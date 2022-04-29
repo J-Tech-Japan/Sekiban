@@ -192,9 +192,9 @@ public class CustomerDbStoryBasic : TestBase
 
         // loyalty point should be created with event subscribe
         loyaltyPointList =  (await _aggregateService.DtoListAsync<LoyaltyPoint, LoyaltyPointDto>()).ToList();
-        Assert.Empty(clientList);
+        Assert.Empty(loyaltyPointList);
         loyaltyPointList =  (await _aggregateService.DtoListAsync<LoyaltyPoint, LoyaltyPointDto>(QueryListType.DeletedOnly)).ToList();
-        Assert.Single(clientList);
+        Assert.Single(loyaltyPointList);
 
     }
 }
