@@ -56,7 +56,7 @@ public class ClientController : Controller
     public async Task<IActionResult> CreateAsync([FromBody] CreateClient command)
     {
         var createdResult =
-            await _aggregateCommandExecutor.ExecConstructorAsync<Client, ClientDto, CreateClient>(
+            await _aggregateCommandExecutor.ExecCreateCommandAsync<Client, ClientDto, CreateClient>(
                 command);
         return Ok(createdResult);
     }
@@ -65,14 +65,14 @@ public class ClientController : Controller
     public async Task<IActionResult> ChangeNameAsync(ChangeClientName command)
     {
         var result =
-            await _aggregateCommandExecutor.ExecAsync<Client, ClientDto, ChangeClientName>(command);
+            await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientDto, ChangeClientName>(command);
         return Ok(result);
     }
 
     [HttpDelete]
     public async Task<IActionResult> DeleteAsync(DeleteClient command)
     {
-        await _aggregateCommandExecutor.ExecAsync<Client, ClientDto, DeleteClient>(command);
+        await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientDto, DeleteClient>(command);
         return Ok();
     }
 }

@@ -45,7 +45,7 @@ public class LoyaltyPointController : Controller
     public async Task<IActionResult> AddPointAsync([FromBody] AddLoyaltyPoint command)
     {
         var result = await _aggregateCommandExecutor
-            .ExecAsync<LoyaltyPoint, LoyaltyPointDto, AddLoyaltyPoint>(command);
+            .ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointDto, AddLoyaltyPoint>(command);
         return Ok(result);
     }
 
@@ -53,7 +53,7 @@ public class LoyaltyPointController : Controller
     public async Task<IActionResult> UsePointAsync([FromBody] UseLoyaltyPoint command)
     {
         var result = await _aggregateCommandExecutor
-            .ExecAsync<LoyaltyPoint, LoyaltyPointDto, UseLoyaltyPoint>(command);
+            .ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointDto, UseLoyaltyPoint>(command);
         return Ok(result);
     }
 }
