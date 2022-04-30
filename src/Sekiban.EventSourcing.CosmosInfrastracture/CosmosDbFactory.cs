@@ -1,5 +1,7 @@
+using Microsoft.Azure.Cosmos.Linq;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
+using Newtonsoft.Json.Linq;
 
 namespace CosmosInfrastructure;
 
@@ -108,6 +110,42 @@ public class CosmosDbFactory
             container);
 
         return container;
+    }
+
+    public async Task DeleteAllFromAggregateFromContainerIncludes(DocumentType documentType)
+    {
+        await CosmosActionAsync<IEnumerable<AggregateEvent>?>(
+            documentType,
+            async container =>
+            {
+                var query = container.GetItemLinqQueryable<Document>()
+                    .Where(
+                        b => true);
+                var feedIterator = container.GetItemQueryIterator<dynamic>(
+                    query.ToQueryDefinition(),
+                    null,
+                    null);
+                var todelete = new List<Document>(); 
+                while (feedIterator.HasMoreResults)
+                {
+                    var response = await feedIterator.ReadNextAsync();
+                    foreach (var item in response)
+                    {
+                        if (item == null) {continue;}
+                        if (item is not JObject jobj) { continue; }
+                        todelete.Add(jobj.ToObject<Document>() ?? throw new Exception());
+                    }
+                }
+                foreach (var d in todelete)
+                {
+                    await container.DeleteItemAsync<Document>(d.Id.ToString(), new PartitionKey(d.PartitionKey));
+                }
+                return null;
+            });
+    }
+    public async Task DeleteAllFromAggregateEventContainer()
+    {
+        await DeleteAllFromAggregateFromContainerIncludes(DocumentType.AggregateEvent);
     }
 
     public async Task<T> CosmosActionAsync<T>(

@@ -27,7 +27,7 @@ public class AggregateCommandExecutor
         _userInformationFactory = userInformationFactory;
     }
 
-    public async Task<AggregateCommandExecutorResponse<Q, C>> ExecAsync<T, Q, C>(
+    public async Task<AggregateCommandExecutorResponse<Q, C>> ExecChangeCommandAsync<T, Q, C>(
         C command,
         List<CallHistory>? callHistories = null)
         where T : TransferableAggregateBase<Q>
@@ -100,7 +100,7 @@ public class AggregateCommandExecutor
         return toReturn;
     }
 
-    public async Task<AggregateCommandExecutorResponse<Q, C>> ExecConstructorAsync<T, Q, C>(
+    public async Task<AggregateCommandExecutorResponse<Q, C>> ExecCreateCommandAsync<T, Q, C>(
         C command,
         List<CallHistory>? callHistories = null)
         where T : TransferableAggregateBase<Q>

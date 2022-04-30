@@ -25,7 +25,7 @@ public class BranchController : Controller
         CreateAsync(CreateBranch command)
     {
         var result = await _aggregateCommandExecutor
-            .ExecConstructorAsync<Branch, BranchDto, CreateBranch>(command);
+            .ExecCreateCommandAsync<Branch, BranchDto, CreateBranch>(command);
         return result;
     }
 
