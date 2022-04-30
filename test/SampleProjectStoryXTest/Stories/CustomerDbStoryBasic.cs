@@ -39,36 +39,8 @@ public class CustomerDbStoryBasic : TestBase
     public async Task CosmosDbStory()
     {
         // 先に全データを削除する
-        await _cosmosDbFactory.CosmosActionAsync<IEnumerable<AggregateEvent>?>(
-            DocumentType.AggregateEvent,
-            async container =>
-            {
-                var query = container.GetItemLinqQueryable<Document>()
-                    .Where(
-                        b => true);
-                var feedIterator = container.GetItemQueryIterator<dynamic>(
-                    query.ToQueryDefinition(),
-                    null,
-                    null);
-                var todelete = new List<Document>(); 
-                while (feedIterator.HasMoreResults)
-                {
-                    var response = await feedIterator.ReadNextAsync();
-                    foreach (var item in response)
-                    {
-                        if (item == null) {continue;}
-                        if (item is not JObject jobj) { continue; }
-                        todelete.Add(jobj.ToObject<Document>() ?? throw new Exception());
-                    }
-                }
-                foreach (var d in todelete)
-                {
-                    await container.DeleteItemAsync<Document>(d.Id.ToString(), new PartitionKey(d.PartitionKey));
-                }
-                return null;
-            });
-
-
+        await _cosmosDbFactory.DeleteAllFromAggregateEventContainer();
+        
         // create list branch
         var branchList = (await _aggregateService.DtoListAsync<Branch, BranchDto>()).ToList();
         Assert.Empty(branchList);

@@ -38,7 +38,7 @@ public class CosmosDocumentRepository : IDocumentRepository
                     .Where(
                         b => b.DocumentType == DocumentType.AggregateEvent &&
                             b.AggregateType == aggregateName)
-                    .OrderByDescending(m => m.TimeStamp);
+                    .OrderByDescending(m => m.Ts);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(
                     query.ToQueryDefinition(),
                     null,
@@ -67,13 +67,13 @@ public class CosmosDocumentRepository : IDocumentRepository
                         if (sinceEventId.HasValue &&
                             toAdd.Id == sinceEventId.Value)
                         {
-                            return events.OrderBy(m => m.TimeStamp);
+                            return events.OrderBy(m => m.Ts);
                         }
 
                         events.Add(toAdd);
                     }
                 }
-                return events.OrderBy(m => m.TimeStamp);
+                return events.OrderBy(m => m.Ts);
             });
     }
 
@@ -101,7 +101,7 @@ public class CosmosDocumentRepository : IDocumentRepository
                     .Where(
                         b => b.DocumentType == DocumentType.AggregateSnapshot &&
                             b.AggregateId == aggregateId)
-                    .OrderByDescending(m => m.TimeStamp);
+                    .OrderByDescending(m => m.Ts);
                 var feedIterator = container.GetItemQueryIterator<SnapshotDocument>(
                     query.ToQueryDefinition(),
                     null,
@@ -136,7 +136,7 @@ public class CosmosDocumentRepository : IDocumentRepository
                     .Where(
                         b => b.DocumentType == DocumentType.SnapshotList &&
                             b.DocumentTypeName == aggregateName)
-                    .OrderByDescending(m => m.TimeStamp);
+                    .OrderByDescending(m => m.Ts);
                 var feedIterator = container.GetItemQueryIterator<SnapshotListDocument>(
                     query.ToQueryDefinition(),
                     null,
@@ -199,8 +199,8 @@ public class CosmosDocumentRepository : IDocumentRepository
                     .Where(
                         b => b.DocumentType == DocumentType.AggregateEvent &&
                             b.AggregateId == aggregateId);
-                query = sinceEventId.HasValue ? query.OrderByDescending(m => m.TimeStamp)
-                    : query.OrderBy(m => m.TimeStamp);
+                query = sinceEventId.HasValue ? query.OrderByDescending(m => m.Ts)
+                    : query.OrderBy(m => m.Ts);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(
                     query.ToQueryDefinition(),
                     null,
@@ -226,13 +226,13 @@ public class CosmosDocumentRepository : IDocumentRepository
 
                         if (sinceEventId.HasValue && toAdd.Id == sinceEventId.Value)
                         {
-                            return events.OrderBy(m => m.TimeStamp);
+                            return events.OrderBy(m => m.Ts);
                         }
 
                         events.Add(toAdd);
                     }
                 }
-                return events.OrderBy(m => m.TimeStamp);
+                return events.OrderBy(m => m.Ts);
             });
     }
     public async Task<IEnumerable<AggregateEvent>> GetAllAggregateEventsForAggregateEventTypeAsync(
@@ -250,7 +250,7 @@ public class CosmosDocumentRepository : IDocumentRepository
                     .Where(
                         b => b.DocumentType == DocumentType.AggregateEvent &&
                             b.AggregateType == originalType.Name)
-                    .OrderByDescending(m => m.TimeStamp);
+                    .OrderByDescending(m => m.Ts);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(
                     query.ToQueryDefinition(),
                     null,
@@ -280,13 +280,13 @@ public class CosmosDocumentRepository : IDocumentRepository
                         if (sinceEventId.HasValue &&
                             toAdd.Id == sinceEventId.Value)
                         {
-                            return events.OrderBy(m => m.TimeStamp);
+                            return events.OrderBy(m => m.Ts);
                         }
 
                         events.Add(toAdd);
                     }
                 }
-                return events.OrderBy(m => m.TimeStamp);
+                return events.OrderBy(m => m.Ts);
             });
     }
 }
