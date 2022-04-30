@@ -1,10 +1,10 @@
-﻿using CustomerDomainContext.Aggregates.Branches;
+﻿using CustomerDomainContext.AggregateEventSubscribers;
+using CustomerDomainContext.Aggregates.Branches;
 using CustomerDomainContext.Aggregates.Branches.Commands;
 using CustomerDomainContext.Aggregates.Clients;
 using CustomerDomainContext.Aggregates.Clients.Commands;
 using CustomerDomainContext.Aggregates.Clients.Events;
 using CustomerDomainContext.Aggregates.LoyaltyPoints;
-using CustomerDomainContext.Aggregates.LoyaltyPoints.AggregateEventSubscribers;
 using CustomerDomainContext.Aggregates.LoyaltyPoints.Commands;
 namespace CustomerDomainContext.Shared;
 
@@ -12,6 +12,15 @@ public static class Dependency
 {
     public static IEnumerable<(Type serviceType, Type? implementationType)> Enumerate()
     {
+        // Aggregate Event Subscribers
+        yield return (
+            typeof(INotificationHandler<ClientCreated>),
+            typeof(ClientCreatedSubscriber));
+
+        yield return (
+            typeof(INotificationHandler<ClientDeleted>),
+            typeof(ClientDeletedSubscriber));
+
         // Aggregate: Branch
         yield return (
             typeof(ICreateAggregateCommandHandler<Branch, CreateBranch>),
@@ -46,13 +55,5 @@ public static class Dependency
         yield return (
             typeof(IChangeAggregateCommandHandler<LoyaltyPoint, DeleteLoyaltyPoint>),
             typeof(DeleteLoyaltyPointHandler));
-
-        yield return (
-            typeof(INotificationHandler<ClientCreated>),
-            typeof(ClientCreatedSubscriber));
-
-        yield return (
-            typeof(INotificationHandler<ClientDeleted>),
-            typeof(ClientDeletedSubscriber));
     }
 }

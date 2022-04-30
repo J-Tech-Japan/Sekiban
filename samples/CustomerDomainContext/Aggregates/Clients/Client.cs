@@ -32,9 +32,9 @@ public class Client : TransferableAggregateBase<ClientDto>
 
     protected override void CopyPropertiesFromSnapshot(ClientDto snapshot)
     {
+        BranchId = snapshot.BranchId;
         ClientName = snapshot.ClientName;
         ClientEmail = snapshot.ClientEmail;
-        BranchId = snapshot.BranchId;
     }
 
     protected override Action? GetApplyEventAction(AggregateEvent ev) => ev switch
@@ -44,11 +44,15 @@ public class Client : TransferableAggregateBase<ClientDto>
             BranchId = clientChanged.BranchId;
             ClientName = clientChanged.ClientName;
             ClientEmail = clientChanged.ClientEmail;
-        },
+        }
+        ,
+
         ClientNameChanged clientNameChanged => () =>
             ClientName = clientNameChanged.ClientName,
+        
         ClientDeleted => () =>
             IsDeleted = true,
+        
         _ => null
     };
 

@@ -1,6 +1,7 @@
 ﻿using CustomerDomainContext.Aggregates.Clients.Events;
+using CustomerDomainContext.Aggregates.LoyaltyPoints;
 using CustomerDomainContext.Aggregates.LoyaltyPoints.Commands;
-namespace CustomerDomainContext.Aggregates.LoyaltyPoints.AggregateEventSubscribers;
+namespace CustomerDomainContext.AggregateEventSubscribers;
 
 public class ClientCreatedSubscriber : AggregateEventSubscriberBase<ClientCreated>
 {
