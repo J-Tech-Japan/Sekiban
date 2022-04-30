@@ -6,11 +6,15 @@ using CustomerDomainContext.Aggregates.Clients.Commands;
 using CustomerDomainContext.Aggregates.Clients.Events;
 using CustomerDomainContext.Aggregates.LoyaltyPoints;
 using CustomerDomainContext.Aggregates.LoyaltyPoints.Commands;
+using System.Reflection;
+
 namespace CustomerDomainContext.Shared;
 
 public static class Dependency
 {
-    public static IEnumerable<(Type serviceType, Type? implementationType)> Enumerate()
+    public static RegisteredEventTypes GetRegisteredAggregateEvents() => new(Assembly.GetExecutingAssembly());
+
+    public static IEnumerable<(Type serviceType, Type? implementationType)> GetDependencies()
     {
         // Aggregate Event Subscribers
         yield return (
