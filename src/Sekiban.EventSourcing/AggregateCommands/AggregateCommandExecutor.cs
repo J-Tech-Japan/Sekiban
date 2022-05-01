@@ -83,6 +83,7 @@ public class AggregateCommandExecutor
                     await _documentWriter.SaveAsync(snapshot, typeof(T));
                 }
             }
+            aggregate.ResetEventsAndSnepshots();
             if (result == null)
             {
                 throw new JJInvalidArgumentException();
@@ -149,6 +150,7 @@ public class AggregateCommandExecutor
                     await _documentWriter.SaveAsync(snapshot, typeof(T));
                 }
             }
+            result.Aggregate.ResetEventsAndSnepshots();
             if (result == null)
             {
                 throw new JJInvalidArgumentException();

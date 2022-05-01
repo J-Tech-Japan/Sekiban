@@ -25,6 +25,7 @@ public abstract class SingleAggregateProjectionBase<T> : ISingleAggregateProject
         Version++;
     }
     public abstract T ToDto();
+    public abstract void ApplySnapshot(T snapshot);
     public abstract Type OriginalAggregateType();
     public abstract T CreateInitialAggregate(Guid aggregateId);
     protected abstract Action? GetApplyEventAction(AggregateEvent ev);

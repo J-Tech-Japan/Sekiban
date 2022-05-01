@@ -196,7 +196,7 @@ public class SingleAggregateService
     /// <returns></returns>
     private async Task<T?> GetAggregateAsync<T, Q, P>(
         Guid aggregateId)
-        where T : ISingleAggregate, ISingleAggregateProjection
+        where T : ISingleAggregate, ISingleAggregateProjection, ISingleAggregateProjectionDtoConvertible<Q>
         where Q : ISingleAggregate
         where P : ISingleAggregateProjector<T>, new()
     {
@@ -214,8 +214,12 @@ public class SingleAggregateService
                     .GetPartitionKey(
                         DocumentType.AggregateEvent),
                 fromStore.LastEventId);
-            foreach (var e in allAfterEvents) { fromStore.ApplyEvent(e); }
-            return fromStore;
+            var dto = fromStore.ToDto();
+            var aggregateToApply = projector.CreateInitialAggregate(fromStore.AggregateId);
+            aggregateToApply.ApplySnapshot(dto);
+            foreach (var e in allAfterEvents) { aggregateToApply.ApplyEvent(e); }
+            _singleAggregateProjectionQueryStore.SaveProjection(aggregateToApply, typeof(T).Name);
+            return aggregateToApply;
         }
         var allEvents = await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,

@@ -19,6 +19,12 @@ public class
     public ClientNameHistoryProjection() { }
 
     public override ClientNameHistoryProjection ToDto() => this;
+    public override void ApplySnapshot(ClientNameHistoryProjection snapshot)
+    {
+        BranchId = snapshot.BranchId;
+        ClientNames.AddRange(snapshot.ClientNames);
+        ClientEmail = snapshot.ClientEmail;
+    }
 
     public override Type OriginalAggregateType() => typeof(Client);
 

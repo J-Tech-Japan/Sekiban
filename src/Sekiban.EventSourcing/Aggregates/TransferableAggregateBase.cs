@@ -12,7 +12,7 @@ public abstract class TransferableAggregateBase<TDto> : AggregateBase, ISingleAg
     public abstract TDto ToDto();
     protected abstract void CopyPropertiesFromSnapshot(TDto snapshot);
 
-    internal void ApplySnapshot(TDto snapshot)
+    public void ApplySnapshot(TDto snapshot)
     {
         Version = snapshot.Version;
         LastEventId = snapshot.LastEventId;
