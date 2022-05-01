@@ -84,7 +84,10 @@ public class AggregateCommandExecutor
         }
         catch (Exception e)
         {
-            toReturn.Command.Exception = JsonConvert.SerializeObject(e);
+            toReturn.Command.Exception = JsonConvert.SerializeObject(e, new JsonSerializerSettings()
+            {
+                ReferenceLoopHandling = ReferenceLoopHandling.Ignore
+            });
             throw;
         }
         finally
@@ -144,7 +147,10 @@ public class AggregateCommandExecutor
         }
         catch (Exception e)
         {
-            toReturn.Command.Exception = JsonConvert.SerializeObject(e);
+            toReturn.Command.Exception = JsonConvert.SerializeObject(e, new JsonSerializerSettings()
+            {
+                ReferenceLoopHandling = ReferenceLoopHandling.Ignore
+            });
             throw;
         }
         finally
