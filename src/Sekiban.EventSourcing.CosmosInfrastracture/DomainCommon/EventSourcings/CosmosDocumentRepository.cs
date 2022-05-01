@@ -42,7 +42,7 @@ public class CosmosDocumentRepository : IDocumentRepository
                     .Where(
                         b => b.DocumentType == DocumentType.AggregateSnapshot &&
                             b.AggregateId == aggregateId)
-                    .OrderByDescending(m => m.Ts);
+                    .OrderByDescending(m => m.TimeStamp);
                 var feedIterator = container.GetItemQueryIterator<SnapshotDocument>(
                     query.ToQueryDefinition(),
                     null,
@@ -81,7 +81,7 @@ public class CosmosDocumentRepository : IDocumentRepository
                     .Where(
                         b => b.DocumentType == DocumentType.SnapshotList &&
                             b.DocumentTypeName == aggregateName)
-                    .OrderByDescending(m => m.Ts);
+                    .OrderByDescending(m => m.TimeStamp);
                 var feedIterator = container.GetItemQueryIterator<SnapshotListDocument>(
                     query.ToQueryDefinition(),
                     null,
@@ -217,7 +217,7 @@ public class CosmosDocumentRepository : IDocumentRepository
                     .Where(
                         b => b.DocumentType == DocumentType.AggregateEvent &&
                             b.AggregateType == originalType.Name)
-                    .OrderByDescending(m => m.Ts);
+                    .OrderByDescending(m => m.TimeStamp);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(
                     query.ToQueryDefinition(),
                     null,
@@ -247,13 +247,13 @@ public class CosmosDocumentRepository : IDocumentRepository
                         if (sinceEventId.HasValue &&
                             toAdd.Id == sinceEventId.Value)
                         {
-                            return events.OrderBy(m => m.Ts);
+                            return events.OrderBy(m => m.TimeStamp);
                         }
 
                         events.Add(toAdd);
                     }
                 }
-                return events.OrderBy(m => m.Ts);
+                return events.OrderBy(m => m.TimeStamp);
             });
     }
 }

@@ -226,7 +226,7 @@ public class SingleAggregateService
                 fromStore.LastEventId);
 
             var aggregateEvents = allAfterEvents.ToList();
-            if (aggregateEvents.Count() != aggregateEvents.Select(m => m.Ts + m.Version).Distinct().Count())
+            if (aggregateEvents.Count() != aggregateEvents.Select(m => m.TimeStamp).Distinct().Count())
             {
                 return await GetAggregateFromInitialAsync<T, P>(aggregateId);
             }

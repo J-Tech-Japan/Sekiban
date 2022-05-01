@@ -33,17 +33,5 @@ public abstract class TransferableAggregateBase<TDto> : AggregateBase, ISingleAg
         // Apply Event
         ApplyEvent(ev);
         ev.SetVersion(Version);
-
-        // Add Snapshot
-        if (AutoSnapshotCount.HasValue && Version > 0 && Version % AutoSnapshotCount.Value == 0)
-        {
-            _snapshots.Add(
-                new SnapshotDocument(
-                    DefaultPartitionKeyFactory,
-                    GetType().Name,
-                    ToDto(),
-                    AggregateId,
-                    LastEventId));
-        }
     }
 }

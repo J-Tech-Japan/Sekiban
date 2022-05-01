@@ -10,7 +10,6 @@ namespace Sekiban.EventSourcing.Aggregates;
 public abstract class AggregateBase : IAggregate
 {
     protected readonly List<AggregateEvent> _events = new();
-    protected readonly List<SnapshotDocument> _snapshots = new();
 
     public Guid AggregateId { get; }
     public Guid LastEventId { get; protected set; } = Guid.Empty;
@@ -18,13 +17,10 @@ public abstract class AggregateBase : IAggregate
     public bool IsDeleted { get; protected set; }
 
     public ReadOnlyCollection<AggregateEvent> Events => _events.AsReadOnly();
-    public ReadOnlyCollection<SnapshotDocument> Snapshots => _snapshots.AsReadOnly();
     public void ResetEventsAndSnepshots()
     {
         _events.Clear();
-        _snapshots.Clear();
     }
-    protected virtual int? AutoSnapshotCount { get; } = 10;
     protected static IPartitionKeyFactory DefaultPartitionKeyFactory => new CanNotUsePartitionKeyFactory();
 
     public AggregateBase(Guid aggregateId) =>

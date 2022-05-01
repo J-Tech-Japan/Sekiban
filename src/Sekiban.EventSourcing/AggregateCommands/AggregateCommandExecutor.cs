@@ -76,13 +76,6 @@ public class AggregateCommandExecutor
                     await _documentWriter.SaveAndPublishAggregateEvent(ev, typeof(T));
                 }
             }
-            if (result.Aggregate.Snapshots.Any())
-            {
-                foreach (var snapshot in result.Aggregate.Snapshots)
-                {
-                    await _documentWriter.SaveAsync(snapshot, typeof(T));
-                }
-            }
             aggregate.ResetEventsAndSnepshots();
             if (result == null)
             {
@@ -141,13 +134,6 @@ public class AggregateCommandExecutor
                 foreach (var ev in result.Aggregate.Events)
                 {
                     await _documentWriter.SaveAndPublishAggregateEvent(ev, typeof(T));
-                }
-            }
-            if (result.Aggregate.Snapshots.Any())
-            {
-                foreach (var snapshot in result.Aggregate.Snapshots)
-                {
-                    await _documentWriter.SaveAsync(snapshot, typeof(T));
                 }
             }
             result.Aggregate.ResetEventsAndSnepshots();
