@@ -15,23 +15,23 @@ public class CosmosDbFactory
         _configuration = configuration;
         _memoryCache = memoryCache;
     }
-    private string GetContainerId(DocumentType documentType)
+    private string GetContainerId(DocumentType documentType, AggregateContainerGroup containerGroup)
     {
         return documentType switch
         {
             DocumentType.AggregateEvent => _configuration.GetValue<string>(
-                    "AggregateEventCosmosDbContainer") ??
-                _configuration.GetValue<string>("CosmosDbContainer"),
+                    $"AggregateEventCosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
+                _configuration.GetValue<string>($"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ?? _configuration.GetValue<string>("CosmosDbContainer"),
             DocumentType.AggregateCommand => _configuration.GetValue<string>(
-                    "AggregateCommandCosmosDbContainer") ??
-                _configuration.GetValue<string>("CosmosDbContainer"),
+                    $"AggregateCommandCosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
+                _configuration.GetValue<string>($"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "dissolvable" : "")}") ?? _configuration.GetValue<string>("CosmosDbContainer"),
             DocumentType.IntegratedEvent => _configuration.GetValue<string>(
-                    "IntegrateEventCosmosDbContainer") ??
-                _configuration.GetValue<string>("CosmosDbContainer"),
+                    $"IntegrateEventCosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
+                _configuration.GetValue<string>($"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "dissolvable" : "")}") ?? _configuration.GetValue<string>("CosmosDbContainer"),
             DocumentType.IntegratedCommand => _configuration.GetValue<string>(
-                    "IntegrateEventCosmosDbContainer") ??
-                _configuration.GetValue<string>("CosmosDbContainer"),
-            _ => _configuration.GetValue<string>("CosmosDbContainer")
+                    $"IntegrateEventCosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
+                _configuration.GetValue<string>($"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ?? _configuration.GetValue<string>("CosmosDbContainer"),
+            _ => _configuration.GetValue<string>($"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ?? _configuration.GetValue<string>("CosmosDbContainer")
         };
     }
     private static string GetMemoryCacheContainerKey(
@@ -62,10 +62,10 @@ public class CosmosDbFactory
             _configuration.GetValue<string>("CosmosDbDatabase")
             : _configuration.GetValue<string>("CosmosDbDatabase");
 
-    private async Task<Container> GetContainerAsync(DocumentType documentType)
+    private async Task<Container> GetContainerAsync(DocumentType documentType, AggregateContainerGroup containerGroup)
     {
         var databaseId = GetDatabaseId(documentType);
-        var containerId = GetContainerId(documentType);
+        var containerId = GetContainerId(documentType, containerGroup);
         var container =
             (Container?)_memoryCache.Get(
                 GetMemoryCacheContainerKey(documentType, databaseId, containerId));
@@ -112,10 +112,11 @@ public class CosmosDbFactory
         return container;
     }
 
-    public async Task DeleteAllFromAggregateFromContainerIncludes(DocumentType documentType)
+    public async Task DeleteAllFromAggregateFromContainerIncludes(DocumentType documentType, AggregateContainerGroup containerGroup = AggregateContainerGroup.Default)
     {
         await CosmosActionAsync<IEnumerable<AggregateEvent>?>(
             documentType,
+            containerGroup,
             async container =>
             {
                 var query = container.GetItemLinqQueryable<Document>()
@@ -143,29 +144,30 @@ public class CosmosDbFactory
                 return null;
             });
     }
-    public async Task DeleteAllFromAggregateEventContainer()
+    public async Task DeleteAllFromAggregateEventContainer(AggregateContainerGroup containerGroup)
     {
-        await DeleteAllFromAggregateFromContainerIncludes(DocumentType.AggregateEvent);
+        await DeleteAllFromAggregateFromContainerIncludes(DocumentType.AggregateEvent, containerGroup);
     }
 
     public async Task<T> CosmosActionAsync<T>(
         DocumentType documentType,
+        AggregateContainerGroup containerGroup,
         Func<Container, Task<T>> cosmosAction)
     {
         try
         {
-            var result = await cosmosAction(await GetContainerAsync(documentType));
+            var result = await cosmosAction(await GetContainerAsync(documentType, containerGroup));
             return result;
         }
         catch
         {
-            ResetMemoryCache(documentType);
+            ResetMemoryCache(documentType, containerGroup);
             throw;
         }
     }
-    private void ResetMemoryCache(DocumentType documentType)
+    private void ResetMemoryCache(DocumentType documentType, AggregateContainerGroup containerGroup)
     {
-        var containerId = GetContainerId(documentType);
+        var containerId = GetContainerId(documentType, containerGroup);
         var databaseId = GetDatabaseId(documentType);
         // ネットワークエラーの可能性があるので、コンテナを初期化する
         // これによって次回回復したら再接続できる
@@ -175,17 +177,18 @@ public class CosmosDbFactory
     }
     public async Task CosmosActionAsync(
         DocumentType documentType,
+        AggregateContainerGroup containerGroup,
         Func<Container, Task> cosmosAction)
     {
         try
         {
-            await cosmosAction(await GetContainerAsync(documentType));
+            await cosmosAction(await GetContainerAsync(documentType, containerGroup));
         }
         catch
         {
             // ネットワークエラーの可能性があるので、コンテナを初期化する
             // これによって次回回復したら再接続できる
-            ResetMemoryCache(documentType);
+            ResetMemoryCache(documentType, containerGroup);
             throw;
         }
     }

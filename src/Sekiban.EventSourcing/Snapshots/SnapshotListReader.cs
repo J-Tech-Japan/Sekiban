@@ -34,7 +34,7 @@ public class SnapshotListReader
         foreach (var i in aggregateList.MergedSnapshotIds)
         {
             var snapshot =
-                await _documentRepository.GetSnapshotByIdAsync(i.SnapshotId, i.PartitionKey);
+                await _documentRepository.GetSnapshotByIdAsync(i.SnapshotId,typeof(T), i.PartitionKey);
             if (snapshot == default)
             {
                 continue;

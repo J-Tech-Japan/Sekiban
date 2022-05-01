@@ -21,75 +21,16 @@ public class CosmosDocumentRepository : IDocumentRepository
         _registeredEventTypes = registeredEventTypes;
     }
 
-    public async Task<IEnumerable<AggregateEvent>> GetAllAggregateEventsForAggregateTypeAsync<T>(
-        Guid? sinceEventId = null)
-        where T : AggregateBase
-    {
-        var aggregateName = typeof(T).Name;
-        var aggregate = AggregateBase.Create<T>(Guid.NewGuid());
-        var eventTypes = _registeredEventTypes.RegisteredTypes;
-        return await _cosmosDbFactory.CosmosActionAsync<IEnumerable<AggregateEvent>>(
-            DocumentType.AggregateEvent,
-            async container =>
-            {
-                var options = new QueryRequestOptions();
-                var events = new List<AggregateEvent>();
-                var query = container.GetItemLinqQueryable<AggregateEvent>()
-                    .Where(
-                        b => b.DocumentType == DocumentType.AggregateEvent &&
-                            b.AggregateType == aggregateName)
-                    .OrderByDescending(m => m.Ts);
-                var feedIterator = container.GetItemQueryIterator<dynamic>(
-                    query.ToQueryDefinition(),
-                    null,
-                    options);
-                while (feedIterator.HasMoreResults)
-                {
-                    var response = await feedIterator.ReadNextAsync();
-                    foreach (var item in response)
-                    {
-                        // pick out one album
-                        if (item is not JObject jobj) { continue; }
-                        var typeName = jobj.GetValue(nameof(Document.DocumentTypeName))?.ToString();
-                        if (typeName == null)
-                        {
-                            continue;
-                        }
-
-                        var toAdd = eventTypes.Where(m => m.Name == typeName)
-                            .Select(m => (AggregateEvent?)jobj.ToObject(m))
-                            .FirstOrDefault(m => m != null);
-                        if (toAdd == null)
-                        {
-                            throw new JJUnregisterdEventFoundException();
-                        }
-
-                        if (sinceEventId.HasValue &&
-                            toAdd.Id == sinceEventId.Value)
-                        {
-                            return events.OrderBy(m => m.Ts);
-                        }
-
-                        events.Add(toAdd);
-                    }
-                }
-                return events.OrderBy(m => m.Ts);
-            });
-    }
-
-    public async Task<IEnumerable<AggregateEvent>> GetAllCommandForTypeAsync<T>()
-        where T : IAggregateCommand
-    {
-        await Task.CompletedTask;
-        throw new NotImplementedException();
-    }
-
     public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
         Guid aggregateId,
+        Type originalType,
         string? partitionKey)
     {
+        var aggregateContainerGroup =
+            AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
         return await _cosmosDbFactory.CosmosActionAsync(
             DocumentType.AggregateSnapshot,
+            aggregateContainerGroup,
             async container =>
             {
                 var options = new QueryRequestOptions();
@@ -122,9 +63,13 @@ public class CosmosDocumentRepository : IDocumentRepository
         QueryListType queryListType = QueryListType.ActiveAndDeleted)
         where T : IAggregate
     {
+        var aggregateContainerGroup =
+            AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(T));
+
         var aggregateName = typeof(T).Name;
         return await _cosmosDbFactory.CosmosActionAsync(
             DocumentType.SnapshotList,
+            aggregateContainerGroup,
             async container =>
             {
                 var options = new QueryRequestOptions();
@@ -155,8 +100,10 @@ public class CosmosDocumentRepository : IDocumentRepository
         Guid id,
         string partitionKey)
     {
+        
         return await _cosmosDbFactory.CosmosActionAsync(
             DocumentType.SnapshotListChunk,
+            AggregateContainerGroup.Default,
             async container =>
             {
                 var response = await container.ReadItemAsync<SnapshotListChunkDocument>(
@@ -165,10 +112,13 @@ public class CosmosDocumentRepository : IDocumentRepository
                 return response.Resource;
             });
     }
-    public async Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, string partitionKey)
+    public async Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type originalType, string partitionKey)
     {
+        var aggregateContainerGroup =
+            AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
         return await _cosmosDbFactory.CosmosActionAsync(
             DocumentType.AggregateSnapshot,
+            aggregateContainerGroup,
             async container =>
             {
                 var response = await container.ReadItemAsync<SnapshotDocument>(
@@ -180,11 +130,16 @@ public class CosmosDocumentRepository : IDocumentRepository
 
     public async Task<IEnumerable<AggregateEvent>> GetAllAggregateEventsForAggregateIdAsync(
         Guid aggregateId,
+        Type originalType,
         string? partitionKey = null,
         Guid? sinceEventId = null)
     {
+        var aggregateContainerGroup =
+            AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
+
         return await _cosmosDbFactory.CosmosActionAsync<IEnumerable<AggregateEvent>>(
             DocumentType.AggregateEvent,
+            aggregateContainerGroup,
             async container =>
             {
                 var types = _registeredEventTypes.RegisteredTypes;
@@ -239,8 +194,12 @@ public class CosmosDocumentRepository : IDocumentRepository
         Type originalType,
         Guid? sinceEventId = null)
     {
+        var aggregateContainerGroup =
+            AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
+
         return await _cosmosDbFactory.CosmosActionAsync<IEnumerable<AggregateEvent>>(
             DocumentType.AggregateEvent,
+            aggregateContainerGroup,
             async container =>
             {
                 var options = new QueryRequestOptions();

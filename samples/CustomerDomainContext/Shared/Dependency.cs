@@ -6,7 +6,10 @@ using CustomerDomainContext.Aggregates.Clients.Commands;
 using CustomerDomainContext.Aggregates.Clients.Events;
 using CustomerDomainContext.Aggregates.LoyaltyPoints;
 using CustomerDomainContext.Aggregates.LoyaltyPoints.Commands;
+using CustomerDomainContext.Aggregates.RecentActivities;
+using CustomerDomainContext.Aggregates.RecentActivities.Commands;
 using System.Reflection;
+using CreateLoyaltyPointHandler = CustomerDomainContext.Aggregates.LoyaltyPoints.Commands.CreateLoyaltyPointHandler;
 
 namespace CustomerDomainContext.Shared;
 
@@ -59,5 +62,15 @@ public static class Dependency
         yield return (
             typeof(IChangeAggregateCommandHandler<LoyaltyPoint, DeleteLoyaltyPoint>),
             typeof(DeleteLoyaltyPointHandler));
+        
+        // Aggregate: RecentActivity
+        yield return (
+            typeof(ICreateAggregateCommandHandler<RecentActivity, CreateRecentActivity>),
+            typeof(CreateRecentActivityHandler));
+        
+        yield return (
+                typeof(IChangeAggregateCommandHandler<RecentActivity, AddRecentActivity>),
+                typeof(AddRecentActivityHandler));
+
     }
 }

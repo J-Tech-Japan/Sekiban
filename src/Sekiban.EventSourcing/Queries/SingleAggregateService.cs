@@ -155,6 +155,7 @@ public class SingleAggregateService
         var projector = new P();
         var allEvents = await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
+            typeof(T),
             new AggregateIdPartitionKeyFactory(aggregateId, projector.OriginalAggregateType())
                 .GetPartitionKey(
                     DocumentType.AggregateEvent));
@@ -206,17 +207,19 @@ public class SingleAggregateService
         var projector = new P();
         if (fromStore != null)
         {
-            var allAfterEvents = await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
-                aggregateId,
-                new AggregateIdPartitionKeyFactory(aggregateId, projector.OriginalAggregateType())
-                    .GetPartitionKey(
-                        DocumentType.AggregateEvent),
-                fromStore.LastEventId);
-            foreach (var e in allAfterEvents) { fromStore.ApplyEvent(e); }
+            // var allAfterEvents = await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
+            //     aggregateId,
+            //     typeof(T),
+            //     new AggregateIdPartitionKeyFactory(aggregateId, projector.OriginalAggregateType())
+            //         .GetPartitionKey(
+            //             DocumentType.AggregateEvent),
+            //     fromStore.LastEventId);
+            // foreach (var e in allAfterEvents) { fromStore.ApplyEvent(e); }
             return fromStore;
         }
         var allEvents = await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
+            typeof(T),
             new AggregateIdPartitionKeyFactory(aggregateId, projector.OriginalAggregateType())
                 .GetPartitionKey(
                     DocumentType.AggregateEvent));

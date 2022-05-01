@@ -9,21 +9,17 @@ public interface IDocumentRepository
 {
     Task<IEnumerable<AggregateEvent>> GetAllAggregateEventsForAggregateIdAsync(
         Guid aggregateId,
+        Type originalType,
         string? partitionKey = null,
         Guid? sinceEventId = null);
-
-    Task<IEnumerable<AggregateEvent>> GetAllAggregateEventsForAggregateTypeAsync<T>(
-        Guid? sinceEventId = null)
-        where T : AggregateBase;
-
+    
     Task<IEnumerable<AggregateEvent>> GetAllAggregateEventsForAggregateEventTypeAsync(
         Type originalType,
         Guid? sinceEventId = null);
-
-    Task<IEnumerable<AggregateEvent>> GetAllCommandForTypeAsync<T>() where T : IAggregateCommand;
-
+    
     Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
         Guid aggregateId,
+        Type originalType,
         string? partitionKey);
 
     Task<SnapshotListDocument?> GetLatestSnapshotListForTypeAsync<T>(
@@ -37,5 +33,6 @@ public interface IDocumentRepository
 
     Task<SnapshotDocument?> GetSnapshotByIdAsync(
         Guid id,
+        Type originalType,
         string partitionKey);
 }

@@ -7,6 +7,8 @@ using CustomerDomainContext.Aggregates.Clients.Projections;
 using CustomerDomainContext.Aggregates.LoyaltyPoints;
 using CustomerDomainContext.Aggregates.LoyaltyPoints.Commands;
 using CustomerDomainContext.Aggregates.LoyaltyPoints.Consts;
+using CustomerDomainContext.Aggregates.RecentActivities;
+using CustomerDomainContext.Aggregates.RecentActivities.Commands;
 using CustomerDomainContext.Shared.Exceptions;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Cosmos.Linq;
@@ -14,6 +16,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json.Linq;
 using Sekiban.EventSourcing.AggregateCommands;
 using Sekiban.EventSourcing.AggregateEvents;
+using Sekiban.EventSourcing.Aggregates;
 using Sekiban.EventSourcing.Documents;
 using Sekiban.EventSourcing.Queries;
 using Sekiban.EventSourcing.Shared.Exceptions;
@@ -39,7 +42,9 @@ public class CustomerDbStoryBasic : TestBase
     public async Task CosmosDbStory()
     {
         // 先に全データを削除する
-        await _cosmosDbFactory.DeleteAllFromAggregateEventContainer();
+        await _cosmosDbFactory.DeleteAllFromAggregateEventContainer(AggregateContainerGroup.Default);
+        await _cosmosDbFactory.DeleteAllFromAggregateEventContainer(AggregateContainerGroup.Dissolvable);
+        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.AggregateCommand, AggregateContainerGroup.Dissolvable);
         
         // create list branch
         var branchList = (await _aggregateService.DtoListAsync<Branch, BranchDto>()).ToList();
@@ -168,5 +173,27 @@ public class CustomerDbStoryBasic : TestBase
         loyaltyPointList =  (await _aggregateService.DtoListAsync<LoyaltyPoint, LoyaltyPointDto>(QueryListType.DeletedOnly)).ToList();
         Assert.Single(loyaltyPointList);
 
+        // create recent activity
+        var createRecentActivityResult =
+            await _aggregateCommandExecutor
+                .ExecCreateCommandAsync<RecentActivity, RecentActivityDto, CreateRecentActivity>(
+                    new CreateRecentActivity(Guid.NewGuid()));
+        
+        var recentActivityList = (await _aggregateService.DtoListAsync<RecentActivity, RecentActivityDto>()).ToList();
+        Assert.Single(recentActivityList);
+        int version = createRecentActivityResult.AggregateDto!.Version;
+        foreach (var i in Enumerable.Range(0, 100))
+        {
+            var recentActivityAddedResult = await 
+                _aggregateCommandExecutor
+                    .ExecChangeCommandAsync<RecentActivity, RecentActivityDto, AddRecentActivity>(
+                        new AddRecentActivity(
+                            createRecentActivityResult!.AggregateDto!.AggregateId,
+                            $"Message - {i + 1}") { ReferenceVersion = version}, null );
+            version = recentActivityAddedResult.AggregateDto!.Version;
+        }
+        recentActivityList = (await _aggregateService.DtoListAsync<RecentActivity, RecentActivityDto>()).ToList();
+        Assert.Single(recentActivityList);
+        Assert.Equal(101, version);
     }
 }

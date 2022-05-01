@@ -59,7 +59,7 @@ public class AggregateCommandExecutor
             {
                 throw new JJInvalidArgumentException();
             }
-
+            aggregate.ResetEventsAndSnepshots();
             var result = await handler.HandleAsync(toReturn.Command, aggregate);
             toReturn.Command.AggregateId = result.Aggregate.AggregateId;
 
@@ -73,14 +73,14 @@ public class AggregateCommandExecutor
                 toReturn.Events.AddRange(result.Aggregate.Events);
                 foreach (var ev in result.Aggregate.Events)
                 {
-                    await _documentWriter.SaveAndPublishAggregateEvent(ev);
+                    await _documentWriter.SaveAndPublishAggregateEvent(ev, typeof(T));
                 }
             }
             if (result.Aggregate.Snapshots.Any())
             {
                 foreach (var snapshot in result.Aggregate.Snapshots)
                 {
-                    await _documentWriter.SaveAsync(snapshot);
+                    await _documentWriter.SaveAsync(snapshot, typeof(T));
                 }
             }
             if (result == null)
@@ -95,7 +95,7 @@ public class AggregateCommandExecutor
         }
         finally
         {
-            await _documentWriter.SaveAsync(toReturn.Command);
+            await _documentWriter.SaveAsync(toReturn.Command, typeof(T));
         }
         return toReturn;
     }
@@ -139,14 +139,14 @@ public class AggregateCommandExecutor
                 toReturn.Events.AddRange(result.Aggregate.Events);
                 foreach (var ev in result.Aggregate.Events)
                 {
-                    await _documentWriter.SaveAndPublishAggregateEvent(ev);
+                    await _documentWriter.SaveAndPublishAggregateEvent(ev, typeof(T));
                 }
             }
             if (result.Aggregate.Snapshots.Any())
             {
                 foreach (var snapshot in result.Aggregate.Snapshots)
                 {
-                    await _documentWriter.SaveAsync(snapshot);
+                    await _documentWriter.SaveAsync(snapshot, typeof(T));
                 }
             }
             if (result == null)
@@ -161,7 +161,7 @@ public class AggregateCommandExecutor
         }
         finally
         {
-            await _documentWriter.SaveAsync(toReturn.Command);
+            await _documentWriter.SaveAsync(toReturn.Command, typeof(T));
         }
         return toReturn;
     }

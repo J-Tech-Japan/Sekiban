@@ -19,7 +19,11 @@ public abstract class AggregateBase : IAggregate
 
     public ReadOnlyCollection<AggregateEvent> Events => _events.AsReadOnly();
     public ReadOnlyCollection<SnapshotDocument> Snapshots => _snapshots.AsReadOnly();
-
+    public void ResetEventsAndSnepshots()
+    {
+        _events.Clear();
+        _snapshots.Clear();
+    }
     protected virtual int? AutoSnapshotCount { get; } = 10;
     protected static IPartitionKeyFactory DefaultPartitionKeyFactory => new CanNotUsePartitionKeyFactory();
 
