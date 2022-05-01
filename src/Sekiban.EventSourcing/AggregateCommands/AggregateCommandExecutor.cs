@@ -53,7 +53,7 @@ public class AggregateCommandExecutor
             }
             var aggregate =
                 await _singleAggregateService
-                    .GetAggregateAsync<T, Q>(
+                    .GetAggregateFromInitialDefaultAggregateAsync<T, Q>(
                         command.AggregateId);
             if (aggregate == null)
             {

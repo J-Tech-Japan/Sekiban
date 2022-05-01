@@ -10,12 +10,7 @@ using CustomerDomainContext.Aggregates.LoyaltyPoints.Consts;
 using CustomerDomainContext.Aggregates.RecentActivities;
 using CustomerDomainContext.Aggregates.RecentActivities.Commands;
 using CustomerDomainContext.Shared.Exceptions;
-using Microsoft.Azure.Cosmos;
-using Microsoft.Azure.Cosmos.Linq;
-using Microsoft.Extensions.DependencyInjection;
-using Newtonsoft.Json.Linq;
 using Sekiban.EventSourcing.AggregateCommands;
-using Sekiban.EventSourcing.AggregateEvents;
 using Sekiban.EventSourcing.Aggregates;
 using Sekiban.EventSourcing.Documents;
 using Sekiban.EventSourcing.Queries;
@@ -195,5 +190,51 @@ public class CustomerDbStoryBasic : TestBase
         recentActivityList = (await _aggregateService.DtoListAsync<RecentActivity, RecentActivityDto>()).ToList();
         Assert.Single(recentActivityList);
         Assert.Equal(101, version);
+    }
+
+    [Fact(DisplayName = "CosmosDb ストーリーテスト 。並列でたくさん動かしたらどうなるか。 INoValidateCommand がRecentActivityに適応されているので、問題ないはず")]
+    public async Task AsynchronousExecutionTestAsync()
+    {
+        // 先に全データを削除する
+        await _cosmosDbFactory.DeleteAllFromAggregateEventContainer(AggregateContainerGroup.Default);
+        await _cosmosDbFactory.DeleteAllFromAggregateEventContainer(AggregateContainerGroup.Dissolvable);
+        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.AggregateCommand, AggregateContainerGroup.Dissolvable);
+
+        // create recent activity
+        var createRecentActivityResult =
+            await _aggregateCommandExecutor
+                .ExecCreateCommandAsync<RecentActivity, RecentActivityDto, CreateRecentActivity>(
+                    new CreateRecentActivity(Guid.NewGuid()));
+        
+        var recentActivityList = (await _aggregateService.DtoListAsync<RecentActivity, RecentActivityDto>()).ToList();
+        Assert.Single(recentActivityList);
+        int version = createRecentActivityResult.AggregateDto!.Version;
+        List<Task> tasks = new List<Task>();
+        foreach (var i in Enumerable.Range(0, 100))
+        {
+            tasks.Add(Task.Run(
+                async () =>
+                {
+                    var recentActivityAddedResult = await 
+                        _aggregateCommandExecutor
+                            .ExecChangeCommandAsync<RecentActivity, RecentActivityDto, AddRecentActivity>(
+                                new AddRecentActivity(
+                                    createRecentActivityResult!.AggregateDto!.AggregateId,
+                                    $"Message - {i + 1}") { ReferenceVersion = version}, null );
+                    version = recentActivityAddedResult.AggregateDto!.Version;
+                }));
+        }
+        await Task.WhenAll(tasks);
+        recentActivityList = (await _aggregateService.DtoListAsync<RecentActivity, RecentActivityDto>()).ToList();
+        Assert.Single(recentActivityList);
+        // this works
+        var aggregateRecentActivity = (await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<RecentActivity, RecentActivityDto>(createRecentActivityResult.AggregateDto.AggregateId));
+        // var aggregateRecentActivity =
+        //     await _aggregateService.GetAggregateDtoAsync<RecentActivity, RecentActivityDto>(
+        //         createRecentActivityResult.AggregateDto.AggregateId);
+        Assert.Single(recentActivityList);
+        Assert.NotNull(aggregateRecentActivity);
+        Assert.Equal(101, aggregateRecentActivity!.Version);
+
     }
 }

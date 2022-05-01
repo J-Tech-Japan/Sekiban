@@ -5,7 +5,7 @@ public record AddRecentActivity(
     string Activity
 ) : ChangeAggregateCommandBase<RecentActivity>(
     AggregateId
-);
+) , INoValidateCommand;
 
 public class AddRecentActivityHandler : ChangeAggregateCommandHandlerBase<RecentActivity, AddRecentActivity>
 {

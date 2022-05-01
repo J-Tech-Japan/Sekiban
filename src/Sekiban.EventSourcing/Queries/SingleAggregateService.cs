@@ -144,7 +144,6 @@ public class SingleAggregateService
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <typeparam name="T"></typeparam>
-    /// <typeparam name="Q"></typeparam>
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
     public async Task<T?> GetAggregateFromInitialAsync<T, P>(
@@ -164,6 +163,7 @@ public class SingleAggregateService
         _singleAggregateProjectionQueryStore.SaveProjection(aggregate, typeof(T).Name);
         return aggregate;
     }
+    
     /// <summary>
     ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
     ///     遅いので、通常はキャッシュバージョンを使用ください
@@ -171,20 +171,30 @@ public class SingleAggregateService
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <typeparam name="T"></typeparam>
-    /// <typeparam name="Q"></typeparam>
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
-    public async Task<Q?> GetAggregateFromInitialDtoAsync<T, Q, P>(
+    public async Task<T?> GetAggregateFromInitialDefaultAggregateAsync<T, Q>(
         Guid aggregateId)
-        where T : ISingleAggregate, ISingleAggregateProjection,
-        ISingleAggregateProjectionDtoConvertible<Q>
-        where Q : ISingleAggregate
-        where P : ISingleAggregateProjector<T>, new()
-    {
-        var aggregate = await GetAggregateFromInitialAsync<T, P>(aggregateId);
-        var projector = new P();
-        return aggregate != null ? aggregate.ToDto() : default;
-    }
+        where T : TransferableAggregateBase<Q>
+        where Q : AggregateDtoBase =>
+        await GetAggregateFromInitialAsync<T, DefaultSingleAggregateProjector<T>>(
+            aggregateId);
+    
+    /// <summary>
+    ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
+    ///     遅いので、通常はキャッシュバージョンを使用ください
+    ///     検証などのためにこちらを残しています。
+    /// </summary>
+    /// <param name="aggregateId"></param>
+    /// <typeparam name="T"></typeparam>
+    /// <typeparam name="P"></typeparam>
+    /// <returns></returns>
+    public async Task<Q?> GetAggregateFromInitialDefaultAggregateDtoAsync<T, Q>(
+        Guid aggregateId)
+        where T : TransferableAggregateBase<Q>
+        where Q : AggregateDtoBase =>
+        (await GetAggregateFromInitialAsync<T, DefaultSingleAggregateProjector<T>>(
+            aggregateId))?.ToDto();
 
     /// <summary>
     ///     スナップショット、メモリキャッシュを使用する通常版
@@ -214,10 +224,17 @@ public class SingleAggregateService
                     .GetPartitionKey(
                         DocumentType.AggregateEvent),
                 fromStore.LastEventId);
+
+            var aggregateEvents = allAfterEvents.ToList();
+            if (aggregateEvents.Count() != aggregateEvents.Select(m => m.Ts + m.Version).Distinct().Count())
+            {
+                return await GetAggregateFromInitialAsync<T, P>(aggregateId);
+            }
+            
             var dto = fromStore.ToDto();
             var aggregateToApply = projector.CreateInitialAggregate(fromStore.AggregateId);
             aggregateToApply.ApplySnapshot(dto);
-            foreach (var e in allAfterEvents) { aggregateToApply.ApplyEvent(e); }
+            foreach (var e in aggregateEvents) { aggregateToApply.ApplyEvent(e); }
             _singleAggregateProjectionQueryStore.SaveProjection(aggregateToApply, typeof(T).Name);
             return aggregateToApply;
         }

@@ -142,6 +142,15 @@ public class CosmosDocumentRepository : IDocumentRepository
             aggregateContainerGroup,
             async container =>
             {
+                DateTime? ts = null;
+                // get ts from since event
+                if (sinceEventId.HasValue)
+                {
+                    var response = await container.ReadItemAsync<AggregateEvent>(
+                        sinceEventId.Value.ToString(),
+                        new PartitionKey(partitionKey));
+                    ts = response.Resource.TimeStamp;
+                }
                 var types = _registeredEventTypes.RegisteredTypes;
                 var options = new QueryRequestOptions();
                 if (partitionKey != null)
@@ -154,8 +163,8 @@ public class CosmosDocumentRepository : IDocumentRepository
                     .Where(
                         b => b.DocumentType == DocumentType.AggregateEvent &&
                             b.AggregateId == aggregateId);
-                query = sinceEventId.HasValue ? query.OrderByDescending(m => m.Ts)
-                    : query.OrderBy(m => m.Ts);
+                query = sinceEventId.HasValue ? query.OrderByDescending(m => m.TimeStamp)
+                    : query.OrderBy(m => m.TimeStamp);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(
                     query.ToQueryDefinition(),
                     null,
@@ -179,15 +188,14 @@ public class CosmosDocumentRepository : IDocumentRepository
                             throw new JJUnregisterdEventFoundException();
                         }
 
-                        if (sinceEventId.HasValue && toAdd.Id == sinceEventId.Value)
+                        if (ts.HasValue  && toAdd.TimeStamp < ts)
                         {
-                            return events.OrderBy(m => m.Ts);
+                            return events.OrderBy(m => m.TimeStamp);
                         }
-
                         events.Add(toAdd);
                     }
                 }
-                return events.OrderBy(m => m.Ts);
+                return events.OrderBy(m => m.TimeStamp);
             });
     }
     public async Task<IEnumerable<AggregateEvent>> GetAllAggregateEventsForAggregateEventTypeAsync(
