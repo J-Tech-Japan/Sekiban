@@ -27,7 +27,7 @@ public class CosmosDocumentRepository : IDocumentRepository
     {
         var aggregateName = typeof(T).Name;
         var aggregate = AggregateBase.Create<T>(Guid.NewGuid());
-        var eventTypes = _registeredEventTypes.RegisterTypes;
+        var eventTypes = _registeredEventTypes.RegisteredTypes;
         return await _cosmosDbFactory.CosmosActionAsync<IEnumerable<AggregateEvent>>(
             DocumentType.AggregateEvent,
             async container =>
@@ -187,7 +187,7 @@ public class CosmosDocumentRepository : IDocumentRepository
             DocumentType.AggregateEvent,
             async container =>
             {
-                var types = _registeredEventTypes.RegisterTypes;
+                var types = _registeredEventTypes.RegisteredTypes;
                 var options = new QueryRequestOptions();
                 if (partitionKey != null)
                 {
@@ -245,7 +245,7 @@ public class CosmosDocumentRepository : IDocumentRepository
             {
                 var options = new QueryRequestOptions();
                 var events = new List<AggregateEvent>();
-                var eventTypes = _registeredEventTypes.RegisterTypes.Select(m => m.Name);
+                var eventTypes = _registeredEventTypes.RegisteredTypes.Select(m => m.Name);
                 var query = container.GetItemLinqQueryable<AggregateEvent>()
                     .Where(
                         b => b.DocumentType == DocumentType.AggregateEvent &&
@@ -268,7 +268,7 @@ public class CosmosDocumentRepository : IDocumentRepository
                             continue;
                         }
 
-                        var toAdd = _registeredEventTypes.RegisterTypes
+                        var toAdd = _registeredEventTypes.RegisteredTypes
                             .Where(m => m.Name == typeName)
                             .Select(m => (AggregateEvent?)jobj.ToObject(m))
                             .FirstOrDefault(m => m != null);

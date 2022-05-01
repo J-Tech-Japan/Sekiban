@@ -3,9 +3,12 @@ namespace Sekiban.EventSourcing.AggregateEvents;
 
 [AttributeUsage(AttributeTargets.Class)]
 public class SekibanEventTypeAttribute : Attribute { }
+
 public class RegisteredEventTypes
 {
-    public List<Type> RegisterTypes { get; init; } = new();
+    private readonly List<Type> _registeredTypes = new();
+    public ReadOnlyCollection<Type> RegisteredTypes { get; }
+
     public RegisteredEventTypes(params Assembly[] assemblies)
     {
         var attributeType = typeof(SekibanEventTypeAttribute);
@@ -23,8 +26,9 @@ public class RegisteredEventTypes
             );
             foreach (var type in decoratedTypes)
             {
-                RegisterTypes.Add(type);
+                _registeredTypes.Add(type);
             }
         }
+        RegisteredTypes = _registeredTypes.AsReadOnly();
     }
 }

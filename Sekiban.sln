@@ -1,37 +1,34 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.30114.105
+# Visual Studio Version 17
+VisualStudioVersion = 17.1.32328.378
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.EventSourcing", "src\Sekiban.EventSourcing\Sekiban.EventSourcing.csproj", "{55BD846C-C1F0-4187-A0D7-2013EEEFDBCE}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Sekiban.EventSourcing", "src\Sekiban.EventSourcing\Sekiban.EventSourcing.csproj", "{55BD846C-C1F0-4187-A0D7-2013EEEFDBCE}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Lib", "Lib", "{76D7B2DA-2E6B-4078-AC01-B29BCA83411A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.EventSourcing.CosmosInfrastructure", "src\Sekiban.EventSourcing.CosmosInfrastracture\Sekiban.EventSourcing.CosmosInfrastructure.csproj", "{F6F5A43D-3E80-4B39-8A56-13F2A6B61EC7}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Sekiban.EventSourcing.CosmosInfrastructure", "src\Sekiban.EventSourcing.CosmosInfrastracture\Sekiban.EventSourcing.CosmosInfrastructure.csproj", "{F6F5A43D-3E80-4B39-8A56-13F2A6B61EC7}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Samples", "Samples", "{B85F80AE-6A27-402C-93FA-352D938EDA8D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ESSampleProjectLib", "samples\ESSampleProjectLib\ESSampleProjectLib.csproj", "{81C2B718-30E5-4FAE-8CC9-BF4857C4745E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ESSampleProjectLib", "samples\ESSampleProjectLib\ESSampleProjectLib.csproj", "{81C2B718-30E5-4FAE-8CC9-BF4857C4745E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CustomerDomainContext", "samples\CustomerDomainContext\CustomerDomainContext.csproj", "{B29502DD-FDC4-4384-9639-B504E5A9E1CA}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CustomerDomainContext", "samples\CustomerDomainContext\CustomerDomainContext.csproj", "{B29502DD-FDC4-4384-9639-B504E5A9E1CA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainIntegration", "samples\DomainIntegration\DomainIntegration.csproj", "{C61B605A-2F2F-40C4-963F-F6D9FBF530CD}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DomainIntegration", "samples\DomainIntegration\DomainIntegration.csproj", "{C61B605A-2F2F-40C4-963F-F6D9FBF530CD}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ESSampleProjectDependency", "samples\ESSampleProjectDependency\ESSampleProjectDependency.csproj", "{6E0F08C3-00B4-4717-9013-6B386474875E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ESSampleProjectDependency", "samples\ESSampleProjectDependency\ESSampleProjectDependency.csproj", "{6E0F08C3-00B4-4717-9013-6B386474875E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CustomerWebApi", "samples\CustomerWebApi\CustomerWebApi.csproj", "{5ED1D505-37C6-4025-B991-8D0A7E1FD75F}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CustomerWebApi", "samples\CustomerWebApi\CustomerWebApi.csproj", "{5ED1D505-37C6-4025-B991-8D0A7E1FD75F}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{4C34F748-F223-44DD-899D-029F9CEF7780}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SampleProjectStoryXTest", "test\SampleProjectStoryXTest\SampleProjectStoryXTest.csproj", "{36525982-9318-4E08-BE0E-2731A9AD8E42}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SampleProjectStoryXTest", "test\SampleProjectStoryXTest\SampleProjectStoryXTest.csproj", "{36525982-9318-4E08-BE0E-2731A9AD8E42}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
-	EndGlobalSection
-	GlobalSection(SolutionProperties) = preSolution
-		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{55BD846C-C1F0-4187-A0D7-2013EEEFDBCE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
@@ -67,6 +64,9 @@ Global
 		{36525982-9318-4E08-BE0E-2731A9AD8E42}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{36525982-9318-4E08-BE0E-2731A9AD8E42}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{55BD846C-C1F0-4187-A0D7-2013EEEFDBCE} = {76D7B2DA-2E6B-4078-AC01-B29BCA83411A}
 		{F6F5A43D-3E80-4B39-8A56-13F2A6B61EC7} = {76D7B2DA-2E6B-4078-AC01-B29BCA83411A}
@@ -76,5 +76,8 @@ Global
 		{6E0F08C3-00B4-4717-9013-6B386474875E} = {B85F80AE-6A27-402C-93FA-352D938EDA8D}
 		{5ED1D505-37C6-4025-B991-8D0A7E1FD75F} = {B85F80AE-6A27-402C-93FA-352D938EDA8D}
 		{36525982-9318-4E08-BE0E-2731A9AD8E42} = {4C34F748-F223-44DD-899D-029F9CEF7780}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {2DFBE53E-69A7-453A-8D20-72271AE32016}
 	EndGlobalSection
 EndGlobal

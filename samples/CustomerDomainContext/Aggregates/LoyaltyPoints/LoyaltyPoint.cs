@@ -15,20 +15,6 @@ public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointDto>
         AddAndApplyEvent(new LoyaltyPointCreated(clientId, initialPoint));
     }
 
-    public void AddLoyaltyPoint(
-        DateTime happenedDate,
-        LoyaltyPointReceiveType reason,
-        int pointAmount,
-        string note)
-    {
-        if (LastOccuredTime > happenedDate)
-        {
-            throw new JJLoyaltyPointCanNotHappenOnThisTimeException();
-        }
-        AddAndApplyEvent(
-            new LoyaltyPointAdded(AggregateId, happenedDate, reason, pointAmount, note));
-    }
-
     public override LoyaltyPointDto ToDto() => new(this)
     {
         CurrentPoint = CurrentPoint
@@ -65,6 +51,20 @@ public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointDto>
         ,
         _ => null
     };
+
+    public void AddLoyaltyPoint(
+        DateTime happenedDate,
+        LoyaltyPointReceiveType reason,
+        int pointAmount,
+        string note)
+    {
+        if (LastOccuredTime > happenedDate)
+        {
+            throw new JJLoyaltyPointCanNotHappenOnThisTimeException();
+        }
+        AddAndApplyEvent(
+            new LoyaltyPointAdded(AggregateId, happenedDate, reason, pointAmount, note));
+    }
 
     public void UseLoyaltyPoint(
         DateTime happenedDate,

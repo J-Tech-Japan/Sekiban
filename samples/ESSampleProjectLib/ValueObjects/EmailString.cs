@@ -2,7 +2,7 @@
 
 namespace ESSampleProjectLib.ValueObjects
 {
-    public class EmailString : IValueObject<string>
+    public record EmailString : IValueObject<string>
     {
         public string Value { get; } = null!;
 

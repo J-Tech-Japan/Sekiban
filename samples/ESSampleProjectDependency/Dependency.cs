@@ -1,15 +1,13 @@
 ﻿using CosmosInfrastructure;
 using CosmosInfrastructure.DomainCommon.EventSourcings;
-using CustomerDomainContext.Aggregates.Branches.Events;
-using Sekiban.EventSourcing.AggregateCommands;
-using Sekiban.EventSourcing.Documents;
-using Sekiban.EventSourcing.AggregateEvents;
-using Sekiban.EventSourcing.PubSubs;
-using Sekiban.EventSourcing.Queries;
-using Sekiban.EventSourcing.Snapshots;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Sekiban.EventSourcing.AggregateCommands;
+using Sekiban.EventSourcing.Documents;
+using Sekiban.EventSourcing.PubSubs;
+using Sekiban.EventSourcing.Queries;
+using Sekiban.EventSourcing.Snapshots;
 using System.Reflection;
 namespace ESSampleProjectDependency;
 
@@ -31,21 +29,20 @@ public static class Dependency
         services.AddTransient<SnapshotListWriter>();
         services.AddTransient<SnapshotListReader>();
 
-        services
-            .AddTransient<ISingleAggregateProjectionQueryStore,
-                MemoryCacheSingleAggregateProjectionQueryStore>();
+        services.AddTransient<ISingleAggregateProjectionQueryStore, MemoryCacheSingleAggregateProjectionQueryStore>();
         services.AddTransient<IDocumentWriter, CosmosDocumentWriter>();
         services.AddTransient<IDocumentRepository, CosmosDocumentRepository>();
+
+        // ユーザー情報
+        services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
+        services.AddTransient<IUserInformationFactory, HttpContextUserInformationFactory>();
 
         // ドメイン統合
         services.AddTransient<IIntegratedEventPublisher, NoIntegratedEventPublisher>();
 
         // 各ドメインコンテキスト
-        services.AddTransient(CustomerDomainContext.Shared.Dependency.Enumerate());
-
-        services.AddTransient<IUserInformationFactory, HttpContextUserInformationFactory>();
-        services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
-        services.AddSingleton(new RegisteredEventTypes(typeof(BranchCreated).Assembly));
+        services.AddSingleton(CustomerDomainContext.Shared.Dependency.GetRegisteredAggregateEvents());
+        services.AddTransient(CustomerDomainContext.Shared.Dependency.GetDependencies());
     }
 
     public static void AddTransient(

@@ -7,7 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\CustomerDomainContext\CustomerDomainContext.csproj" />
     <ProjectReference Include="..\..\src\Sekiban.EventSourcing\Sekiban.EventSourcing.csproj" />
   </ItemGroup>
 
