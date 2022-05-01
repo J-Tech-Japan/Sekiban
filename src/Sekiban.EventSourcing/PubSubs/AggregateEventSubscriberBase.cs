@@ -10,9 +10,6 @@ public abstract class AggregateEventSubscriberBase<TEvent> : INotificationHandle
         TEvent ev,
         CancellationToken cancellationToken)
     {
-        // TODO: 下記行が必要かどうか確認する。
-        //_aggregateQueryStore.ReceiveEvent(notification.AggregateEvent);
-
         await SubscribeAggregateEventAsync(ev);
     }
 
