@@ -28,22 +28,22 @@ public class SingleAggregateService
             _singleAggregateProjectionQueryStore.FindAggregateList<T>();
         if (aggregateList != null)
         {
-            var allAfterEvents =
+            var allAfterEvents = new List<AggregateEvent>();
                 await _documentRepository.GetAllAggregateEventsForAggregateEventTypeAsync(
                     projector.OriginalAggregateType(),
-                    aggregateList.LastEventId); // 効率悪いけどこれで取れる
-            return HandleListEvent(
-                    projector,
-                    allAfterEvents,
-                    aggregateList) ??
-                new SingleAggregateList<T>();
+                    aggregateList.LastEventId,
+                    events =>
+                    {
+                        aggregateList = HandleListEvent(projector, events, aggregateList);
+                    }); // 効率悪いけどこれで取れる
+            return aggregateList ?? new SingleAggregateList<T>();
         }
-
-        var allEvents =
-            await _documentRepository.GetAllAggregateEventsForAggregateEventTypeAsync(
+        await _documentRepository.GetAllAggregateEventsForAggregateEventTypeAsync(
                 projector.OriginalAggregateType(),
-                aggregateList?.LastEventId);
-        return HandleListEvent(projector, allEvents, aggregateList) ??
+                aggregateList?.LastEventId, events => {
+                    aggregateList = HandleListEvent(projector, events, aggregateList);
+                });
+        return aggregateList ??
             new SingleAggregateList<T>();
     }
 
@@ -152,14 +152,17 @@ public class SingleAggregateService
         where P : ISingleAggregateProjector<T>, new()
     {
         var projector = new P();
-        var allEvents = await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
+        var aggregate = projector.CreateInitialAggregate(aggregateId);
+        await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
             typeof(T),
             new AggregateIdPartitionKeyFactory(aggregateId, projector.OriginalAggregateType())
                 .GetPartitionKey(
-                    DocumentType.AggregateEvent));
-        var aggregate = projector.CreateInitialAggregate(aggregateId);
-        foreach (var e in allEvents) { aggregate.ApplyEvent(e); }
+                    DocumentType.AggregateEvent), null,
+            events =>
+            {
+                foreach (var e in events) { aggregate.ApplyEvent(e); }
+            } );
         _singleAggregateProjectionQueryStore.SaveProjection(aggregate, typeof(T).Name);
         return aggregate;
     }
@@ -217,35 +220,35 @@ public class SingleAggregateService
         var projector = new P();
         if (fromStore != null)
         {
-            var allAfterEvents = await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
+            var dto = fromStore.ToDto();
+            var aggregateToApply = projector.CreateInitialAggregate(fromStore.AggregateId);
+            aggregateToApply.ApplySnapshot(dto);
+            
+            await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
                 aggregateId,
                 typeof(T),
                 new AggregateIdPartitionKeyFactory(aggregateId, projector.OriginalAggregateType())
                     .GetPartitionKey(
                         DocumentType.AggregateEvent),
-                fromStore.LastEventId);
-
-            var aggregateEvents = allAfterEvents.ToList();
-            if (aggregateEvents.Count() != aggregateEvents.Select(m => m.TimeStamp).Distinct().Count())
-            {
-                return await GetAggregateFromInitialAsync<T, P>(aggregateId);
-            }
-            
-            var dto = fromStore.ToDto();
-            var aggregateToApply = projector.CreateInitialAggregate(fromStore.AggregateId);
-            aggregateToApply.ApplySnapshot(dto);
-            foreach (var e in aggregateEvents) { aggregateToApply.ApplyEvent(e); }
+                fromStore.LastEventId,
+                events =>
+                {
+                    foreach (var e in events) { aggregateToApply.ApplyEvent(e); }
+                });
             _singleAggregateProjectionQueryStore.SaveProjection(aggregateToApply, typeof(T).Name);
             return aggregateToApply;
         }
-        var allEvents = await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
+        var aggregate = projector.CreateInitialAggregate(aggregateId);
+        await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
             typeof(T),
             new AggregateIdPartitionKeyFactory(aggregateId, projector.OriginalAggregateType())
                 .GetPartitionKey(
-                    DocumentType.AggregateEvent));
-        var aggregate = projector.CreateInitialAggregate(aggregateId);
-        foreach (var e in allEvents) { aggregate.ApplyEvent(e); }
+                    DocumentType.AggregateEvent), null,
+            events =>
+            {
+                foreach (var e in events) { aggregate.ApplyEvent(e); }
+            });
         _singleAggregateProjectionQueryStore.SaveProjection(aggregate, typeof(T).Name);
         return aggregate;
     }

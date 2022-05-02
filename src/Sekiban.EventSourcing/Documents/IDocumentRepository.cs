@@ -7,12 +7,6 @@ namespace Sekiban.EventSourcing.Documents;
 
 public interface IDocumentRepository
 {
-    Task<IEnumerable<AggregateEvent>> GetAllAggregateEventsForAggregateIdAsync(
-        Guid aggregateId,
-        Type originalType,
-        string? partitionKey = null,
-        Guid? sinceEventId = null);
-    
     Task GetAllAggregateEventsForAggregateIdAsync(
         Guid aggregateId,
         Type originalType,
@@ -20,9 +14,6 @@ public interface IDocumentRepository
         Guid? sinceEventId,
         Action<IEnumerable<AggregateEvent>> resultAction);
     
-    Task<IEnumerable<AggregateEvent>> GetAllAggregateEventsForAggregateEventTypeAsync(
-        Type originalType,
-        Guid? sinceEventId = null);
     Task GetAllAggregateEventsForAggregateEventTypeAsync(
         Type originalType,
         Guid? sinceEventId,
