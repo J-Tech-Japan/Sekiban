@@ -7,3 +7,5 @@ public interface IDocumentWriter
     Task SaveAndPublishAggregateEvent<TAggregateEvent>(TAggregateEvent aggregateEvent, Type aggregateType)
         where TAggregateEvent : AggregateEvent;
 }
+public interface IDocumentPersistentWriter : IDocumentWriter {}
+public interface IDocumentTemporaryWriter : IDocumentWriter {}

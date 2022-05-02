@@ -1,6 +1,6 @@
 namespace CosmosInfrastructure.DomainCommon.EventSourcings;
 
-public class CosmosDocumentWriter : IDocumentWriter
+public class CosmosDocumentWriter : IDocumentPersistentWriter
 {
     private readonly CosmosDbFactory _cosmosDbFactory;
     private readonly AggregateEventPublisher _eventPublisher;

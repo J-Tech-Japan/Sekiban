@@ -25,6 +25,5 @@ public enum AggregateContainerGroup
 {
     Default = 0,
     Dissolvable = 1,
-    ThirdContainer = 2,
-    FourthContainer = 3,
+    InMemoryContainer = 10
 }

@@ -13,10 +13,21 @@ public interface IDocumentRepository
         string? partitionKey = null,
         Guid? sinceEventId = null);
     
+    Task GetAllAggregateEventsForAggregateIdAsync(
+        Guid aggregateId,
+        Type originalType,
+        string? partitionKey,
+        Guid? sinceEventId,
+        Action<IEnumerable<AggregateEvent>> resultAction);
+    
     Task<IEnumerable<AggregateEvent>> GetAllAggregateEventsForAggregateEventTypeAsync(
         Type originalType,
         Guid? sinceEventId = null);
-    
+    Task GetAllAggregateEventsForAggregateEventTypeAsync(
+        Type originalType,
+        Guid? sinceEventId,
+        Action<IEnumerable<AggregateEvent>> resultAction);
+
     Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
         Guid aggregateId,
         Type originalType,
@@ -26,13 +37,19 @@ public interface IDocumentRepository
         string? partitionKey,
         QueryListType queryListType = QueryListType.ActiveAndDeleted)
         where T : IAggregate;
-
+    
     Task<SnapshotListChunkDocument?> GetSnapshotListChunkByIdAsync(
         Guid id,
         string partitionKey);
+
 
     Task<SnapshotDocument?> GetSnapshotByIdAsync(
         Guid id,
         Type originalType,
         string partitionKey);
+
 }
+
+public interface IDocumentPersistentRepository : IDocumentRepository {}
+public interface IDocumentTemporaryRepository : IDocumentRepository {}
+
