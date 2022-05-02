@@ -9,6 +9,8 @@ using CustomerDomainContext.Aggregates.LoyaltyPoints.Commands;
 using CustomerDomainContext.Aggregates.LoyaltyPoints.Consts;
 using CustomerDomainContext.Aggregates.RecentActivities;
 using CustomerDomainContext.Aggregates.RecentActivities.Commands;
+using CustomerDomainContext.Aggregates.RecentInMemoryActivities;
+using CustomerDomainContext.Aggregates.RecentInMemoryActivities.Commands;
 using CustomerDomainContext.Shared.Exceptions;
 using Sekiban.EventSourcing.AggregateCommands;
 using Sekiban.EventSourcing.Aggregates;
@@ -241,4 +243,47 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Equal(count+1, aggregateRecentActivity!.Version);
 
     }
+        [Fact(DisplayName = "インメモリストーリーテスト 。並列でたくさん動かしたらどうなるか。 INoValidateCommand がRecentActivityに適応されているので、問題ないはず")]
+    public async Task AsynchronousInMemoryExecutionTestAsync()
+    {
+
+        // create recent activity
+        var createRecentActivityResult =
+            await _aggregateCommandExecutor
+                .ExecCreateCommandAsync<RecentInMemoryActivity, RecentInMemoryActivityDto, CreateRecentInMemoryActivity>(
+                    new CreateRecentInMemoryActivity(Guid.NewGuid()));
+        
+        var recentActivityList = (await _aggregateService.DtoListAsync<RecentInMemoryActivity, RecentInMemoryActivityDto>()).ToList();
+        Assert.Single(recentActivityList);
+        int version = createRecentActivityResult.AggregateDto!.Version;
+        List<Task> tasks = new List<Task>();
+        int count = 100;
+        foreach (var i in Enumerable.Range(0, count))
+        {
+            tasks.Add(Task.Run(
+                async () =>
+                {
+                    var recentActivityAddedResult = await 
+                        _aggregateCommandExecutor
+                            .ExecChangeCommandAsync<RecentInMemoryActivity, RecentInMemoryActivityDto, AddRecentInMemoryActivity>(
+                                new AddRecentInMemoryActivity(
+                                    createRecentActivityResult!.AggregateDto!.AggregateId,
+                                    $"Message - {i + 1}") { ReferenceVersion = version}, null );
+                    version = recentActivityAddedResult.AggregateDto!.Version;
+                }));
+        }
+        await Task.WhenAll(tasks);
+        recentActivityList = (await _aggregateService.DtoListAsync<RecentInMemoryActivity, RecentInMemoryActivityDto>()).ToList();
+        Assert.Single(recentActivityList);
+        // this works
+        var aggregateRecentActivity = (await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<RecentInMemoryActivity, RecentInMemoryActivityDto>(createRecentActivityResult.AggregateDto.AggregateId));
+        // var aggregateRecentActivity =
+        //     await _aggregateService.GetAggregateDtoAsync<RecentInMemoryActivity, RecentInMemoryActivityDto>(
+        //         createRecentInMemoryActivityResult.AggregateDto.AggregateId);
+        Assert.Single(recentActivityList);
+        Assert.NotNull(aggregateRecentActivity);
+        Assert.Equal(count+1, aggregateRecentActivity!.Version);
+
+    }
 }
+

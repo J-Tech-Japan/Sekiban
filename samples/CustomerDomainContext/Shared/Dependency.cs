@@ -8,6 +8,8 @@ using CustomerDomainContext.Aggregates.LoyaltyPoints;
 using CustomerDomainContext.Aggregates.LoyaltyPoints.Commands;
 using CustomerDomainContext.Aggregates.RecentActivities;
 using CustomerDomainContext.Aggregates.RecentActivities.Commands;
+using CustomerDomainContext.Aggregates.RecentInMemoryActivities;
+using CustomerDomainContext.Aggregates.RecentInMemoryActivities.Commands;
 using System.Reflection;
 using CreateLoyaltyPointHandler = CustomerDomainContext.Aggregates.LoyaltyPoints.Commands.CreateLoyaltyPointHandler;
 
@@ -69,8 +71,16 @@ public static class Dependency
             typeof(CreateRecentActivityHandler));
         
         yield return (
-                typeof(IChangeAggregateCommandHandler<RecentActivity, AddRecentActivity>),
-                typeof(AddRecentActivityHandler));
+            typeof(IChangeAggregateCommandHandler<RecentActivity, AddRecentActivity>),
+            typeof(AddRecentActivityHandler));
+        // Aggregate: RecentInMemoryActivity
+        yield return (
+            typeof(ICreateAggregateCommandHandler<RecentInMemoryActivity, CreateRecentInMemoryActivity>),
+            typeof(CreateRecentInMemoryActivityHandler));
+        
+        yield return (
+            typeof(IChangeAggregateCommandHandler<RecentInMemoryActivity, AddRecentInMemoryActivity>),
+            typeof(AddRecentInMemoryActivityHandler));
 
     }
 }
