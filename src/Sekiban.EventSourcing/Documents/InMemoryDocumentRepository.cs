@@ -23,11 +23,11 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository
         if (sinceEventId != null)
         {
             var index = list.FindIndex(m => m.Id == sinceEventId);
-            resultAction(list.GetRange(index, list.Count - index));
+            resultAction(list.GetRange(index, list.Count - index).OrderBy(m => m.TimeStamp));
         }
         else
         {
-            resultAction(list);
+            resultAction(list.OrderBy(m => m.TimeStamp));
         }
     }
     public async Task GetAllAggregateEventsForAggregateEventTypeAsync(
@@ -46,12 +46,12 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository
             }
             else
             {
-                resultAction(list.GetRange(index + 1, list.Count - index - 1));
+                resultAction(list.GetRange(index + 1, list.Count - index - 1).OrderBy(m => m.TimeStamp));
             }
         }
         else
         {
-            resultAction(list);
+            resultAction(list.OrderBy(m => m.TimeStamp));
         }
     }
     public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type originalType, string? partitionKey) =>

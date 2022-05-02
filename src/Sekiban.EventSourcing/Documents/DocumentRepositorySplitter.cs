@@ -21,7 +21,11 @@ public class DocumentRepositorySplitter : IDocumentRepository
             AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
             return _documentTemporaryRepository.GetAllAggregateEventsForAggregateIdAsync(aggregateId, originalType, partitionKey, sinceEventId, resultAction);
-        return _documentPersistentRepository.GetAllAggregateEventsForAggregateIdAsync(aggregateId, originalType, partitionKey, sinceEventId, resultAction);
+        return _documentPersistentRepository.GetAllAggregateEventsForAggregateIdAsync(aggregateId, originalType, partitionKey, sinceEventId,
+            events =>
+            {
+                resultAction(events);
+            });
     }
     public Task GetAllAggregateEventsForAggregateEventTypeAsync(
         Type originalType,
@@ -32,7 +36,11 @@ public class DocumentRepositorySplitter : IDocumentRepository
             AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
             return _documentTemporaryRepository.GetAllAggregateEventsForAggregateEventTypeAsync( originalType, sinceEventId, resultAction);
-        return _documentPersistentRepository.GetAllAggregateEventsForAggregateEventTypeAsync(originalType,  sinceEventId, resultAction);
+        return _documentPersistentRepository.GetAllAggregateEventsForAggregateEventTypeAsync(originalType,  sinceEventId,
+            events =>
+            {
+                resultAction(events);
+            });
     }
     public Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
         Guid aggregateId,
