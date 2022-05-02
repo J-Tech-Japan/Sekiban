@@ -4,18 +4,20 @@ public class DocumentRepositorySplitter : IDocumentRepository
 {
     private readonly IDocumentPersistentRepository _documentPersistentRepository;
     private readonly IDocumentTemporaryRepository _documentTemporaryRepository;
+    private readonly IDocumentTemporaryWriter _documentTemporaryWriter;
     private readonly HybridStoreManager _hybridStoreManager;
     public DocumentRepositorySplitter(
         IDocumentPersistentRepository documentPersistentRepository,
         IDocumentTemporaryRepository documentTemporaryRepository,
-        HybridStoreManager hybridStoreManager)
+        HybridStoreManager hybridStoreManager, IDocumentTemporaryWriter documentTemporaryWriter)
     {
         _documentPersistentRepository = documentPersistentRepository;
         _documentTemporaryRepository = documentTemporaryRepository;
         _hybridStoreManager = hybridStoreManager;
+        _documentTemporaryWriter = documentTemporaryWriter;
     }
 
-    public Task GetAllAggregateEventsForAggregateIdAsync(
+    public async Task GetAllAggregateEventsForAggregateIdAsync(
         Guid aggregateId,
         Type originalType,
         string? partitionKey,
@@ -26,29 +28,39 @@ public class DocumentRepositorySplitter : IDocumentRepository
             AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
         {
-            return _documentTemporaryRepository.GetAllAggregateEventsForAggregateIdAsync(
+           await _documentTemporaryRepository.GetAllAggregateEventsForAggregateIdAsync(
                 aggregateId,
                 originalType,
                 partitionKey,
                 sinceEventId,
                 resultAction);
+            return;
         }
-        if (partitionKey != null && _hybridStoreManager.HybridPartitionKeys.Contains(partitionKey))
+        if (partitionKey != null && _hybridStoreManager.HasPartition(partitionKey))
         {
-            return _documentTemporaryRepository.GetAllAggregateEventsForAggregateIdAsync(
+            await _documentTemporaryRepository.GetAllAggregateEventsForAggregateIdAsync(
                 aggregateId,
                 originalType,
                 partitionKey,
                 sinceEventId,
                 resultAction);
+            return;
         }
-        return _documentPersistentRepository.GetAllAggregateEventsForAggregateIdAsync(
+        await _documentPersistentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
             originalType,
             partitionKey,
             sinceEventId,
             events =>
             {
+                if (sinceEventId == null && partitionKey!=null)
+                {
+                    _hybridStoreManager.AddPartitionKey(partitionKey);
+                    foreach (AggregateEvent aggregateEvent in events)
+                    {
+                        _documentTemporaryWriter.SaveAsync(aggregateEvent, originalType).Wait();
+                    }
+                }
                 resultAction(events);
             });
     }

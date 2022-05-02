@@ -229,11 +229,10 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Single(recentActivityList);
         Assert.Equal(101, version);
     }
-
     [Fact(
-        DisplayName =
-            "CosmosDb ストーリーテスト 。並列でたくさん動かしたらどうなるか。 INoValidateCommand がRecentActivityに適応されているので、問題ないはず")]
-    public async Task AsynchronousExecutionTestAsync()
+    DisplayName =
+        "CosmosDbストーリーテスト用に削除のみを行う 。")]
+    public async Task DeleteonlyAsync()
     {
         // 先に全データを削除する
         await _cosmosDbFactory.DeleteAllFromAggregateEventContainer(
@@ -245,6 +244,28 @@ public class CustomerDbStoryBasic : TestBase
             AggregateContainerGroup.Dissolvable);
         await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(
             DocumentType.AggregateCommand);
+    }
+        [Theory(
+        DisplayName =
+            "CosmosDb ストーリーテスト 。並列でたくさん動かしたらどうなるか。 INoValidateCommand がRecentActivityに適応されているので、問題ないはず")]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task AsynchronousExecutionTestAsync(int step)
+    {
+        if (step == 01)
+        {
+            // 先に全データを削除する
+            await _cosmosDbFactory.DeleteAllFromAggregateEventContainer(
+                AggregateContainerGroup.Default);
+            await _cosmosDbFactory.DeleteAllFromAggregateEventContainer(
+                AggregateContainerGroup.Dissolvable);
+            await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(
+                DocumentType.AggregateCommand,
+                AggregateContainerGroup.Dissolvable);
+            await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(
+                DocumentType.AggregateCommand);
+            return;
+        }
 
         // create recent activity
         var createRecentActivityResult =
@@ -257,7 +278,7 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Single(recentActivityList);
         var version = createRecentActivityResult.AggregateDto!.Version;
         var tasks = new List<Task>();
-        var count = 100;
+        var count = 1000;
         foreach (var i in Enumerable.Range(0, count))
         {
             tasks.Add(
