@@ -213,7 +213,8 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Single(recentActivityList);
         int version = createRecentActivityResult.AggregateDto!.Version;
         List<Task> tasks = new List<Task>();
-        foreach (var i in Enumerable.Range(0, 100))
+        int count = 100;
+        foreach (var i in Enumerable.Range(0, count))
         {
             tasks.Add(Task.Run(
                 async () =>
@@ -237,7 +238,7 @@ public class CustomerDbStoryBasic : TestBase
         //         createRecentActivityResult.AggregateDto.AggregateId);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
-        Assert.Equal(101, aggregateRecentActivity!.Version);
+        Assert.Equal(count+1, aggregateRecentActivity!.Version);
 
     }
 }

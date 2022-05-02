@@ -30,8 +30,13 @@ public static class Dependency
         services.AddTransient<SnapshotListReader>();
 
         services.AddTransient<ISingleAggregateProjectionQueryStore, MemoryCacheSingleAggregateProjectionQueryStore>();
-        services.AddTransient<IDocumentWriter, CosmosDocumentWriter>();
-        services.AddTransient<IDocumentRepository, CosmosDocumentRepository>();
+        services.AddTransient<IDocumentPersistentWriter, CosmosDocumentWriter>();
+        services.AddTransient<IDocumentPersistentRepository, CosmosDocumentRepository>();
+        services.AddSingleton(new InMemoryDocumentStore());
+        services.AddTransient<IDocumentTemporaryWriter, InMemoryDocumentWriter>();
+        services.AddTransient<IDocumentTemporaryRepository, InMemoryDocumentRepository>();
+        services.AddTransient<IDocumentWriter, DocumentWriterSplitter>();
+        services.AddTransient<IDocumentRepository, DocumentRepositorySplitter>();
 
         // ユーザー情報
         services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
