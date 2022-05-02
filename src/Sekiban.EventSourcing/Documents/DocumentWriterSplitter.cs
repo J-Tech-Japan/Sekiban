@@ -15,18 +15,21 @@ public class DocumentWriterSplitter : IDocumentWriter
         _hybridStoreManager = hybridStoreManager;
     }
 
-    public Task SaveAsync<TDocument>(TDocument document, Type aggregateType)
+    public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType)
         where TDocument : Document
     {
         var aggregateContainerGroup =
             AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
         {
-            return _documentTemporaryWriter.SaveAsync(document, aggregateType);
+            await _documentTemporaryWriter.SaveAsync(document, aggregateType);
+            return;
         }
-        return _documentPersistentWriter.SaveAsync(document, aggregateType);
+
+        if (document is AggregateEvent) { }
+        await _documentPersistentWriter.SaveAsync(document, aggregateType);
     }
-    public Task SaveAndPublishAggregateEvent<TAggregateEvent>(
+    public async Task SaveAndPublishAggregateEvent<TAggregateEvent>(
         TAggregateEvent aggregateEvent,
         Type aggregateType) where TAggregateEvent : AggregateEvent
     {
@@ -34,12 +37,34 @@ public class DocumentWriterSplitter : IDocumentWriter
             AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
         {
-            return _documentTemporaryWriter.SaveAndPublishAggregateEvent(
+            await _documentTemporaryWriter.SaveAndPublishAggregateEvent(
+                aggregateEvent,
+                aggregateType);
+            return;
+        }
+        await AddToHybridIfPossible(aggregateEvent, aggregateType);
+        await _documentPersistentWriter.SaveAndPublishAggregateEvent(
+            aggregateEvent,
+            aggregateType);
+    }
+
+    private async Task AddToHybridIfPossible(AggregateEvent aggregateEvent, Type aggregateType)
+    {
+        if (aggregateEvent.IsAggregateInitialEvent)
+        {
+            _hybridStoreManager.HybridPartitionKeys.Add(aggregateEvent.PartitionKey);
+            await _documentTemporaryWriter.SaveAndPublishAggregateEvent(
                 aggregateEvent,
                 aggregateType);
         }
-        return _documentPersistentWriter.SaveAndPublishAggregateEvent(
-            aggregateEvent,
-            aggregateType);
+        else
+        {
+            if (_hybridStoreManager.HybridPartitionKeys.Contains(aggregateEvent.PartitionKey))
+            {
+                await _documentTemporaryWriter.SaveAndPublishAggregateEvent(
+                    aggregateEvent,
+                    aggregateType);
+            }
+        }
     }
 }

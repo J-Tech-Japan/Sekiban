@@ -4,12 +4,15 @@ public class DocumentRepositorySplitter : IDocumentRepository
 {
     private readonly IDocumentPersistentRepository _documentPersistentRepository;
     private readonly IDocumentTemporaryRepository _documentTemporaryRepository;
+    private readonly HybridStoreManager _hybridStoreManager;
     public DocumentRepositorySplitter(
         IDocumentPersistentRepository documentPersistentRepository,
-        IDocumentTemporaryRepository documentTemporaryRepository)
+        IDocumentTemporaryRepository documentTemporaryRepository,
+        HybridStoreManager hybridStoreManager)
     {
         _documentPersistentRepository = documentPersistentRepository;
         _documentTemporaryRepository = documentTemporaryRepository;
+        _hybridStoreManager = hybridStoreManager;
     }
 
     public Task GetAllAggregateEventsForAggregateIdAsync(
@@ -22,6 +25,15 @@ public class DocumentRepositorySplitter : IDocumentRepository
         var aggregateContainerGroup =
             AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+        {
+            return _documentTemporaryRepository.GetAllAggregateEventsForAggregateIdAsync(
+                aggregateId,
+                originalType,
+                partitionKey,
+                sinceEventId,
+                resultAction);
+        }
+        if (partitionKey != null && _hybridStoreManager.HybridPartitionKeys.Contains(partitionKey))
         {
             return _documentTemporaryRepository.GetAllAggregateEventsForAggregateIdAsync(
                 aggregateId,
