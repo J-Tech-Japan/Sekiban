@@ -1,7 +1,7 @@
 using Sekiban.EventSourcing.PubSubs;
 namespace Sekiban.EventSourcing.Documents;
 
-public class InMemoryDocumentWriter : IDocumentTemporaryWriter
+public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersistentWriter
 {
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
     private readonly AggregateEventPublisher _eventPublisher;

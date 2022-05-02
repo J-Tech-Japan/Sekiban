@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 namespace Sekiban.EventSourcing.Documents;
 
-public class InMemoryDocumentRepository : IDocumentTemporaryRepository
+public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumentPersistentRepository
 {
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
 
