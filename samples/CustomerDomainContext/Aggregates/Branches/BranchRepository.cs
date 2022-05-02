@@ -1,6 +1,3 @@
 namespace CustomerDomainContext.Aggregates.Branches;
 
-public class BranchRepository
-{
-
-}
+public class BranchRepository { }

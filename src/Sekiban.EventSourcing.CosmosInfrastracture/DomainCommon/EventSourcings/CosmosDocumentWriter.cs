@@ -44,7 +44,9 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
         }
     }
 
-    public async Task SaveAndPublishAggregateEvent<TAggregateEvent>(TAggregateEvent aggregateEvent, Type aggregateType) 
+    public async Task SaveAndPublishAggregateEvent<TAggregateEvent>(
+        TAggregateEvent aggregateEvent,
+        Type aggregateType)
         where TAggregateEvent : AggregateEvent
     {
         var aggregateContainerGroup =

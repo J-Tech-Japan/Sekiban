@@ -1,4 +1,3 @@
-using Sekiban.EventSourcing.Aggregates;
 namespace Sekiban.EventSourcing.AggregateCommands;
 
 public interface IChangeAggregateCommandHandler<T, C>

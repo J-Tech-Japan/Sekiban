@@ -1,15 +1,14 @@
-﻿using Sekiban.EventSourcing.AggregateEvents;
-using Sekiban.EventSourcing.Documents;
-using Sekiban.EventSourcing.Partitions;
-using Sekiban.EventSourcing.Queries;
-using Sekiban.EventSourcing.Shared.Exceptions;
-using Sekiban.EventSourcing.Snapshots;
-using System.Reflection;
+﻿using System.Reflection;
 namespace Sekiban.EventSourcing.Aggregates;
 
 public abstract class AggregateBase : IAggregate
 {
     protected readonly List<AggregateEvent> _events = new();
+    protected static IPartitionKeyFactory DefaultPartitionKeyFactory =>
+        new CanNotUsePartitionKeyFactory();
+
+    public AggregateBase(Guid aggregateId) =>
+        AggregateId = aggregateId;
 
     public Guid AggregateId { get; }
     public Guid LastEventId { get; protected set; } = Guid.Empty;
@@ -17,26 +16,6 @@ public abstract class AggregateBase : IAggregate
     public bool IsDeleted { get; protected set; }
 
     public ReadOnlyCollection<AggregateEvent> Events => _events.AsReadOnly();
-    public void ResetEventsAndSnepshots()
-    {
-        _events.Clear();
-    }
-    protected static IPartitionKeyFactory DefaultPartitionKeyFactory => new CanNotUsePartitionKeyFactory();
-
-    public AggregateBase(Guid aggregateId) =>
-        AggregateId = aggregateId;
-
-    public void FromEventHistory(IEnumerable<AggregateEvent> events)
-    {
-        foreach (var ev in events.OrderBy(m => m.TimeStamp))
-        {
-            ApplyEvent(ev);
-        }
-    }
-
-    // TODO: 下記2行が必要か確認する
-    public ISingleAggregateProjection CreateInitialAggregate(Guid _) => this;
-    public ISingleAggregateProjection CreateInitialAggregate<T>(Guid _) => this;
 
     public void ApplyEvent(AggregateEvent ev)
     {
@@ -51,6 +30,22 @@ public abstract class AggregateBase : IAggregate
         LastEventId = ev.Id;
         Version++;
     }
+    public void ResetEventsAndSnepshots()
+    {
+        _events.Clear();
+    }
+
+    public void FromEventHistory(IEnumerable<AggregateEvent> events)
+    {
+        foreach (var ev in events.OrderBy(m => m.TimeStamp))
+        {
+            ApplyEvent(ev);
+        }
+    }
+
+    // TODO: 下記2行が必要か確認する
+    public ISingleAggregateProjection CreateInitialAggregate(Guid _) => this;
+    public ISingleAggregateProjection CreateInitialAggregate<T>(Guid _) => this;
 
     public static UAggregate Create<UAggregate>(Guid aggregateId)
         where UAggregate : AggregateBase

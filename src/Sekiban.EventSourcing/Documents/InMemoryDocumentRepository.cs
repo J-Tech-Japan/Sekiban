@@ -1,7 +1,7 @@
-using System.Collections.Concurrent;
 namespace Sekiban.EventSourcing.Documents;
 
-public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumentPersistentRepository
+public class InMemoryDocumentRepository : IDocumentTemporaryRepository,
+    IDocumentPersistentRepository
 {
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
 
@@ -15,11 +15,11 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         Action<IEnumerable<AggregateEvent>> resultAction)
     {
         await Task.CompletedTask;
-        if (partitionKey == null)
-        {
-            
-        }
-        var list = partitionKey == null ? _inMemoryDocumentStore.GetAllEvents().Where(m => m.AggregateId == aggregateId).ToList() : _inMemoryDocumentStore.GetEventPartition(partitionKey).ToList();
+        if (partitionKey == null) { }
+        var list = partitionKey == null
+            ? _inMemoryDocumentStore.GetAllEvents()
+                .Where(m => m.AggregateId == aggregateId)
+                .ToList() : _inMemoryDocumentStore.GetEventPartition(partitionKey).ToList();
         if (sinceEventId != null)
         {
             var index = list.FindIndex(m => m.Id == sinceEventId);
@@ -36,7 +36,9 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         Action<IEnumerable<AggregateEvent>> resultAction)
     {
         await Task.CompletedTask;
-        var list = _inMemoryDocumentStore.GetAllEvents().Where(m => m.AggregateType == originalType.Name).ToList();
+        var list = _inMemoryDocumentStore.GetAllEvents()
+            .Where(m => m.AggregateType == originalType.Name)
+            .ToList();
         if (sinceEventId != null)
         {
             var index = list.FindIndex(m => m.Id == sinceEventId);
@@ -46,7 +48,8 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             }
             else
             {
-                resultAction(list.GetRange(index + 1, list.Count - index - 1).OrderBy(m => m.TimeStamp));
+                resultAction(
+                    list.GetRange(index + 1, list.Count - index - 1).OrderBy(m => m.TimeStamp));
             }
         }
         else
@@ -54,14 +57,22 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             resultAction(list.OrderBy(m => m.TimeStamp));
         }
     }
-    public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type originalType, string? partitionKey) =>
+    public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
+        Guid aggregateId,
+        Type originalType,
+        string? partitionKey) =>
         throw new NotImplementedException();
     public async Task<SnapshotListDocument?> GetLatestSnapshotListForTypeAsync<T>(
         string? partitionKey,
         QueryListType queryListType = QueryListType.ActiveAndDeleted) where T : IAggregate =>
         throw new NotImplementedException();
-    public async Task<SnapshotListChunkDocument?> GetSnapshotListChunkByIdAsync(Guid id, string partitionKey) =>
+    public async Task<SnapshotListChunkDocument?> GetSnapshotListChunkByIdAsync(
+        Guid id,
+        string partitionKey) =>
         throw new NotImplementedException();
-    public async Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type originalType, string partitionKey) =>
+    public async Task<SnapshotDocument?> GetSnapshotByIdAsync(
+        Guid id,
+        Type originalType,
+        string partitionKey) =>
         throw new NotImplementedException();
 }

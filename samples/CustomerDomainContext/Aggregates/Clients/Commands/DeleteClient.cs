@@ -5,7 +5,6 @@ public record DeleteClient(
 ) : ChangeAggregateCommandBase<Client>(
     ClientId
 );
-
 public class DeleteClientHandler : ChangeAggregateCommandHandlerBase<Client, DeleteClient>
 {
     protected override async Task ExecCommandAsync(Client aggregate, DeleteClient _)

@@ -1,17 +1,19 @@
 using CustomerDomainContext.Aggregates.RecentActivities.Events;
-using System.Text.RegularExpressions;
 namespace CustomerDomainContext.Aggregates.RecentActivities;
 
 [AggregateContainerGroup(AggregateContainerGroup.Dissolvable)]
 public class RecentActivity : TransferableAggregateBase<RecentActivityDto>
 {
-    private List<RecentActivityRecord> LatestActivities { get; set; }= new List<RecentActivityRecord>();
+    private List<RecentActivityRecord> LatestActivities { get; set; } = new();
 
     public RecentActivity(Guid aggregateId) : base(aggregateId) { }
 
     public RecentActivity(Guid aggregateId, string firstActivity) : base(aggregateId)
     {
-        AddAndApplyEvent(new RecentActivityCreated(aggregateId, new RecentActivityRecord(firstActivity, DateTime.UtcNow)));
+        AddAndApplyEvent(
+            new RecentActivityCreated(
+                aggregateId,
+                new RecentActivityRecord(firstActivity, DateTime.UtcNow)));
     }
     protected sealed override void AddAndApplyEvent(AggregateEvent ev)
     {
@@ -44,7 +46,9 @@ public class RecentActivity : TransferableAggregateBase<RecentActivityDto>
     }
     public void AddActivity(string activity)
     {
-        var ev = new RecentActivityAdded(AggregateId,new RecentActivityRecord(activity, DateTime.UtcNow));
+        var ev = new RecentActivityAdded(
+            AggregateId,
+            new RecentActivityRecord(activity, DateTime.UtcNow));
         AddAndApplyEvent(ev);
     }
 }

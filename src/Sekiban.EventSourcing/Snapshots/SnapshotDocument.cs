@@ -1,7 +1,4 @@
 using Newtonsoft.Json.Linq;
-using Sekiban.EventSourcing.Aggregates;
-using Sekiban.EventSourcing.Documents;
-
 namespace Sekiban.EventSourcing.Snapshots;
 
 public record SnapshotDocument : Document

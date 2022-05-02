@@ -4,7 +4,6 @@ global using Sekiban.EventSourcing.AggregateEvents;
 global using Sekiban.EventSourcing.PubSubs;
 global using Sekiban.EventSourcing.Queries;
 global using Sekiban.EventSourcing.Shared.Exceptions;
-
 global using System;
 global using System.Collections.Generic;
 global using System.Linq;

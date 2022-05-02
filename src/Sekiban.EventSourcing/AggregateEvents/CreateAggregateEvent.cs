@@ -1,4 +1,3 @@
-using Sekiban.EventSourcing.Aggregates;
 namespace Sekiban.EventSourcing.AggregateEvents;
 
 public record CreateAggregateEvent<T>(Guid AggregateId) : AggregateEvent(

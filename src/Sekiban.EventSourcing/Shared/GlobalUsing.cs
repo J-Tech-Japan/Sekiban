@@ -8,7 +8,6 @@ global using Sekiban.EventSourcing.Partitions.AggregateIdPartitions;
 global using Sekiban.EventSourcing.Queries;
 global using Sekiban.EventSourcing.Snapshots;
 global using Sekiban.EventSourcing.Shared.Exceptions;
-
 global using System;
 global using System.Collections.Generic;
 global using System.Collections.ObjectModel;

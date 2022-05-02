@@ -1,18 +1,11 @@
 using System.Collections.Concurrent;
 namespace Sekiban.EventSourcing.Documents;
 
-
 public class InMemoryDocumentStore
 {
-    private class InMemoryDocumentContainer<T>
-    {
-        public readonly BlockingCollection<T> All = new BlockingCollection<T>();
-        public readonly ConcurrentDictionary<string, BlockingCollection<T>> Partitions =
-            new ConcurrentDictionary<string, BlockingCollection<T>>();
-    }
 
-    private InMemoryDocumentContainer<AggregateEvent> _eventContainer = new InMemoryDocumentContainer<AggregateEvent>();
-    private InMemoryDocumentContainer<Document> _otherContainer = new InMemoryDocumentContainer<Document>();
+    private readonly InMemoryDocumentContainer<AggregateEvent> _eventContainer = new();
+    private readonly InMemoryDocumentContainer<Document> _otherContainer = new();
 
     public void SaveItem(Document document, string partition)
     {
@@ -44,20 +37,27 @@ public class InMemoryDocumentStore
     }
     public Document[] GetAllItems() =>
         _otherContainer.All.ToArray();
-    public Document[] GetItemPartition(string partition)  {
+    public Document[] GetItemPartition(string partition)
+    {
         if (_eventContainer.Partitions.ContainsKey(partition))
         {
             return _otherContainer.Partitions[partition].ToArray();
         }
-        return new Document[] {};
+        return new Document[] { };
     }
     public AggregateEvent[] GetAllEvents() =>
         _eventContainer.All.ToArray();
-    public AggregateEvent[] GetEventPartition(string partition) {
+    public AggregateEvent[] GetEventPartition(string partition)
+    {
         if (_eventContainer.Partitions.ContainsKey(partition))
         {
             return _eventContainer.Partitions[partition].ToArray();
         }
-        return new AggregateEvent[] {};
+        return new AggregateEvent[] { };
+    }
+    private class InMemoryDocumentContainer<T>
+    {
+        public readonly BlockingCollection<T> All = new();
+        public readonly ConcurrentDictionary<string, BlockingCollection<T>> Partitions = new();
     }
 }

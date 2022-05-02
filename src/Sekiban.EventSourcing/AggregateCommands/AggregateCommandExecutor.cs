@@ -1,11 +1,4 @@
 using Newtonsoft.Json;
-using Sekiban.EventSourcing.Aggregates;
-using Sekiban.EventSourcing.Documents;
-using Sekiban.EventSourcing.Histories;
-using Sekiban.EventSourcing.Partitions;
-using Sekiban.EventSourcing.Partitions.AggregateIdPartitions;
-using Sekiban.EventSourcing.Queries;
-using Sekiban.EventSourcing.Shared.Exceptions;
 namespace Sekiban.EventSourcing.AggregateCommands;
 
 public class AggregateCommandExecutor
@@ -84,10 +77,12 @@ public class AggregateCommandExecutor
         }
         catch (Exception e)
         {
-            toReturn.Command.Exception = JsonConvert.SerializeObject(e, new JsonSerializerSettings()
-            {
-                ReferenceLoopHandling = ReferenceLoopHandling.Ignore
-            });
+            toReturn.Command.Exception = JsonConvert.SerializeObject(
+                e,
+                new JsonSerializerSettings
+                {
+                    ReferenceLoopHandling = ReferenceLoopHandling.Ignore
+                });
             throw;
         }
         finally
@@ -147,10 +142,12 @@ public class AggregateCommandExecutor
         }
         catch (Exception e)
         {
-            toReturn.Command.Exception = JsonConvert.SerializeObject(e, new JsonSerializerSettings()
-            {
-                ReferenceLoopHandling = ReferenceLoopHandling.Ignore
-            });
+            toReturn.Command.Exception = JsonConvert.SerializeObject(
+                e,
+                new JsonSerializerSettings
+                {
+                    ReferenceLoopHandling = ReferenceLoopHandling.Ignore
+                });
             throw;
         }
         finally

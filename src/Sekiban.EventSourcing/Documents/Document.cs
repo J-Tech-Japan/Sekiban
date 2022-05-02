@@ -1,14 +1,12 @@
 using Newtonsoft.Json;
-using Sekiban.EventSourcing.Partitions;
-
 namespace Sekiban.EventSourcing.Documents;
 
 public record Document
 {
-    [JsonProperty("id")]
-    public Guid Id { get; init; }
 
     private string _partitionKey = string.Empty;
+    [JsonProperty("id")]
+    public Guid Id { get; init; }
     [JsonProperty("partitionkey")]
     public string PartitionKey
     {
@@ -21,8 +19,8 @@ public record Document
     public DateTime TimeStamp { get; init; }
 
     /// <summary>
-    /// cosmosdb 保存時に自動設定されるtimestamp
-    /// コードからは指定しない
+    ///     cosmosdb 保存時に自動設定されるtimestamp
+    ///     コードからは指定しない
     /// </summary>
     [JsonProperty("_ts")]
     public long Ts { get; init; }
@@ -40,13 +38,17 @@ public record Document
         TimeStamp = DateTime.UtcNow;
 
         if (partitionKeyFactory is not null)
+        {
             SetPartitionKey(partitionKeyFactory);
+        }
     }
 
     public void SetPartitionKey(IPartitionKeyFactory partitionKeyFactory)
     {
         if (partitionKeyFactory is CanNotUsePartitionKeyFactory)
+        {
             return;
+        }
         _partitionKey = partitionKeyFactory.GetPartitionKey(DocumentType);
     }
 

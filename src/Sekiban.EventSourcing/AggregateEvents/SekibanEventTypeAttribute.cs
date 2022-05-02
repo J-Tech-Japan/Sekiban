@@ -3,7 +3,6 @@ namespace Sekiban.EventSourcing.AggregateEvents;
 
 [AttributeUsage(AttributeTargets.Class)]
 public class SekibanEventTypeAttribute : Attribute { }
-
 public class RegisteredEventTypes
 {
     private readonly List<Type> _registeredTypes = new();

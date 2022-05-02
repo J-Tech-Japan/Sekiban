@@ -1,6 +1,3 @@
 namespace CustomerDomainContext.Aggregates.Clients;
 
-public class ClientRepository
-{
-
-}
+public class ClientRepository { }

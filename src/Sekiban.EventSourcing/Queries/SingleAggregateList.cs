@@ -1,4 +1,3 @@
-using Sekiban.EventSourcing.Snapshots;
 namespace Sekiban.EventSourcing.Queries;
 
 public class SingleAggregateList<T>

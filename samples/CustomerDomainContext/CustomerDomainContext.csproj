@@ -7,8 +7,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\ESSampleProjectLib\ESSampleProjectLib.csproj" />
-        <ProjectReference Include="..\..\src\Sekiban.EventSourcing\Sekiban.EventSourcing.csproj" />
+        <ProjectReference Include="..\ESSampleProjectLib\ESSampleProjectLib.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.EventSourcing\Sekiban.EventSourcing.csproj"/>
     </ItemGroup>
 
 </Project>

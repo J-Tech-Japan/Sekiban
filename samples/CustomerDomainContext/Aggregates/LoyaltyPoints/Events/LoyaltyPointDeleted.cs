@@ -5,4 +5,3 @@ public record LoyaltyPointDeleted(
 ) : ChangeAggregateEvent<LoyaltyPoint>(
     ClientId
 );
-

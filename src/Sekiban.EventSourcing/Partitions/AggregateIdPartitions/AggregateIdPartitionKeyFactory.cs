@@ -1,5 +1,3 @@
-using Sekiban.EventSourcing.Documents;
-using Sekiban.EventSourcing.Shared.Exceptions;
 namespace Sekiban.EventSourcing.Partitions.AggregateIdPartitions;
 
 public class AggregateIdPartitionKeyFactory : IPartitionKeyFactory

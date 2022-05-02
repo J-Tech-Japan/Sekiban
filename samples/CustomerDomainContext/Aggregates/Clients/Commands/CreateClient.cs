@@ -7,7 +7,6 @@ public record CreateClient
     string ClientName,
     string ClientEmail
 ) : ICreateAggregateCommand<Client>;
-
 public class CreateClientHandler : CreateAggregateCommandHandlerBase<Client, CreateClient>
 {
     private readonly SingleAggregateService _singleAggregateService;
@@ -18,11 +17,14 @@ public class CreateClientHandler : CreateAggregateCommandHandlerBase<Client, Cre
     protected override async Task<Client> CreateAggregateAsync(CreateClient command)
     {
         // Check if branch exists
-        var branchDto = await _singleAggregateService.GetAggregateDtoAsync<Branch, BranchDto>(command.BranchId);
+        var branchDto =
+            await _singleAggregateService.GetAggregateDtoAsync<Branch, BranchDto>(command.BranchId);
         if (branchDto is null)
+        {
             throw new JJAggregateNotExistsException(command.BranchId, nameof(Branch));
+        }
 
-        return new(
+        return new Client(
             command.BranchId,
             command.ClientName,
             command.ClientEmail);

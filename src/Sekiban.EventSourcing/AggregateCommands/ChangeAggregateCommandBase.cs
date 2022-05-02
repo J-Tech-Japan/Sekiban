@@ -1,5 +1,4 @@
-﻿using Sekiban.EventSourcing.Aggregates;
-namespace Sekiban.EventSourcing.AggregateCommands;
+﻿namespace Sekiban.EventSourcing.AggregateCommands;
 
 public abstract record ChangeAggregateCommandBase<T> : IAggregateCommand
     where T : IAggregate
@@ -9,8 +8,6 @@ public abstract record ChangeAggregateCommandBase<T> : IAggregateCommand
 
     public int ReferenceVersion { get; init; }
 
-    public ChangeAggregateCommandBase(Guid aggregateId)
-    {
+    public ChangeAggregateCommandBase(Guid aggregateId) =>
         AggregateId = aggregateId;
-    }
 }

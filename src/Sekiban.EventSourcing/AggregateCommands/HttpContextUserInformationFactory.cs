@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
-
 namespace Sekiban.EventSourcing.AggregateCommands;
 
 public class HttpContextUserInformationFactory : IUserInformationFactory

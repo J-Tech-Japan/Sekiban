@@ -1,8 +1,3 @@
-using Sekiban.EventSourcing.AggregateEvents;
-using Sekiban.EventSourcing.Aggregates;
-using Sekiban.EventSourcing.Documents;
-using Sekiban.EventSourcing.Partitions.AggregateIdPartitions;
-using Sekiban.EventSourcing.Shared.Exceptions;
 namespace Sekiban.EventSourcing.Queries;
 
 public class SingleAggregateService
@@ -29,20 +24,22 @@ public class SingleAggregateService
         if (aggregateList != null)
         {
             var allAfterEvents = new List<AggregateEvent>();
-                await _documentRepository.GetAllAggregateEventsForAggregateEventTypeAsync(
-                    projector.OriginalAggregateType(),
-                    aggregateList.LastEventId,
-                    events =>
-                    {
-                        aggregateList = HandleListEvent(projector, events, aggregateList);
-                    }); // 効率悪いけどこれで取れる
+            await _documentRepository.GetAllAggregateEventsForAggregateEventTypeAsync(
+                projector.OriginalAggregateType(),
+                aggregateList.LastEventId,
+                events =>
+                {
+                    aggregateList = HandleListEvent(projector, events, aggregateList);
+                }); // 効率悪いけどこれで取れる
             return aggregateList ?? new SingleAggregateList<T>();
         }
         await _documentRepository.GetAllAggregateEventsForAggregateEventTypeAsync(
-                projector.OriginalAggregateType(),
-                aggregateList?.LastEventId, events => {
-                    aggregateList = HandleListEvent(projector, events, aggregateList);
-                });
+            projector.OriginalAggregateType(),
+            aggregateList?.LastEventId,
+            events =>
+            {
+                aggregateList = HandleListEvent(projector, events, aggregateList);
+            });
         return aggregateList ??
             new SingleAggregateList<T>();
     }
@@ -158,15 +155,16 @@ public class SingleAggregateService
             typeof(T),
             new AggregateIdPartitionKeyFactory(aggregateId, projector.OriginalAggregateType())
                 .GetPartitionKey(
-                    DocumentType.AggregateEvent), null,
+                    DocumentType.AggregateEvent),
+            null,
             events =>
             {
                 foreach (var e in events) { aggregate.ApplyEvent(e); }
-            } );
+            });
         _singleAggregateProjectionQueryStore.SaveProjection(aggregate, typeof(T).Name);
         return aggregate;
     }
-    
+
     /// <summary>
     ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
     ///     遅いので、通常はキャッシュバージョンを使用ください
@@ -182,7 +180,7 @@ public class SingleAggregateService
         where Q : AggregateDtoBase =>
         await GetAggregateFromInitialAsync<T, DefaultSingleAggregateProjector<T>>(
             aggregateId);
-    
+
     /// <summary>
     ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
     ///     遅いので、通常はキャッシュバージョンを使用ください
@@ -209,7 +207,8 @@ public class SingleAggregateService
     /// <returns></returns>
     private async Task<T?> GetAggregateAsync<T, Q, P>(
         Guid aggregateId)
-        where T : ISingleAggregate, ISingleAggregateProjection, ISingleAggregateProjectionDtoConvertible<Q>
+        where T : ISingleAggregate, ISingleAggregateProjection,
+        ISingleAggregateProjectionDtoConvertible<Q>
         where Q : ISingleAggregate
         where P : ISingleAggregateProjector<T>, new()
     {
@@ -223,7 +222,7 @@ public class SingleAggregateService
             var dto = fromStore.ToDto();
             var aggregateToApply = projector.CreateInitialAggregate(fromStore.AggregateId);
             aggregateToApply.ApplySnapshot(dto);
-            
+
             await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
                 aggregateId,
                 typeof(T),
@@ -244,7 +243,8 @@ public class SingleAggregateService
             typeof(T),
             new AggregateIdPartitionKeyFactory(aggregateId, projector.OriginalAggregateType())
                 .GetPartitionKey(
-                    DocumentType.AggregateEvent), null,
+                    DocumentType.AggregateEvent),
+            null,
             events =>
             {
                 foreach (var e in events) { aggregate.ApplyEvent(e); }

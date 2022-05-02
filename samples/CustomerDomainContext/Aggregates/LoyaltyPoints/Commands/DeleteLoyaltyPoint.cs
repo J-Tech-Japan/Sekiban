@@ -5,8 +5,8 @@ public record DeleteLoyaltyPoint(
 ) : ChangeAggregateCommandBase<LoyaltyPoint>(
     ClientId
 ), INoValidateCommand;
-
-public class DeleteLoyaltyPointHandler : ChangeAggregateCommandHandlerBase<LoyaltyPoint, DeleteLoyaltyPoint>
+public class
+    DeleteLoyaltyPointHandler : ChangeAggregateCommandHandlerBase<LoyaltyPoint, DeleteLoyaltyPoint>
 {
     protected override async Task ExecCommandAsync(LoyaltyPoint aggregate, DeleteLoyaltyPoint _)
     {

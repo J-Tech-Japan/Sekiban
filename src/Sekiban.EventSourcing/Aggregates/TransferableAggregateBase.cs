@@ -1,16 +1,12 @@
-using Sekiban.EventSourcing.AggregateEvents;
-using Sekiban.EventSourcing.Queries;
-using Sekiban.EventSourcing.Shared.Exceptions;
-using Sekiban.EventSourcing.Snapshots;
 namespace Sekiban.EventSourcing.Aggregates;
 
-public abstract class TransferableAggregateBase<TDto> : AggregateBase, ISingleAggregateProjectionDtoConvertible<TDto>
+public abstract class TransferableAggregateBase<TDto> : AggregateBase,
+    ISingleAggregateProjectionDtoConvertible<TDto>
     where TDto : AggregateDtoBase
 {
     public TransferableAggregateBase(Guid aggregateId) : base(aggregateId) { }
 
     public abstract TDto ToDto();
-    protected abstract void CopyPropertiesFromSnapshot(TDto snapshot);
 
     public void ApplySnapshot(TDto snapshot)
     {
@@ -19,6 +15,7 @@ public abstract class TransferableAggregateBase<TDto> : AggregateBase, ISingleAg
         IsDeleted = snapshot.IsDeleted;
         CopyPropertiesFromSnapshot(snapshot);
     }
+    protected abstract void CopyPropertiesFromSnapshot(TDto snapshot);
 
     protected override void AddAndApplyEvent(AggregateEvent ev)
     {

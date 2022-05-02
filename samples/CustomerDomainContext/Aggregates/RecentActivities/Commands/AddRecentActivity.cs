@@ -5,11 +5,13 @@ public record AddRecentActivity(
     string Activity
 ) : ChangeAggregateCommandBase<RecentActivity>(
     AggregateId
-) , INoValidateCommand;
-
-public class AddRecentActivityHandler : ChangeAggregateCommandHandlerBase<RecentActivity, AddRecentActivity>
+), INoValidateCommand;
+public class
+    AddRecentActivityHandler : ChangeAggregateCommandHandlerBase<RecentActivity, AddRecentActivity>
 {
-    protected override async Task ExecCommandAsync(RecentActivity aggregate, AddRecentActivity command)
+    protected override async Task ExecCommandAsync(
+        RecentActivity aggregate,
+        AddRecentActivity command)
     {
         aggregate.AddActivity(command.Activity);
         await Task.CompletedTask;

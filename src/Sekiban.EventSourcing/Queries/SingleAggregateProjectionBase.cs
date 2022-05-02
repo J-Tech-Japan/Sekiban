@@ -1,5 +1,3 @@
-using Sekiban.EventSourcing.AggregateEvents;
-using Sekiban.EventSourcing.Shared.Exceptions;
 namespace Sekiban.EventSourcing.Queries;
 
 public abstract class SingleAggregateProjectionBase<T> : ISingleAggregateProjection,

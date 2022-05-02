@@ -1,6 +1,4 @@
 using MediatR;
-using Sekiban.EventSourcing.AggregateEvents;
-
 namespace Sekiban.EventSourcing.PubSubs;
 
 public abstract class AggregateEventSubscriberBase<TEvent> : INotificationHandler<TEvent>

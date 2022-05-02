@@ -1,5 +1,4 @@
 using CustomerDomainContext.Aggregates.LoyaltyPoints.Consts;
-
 namespace CustomerDomainContext.Aggregates.LoyaltyPoints.ValueObjects;
 
 public record LoyaltyPointReceiveType : IValueObject<LoyaltyPointReceiveTypeKeys>

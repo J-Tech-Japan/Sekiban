@@ -1,18 +1,19 @@
-using CustomerDomainContext.Aggregates.RecentActivities;
-using CustomerDomainContext.Aggregates.RecentActivities.Events;
 using CustomerDomainContext.Aggregates.RecentInMemoryActivities.Events;
 namespace CustomerDomainContext.Aggregates.RecentInMemoryActivities;
 
 [AggregateContainerGroup(AggregateContainerGroup.InMemoryContainer)]
 public class RecentInMemoryActivity : TransferableAggregateBase<RecentInMemoryActivityDto>
 {
-    private List<RecentInMemoryActivityRecord> LatestActivities { get; set; }= new List<RecentInMemoryActivityRecord>();
+    private List<RecentInMemoryActivityRecord> LatestActivities { get; set; } = new();
 
     public RecentInMemoryActivity(Guid aggregateId) : base(aggregateId) { }
 
     public RecentInMemoryActivity(Guid aggregateId, string firstActivity) : base(aggregateId)
     {
-        AddAndApplyEvent(new RecentInMemoryActivityCreated(aggregateId, new RecentInMemoryActivityRecord(firstActivity, DateTime.UtcNow)));
+        AddAndApplyEvent(
+            new RecentInMemoryActivityCreated(
+                aggregateId,
+                new RecentInMemoryActivityRecord(firstActivity, DateTime.UtcNow)));
     }
     protected sealed override void AddAndApplyEvent(AggregateEvent ev)
     {
@@ -45,7 +46,9 @@ public class RecentInMemoryActivity : TransferableAggregateBase<RecentInMemoryAc
     }
     public void AddActivity(string activity)
     {
-        var ev = new RecentInMemoryActivityAdded(AggregateId,new RecentInMemoryActivityRecord(activity, DateTime.UtcNow));
+        var ev = new RecentInMemoryActivityAdded(
+            AggregateId,
+            new RecentInMemoryActivityRecord(activity, DateTime.UtcNow));
         AddAndApplyEvent(ev);
     }
 }

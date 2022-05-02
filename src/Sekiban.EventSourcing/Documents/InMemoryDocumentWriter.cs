@@ -3,15 +3,18 @@ namespace Sekiban.EventSourcing.Documents;
 
 public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersistentWriter
 {
-    private readonly InMemoryDocumentStore _inMemoryDocumentStore;
     private readonly AggregateEventPublisher _eventPublisher;
+    private readonly InMemoryDocumentStore _inMemoryDocumentStore;
 
-    public InMemoryDocumentWriter(InMemoryDocumentStore inMemoryDocumentStore, AggregateEventPublisher eventPublisher)
+    public InMemoryDocumentWriter(
+        InMemoryDocumentStore inMemoryDocumentStore,
+        AggregateEventPublisher eventPublisher)
     {
         _inMemoryDocumentStore = inMemoryDocumentStore;
         _eventPublisher = eventPublisher;
     }
-    public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType) where TDocument : Document
+    public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType)
+        where TDocument : Document
     {
         if (document.DocumentType == DocumentType.AggregateEvent)
         {

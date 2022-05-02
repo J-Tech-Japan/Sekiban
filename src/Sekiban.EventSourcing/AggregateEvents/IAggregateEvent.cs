@@ -1,5 +1,4 @@
 ﻿using MediatR;
 namespace Sekiban.EventSourcing.AggregateEvents;
 
-public interface IAggregateEvent : INotification
-{ }
+public interface IAggregateEvent : INotification { }

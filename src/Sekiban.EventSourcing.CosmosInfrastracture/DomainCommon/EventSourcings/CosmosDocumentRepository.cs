@@ -1,12 +1,5 @@
 using Microsoft.Azure.Cosmos.Linq;
 using Newtonsoft.Json.Linq;
-using Sekiban.EventSourcing.AggregateCommands;
-using Sekiban.EventSourcing.AggregateEvents;
-using Sekiban.EventSourcing.Aggregates;
-using Sekiban.EventSourcing.Documents;
-using Sekiban.EventSourcing.Queries;
-using Sekiban.EventSourcing.Shared.Exceptions;
-using Sekiban.EventSourcing.Snapshots;
 namespace CosmosInfrastructure.DomainCommon.EventSourcings;
 
 public class CosmosDocumentRepository : IDocumentPersistentRepository
@@ -99,7 +92,6 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
         Guid id,
         string partitionKey)
     {
-        
         return await _cosmosDbFactory.CosmosActionAsync(
             DocumentType.SnapshotListChunk,
             AggregateContainerGroup.Default,
@@ -111,7 +103,10 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 return response.Resource;
             });
     }
-    public async Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type originalType, string partitionKey)
+    public async Task<SnapshotDocument?> GetSnapshotByIdAsync(
+        Guid id,
+        Type originalType,
+        string partitionKey)
     {
         var aggregateContainerGroup =
             AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
@@ -124,76 +119,6 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     id.ToString(),
                     new PartitionKey(partitionKey));
                 return response.Resource;
-            });
-    }
-    public async Task<IEnumerable<AggregateEvent>> GetAllAggregateEventsForAggregateIdAsync(
-        Guid aggregateId,
-        Type originalType,
-        string? partitionKey = null,
-        Guid? sinceEventId = null)
-    {
-        var aggregateContainerGroup =
-            AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
-
-        return await _cosmosDbFactory.CosmosActionAsync<IEnumerable<AggregateEvent>>(
-            DocumentType.AggregateEvent,
-            aggregateContainerGroup,
-            async container =>
-            {
-                DateTime? ts = null;
-                // get ts from since event
-                if (sinceEventId.HasValue)
-                {
-                    var response = await container.ReadItemAsync<AggregateEvent>(
-                        sinceEventId.Value.ToString(),
-                        new PartitionKey(partitionKey));
-                    ts = response.Resource.TimeStamp;
-                }
-                var types = _registeredEventTypes.RegisteredTypes;
-                var options = new QueryRequestOptions();
-                if (partitionKey != null)
-                {
-                    options.PartitionKey = new PartitionKey(partitionKey);
-                }
-
-                var events = new List<AggregateEvent>();
-                var query = container.GetItemLinqQueryable<AggregateEvent>()
-                    .Where(
-                        b => b.DocumentType == DocumentType.AggregateEvent &&
-                            b.AggregateId == aggregateId);
-                query = sinceEventId.HasValue ? query.OrderByDescending(m => m.TimeStamp)
-                    : query.OrderBy(m => m.TimeStamp);
-                var feedIterator = container.GetItemQueryIterator<dynamic>(
-                    query.ToQueryDefinition(),
-                    null,
-                    options);
-                while (feedIterator.HasMoreResults)
-                {
-                    var response = await feedIterator.ReadNextAsync();
-                    foreach (var item in response)
-                    {
-                        // pick out one album
-                        if (item is not JObject jobj)
-                        {
-                            continue;
-                        }
-                        var typeName = jobj.GetValue(nameof(Document.DocumentTypeName))?.ToString();
-                        var toAdd = types.Where(m => m.Name == typeName)
-                            .Select(m => (AggregateEvent?)jobj.ToObject(m))
-                            .FirstOrDefault(m => m != null);
-                        if (toAdd == null)
-                        {
-                            throw new JJUnregisterdEventFoundException();
-                        }
-
-                        if (ts.HasValue  && toAdd.TimeStamp < ts)
-                        {
-                            return events.OrderBy(m => m.TimeStamp);
-                        }
-                        events.Add(toAdd);
-                    }
-                }
-                return events.OrderBy(m => m.TimeStamp);
             });
     }
     public async Task GetAllAggregateEventsForAggregateIdAsync(
@@ -257,7 +182,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                             throw new JJUnregisterdEventFoundException();
                         }
 
-                        if (ts.HasValue  && toAdd.TimeStamp < ts)
+                        if (ts.HasValue && toAdd.TimeStamp < ts)
                         {
                             resultAction(events);
                             return;
@@ -266,64 +191,6 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     }
                     resultAction(events);
                 }
-            });
-    }
-    public async Task<IEnumerable<AggregateEvent>> GetAllAggregateEventsForAggregateEventTypeAsync(
-        Type originalType,
-        Guid? sinceEventId = null)
-    {
-        var aggregateContainerGroup =
-            AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
-
-        return await _cosmosDbFactory.CosmosActionAsync<IEnumerable<AggregateEvent>>(
-            DocumentType.AggregateEvent,
-            aggregateContainerGroup,
-            async container =>
-            {
-                var options = new QueryRequestOptions();
-                var events = new List<AggregateEvent>();
-                var eventTypes = _registeredEventTypes.RegisteredTypes.Select(m => m.Name);
-                var query = container.GetItemLinqQueryable<AggregateEvent>()
-                    .Where(
-                        b => b.DocumentType == DocumentType.AggregateEvent &&
-                            b.AggregateType == originalType.Name)
-                    .OrderByDescending(m => m.TimeStamp);
-                var feedIterator = container.GetItemQueryIterator<dynamic>(
-                    query.ToQueryDefinition(),
-                    null,
-                    options);
-                while (feedIterator.HasMoreResults)
-                {
-                    var response = await feedIterator.ReadNextAsync();
-                    foreach (var item in response)
-                    {
-                        // pick out one album
-                        if (item is not JObject jobj) { continue; }
-                        var typeName = jobj.GetValue(nameof(Document.DocumentTypeName))?.ToString();
-                        if (typeName == null)
-                        {
-                            continue;
-                        }
-
-                        var toAdd = _registeredEventTypes.RegisteredTypes
-                            .Where(m => m.Name == typeName)
-                            .Select(m => (AggregateEvent?)jobj.ToObject(m))
-                            .FirstOrDefault(m => m != null);
-                        if (toAdd == null)
-                        {
-                            throw new JJUnregisterdEventFoundException();
-                        }
-
-                        if (sinceEventId.HasValue &&
-                            toAdd.Id == sinceEventId.Value)
-                        {
-                            return events.OrderBy(m => m.TimeStamp);
-                        }
-
-                        events.Add(toAdd);
-                    }
-                }
-                return events.OrderBy(m => m.TimeStamp);
             });
     }
     public async Task GetAllAggregateEventsForAggregateEventTypeAsync(
@@ -386,5 +253,132 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 }
             });
     }
+    public async Task<IEnumerable<AggregateEvent>> GetAllAggregateEventsForAggregateIdAsync(
+        Guid aggregateId,
+        Type originalType,
+        string? partitionKey = null,
+        Guid? sinceEventId = null)
+    {
+        var aggregateContainerGroup =
+            AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
 
+        return await _cosmosDbFactory.CosmosActionAsync<IEnumerable<AggregateEvent>>(
+            DocumentType.AggregateEvent,
+            aggregateContainerGroup,
+            async container =>
+            {
+                DateTime? ts = null;
+                // get ts from since event
+                if (sinceEventId.HasValue)
+                {
+                    var response = await container.ReadItemAsync<AggregateEvent>(
+                        sinceEventId.Value.ToString(),
+                        new PartitionKey(partitionKey));
+                    ts = response.Resource.TimeStamp;
+                }
+                var types = _registeredEventTypes.RegisteredTypes;
+                var options = new QueryRequestOptions();
+                if (partitionKey != null)
+                {
+                    options.PartitionKey = new PartitionKey(partitionKey);
+                }
+
+                var events = new List<AggregateEvent>();
+                var query = container.GetItemLinqQueryable<AggregateEvent>()
+                    .Where(
+                        b => b.DocumentType == DocumentType.AggregateEvent &&
+                            b.AggregateId == aggregateId);
+                query = sinceEventId.HasValue ? query.OrderByDescending(m => m.TimeStamp)
+                    : query.OrderBy(m => m.TimeStamp);
+                var feedIterator = container.GetItemQueryIterator<dynamic>(
+                    query.ToQueryDefinition(),
+                    null,
+                    options);
+                while (feedIterator.HasMoreResults)
+                {
+                    var response = await feedIterator.ReadNextAsync();
+                    foreach (var item in response)
+                    {
+                        // pick out one album
+                        if (item is not JObject jobj)
+                        {
+                            continue;
+                        }
+                        var typeName = jobj.GetValue(nameof(Document.DocumentTypeName))?.ToString();
+                        var toAdd = types.Where(m => m.Name == typeName)
+                            .Select(m => (AggregateEvent?)jobj.ToObject(m))
+                            .FirstOrDefault(m => m != null);
+                        if (toAdd == null)
+                        {
+                            throw new JJUnregisterdEventFoundException();
+                        }
+
+                        if (ts.HasValue && toAdd.TimeStamp < ts)
+                        {
+                            return events.OrderBy(m => m.TimeStamp);
+                        }
+                        events.Add(toAdd);
+                    }
+                }
+                return events.OrderBy(m => m.TimeStamp);
+            });
+    }
+    public async Task<IEnumerable<AggregateEvent>> GetAllAggregateEventsForAggregateEventTypeAsync(
+        Type originalType,
+        Guid? sinceEventId = null)
+    {
+        var aggregateContainerGroup =
+            AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
+
+        return await _cosmosDbFactory.CosmosActionAsync<IEnumerable<AggregateEvent>>(
+            DocumentType.AggregateEvent,
+            aggregateContainerGroup,
+            async container =>
+            {
+                var options = new QueryRequestOptions();
+                var events = new List<AggregateEvent>();
+                var eventTypes = _registeredEventTypes.RegisteredTypes.Select(m => m.Name);
+                var query = container.GetItemLinqQueryable<AggregateEvent>()
+                    .Where(
+                        b => b.DocumentType == DocumentType.AggregateEvent &&
+                            b.AggregateType == originalType.Name)
+                    .OrderByDescending(m => m.TimeStamp);
+                var feedIterator = container.GetItemQueryIterator<dynamic>(
+                    query.ToQueryDefinition(),
+                    null,
+                    options);
+                while (feedIterator.HasMoreResults)
+                {
+                    var response = await feedIterator.ReadNextAsync();
+                    foreach (var item in response)
+                    {
+                        // pick out one album
+                        if (item is not JObject jobj) { continue; }
+                        var typeName = jobj.GetValue(nameof(Document.DocumentTypeName))?.ToString();
+                        if (typeName == null)
+                        {
+                            continue;
+                        }
+
+                        var toAdd = _registeredEventTypes.RegisteredTypes
+                            .Where(m => m.Name == typeName)
+                            .Select(m => (AggregateEvent?)jobj.ToObject(m))
+                            .FirstOrDefault(m => m != null);
+                        if (toAdd == null)
+                        {
+                            throw new JJUnregisterdEventFoundException();
+                        }
+
+                        if (sinceEventId.HasValue &&
+                            toAdd.Id == sinceEventId.Value)
+                        {
+                            return events.OrderBy(m => m.TimeStamp);
+                        }
+
+                        events.Add(toAdd);
+                    }
+                }
+                return events.OrderBy(m => m.TimeStamp);
+            });
+    }
 }

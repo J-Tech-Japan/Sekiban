@@ -29,7 +29,9 @@ public static class Dependency
         services.AddTransient<SnapshotListWriter>();
         services.AddTransient<SnapshotListReader>();
 
-        services.AddTransient<ISingleAggregateProjectionQueryStore, MemoryCacheSingleAggregateProjectionQueryStore>();
+        services
+            .AddTransient<ISingleAggregateProjectionQueryStore,
+                MemoryCacheSingleAggregateProjectionQueryStore>();
         services.AddTransient<IDocumentPersistentWriter, CosmosDocumentWriter>();
         services.AddTransient<IDocumentPersistentRepository, CosmosDocumentRepository>();
         services.AddSingleton(new InMemoryDocumentStore());
@@ -47,7 +49,8 @@ public static class Dependency
         services.AddTransient<IIntegratedEventPublisher, NoIntegratedEventPublisher>();
 
         // 各ドメインコンテキスト
-        services.AddSingleton(CustomerDomainContext.Shared.Dependency.GetRegisteredAggregateEvents());
+        services.AddSingleton(
+            CustomerDomainContext.Shared.Dependency.GetRegisteredAggregateEvents());
         services.AddTransient(CustomerDomainContext.Shared.Dependency.GetDependencies());
     }
 

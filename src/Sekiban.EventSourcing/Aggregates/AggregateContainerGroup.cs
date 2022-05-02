@@ -3,9 +3,10 @@ namespace Sekiban.EventSourcing.Aggregates;
 [AttributeUsage(AttributeTargets.Class)]
 public class AggregateContainerGroupAttribute : Attribute
 {
-    public AggregateContainerGroupAttribute(AggregateContainerGroup group = AggregateContainerGroup.Default) =>
+    public AggregateContainerGroup Group { get; init; }
+    public AggregateContainerGroupAttribute(
+        AggregateContainerGroup group = AggregateContainerGroup.Default) =>
         Group = group;
-    public  AggregateContainerGroup Group { get; init; }
     public static AggregateContainerGroup FindAggregateContainerGroup(Type type)
     {
         if (type.CustomAttributes.Any(
@@ -20,10 +21,7 @@ public class AggregateContainerGroupAttribute : Attribute
         return AggregateContainerGroup.Default;
     }
 }
-
 public enum AggregateContainerGroup
 {
-    Default = 0,
-    Dissolvable = 1,
-    InMemoryContainer = 10
+    Default = 0, Dissolvable = 1, InMemoryContainer = 10
 }

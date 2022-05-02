@@ -3,6 +3,5 @@ namespace Sekiban.EventSourcing.Documents;
 
 public class HybridStoreManager
 {
-    public BlockingCollection<string> HybridPartitionKeys { get; init; } =
-        new BlockingCollection<string>();
+    public BlockingCollection<string> HybridPartitionKeys { get; init; } = new();
 }
