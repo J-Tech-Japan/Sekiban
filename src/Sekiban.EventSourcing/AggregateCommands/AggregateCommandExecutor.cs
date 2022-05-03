@@ -61,7 +61,7 @@ public class AggregateCommandExecutor
             {
                 throw new JJInvalidArgumentException();
             }
-            aggregate.ResetEventsAndSnepshots();
+            aggregate.ResetEventsAndSnapshots();
             var result = await handler.HandleAsync(toReturn.Command, aggregate);
             toReturn.Command.AggregateId = result.Aggregate.AggregateId;
 
@@ -110,14 +110,14 @@ public class AggregateCommandExecutor
                                     aggregateToSnapshot,
                                     ev.AggregateId,
                                     aggregateToSnapshot.LastEventId,
-                                    aggregateToSnapshot.LastTimestamp);
+                                    aggregateToSnapshot.LastSortableUniqueId);
                                 await _documentWriter.SaveAsync(snapshotDocument, typeof(T));
                             }
                         }
                     }
                 }
             }
-            aggregate.ResetEventsAndSnepshots();
+            aggregate.ResetEventsAndSnapshots();
             if (result == null)
             {
                 throw new JJInvalidArgumentException();
@@ -192,7 +192,7 @@ public class AggregateCommandExecutor
                     await _documentWriter.SaveAndPublishAggregateEvent(ev, typeof(T));
                 }
             }
-            result.Aggregate.ResetEventsAndSnepshots();
+            result.Aggregate.ResetEventsAndSnapshots();
             if (result == null)
             {
                 throw new JJInvalidArgumentException();

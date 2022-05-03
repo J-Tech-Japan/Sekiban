@@ -7,7 +7,7 @@ public record SnapshotDocument : Document
     public dynamic? Snapshot { get; init; }
     public Guid AggregateId { get; init; }
     public Guid LastEventId { get; init; }
-    public DateTime LastTimeStamp { get; set; }
+    public string LastSortableUniqueId { get; set; } = string.Empty;
     public SnapshotDocument() { }
 
     public SnapshotDocument(
@@ -16,7 +16,7 @@ public record SnapshotDocument : Document
         AggregateDtoBase dtoToSnapshot,
         Guid aggregateId,
         Guid lastEventId,
-        DateTime lastTimeStamp,
+        string lastSortableUniqueId,
         DateTime? timeStamp = null
     ) : base(
         DocumentType.AggregateSnapshot,
@@ -26,7 +26,7 @@ public record SnapshotDocument : Document
         Snapshot = dtoToSnapshot;
         AggregateId = aggregateId;
         LastEventId = lastEventId;
-        LastTimeStamp = lastTimeStamp;
+        LastSortableUniqueId = lastSortableUniqueId;
     }
 
     public T? ToDto<T>()

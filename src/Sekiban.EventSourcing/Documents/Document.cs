@@ -17,7 +17,7 @@ public record Document
     public DocumentType DocumentType { get; init; }
     public string DocumentTypeName { get; init; } = null!;
     public DateTime TimeStamp { get; init; }
-    public string SortableUniqueId { get; init; }
+    public string SortableUniqueId { get; init; } = string.Empty;
     /// <summary>
     ///     cosmosdb 保存時に自動設定されるtimestamp
     ///     コードからは指定しない
@@ -37,7 +37,7 @@ public record Document
         DocumentTypeName = documentTypeName ?? GetType().Name;
         TimeStamp = DateTime.UtcNow;
         SortableUniqueId =
-            TimeStamp.Ticks + (Math.Abs(Id.GetHashCode()) % 1000000).ToString("000000");
+            TimeStamp.Ticks + (Math.Abs(Id.GetHashCode()) % 1000000000000).ToString("000000000000");
         if (partitionKeyFactory is not null)
         {
             SetPartitionKey(partitionKeyFactory);

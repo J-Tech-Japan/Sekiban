@@ -12,7 +12,7 @@ public abstract class AggregateBase : IAggregate
 
     public Guid AggregateId { get; }
     public Guid LastEventId { get; protected set; } = Guid.Empty;
-    public DateTime LastTimestamp { get; protected set; } = DateTime.UnixEpoch;
+    public string LastSortableUniqueId { get; protected set; } = string.Empty;
     public int Version { get; protected set; }
     public bool IsDeleted { get; protected set; }
 
@@ -29,10 +29,10 @@ public abstract class AggregateBase : IAggregate
         if (action == null) { return; }
         action();
         LastEventId = ev.Id;
-        LastTimestamp = ev.TimeStamp;
+        LastSortableUniqueId = ev.SortableUniqueId;
         Version++;
     }
-    public void ResetEventsAndSnepshots()
+    public void ResetEventsAndSnapshots()
     {
         _events.Clear();
     }
