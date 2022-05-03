@@ -37,8 +37,7 @@ public class SnapshotManager : TransferableAggregateBase<SnapshotManagerDto>
         var key = SnapshotKey(
             aggregateType.Name,
             targetAggregateId,
-            nextSnapshotVersion,
-            snapshotVersion);
+            nextSnapshotVersion);
         if (!Requests.Contains(key) && !RequestTakens.Contains(key))
         {
             AddAndApplyEvent(
@@ -63,9 +62,8 @@ public class SnapshotManager : TransferableAggregateBase<SnapshotManagerDto>
     private static string SnapshotKey(
         string aggregateTypeName,
         Guid targetAggregateId,
-        int nextSnapshotVersion,
-        int? snapshotVersion) =>
-        $"{aggregateTypeName}_{targetAggregateId.ToString()}_{snapshotVersion ?? 0}_{nextSnapshotVersion}";
+        int nextSnapshotVersion) =>
+        $"{aggregateTypeName}_{targetAggregateId.ToString()}_{nextSnapshotVersion}";
     protected override Action? GetApplyEventAction(AggregateEvent ev) => ev switch
     {
         SnapshotManagerCreated created => () =>
@@ -78,8 +76,7 @@ public class SnapshotManager : TransferableAggregateBase<SnapshotManagerDto>
                 SnapshotKey(
                     requestAdded.AggregateTypeName,
                     requestAdded.TargetAggregateId,
-                    requestAdded.NextSnapshotVersion,
-                    requestAdded.SnapshotVersion));
+                    requestAdded.NextSnapshotVersion));
         },
         SnapshotManagerSnapshotTaken requestAdded => () =>
         {
@@ -87,14 +84,12 @@ public class SnapshotManager : TransferableAggregateBase<SnapshotManagerDto>
                 SnapshotKey(
                     requestAdded.AggregateTypeName,
                     requestAdded.TargetAggregateId,
-                    requestAdded.NextSnapshotVersion,
-                    requestAdded.SnapshotVersion));
+                    requestAdded.NextSnapshotVersion));
             RequestTakens.Add(
                 SnapshotKey(
                     requestAdded.AggregateTypeName,
                     requestAdded.TargetAggregateId,
-                    requestAdded.NextSnapshotVersion,
-                    requestAdded.SnapshotVersion));
+                    requestAdded.NextSnapshotVersion));
         },
         _ => null
     };

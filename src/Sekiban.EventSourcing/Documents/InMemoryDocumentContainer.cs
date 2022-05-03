@@ -3,24 +3,8 @@ namespace Sekiban.EventSourcing.Documents;
 
 public class InMemoryDocumentStore
 {
-
     private readonly InMemoryDocumentContainer<AggregateEvent> _eventContainer = new();
-    private readonly InMemoryDocumentContainer<Document> _otherContainer = new();
 
-    public void SaveItem(Document document, string partition)
-    {
-        _otherContainer.All.Add(document);
-        if (_otherContainer.Partitions.ContainsKey(partition))
-        {
-            _otherContainer.Partitions[partition].Add(document);
-        }
-        else
-        {
-            var partitionCollection = new BlockingCollection<Document>();
-            partitionCollection.Add(document);
-            _otherContainer.Partitions[partition] = partitionCollection;
-        }
-    }
     public void SaveEvent(AggregateEvent document, string partition)
     {
         _eventContainer.All.Add(document);
@@ -34,16 +18,6 @@ public class InMemoryDocumentStore
             partitionCollection.Add(document);
             _eventContainer.Partitions[partition] = partitionCollection;
         }
-    }
-    public Document[] GetAllItems() =>
-        _otherContainer.All.ToArray();
-    public Document[] GetItemPartition(string partition)
-    {
-        if (_eventContainer.Partitions.ContainsKey(partition))
-        {
-            return _otherContainer.Partitions[partition].ToArray();
-        }
-        return new Document[] { };
     }
     public AggregateEvent[] GetAllEvents() =>
         _eventContainer.All.ToArray();

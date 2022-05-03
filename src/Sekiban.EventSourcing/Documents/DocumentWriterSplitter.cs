@@ -25,6 +25,7 @@ public class DocumentWriterSplitter : IDocumentWriter
             await _documentTemporaryWriter.SaveAsync(document, aggregateType);
             return;
         }
+        if (document.DocumentType == DocumentType.AggregateSnapshot) { }
 
         if (document is AggregateEvent) { }
         await _documentPersistentWriter.SaveAsync(document, aggregateType);
@@ -65,6 +66,18 @@ public class DocumentWriterSplitter : IDocumentWriter
                     aggregateEvent,
                     aggregateType);
             }
+        }
+    }
+    private async Task SaveSnapshotToHybridIfPossible(SnapshotDocument snapshot, Type aggregateType)
+    {
+        var partitionKeyFactory =
+            new AggregateIdPartitionKeyFactory(snapshot.AggregateId, aggregateType);
+        if (_hybridStoreManager.HasPartition(
+            partitionKeyFactory.GetPartitionKey(DocumentType.AggregateEvent)))
+        {
+            await _documentTemporaryWriter.SaveAsync(
+                snapshot,
+                aggregateType);
         }
     }
 }

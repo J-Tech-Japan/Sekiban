@@ -1,12 +1,19 @@
+using Microsoft.Extensions.Caching.Memory;
 namespace Sekiban.EventSourcing.Documents;
 
 public class InMemoryDocumentRepository : IDocumentTemporaryRepository,
     IDocumentPersistentRepository
 {
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
+    private readonly IMemoryCache _memoryCache;
 
-    public InMemoryDocumentRepository(InMemoryDocumentStore inMemoryDocumentStore) =>
+    public InMemoryDocumentRepository(
+        InMemoryDocumentStore inMemoryDocumentStore,
+        IMemoryCache memoryCache)
+    {
         _inMemoryDocumentStore = inMemoryDocumentStore;
+        _memoryCache = memoryCache;
+    }
     public async Task GetAllAggregateEventsForAggregateIdAsync(
         Guid aggregateId,
         Type originalType,
@@ -61,8 +68,16 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository,
     public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
         Guid aggregateId,
         Type originalType,
-        string? partitionKey) =>
-        throw new NotImplementedException();
+        string? partitionKey)
+    {
+        var partitionKeyFactory = new AggregateIdPartitionKeyFactory(aggregateId, originalType);
+        var pk = partitionKeyFactory.GetPartitionKey(DocumentType.AggregateSnapshot);
+        if (_memoryCache.TryGetValue<SnapshotDocument>(pk, out var sd))
+        {
+            return sd;
+        }
+        return null;
+    }
     public async Task<SnapshotListDocument?> GetLatestSnapshotListForTypeAsync<T>(
         string? partitionKey,
         QueryListType queryListType = QueryListType.ActiveAndDeleted) where T : IAggregate =>
