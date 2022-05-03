@@ -241,6 +241,21 @@ public class CustomerDbStoryBasic : TestBase
             (await _aggregateService.DtoListAsync<RecentActivity, RecentActivityDto>()).ToList();
         Assert.Single(recentActivityList);
         Assert.Equal(101, version);
+
+        var snapshotManager =
+            await _aggregateService
+                .GetAggregateFromInitialDefaultAggregateDtoAsync<SnapshotManager,
+                    SnapshotManagerDto>(SnapshotManager.SharedId);
+        _testOutputHelper.WriteLine("-requests-");
+        foreach (var key in snapshotManager!.Requests)
+        {
+            _testOutputHelper.WriteLine(key);
+        }
+        _testOutputHelper.WriteLine("-request takens-");
+        foreach (var key in snapshotManager!.RequestTakens)
+        {
+            _testOutputHelper.WriteLine(key);
+        }
     }
     [Fact(
         DisplayName =
@@ -258,27 +273,21 @@ public class CustomerDbStoryBasic : TestBase
         await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(
             DocumentType.AggregateCommand);
     }
-    [Theory(
+    [Fact(
         DisplayName =
             "CosmosDb ストーリーテスト 。並列でたくさん動かしたらどうなるか。 INoValidateCommand がRecentActivityに適応されているので、問題ないはず")]
-    [InlineData(1)]
-    [InlineData(2)]
-    public async Task AsynchronousExecutionTestAsync(int step)
+    public async Task AsynchronousExecutionTestAsync()
     {
-        if (step == 01)
-        {
-            // 先に全データを削除する
-            await _cosmosDbFactory.DeleteAllFromAggregateEventContainer(
-                AggregateContainerGroup.Default);
-            await _cosmosDbFactory.DeleteAllFromAggregateEventContainer(
-                AggregateContainerGroup.Dissolvable);
-            await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(
-                DocumentType.AggregateCommand,
-                AggregateContainerGroup.Dissolvable);
-            await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(
-                DocumentType.AggregateCommand);
-            return;
-        }
+        // 先に全データを削除する
+        await _cosmosDbFactory.DeleteAllFromAggregateEventContainer(
+            AggregateContainerGroup.Default);
+        await _cosmosDbFactory.DeleteAllFromAggregateEventContainer(
+            AggregateContainerGroup.Dissolvable);
+        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(
+            DocumentType.AggregateCommand,
+            AggregateContainerGroup.Dissolvable);
+        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(
+            DocumentType.AggregateCommand);
 
         // create recent activity
         var createRecentActivityResult =
@@ -328,7 +337,13 @@ public class CustomerDbStoryBasic : TestBase
             await _aggregateService
                 .GetAggregateFromInitialDefaultAggregateDtoAsync<SnapshotManager,
                     SnapshotManagerDto>(SnapshotManager.SharedId);
+        _testOutputHelper.WriteLine("-requests-");
         foreach (var key in snapshotManager!.Requests)
+        {
+            _testOutputHelper.WriteLine(key);
+        }
+        _testOutputHelper.WriteLine("-request takens-");
+        foreach (var key in snapshotManager!.RequestTakens)
         {
             _testOutputHelper.WriteLine(key);
         }
@@ -391,7 +406,13 @@ public class CustomerDbStoryBasic : TestBase
             await _aggregateService
                 .GetAggregateFromInitialDefaultAggregateDtoAsync<SnapshotManager,
                     SnapshotManagerDto>(SnapshotManager.SharedId);
+        _testOutputHelper.WriteLine("-requests-");
         foreach (var key in snapshotManager!.Requests)
+        {
+            _testOutputHelper.WriteLine(key);
+        }
+        _testOutputHelper.WriteLine("-request takens-");
+        foreach (var key in snapshotManager!.RequestTakens)
         {
             _testOutputHelper.WriteLine(key);
         }
