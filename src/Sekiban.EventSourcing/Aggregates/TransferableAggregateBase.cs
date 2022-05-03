@@ -13,6 +13,7 @@ public abstract class TransferableAggregateBase<TDto> : AggregateBase,
         Version = snapshot.Version;
         LastEventId = snapshot.LastEventId;
         LastSortableUniqueId = snapshot.LastSortableUniqueId;
+        AppliedSnapshotVersion = snapshot.Version;
         IsDeleted = snapshot.IsDeleted;
         CopyPropertiesFromSnapshot(snapshot);
     }

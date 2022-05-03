@@ -16,11 +16,13 @@ public abstract record AggregateDtoBase : ISingleAggregate
         Version = aggregate.Version;
         LastEventId = aggregate.LastEventId;
         LastSortableUniqueId = aggregate.LastSortableUniqueId;
+        AppliedSnapshotVersion = aggregate.AppliedSnapshotVersion;
         IsDeleted = aggregate.IsDeleted;
     }
     public bool IsDeleted { get; init; }
     public Guid AggregateId { get; init; }
     public int Version { get; init; }
     public Guid LastEventId { get; init; }
+    public int AppliedSnapshotVersion { get; init; }
     public string LastSortableUniqueId { get; init; } = string.Empty;
 }

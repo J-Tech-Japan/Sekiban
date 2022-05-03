@@ -6,6 +6,7 @@ public abstract class SingleAggregateProjectionBase<T> : ISingleAggregateProject
 {
     public Guid LastEventId { get; set; }
     public string LastSortableUniqueId { get; set; } = string.Empty;
+    public int AppliedSnapshotVersion { get; set; } = 0;
     public int Version { get; set; }
     public bool IsDeleted { get; set; }
     public Guid AggregateId { get; set; }

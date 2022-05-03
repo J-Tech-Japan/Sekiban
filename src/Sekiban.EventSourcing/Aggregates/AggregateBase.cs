@@ -13,6 +13,7 @@ public abstract class AggregateBase : IAggregate
     public Guid AggregateId { get; }
     public Guid LastEventId { get; protected set; } = Guid.Empty;
     public string LastSortableUniqueId { get; protected set; } = string.Empty;
+    public int AppliedSnapshotVersion { get; protected set; }
     public int Version { get; protected set; }
     public bool IsDeleted { get; protected set; }
 
