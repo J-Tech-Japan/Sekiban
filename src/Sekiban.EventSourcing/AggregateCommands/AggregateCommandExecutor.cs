@@ -1,4 +1,6 @@
 using Newtonsoft.Json;
+using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
+using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
 namespace Sekiban.EventSourcing.AggregateCommands;
 
 public class AggregateCommandExecutor
@@ -8,6 +10,7 @@ public class AggregateCommandExecutor
     private readonly IServiceProvider _serviceProvider;
     private readonly SingleAggregateService _singleAggregateService;
     private readonly IUserInformationFactory _userInformationFactory;
+
     public AggregateCommandExecutor(
         IDocumentWriter documentWriter,
         IServiceProvider serviceProvider,
@@ -72,6 +75,17 @@ public class AggregateCommandExecutor
                 foreach (var ev in result.Aggregate.Events)
                 {
                     await _documentWriter.SaveAndPublishAggregateEvent(ev, typeof(T));
+                    if (aggregateContainerGroup != AggregateContainerGroup.InMemoryContainer)
+                    {
+                        await ExecChangeCommandAsync<SnapshotManager, SnapshotManagerDto,
+                            ReportAggregateVersionToSnapshotManger>(
+                            new ReportAggregateVersionToSnapshotManger(
+                                SnapshotManager.SharedId,
+                                typeof(T),
+                                ev.AggregateId,
+                                ev.Version,
+                                null));
+                    }
                 }
             }
             aggregate.ResetEventsAndSnepshots();
@@ -95,7 +109,7 @@ public class AggregateCommandExecutor
             await _documentWriter.SaveAsync(toReturn.Command, typeof(T));
             if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
             {
-                 _semaphoreInMemory.Release();
+                _semaphoreInMemory.Release();
             }
         }
         return toReturn;
@@ -170,7 +184,7 @@ public class AggregateCommandExecutor
             await _documentWriter.SaveAsync(toReturn.Command, typeof(T));
             if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
             {
-                 _semaphoreInMemory.Release();
+                _semaphoreInMemory.Release();
             }
         }
         return toReturn;

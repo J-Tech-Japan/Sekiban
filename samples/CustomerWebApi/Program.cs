@@ -1,6 +1,6 @@
 using ESSampleProjectDependency;
-using Sekiban.EventSourcing.Snapshots.SnapshotManager;
-using Sekiban.EventSourcing.Snapshots.SnapshotManager.Commands;
+using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
+using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.

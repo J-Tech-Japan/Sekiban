@@ -1,5 +1,5 @@
-using Sekiban.EventSourcing.Snapshots.SnapshotManager;
-using Sekiban.EventSourcing.Snapshots.SnapshotManager.Commands;
+using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
+using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
 using System.Reflection;
 namespace Sekiban.EventSourcing.Shared;
 
@@ -15,5 +15,9 @@ public static class Dependency
             typeof(ICreateAggregateCommandHandler<SnapshotManager,
                 CreateSnapshotManager>),
             typeof(CreateSnapshotManagerHandler));
+        yield return (
+            typeof(IChangeAggregateCommandHandler<SnapshotManager,
+                ReportAggregateVersionToSnapshotManger>),
+            typeof(ReportAggregateVersionToSnapshotMangerHandler));
     }
 }

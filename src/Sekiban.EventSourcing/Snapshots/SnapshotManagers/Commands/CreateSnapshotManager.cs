@@ -1,4 +1,4 @@
-namespace Sekiban.EventSourcing.Snapshots.SnapshotManager.Commands;
+namespace Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
 
 public record CreateSnapshotManager(Guid AggregateId) : ICreateAggregateCommand<SnapshotManager>;
 public class

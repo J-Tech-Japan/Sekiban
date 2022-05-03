@@ -1,4 +1,4 @@
-namespace Sekiban.EventSourcing.Snapshots.SnapshotManager;
+namespace Sekiban.EventSourcing.Snapshots.SnapshotManagers;
 
 public record SnapshotManagerDto : AggregateDtoBase
 {

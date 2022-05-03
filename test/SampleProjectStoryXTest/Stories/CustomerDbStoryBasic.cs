@@ -17,8 +17,8 @@ using Sekiban.EventSourcing.Aggregates;
 using Sekiban.EventSourcing.Documents;
 using Sekiban.EventSourcing.Queries;
 using Sekiban.EventSourcing.Shared.Exceptions;
-using Sekiban.EventSourcing.Snapshots.SnapshotManager;
-using Sekiban.EventSourcing.Snapshots.SnapshotManager.Commands;
+using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
+using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -323,6 +323,15 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + 1, aggregateRecentActivity!.Version);
+
+        var snapshotManager =
+            await _aggregateService
+                .GetAggregateFromInitialDefaultAggregateDtoAsync<SnapshotManager,
+                    SnapshotManagerDto>(SnapshotManager.SharedId);
+        foreach (var key in snapshotManager!.Requests)
+        {
+            _testOutputHelper.WriteLine(key);
+        }
     }
     [Fact(
         DisplayName =
@@ -377,5 +386,14 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + 1, aggregateRecentActivity!.Version);
+
+        var snapshotManager =
+            await _aggregateService
+                .GetAggregateFromInitialDefaultAggregateDtoAsync<SnapshotManager,
+                    SnapshotManagerDto>(SnapshotManager.SharedId);
+        foreach (var key in snapshotManager!.Requests)
+        {
+            _testOutputHelper.WriteLine(key);
+        }
     }
 }
