@@ -4,6 +4,7 @@ using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.AggregateCommands;
+using Sekiban.EventSourcing.AggregateEvents;
 using Sekiban.EventSourcing.Documents;
 using Sekiban.EventSourcing.PubSubs;
 using Sekiban.EventSourcing.Queries;
@@ -50,8 +51,11 @@ public static class Dependency
 
         // 各ドメインコンテキスト
         services.AddSingleton(
-            CustomerDomainContext.Shared.Dependency.GetRegisteredAggregateEvents());
+            new RegisteredEventTypes(
+                CustomerDomainContext.Shared.Dependency.GetAssembly(),
+                Sekiban.EventSourcing.Shared.Dependency.GetAssembly()));
         services.AddTransient(CustomerDomainContext.Shared.Dependency.GetDependencies());
+        services.AddTransient(Sekiban.EventSourcing.Shared.Dependency.GetDependencies());
     }
 
     public static void AddTransient(

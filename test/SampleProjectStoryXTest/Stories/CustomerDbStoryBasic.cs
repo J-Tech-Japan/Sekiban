@@ -17,6 +17,8 @@ using Sekiban.EventSourcing.Aggregates;
 using Sekiban.EventSourcing.Documents;
 using Sekiban.EventSourcing.Queries;
 using Sekiban.EventSourcing.Shared.Exceptions;
+using Sekiban.EventSourcing.Snapshots.SnapshotManager;
+using Sekiban.EventSourcing.Snapshots.SnapshotManager.Commands;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -38,6 +40,13 @@ public class CustomerDbStoryBasic : TestBase
         _cosmosDbFactory = GetService<CosmosDbFactory>();
         _aggregateCommandExecutor = GetService<AggregateCommandExecutor>();
         _aggregateService = GetService<SingleAggregateService>();
+
+        // create recent activity
+        _aggregateCommandExecutor
+            .ExecCreateCommandAsync<SnapshotManager, SnapshotManagerDto,
+                CreateSnapshotManager>(
+                new CreateSnapshotManager(SnapshotManager.SharedId))
+            .Wait();
     }
     [Fact(DisplayName = "CosmosDb ストーリーテスト 集約の機能のテストではなく、CosmosDbと連携して正しく動くかをテストしています。")]
     public async Task CosmosDbStory()

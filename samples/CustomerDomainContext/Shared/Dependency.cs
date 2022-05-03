@@ -15,8 +15,8 @@ namespace CustomerDomainContext.Shared;
 
 public static class Dependency
 {
-    public static RegisteredEventTypes GetRegisteredAggregateEvents() =>
-        new(Assembly.GetExecutingAssembly());
+    public static Assembly GetAssembly() =>
+        Assembly.GetExecutingAssembly();
 
     public static IEnumerable<(Type serviceType, Type? implementationType)> GetDependencies()
     {
