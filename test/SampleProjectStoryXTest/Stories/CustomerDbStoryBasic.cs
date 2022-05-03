@@ -22,6 +22,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
+using Xunit.Abstractions;
 namespace SampleProjectStoryXTest.Stories;
 
 public class CustomerDbStoryBasic : TestBase
@@ -29,8 +30,11 @@ public class CustomerDbStoryBasic : TestBase
     private readonly AggregateCommandExecutor _aggregateCommandExecutor;
     private readonly SingleAggregateService _aggregateService;
     private readonly CosmosDbFactory _cosmosDbFactory;
-    public CustomerDbStoryBasic(TestFixture testFixture) : base(testFixture)
+    private readonly ITestOutputHelper _testOutputHelper;
+    public CustomerDbStoryBasic(TestFixture testFixture, ITestOutputHelper testOutputHelper) : base(
+        testFixture)
     {
+        _testOutputHelper = testOutputHelper;
         _cosmosDbFactory = GetService<CosmosDbFactory>();
         _aggregateCommandExecutor = GetService<AggregateCommandExecutor>();
         _aggregateService = GetService<SingleAggregateService>();
@@ -230,8 +234,8 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Equal(101, version);
     }
     [Fact(
-    DisplayName =
-        "CosmosDbストーリーテスト用に削除のみを行う 。")]
+        DisplayName =
+            "CosmosDbストーリーテスト用に削除のみを行う 。")]
     public async Task DeleteonlyAsync()
     {
         // 先に全データを削除する
@@ -245,7 +249,7 @@ public class CustomerDbStoryBasic : TestBase
         await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(
             DocumentType.AggregateCommand);
     }
-        [Theory(
+    [Theory(
         DisplayName =
             "CosmosDb ストーリーテスト 。並列でたくさん動かしたらどうなるか。 INoValidateCommand がRecentActivityに適応されているので、問題ないはず")]
     [InlineData(1)]
@@ -344,6 +348,8 @@ public class CustomerDbStoryBasic : TestBase
                                         createRecentActivityResult!.AggregateDto!.AggregateId,
                                         $"Message - {i + 1}") { ReferenceVersion = version });
                         version = recentActivityAddedResult.AggregateDto!.Version;
+                        _testOutputHelper.WriteLine(
+                            $"{i} - {recentActivityAddedResult.AggregateDto.Version.ToString()}");
                     }));
         }
         await Task.WhenAll(tasks);

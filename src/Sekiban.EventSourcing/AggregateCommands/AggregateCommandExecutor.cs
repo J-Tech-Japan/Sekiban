@@ -3,11 +3,11 @@ namespace Sekiban.EventSourcing.AggregateCommands;
 
 public class AggregateCommandExecutor
 {
+    private static readonly SemaphoreSlim _semaphore = new(1, 1);
     private readonly IDocumentWriter _documentWriter;
     private readonly IServiceProvider _serviceProvider;
     private readonly SingleAggregateService _singleAggregateService;
     private readonly IUserInformationFactory _userInformationFactory;
-
     public AggregateCommandExecutor(
         IDocumentWriter documentWriter,
         IServiceProvider serviceProvider,
@@ -19,7 +19,6 @@ public class AggregateCommandExecutor
         _singleAggregateService = singleAggregateService;
         _userInformationFactory = userInformationFactory;
     }
-
     public async Task<AggregateCommandExecutorResponse<Q, C>> ExecChangeCommandAsync<T, Q, C>(
         C command,
         List<CallHistory>? callHistories = null)
@@ -34,6 +33,7 @@ public class AggregateCommandExecutor
                     new AggregateIdPartitionKeyFactory(command.AggregateId, typeof(T)),
                     callHistories
                 ));
+        await _semaphore.WaitAsync();
         try
         {
             toReturn.Command.ExecutedUser = _userInformationFactory.GetCurrentUserInformation();
@@ -88,6 +88,7 @@ public class AggregateCommandExecutor
         finally
         {
             await _documentWriter.SaveAsync(toReturn.Command, typeof(T));
+            _semaphore.Release();
         }
         return toReturn;
     }
