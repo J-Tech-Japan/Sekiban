@@ -33,7 +33,12 @@ public class AggregateCommandExecutor
                     new AggregateIdPartitionKeyFactory(command.AggregateId, typeof(T)),
                     callHistories
                 ));
-        await _semaphore.WaitAsync();
+        var aggregateContainerGroup =
+            AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(T));
+        if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+        {
+            await _semaphore.WaitAsync();
+        }
         try
         {
             toReturn.Command.ExecutedUser = _userInformationFactory.GetCurrentUserInformation();
@@ -88,7 +93,10 @@ public class AggregateCommandExecutor
         finally
         {
             await _documentWriter.SaveAsync(toReturn.Command, typeof(T));
-            _semaphore.Release();
+            if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+            {
+                _semaphore.Release();
+            }
         }
         return toReturn;
     }
@@ -107,6 +115,12 @@ public class AggregateCommandExecutor
                     new CanNotUsePartitionKeyFactory(),
                     callHistories
                 ));
+        var aggregateContainerGroup =
+            AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(T));
+        if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+        {
+            await _semaphore.WaitAsync();
+        }
         try
         {
             toReturn.Command.ExecutedUser = _userInformationFactory.GetCurrentUserInformation();
@@ -154,6 +168,10 @@ public class AggregateCommandExecutor
         finally
         {
             await _documentWriter.SaveAsync(toReturn.Command, typeof(T));
+            if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+            {
+                _semaphore.Release();
+            }
         }
         return toReturn;
     }
