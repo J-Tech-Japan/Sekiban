@@ -8,6 +8,7 @@ public record SnapshotDocument : Document
     public Guid AggregateId { get; init; }
     public Guid LastEventId { get; init; }
     public string LastSortableUniqueId { get; set; } = string.Empty;
+    public int SavedVersion { get; set; }
     public SnapshotDocument() { }
 
     public SnapshotDocument(
@@ -17,7 +18,7 @@ public record SnapshotDocument : Document
         Guid aggregateId,
         Guid lastEventId,
         string lastSortableUniqueId,
-        DateTime? timeStamp = null
+        int savedVersion
     ) : base(
         DocumentType.AggregateSnapshot,
         partitionKeyFactory,
@@ -27,6 +28,7 @@ public record SnapshotDocument : Document
         AggregateId = aggregateId;
         LastEventId = lastEventId;
         LastSortableUniqueId = lastSortableUniqueId;
+        SavedVersion = savedVersion;
     }
 
     public T? ToDto<T>()

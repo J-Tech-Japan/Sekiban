@@ -39,7 +39,7 @@ public abstract class AggregateBase : IAggregate
 
     public void FromEventHistory(IEnumerable<AggregateEvent> events)
     {
-        foreach (var ev in events.OrderBy(m => m.TimeStamp))
+        foreach (var ev in events.OrderBy(m => m.SortableUniqueId))
         {
             ApplyEvent(ev);
         }

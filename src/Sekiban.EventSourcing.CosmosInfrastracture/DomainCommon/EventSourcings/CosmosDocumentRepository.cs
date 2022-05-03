@@ -35,7 +35,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     .Where(
                         b => b.DocumentType == DocumentType.AggregateSnapshot &&
                             b.AggregateId == aggregateId)
-                    .OrderByDescending(m => m.TimeStamp);
+                    .OrderByDescending(m => m.LastSortableUniqueId);
                 var feedIterator = container.GetItemQueryIterator<SnapshotDocument>(
                     query.ToQueryDefinition(),
                     null,
@@ -73,7 +73,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     .Where(
                         b => b.DocumentType == DocumentType.SnapshotList &&
                             b.DocumentTypeName == aggregateName)
-                    .OrderByDescending(m => m.TimeStamp);
+                    .OrderByDescending(m => m.SortableUniqueId);
                 var feedIterator = container.GetItemQueryIterator<SnapshotListDocument>(
                     query.ToQueryDefinition(),
                     null,
@@ -156,8 +156,8 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     .Where(
                         b => b.DocumentType == DocumentType.AggregateEvent &&
                             b.AggregateId == aggregateId);
-                query = sinceEventId.HasValue ? query.OrderByDescending(m => m.TimeStamp)
-                    : query.OrderBy(m => m.TimeStamp);
+                query = sinceEventId.HasValue ? query.OrderByDescending(m => m.SortableUniqueId)
+                    : query.OrderBy(m => m.SortableUniqueId);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(
                     query.ToQueryDefinition(),
                     null,
@@ -212,7 +212,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     .Where(
                         b => b.DocumentType == DocumentType.AggregateEvent &&
                             b.AggregateType == originalType.Name)
-                    .OrderByDescending(m => m.TimeStamp);
+                    .OrderByDescending(m => m.SortableUniqueId);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(
                     query.ToQueryDefinition(),
                     null,
@@ -288,8 +288,8 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     .Where(
                         b => b.DocumentType == DocumentType.AggregateEvent &&
                             b.AggregateId == aggregateId);
-                query = sinceEventId.HasValue ? query.OrderByDescending(m => m.TimeStamp)
-                    : query.OrderBy(m => m.TimeStamp);
+                query = sinceEventId.HasValue ? query.OrderByDescending(m => m.SortableUniqueId)
+                    : query.OrderBy(m => m.SortableUniqueId);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(
                     query.ToQueryDefinition(),
                     null,
@@ -315,12 +315,12 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
 
                         if (ts.HasValue && toAdd.TimeStamp < ts)
                         {
-                            return events.OrderBy(m => m.TimeStamp);
+                            return events.OrderBy(m => m.SortableUniqueId);
                         }
                         events.Add(toAdd);
                     }
                 }
-                return events.OrderBy(m => m.TimeStamp);
+                return events.OrderBy(m => m.SortableUniqueId);
             });
     }
     public async Task<IEnumerable<AggregateEvent>> GetAllAggregateEventsForAggregateEventTypeAsync(
@@ -342,7 +342,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     .Where(
                         b => b.DocumentType == DocumentType.AggregateEvent &&
                             b.AggregateType == originalType.Name)
-                    .OrderByDescending(m => m.TimeStamp);
+                    .OrderByDescending(m => m.SortableUniqueId);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(
                     query.ToQueryDefinition(),
                     null,
@@ -372,13 +372,13 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                         if (sinceEventId.HasValue &&
                             toAdd.Id == sinceEventId.Value)
                         {
-                            return events.OrderBy(m => m.TimeStamp);
+                            return events.OrderBy(m => m.SortableUniqueId);
                         }
 
                         events.Add(toAdd);
                     }
                 }
-                return events.OrderBy(m => m.TimeStamp);
+                return events.OrderBy(m => m.SortableUniqueId);
             });
     }
 }

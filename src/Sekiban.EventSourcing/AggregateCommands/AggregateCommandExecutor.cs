@@ -110,7 +110,8 @@ public class AggregateCommandExecutor
                                     aggregateToSnapshot,
                                     ev.AggregateId,
                                     aggregateToSnapshot.LastEventId,
-                                    aggregateToSnapshot.LastSortableUniqueId);
+                                    aggregateToSnapshot.LastSortableUniqueId,
+                                    aggregateToSnapshot.Version);
                                 await _documentWriter.SaveAsync(snapshotDocument, typeof(T));
                             }
                         }

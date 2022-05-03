@@ -18,12 +18,6 @@ public record Document
     public string DocumentTypeName { get; init; } = null!;
     public DateTime TimeStamp { get; init; }
     public string SortableUniqueId { get; init; } = string.Empty;
-    /// <summary>
-    ///     cosmosdb 保存時に自動設定されるtimestamp
-    ///     コードからは指定しない
-    /// </summary>
-    [JsonProperty("_ts")]
-    public long Ts { get; init; }
 
     public Document() { }
 

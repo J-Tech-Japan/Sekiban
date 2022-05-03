@@ -350,7 +350,7 @@ public class CustomerDbStoryBasic : TestBase
     }
     [Fact(
         DisplayName =
-            "インメモリストーリーテスト 。並列でたくさん動かしたらどうなるか。 INoValidateCommand がRecentActivityに適応されているので、問題ないはず")]
+            "インメモリストーリーテスト 。並列でたくさん動かしたらどうなるか。 Versionの重複が発生しないことを確認")]
     public async Task AsynchronousInMemoryExecutionTestAsync()
     {
         // create recent activity
