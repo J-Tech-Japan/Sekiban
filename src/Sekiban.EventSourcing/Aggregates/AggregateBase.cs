@@ -29,6 +29,7 @@ public abstract class AggregateBase : IAggregate
         if (action == null) { return; }
         action();
         LastEventId = ev.Id;
+        LastTimestamp = ev.TimeStamp;
         Version++;
     }
     public void ResetEventsAndSnepshots()

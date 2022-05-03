@@ -99,7 +99,7 @@ public class AggregateCommandExecutor
                                     await _singleAggregateService
                                         .GetAggregateFromInitialDefaultAggregateDtoAsync<T, Q>(
                                             command.AggregateId,
-                                            taken.SnapshotVersion);
+                                            taken.NextSnapshotVersion);
                                 if (aggregateToSnapshot == null)
                                 {
                                     continue;

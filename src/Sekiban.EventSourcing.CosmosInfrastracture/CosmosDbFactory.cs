@@ -95,6 +95,7 @@ public class CosmosDbFactory
                 new JsonSerializerSettings
                 {
                     // TypeNameHandling = TypeNameHandling.Auto
+                    DateFormatString = "yyyy-MM-dd'T'hh:mm:ss.ffffff'Z'"
                 }
             )
         };
