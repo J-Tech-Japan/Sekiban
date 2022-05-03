@@ -12,6 +12,7 @@ public abstract class AggregateBase : IAggregate
 
     public Guid AggregateId { get; }
     public Guid LastEventId { get; protected set; } = Guid.Empty;
+    public DateTime LastTimestamp { get; protected set; } = DateTime.UnixEpoch;
     public int Version { get; protected set; }
     public bool IsDeleted { get; protected set; }
 

@@ -1,6 +1,7 @@
 using Newtonsoft.Json;
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
+using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Events;
 namespace Sekiban.EventSourcing.AggregateCommands;
 
 public class AggregateCommandExecutor
@@ -77,14 +78,42 @@ public class AggregateCommandExecutor
                     await _documentWriter.SaveAndPublishAggregateEvent(ev, typeof(T));
                     if (aggregateContainerGroup != AggregateContainerGroup.InMemoryContainer)
                     {
-                        await ExecChangeCommandAsync<SnapshotManager, SnapshotManagerDto,
-                            ReportAggregateVersionToSnapshotManger>(
-                            new ReportAggregateVersionToSnapshotManger(
-                                SnapshotManager.SharedId,
-                                typeof(T),
-                                ev.AggregateId,
-                                ev.Version,
-                                null));
+                        var snapshotManagerResponse =
+                            await ExecChangeCommandAsync<SnapshotManager, SnapshotManagerDto,
+                                ReportAggregateVersionToSnapshotManger>(
+                                new ReportAggregateVersionToSnapshotManger(
+                                    SnapshotManager.SharedId,
+                                    typeof(T),
+                                    ev.AggregateId,
+                                    ev.Version,
+                                    null));
+                        if (snapshotManagerResponse.Events.Any(
+                            m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken)))
+                        {
+                            foreach (var taken in snapshotManagerResponse.Events.Where(
+                                    m => m.DocumentTypeName ==
+                                        nameof(SnapshotManagerSnapshotTaken))
+                                .Select(m => (SnapshotManagerSnapshotTaken)m))
+                            {
+                                var aggregateToSnapshot =
+                                    await _singleAggregateService
+                                        .GetAggregateFromInitialDefaultAggregateDtoAsync<T, Q>(
+                                            command.AggregateId,
+                                            taken.SnapshotVersion);
+                                if (aggregateToSnapshot == null)
+                                {
+                                    continue;
+                                }
+                                var snapshotDocument = new SnapshotDocument(
+                                    new AggregateIdPartitionKeyFactory(ev.AggregateId, typeof(T)),
+                                    typeof(T).Name,
+                                    aggregateToSnapshot,
+                                    ev.AggregateId,
+                                    aggregateToSnapshot.LastEventId,
+                                    aggregateToSnapshot.LastTimestamp);
+                                await _documentWriter.SaveAsync(snapshotDocument, typeof(T));
+                            }
+                        }
                     }
                 }
             }

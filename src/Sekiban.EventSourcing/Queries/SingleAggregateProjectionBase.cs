@@ -5,6 +5,7 @@ public abstract class SingleAggregateProjectionBase<T> : ISingleAggregateProject
     where T : ISingleAggregate, ISingleAggregateProjection
 {
     public Guid LastEventId { get; set; }
+    public DateTime LastTimestamp { get; set; }
     public int Version { get; set; }
     public bool IsDeleted { get; set; }
     public Guid AggregateId { get; set; }
@@ -20,6 +21,7 @@ public abstract class SingleAggregateProjectionBase<T> : ISingleAggregateProject
         action();
 
         LastEventId = ev.Id;
+        LastTimestamp = ev.TimeStamp;
         Version++;
     }
     public abstract T ToDto();

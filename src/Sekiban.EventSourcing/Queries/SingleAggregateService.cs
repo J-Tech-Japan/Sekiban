@@ -140,11 +140,13 @@ public class SingleAggregateService
     ///     検証などのためにこちらを残しています。
     /// </summary>
     /// <param name="aggregateId"></param>
+    /// <param name="toVersion"></param>
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
     public async Task<T?> GetAggregateFromInitialAsync<T, P>(
-        Guid aggregateId)
+        Guid aggregateId,
+        int? toVersion)
         where T : ISingleAggregate, ISingleAggregateProjection
         where P : ISingleAggregateProjector<T>, new()
     {
@@ -159,7 +161,11 @@ public class SingleAggregateService
             null,
             events =>
             {
-                foreach (var e in events) { aggregate.ApplyEvent(e); }
+                foreach (var e in events)
+                {
+                    aggregate.ApplyEvent(e);
+                    if (toVersion.HasValue && toVersion.Value == aggregate.Version) { break; }
+                }
             });
         _singleAggregateProjectionQueryStore.SaveProjection(aggregate, typeof(T).Name);
         return aggregate;
@@ -171,15 +177,18 @@ public class SingleAggregateService
     ///     検証などのためにこちらを残しています。
     /// </summary>
     /// <param name="aggregateId"></param>
+    /// <param name="toVersion"></param>
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
     public async Task<T?> GetAggregateFromInitialDefaultAggregateAsync<T, Q>(
-        Guid aggregateId)
+        Guid aggregateId,
+        int? toVersion = null)
         where T : TransferableAggregateBase<Q>
         where Q : AggregateDtoBase =>
         await GetAggregateFromInitialAsync<T, DefaultSingleAggregateProjector<T>>(
-            aggregateId);
+            aggregateId,
+            toVersion);
 
     /// <summary>
     ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
@@ -187,15 +196,18 @@ public class SingleAggregateService
     ///     検証などのためにこちらを残しています。
     /// </summary>
     /// <param name="aggregateId"></param>
+    /// <param name="toVersion"></param>
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
     public async Task<Q?> GetAggregateFromInitialDefaultAggregateDtoAsync<T, Q>(
-        Guid aggregateId)
+        Guid aggregateId,
+        int? toVersion = null)
         where T : TransferableAggregateBase<Q>
         where Q : AggregateDtoBase =>
         (await GetAggregateFromInitialAsync<T, DefaultSingleAggregateProjector<T>>(
-            aggregateId))?.ToDto();
+            aggregateId,
+            toVersion))?.ToDto();
 
     /// <summary>
     ///     スナップショット、メモリキャッシュを使用する通常版

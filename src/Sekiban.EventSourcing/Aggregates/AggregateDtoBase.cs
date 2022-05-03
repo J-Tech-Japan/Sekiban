@@ -15,10 +15,12 @@ public abstract record AggregateDtoBase : ISingleAggregate
         AggregateId = aggregate.AggregateId;
         Version = aggregate.Version;
         LastEventId = aggregate.LastEventId;
+        LastTimestamp = aggregate.LastTimestamp;
         IsDeleted = aggregate.IsDeleted;
     }
     public bool IsDeleted { get; init; }
     public Guid AggregateId { get; init; }
     public int Version { get; init; }
     public Guid LastEventId { get; init; }
+    public DateTime LastTimestamp { get; init; }
 }
