@@ -3,7 +3,7 @@ namespace Sekiban.EventSourcing.AggregateCommands;
 
 public class AggregateCommandExecutor
 {
-    private static readonly SemaphoreSlim _semaphore = new(1, 1);
+    private static readonly SemaphoreSlim _semaphoreInMemory = new(1, 1);
     private readonly IDocumentWriter _documentWriter;
     private readonly IServiceProvider _serviceProvider;
     private readonly SingleAggregateService _singleAggregateService;
@@ -37,7 +37,7 @@ public class AggregateCommandExecutor
             AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(T));
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
         {
-            await _semaphore.WaitAsync();
+            await _semaphoreInMemory.WaitAsync();
         }
         try
         {
@@ -95,7 +95,7 @@ public class AggregateCommandExecutor
             await _documentWriter.SaveAsync(toReturn.Command, typeof(T));
             if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
             {
-                _semaphore.Release();
+                 _semaphoreInMemory.Release();
             }
         }
         return toReturn;
@@ -119,7 +119,7 @@ public class AggregateCommandExecutor
             AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(T));
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
         {
-            await _semaphore.WaitAsync();
+            await _semaphoreInMemory.WaitAsync();
         }
         try
         {
@@ -170,7 +170,7 @@ public class AggregateCommandExecutor
             await _documentWriter.SaveAsync(toReturn.Command, typeof(T));
             if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
             {
-                _semaphore.Release();
+                 _semaphoreInMemory.Release();
             }
         }
         return toReturn;

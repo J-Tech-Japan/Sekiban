@@ -282,7 +282,7 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Single(recentActivityList);
         var version = createRecentActivityResult.AggregateDto!.Version;
         var tasks = new List<Task>();
-        var count = 1000;
+        var count = 100;
         foreach (var i in Enumerable.Range(0, count))
         {
             tasks.Add(
