@@ -14,7 +14,7 @@ public abstract class SingleAggregateProjectionBase<T> : ISingleAggregateProject
     {
         if (ev.IsAggregateInitialEvent == false && Version == 0)
         {
-            throw new JJJnvalidEventException();
+            throw new JJInvalidEventException();
         }
         if (ev.Id == LastEventId) { return; }
         var action = GetApplyEventAction(ev);

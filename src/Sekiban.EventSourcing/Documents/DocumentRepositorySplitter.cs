@@ -56,10 +56,12 @@ public class DocumentRepositorySplitter : IDocumentRepository
             {
                 if (sinceSortableUniqueId == null && partitionKey != null)
                 {
-                    _hybridStoreManager.AddPartitionKey(partitionKey);
-                    foreach (var aggregateEvent in events)
+                    if (_hybridStoreManager.AddPartitionKey(partitionKey))
                     {
-                        _documentTemporaryWriter.SaveAsync(aggregateEvent, originalType).Wait();
+                        foreach (var aggregateEvent in events)
+                        {
+                            _documentTemporaryWriter.SaveAsync(aggregateEvent, originalType).Wait();
+                        }
                     }
                 }
                 resultAction(events);

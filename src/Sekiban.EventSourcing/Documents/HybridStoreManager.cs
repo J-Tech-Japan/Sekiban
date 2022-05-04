@@ -10,9 +10,10 @@ public class HybridStoreManager
     {
         return Enabled ? HybridPartitionKeys.Contains(partitionKey) : false;
     }
-    public void AddPartitionKey(string partitionKey)
+    public bool AddPartitionKey(string partitionKey)
     {
-        if (!Enabled ) return;
+        if (!Enabled ) return false;
         HybridPartitionKeys.Add(partitionKey);
+        return true;
     }
 }

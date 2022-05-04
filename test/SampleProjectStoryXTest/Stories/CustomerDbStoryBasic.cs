@@ -227,7 +227,8 @@ public class CustomerDbStoryBasic : TestBase
             (await _aggregateService.DtoListAsync<RecentActivity, RecentActivityDto>()).ToList();
         Assert.Single(recentActivityList);
         var version = createRecentActivityResult.AggregateDto!.Version;
-        foreach (var i in Enumerable.Range(0, 100))
+        var count = 500;
+        foreach (var i in Enumerable.Range(0, count))
         {
             var recentActivityAddedResult = await
                 _aggregateCommandExecutor
@@ -240,7 +241,7 @@ public class CustomerDbStoryBasic : TestBase
         recentActivityList =
             (await _aggregateService.DtoListAsync<RecentActivity, RecentActivityDto>()).ToList();
         Assert.Single(recentActivityList);
-        Assert.Equal(101, version);
+        Assert.Equal(count+1, version);
 
         var snapshotManager =
             await _aggregateService
@@ -300,7 +301,7 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Single(recentActivityList);
         var version = createRecentActivityResult.AggregateDto!.Version;
         var tasks = new List<Task>();
-        var count = 100;
+        var count = 500;
         foreach (var i in Enumerable.Range(0, count))
         {
             tasks.Add(
