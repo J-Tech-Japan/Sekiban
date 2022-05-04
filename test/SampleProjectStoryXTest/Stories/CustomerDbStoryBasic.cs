@@ -328,12 +328,13 @@ public class CustomerDbStoryBasic : TestBase
             await _aggregateService
                 .GetAggregateFromInitialDefaultAggregateDtoAsync<RecentActivity, RecentActivityDto>(
                     createRecentActivityResult.AggregateDto.AggregateId);
-        // var aggregateRecentActivity =
-        //     await _aggregateService.GetAggregateDtoAsync<RecentActivity, RecentActivityDto>(
-        //         createRecentActivityResult.AggregateDto.AggregateId);
+        var aggregateRecentActivity2 =
+            await _aggregateService.GetAggregateDtoAsync<RecentActivity, RecentActivityDto>(
+                createRecentActivityResult.AggregateDto.AggregateId);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + 1, aggregateRecentActivity!.Version);
+        Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
 
         var snapshotManager =
             await _aggregateService
@@ -392,17 +393,19 @@ public class CustomerDbStoryBasic : TestBase
             (await _aggregateService
                 .DtoListAsync<RecentInMemoryActivity, RecentInMemoryActivityDto>()).ToList();
         Assert.Single(recentActivityList);
-        // this works
+
         var aggregateRecentActivity =
             await _aggregateService
-                .GetAggregateFromInitialDefaultAggregateDtoAsync<RecentInMemoryActivity,
-                    RecentInMemoryActivityDto>(createRecentActivityResult.AggregateDto.AggregateId);
-        // var aggregateRecentActivity =
-        //     await _aggregateService.GetAggregateDtoAsync<RecentInMemoryActivity, RecentInMemoryActivityDto>(
-        //         createRecentInMemoryActivityResult.AggregateDto.AggregateId);
+                .GetAggregateFromInitialDefaultAggregateDtoAsync<RecentActivity, RecentActivityDto>(
+                    createRecentActivityResult.AggregateDto.AggregateId);
+        var aggregateRecentActivity2 =
+            await _aggregateService.GetAggregateDtoAsync<RecentActivity, RecentActivityDto>(
+                createRecentActivityResult.AggregateDto.AggregateId);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + 1, aggregateRecentActivity!.Version);
+        Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
+
 
         var snapshotManager =
             await _aggregateService
@@ -438,7 +441,7 @@ public class CustomerDbStoryBasic : TestBase
         Assert.NotNull(aggregate);
         var version = recentActivityList.First().Version;
         var tasks = new List<Task>();
-        var count = 50;
+        var count = 120;
         foreach (var i in Enumerable.Range(0, count))
         {
             tasks.Add(
@@ -459,17 +462,19 @@ public class CustomerDbStoryBasic : TestBase
         recentActivityList =
             (await _aggregateService.DtoListAsync<RecentActivity, RecentActivityDto>()).ToList();
         Assert.Single(recentActivityList);
+        
         // this works
         var aggregateRecentActivity =
             await _aggregateService
                 .GetAggregateFromInitialDefaultAggregateDtoAsync<RecentActivity, RecentActivityDto>(
                     aggregateId);
-        // var aggregateRecentActivity =
-        //     await _aggregateService.GetAggregateDtoAsync<RecentActivity, RecentActivityDto>(
-        //         createRecentActivityResult.AggregateDto.AggregateId);
+        var aggregateRecentActivity2 =
+            await _aggregateService.GetAggregateDtoAsync<RecentActivity, RecentActivityDto>(
+                aggregateId);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + aggregate!.ToDto().Version, aggregateRecentActivity!.Version);
+        Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
 
         var snapshotManager =
             await _aggregateService
