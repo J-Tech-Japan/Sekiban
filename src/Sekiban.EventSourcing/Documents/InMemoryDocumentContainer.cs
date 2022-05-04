@@ -19,6 +19,10 @@ public class InMemoryDocumentStore
             _eventContainer.Partitions[partition] = partitionCollection;
         }
     }
+    public void ResetEventsForPartition(string partitionKey)
+    {
+        while (_eventContainer.Partitions[partitionKey].TryTake(out _)) { }
+    }
     public AggregateEvent[] GetAllEvents() =>
         _eventContainer.All.ToArray();
     public AggregateEvent[] GetEventPartition(string partition)

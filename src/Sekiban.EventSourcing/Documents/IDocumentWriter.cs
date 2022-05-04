@@ -9,4 +9,7 @@ public interface IDocumentWriter
         where TAggregateEvent : AggregateEvent;
 }
 public interface IDocumentPersistentWriter : IDocumentWriter { }
-public interface IDocumentTemporaryWriter : IDocumentWriter { }
+public interface IDocumentTemporaryWriter : IDocumentWriter
+{
+    void ResetEventForPartition(string partitionKey);
+}

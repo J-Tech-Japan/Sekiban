@@ -169,7 +169,6 @@ public class SingleAggregateService
                     if (toVersion.HasValue && toVersion.Value == aggregate.Version) { break; }
                 }
             });
-        _singleAggregateProjectionQueryStore.SaveProjection(aggregate, typeof(T).Name);
         return aggregate;
     }
 
@@ -231,7 +230,7 @@ public class SingleAggregateService
 
         var snapshotDocument =
             await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(T));
-        Q? dto = snapshotDocument == null ? default : snapshotDocument.ToDto<Q>();
+        var dto = snapshotDocument == null ? default : snapshotDocument.ToDto<Q>();
         if (dto != null)
         {
             aggregate.ApplySnapshot(dto);
@@ -247,7 +246,6 @@ public class SingleAggregateService
             {
                 foreach (var e in events) { aggregate.ApplyEvent(e); }
             });
-        _singleAggregateProjectionQueryStore.SaveProjection(aggregate, typeof(T).Name);
         return aggregate;
     }
     /// <summary>

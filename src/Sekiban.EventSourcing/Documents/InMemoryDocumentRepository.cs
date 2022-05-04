@@ -29,7 +29,8 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository,
                 .ToList() : _inMemoryDocumentStore.GetEventPartition(partitionKey).ToList();
         if (sinceSortableUniqueId != null)
         {
-            var index = list.FindIndex(m => m.SortableUniqueId == sinceSortableUniqueId);
+            var index = list.Any(m => m.SortableUniqueId == sinceSortableUniqueId)
+                ? list.FindIndex(m => m.SortableUniqueId == sinceSortableUniqueId) : 0;
             resultAction(list.GetRange(index, list.Count - index).OrderBy(m => m.SortableUniqueId));
         }
         else

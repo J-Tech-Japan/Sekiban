@@ -178,12 +178,12 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                         if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
                             toAdd.SortableUniqueId == sinceSortableUniqueId)
                         {
-                            resultAction(events);
+                            resultAction(events.OrderBy(m => m.SortableUniqueId));
                             return;
                         }
                         events.Add(toAdd);
                     }
-                    resultAction(events);
+                    resultAction(events.OrderBy(m => m.SortableUniqueId));
                 }
             });
     }
@@ -237,13 +237,13 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                         if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
                             toAdd.SortableUniqueId == sinceSortableUniqueId)
                         {
-                            resultAction(events);
+                            resultAction(events.OrderBy(m => m.SortableUniqueId));
                             return;
                         }
 
                         events.Add(toAdd);
                     }
-                    resultAction(events);
+                    resultAction(events.OrderBy(m => m.SortableUniqueId));
                 }
             });
     }

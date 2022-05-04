@@ -142,12 +142,13 @@ public class CustomerDbStoryBasic : TestBase
         Assert.NotNull(loyaltyPoint);
         Assert.Equal(0, loyaltyPoint!.CurrentPoint);
 
+        var datetimeFirst = DateTime.Now;
         var addPointResult =
             await _aggregateCommandExecutor
                 .ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointDto, AddLoyaltyPoint>(
                     new AddLoyaltyPoint(
                         clientId,
-                        DateTime.Now,
+                        datetimeFirst,
                         LoyaltyPointReceiveTypeKeys.FlightDomestic,
                         1000,
                         "") { ReferenceVersion = loyaltyPoint.Version });
@@ -167,7 +168,7 @@ public class CustomerDbStoryBasic : TestBase
                     .ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointDto, UseLoyaltyPoint>(
                         new UseLoyaltyPoint(
                             clientId,
-                            DateTime.Now,
+                            datetimeFirst.AddSeconds(1),
                             LoyaltyPointUsageTypeKeys.FlightUpgrade,
                             2000,
                             "") { ReferenceVersion = addPointResult!.AggregateDto!.Version });
@@ -241,7 +242,7 @@ public class CustomerDbStoryBasic : TestBase
         recentActivityList =
             (await _aggregateService.DtoListAsync<RecentActivity, RecentActivityDto>()).ToList();
         Assert.Single(recentActivityList);
-        Assert.Equal(count+1, version);
+        Assert.Equal(count + 1, version);
 
         var snapshotManager =
             await _aggregateService
@@ -402,6 +403,73 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + 1, aggregateRecentActivity!.Version);
+
+        var snapshotManager =
+            await _aggregateService
+                .GetAggregateFromInitialDefaultAggregateDtoAsync<SnapshotManager,
+                    SnapshotManagerDto>(SnapshotManager.SharedId);
+        _testOutputHelper.WriteLine("-requests-");
+        foreach (var key in snapshotManager!.Requests)
+        {
+            _testOutputHelper.WriteLine(key);
+        }
+        _testOutputHelper.WriteLine("-request takens-");
+        foreach (var key in snapshotManager!.RequestTakens)
+        {
+            _testOutputHelper.WriteLine(key);
+        }
+    }
+
+    [Fact(
+        DisplayName =
+            "CosmosDb ストーリーテスト 。一度アプリ終了してから正しく動くか"
+        // , Skip = "一度終了してから実行するため、自動実行はしない"
+    )]
+    public async Task ContinuousExecutionTestAsync()
+    {
+        var recentActivityList =
+            (await _aggregateService.DtoListAsync<RecentActivity, RecentActivityDto>()).ToList();
+        Assert.Single(recentActivityList);
+        var aggregateId = recentActivityList.First().AggregateId;
+
+        var aggregate =
+            await _aggregateService.GetAggregateAsync<RecentActivity, RecentActivityDto>(
+                aggregateId);
+        Assert.NotNull(aggregate);
+        var version = recentActivityList.First().Version;
+        var tasks = new List<Task>();
+        var count = 50;
+        foreach (var i in Enumerable.Range(0, count))
+        {
+            tasks.Add(
+                Task.Run(
+                    async () =>
+                    {
+                        var recentActivityAddedResult = await
+                            _aggregateCommandExecutor
+                                .ExecChangeCommandAsync<RecentActivity, RecentActivityDto,
+                                    AddRecentActivity>(
+                                    new AddRecentActivity(
+                                        aggregateId,
+                                        $"Message - {i + 1}") { ReferenceVersion = version });
+                        version = recentActivityAddedResult.AggregateDto!.Version;
+                    }));
+        }
+        await Task.WhenAll(tasks);
+        recentActivityList =
+            (await _aggregateService.DtoListAsync<RecentActivity, RecentActivityDto>()).ToList();
+        Assert.Single(recentActivityList);
+        // this works
+        var aggregateRecentActivity =
+            await _aggregateService
+                .GetAggregateFromInitialDefaultAggregateDtoAsync<RecentActivity, RecentActivityDto>(
+                    aggregateId);
+        // var aggregateRecentActivity =
+        //     await _aggregateService.GetAggregateDtoAsync<RecentActivity, RecentActivityDto>(
+        //         createRecentActivityResult.AggregateDto.AggregateId);
+        Assert.Single(recentActivityList);
+        Assert.NotNull(aggregateRecentActivity);
+        Assert.Equal(count + aggregate!.ToDto().Version, aggregateRecentActivity!.Version);
 
         var snapshotManager =
             await _aggregateService

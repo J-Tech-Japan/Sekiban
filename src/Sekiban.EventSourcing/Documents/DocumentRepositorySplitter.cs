@@ -37,7 +37,10 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 resultAction);
             return;
         }
-        if (partitionKey != null && _hybridStoreManager.HasPartition(partitionKey))
+        if (partitionKey != null &&
+            _hybridStoreManager.HasPartition(partitionKey) &&
+            sinceSortableUniqueId ==
+            _hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey))
         {
             await _documentTemporaryRepository.GetAllAggregateEventsForAggregateIdAsync(
                 aggregateId,
@@ -54,17 +57,22 @@ public class DocumentRepositorySplitter : IDocumentRepository
             sinceSortableUniqueId,
             events =>
             {
-                if (sinceSortableUniqueId == null && partitionKey != null)
+                if (partitionKey != null && _hybridStoreManager.HasPartition(partitionKey))
                 {
-                    if (_hybridStoreManager.AddPartitionKey(partitionKey))
+                    _documentTemporaryWriter.ResetEventForPartition(partitionKey);
+                }
+                var aggregateEvents = events.ToList();
+                if (partitionKey != null &&
+                    _hybridStoreManager.AddPartitionKey(
+                        partitionKey,
+                        sinceSortableUniqueId ?? string.Empty))
+                {
+                    foreach (var aggregateEvent in aggregateEvents)
                     {
-                        foreach (var aggregateEvent in events)
-                        {
-                            _documentTemporaryWriter.SaveAsync(aggregateEvent, originalType).Wait();
-                        }
+                        _documentTemporaryWriter.SaveAsync(aggregateEvent, originalType).Wait();
                     }
                 }
-                resultAction(events);
+                resultAction(aggregateEvents);
             });
     }
     public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
