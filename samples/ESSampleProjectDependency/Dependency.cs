@@ -40,7 +40,7 @@ public static class Dependency
         services.AddTransient<IDocumentTemporaryRepository, InMemoryDocumentRepository>();
         services.AddTransient<IDocumentWriter, DocumentWriterSplitter>();
         services.AddSingleton<IDocumentRepository, DocumentRepositorySplitter>();
-        services.AddSingleton(new HybridStoreManager(false));
+        services.AddSingleton(new HybridStoreManager(true));
 
         // ユーザー情報
         services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
