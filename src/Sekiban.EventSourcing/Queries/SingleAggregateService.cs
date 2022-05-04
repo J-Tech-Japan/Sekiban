@@ -26,7 +26,7 @@ public class SingleAggregateService
             var allAfterEvents = new List<AggregateEvent>();
             await _documentRepository.GetAllAggregateEventsForAggregateEventTypeAsync(
                 projector.OriginalAggregateType(),
-                aggregateList.LastEventId,
+                aggregateList.LastSortableUniqueId,
                 events =>
                 {
                     aggregateList = HandleListEvent(projector, events, aggregateList);
@@ -35,7 +35,7 @@ public class SingleAggregateService
         }
         await _documentRepository.GetAllAggregateEventsForAggregateEventTypeAsync(
             projector.OriginalAggregateType(),
-            aggregateList?.LastEventId,
+            aggregateList?.LastSortableUniqueId,
             events =>
             {
                 aggregateList = HandleListEvent(projector, events, aggregateList);
@@ -224,32 +224,12 @@ public class SingleAggregateService
         where Q : ISingleAggregate
         where P : ISingleAggregateProjector<T>, new()
     {
-        var fromStore =
-            _singleAggregateProjectionQueryStore.FindAggregate<T>(
-                aggregateId,
-                typeof(T).Name);
         var projector = new P();
-        if (fromStore != null)
-        {
-            var dto = fromStore.ToDto();
-            var aggregateToApply = projector.CreateInitialAggregate(fromStore.AggregateId);
-            aggregateToApply.ApplySnapshot(dto);
-
-            await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
-                aggregateId,
-                typeof(T),
-                new AggregateIdPartitionKeyFactory(aggregateId, projector.OriginalAggregateType())
-                    .GetPartitionKey(
-                        DocumentType.AggregateEvent),
-                fromStore.LastEventId,
-                events =>
-                {
-                    foreach (var e in events) { aggregateToApply.ApplyEvent(e); }
-                });
-            _singleAggregateProjectionQueryStore.SaveProjection(aggregateToApply, typeof(T).Name);
-            return aggregateToApply;
-        }
         var aggregate = projector.CreateInitialAggregate(aggregateId);
+
+        var snapshot =
+            _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(T));
+
         await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
             typeof(T),

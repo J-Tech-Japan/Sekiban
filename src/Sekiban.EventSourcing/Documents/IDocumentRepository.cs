@@ -6,18 +6,17 @@ public interface IDocumentRepository
         Guid aggregateId,
         Type originalType,
         string? partitionKey,
-        Guid? sinceEventId,
+        string? sinceSortableUniqueId,
         Action<IEnumerable<AggregateEvent>> resultAction);
 
     Task GetAllAggregateEventsForAggregateEventTypeAsync(
         Type originalType,
-        Guid? sinceEventId,
+        string? sinceSortableUniqueId,
         Action<IEnumerable<AggregateEvent>> resultAction);
 
     Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
         Guid aggregateId,
-        Type originalType,
-        string? partitionKey);
+        Type originalType);
 
     Task<SnapshotListDocument?> GetLatestSnapshotListForTypeAsync<T>(
         string? partitionKey,

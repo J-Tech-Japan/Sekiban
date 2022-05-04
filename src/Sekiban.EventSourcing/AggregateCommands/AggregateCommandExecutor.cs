@@ -54,9 +54,8 @@ public class AggregateCommandExecutor
                 throw new JJAggregateCommandNotRegisteredException(typeof(C).Name);
             }
             var aggregate =
-                await _singleAggregateService
-                    .GetAggregateFromInitialDefaultAggregateAsync<T, Q>(
-                        command.AggregateId);
+                await _singleAggregateService.GetAggregateAsync<T, Q>(
+                    command.AggregateId);
             if (aggregate == null)
             {
                 throw new JJInvalidArgumentException();

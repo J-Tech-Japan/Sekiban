@@ -9,7 +9,8 @@ public class DocumentRepositorySplitter : IDocumentRepository
     public DocumentRepositorySplitter(
         IDocumentPersistentRepository documentPersistentRepository,
         IDocumentTemporaryRepository documentTemporaryRepository,
-        HybridStoreManager hybridStoreManager, IDocumentTemporaryWriter documentTemporaryWriter)
+        HybridStoreManager hybridStoreManager,
+        IDocumentTemporaryWriter documentTemporaryWriter)
     {
         _documentPersistentRepository = documentPersistentRepository;
         _documentTemporaryRepository = documentTemporaryRepository;
@@ -21,18 +22,18 @@ public class DocumentRepositorySplitter : IDocumentRepository
         Guid aggregateId,
         Type originalType,
         string? partitionKey,
-        Guid? sinceEventId,
+        string? sinceSortableUniqueId,
         Action<IEnumerable<AggregateEvent>> resultAction)
     {
         var aggregateContainerGroup =
             AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
         {
-           await _documentTemporaryRepository.GetAllAggregateEventsForAggregateIdAsync(
+            await _documentTemporaryRepository.GetAllAggregateEventsForAggregateIdAsync(
                 aggregateId,
                 originalType,
                 partitionKey,
-                sinceEventId,
+                sinceSortableUniqueId,
                 resultAction);
             return;
         }
@@ -42,7 +43,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 aggregateId,
                 originalType,
                 partitionKey,
-                sinceEventId,
+                sinceSortableUniqueId,
                 resultAction);
             return;
         }
@@ -50,13 +51,13 @@ public class DocumentRepositorySplitter : IDocumentRepository
             aggregateId,
             originalType,
             partitionKey,
-            sinceEventId,
+            sinceSortableUniqueId,
             events =>
             {
-                if (sinceEventId == null && partitionKey!=null)
+                if (sinceSortableUniqueId == null && partitionKey != null)
                 {
                     _hybridStoreManager.AddPartitionKey(partitionKey);
-                    foreach (AggregateEvent aggregateEvent in events)
+                    foreach (var aggregateEvent in events)
                     {
                         _documentTemporaryWriter.SaveAsync(aggregateEvent, originalType).Wait();
                     }
@@ -64,46 +65,24 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 resultAction(events);
             });
     }
-    public Task GetAllAggregateEventsForAggregateEventTypeAsync(
-        Type originalType,
-        Guid? sinceEventId,
-        Action<IEnumerable<AggregateEvent>> resultAction)
-    {
-        var aggregateContainerGroup =
-            AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
-        if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
-        {
-            return _documentTemporaryRepository.GetAllAggregateEventsForAggregateEventTypeAsync(
-                originalType,
-                sinceEventId,
-                resultAction);
-        }
-        return _documentPersistentRepository.GetAllAggregateEventsForAggregateEventTypeAsync(
-            originalType,
-            sinceEventId,
-            events =>
-            {
-                resultAction(events);
-            });
-    }
-    public Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
+    public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
         Guid aggregateId,
-        Type originalType,
-        string? partitionKey)
+        Type originalType)
     {
         var aggregateContainerGroup =
             AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
         {
-            return _documentTemporaryRepository.GetLatestSnapshotForAggregateAsync(
+            return await _documentTemporaryRepository.GetLatestSnapshotForAggregateAsync(
                 aggregateId,
-                originalType,
-                partitionKey);
+                originalType);
         }
-        return _documentPersistentRepository.GetLatestSnapshotForAggregateAsync(
-            aggregateId,
-            originalType,
-            partitionKey);
+        return await _documentTemporaryRepository.GetLatestSnapshotForAggregateAsync(
+                aggregateId,
+                originalType) ??
+            await _documentPersistentRepository.GetLatestSnapshotForAggregateAsync(
+                aggregateId,
+                originalType);
     }
     public Task<SnapshotListDocument?> GetLatestSnapshotListForTypeAsync<T>(
         string? partitionKey,
@@ -140,5 +119,27 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 partitionKey);
         }
         return _documentPersistentRepository.GetSnapshotByIdAsync(id, originalType, partitionKey);
+    }
+    public Task GetAllAggregateEventsForAggregateEventTypeAsync(
+        Type originalType,
+        string? sinceSortableUniqueId,
+        Action<IEnumerable<AggregateEvent>> resultAction)
+    {
+        var aggregateContainerGroup =
+            AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
+        if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+        {
+            return _documentTemporaryRepository.GetAllAggregateEventsForAggregateEventTypeAsync(
+                originalType,
+                sinceSortableUniqueId,
+                resultAction);
+        }
+        return _documentPersistentRepository.GetAllAggregateEventsForAggregateEventTypeAsync(
+            originalType,
+            sinceSortableUniqueId,
+            events =>
+            {
+                resultAction(events);
+            });
     }
 }
