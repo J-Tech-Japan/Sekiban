@@ -78,13 +78,15 @@ public class SingleAggregateService
             aggregateList = new SingleAggregateList<T>
             {
                 List = list,
-                LastEventId = domainEvents.Last().Id
+                LastEventId = domainEvents.Last().Id,
+                LastSortableUniqueId = domainEvents.Last().SortableUniqueId
             };
         }
         else
         {
             aggregateList.List = list;
             aggregateList.LastEventId = domainEvents.Last().Id;
+            aggregateList.LastSortableUniqueId = domainEvents.Last().SortableUniqueId;
         }
         _singleAggregateProjectionQueryStore.SaveLatestAggregateList(aggregateList);
         return aggregateList;
