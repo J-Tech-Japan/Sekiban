@@ -1,5 +1,4 @@
-﻿using Sekiban.EventSourcing.Histories;
-namespace Sekiban.EventSourcing.IntegratedEvents;
+﻿namespace Sekiban.EventSourcing.IntegratedEvents;
 
 public class IntegratedEvent : IIntegratedEvent, ICallHistories
 {

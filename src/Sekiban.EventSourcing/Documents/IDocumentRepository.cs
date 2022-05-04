@@ -1,30 +1,22 @@
-using Sekiban.EventSourcing.AggregateCommands;
-using Sekiban.EventSourcing.AggregateEvents;
-using Sekiban.EventSourcing.Aggregates;
-using Sekiban.EventSourcing.Queries;
-using Sekiban.EventSourcing.Snapshots;
 namespace Sekiban.EventSourcing.Documents;
 
 public interface IDocumentRepository
 {
-    Task<IEnumerable<AggregateEvent>> GetAllAggregateEventsForAggregateIdAsync(
+    Task GetAllAggregateEventsForAggregateIdAsync(
         Guid aggregateId,
-        string? partitionKey = null,
-        Guid? sinceEventId = null);
-
-    Task<IEnumerable<AggregateEvent>> GetAllAggregateEventsForAggregateTypeAsync<T>(
-        Guid? sinceEventId = null)
-        where T : AggregateBase;
-
-    Task<IEnumerable<AggregateEvent>> GetAllAggregateEventsForAggregateEventTypeAsync(
         Type originalType,
-        Guid? sinceEventId = null);
+        string? partitionKey,
+        string? sinceSortableUniqueId,
+        Action<IEnumerable<AggregateEvent>> resultAction);
 
-    Task<IEnumerable<AggregateEvent>> GetAllCommandForTypeAsync<T>() where T : IAggregateCommand;
+    Task GetAllAggregateEventsForAggregateEventTypeAsync(
+        Type originalType,
+        string? sinceSortableUniqueId,
+        Action<IEnumerable<AggregateEvent>> resultAction);
 
     Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
         Guid aggregateId,
-        string? partitionKey);
+        Type originalType);
 
     Task<SnapshotListDocument?> GetLatestSnapshotListForTypeAsync<T>(
         string? partitionKey,
@@ -37,5 +29,8 @@ public interface IDocumentRepository
 
     Task<SnapshotDocument?> GetSnapshotByIdAsync(
         Guid id,
+        Type originalType,
         string partitionKey);
 }
+public interface IDocumentPersistentRepository : IDocumentRepository { }
+public interface IDocumentTemporaryRepository : IDocumentRepository { }

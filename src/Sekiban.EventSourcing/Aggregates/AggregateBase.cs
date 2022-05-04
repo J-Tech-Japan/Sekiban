@@ -1,34 +1,46 @@
-﻿using Sekiban.EventSourcing.AggregateEvents;
-using Sekiban.EventSourcing.Documents;
-using Sekiban.EventSourcing.Partitions;
-using Sekiban.EventSourcing.Queries;
-using Sekiban.EventSourcing.Shared.Exceptions;
-using Sekiban.EventSourcing.Snapshots;
-using System.Reflection;
+﻿using System.Reflection;
 namespace Sekiban.EventSourcing.Aggregates;
 
 public abstract class AggregateBase : IAggregate
 {
     protected readonly List<AggregateEvent> _events = new();
-    protected readonly List<SnapshotDocument> _snapshots = new();
-
-    public Guid AggregateId { get; }
-    public Guid LastEventId { get; protected set; } = Guid.Empty;
-    public int Version { get; protected set; }
-    public bool IsDeleted { get; protected set; }
-
-    public ReadOnlyCollection<AggregateEvent> Events => _events.AsReadOnly();
-    public ReadOnlyCollection<SnapshotDocument> Snapshots => _snapshots.AsReadOnly();
-
-    protected virtual int? AutoSnapshotCount { get; } = 10;
-    protected static IPartitionKeyFactory DefaultPartitionKeyFactory => new CanNotUsePartitionKeyFactory();
+    protected static IPartitionKeyFactory DefaultPartitionKeyFactory =>
+        new CanNotUsePartitionKeyFactory();
 
     public AggregateBase(Guid aggregateId) =>
         AggregateId = aggregateId;
 
+    public Guid AggregateId { get; }
+    public Guid LastEventId { get; protected set; } = Guid.Empty;
+    public string LastSortableUniqueId { get; protected set; } = string.Empty;
+    public int AppliedSnapshotVersion { get; protected set; }
+    public int Version { get; protected set; }
+    public bool IsDeleted { get; protected set; }
+
+    public ReadOnlyCollection<AggregateEvent> Events => _events.AsReadOnly();
+
+    public void ApplyEvent(AggregateEvent ev)
+    {
+        if (ev.IsAggregateInitialEvent == false && Version == 0)
+        {
+            throw new JJInvalidEventException();
+        }
+        if (ev.Id == LastEventId) { return; }
+        var action = GetApplyEventAction(ev);
+        if (action == null) { return; }
+        action();
+        LastEventId = ev.Id;
+        LastSortableUniqueId = ev.SortableUniqueId;
+        Version++;
+    }
+    public void ResetEventsAndSnapshots()
+    {
+        _events.Clear();
+    }
+
     public void FromEventHistory(IEnumerable<AggregateEvent> events)
     {
-        foreach (var ev in events.OrderBy(m => m.TimeStamp))
+        foreach (var ev in events.OrderBy(m => m.SortableUniqueId))
         {
             ApplyEvent(ev);
         }
@@ -37,20 +49,6 @@ public abstract class AggregateBase : IAggregate
     // TODO: 下記2行が必要か確認する
     public ISingleAggregateProjection CreateInitialAggregate(Guid _) => this;
     public ISingleAggregateProjection CreateInitialAggregate<T>(Guid _) => this;
-
-    public void ApplyEvent(AggregateEvent ev)
-    {
-        if (ev.IsAggregateInitialEvent == false && Version == 0)
-        {
-            throw new JJJnvalidEventException();
-        }
-        if (ev.Id == LastEventId) { return; }
-        var action = GetApplyEventAction(ev);
-        if (action == null) { return; }
-        action();
-        LastEventId = ev.Id;
-        Version++;
-    }
 
     public static UAggregate Create<UAggregate>(Guid aggregateId)
         where UAggregate : AggregateBase

@@ -4,6 +4,7 @@ using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.AggregateCommands;
+using Sekiban.EventSourcing.AggregateEvents;
 using Sekiban.EventSourcing.Documents;
 using Sekiban.EventSourcing.PubSubs;
 using Sekiban.EventSourcing.Queries;
@@ -29,9 +30,17 @@ public static class Dependency
         services.AddTransient<SnapshotListWriter>();
         services.AddTransient<SnapshotListReader>();
 
-        services.AddTransient<ISingleAggregateProjectionQueryStore, MemoryCacheSingleAggregateProjectionQueryStore>();
-        services.AddTransient<IDocumentWriter, CosmosDocumentWriter>();
-        services.AddTransient<IDocumentRepository, CosmosDocumentRepository>();
+        services
+            .AddTransient<ISingleAggregateProjectionQueryStore,
+                MemoryCacheSingleAggregateProjectionQueryStore>();
+        services.AddTransient<IDocumentPersistentWriter, CosmosDocumentWriter>();
+        services.AddTransient<IDocumentPersistentRepository, CosmosDocumentRepository>();
+        services.AddSingleton(new InMemoryDocumentStore());
+        services.AddTransient<IDocumentTemporaryWriter, InMemoryDocumentWriter>();
+        services.AddTransient<IDocumentTemporaryRepository, InMemoryDocumentRepository>();
+        services.AddTransient<IDocumentWriter, DocumentWriterSplitter>();
+        services.AddSingleton<IDocumentRepository, DocumentRepositorySplitter>();
+        services.AddSingleton(new HybridStoreManager(true));
 
         // ユーザー情報
         services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
@@ -41,8 +50,12 @@ public static class Dependency
         services.AddTransient<IIntegratedEventPublisher, NoIntegratedEventPublisher>();
 
         // 各ドメインコンテキスト
-        services.AddSingleton(CustomerDomainContext.Shared.Dependency.GetRegisteredAggregateEvents());
+        services.AddSingleton(
+            new RegisteredEventTypes(
+                CustomerDomainContext.Shared.Dependency.GetAssembly(),
+                Sekiban.EventSourcing.Shared.Dependency.GetAssembly()));
         services.AddTransient(CustomerDomainContext.Shared.Dependency.GetDependencies());
+        services.AddTransient(Sekiban.EventSourcing.Shared.Dependency.GetDependencies());
     }
 
     public static void AddTransient(

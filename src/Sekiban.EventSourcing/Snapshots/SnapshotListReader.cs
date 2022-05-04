@@ -1,6 +1,3 @@
-using Sekiban.EventSourcing.Aggregates;
-using Sekiban.EventSourcing.Documents;
-using Sekiban.EventSourcing.Queries;
 namespace Sekiban.EventSourcing.Snapshots;
 
 public class SnapshotListReader
@@ -34,7 +31,10 @@ public class SnapshotListReader
         foreach (var i in aggregateList.MergedSnapshotIds)
         {
             var snapshot =
-                await _documentRepository.GetSnapshotByIdAsync(i.SnapshotId, i.PartitionKey);
+                await _documentRepository.GetSnapshotByIdAsync(
+                    i.SnapshotId,
+                    typeof(T),
+                    i.PartitionKey);
             if (snapshot == default)
             {
                 continue;

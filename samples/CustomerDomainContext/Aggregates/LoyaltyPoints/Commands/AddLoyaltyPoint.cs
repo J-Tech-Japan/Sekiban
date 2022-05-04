@@ -10,8 +10,8 @@ public record AddLoyaltyPoint(
 ) : ChangeAggregateCommandBase<LoyaltyPoint>(
     ClientId
 );
-
-public class AddLoyaltyPointHandler : ChangeAggregateCommandHandlerBase<LoyaltyPoint, AddLoyaltyPoint>
+public class
+    AddLoyaltyPointHandler : ChangeAggregateCommandHandlerBase<LoyaltyPoint, AddLoyaltyPoint>
 {
     protected override async Task ExecCommandAsync(LoyaltyPoint aggregate, AddLoyaltyPoint command)
     {

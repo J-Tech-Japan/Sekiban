@@ -1,5 +1,4 @@
 ﻿using Sekiban.EventSourcing.IntegratedEvents;
-
 namespace Sekiban.EventSourcing.PubSubs;
 
 public interface IIntegratedEventPublisher

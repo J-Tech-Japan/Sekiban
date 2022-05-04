@@ -1,8 +1,3 @@
-using Sekiban.EventSourcing.AggregateEvents;
-using Sekiban.EventSourcing.Aggregates;
-using Sekiban.EventSourcing.Documents;
-using Sekiban.EventSourcing.Partitions.AggregateIdPartitions;
-using Sekiban.EventSourcing.Shared.Exceptions;
 namespace Sekiban.EventSourcing.Queries;
 
 public class SingleAggregateService
@@ -28,22 +23,24 @@ public class SingleAggregateService
             _singleAggregateProjectionQueryStore.FindAggregateList<T>();
         if (aggregateList != null)
         {
-            var allAfterEvents =
-                await _documentRepository.GetAllAggregateEventsForAggregateEventTypeAsync(
-                    projector.OriginalAggregateType(),
-                    aggregateList.LastEventId); // 効率悪いけどこれで取れる
-            return HandleListEvent(
-                    projector,
-                    allAfterEvents,
-                    aggregateList) ??
-                new SingleAggregateList<T>();
-        }
-
-        var allEvents =
+            var allAfterEvents = new List<AggregateEvent>();
             await _documentRepository.GetAllAggregateEventsForAggregateEventTypeAsync(
                 projector.OriginalAggregateType(),
-                aggregateList?.LastEventId);
-        return HandleListEvent(projector, allEvents, aggregateList) ??
+                aggregateList.LastSortableUniqueId,
+                events =>
+                {
+                    aggregateList = HandleListEvent(projector, events, aggregateList);
+                }); // 効率悪いけどこれで取れる
+            return aggregateList ?? new SingleAggregateList<T>();
+        }
+        await _documentRepository.GetAllAggregateEventsForAggregateEventTypeAsync(
+            projector.OriginalAggregateType(),
+            aggregateList?.LastSortableUniqueId,
+            events =>
+            {
+                aggregateList = HandleListEvent(projector, events, aggregateList);
+            });
+        return aggregateList ??
             new SingleAggregateList<T>();
     }
 
@@ -81,13 +78,15 @@ public class SingleAggregateService
             aggregateList = new SingleAggregateList<T>
             {
                 List = list,
-                LastEventId = domainEvents.Last().Id
+                LastEventId = domainEvents.Last().Id,
+                LastSortableUniqueId = domainEvents.Last().SortableUniqueId
             };
         }
         else
         {
             aggregateList.List = list;
             aggregateList.LastEventId = domainEvents.Last().Id;
+            aggregateList.LastSortableUniqueId = domainEvents.Last().SortableUniqueId;
         }
         _singleAggregateProjectionQueryStore.SaveLatestAggregateList(aggregateList);
         return aggregateList;
@@ -143,47 +142,74 @@ public class SingleAggregateService
     ///     検証などのためにこちらを残しています。
     /// </summary>
     /// <param name="aggregateId"></param>
+    /// <param name="toVersion"></param>
     /// <typeparam name="T"></typeparam>
-    /// <typeparam name="Q"></typeparam>
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
     public async Task<T?> GetAggregateFromInitialAsync<T, P>(
-        Guid aggregateId)
+        Guid aggregateId,
+        int? toVersion)
         where T : ISingleAggregate, ISingleAggregateProjection
         where P : ISingleAggregateProjector<T>, new()
     {
         var projector = new P();
-        var allEvents = await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
+        var aggregate = projector.CreateInitialAggregate(aggregateId);
+        await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
+            typeof(T),
             new AggregateIdPartitionKeyFactory(aggregateId, projector.OriginalAggregateType())
                 .GetPartitionKey(
-                    DocumentType.AggregateEvent));
-        var aggregate = projector.CreateInitialAggregate(aggregateId);
-        foreach (var e in allEvents) { aggregate.ApplyEvent(e); }
+                    DocumentType.AggregateEvent),
+            null,
+            events =>
+            {
+                foreach (var e in events)
+                {
+                    aggregate.ApplyEvent(e);
+                    if (toVersion.HasValue && toVersion.Value == aggregate.Version) { break; }
+                }
+            });
         _singleAggregateProjectionQueryStore.SaveProjection(aggregate, typeof(T).Name);
         return aggregate;
     }
+
     /// <summary>
     ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
     ///     遅いので、通常はキャッシュバージョンを使用ください
     ///     検証などのためにこちらを残しています。
     /// </summary>
     /// <param name="aggregateId"></param>
+    /// <param name="toVersion"></param>
     /// <typeparam name="T"></typeparam>
-    /// <typeparam name="Q"></typeparam>
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
-    public async Task<Q?> GetAggregateFromInitialDtoAsync<T, Q, P>(
-        Guid aggregateId)
-        where T : ISingleAggregate, ISingleAggregateProjection,
-        ISingleAggregateProjectionDtoConvertible<Q>
-        where Q : ISingleAggregate
-        where P : ISingleAggregateProjector<T>, new()
-    {
-        var aggregate = await GetAggregateFromInitialAsync<T, P>(aggregateId);
-        var projector = new P();
-        return aggregate != null ? aggregate.ToDto() : default;
-    }
+    public async Task<T?> GetAggregateFromInitialDefaultAggregateAsync<T, Q>(
+        Guid aggregateId,
+        int? toVersion = null)
+        where T : TransferableAggregateBase<Q>
+        where Q : AggregateDtoBase =>
+        await GetAggregateFromInitialAsync<T, DefaultSingleAggregateProjector<T>>(
+            aggregateId,
+            toVersion);
+
+    /// <summary>
+    ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
+    ///     遅いので、通常はキャッシュバージョンを使用ください
+    ///     検証などのためにこちらを残しています。
+    /// </summary>
+    /// <param name="aggregateId"></param>
+    /// <param name="toVersion"></param>
+    /// <typeparam name="T"></typeparam>
+    /// <typeparam name="P"></typeparam>
+    /// <returns></returns>
+    public async Task<Q?> GetAggregateFromInitialDefaultAggregateDtoAsync<T, Q>(
+        Guid aggregateId,
+        int? toVersion = null)
+        where T : TransferableAggregateBase<Q>
+        where Q : AggregateDtoBase =>
+        (await GetAggregateFromInitialAsync<T, DefaultSingleAggregateProjector<T>>(
+            aggregateId,
+            toVersion))?.ToDto();
 
     /// <summary>
     ///     スナップショット、メモリキャッシュを使用する通常版
@@ -195,33 +221,32 @@ public class SingleAggregateService
     /// <returns></returns>
     private async Task<T?> GetAggregateAsync<T, Q, P>(
         Guid aggregateId)
-        where T : ISingleAggregate, ISingleAggregateProjection
+        where T : ISingleAggregate, ISingleAggregateProjection,
+        ISingleAggregateProjectionDtoConvertible<Q>
         where Q : ISingleAggregate
         where P : ISingleAggregateProjector<T>, new()
     {
-        var fromStore =
-            _singleAggregateProjectionQueryStore.FindAggregate<T>(
-                aggregateId,
-                typeof(T).Name);
         var projector = new P();
-        if (fromStore != null)
+        var aggregate = projector.CreateInitialAggregate(aggregateId);
+
+        var snapshotDocument =
+            await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(T));
+        Q? dto = snapshotDocument == null ? default : snapshotDocument.ToDto<Q>();
+        if (dto != null)
         {
-            var allAfterEvents = await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
-                aggregateId,
-                new AggregateIdPartitionKeyFactory(aggregateId, projector.OriginalAggregateType())
-                    .GetPartitionKey(
-                        DocumentType.AggregateEvent),
-                fromStore.LastEventId);
-            foreach (var e in allAfterEvents) { fromStore.ApplyEvent(e); }
-            return fromStore;
+            aggregate.ApplySnapshot(dto);
         }
-        var allEvents = await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
+        await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
+            typeof(T),
             new AggregateIdPartitionKeyFactory(aggregateId, projector.OriginalAggregateType())
                 .GetPartitionKey(
-                    DocumentType.AggregateEvent));
-        var aggregate = projector.CreateInitialAggregate(aggregateId);
-        foreach (var e in allEvents) { aggregate.ApplyEvent(e); }
+                    DocumentType.AggregateEvent),
+            dto?.LastSortableUniqueId,
+            events =>
+            {
+                foreach (var e in events) { aggregate.ApplyEvent(e); }
+            });
         _singleAggregateProjectionQueryStore.SaveProjection(aggregate, typeof(T).Name);
         return aggregate;
     }

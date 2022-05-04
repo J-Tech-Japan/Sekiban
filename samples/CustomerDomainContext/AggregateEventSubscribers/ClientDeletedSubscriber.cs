@@ -1,7 +1,6 @@
 ﻿using CustomerDomainContext.Aggregates.Clients.Events;
 using CustomerDomainContext.Aggregates.LoyaltyPoints;
 using CustomerDomainContext.Aggregates.LoyaltyPoints.Commands;
-
 namespace CustomerDomainContext.AggregateEventSubscribers;
 
 public class ClientDeletedSubscriber : AggregateEventSubscriberBase<ClientDeleted>

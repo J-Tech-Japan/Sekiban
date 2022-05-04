@@ -1,4 +1,3 @@
-using Sekiban.EventSourcing.Snapshots;
 namespace Sekiban.EventSourcing.Queries;
 
 public class SingleAggregateList<T>
@@ -7,6 +6,7 @@ public class SingleAggregateList<T>
     private List<SnapshotListIndex>? _mergedSnapshotIds;
     public List<T> List { get; set; } = new();
     public Guid? LastEventId { get; set; } = null;
+    public string LastSortableUniqueId { get; set; } = string.Empty;
     public SnapshotListDocument? ProjectedSnapshot { get; set; } = null;
     public List<SnapshotListChunkDocument> ProjectedSnapshotChunks { get; set; } = new();
 

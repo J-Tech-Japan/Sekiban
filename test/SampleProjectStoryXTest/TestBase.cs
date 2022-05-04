@@ -13,14 +13,14 @@ public class TestBase : IClassFixture<TestFixture>, IDisposable
         _testFixture = testFixture;
         _serviceProvider = DependencyHelper.CreateDefaultProvider(testFixture);
     }
-    protected virtual void Dispose(bool disposing)
-    {
-        if (disposing) { }
-    }
     public void Dispose()
     {
         Dispose(true);
         GC.SuppressFinalize(this);
+    }
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing) { }
     }
     public T GetService<T>()
     {

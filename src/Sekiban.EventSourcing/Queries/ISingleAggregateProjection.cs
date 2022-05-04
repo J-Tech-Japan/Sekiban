@@ -1,4 +1,3 @@
-using Sekiban.EventSourcing.AggregateEvents;
 namespace Sekiban.EventSourcing.Queries;
 
 public interface ISingleAggregateProjection

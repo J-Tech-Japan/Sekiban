@@ -1,15 +1,12 @@
 using Newtonsoft.Json;
-using Sekiban.EventSourcing.Aggregates;
-using Sekiban.EventSourcing.Documents;
-using Sekiban.EventSourcing.Histories;
-using Sekiban.EventSourcing.Partitions;
-using Sekiban.EventSourcing.Partitions.AggregateIdPartitions;
-using Sekiban.EventSourcing.Queries;
-using Sekiban.EventSourcing.Shared.Exceptions;
+using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
+using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
+using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Events;
 namespace Sekiban.EventSourcing.AggregateCommands;
 
 public class AggregateCommandExecutor
 {
+    private static readonly SemaphoreSlim _semaphoreInMemory = new(1, 1);
     private readonly IDocumentWriter _documentWriter;
     private readonly IServiceProvider _serviceProvider;
     private readonly SingleAggregateService _singleAggregateService;
@@ -26,7 +23,6 @@ public class AggregateCommandExecutor
         _singleAggregateService = singleAggregateService;
         _userInformationFactory = userInformationFactory;
     }
-
     public async Task<AggregateCommandExecutorResponse<Q, C>> ExecChangeCommandAsync<T, Q, C>(
         C command,
         List<CallHistory>? callHistories = null)
@@ -41,6 +37,12 @@ public class AggregateCommandExecutor
                     new AggregateIdPartitionKeyFactory(command.AggregateId, typeof(T)),
                     callHistories
                 ));
+        var aggregateContainerGroup =
+            AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(T));
+        if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+        {
+            await _semaphoreInMemory.WaitAsync();
+        }
         try
         {
             toReturn.Command.ExecutedUser = _userInformationFactory.GetCurrentUserInformation();
@@ -52,14 +54,13 @@ public class AggregateCommandExecutor
                 throw new JJAggregateCommandNotRegisteredException(typeof(C).Name);
             }
             var aggregate =
-                await _singleAggregateService
-                    .GetAggregateAsync<T, Q>(
-                        command.AggregateId);
+                await _singleAggregateService.GetAggregateAsync<T, Q>(
+                    command.AggregateId);
             if (aggregate == null)
             {
                 throw new JJInvalidArgumentException();
             }
-
+            aggregate.ResetEventsAndSnapshots();
             var result = await handler.HandleAsync(toReturn.Command, aggregate);
             toReturn.Command.AggregateId = result.Aggregate.AggregateId;
 
@@ -73,16 +74,50 @@ public class AggregateCommandExecutor
                 toReturn.Events.AddRange(result.Aggregate.Events);
                 foreach (var ev in result.Aggregate.Events)
                 {
-                    await _documentWriter.SaveAndPublishAggregateEvent(ev);
+                    await _documentWriter.SaveAndPublishAggregateEvent(ev, typeof(T));
+                    if (aggregateContainerGroup != AggregateContainerGroup.InMemoryContainer)
+                    {
+                        var snapshotManagerResponse =
+                            await ExecChangeCommandAsync<SnapshotManager, SnapshotManagerDto,
+                                ReportAggregateVersionToSnapshotManger>(
+                                new ReportAggregateVersionToSnapshotManger(
+                                    SnapshotManager.SharedId,
+                                    typeof(T),
+                                    ev.AggregateId,
+                                    ev.Version,
+                                    null));
+                        if (snapshotManagerResponse.Events.Any(
+                            m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken)))
+                        {
+                            foreach (var taken in snapshotManagerResponse.Events.Where(
+                                    m => m.DocumentTypeName ==
+                                        nameof(SnapshotManagerSnapshotTaken))
+                                .Select(m => (SnapshotManagerSnapshotTaken)m))
+                            {
+                                var aggregateToSnapshot =
+                                    await _singleAggregateService
+                                        .GetAggregateFromInitialDefaultAggregateDtoAsync<T, Q>(
+                                            command.AggregateId,
+                                            taken.NextSnapshotVersion);
+                                if (aggregateToSnapshot == null)
+                                {
+                                    continue;
+                                }
+                                var snapshotDocument = new SnapshotDocument(
+                                    new AggregateIdPartitionKeyFactory(ev.AggregateId, typeof(T)),
+                                    typeof(T).Name,
+                                    aggregateToSnapshot,
+                                    ev.AggregateId,
+                                    aggregateToSnapshot.LastEventId,
+                                    aggregateToSnapshot.LastSortableUniqueId,
+                                    aggregateToSnapshot.Version);
+                                await _documentWriter.SaveAsync(snapshotDocument, typeof(T));
+                            }
+                        }
+                    }
                 }
             }
-            if (result.Aggregate.Snapshots.Any())
-            {
-                foreach (var snapshot in result.Aggregate.Snapshots)
-                {
-                    await _documentWriter.SaveAsync(snapshot);
-                }
-            }
+            aggregate.ResetEventsAndSnapshots();
             if (result == null)
             {
                 throw new JJInvalidArgumentException();
@@ -90,12 +125,21 @@ public class AggregateCommandExecutor
         }
         catch (Exception e)
         {
-            toReturn.Command.Exception = JsonConvert.SerializeObject(e);
+            toReturn.Command.Exception = JsonConvert.SerializeObject(
+                e,
+                new JsonSerializerSettings
+                {
+                    ReferenceLoopHandling = ReferenceLoopHandling.Ignore
+                });
             throw;
         }
         finally
         {
-            await _documentWriter.SaveAsync(toReturn.Command);
+            await _documentWriter.SaveAsync(toReturn.Command, typeof(T));
+            if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+            {
+                _semaphoreInMemory.Release();
+            }
         }
         return toReturn;
     }
@@ -114,6 +158,12 @@ public class AggregateCommandExecutor
                     new CanNotUsePartitionKeyFactory(),
                     callHistories
                 ));
+        var aggregateContainerGroup =
+            AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(T));
+        if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+        {
+            await _semaphoreInMemory.WaitAsync();
+        }
         try
         {
             toReturn.Command.ExecutedUser = _userInformationFactory.GetCurrentUserInformation();
@@ -139,16 +189,10 @@ public class AggregateCommandExecutor
                 toReturn.Events.AddRange(result.Aggregate.Events);
                 foreach (var ev in result.Aggregate.Events)
                 {
-                    await _documentWriter.SaveAndPublishAggregateEvent(ev);
+                    await _documentWriter.SaveAndPublishAggregateEvent(ev, typeof(T));
                 }
             }
-            if (result.Aggregate.Snapshots.Any())
-            {
-                foreach (var snapshot in result.Aggregate.Snapshots)
-                {
-                    await _documentWriter.SaveAsync(snapshot);
-                }
-            }
+            result.Aggregate.ResetEventsAndSnapshots();
             if (result == null)
             {
                 throw new JJInvalidArgumentException();
@@ -156,12 +200,21 @@ public class AggregateCommandExecutor
         }
         catch (Exception e)
         {
-            toReturn.Command.Exception = JsonConvert.SerializeObject(e);
+            toReturn.Command.Exception = JsonConvert.SerializeObject(
+                e,
+                new JsonSerializerSettings
+                {
+                    ReferenceLoopHandling = ReferenceLoopHandling.Ignore
+                });
             throw;
         }
         finally
         {
-            await _documentWriter.SaveAsync(toReturn.Command);
+            await _documentWriter.SaveAsync(toReturn.Command, typeof(T));
+            if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+            {
+                _semaphoreInMemory.Release();
+            }
         }
         return toReturn;
     }

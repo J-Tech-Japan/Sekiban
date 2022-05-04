@@ -2,7 +2,6 @@ using Microsoft.Azure.Cosmos.Linq;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json.Linq;
-
 namespace CosmosInfrastructure;
 
 public class CosmosDbFactory
@@ -15,23 +14,33 @@ public class CosmosDbFactory
         _configuration = configuration;
         _memoryCache = memoryCache;
     }
-    private string GetContainerId(DocumentType documentType)
+    private string GetContainerId(DocumentType documentType, AggregateContainerGroup containerGroup)
     {
         return documentType switch
         {
             DocumentType.AggregateEvent => _configuration.GetValue<string>(
-                    "AggregateEventCosmosDbContainer") ??
+                    $"AggregateEventCosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
+                _configuration.GetValue<string>(
+                    $"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
                 _configuration.GetValue<string>("CosmosDbContainer"),
             DocumentType.AggregateCommand => _configuration.GetValue<string>(
-                    "AggregateCommandCosmosDbContainer") ??
+                    $"AggregateCommandCosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
+                _configuration.GetValue<string>(
+                    $"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "dissolvable" : "")}") ??
                 _configuration.GetValue<string>("CosmosDbContainer"),
             DocumentType.IntegratedEvent => _configuration.GetValue<string>(
-                    "IntegrateEventCosmosDbContainer") ??
+                    $"IntegrateEventCosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
+                _configuration.GetValue<string>(
+                    $"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "dissolvable" : "")}") ??
                 _configuration.GetValue<string>("CosmosDbContainer"),
             DocumentType.IntegratedCommand => _configuration.GetValue<string>(
-                    "IntegrateEventCosmosDbContainer") ??
+                    $"IntegrateEventCosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
+                _configuration.GetValue<string>(
+                    $"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
                 _configuration.GetValue<string>("CosmosDbContainer"),
-            _ => _configuration.GetValue<string>("CosmosDbContainer")
+            _ => _configuration.GetValue<string>(
+                    $"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
+                _configuration.GetValue<string>("CosmosDbContainer")
         };
     }
     private static string GetMemoryCacheContainerKey(
@@ -62,10 +71,12 @@ public class CosmosDbFactory
             _configuration.GetValue<string>("CosmosDbDatabase")
             : _configuration.GetValue<string>("CosmosDbDatabase");
 
-    private async Task<Container> GetContainerAsync(DocumentType documentType)
+    private async Task<Container> GetContainerAsync(
+        DocumentType documentType,
+        AggregateContainerGroup containerGroup)
     {
         var databaseId = GetDatabaseId(documentType);
-        var containerId = GetContainerId(documentType);
+        var containerId = GetContainerId(documentType, containerGroup);
         var container =
             (Container?)_memoryCache.Get(
                 GetMemoryCacheContainerKey(documentType, databaseId, containerId));
@@ -84,6 +95,7 @@ public class CosmosDbFactory
                 new JsonSerializerSettings
                 {
                     // TypeNameHandling = TypeNameHandling.Auto
+                    DateFormatString = "yyyy-MM-dd'T'hh:mm:ss.ffffff'Z'"
                 }
             )
         };
@@ -112,60 +124,66 @@ public class CosmosDbFactory
         return container;
     }
 
-    public async Task DeleteAllFromAggregateFromContainerIncludes(DocumentType documentType)
+    public async Task DeleteAllFromAggregateFromContainerIncludes(
+        DocumentType documentType,
+        AggregateContainerGroup containerGroup = AggregateContainerGroup.Default)
     {
         await CosmosActionAsync<IEnumerable<AggregateEvent>?>(
             documentType,
+            containerGroup,
             async container =>
             {
                 var query = container.GetItemLinqQueryable<Document>()
                     .Where(
                         b => true);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(
-                    query.ToQueryDefinition(),
-                    null,
-                    null);
-                var todelete = new List<Document>(); 
+                    query.ToQueryDefinition());
+                var todelete = new List<Document>();
                 while (feedIterator.HasMoreResults)
                 {
                     var response = await feedIterator.ReadNextAsync();
                     foreach (var item in response)
                     {
-                        if (item == null) {continue;}
+                        if (item == null) { continue; }
                         if (item is not JObject jobj) { continue; }
                         todelete.Add(jobj.ToObject<Document>() ?? throw new Exception());
                     }
                 }
                 foreach (var d in todelete)
                 {
-                    await container.DeleteItemAsync<Document>(d.Id.ToString(), new PartitionKey(d.PartitionKey));
+                    await container.DeleteItemAsync<Document>(
+                        d.Id.ToString(),
+                        new PartitionKey(d.PartitionKey));
                 }
                 return null;
             });
     }
-    public async Task DeleteAllFromAggregateEventContainer()
+    public async Task DeleteAllFromAggregateEventContainer(AggregateContainerGroup containerGroup)
     {
-        await DeleteAllFromAggregateFromContainerIncludes(DocumentType.AggregateEvent);
+        await DeleteAllFromAggregateFromContainerIncludes(
+            DocumentType.AggregateEvent,
+            containerGroup);
     }
 
     public async Task<T> CosmosActionAsync<T>(
         DocumentType documentType,
+        AggregateContainerGroup containerGroup,
         Func<Container, Task<T>> cosmosAction)
     {
         try
         {
-            var result = await cosmosAction(await GetContainerAsync(documentType));
+            var result = await cosmosAction(await GetContainerAsync(documentType, containerGroup));
             return result;
         }
         catch
         {
-            ResetMemoryCache(documentType);
+            ResetMemoryCache(documentType, containerGroup);
             throw;
         }
     }
-    private void ResetMemoryCache(DocumentType documentType)
+    private void ResetMemoryCache(DocumentType documentType, AggregateContainerGroup containerGroup)
     {
-        var containerId = GetContainerId(documentType);
+        var containerId = GetContainerId(documentType, containerGroup);
         var databaseId = GetDatabaseId(documentType);
         // ネットワークエラーの可能性があるので、コンテナを初期化する
         // これによって次回回復したら再接続できる
@@ -175,17 +193,18 @@ public class CosmosDbFactory
     }
     public async Task CosmosActionAsync(
         DocumentType documentType,
+        AggregateContainerGroup containerGroup,
         Func<Container, Task> cosmosAction)
     {
         try
         {
-            await cosmosAction(await GetContainerAsync(documentType));
+            await cosmosAction(await GetContainerAsync(documentType, containerGroup));
         }
         catch
         {
             // ネットワークエラーの可能性があるので、コンテナを初期化する
             // これによって次回回復したら再接続できる
-            ResetMemoryCache(documentType);
+            ResetMemoryCache(documentType, containerGroup);
             throw;
         }
     }

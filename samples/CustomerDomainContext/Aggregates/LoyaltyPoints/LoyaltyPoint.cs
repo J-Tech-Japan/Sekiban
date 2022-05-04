@@ -30,25 +30,21 @@ public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointDto>
         LoyaltyPointCreated created => () =>
         {
             CurrentPoint = created.InitialPoint;
-        }
-        ,
+        },
         LoyaltyPointAdded added => () =>
         {
             CurrentPoint += added.PointAmount;
             LastOccuredTime = added.HappenedDate;
-        }
-        ,
+        },
         LoyaltyPointUsed used => () =>
         {
             CurrentPoint -= used.PointAmount;
             LastOccuredTime = used.HappenedDate;
-        }
-        ,
+        },
         LoyaltyPointDeleted => () =>
         {
             IsDeleted = true;
-        }
-        ,
+        },
         _ => null
     };
 

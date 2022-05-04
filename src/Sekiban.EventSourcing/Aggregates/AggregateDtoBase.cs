@@ -1,9 +1,7 @@
-using Sekiban.EventSourcing.Queries;
 namespace Sekiban.EventSourcing.Aggregates;
 
 public abstract record AggregateDtoBase : ISingleAggregate
 {
-    public bool IsDeleted { get; init; }
     /// <summary>
     ///     スナップショットからの再構築用。
     /// </summary>
@@ -17,9 +15,14 @@ public abstract record AggregateDtoBase : ISingleAggregate
         AggregateId = aggregate.AggregateId;
         Version = aggregate.Version;
         LastEventId = aggregate.LastEventId;
+        LastSortableUniqueId = aggregate.LastSortableUniqueId;
+        AppliedSnapshotVersion = aggregate.AppliedSnapshotVersion;
         IsDeleted = aggregate.IsDeleted;
     }
+    public bool IsDeleted { get; init; }
     public Guid AggregateId { get; init; }
     public int Version { get; init; }
     public Guid LastEventId { get; init; }
+    public int AppliedSnapshotVersion { get; init; }
+    public string LastSortableUniqueId { get; init; } = string.Empty;
 }

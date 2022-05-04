@@ -1,5 +1,3 @@
-using Sekiban.EventSourcing.Documents;
-
 namespace Sekiban.EventSourcing.Snapshots;
 
 public record SnapshotListChunkDocument : Document

@@ -6,13 +6,17 @@ using CustomerDomainContext.Aggregates.Clients.Commands;
 using CustomerDomainContext.Aggregates.Clients.Events;
 using CustomerDomainContext.Aggregates.LoyaltyPoints;
 using CustomerDomainContext.Aggregates.LoyaltyPoints.Commands;
+using CustomerDomainContext.Aggregates.RecentActivities;
+using CustomerDomainContext.Aggregates.RecentActivities.Commands;
+using CustomerDomainContext.Aggregates.RecentInMemoryActivities;
+using CustomerDomainContext.Aggregates.RecentInMemoryActivities.Commands;
 using System.Reflection;
-
 namespace CustomerDomainContext.Shared;
 
 public static class Dependency
 {
-    public static RegisteredEventTypes GetRegisteredAggregateEvents() => new(Assembly.GetExecutingAssembly());
+    public static Assembly GetAssembly() =>
+        Assembly.GetExecutingAssembly();
 
     public static IEnumerable<(Type serviceType, Type? implementationType)> GetDependencies()
     {
@@ -59,5 +63,24 @@ public static class Dependency
         yield return (
             typeof(IChangeAggregateCommandHandler<LoyaltyPoint, DeleteLoyaltyPoint>),
             typeof(DeleteLoyaltyPointHandler));
+
+        // Aggregate: RecentActivity
+        yield return (
+            typeof(ICreateAggregateCommandHandler<RecentActivity, CreateRecentActivity>),
+            typeof(CreateRecentActivityHandler));
+
+        yield return (
+            typeof(IChangeAggregateCommandHandler<RecentActivity, AddRecentActivity>),
+            typeof(AddRecentActivityHandler));
+        // Aggregate: RecentInMemoryActivity
+        yield return (
+            typeof(ICreateAggregateCommandHandler<RecentInMemoryActivity,
+                CreateRecentInMemoryActivity>),
+            typeof(CreateRecentInMemoryActivityHandler));
+
+        yield return (
+            typeof(
+                IChangeAggregateCommandHandler<RecentInMemoryActivity, AddRecentInMemoryActivity>),
+            typeof(AddRecentInMemoryActivityHandler));
     }
 }
