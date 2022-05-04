@@ -32,11 +32,11 @@ public record SnapshotDocument : Document
     }
 
     public T? ToDto<T>()
-        where T : AggregateDtoBase, new()
+        where T : ISingleAggregate
     {
         if (Snapshot is not JObject jobj)
         {
-            return null;
+            return default;
         }
         return jobj.ToObject<T>();
     }

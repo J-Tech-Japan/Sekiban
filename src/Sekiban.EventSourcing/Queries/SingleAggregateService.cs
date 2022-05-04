@@ -229,16 +229,20 @@ public class SingleAggregateService
         var projector = new P();
         var aggregate = projector.CreateInitialAggregate(aggregateId);
 
-        var snapshot =
-            _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(T));
-
+        var snapshotDocument =
+            await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(T));
+        Q? dto = snapshotDocument == null ? default : snapshotDocument.ToDto<Q>();
+        if (dto != null)
+        {
+            aggregate.ApplySnapshot(dto);
+        }
         await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
             typeof(T),
             new AggregateIdPartitionKeyFactory(aggregateId, projector.OriginalAggregateType())
                 .GetPartitionKey(
                     DocumentType.AggregateEvent),
-            null,
+            dto?.LastSortableUniqueId,
             events =>
             {
                 foreach (var e in events) { aggregate.ApplyEvent(e); }
