@@ -38,8 +38,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
             return;
         }
         if (partitionKey != null &&
-            _hybridStoreManager.HasPartition(partitionKey) &&
-            sinceSortableUniqueId != null            )
+            _hybridStoreManager.HasPartition(partitionKey))
         {
             await _documentTemporaryRepository.GetAllAggregateEventsForAggregateIdAsync(
                 aggregateId,
@@ -56,14 +55,10 @@ public class DocumentRepositorySplitter : IDocumentRepository
             sinceSortableUniqueId,
             events =>
             {
-                if (partitionKey != null && _hybridStoreManager.HasPartition(partitionKey))
-                {
-                }
+                if (partitionKey != null && _hybridStoreManager.HasPartition(partitionKey)) { }
                 var aggregateEvents = events.ToList();
-                if (partitionKey != null && sinceSortableUniqueId == null &&
-                    _hybridStoreManager.AddPartitionKey(
-                        partitionKey,
-                        sinceSortableUniqueId ?? string.Empty))
+                if (partitionKey != null &&
+                    string.IsNullOrWhiteSpace(sinceSortableUniqueId))
                 {
                     foreach (var aggregateEvent in aggregateEvents)
                     {
@@ -152,7 +147,10 @@ public class DocumentRepositorySplitter : IDocumentRepository
             });
     }
 
-    public async Task<bool> ExistsSnapshotForAggregateAsync(Guid aggregateId, Type originalType, int version)
+    public async Task<bool> ExistsSnapshotForAggregateAsync(
+        Guid aggregateId,
+        Type originalType,
+        int version)
     {
         var aggregateContainerGroup =
             AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
@@ -160,9 +158,10 @@ public class DocumentRepositorySplitter : IDocumentRepository
         {
             return false;
         }
-        return 
+        return
             await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
                 aggregateId,
-                originalType, version);
+                originalType,
+                version);
     }
 }

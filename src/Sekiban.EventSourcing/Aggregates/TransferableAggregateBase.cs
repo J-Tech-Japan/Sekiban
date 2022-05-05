@@ -10,6 +10,8 @@ public abstract class TransferableAggregateBase<TDto> : AggregateBase,
 
     public void ApplySnapshot(TDto snapshot)
     {
+        Console.WriteLine(
+            $"Apply snapshot - version {snapshot.Version}, {snapshot.LastEventId}, {snapshot.LastSortableUniqueId}");
         Version = snapshot.Version;
         LastEventId = snapshot.LastEventId;
         LastSortableUniqueId = snapshot.LastSortableUniqueId;

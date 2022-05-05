@@ -7,8 +7,8 @@ namespace Sekiban.EventSourcing.AggregateCommands;
 public class AggregateCommandExecutor
 {
     private static readonly SemaphoreSlim _semaphoreInMemory = new(1, 1);
-    private readonly IDocumentWriter _documentWriter;
     private readonly IDocumentPersistentRepository _documentPersistentRepository;
+    private readonly IDocumentWriter _documentWriter;
     private readonly IServiceProvider _serviceProvider;
     private readonly SingleAggregateService _singleAggregateService;
     private readonly IUserInformationFactory _userInformationFactory;
@@ -17,7 +17,8 @@ public class AggregateCommandExecutor
         IDocumentWriter documentWriter,
         IServiceProvider serviceProvider,
         SingleAggregateService singleAggregateService,
-        IUserInformationFactory userInformationFactory, IDocumentPersistentRepository documentPersistentRepository)
+        IUserInformationFactory userInformationFactory,
+        IDocumentPersistentRepository documentPersistentRepository)
     {
         _documentWriter = documentWriter;
         _serviceProvider = serviceProvider;
@@ -96,8 +97,13 @@ public class AggregateCommandExecutor
                                         nameof(SnapshotManagerSnapshotTaken))
                                 .Select(m => (SnapshotManagerSnapshotTaken)m))
                             {
-                                if (! await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(command.AggregateId, typeof(T), taken.NextSnapshotVersion))
+                                if (!await _documentPersistentRepository
+                                    .ExistsSnapshotForAggregateAsync(
+                                        command.AggregateId,
+                                        typeof(T),
+                                        taken.NextSnapshotVersion))
                                 {
+                                    Console.WriteLine($"snapshot - {taken.NextSnapshotVersion}");
                                     var aggregateToSnapshot =
                                         await _singleAggregateService
                                             .GetAggregateDtoAsync<T, Q>(
@@ -107,9 +113,14 @@ public class AggregateCommandExecutor
                                     {
                                         continue;
                                     }
-                                    if (taken.NextSnapshotVersion != aggregateToSnapshot.Version) { continue; }
+                                    if (taken.NextSnapshotVersion != aggregateToSnapshot.Version)
+                                    {
+                                        continue;
+                                    }
                                     var snapshotDocument = new SnapshotDocument(
-                                        new AggregateIdPartitionKeyFactory(ev.AggregateId, typeof(T)),
+                                        new AggregateIdPartitionKeyFactory(
+                                            ev.AggregateId,
+                                            typeof(T)),
                                         typeof(T).Name,
                                         aggregateToSnapshot,
                                         ev.AggregateId,

@@ -219,7 +219,8 @@ public class SingleAggregateService
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
     private async Task<T?> GetAggregateAsync<T, Q, P>(
-        Guid aggregateId, int? toVersion = null)
+        Guid aggregateId,
+        int? toVersion = null)
         where T : ISingleAggregate, ISingleAggregateProjection,
         ISingleAggregateProjectionDtoConvertible<Q>
         where Q : ISingleAggregate
@@ -233,12 +234,18 @@ public class SingleAggregateService
         var dto = snapshotDocument == null ? default : snapshotDocument.ToDto<Q>();
         if (dto != null)
         {
+            Console.WriteLine(
+                $"using snapshot version - {dto.Version} applied {dto.AppliedSnapshotVersion}");
             aggregate.ApplySnapshot(dto);
         }
-        if (toVersion.HasValue && aggregate.Version < toVersion.Value)
+        if (toVersion.HasValue && aggregate.Version >= toVersion.Value)
         {
-           return await GetAggregateFromInitialAsync<T, P>(aggregateId, toVersion.Value);
+            Console.WriteLine(
+                $"aggregate.Version  {aggregate.Version} - toVersion {toVersion.Value}");
+            return await GetAggregateFromInitialAsync<T, P>(aggregateId, toVersion.Value);
         }
+        Console.WriteLine(
+            $"GetAllAggregateEventsForAggregateIdAsync  {dto?.Version} {dto?.LastSortableUniqueId}");
         await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
             typeof(T),
@@ -248,10 +255,19 @@ public class SingleAggregateService
             dto?.LastSortableUniqueId,
             events =>
             {
-                foreach (var e in events) { aggregate.ApplyEvent(e); if (toVersion.HasValue && aggregate.Version == toVersion.Value) break; }
+                foreach (var e in events)
+                {
+                    aggregate.ApplyEvent(e);
+                    if (toVersion.HasValue && aggregate.Version == toVersion.Value)
+                    {
+                        break;
+                    }
+                }
             });
         if (toVersion.HasValue && aggregate.Version < toVersion.Value)
-        { throw new JJVersionNotReachToSpecificVersion(); }
+        {
+            throw new JJVersionNotReachToSpecificVersion();
+        }
         return aggregate;
     }
     /// <summary>
@@ -263,7 +279,8 @@ public class SingleAggregateService
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
     private async Task<Q?> GetAggregateDtoAsync<T, Q, P>(
-        Guid aggregateId, int? toVersion = null)
+        Guid aggregateId,
+        int? toVersion = null)
         where T : ISingleAggregate, ISingleAggregateProjection,
         ISingleAggregateProjectionDtoConvertible<Q>
         where Q : ISingleAggregate
@@ -287,11 +304,13 @@ public class SingleAggregateService
     /// <typeparam name="Q"></typeparam>
     /// <returns></returns>
     public async Task<T?> GetAggregateAsync<T, Q>(
-        Guid aggregateId, int? toVersion = null)
+        Guid aggregateId,
+        int? toVersion = null)
         where T : TransferableAggregateBase<Q>
         where Q : AggregateDtoBase =>
         await GetAggregateAsync<T, Q, DefaultSingleAggregateProjector<T>>(
-            aggregateId, toVersion);
+            aggregateId,
+            toVersion);
     /// <summary>
     ///     スナップショット、メモリキャッシュを使用する通常版
     ///     こちらはデフォルトプロジェクトション（集約のデフォルトステータス）
@@ -301,13 +320,15 @@ public class SingleAggregateService
     /// <typeparam name="Q"></typeparam>
     /// <returns></returns>
     public async Task<Q?> GetAggregateDtoAsync<T, Q>(
-        Guid aggregateId, int? toVersion = null)
+        Guid aggregateId,
+        int? toVersion = null)
         where T : TransferableAggregateBase<Q>
         where Q : AggregateDtoBase
     {
         var aggregate =
             await GetAggregateAsync<T, Q, DefaultSingleAggregateProjector<T>>(
-                aggregateId,  toVersion);
+                aggregateId,
+                toVersion);
         return aggregate?.ToDto();
     }
 }
