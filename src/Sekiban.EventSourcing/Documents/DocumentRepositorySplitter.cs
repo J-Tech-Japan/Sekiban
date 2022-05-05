@@ -65,7 +65,6 @@ public class DocumentRepositorySplitter : IDocumentRepository
                         _documentTemporaryWriter.SaveAsync(aggregateEvent, originalType).Wait();
                     }
                 }
-                Console.WriteLine($"{aggregateEvents.Count} events selected");
                 resultAction(aggregateEvents);
             });
     }
