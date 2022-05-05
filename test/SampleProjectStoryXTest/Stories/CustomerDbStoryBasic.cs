@@ -457,7 +457,7 @@ public class CustomerDbStoryBasic : TestBase
 
         var version = recentActivityList.First().Version;
         var tasks = new List<Task>();
-        var count = 50;
+        var count = 80;
         foreach (var i in Enumerable.Range(0, count))
         {
             tasks.Add(
@@ -475,15 +475,19 @@ public class CustomerDbStoryBasic : TestBase
                     }));
         }
         await Task.WhenAll(tasks);
+        Console.WriteLine("---list---");
         recentActivityList =
             (await _aggregateService.DtoListAsync<RecentActivity, RecentActivityDto>()).ToList();
         Assert.Single(recentActivityList);
         
+        Console.WriteLine("---checking---");
+
         // this works
         var aggregateRecentActivity =
             await _aggregateService
                 .GetAggregateFromInitialDefaultAggregateDtoAsync<RecentActivity, RecentActivityDto>(
                     aggregateId);
+        Console.WriteLine("---checking 2---");
         aggregateRecentActivity2 =
             await _aggregateService.GetAggregateDtoAsync<RecentActivity, RecentActivityDto>(
                 aggregateId);

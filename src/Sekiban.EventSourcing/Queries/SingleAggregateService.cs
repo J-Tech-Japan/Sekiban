@@ -219,7 +219,7 @@ public class SingleAggregateService
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
     private async Task<T?> GetAggregateAsync<T, Q, P>(
-        Guid aggregateId)
+        Guid aggregateId, int? toVersion = null)
         where T : ISingleAggregate, ISingleAggregateProjection,
         ISingleAggregateProjectionDtoConvertible<Q>
         where Q : ISingleAggregate
@@ -235,6 +235,10 @@ public class SingleAggregateService
         {
             aggregate.ApplySnapshot(dto);
         }
+        if (toVersion.HasValue && aggregate.Version < toVersion.Value)
+        {
+           return await GetAggregateFromInitialAsync<T, P>(aggregateId, toVersion.Value);
+        }
         await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
             typeof(T),
@@ -244,8 +248,10 @@ public class SingleAggregateService
             dto?.LastSortableUniqueId,
             events =>
             {
-                foreach (var e in events) { aggregate.ApplyEvent(e); }
+                foreach (var e in events) { aggregate.ApplyEvent(e); if (toVersion.HasValue && aggregate.Version == toVersion.Value) break; }
             });
+        if (toVersion.HasValue && aggregate.Version < toVersion.Value)
+        { throw new JJVersionNotReachToSpecificVersion(); }
         return aggregate;
     }
     /// <summary>
@@ -257,14 +263,14 @@ public class SingleAggregateService
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
     private async Task<Q?> GetAggregateDtoAsync<T, Q, P>(
-        Guid aggregateId)
+        Guid aggregateId, int? toVersion = null)
         where T : ISingleAggregate, ISingleAggregateProjection,
         ISingleAggregateProjectionDtoConvertible<Q>
         where Q : ISingleAggregate
         where P : ISingleAggregateProjector<T>, new()
     {
         var aggregate =
-            await GetAggregateAsync<T, Q, P>(aggregateId);
+            await GetAggregateAsync<T, Q, P>(aggregateId, toVersion);
         return aggregate == null ? default : aggregate.ToDto();
     }
 
@@ -281,11 +287,11 @@ public class SingleAggregateService
     /// <typeparam name="Q"></typeparam>
     /// <returns></returns>
     public async Task<T?> GetAggregateAsync<T, Q>(
-        Guid aggregateId)
+        Guid aggregateId, int? toVersion = null)
         where T : TransferableAggregateBase<Q>
         where Q : AggregateDtoBase =>
         await GetAggregateAsync<T, Q, DefaultSingleAggregateProjector<T>>(
-            aggregateId);
+            aggregateId, toVersion);
     /// <summary>
     ///     スナップショット、メモリキャッシュを使用する通常版
     ///     こちらはデフォルトプロジェクトション（集約のデフォルトステータス）
@@ -295,13 +301,13 @@ public class SingleAggregateService
     /// <typeparam name="Q"></typeparam>
     /// <returns></returns>
     public async Task<Q?> GetAggregateDtoAsync<T, Q>(
-        Guid aggregateId)
+        Guid aggregateId, int? toVersion = null)
         where T : TransferableAggregateBase<Q>
         where Q : AggregateDtoBase
     {
         var aggregate =
             await GetAggregateAsync<T, Q, DefaultSingleAggregateProjector<T>>(
-                aggregateId);
+                aggregateId,  toVersion);
         return aggregate?.ToDto();
     }
 }

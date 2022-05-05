@@ -100,7 +100,7 @@ public class AggregateCommandExecutor
                                 {
                                     var aggregateToSnapshot =
                                         await _singleAggregateService
-                                            .GetAggregateFromInitialDefaultAggregateDtoAsync<T, Q>(
+                                            .GetAggregateDtoAsync<T, Q>(
                                                 command.AggregateId,
                                                 taken.NextSnapshotVersion);
                                     if (aggregateToSnapshot == null)
