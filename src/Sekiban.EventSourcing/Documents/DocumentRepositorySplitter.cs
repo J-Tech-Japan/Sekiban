@@ -39,8 +39,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
         }
         if (partitionKey != null &&
             _hybridStoreManager.HasPartition(partitionKey) &&
-            sinceSortableUniqueId ==
-            _hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey))
+            sinceSortableUniqueId != null            )
         {
             await _documentTemporaryRepository.GetAllAggregateEventsForAggregateIdAsync(
                 aggregateId,
@@ -59,10 +58,9 @@ public class DocumentRepositorySplitter : IDocumentRepository
             {
                 if (partitionKey != null && _hybridStoreManager.HasPartition(partitionKey))
                 {
-                    _documentTemporaryWriter.ResetEventForPartition(partitionKey);
                 }
                 var aggregateEvents = events.ToList();
-                if (partitionKey != null &&
+                if (partitionKey != null && sinceSortableUniqueId == null &&
                     _hybridStoreManager.AddPartitionKey(
                         partitionKey,
                         sinceSortableUniqueId ?? string.Empty))
@@ -151,5 +149,19 @@ public class DocumentRepositorySplitter : IDocumentRepository
             {
                 resultAction(events);
             });
+    }
+
+    public async Task<bool> ExistsSnapshotForAggregateAsync(Guid aggregateId, Type originalType, int version)
+    {
+        var aggregateContainerGroup =
+            AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
+        if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+        {
+            return false;
+        }
+        return 
+            await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
+                aggregateId,
+                originalType, version);
     }
 }

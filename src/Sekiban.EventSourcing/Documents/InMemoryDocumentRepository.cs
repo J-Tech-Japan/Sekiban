@@ -92,4 +92,9 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository,
             resultAction(list.OrderBy(m => m.SortableUniqueId));
         }
     }
+
+    public Task<bool> ExistsSnapshotForAggregateAsync(Guid aggregateId, Type originalType, int version)
+    {
+        return Task.FromResult(false);
+    }
 }

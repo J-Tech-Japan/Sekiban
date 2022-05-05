@@ -302,7 +302,7 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Single(recentActivityList);
         var version = createRecentActivityResult.AggregateDto!.Version;
         var tasks = new List<Task>();
-        var count = 500;
+        var count = 80;
         foreach (var i in Enumerable.Range(0, count))
         {
             tasks.Add(
@@ -396,10 +396,10 @@ public class CustomerDbStoryBasic : TestBase
 
         var aggregateRecentActivity =
             await _aggregateService
-                .GetAggregateFromInitialDefaultAggregateDtoAsync<RecentActivity, RecentActivityDto>(
+                .GetAggregateFromInitialDefaultAggregateDtoAsync<RecentInMemoryActivity, RecentInMemoryActivityDto>(
                     createRecentActivityResult.AggregateDto.AggregateId);
         var aggregateRecentActivity2 =
-            await _aggregateService.GetAggregateDtoAsync<RecentActivity, RecentActivityDto>(
+            await _aggregateService.GetAggregateDtoAsync<RecentInMemoryActivity, RecentInMemoryActivityDto>(
                 createRecentActivityResult.AggregateDto.AggregateId);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
@@ -439,9 +439,25 @@ public class CustomerDbStoryBasic : TestBase
             await _aggregateService.GetAggregateAsync<RecentActivity, RecentActivityDto>(
                 aggregateId);
         Assert.NotNull(aggregate);
+
+
+        var aggregateRecentActivity2 =
+            await _aggregateService.GetAggregateDtoAsync<RecentActivity, RecentActivityDto>(
+                aggregateId);
+        //var aggregateRecentActivity =
+        //    await _aggregateService
+        //        .GetAggregateFromInitialDefaultAggregateDtoAsync<RecentActivity, RecentActivityDto>(
+        //            aggregateId);
+        //Assert.Single(recentActivityList);
+        //Assert.NotNull(aggregateRecentActivity);
+        //Assert.NotNull(aggregateRecentActivity2);
+        //Assert.Equal(aggregateRecentActivity!.Version, aggregateRecentActivity2!.Version);
+
+
+
         var version = recentActivityList.First().Version;
         var tasks = new List<Task>();
-        var count = 120;
+        var count = 50;
         foreach (var i in Enumerable.Range(0, count))
         {
             tasks.Add(
@@ -468,7 +484,7 @@ public class CustomerDbStoryBasic : TestBase
             await _aggregateService
                 .GetAggregateFromInitialDefaultAggregateDtoAsync<RecentActivity, RecentActivityDto>(
                     aggregateId);
-        var aggregateRecentActivity2 =
+        aggregateRecentActivity2 =
             await _aggregateService.GetAggregateDtoAsync<RecentActivity, RecentActivityDto>(
                 aggregateId);
         Assert.Single(recentActivityList);

@@ -4,8 +4,8 @@ namespace Sekiban.EventSourcing.Snapshots.SnapshotManagers;
 [AggregateContainerGroup(AggregateContainerGroup.InMemoryContainer)]
 public class SnapshotManager : TransferableAggregateBase<SnapshotManagerDto>
 {
-    private const int SnapshotCount = 30;
-    private const int SnapshotTakeOffset = 5;
+    private const int SnapshotCount = 50;
+    private const int SnapshotTakeOffset = 10;
     public static Guid SharedId { get; } = new();
     private List<string> Requests
     {

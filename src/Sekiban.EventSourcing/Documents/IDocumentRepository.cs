@@ -18,6 +18,11 @@ public interface IDocumentRepository
         Guid aggregateId,
         Type originalType);
 
+    Task<bool> ExistsSnapshotForAggregateAsync(
+    Guid aggregateId,
+    Type originalType, 
+    int version);
+
     Task<SnapshotListDocument?> GetLatestSnapshotListForTypeAsync<T>(
         string? partitionKey,
         QueryListType queryListType = QueryListType.ActiveAndDeleted)

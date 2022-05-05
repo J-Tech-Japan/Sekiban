@@ -11,5 +11,4 @@ public interface IDocumentWriter
 public interface IDocumentPersistentWriter : IDocumentWriter { }
 public interface IDocumentTemporaryWriter : IDocumentWriter
 {
-    void ResetEventForPartition(string partitionKey);
 }
