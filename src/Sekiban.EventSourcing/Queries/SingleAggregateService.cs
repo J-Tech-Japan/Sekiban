@@ -154,6 +154,7 @@ public class SingleAggregateService
     {
         var projector = new P();
         var aggregate = projector.CreateInitialAggregate(aggregateId);
+        var addFinished = false;
         await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
             typeof(T),
@@ -167,10 +168,15 @@ public class SingleAggregateService
                 {
                     throw new JJAggregateEventDuplicateException();
                 }
+                if (addFinished) { return; }
                 foreach (var e in events)
                 {
                     aggregate.ApplyEvent(e);
-                    if (toVersion.HasValue && toVersion.Value == aggregate.Version) { break; }
+                    if (toVersion.HasValue && toVersion.Value == aggregate.Version)
+                    {
+                        addFinished = true;
+                        break;
+                    }
                 }
             });
         return aggregate;
