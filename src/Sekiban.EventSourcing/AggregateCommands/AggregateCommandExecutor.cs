@@ -103,7 +103,6 @@ public class AggregateCommandExecutor
                                         typeof(T),
                                         taken.NextSnapshotVersion))
                                 {
-                                    Console.WriteLine($"snapshot - {taken.NextSnapshotVersion}");
                                     var aggregateToSnapshot =
                                         await _singleAggregateService
                                             .GetAggregateDtoAsync<T, Q>(

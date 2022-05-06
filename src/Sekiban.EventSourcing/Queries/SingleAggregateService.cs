@@ -238,18 +238,12 @@ public class SingleAggregateService
         var dto = snapshotDocument == null ? default : snapshotDocument.ToDto<Q>();
         if (dto != null)
         {
-            Console.WriteLine(
-                $"using snapshot version - {dto.Version} applied {dto.AppliedSnapshotVersion}");
             aggregate.ApplySnapshot(dto);
         }
         if (toVersion.HasValue && aggregate.Version >= toVersion.Value)
         {
-            Console.WriteLine(
-                $"aggregate.Version  {aggregate.Version} - toVersion {toVersion.Value}");
             return await GetAggregateFromInitialAsync<T, P>(aggregateId, toVersion.Value);
         }
-        Console.WriteLine(
-            $"GetAllAggregateEventsForAggregateIdAsync  {dto?.Version} {dto?.LastSortableUniqueId}");
         await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
             typeof(T),
