@@ -7,6 +7,7 @@ namespace Sekiban.EventSourcing.AggregateCommands;
 public class AggregateCommandExecutor
 {
     private static readonly SemaphoreSlim _semaphoreInMemory = new(1, 1);
+    private readonly IDocumentPersistentRepository _documentPersistentRepository;
     private readonly IDocumentWriter _documentWriter;
     private readonly IServiceProvider _serviceProvider;
     private readonly SingleAggregateService _singleAggregateService;
@@ -16,12 +17,14 @@ public class AggregateCommandExecutor
         IDocumentWriter documentWriter,
         IServiceProvider serviceProvider,
         SingleAggregateService singleAggregateService,
-        IUserInformationFactory userInformationFactory)
+        IUserInformationFactory userInformationFactory,
+        IDocumentPersistentRepository documentPersistentRepository)
     {
         _documentWriter = documentWriter;
         _serviceProvider = serviceProvider;
         _singleAggregateService = singleAggregateService;
         _userInformationFactory = userInformationFactory;
+        _documentPersistentRepository = documentPersistentRepository;
     }
     public async Task<AggregateCommandExecutorResponse<Q, C>> ExecChangeCommandAsync<T, Q, C>(
         C command,
@@ -94,24 +97,39 @@ public class AggregateCommandExecutor
                                         nameof(SnapshotManagerSnapshotTaken))
                                 .Select(m => (SnapshotManagerSnapshotTaken)m))
                             {
-                                var aggregateToSnapshot =
-                                    await _singleAggregateService
-                                        .GetAggregateFromInitialDefaultAggregateDtoAsync<T, Q>(
-                                            command.AggregateId,
-                                            taken.NextSnapshotVersion);
-                                if (aggregateToSnapshot == null)
+                                if (!await _documentPersistentRepository
+                                    .ExistsSnapshotForAggregateAsync(
+                                        command.AggregateId,
+                                        typeof(T),
+                                        taken.NextSnapshotVersion))
                                 {
-                                    continue;
+                                    Console.WriteLine(
+                                        $"creating snapshot - {taken.NextSnapshotVersion}");
+                                    var aggregateToSnapshot =
+                                        await _singleAggregateService
+                                            .GetAggregateDtoAsync<T, Q>(
+                                                command.AggregateId,
+                                                taken.NextSnapshotVersion);
+                                    if (aggregateToSnapshot == null)
+                                    {
+                                        continue;
+                                    }
+                                    if (taken.NextSnapshotVersion != aggregateToSnapshot.Version)
+                                    {
+                                        continue;
+                                    }
+                                    var snapshotDocument = new SnapshotDocument(
+                                        new AggregateIdPartitionKeyFactory(
+                                            ev.AggregateId,
+                                            typeof(T)),
+                                        typeof(T).Name,
+                                        aggregateToSnapshot,
+                                        ev.AggregateId,
+                                        aggregateToSnapshot.LastEventId,
+                                        aggregateToSnapshot.LastSortableUniqueId,
+                                        aggregateToSnapshot.Version);
+                                    await _documentWriter.SaveAsync(snapshotDocument, typeof(T));
                                 }
-                                var snapshotDocument = new SnapshotDocument(
-                                    new AggregateIdPartitionKeyFactory(ev.AggregateId, typeof(T)),
-                                    typeof(T).Name,
-                                    aggregateToSnapshot,
-                                    ev.AggregateId,
-                                    aggregateToSnapshot.LastEventId,
-                                    aggregateToSnapshot.LastSortableUniqueId,
-                                    aggregateToSnapshot.Version);
-                                await _documentWriter.SaveAsync(snapshotDocument, typeof(T));
                             }
                         }
                     }

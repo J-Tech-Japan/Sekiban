@@ -154,6 +154,7 @@ public class SingleAggregateService
     {
         var projector = new P();
         var aggregate = projector.CreateInitialAggregate(aggregateId);
+        var addFinished = false;
         await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
             typeof(T),
@@ -163,13 +164,21 @@ public class SingleAggregateService
             null,
             events =>
             {
+                if (events.Count() != events.Select(m => m.Id).Distinct().Count())
+                {
+                    throw new JJAggregateEventDuplicateException();
+                }
+                if (addFinished) { return; }
                 foreach (var e in events)
                 {
                     aggregate.ApplyEvent(e);
-                    if (toVersion.HasValue && toVersion.Value == aggregate.Version) { break; }
+                    if (toVersion.HasValue && toVersion.Value == aggregate.Version)
+                    {
+                        addFinished = true;
+                        break;
+                    }
                 }
             });
-        _singleAggregateProjectionQueryStore.SaveProjection(aggregate, typeof(T).Name);
         return aggregate;
     }
 
@@ -220,7 +229,8 @@ public class SingleAggregateService
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
     private async Task<T?> GetAggregateAsync<T, Q, P>(
-        Guid aggregateId)
+        Guid aggregateId,
+        int? toVersion = null)
         where T : ISingleAggregate, ISingleAggregateProjection,
         ISingleAggregateProjectionDtoConvertible<Q>
         where Q : ISingleAggregate
@@ -231,10 +241,19 @@ public class SingleAggregateService
 
         var snapshotDocument =
             await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(T));
-        Q? dto = snapshotDocument == null ? default : snapshotDocument.ToDto<Q>();
+        var dto = snapshotDocument == null ? default : snapshotDocument.ToDto<Q>();
         if (dto != null)
         {
             aggregate.ApplySnapshot(dto);
+        }
+        if (toVersion.HasValue)
+        {
+            Console.WriteLine(
+                $"toVersion {toVersion.Value} aggregate.Version");
+        }
+        if (toVersion.HasValue && aggregate.Version >= toVersion.Value)
+        {
+            return await GetAggregateFromInitialAsync<T, P>(aggregateId, toVersion.Value);
         }
         await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
@@ -245,9 +264,26 @@ public class SingleAggregateService
             dto?.LastSortableUniqueId,
             events =>
             {
-                foreach (var e in events) { aggregate.ApplyEvent(e); }
+                Console.WriteLine(
+                    $"received {events.Count()} {events.FirstOrDefault()?.Id} -{events.LastOrDefault()?.Id}");
+                foreach (var e in events)
+                {
+                    if (!string.IsNullOrWhiteSpace(dto?.LastSortableUniqueId) &&
+                        string.CompareOrdinal(dto?.LastSortableUniqueId, e.SortableUniqueId) > 0)
+                    {
+                        throw new JJAggregateEventDuplicateException();
+                    }
+                    aggregate.ApplyEvent(e);
+                    if (toVersion.HasValue && aggregate.Version == toVersion.Value)
+                    {
+                        break;
+                    }
+                }
             });
-        _singleAggregateProjectionQueryStore.SaveProjection(aggregate, typeof(T).Name);
+        if (toVersion.HasValue && aggregate.Version < toVersion.Value)
+        {
+            throw new JJVersionNotReachToSpecificVersion();
+        }
         return aggregate;
     }
     /// <summary>
@@ -259,14 +295,15 @@ public class SingleAggregateService
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
     private async Task<Q?> GetAggregateDtoAsync<T, Q, P>(
-        Guid aggregateId)
+        Guid aggregateId,
+        int? toVersion = null)
         where T : ISingleAggregate, ISingleAggregateProjection,
         ISingleAggregateProjectionDtoConvertible<Q>
         where Q : ISingleAggregate
         where P : ISingleAggregateProjector<T>, new()
     {
         var aggregate =
-            await GetAggregateAsync<T, Q, P>(aggregateId);
+            await GetAggregateAsync<T, Q, P>(aggregateId, toVersion);
         return aggregate == null ? default : aggregate.ToDto();
     }
 
@@ -283,11 +320,13 @@ public class SingleAggregateService
     /// <typeparam name="Q"></typeparam>
     /// <returns></returns>
     public async Task<T?> GetAggregateAsync<T, Q>(
-        Guid aggregateId)
+        Guid aggregateId,
+        int? toVersion = null)
         where T : TransferableAggregateBase<Q>
         where Q : AggregateDtoBase =>
         await GetAggregateAsync<T, Q, DefaultSingleAggregateProjector<T>>(
-            aggregateId);
+            aggregateId,
+            toVersion);
     /// <summary>
     ///     スナップショット、メモリキャッシュを使用する通常版
     ///     こちらはデフォルトプロジェクトション（集約のデフォルトステータス）
@@ -297,13 +336,15 @@ public class SingleAggregateService
     /// <typeparam name="Q"></typeparam>
     /// <returns></returns>
     public async Task<Q?> GetAggregateDtoAsync<T, Q>(
-        Guid aggregateId)
+        Guid aggregateId,
+        int? toVersion = null)
         where T : TransferableAggregateBase<Q>
         where Q : AggregateDtoBase
     {
         var aggregate =
             await GetAggregateAsync<T, Q, DefaultSingleAggregateProjector<T>>(
-                aggregateId);
+                aggregateId,
+                toVersion);
         return aggregate?.ToDto();
     }
 }

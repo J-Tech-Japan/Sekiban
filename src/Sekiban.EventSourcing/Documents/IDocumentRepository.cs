@@ -18,6 +18,11 @@ public interface IDocumentRepository
         Guid aggregateId,
         Type originalType);
 
+    Task<bool> ExistsSnapshotForAggregateAsync(
+        Guid aggregateId,
+        Type originalType,
+        int version);
+
     Task<SnapshotListDocument?> GetLatestSnapshotListForTypeAsync<T>(
         string? partitionKey,
         QueryListType queryListType = QueryListType.ActiveAndDeleted)
@@ -32,5 +37,17 @@ public interface IDocumentRepository
         Type originalType,
         string partitionKey);
 }
-public interface IDocumentPersistentRepository : IDocumentRepository { }
-public interface IDocumentTemporaryRepository : IDocumentRepository { }
+public interface IDocumentPersistentRepository : IDocumentRepository
+{
+    Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(
+        Guid aggregateId,
+        Type originalType);
+}
+public interface IDocumentTemporaryRepository : IDocumentRepository
+{
+    Task<bool> AggregateEventsForAggregateIdHasSortableUniqueIdAsync(
+        Guid aggregateId,
+        Type originalType,
+        string? partitionKey,
+        string? sortableUniqueId);
+}

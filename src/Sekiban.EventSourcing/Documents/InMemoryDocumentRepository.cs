@@ -14,6 +14,10 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository,
         _inMemoryDocumentStore = inMemoryDocumentStore;
         _memoryCache = memoryCache;
     }
+    public async Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(
+        Guid aggregateId,
+        Type originalType) =>
+        throw new NotImplementedException();
     public async Task GetAllAggregateEventsForAggregateIdAsync(
         Guid aggregateId,
         Type originalType,
@@ -26,15 +30,20 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository,
         var list = partitionKey == null
             ? _inMemoryDocumentStore.GetAllEvents()
                 .Where(m => m.AggregateId == aggregateId)
-                .ToList() : _inMemoryDocumentStore.GetEventPartition(partitionKey).ToList();
-        if (sinceSortableUniqueId != null)
+                .ToList() : _inMemoryDocumentStore.GetEventPartition(partitionKey)
+                .OrderBy(m => m.SortableUniqueId)
+                .ToList();
+        if (string.IsNullOrWhiteSpace(sinceSortableUniqueId))
         {
-            var index = list.FindIndex(m => m.SortableUniqueId == sinceSortableUniqueId);
-            resultAction(list.GetRange(index, list.Count - index).OrderBy(m => m.SortableUniqueId));
+            resultAction(list.OrderBy(m => m.SortableUniqueId));
         }
         else
         {
-            resultAction(list.OrderBy(m => m.SortableUniqueId));
+            var index = list.Any(m => m.SortableUniqueId == sinceSortableUniqueId)
+                ? list.FindIndex(m => m.SortableUniqueId == sinceSortableUniqueId) : 0;
+            if (index == list.Count - 1) { resultAction(new List<AggregateEvent>()); }
+            resultAction(
+                list.GetRange(index, list.Count - index).Where(m => m.SortableUniqueId != sinceSortableUniqueId).OrderBy(m => m.SortableUniqueId));
         }
     }
     public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
@@ -63,6 +72,21 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository,
         Type originalType,
         string partitionKey) =>
         throw new NotImplementedException();
+    public async Task<bool> AggregateEventsForAggregateIdHasSortableUniqueIdAsync(
+        Guid aggregateId,
+        Type originalType,
+        string? partitionKey,
+        string? sortableUniqueId)
+    {
+        await Task.CompletedTask;
+        if (partitionKey == null) { return false; }
+        var list = _inMemoryDocumentStore.GetEventPartition(partitionKey).ToList();
+        if (string.IsNullOrWhiteSpace(sortableUniqueId))
+        {
+            return false;
+        }
+        return list.Any(m => m.SortableUniqueId == sortableUniqueId);
+    }
     public async Task GetAllAggregateEventsForAggregateEventTypeAsync(
         Type originalType,
         string? sinceSortableUniqueId,
@@ -91,4 +115,10 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository,
             resultAction(list.OrderBy(m => m.SortableUniqueId));
         }
     }
+
+    public Task<bool> ExistsSnapshotForAggregateAsync(
+        Guid aggregateId,
+        Type originalType,
+        int version) =>
+        Task.FromResult(false);
 }

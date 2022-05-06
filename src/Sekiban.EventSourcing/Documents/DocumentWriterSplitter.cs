@@ -53,7 +53,7 @@ public class DocumentWriterSplitter : IDocumentWriter
     {
         if (aggregateEvent.IsAggregateInitialEvent)
         {
-            if (_hybridStoreManager.AddPartitionKey(aggregateEvent.PartitionKey))
+            if (_hybridStoreManager.AddPartitionKey(aggregateEvent.PartitionKey, string.Empty))
             {
                 await _documentTemporaryWriter.SaveAsync(
                     aggregateEvent,

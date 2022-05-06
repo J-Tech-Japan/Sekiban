@@ -12,7 +12,9 @@ public abstract class SingleAggregateProjectionBase<T> : ISingleAggregateProject
     public Guid AggregateId { get; set; }
     public void ApplyEvent(AggregateEvent ev)
     {
-        if (ev.IsAggregateInitialEvent == false && Version == 0)
+        // IsAggregateInitialEvent は V0 の時のみ
+        // IsAggregateInitialEvent == false は V0以外
+        if (ev.IsAggregateInitialEvent != (Version == 0))
         {
             throw new JJInvalidEventException();
         }

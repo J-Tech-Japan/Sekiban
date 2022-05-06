@@ -37,16 +37,36 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 resultAction);
             return;
         }
-        if (partitionKey != null && _hybridStoreManager.HasPartition(partitionKey))
+        if (partitionKey != null &&
+            _hybridStoreManager.HasPartition(partitionKey))
         {
-            await _documentTemporaryRepository.GetAllAggregateEventsForAggregateIdAsync(
-                aggregateId,
-                originalType,
-                partitionKey,
-                sinceSortableUniqueId,
-                resultAction);
-            return;
+            Console.WriteLine(
+                $"{_hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey)} {partitionKey}");
+            if ((string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
+                    string.IsNullOrWhiteSpace(
+                        _hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey))) ||
+                (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
+                    await _documentTemporaryRepository
+                        .AggregateEventsForAggregateIdHasSortableUniqueIdAsync(
+                            aggregateId,
+                            originalType,
+                            partitionKey,
+                            sinceSortableUniqueId)) ||
+                (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
+                    sinceSortableUniqueId.Equals(
+                        _hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey))))
+            {
+                Console.WriteLine("inmemory  ");
+                await _documentTemporaryRepository.GetAllAggregateEventsForAggregateIdAsync(
+                    aggregateId,
+                    originalType,
+                    partitionKey,
+                    sinceSortableUniqueId,
+                    resultAction);
+                return;
+            }
         }
+        Console.WriteLine("cosmos  ");
         await _documentPersistentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
             originalType,
@@ -54,17 +74,47 @@ public class DocumentRepositorySplitter : IDocumentRepository
             sinceSortableUniqueId,
             events =>
             {
-                if (sinceSortableUniqueId == null && partitionKey != null)
+                var aggregateEvents = events.ToList();
+                if (partitionKey == null) { return; }
+                var hasPartitionKey =
+                    _hybridStoreManager.HasPartition(partitionKey);
+                var sinceSortableUniqueIdInPartition =
+                    _hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey);
+
+                if (string.IsNullOrWhiteSpace(sinceSortableUniqueId))
                 {
-                    if (_hybridStoreManager.AddPartitionKey(partitionKey))
+                    SaveAggregateEvents(aggregateEvents, originalType, partitionKey, string.Empty);
+                }
+
+                if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId))
+                {
+                    if (!hasPartitionKey)
                     {
-                        foreach (var aggregateEvent in events)
+                        SaveAggregateEvents(
+                            aggregateEvents,
+                            originalType,
+                            partitionKey,
+                            sinceSortableUniqueId);
+                    }
+                    else
+                    {
+                        if (!string.IsNullOrWhiteSpace(sinceSortableUniqueIdInPartition) &&
+                            string.Compare(
+                                sinceSortableUniqueIdInPartition!,
+                                sinceSortableUniqueId!,
+                                StringComparison.Ordinal) >
+                            0)
                         {
-                            _documentTemporaryWriter.SaveAsync(aggregateEvent, originalType).Wait();
+                            SaveAggregateEvents(
+                                aggregateEvents,
+                                originalType,
+                                partitionKey,
+                                sinceSortableUniqueId);
                         }
                     }
                 }
-                resultAction(events);
+                Console.WriteLine($"{aggregateEvents.Count} events selected");
+                resultAction(aggregateEvents.OrderBy(m => m.SortableUniqueId));
             });
     }
     public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
@@ -143,5 +193,35 @@ public class DocumentRepositorySplitter : IDocumentRepository
             {
                 resultAction(events);
             });
+    }
+
+    public async Task<bool> ExistsSnapshotForAggregateAsync(
+        Guid aggregateId,
+        Type originalType,
+        int version)
+    {
+        var aggregateContainerGroup =
+            AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
+        if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+        {
+            return false;
+        }
+        return
+            await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
+                aggregateId,
+                originalType,
+                version);
+    }
+    private void SaveAggregateEvents(
+        List<AggregateEvent> aggregateEvents,
+        Type originalType,
+        string partitionKey,
+        string sortableUniqueKey)
+    {
+        _hybridStoreManager.AddPartitionKey(partitionKey, sortableUniqueKey);
+        foreach (var aggregateEvent in aggregateEvents)
+        {
+            _documentTemporaryWriter.SaveAsync(aggregateEvent, originalType).Wait();
+        }
     }
 }

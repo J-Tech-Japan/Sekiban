@@ -10,7 +10,10 @@ public class InMemoryDocumentStore
         _eventContainer.All.Add(document);
         if (_eventContainer.Partitions.ContainsKey(partition))
         {
-            _eventContainer.Partitions[partition].Add(document);
+            if (!_eventContainer.Partitions[partition].Any(m => m.Id == document.Id))
+            {
+                _eventContainer.Partitions[partition].Add(document);
+            }
         }
         else
         {
@@ -18,6 +21,19 @@ public class InMemoryDocumentStore
             partitionCollection.Add(document);
             _eventContainer.Partitions[partition] = partitionCollection;
         }
+    }
+    public void ResetEventsForPartition(string partitionKey, string beforeSortableUniqueId)
+    {
+        var partitionContainer = _eventContainer.Partitions[partitionKey];
+        var toAdd = new List<AggregateEvent>();
+
+        while (partitionContainer.TryTake(out var checkingItem)) {
+            if (!string.IsNullOrWhiteSpace(beforeSortableUniqueId) &&  checkingItem.SortableUniqueId.CompareTo( beforeSortableUniqueId) > 0)
+            {
+                toAdd.Add(checkingItem);
+            }
+        }
+        foreach (var checkingItem in toAdd) { partitionContainer.Add(checkingItem); }
     }
     public AggregateEvent[] GetAllEvents() =>
         _eventContainer.All.ToArray();
