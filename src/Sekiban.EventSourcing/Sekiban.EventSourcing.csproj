@@ -5,7 +5,7 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>JJ_Sekiban.EventSourcing</PackageId>
-    <Version>0.2.2</Version>
+    <Version>0.2.4</Version>
     <Authors>J-Tech Group</Authors>
     <Company>J-Tech-Japan</Company>
     <PackageDescription>Sekiban - Event Sourcing Framework Core</PackageDescription>
