@@ -18,6 +18,7 @@ public class HybridStoreManager
         {
             return false;
         }
+        Console.WriteLine($"HybridPartitionKeys[{partitionKey}] = {sortableUniqueId}");
         HybridPartitionKeys[partitionKey] = sortableUniqueId;
         return true;
     }

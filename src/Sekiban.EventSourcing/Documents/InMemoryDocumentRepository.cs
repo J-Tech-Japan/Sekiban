@@ -14,6 +14,10 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository,
         _inMemoryDocumentStore = inMemoryDocumentStore;
         _memoryCache = memoryCache;
     }
+    public async Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(
+        Guid aggregateId,
+        Type originalType) =>
+        throw new NotImplementedException();
     public async Task GetAllAggregateEventsForAggregateIdAsync(
         Guid aggregateId,
         Type originalType,
@@ -39,7 +43,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository,
                 ? list.FindIndex(m => m.SortableUniqueId == sinceSortableUniqueId) : 0;
             if (index == list.Count - 1) { resultAction(new List<AggregateEvent>()); }
             resultAction(
-                list.GetRange(index + 1, list.Count - index - 1).OrderBy(m => m.SortableUniqueId));
+                list.GetRange(index, list.Count - index).Where(m => m.SortableUniqueId != sinceSortableUniqueId).OrderBy(m => m.SortableUniqueId));
         }
     }
     public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(

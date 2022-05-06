@@ -40,6 +40,8 @@ public class DocumentRepositorySplitter : IDocumentRepository
         if (partitionKey != null &&
             _hybridStoreManager.HasPartition(partitionKey))
         {
+            Console.WriteLine(
+                $"{_hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey)} {partitionKey}");
             if ((string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
                     string.IsNullOrWhiteSpace(
                         _hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey))) ||
@@ -49,8 +51,12 @@ public class DocumentRepositorySplitter : IDocumentRepository
                             aggregateId,
                             originalType,
                             partitionKey,
-                            sinceSortableUniqueId)))
+                            sinceSortableUniqueId)) ||
+                (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
+                    sinceSortableUniqueId.Equals(
+                        _hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey))))
             {
+                Console.WriteLine("inmemory  ");
                 await _documentTemporaryRepository.GetAllAggregateEventsForAggregateIdAsync(
                     aggregateId,
                     originalType,
@@ -60,6 +66,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 return;
             }
         }
+        Console.WriteLine("cosmos  ");
         await _documentPersistentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
             originalType,

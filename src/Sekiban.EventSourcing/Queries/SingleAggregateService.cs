@@ -242,6 +242,11 @@ public class SingleAggregateService
                 $"using snapshot version - {dto.Version} applied {dto.AppliedSnapshotVersion}");
             aggregate.ApplySnapshot(dto);
         }
+        if (toVersion.HasValue)
+        {
+            Console.WriteLine(
+                $"toVersion {toVersion.Value} aggregate.Version");
+        }
         if (toVersion.HasValue && aggregate.Version >= toVersion.Value)
         {
             Console.WriteLine(
@@ -259,6 +264,8 @@ public class SingleAggregateService
             dto?.LastSortableUniqueId,
             events =>
             {
+                Console.WriteLine(
+                    $"received {events.Count()} {events.FirstOrDefault()?.Id} -{events.LastOrDefault()?.Id}");
                 foreach (var e in events)
                 {
                     if (!string.IsNullOrWhiteSpace(dto?.LastSortableUniqueId) &&

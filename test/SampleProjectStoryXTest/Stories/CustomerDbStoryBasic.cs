@@ -32,6 +32,7 @@ public class CustomerDbStoryBasic : TestBase
     private readonly AggregateCommandExecutor _aggregateCommandExecutor;
     private readonly SingleAggregateService _aggregateService;
     private readonly CosmosDbFactory _cosmosDbFactory;
+    private readonly IDocumentPersistentRepository _documentPersistentRepository;
     private readonly ITestOutputHelper _testOutputHelper;
     public CustomerDbStoryBasic(TestFixture testFixture, ITestOutputHelper testOutputHelper) : base(
         testFixture)
@@ -40,7 +41,7 @@ public class CustomerDbStoryBasic : TestBase
         _cosmosDbFactory = GetService<CosmosDbFactory>();
         _aggregateCommandExecutor = GetService<AggregateCommandExecutor>();
         _aggregateService = GetService<SingleAggregateService>();
-
+        _documentPersistentRepository = GetService<IDocumentPersistentRepository>();
         // create recent activity
         _aggregateCommandExecutor
             .ExecCreateCommandAsync<SnapshotManager, SnapshotManagerDto,
@@ -228,7 +229,7 @@ public class CustomerDbStoryBasic : TestBase
             (await _aggregateService.DtoListAsync<RecentActivity, RecentActivityDto>()).ToList();
         Assert.Single(recentActivityList);
         var version = createRecentActivityResult.AggregateDto!.Version;
-        var count = 500;
+        var count = 180;
         foreach (var i in Enumerable.Range(0, count))
         {
             var recentActivityAddedResult = await
@@ -350,7 +351,25 @@ public class CustomerDbStoryBasic : TestBase
         {
             _testOutputHelper.WriteLine(key);
         }
+
+        var snapshots = await _documentPersistentRepository.GetSnapshotsForAggregateAsync(
+            createRecentActivityResult.AggregateDto.AggregateId,
+            typeof(RecentActivity));
+
+        foreach (var snapshot in snapshots)
+        {
+            var dto = snapshot.ToDto<RecentActivityDto>();
+            var fromInitial =
+                await _aggregateService
+                    .GetAggregateFromInitialDefaultAggregateDtoAsync<RecentActivity,
+                        RecentActivityDto>(
+                        createRecentActivityResult.AggregateDto.AggregateId,
+                        dto.Version);
+            Assert.Equal(fromInitial.Version, dto.Version);
+            Assert.Equal(fromInitial.LastEventId, dto.LastEventId);
+        }
     }
+
     [Fact(
         DisplayName =
             "インメモリストーリーテスト 。並列でたくさん動かしたらどうなるか。 Versionの重複が発生しないことを確認")]
@@ -396,16 +415,17 @@ public class CustomerDbStoryBasic : TestBase
 
         var aggregateRecentActivity =
             await _aggregateService
-                .GetAggregateFromInitialDefaultAggregateDtoAsync<RecentInMemoryActivity, RecentInMemoryActivityDto>(
+                .GetAggregateFromInitialDefaultAggregateDtoAsync<RecentInMemoryActivity,
+                    RecentInMemoryActivityDto>(
                     createRecentActivityResult.AggregateDto.AggregateId);
         var aggregateRecentActivity2 =
-            await _aggregateService.GetAggregateDtoAsync<RecentInMemoryActivity, RecentInMemoryActivityDto>(
-                createRecentActivityResult.AggregateDto.AggregateId);
+            await _aggregateService
+                .GetAggregateDtoAsync<RecentInMemoryActivity, RecentInMemoryActivityDto>(
+                    createRecentActivityResult.AggregateDto.AggregateId);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + 1, aggregateRecentActivity!.Version);
         Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
-
 
         var snapshotManager =
             await _aggregateService
@@ -440,7 +460,6 @@ public class CustomerDbStoryBasic : TestBase
                 aggregateId);
         Assert.NotNull(aggregate);
 
-
         var aggregateRecentActivity2 =
             await _aggregateService.GetAggregateDtoAsync<RecentActivity, RecentActivityDto>(
                 aggregateId);
@@ -452,8 +471,6 @@ public class CustomerDbStoryBasic : TestBase
         //Assert.NotNull(aggregateRecentActivity);
         //Assert.NotNull(aggregateRecentActivity2);
         //Assert.Equal(aggregateRecentActivity!.Version, aggregateRecentActivity2!.Version);
-
-
 
         var version = recentActivityList.First().Version;
         var tasks = new List<Task>();
@@ -479,8 +496,25 @@ public class CustomerDbStoryBasic : TestBase
         recentActivityList =
             (await _aggregateService.DtoListAsync<RecentActivity, RecentActivityDto>()).ToList();
         Assert.Single(recentActivityList);
-        
+
         Console.WriteLine("---checking---");
+
+        var snapshots = await _documentPersistentRepository.GetSnapshotsForAggregateAsync(
+            aggregateId,
+            typeof(RecentActivity));
+
+        foreach (var snapshot in snapshots.OrderBy(m => m.SavedVersion))
+        {
+            var dto = snapshot.ToDto<RecentActivityDto>();
+            var fromInitial =
+                await _aggregateService
+                    .GetAggregateFromInitialDefaultAggregateDtoAsync<RecentActivity,
+                        RecentActivityDto>(
+                        aggregateId,
+                        dto.Version);
+            Assert.Equal(fromInitial.Version, dto.Version);
+            Assert.Equal(fromInitial.LastEventId, dto.LastEventId);
+        }
 
         // this works
         var aggregateRecentActivity =

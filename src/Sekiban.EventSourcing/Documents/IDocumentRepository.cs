@@ -37,7 +37,12 @@ public interface IDocumentRepository
         Type originalType,
         string partitionKey);
 }
-public interface IDocumentPersistentRepository : IDocumentRepository { }
+public interface IDocumentPersistentRepository : IDocumentRepository
+{
+    Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(
+        Guid aggregateId,
+        Type originalType);
+}
 public interface IDocumentTemporaryRepository : IDocumentRepository
 {
     Task<bool> AggregateEventsForAggregateIdHasSortableUniqueIdAsync(
