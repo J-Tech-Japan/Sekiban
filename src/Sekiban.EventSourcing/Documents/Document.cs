@@ -21,17 +21,13 @@ public record Document
 
     public Document() { }
 
-    public Document(
-        DocumentType documentType,
-        IPartitionKeyFactory? partitionKeyFactory,
-        string? documentTypeName = null)
+    public Document(DocumentType documentType, IPartitionKeyFactory? partitionKeyFactory, string? documentTypeName = null)
     {
         Id = Guid.NewGuid();
         DocumentType = documentType;
         DocumentTypeName = documentTypeName ?? GetType().Name;
         TimeStamp = DateTime.UtcNow;
-        SortableUniqueId =
-            TimeStamp.Ticks + (Math.Abs(Id.GetHashCode()) % 1000000000000).ToString("000000000000");
+        SortableUniqueId = TimeStamp.Ticks + (Math.Abs(Id.GetHashCode()) % 1000000000000).ToString("000000000000");
         if (partitionKeyFactory is not null)
         {
             SetPartitionKey(partitionKeyFactory);

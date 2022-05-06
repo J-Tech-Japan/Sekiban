@@ -30,8 +30,7 @@ public class HybridStoreManager
         }
         if (HybridPartitionKeys.Keys.Contains(partitionKey))
         {
-            return HybridPartitionKeys
-                [partitionKey];
+            return HybridPartitionKeys[partitionKey];
         }
         return null;
     }

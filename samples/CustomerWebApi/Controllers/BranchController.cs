@@ -21,18 +21,15 @@ public class BranchController : Controller
     }
 
     [HttpPost]
-    public async Task<ActionResult<AggregateCommandExecutorResponse<BranchDto, CreateBranch>>>
-        CreateAsync(CreateBranch command)
+    public async Task<ActionResult<AggregateCommandExecutorResponse<BranchDto, CreateBranch>>> CreateAsync(CreateBranch command)
     {
-        var result = await _aggregateCommandExecutor
-            .ExecCreateCommandAsync<Branch, BranchDto, CreateBranch>(command);
+        var result = await _aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchDto, CreateBranch>(command);
         return result;
     }
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<BranchDto>>> ListAsync() =>
-        new(
-            await _aggregateService.DtoListAsync<Branch, BranchDto>());
+        new(await _aggregateService.DtoListAsync<Branch, BranchDto>());
 
     // [HttpPost]
     // public async Task<IActionResult> TakeSnapshotAsync()

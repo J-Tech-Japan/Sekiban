@@ -5,16 +5,11 @@ public record ReportAggregateVersionToSnapshotManger(
     Type AggregateType,
     Guid TargetAggregateId,
     int Version,
-    int? SnapshotVersion) : ChangeAggregateCommandBase<SnapshotManager>(
-    AggregateId
-), INoValidateCommand;
-public class
-    ReportAggregateVersionToSnapshotMangerHandler : ChangeAggregateCommandHandlerBase<
-        SnapshotManager, ReportAggregateVersionToSnapshotManger>
+    int? SnapshotVersion) : ChangeAggregateCommandBase<SnapshotManager>(AggregateId), INoValidateCommand;
+public class ReportAggregateVersionToSnapshotMangerHandler : ChangeAggregateCommandHandlerBase<SnapshotManager,
+    ReportAggregateVersionToSnapshotManger>
 {
-    protected override async Task ExecCommandAsync(
-        SnapshotManager aggregate,
-        ReportAggregateVersionToSnapshotManger command)
+    protected override async Task ExecCommandAsync(SnapshotManager aggregate, ReportAggregateVersionToSnapshotManger command)
     {
         aggregate.ReportAggregateVersion(
             command.AggregateId,

@@ -5,22 +5,18 @@ public class SingleAggregateService
     private readonly IDocumentRepository _documentRepository;
     private readonly ISingleAggregateProjectionQueryStore _singleAggregateProjectionQueryStore;
 
-    public SingleAggregateService(
-        ISingleAggregateProjectionQueryStore singleAggregateProjectionQueryStore,
-        IDocumentRepository documentRepository)
+    public SingleAggregateService(ISingleAggregateProjectionQueryStore singleAggregateProjectionQueryStore, IDocumentRepository documentRepository)
     {
         _singleAggregateProjectionQueryStore = singleAggregateProjectionQueryStore;
         _documentRepository = documentRepository;
     }
 
-    private async Task<SingleAggregateList<T>> GetAggregateListObjectAsync<T, Q, P>()
-        where T : ISingleAggregate, ISingleAggregateProjection
+    private async Task<SingleAggregateList<T>> GetAggregateListObjectAsync<T, Q, P>() where T : ISingleAggregate, ISingleAggregateProjection
         where Q : ISingleAggregate
         where P : ISingleAggregateProjector<T>, new()
     {
         var projector = new P();
-        var aggregateList =
-            _singleAggregateProjectionQueryStore.FindAggregateList<T>();
+        var aggregateList = _singleAggregateProjectionQueryStore.FindAggregateList<T>();
         if (aggregateList != null)
         {
             var allAfterEvents = new List<AggregateEvent>();
@@ -40,15 +36,13 @@ public class SingleAggregateService
             {
                 aggregateList = HandleListEvent(projector, events, aggregateList);
             });
-        return aggregateList ??
-            new SingleAggregateList<T>();
+        return aggregateList ?? new SingleAggregateList<T>();
     }
 
     private SingleAggregateList<T>? HandleListEvent<T>(
         ISingleAggregateProjector<T> projector,
         IEnumerable<AggregateEvent> events,
-        SingleAggregateList<T>? aggregateList)
-        where T : ISingleAggregate, ISingleAggregateProjection
+        SingleAggregateList<T>? aggregateList) where T : ISingleAggregate, ISingleAggregateProjection
     {
         var domainEvents = events.ToList();
         if (!domainEvents.Any())
@@ -56,8 +50,7 @@ public class SingleAggregateService
             return aggregateList;
         }
         var list = aggregateList?.List == null ? new List<T>() : new List<T>(aggregateList.List);
-        foreach (var e in domainEvents.Where(
-            m => m.AggregateType == projector.OriginalAggregateType().Name))
+        foreach (var e in domainEvents.Where(m => m.AggregateType == projector.OriginalAggregateType().Name))
         {
             if (e.IsAggregateInitialEvent)
             {
@@ -81,8 +74,7 @@ public class SingleAggregateService
                 LastEventId = domainEvents.Last().Id,
                 LastSortableUniqueId = domainEvents.Last().SortableUniqueId
             };
-        }
-        else
+        } else
         {
             aggregateList.List = list;
             aggregateList.LastEventId = domainEvents.Last().Id;
@@ -91,8 +83,7 @@ public class SingleAggregateService
         _singleAggregateProjectionQueryStore.SaveLatestAggregateList(aggregateList);
         return aggregateList;
     }
-    private async Task<IEnumerable<T>> ListAsync<T, Q, P>(QueryListType queryListType)
-        where T : ISingleAggregate, ISingleAggregateProjection
+    private async Task<IEnumerable<T>> ListAsync<T, Q, P>(QueryListType queryListType) where T : ISingleAggregate, ISingleAggregateProjection
         where Q : ISingleAggregate
         where P : ISingleAggregateProjector<T>, new()
     {
@@ -106,34 +97,25 @@ public class SingleAggregateService
         };
     }
     public async Task<IEnumerable<T>> ListAsync<T, Q>(QueryListType queryListType)
-        where T : TransferableAggregateBase<Q>
-        where Q : AggregateDtoBase =>
+        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase =>
         await ListAsync<T, Q, DefaultSingleAggregateProjector<T>>(queryListType);
-    private async Task<IEnumerable<Q>> DtoListAsync<T, Q, P>(
-        QueryListType queryListType = QueryListType.ActiveOnly)
-        where T : ISingleAggregate, ISingleAggregateProjection,
-        ISingleAggregateProjectionDtoConvertible<Q>
+    private async Task<IEnumerable<Q>> DtoListAsync<T, Q, P>(QueryListType queryListType = QueryListType.ActiveOnly)
+        where T : ISingleAggregate, ISingleAggregateProjection, ISingleAggregateProjectionDtoConvertible<Q>
         where Q : ISingleAggregate
         where P : ISingleAggregateProjector<T>, new()
     {
-        return (await ListAsync<T, Q, P>(queryListType)).Select(
-            m => m.ToDto());
+        return (await ListAsync<T, Q, P>(queryListType)).Select(m => m.ToDto());
     }
-    public async Task<IEnumerable<T>> DtoListAsync<T>(
-        QueryListType queryListType = QueryListType.ActiveOnly)
+    public async Task<IEnumerable<T>> DtoListAsync<T>(QueryListType queryListType = QueryListType.ActiveOnly)
         where T : SingleAggregateProjectionBase<T>, new()
     {
-        return (await ListAsync<T, T, T>(queryListType)).Select(
-            m => m.ToDto());
+        return (await ListAsync<T, T, T>(queryListType)).Select(m => m.ToDto());
     }
-    public async Task<IEnumerable<Q>> DtoListAsync<T, Q>(
-        QueryListType queryListType = QueryListType.ActiveOnly)
-        where T : TransferableAggregateBase<Q>
-        where Q : AggregateDtoBase
+    public async Task<IEnumerable<Q>> DtoListAsync<T, Q>(QueryListType queryListType = QueryListType.ActiveOnly)
+        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase
     {
         var projector = new DefaultSingleAggregateProjector<T>();
-        return (await ListAsync<T, Q, DefaultSingleAggregateProjector<T>>(queryListType)).Select(
-            m => m.ToDto());
+        return (await ListAsync<T, Q, DefaultSingleAggregateProjector<T>>(queryListType)).Select(m => m.ToDto());
     }
 
     /// <summary>
@@ -146,10 +128,7 @@ public class SingleAggregateService
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
-    public async Task<T?> GetAggregateFromInitialAsync<T, P>(
-        Guid aggregateId,
-        int? toVersion)
-        where T : ISingleAggregate, ISingleAggregateProjection
+    public async Task<T?> GetAggregateFromInitialAsync<T, P>(Guid aggregateId, int? toVersion) where T : ISingleAggregate, ISingleAggregateProjection
         where P : ISingleAggregateProjector<T>, new()
     {
         var projector = new P();
@@ -158,9 +137,7 @@ public class SingleAggregateService
         await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
             typeof(T),
-            new AggregateIdPartitionKeyFactory(aggregateId, projector.OriginalAggregateType())
-                .GetPartitionKey(
-                    DocumentType.AggregateEvent),
+            new AggregateIdPartitionKeyFactory(aggregateId, projector.OriginalAggregateType()).GetPartitionKey(DocumentType.AggregateEvent),
             null,
             events =>
             {
@@ -192,14 +169,9 @@ public class SingleAggregateService
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
-    public async Task<T?> GetAggregateFromInitialDefaultAggregateAsync<T, Q>(
-        Guid aggregateId,
-        int? toVersion = null)
-        where T : TransferableAggregateBase<Q>
-        where Q : AggregateDtoBase =>
-        await GetAggregateFromInitialAsync<T, DefaultSingleAggregateProjector<T>>(
-            aggregateId,
-            toVersion);
+    public async Task<T?> GetAggregateFromInitialDefaultAggregateAsync<T, Q>(Guid aggregateId, int? toVersion = null)
+        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase =>
+        await GetAggregateFromInitialAsync<T, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion);
 
     /// <summary>
     ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
@@ -211,14 +183,9 @@ public class SingleAggregateService
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
-    public async Task<Q?> GetAggregateFromInitialDefaultAggregateDtoAsync<T, Q>(
-        Guid aggregateId,
-        int? toVersion = null)
-        where T : TransferableAggregateBase<Q>
-        where Q : AggregateDtoBase =>
-        (await GetAggregateFromInitialAsync<T, DefaultSingleAggregateProjector<T>>(
-            aggregateId,
-            toVersion))?.ToDto();
+    public async Task<Q?> GetAggregateFromInitialDefaultAggregateDtoAsync<T, Q>(Guid aggregateId, int? toVersion = null)
+        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase =>
+        (await GetAggregateFromInitialAsync<T, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion))?.ToDto();
 
     /// <summary>
     ///     スナップショット、メモリキャッシュを使用する通常版
@@ -228,19 +195,15 @@ public class SingleAggregateService
     /// <typeparam name="Q"></typeparam>
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
-    private async Task<T?> GetAggregateAsync<T, Q, P>(
-        Guid aggregateId,
-        int? toVersion = null)
-        where T : ISingleAggregate, ISingleAggregateProjection,
-        ISingleAggregateProjectionDtoConvertible<Q>
+    private async Task<T?> GetAggregateAsync<T, Q, P>(Guid aggregateId, int? toVersion = null)
+        where T : ISingleAggregate, ISingleAggregateProjection, ISingleAggregateProjectionDtoConvertible<Q>
         where Q : ISingleAggregate
         where P : ISingleAggregateProjector<T>, new()
     {
         var projector = new P();
         var aggregate = projector.CreateInitialAggregate(aggregateId);
 
-        var snapshotDocument =
-            await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(T));
+        var snapshotDocument = await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(T));
         var dto = snapshotDocument == null ? default : snapshotDocument.ToDto<Q>();
         if (dto != null)
         {
@@ -248,8 +211,7 @@ public class SingleAggregateService
         }
         if (toVersion.HasValue)
         {
-            Console.WriteLine(
-                $"toVersion {toVersion.Value} aggregate.Version");
+            Console.WriteLine($"toVersion {toVersion.Value} aggregate.Version");
         }
         if (toVersion.HasValue && aggregate.Version >= toVersion.Value)
         {
@@ -258,14 +220,11 @@ public class SingleAggregateService
         await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
             typeof(T),
-            new AggregateIdPartitionKeyFactory(aggregateId, projector.OriginalAggregateType())
-                .GetPartitionKey(
-                    DocumentType.AggregateEvent),
+            new AggregateIdPartitionKeyFactory(aggregateId, projector.OriginalAggregateType()).GetPartitionKey(DocumentType.AggregateEvent),
             dto?.LastSortableUniqueId,
             events =>
             {
-                Console.WriteLine(
-                    $"received {events.Count()} {events.FirstOrDefault()?.Id} -{events.LastOrDefault()?.Id}");
+                Console.WriteLine($"received {events.Count()} {events.FirstOrDefault()?.Id} -{events.LastOrDefault()?.Id}");
                 foreach (var e in events)
                 {
                     if (!string.IsNullOrWhiteSpace(dto?.LastSortableUniqueId) &&
@@ -294,21 +253,16 @@ public class SingleAggregateService
     /// <typeparam name="Q"></typeparam>
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
-    private async Task<Q?> GetAggregateDtoAsync<T, Q, P>(
-        Guid aggregateId,
-        int? toVersion = null)
-        where T : ISingleAggregate, ISingleAggregateProjection,
-        ISingleAggregateProjectionDtoConvertible<Q>
+    private async Task<Q?> GetAggregateDtoAsync<T, Q, P>(Guid aggregateId, int? toVersion = null)
+        where T : ISingleAggregate, ISingleAggregateProjection, ISingleAggregateProjectionDtoConvertible<Q>
         where Q : ISingleAggregate
         where P : ISingleAggregateProjector<T>, new()
     {
-        var aggregate =
-            await GetAggregateAsync<T, Q, P>(aggregateId, toVersion);
+        var aggregate = await GetAggregateAsync<T, Q, P>(aggregateId, toVersion);
         return aggregate == null ? default : aggregate.ToDto();
     }
 
-    public async Task<T?> GetProjectionAsync<T>(Guid aggregateId)
-        where T : SingleAggregateProjectionBase<T>, new() =>
+    public async Task<T?> GetProjectionAsync<T>(Guid aggregateId) where T : SingleAggregateProjectionBase<T>, new() =>
         await GetAggregateDtoAsync<T, T, T>(aggregateId);
 
     /// <summary>
@@ -319,14 +273,9 @@ public class SingleAggregateService
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="Q"></typeparam>
     /// <returns></returns>
-    public async Task<T?> GetAggregateAsync<T, Q>(
-        Guid aggregateId,
-        int? toVersion = null)
-        where T : TransferableAggregateBase<Q>
-        where Q : AggregateDtoBase =>
-        await GetAggregateAsync<T, Q, DefaultSingleAggregateProjector<T>>(
-            aggregateId,
-            toVersion);
+    public async Task<T?> GetAggregateAsync<T, Q>(Guid aggregateId, int? toVersion = null)
+        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase =>
+        await GetAggregateAsync<T, Q, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion);
     /// <summary>
     ///     スナップショット、メモリキャッシュを使用する通常版
     ///     こちらはデフォルトプロジェクトション（集約のデフォルトステータス）
@@ -335,16 +284,10 @@ public class SingleAggregateService
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="Q"></typeparam>
     /// <returns></returns>
-    public async Task<Q?> GetAggregateDtoAsync<T, Q>(
-        Guid aggregateId,
-        int? toVersion = null)
-        where T : TransferableAggregateBase<Q>
-        where Q : AggregateDtoBase
+    public async Task<Q?> GetAggregateDtoAsync<T, Q>(Guid aggregateId, int? toVersion = null)
+        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase
     {
-        var aggregate =
-            await GetAggregateAsync<T, Q, DefaultSingleAggregateProjector<T>>(
-                aggregateId,
-                toVersion);
+        var aggregate = await GetAggregateAsync<T, Q, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion);
         return aggregate?.ToDto();
     }
 }

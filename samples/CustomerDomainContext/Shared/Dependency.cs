@@ -21,66 +21,38 @@ public static class Dependency
     public static IEnumerable<(Type serviceType, Type? implementationType)> GetDependencies()
     {
         // Aggregate Event Subscribers
-        yield return (
-            typeof(INotificationHandler<ClientCreated>),
-            typeof(ClientCreatedSubscriber));
+        yield return (typeof(INotificationHandler<ClientCreated>), typeof(ClientCreatedSubscriber));
 
-        yield return (
-            typeof(INotificationHandler<ClientDeleted>),
-            typeof(ClientDeletedSubscriber));
+        yield return (typeof(INotificationHandler<ClientDeleted>), typeof(ClientDeletedSubscriber));
 
         // Aggregate: Branch
-        yield return (
-            typeof(ICreateAggregateCommandHandler<Branch, CreateBranch>),
-            typeof(CreateBranchHandler));
+        yield return (typeof(ICreateAggregateCommandHandler<Branch, CreateBranch>), typeof(CreateBranchHandler));
 
         // Aggregate: Client
-        yield return (
-            typeof(ICreateAggregateCommandHandler<Client, CreateClient>),
-            typeof(CreateClientHandler));
+        yield return (typeof(ICreateAggregateCommandHandler<Client, CreateClient>), typeof(CreateClientHandler));
 
-        yield return (
-            typeof(IChangeAggregateCommandHandler<Client, ChangeClientName>),
-            typeof(ChangeClientNameHandler));
+        yield return (typeof(IChangeAggregateCommandHandler<Client, ChangeClientName>), typeof(ChangeClientNameHandler));
 
-        yield return (
-            typeof(IChangeAggregateCommandHandler<Client, DeleteClient>),
-            typeof(DeleteClientHandler));
+        yield return (typeof(IChangeAggregateCommandHandler<Client, DeleteClient>), typeof(DeleteClientHandler));
 
         // Aggregate: LoyaltyPoint
-        yield return (
-            typeof(ICreateAggregateCommandHandler<LoyaltyPoint, CreateLoyaltyPoint>),
-            typeof(CreateLoyaltyPointHandler));
+        yield return (typeof(ICreateAggregateCommandHandler<LoyaltyPoint, CreateLoyaltyPoint>), typeof(CreateLoyaltyPointHandler));
 
-        yield return (
-            typeof(IChangeAggregateCommandHandler<LoyaltyPoint, AddLoyaltyPoint>),
-            typeof(AddLoyaltyPointHandler));
+        yield return (typeof(IChangeAggregateCommandHandler<LoyaltyPoint, AddLoyaltyPoint>), typeof(AddLoyaltyPointHandler));
 
-        yield return (
-            typeof(IChangeAggregateCommandHandler<LoyaltyPoint, UseLoyaltyPoint>),
-            typeof(UseLoyaltyPointHandler));
+        yield return (typeof(IChangeAggregateCommandHandler<LoyaltyPoint, UseLoyaltyPoint>), typeof(UseLoyaltyPointHandler));
 
-        yield return (
-            typeof(IChangeAggregateCommandHandler<LoyaltyPoint, DeleteLoyaltyPoint>),
-            typeof(DeleteLoyaltyPointHandler));
+        yield return (typeof(IChangeAggregateCommandHandler<LoyaltyPoint, DeleteLoyaltyPoint>), typeof(DeleteLoyaltyPointHandler));
 
         // Aggregate: RecentActivity
-        yield return (
-            typeof(ICreateAggregateCommandHandler<RecentActivity, CreateRecentActivity>),
-            typeof(CreateRecentActivityHandler));
+        yield return (typeof(ICreateAggregateCommandHandler<RecentActivity, CreateRecentActivity>), typeof(CreateRecentActivityHandler));
 
-        yield return (
-            typeof(IChangeAggregateCommandHandler<RecentActivity, AddRecentActivity>),
-            typeof(AddRecentActivityHandler));
+        yield return (typeof(IChangeAggregateCommandHandler<RecentActivity, AddRecentActivity>), typeof(AddRecentActivityHandler));
         // Aggregate: RecentInMemoryActivity
-        yield return (
-            typeof(ICreateAggregateCommandHandler<RecentInMemoryActivity,
-                CreateRecentInMemoryActivity>),
+        yield return (typeof(ICreateAggregateCommandHandler<RecentInMemoryActivity, CreateRecentInMemoryActivity>),
             typeof(CreateRecentInMemoryActivityHandler));
 
-        yield return (
-            typeof(
-                IChangeAggregateCommandHandler<RecentInMemoryActivity, AddRecentInMemoryActivity>),
+        yield return (typeof(IChangeAggregateCommandHandler<RecentInMemoryActivity, AddRecentInMemoryActivity>),
             typeof(AddRecentInMemoryActivityHandler));
     }
 }

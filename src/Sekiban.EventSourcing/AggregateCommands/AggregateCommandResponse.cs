@@ -1,7 +1,6 @@
 namespace Sekiban.EventSourcing.AggregateCommands;
 
-public class AggregateCommandResponse<T>
-    where T : IAggregate
+public class AggregateCommandResponse<T> where T : IAggregate
 {
     public T Aggregate { get; init; }
 

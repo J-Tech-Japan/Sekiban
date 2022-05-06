@@ -9,18 +9,9 @@ public class Client : TransferableAggregateBase<ClientDto>
 
     public Client(Guid clientId) : base(clientId) { }
 
-    public Client(
-        Guid branchId,
-        NameString clientName,
-        EmailString clientEmail
-    ) : base(Guid.NewGuid())
+    public Client(Guid branchId, NameString clientName, EmailString clientEmail) : base(Guid.NewGuid())
     {
-        AddAndApplyEvent(
-            new ClientCreated(
-                AggregateId,
-                branchId,
-                clientName,
-                clientEmail));
+        AddAndApplyEvent(new ClientCreated(AggregateId, branchId, clientName, clientEmail));
     }
 
     public override ClientDto ToDto() => new(this)
@@ -46,11 +37,9 @@ public class Client : TransferableAggregateBase<ClientDto>
             ClientEmail = clientChanged.ClientEmail;
         },
 
-        ClientNameChanged clientNameChanged => () =>
-            ClientName = clientNameChanged.ClientName,
+        ClientNameChanged clientNameChanged => () => ClientName = clientNameChanged.ClientName,
 
-        ClientDeleted => () =>
-            IsDeleted = true,
+        ClientDeleted => () => IsDeleted = true,
 
         _ => null
     };

@@ -27,8 +27,6 @@ app.UseAuthorization();
 
 app.MapControllers();
 var executor = app.Services.GetService<AggregateCommandExecutor>();
-executor!.ExecCreateCommandAsync<SnapshotManager, SnapshotManagerDto,
-        CreateSnapshotManager>(
-        new CreateSnapshotManager(SnapshotManager.SharedId))
+executor!.ExecCreateCommandAsync<SnapshotManager, SnapshotManagerDto, CreateSnapshotManager>(new CreateSnapshotManager(SnapshotManager.SharedId))
     .Wait();
 app.Run();

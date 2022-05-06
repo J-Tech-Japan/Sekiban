@@ -1,7 +1,6 @@
 namespace Sekiban.EventSourcing.AggregateCommands;
 
-public record AggregateCommandDocument<T> : Document, ICallHistories
-    where T : IAggregateCommand
+public record AggregateCommandDocument<T> : Document, ICallHistories where T : IAggregateCommand
 {
     /// <summary>
     ///     コマンド内容
@@ -25,11 +24,10 @@ public record AggregateCommandDocument<T> : Document, ICallHistories
     /// </summary>
     public string? Exception { get; set; } = null;
 
-    public AggregateCommandDocument(
-        T payload,
-        IPartitionKeyFactory partitionKeyFactory,
-        List<CallHistory>? callHistories = null)
-        : base(DocumentType.AggregateCommand, partitionKeyFactory, typeof(T).Name)
+    public AggregateCommandDocument(T payload, IPartitionKeyFactory partitionKeyFactory, List<CallHistory>? callHistories = null) : base(
+        DocumentType.AggregateCommand,
+        partitionKeyFactory,
+        typeof(T).Name)
     {
         Payload = payload;
         CallHistories = callHistories ?? new List<CallHistory>();

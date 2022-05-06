@@ -1,8 +1,7 @@
 namespace Sekiban.EventSourcing.Queries;
 
-public abstract class SingleAggregateProjectionBase<T> : ISingleAggregateProjection,
-    ISingleAggregateProjectionDtoConvertible<T>, ISingleAggregate, ISingleAggregateProjector<T>
-    where T : ISingleAggregate, ISingleAggregateProjection
+public abstract class SingleAggregateProjectionBase<T> : ISingleAggregateProjection, ISingleAggregateProjectionDtoConvertible<T>, ISingleAggregate,
+    ISingleAggregateProjector<T> where T : ISingleAggregate, ISingleAggregateProjection
 {
     public Guid LastEventId { get; set; }
     public string LastSortableUniqueId { get; set; } = string.Empty;

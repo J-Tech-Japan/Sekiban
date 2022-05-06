@@ -5,9 +5,7 @@ namespace SampleProjectStoryXTest;
 
 public static class DependencyHelper
 {
-    public static ServiceProvider CreateDefaultProvider(
-        TestFixture fixture,
-        int loginType = LoginType.Admin)
+    public static ServiceProvider CreateDefaultProvider(TestFixture fixture, int loginType = LoginType.Admin)
     {
         var services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(fixture.Configuration);
