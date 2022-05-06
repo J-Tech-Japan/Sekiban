@@ -16,7 +16,7 @@ jobs:
         dotnet-version: 6.0.x
     - name: Package settings
       run: |
-        dotnet nuget add source --username USERNAME --password ${{TOMOHISA_PAT}} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/J-Tech-Japan/index.json"
+        dotnet nuget add source --username USERNAME --password ${{secrets.TOMOHISA_PAT}} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/J-Tech-Japan/index.json"
     - name: Restore dependencies
       run: |
         pushd ./src
@@ -29,9 +29,9 @@ jobs:
       run: |
         pushd ./src/Sekiban.EventSourcing
         dotnet pack --configuration Release
-        dotnet nuget push "bin/Release/Sekiban.EventSourcing.${REF##*/v}.nupkg" --api-key ${{TOMOHISA_PAT}} --source "github"
+        dotnet nuget push "bin/Release/Sekiban.EventSourcing.${REF##*/v}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
     - name: Pack Cosmos
       run: |
         pushd ./src/Sekiban.EventSourcing.CosmosInfraStracture
         dotnet pack --configuration Release
-        dotnet nuget push "bin/Release/Sekiban.EventSourcing.CosmosInfrastructure.${REF##*/v}.nupkg" --api-key ${{TOMOHISA_PAT}} --source "github"
+        dotnet nuget push "bin/Release/Sekiban.EventSourcing.CosmosInfrastructure.${REF##*/v}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
