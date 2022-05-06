@@ -19,5 +19,7 @@ public class AggregateContainerGroupAttribute : Attribute
 }
 public enum AggregateContainerGroup
 {
-    Default = 0, Dissolvable = 1, InMemoryContainer = 10
+    Default = 0,
+    Dissolvable = 1,
+    InMemoryContainer = 10
 }
