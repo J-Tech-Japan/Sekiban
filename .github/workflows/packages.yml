@@ -29,9 +29,9 @@ jobs:
       run: |
         pushd ./src/Sekiban.EventSourcing
         dotnet pack --configuration Release
-        dotnet nuget push "bin/Release/Sekiban.EventSourcing.${REF##*/v}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
+        dotnet nuget push "bin/Release/JJ_Sekiban.EventSourcing.${REF##*/v}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
     - name: Pack Cosmos
       run: |
         pushd ./src/Sekiban.EventSourcing.CosmosInfraStracture
         dotnet pack --configuration Release
-        dotnet nuget push "bin/Release/Sekiban.EventSourcing.CosmosInfrastructure.${REF##*/v}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
+        dotnet nuget push "bin/Release/JJ_Sekiban.EventSourcing.CosmosInfrastructure.${REF##*/v}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
