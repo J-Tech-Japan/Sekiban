@@ -1,10 +1,3 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace Sekiban.EventSourcing.Shared.Exceptions;
 
-namespace Sekiban.EventSourcing.Shared.Exceptions
-{
-    public class JJVersionNotReachToSpecificVersion : Exception, IJJException { }
-}
+public class JJVersionNotReachToSpecificVersion : Exception, IJJException { }

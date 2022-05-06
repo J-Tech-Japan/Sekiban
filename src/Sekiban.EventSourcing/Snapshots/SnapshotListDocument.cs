@@ -17,10 +17,7 @@ public record SnapshotListDocument : Document
         Guid? projectedSourceSnapshotListId,
         Guid lastEventId,
         IPartitionKeyFactory partitionKeyFactory,
-        string aggregateTypeName) : base(
-        DocumentType.SnapshotList,
-        partitionKeyFactory,
-        aggregateTypeName)
+        string aggregateTypeName) : base(DocumentType.SnapshotList, partitionKeyFactory, aggregateTypeName)
     {
         SnapshotIds = snapshotIds;
         ProjectedSourceSnapshotListId = projectedSourceSnapshotListId;
@@ -28,13 +25,12 @@ public record SnapshotListDocument : Document
         TotalItemCount = snapshotIds.Count;
     }
 
-    public static (SnapshotListDocument?, List<SnapshotListChunkDocument>?)
-        CreateSnapshotListDocument(
-            List<SnapshotListIndex> snapshotIds,
-            Guid? projectedSourceSnapshotListId,
-            Guid lastEventId,
-            IPartitionKeyFactory partitionKeyFactory,
-            string aggregateTypeName)
+    public static (SnapshotListDocument?, List<SnapshotListChunkDocument>?) CreateSnapshotListDocument(
+        List<SnapshotListIndex> snapshotIds,
+        Guid? projectedSourceSnapshotListId,
+        Guid lastEventId,
+        IPartitionKeyFactory partitionKeyFactory,
+        string aggregateTypeName)
     {
         var split = new List<List<SnapshotListIndex>>();
         while (true)
@@ -58,20 +54,10 @@ public record SnapshotListDocument : Document
         {
             if (i == 0)
             {
-                snapshotList = new SnapshotListDocument(
-                    s,
-                    projectedSourceSnapshotListId,
-                    lastEventId,
-                    partitionKeyFactory,
-                    aggregateTypeName);
-            }
-            else
+                snapshotList = new SnapshotListDocument(s, projectedSourceSnapshotListId, lastEventId, partitionKeyFactory, aggregateTypeName);
+            } else
             {
-                var chunk = new SnapshotListChunkDocument(
-                    s,
-                    i,
-                    partitionKeyFactory,
-                    aggregateTypeName);
+                var chunk = new SnapshotListChunkDocument(s, i, partitionKeyFactory, aggregateTypeName);
                 if (snapshotList != null)
                 {
                     snapshotList.SnapshotListChunkIds.Add(chunk.Id);

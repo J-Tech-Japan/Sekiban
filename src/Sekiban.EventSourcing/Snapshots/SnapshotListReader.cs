@@ -8,8 +8,7 @@ public class SnapshotListReader
         _documentRepository = documentRepository;
 
     public async Task<SingleAggregateList<T>?> GetAggregateListFromSnapshotListAsync<T, Q>()
-        where T : TransferableAggregateBase<Q>
-        where Q : AggregateDtoBase, new()
+        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase, new()
     {
         var snapshotList = await _documentRepository.GetLatestSnapshotListForTypeAsync<T>(null);
         if (snapshotList == default) { return default; }
@@ -18,10 +17,7 @@ public class SnapshotListReader
         aggregateList.ProjectedSnapshot = snapshotList;
         foreach (var chunk in snapshotList.SnapshotListChunkIds)
         {
-            var snapshotListChunk =
-                await _documentRepository.GetSnapshotListChunkByIdAsync(
-                    chunk,
-                    snapshotList.PartitionKey);
+            var snapshotListChunk = await _documentRepository.GetSnapshotListChunkByIdAsync(chunk, snapshotList.PartitionKey);
             if (snapshotListChunk == null)
             {
                 continue;
@@ -30,11 +26,7 @@ public class SnapshotListReader
         }
         foreach (var i in aggregateList.MergedSnapshotIds)
         {
-            var snapshot =
-                await _documentRepository.GetSnapshotByIdAsync(
-                    i.SnapshotId,
-                    typeof(T),
-                    i.PartitionKey);
+            var snapshot = await _documentRepository.GetSnapshotByIdAsync(i.SnapshotId, typeof(T), i.PartitionKey);
             if (snapshot == default)
             {
                 continue;

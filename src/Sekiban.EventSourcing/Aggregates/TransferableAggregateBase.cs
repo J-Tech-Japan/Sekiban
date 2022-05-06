@@ -1,8 +1,6 @@
 namespace Sekiban.EventSourcing.Aggregates;
 
-public abstract class TransferableAggregateBase<TDto> : AggregateBase,
-    ISingleAggregateProjectionDtoConvertible<TDto>
-    where TDto : AggregateDtoBase
+public abstract class TransferableAggregateBase<TDto> : AggregateBase, ISingleAggregateProjectionDtoConvertible<TDto> where TDto : AggregateDtoBase
 {
     public TransferableAggregateBase(Guid aggregateId) : base(aggregateId) { }
 

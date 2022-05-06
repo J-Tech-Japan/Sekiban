@@ -4,17 +4,13 @@ namespace Sekiban.EventSourcing.Aggregates;
 public class AggregateContainerGroupAttribute : Attribute
 {
     public AggregateContainerGroup Group { get; init; }
-    public AggregateContainerGroupAttribute(
-        AggregateContainerGroup group = AggregateContainerGroup.Default) =>
+    public AggregateContainerGroupAttribute(AggregateContainerGroup group = AggregateContainerGroup.Default) =>
         Group = group;
     public static AggregateContainerGroup FindAggregateContainerGroup(Type type)
     {
-        if (type.CustomAttributes.Any(
-            a => a.AttributeType == typeof(AggregateContainerGroupAttribute)))
+        if (type.CustomAttributes.Any(a => a.AttributeType == typeof(AggregateContainerGroupAttribute)))
         {
-            var attributes = (AggregateContainerGroupAttribute[])type.GetCustomAttributes(
-                typeof(AggregateContainerGroupAttribute),
-                true);
+            var attributes = (AggregateContainerGroupAttribute[])type.GetCustomAttributes(typeof(AggregateContainerGroupAttribute), true);
             var max = attributes.Max(m => m.Group);
             return max;
         }

@@ -14,8 +14,7 @@ public class InMemoryDocumentStore
             {
                 _eventContainer.Partitions[partition].Add(document);
             }
-        }
-        else
+        } else
         {
             var partitionCollection = new BlockingCollection<AggregateEvent>();
             partitionCollection.Add(document);
@@ -27,8 +26,9 @@ public class InMemoryDocumentStore
         var partitionContainer = _eventContainer.Partitions[partitionKey];
         var toAdd = new List<AggregateEvent>();
 
-        while (partitionContainer.TryTake(out var checkingItem)) {
-            if (!string.IsNullOrWhiteSpace(beforeSortableUniqueId) &&  checkingItem.SortableUniqueId.CompareTo( beforeSortableUniqueId) > 0)
+        while (partitionContainer.TryTake(out var checkingItem))
+        {
+            if (!string.IsNullOrWhiteSpace(beforeSortableUniqueId) && checkingItem.SortableUniqueId.CompareTo(beforeSortableUniqueId) > 0)
             {
                 toAdd.Add(checkingItem);
             }

@@ -1,7 +1,6 @@
 namespace Sekiban.EventSourcing.Queries;
 
-public interface ISingleAggregateProjector<out TProjectionClass>
-    where TProjectionClass : ISingleAggregate, ISingleAggregateProjection
+public interface ISingleAggregateProjector<out TProjectionClass> where TProjectionClass : ISingleAggregate, ISingleAggregateProjection
 {
     public TProjectionClass CreateInitialAggregate(Guid aggregateId);
     public Type OriginalAggregateType();

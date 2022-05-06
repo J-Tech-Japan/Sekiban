@@ -8,8 +8,7 @@ namespace CustomerDomainContext.Aggregates.Clients.Projections;
 ///     プロジェクションに関しては、高速化のために、データとDTOを共通かしている。
 ///     分割することも可能
 /// </summary>
-public class
-    ClientNameHistoryProjection : SingleAggregateProjectionBase<ClientNameHistoryProjection>
+public class ClientNameHistoryProjection : SingleAggregateProjectionBase<ClientNameHistoryProjection>
 {
     public Guid BranchId { get; set; } = Guid.Empty;
     public List<ClientNameHistoryProjectionRecord> ClientNames { get; init; } = new();
@@ -38,21 +37,14 @@ public class
             ClientCreated clientCreated => () =>
             {
                 BranchId = clientCreated.BranchId;
-                ClientNames.Add(
-                    new ClientNameHistoryProjectionRecord(
-                        clientCreated.ClientName,
-                        clientCreated.TimeStamp));
+                ClientNames.Add(new ClientNameHistoryProjectionRecord(clientCreated.ClientName, clientCreated.TimeStamp));
                 ClientEmail = clientCreated.ClientEmail;
             },
 
             ClientNameChanged clientNameChanged => () =>
-                ClientNames.Add(
-                    new ClientNameHistoryProjectionRecord(
-                        clientNameChanged.ClientName,
-                        clientNameChanged.TimeStamp)),
+                ClientNames.Add(new ClientNameHistoryProjectionRecord(clientNameChanged.ClientName, clientNameChanged.TimeStamp)),
 
-            ClientDeleted => () =>
-                IsDeleted = true,
+            ClientDeleted => () => IsDeleted = true,
 
             _ => throw new JJEventNotImplementedException()
         };

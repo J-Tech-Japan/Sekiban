@@ -20,66 +20,49 @@ public class CosmosDbFactory
         {
             DocumentType.AggregateEvent => _configuration.GetValue<string>(
                     $"AggregateEventCosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _configuration.GetValue<string>(
-                    $"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
+                _configuration.GetValue<string>($"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
                 _configuration.GetValue<string>("CosmosDbContainer"),
             DocumentType.AggregateCommand => _configuration.GetValue<string>(
                     $"AggregateCommandCosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _configuration.GetValue<string>(
-                    $"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "dissolvable" : "")}") ??
+                _configuration.GetValue<string>($"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "dissolvable" : "")}") ??
                 _configuration.GetValue<string>("CosmosDbContainer"),
             DocumentType.IntegratedEvent => _configuration.GetValue<string>(
                     $"IntegrateEventCosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _configuration.GetValue<string>(
-                    $"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "dissolvable" : "")}") ??
+                _configuration.GetValue<string>($"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "dissolvable" : "")}") ??
                 _configuration.GetValue<string>("CosmosDbContainer"),
             DocumentType.IntegratedCommand => _configuration.GetValue<string>(
                     $"IntegrateEventCosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _configuration.GetValue<string>(
-                    $"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
+                _configuration.GetValue<string>($"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
                 _configuration.GetValue<string>("CosmosDbContainer"),
             _ => _configuration.GetValue<string>(
                     $"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
                 _configuration.GetValue<string>("CosmosDbContainer")
         };
     }
-    private static string GetMemoryCacheContainerKey(
-        DocumentType documentType,
-        string databaseId,
-        string containerId) =>
+    private static string GetMemoryCacheContainerKey(DocumentType documentType, string databaseId, string containerId) =>
         $"{(documentType == DocumentType.AggregateEvent ? "event." : "")}cosmosdb.container.{databaseId}.{containerId}";
     private static string GetMemoryCacheClientKey(DocumentType documentType) =>
         $"{(documentType == DocumentType.AggregateEvent ? "event." : "")}cosmosdb.client";
     private static string GetMemoryCacheDatabaseKey(DocumentType documentType, string databaseId) =>
         $"{(documentType == DocumentType.AggregateEvent ? "event." : "")}cosmosdb.container.{databaseId}";
 
-    private string GetUri(DocumentType documentType)
-        => documentType == DocumentType.AggregateEvent
-            ? _configuration.GetValue<string>("EventCosmosDbEndPointUrl") ??
-            _configuration.GetValue<string>("CosmosDbEndPointUrl")
-            : _configuration.GetValue<string>("CosmosDbEndPointUrl");
+    private string GetUri(DocumentType documentType) => documentType == DocumentType.AggregateEvent
+        ? _configuration.GetValue<string>("EventCosmosDbEndPointUrl") ?? _configuration.GetValue<string>("CosmosDbEndPointUrl")
+        : _configuration.GetValue<string>("CosmosDbEndPointUrl");
 
-    private string GetSecurityKey(DocumentType documentType)
-        => documentType == DocumentType.AggregateEvent
-            ? _configuration.GetValue<string>("EventCosmosDbAuthorizationKey") ??
-            _configuration.GetValue<string>("CosmosDbAuthorizationKey")
-            : _configuration.GetValue<string>("CosmosDbAuthorizationKey");
+    private string GetSecurityKey(DocumentType documentType) => documentType == DocumentType.AggregateEvent
+        ? _configuration.GetValue<string>("EventCosmosDbAuthorizationKey") ?? _configuration.GetValue<string>("CosmosDbAuthorizationKey")
+        : _configuration.GetValue<string>("CosmosDbAuthorizationKey");
 
-    private string GetDatabaseId(DocumentType documentType)
-        => documentType == DocumentType.AggregateEvent
-            ? _configuration.GetValue<string>("EventCosmosDbDatabase") ??
-            _configuration.GetValue<string>("CosmosDbDatabase")
-            : _configuration.GetValue<string>("CosmosDbDatabase");
+    private string GetDatabaseId(DocumentType documentType) => documentType == DocumentType.AggregateEvent
+        ? _configuration.GetValue<string>("EventCosmosDbDatabase") ?? _configuration.GetValue<string>("CosmosDbDatabase")
+        : _configuration.GetValue<string>("CosmosDbDatabase");
 
-    private async Task<Container> GetContainerAsync(
-        DocumentType documentType,
-        AggregateContainerGroup containerGroup)
+    private async Task<Container> GetContainerAsync(DocumentType documentType, AggregateContainerGroup containerGroup)
     {
         var databaseId = GetDatabaseId(documentType);
         var containerId = GetContainerId(documentType, containerGroup);
-        var container =
-            (Container?)_memoryCache.Get(
-                GetMemoryCacheContainerKey(documentType, databaseId, containerId));
+        var container = (Container?)_memoryCache.Get(GetMemoryCacheContainerKey(documentType, databaseId, containerId));
 
         if (container != null)
         {
@@ -96,8 +79,7 @@ public class CosmosDbFactory
                 {
                     // TypeNameHandling = TypeNameHandling.Auto
                     DateFormatString = "yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'"
-                }
-            )
+                })
         };
         var client = _memoryCache.Get<CosmosClient?>(GetMemoryCacheClientKey(documentType));
         if (client == null)
@@ -105,8 +87,7 @@ public class CosmosDbFactory
             client = new CosmosClient(uri, securityKey, options);
             _memoryCache.Set(GetMemoryCacheClientKey(documentType), client);
         }
-        var database =
-            _memoryCache.Get<Database?>(GetMemoryCacheDatabaseKey(documentType, databaseId));
+        var database = _memoryCache.Get<Database?>(GetMemoryCacheDatabaseKey(documentType, databaseId));
         if (database == null)
         {
             database = await client.CreateDatabaseIfNotExistsAsync(databaseId);
@@ -114,12 +95,8 @@ public class CosmosDbFactory
         }
 
         var containerProperties = new ContainerProperties(containerId, "/partitionkey");
-        container = await database.CreateContainerIfNotExistsAsync(
-            containerProperties,
-            400);
-        _memoryCache.Set(
-            GetMemoryCacheContainerKey(documentType, databaseId, containerId),
-            container);
+        container = await database.CreateContainerIfNotExistsAsync(containerProperties, 400);
+        _memoryCache.Set(GetMemoryCacheContainerKey(documentType, databaseId, containerId), container);
 
         return container;
     }
@@ -133,11 +110,8 @@ public class CosmosDbFactory
             containerGroup,
             async container =>
             {
-                var query = container.GetItemLinqQueryable<Document>()
-                    .Where(
-                        b => true);
-                var feedIterator = container.GetItemQueryIterator<dynamic>(
-                    query.ToQueryDefinition());
+                var query = container.GetItemLinqQueryable<Document>().Where(b => true);
+                var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition());
                 var todelete = new List<Document>();
                 while (feedIterator.HasMoreResults)
                 {
@@ -151,18 +125,14 @@ public class CosmosDbFactory
                 }
                 foreach (var d in todelete)
                 {
-                    await container.DeleteItemAsync<Document>(
-                        d.Id.ToString(),
-                        new PartitionKey(d.PartitionKey));
+                    await container.DeleteItemAsync<Document>(d.Id.ToString(), new PartitionKey(d.PartitionKey));
                 }
                 return null;
             });
     }
     public async Task DeleteAllFromAggregateEventContainer(AggregateContainerGroup containerGroup)
     {
-        await DeleteAllFromAggregateFromContainerIncludes(
-            DocumentType.AggregateEvent,
-            containerGroup);
+        await DeleteAllFromAggregateFromContainerIncludes(DocumentType.AggregateEvent, containerGroup);
     }
 
     public async Task<T> CosmosActionAsync<T>(
@@ -191,10 +161,7 @@ public class CosmosDbFactory
         _memoryCache.Remove(GetMemoryCacheDatabaseKey(documentType, databaseId));
         _memoryCache.Remove(GetMemoryCacheContainerKey(documentType, databaseId, containerId));
     }
-    public async Task CosmosActionAsync(
-        DocumentType documentType,
-        AggregateContainerGroup containerGroup,
-        Func<Container, Task> cosmosAction)
+    public async Task CosmosActionAsync(DocumentType documentType, AggregateContainerGroup containerGroup, Func<Container, Task> cosmosAction)
     {
         try
         {

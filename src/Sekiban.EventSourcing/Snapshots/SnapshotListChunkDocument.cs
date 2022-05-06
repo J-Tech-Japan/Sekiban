@@ -10,10 +10,7 @@ public record SnapshotListChunkDocument : Document
         List<SnapshotListIndex> snapshotIds,
         int chunkIndex,
         IPartitionKeyFactory partitionKeyFactory,
-        string aggregateTypeName) : base(
-        DocumentType.SnapshotListChunk,
-        partitionKeyFactory,
-        aggregateTypeName)
+        string aggregateTypeName) : base(DocumentType.SnapshotListChunk, partitionKeyFactory, aggregateTypeName)
     {
         SnapshotIds = snapshotIds;
         ItemCount = snapshotIds.Count;

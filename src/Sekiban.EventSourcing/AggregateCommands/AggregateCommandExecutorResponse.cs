@@ -1,8 +1,6 @@
 namespace Sekiban.EventSourcing.AggregateCommands;
 
-public class AggregateCommandExecutorResponse<Q, C>
-    where Q : AggregateDtoBase, new()
-    where C : IAggregateCommand
+public class AggregateCommandExecutorResponse<Q, C> where Q : AggregateDtoBase, new() where C : IAggregateCommand
 {
     public Q? AggregateDto { get; set; } = null;
     public AggregateCommandDocument<C> Command { get; init; }

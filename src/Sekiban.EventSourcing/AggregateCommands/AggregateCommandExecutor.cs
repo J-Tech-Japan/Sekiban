@@ -26,22 +26,12 @@ public class AggregateCommandExecutor
         _userInformationFactory = userInformationFactory;
         _documentPersistentRepository = documentPersistentRepository;
     }
-    public async Task<AggregateCommandExecutorResponse<Q, C>> ExecChangeCommandAsync<T, Q, C>(
-        C command,
-        List<CallHistory>? callHistories = null)
-        where T : TransferableAggregateBase<Q>
-        where Q : AggregateDtoBase, new()
-        where C : ChangeAggregateCommandBase<T>
+    public async Task<AggregateCommandExecutorResponse<Q, C>> ExecChangeCommandAsync<T, Q, C>(C command, List<CallHistory>? callHistories = null)
+        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase, new() where C : ChangeAggregateCommandBase<T>
     {
-        var toReturn =
-            new AggregateCommandExecutorResponse<Q, C>(
-                new AggregateCommandDocument<C>(
-                    command,
-                    new AggregateIdPartitionKeyFactory(command.AggregateId, typeof(T)),
-                    callHistories
-                ));
-        var aggregateContainerGroup =
-            AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(T));
+        var toReturn = new AggregateCommandExecutorResponse<Q, C>(
+            new AggregateCommandDocument<C>(command, new AggregateIdPartitionKeyFactory(command.AggregateId, typeof(T)), callHistories));
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(T));
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
         {
             await _semaphoreInMemory.WaitAsync();
@@ -49,16 +39,12 @@ public class AggregateCommandExecutor
         try
         {
             toReturn.Command.ExecutedUser = _userInformationFactory.GetCurrentUserInformation();
-            var handler =
-                _serviceProvider.GetService(typeof(IChangeAggregateCommandHandler<T, C>)) as
-                    IChangeAggregateCommandHandler<T, C>;
+            var handler = _serviceProvider.GetService(typeof(IChangeAggregateCommandHandler<T, C>)) as IChangeAggregateCommandHandler<T, C>;
             if (handler == null)
             {
                 throw new JJAggregateCommandNotRegisteredException(typeof(C).Name);
             }
-            var aggregate =
-                await _singleAggregateService.GetAggregateAsync<T, Q>(
-                    command.AggregateId);
+            var aggregate = await _singleAggregateService.GetAggregateAsync<T, Q>(command.AggregateId);
             if (aggregate == null)
             {
                 throw new JJInvalidArgumentException();
@@ -80,36 +66,24 @@ public class AggregateCommandExecutor
                     await _documentWriter.SaveAndPublishAggregateEvent(ev, typeof(T));
                     if (aggregateContainerGroup != AggregateContainerGroup.InMemoryContainer)
                     {
-                        var snapshotManagerResponse =
-                            await ExecChangeCommandAsync<SnapshotManager, SnapshotManagerDto,
-                                ReportAggregateVersionToSnapshotManger>(
-                                new ReportAggregateVersionToSnapshotManger(
-                                    SnapshotManager.SharedId,
-                                    typeof(T),
-                                    ev.AggregateId,
-                                    ev.Version,
-                                    null));
-                        if (snapshotManagerResponse.Events.Any(
-                            m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken)))
+                        var snapshotManagerResponse
+                            = await ExecChangeCommandAsync<SnapshotManager, SnapshotManagerDto, ReportAggregateVersionToSnapshotManger>(
+                                new ReportAggregateVersionToSnapshotManger(SnapshotManager.SharedId, typeof(T), ev.AggregateId, ev.Version, null));
+                        if (snapshotManagerResponse.Events.Any(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken)))
                         {
                             foreach (var taken in snapshotManagerResponse.Events.Where(
-                                    m => m.DocumentTypeName ==
-                                        nameof(SnapshotManagerSnapshotTaken))
+                                    m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken))
                                 .Select(m => (SnapshotManagerSnapshotTaken)m))
                             {
-                                if (!await _documentPersistentRepository
-                                    .ExistsSnapshotForAggregateAsync(
-                                        command.AggregateId,
-                                        typeof(T),
-                                        taken.NextSnapshotVersion))
+                                if (!await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
+                                    command.AggregateId,
+                                    typeof(T),
+                                    taken.NextSnapshotVersion))
                                 {
-                                    Console.WriteLine(
-                                        $"creating snapshot - {taken.NextSnapshotVersion}");
-                                    var aggregateToSnapshot =
-                                        await _singleAggregateService
-                                            .GetAggregateDtoAsync<T, Q>(
-                                                command.AggregateId,
-                                                taken.NextSnapshotVersion);
+                                    Console.WriteLine($"creating snapshot - {taken.NextSnapshotVersion}");
+                                    var aggregateToSnapshot = await _singleAggregateService.GetAggregateDtoAsync<T, Q>(
+                                        command.AggregateId,
+                                        taken.NextSnapshotVersion);
                                     if (aggregateToSnapshot == null)
                                     {
                                         continue;
@@ -119,9 +93,7 @@ public class AggregateCommandExecutor
                                         continue;
                                     }
                                     var snapshotDocument = new SnapshotDocument(
-                                        new AggregateIdPartitionKeyFactory(
-                                            ev.AggregateId,
-                                            typeof(T)),
+                                        new AggregateIdPartitionKeyFactory(ev.AggregateId, typeof(T)),
                                         typeof(T).Name,
                                         aggregateToSnapshot,
                                         ev.AggregateId,
@@ -162,22 +134,12 @@ public class AggregateCommandExecutor
         return toReturn;
     }
 
-    public async Task<AggregateCommandExecutorResponse<Q, C>> ExecCreateCommandAsync<T, Q, C>(
-        C command,
-        List<CallHistory>? callHistories = null)
-        where T : TransferableAggregateBase<Q>
-        where Q : AggregateDtoBase, new()
-        where C : ICreateAggregateCommand<T>
+    public async Task<AggregateCommandExecutorResponse<Q, C>> ExecCreateCommandAsync<T, Q, C>(C command, List<CallHistory>? callHistories = null)
+        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase, new() where C : ICreateAggregateCommand<T>
     {
-        var toReturn =
-            new AggregateCommandExecutorResponse<Q, C>(
-                new AggregateCommandDocument<C>(
-                    command,
-                    new CanNotUsePartitionKeyFactory(),
-                    callHistories
-                ));
-        var aggregateContainerGroup =
-            AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(T));
+        var toReturn = new AggregateCommandExecutorResponse<Q, C>(
+            new AggregateCommandDocument<C>(command, new CanNotUsePartitionKeyFactory(), callHistories));
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(T));
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
         {
             await _semaphoreInMemory.WaitAsync();
@@ -185,17 +147,13 @@ public class AggregateCommandExecutor
         try
         {
             toReturn.Command.ExecutedUser = _userInformationFactory.GetCurrentUserInformation();
-            var handler =
-                _serviceProvider.GetService(
-                        typeof(ICreateAggregateCommandHandler<T, C>)) as
-                    ICreateAggregateCommandHandler<T, C>;
+            var handler = _serviceProvider.GetService(typeof(ICreateAggregateCommandHandler<T, C>)) as ICreateAggregateCommandHandler<T, C>;
             if (handler == null)
             {
                 throw new JJAggregateCommandNotRegisteredException(typeof(C).Name);
             }
             var result = await handler.HandleAsync(toReturn.Command);
-            toReturn.Command.SetPartitionKey(
-                new AggregateIdPartitionKeyFactory(result.Aggregate.AggregateId, typeof(T)));
+            toReturn.Command.SetPartitionKey(new AggregateIdPartitionKeyFactory(result.Aggregate.AggregateId, typeof(T)));
             toReturn.Command.AggregateId = result.Aggregate.AggregateId;
             toReturn.AggregateDto = result.Aggregate.ToDto();
             if (result.Aggregate.Events.Any())

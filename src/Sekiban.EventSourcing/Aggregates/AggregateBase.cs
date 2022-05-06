@@ -50,13 +50,11 @@ public abstract class AggregateBase : IAggregate
     public ISingleAggregateProjection CreateInitialAggregate(Guid _) => this;
     public ISingleAggregateProjection CreateInitialAggregate<T>(Guid _) => this;
 
-    public static UAggregate Create<UAggregate>(Guid aggregateId)
-        where UAggregate : AggregateBase
+    public static UAggregate Create<UAggregate>(Guid aggregateId) where UAggregate : AggregateBase
     {
         if (typeof(UAggregate).GetConstructor(new[] { typeof(Guid) }) is ConstructorInfo c)
         {
-            return c.Invoke(new object[] { aggregateId }) as UAggregate ??
-                throw new InvalidProgramException();
+            return c.Invoke(new object[] { aggregateId }) as UAggregate ?? throw new InvalidProgramException();
         }
 
         throw new InvalidProgramException();

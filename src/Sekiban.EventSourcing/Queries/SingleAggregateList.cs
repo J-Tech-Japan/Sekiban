@@ -1,7 +1,6 @@
 namespace Sekiban.EventSourcing.Queries;
 
-public class SingleAggregateList<T>
-    where T : ISingleAggregate
+public class SingleAggregateList<T> where T : ISingleAggregate
 {
     private List<SnapshotListIndex>? _mergedSnapshotIds;
     public List<T> List { get; set; } = new();
@@ -19,8 +18,7 @@ public class SingleAggregateList<T>
                 return _mergedSnapshotIds;
             }
             _mergedSnapshotIds = new List<SnapshotListIndex>();
-            _mergedSnapshotIds.AddRange(
-                ProjectedSnapshot?.SnapshotIds ?? new List<SnapshotListIndex>());
+            _mergedSnapshotIds.AddRange(ProjectedSnapshot?.SnapshotIds ?? new List<SnapshotListIndex>());
             foreach (var c in ProjectedSnapshotChunks)
             {
                 _mergedSnapshotIds.AddRange(c.SnapshotIds);

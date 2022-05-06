@@ -14,34 +14,21 @@ public interface IDocumentRepository
         string? sinceSortableUniqueId,
         Action<IEnumerable<AggregateEvent>> resultAction);
 
-    Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
-        Guid aggregateId,
-        Type originalType);
+    Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type originalType);
 
-    Task<bool> ExistsSnapshotForAggregateAsync(
-        Guid aggregateId,
-        Type originalType,
-        int version);
+    Task<bool> ExistsSnapshotForAggregateAsync(Guid aggregateId, Type originalType, int version);
 
     Task<SnapshotListDocument?> GetLatestSnapshotListForTypeAsync<T>(
         string? partitionKey,
-        QueryListType queryListType = QueryListType.ActiveAndDeleted)
-        where T : IAggregate;
+        QueryListType queryListType = QueryListType.ActiveAndDeleted) where T : IAggregate;
 
-    Task<SnapshotListChunkDocument?> GetSnapshotListChunkByIdAsync(
-        Guid id,
-        string partitionKey);
+    Task<SnapshotListChunkDocument?> GetSnapshotListChunkByIdAsync(Guid id, string partitionKey);
 
-    Task<SnapshotDocument?> GetSnapshotByIdAsync(
-        Guid id,
-        Type originalType,
-        string partitionKey);
+    Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type originalType, string partitionKey);
 }
 public interface IDocumentPersistentRepository : IDocumentRepository
 {
-    Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(
-        Guid aggregateId,
-        Type originalType);
+    Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(Guid aggregateId, Type originalType);
 }
 public interface IDocumentTemporaryRepository : IDocumentRepository
 {

@@ -5,6 +5,4 @@ public record SnapshotManagerSnapshotTaken(
     string AggregateTypeName,
     Guid TargetAggregateId,
     int NextSnapshotVersion,
-    int? SnapshotVersion) : ChangeAggregateEvent<SnapshotManager>(
-    AggregateId
-);
+    int? SnapshotVersion) : ChangeAggregateEvent<SnapshotManager>(AggregateId);

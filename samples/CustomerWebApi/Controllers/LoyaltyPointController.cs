@@ -23,15 +23,11 @@ public class LoyaltyPointController : Controller
 
     [HttpGet]
     public async Task<ActionResult<LoyaltyPointDto>> GetAsync(Guid clientId) =>
-        await _singleAggregateService
-            .GetAggregateDtoAsync<LoyaltyPoint, LoyaltyPointDto>(clientId) ??
-        throw new JJInvalidArgumentException();
+        await _singleAggregateService.GetAggregateDtoAsync<LoyaltyPoint, LoyaltyPointDto>(clientId) ?? throw new JJInvalidArgumentException();
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<LoyaltyPointDto>>> ListAsync(
-        QueryListType queryListType = QueryListType.ActiveOnly) => new(
-        await _singleAggregateService
-            .DtoListAsync<LoyaltyPoint, LoyaltyPointDto>(queryListType));
+    public async Task<ActionResult<IEnumerable<LoyaltyPointDto>>> ListAsync(QueryListType queryListType = QueryListType.ActiveOnly) =>
+        new(await _singleAggregateService.DtoListAsync<LoyaltyPoint, LoyaltyPointDto>(queryListType));
 
     [HttpGet]
     public async Task<ActionResult<Dictionary<int, string>>> UsageTypesAsync() => new(
@@ -44,16 +40,14 @@ public class LoyaltyPointController : Controller
     [HttpPatch]
     public async Task<IActionResult> AddPointAsync([FromBody] AddLoyaltyPoint command)
     {
-        var result = await _aggregateCommandExecutor
-            .ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointDto, AddLoyaltyPoint>(command);
+        var result = await _aggregateCommandExecutor.ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointDto, AddLoyaltyPoint>(command);
         return Ok(result);
     }
 
     [HttpPatch]
     public async Task<IActionResult> UsePointAsync([FromBody] UseLoyaltyPoint command)
     {
-        var result = await _aggregateCommandExecutor
-            .ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointDto, UseLoyaltyPoint>(command);
+        var result = await _aggregateCommandExecutor.ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointDto, UseLoyaltyPoint>(command);
         return Ok(result);
     }
 }

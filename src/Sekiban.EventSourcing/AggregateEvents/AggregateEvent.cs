@@ -24,13 +24,7 @@ public record AggregateEvent : Document, IAggregateEvent, ICallHistories
 
     public AggregateEvent() { }
 
-    public AggregateEvent(
-        Guid aggregateId,
-        Type aggregateType,
-        bool isAggregateInitialEvent = false)
-        : base(
-            DocumentType.AggregateEvent,
-            null)
+    public AggregateEvent(Guid aggregateId, Type aggregateType, bool isAggregateInitialEvent = false) : base(DocumentType.AggregateEvent, null)
     {
         AggregateId = aggregateId;
         AggregateType = aggregateType.Name;

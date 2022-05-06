@@ -30,9 +30,7 @@ public static class Dependency
         services.AddTransient<SnapshotListWriter>();
         services.AddTransient<SnapshotListReader>();
 
-        services
-            .AddTransient<ISingleAggregateProjectionQueryStore,
-                MemoryCacheSingleAggregateProjectionQueryStore>();
+        services.AddTransient<ISingleAggregateProjectionQueryStore, MemoryCacheSingleAggregateProjectionQueryStore>();
         services.AddTransient<IDocumentPersistentWriter, CosmosDocumentWriter>();
         services.AddTransient<IDocumentPersistentRepository, CosmosDocumentRepository>();
         services.AddSingleton(new InMemoryDocumentStore());
@@ -51,24 +49,19 @@ public static class Dependency
 
         // 各ドメインコンテキスト
         services.AddSingleton(
-            new RegisteredEventTypes(
-                CustomerDomainContext.Shared.Dependency.GetAssembly(),
-                Sekiban.EventSourcing.Shared.Dependency.GetAssembly()));
+            new RegisteredEventTypes(CustomerDomainContext.Shared.Dependency.GetAssembly(), Sekiban.EventSourcing.Shared.Dependency.GetAssembly()));
         services.AddTransient(CustomerDomainContext.Shared.Dependency.GetDependencies());
         services.AddTransient(Sekiban.EventSourcing.Shared.Dependency.GetDependencies());
     }
 
-    public static void AddTransient(
-        this IServiceCollection services,
-        IEnumerable<(Type serviceType, Type? implementationType)> dependencies)
+    public static void AddTransient(this IServiceCollection services, IEnumerable<(Type serviceType, Type? implementationType)> dependencies)
     {
         foreach (var (serviceType, implementationType) in dependencies)
         {
             if (implementationType is null)
             {
                 services.AddTransient(serviceType);
-            }
-            else
+            } else
             {
                 services.AddTransient(serviceType, implementationType);
             }

@@ -8,8 +8,7 @@ public class AggregateEventPublisher
     public AggregateEventPublisher(IMediator mediator) =>
         _mediator = mediator;
 
-    public async Task PublishAsync<TEvent>(TEvent ev)
-        where TEvent : AggregateEvent
+    public async Task PublishAsync<TEvent>(TEvent ev) where TEvent : AggregateEvent
     {
         await _mediator.Publish(ev, CancellationToken.None);
     }

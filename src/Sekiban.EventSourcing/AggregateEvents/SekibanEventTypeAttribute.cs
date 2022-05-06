@@ -16,13 +16,8 @@ public class RegisteredEventTypes
             var decoratedTypes = assembly.DefinedTypes.Where(
                 x => x.IsClass &&
                     (x.CustomAttributes.Any(a => a.AttributeType == attributeType) ||
-                        (x.BaseType?.CustomAttributes.Any(a => a.AttributeType == attributeType) ??
-                            false) ||
-                        (x.BaseType?.BaseType?.CustomAttributes.Any(
-                                a => a.AttributeType == attributeType) ??
-                            false)
-                    )
-            );
+                        (x.BaseType?.CustomAttributes.Any(a => a.AttributeType == attributeType) ?? false) ||
+                        (x.BaseType?.BaseType?.CustomAttributes.Any(a => a.AttributeType == attributeType) ?? false)));
             foreach (var type in decoratedTypes)
             {
                 _registeredTypes.Add(type);

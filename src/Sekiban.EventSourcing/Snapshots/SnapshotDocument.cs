@@ -18,11 +18,7 @@ public record SnapshotDocument : Document
         Guid aggregateId,
         Guid lastEventId,
         string lastSortableUniqueId,
-        int savedVersion
-    ) : base(
-        DocumentType.AggregateSnapshot,
-        partitionKeyFactory,
-        aggregateTypeName)
+        int savedVersion) : base(DocumentType.AggregateSnapshot, partitionKeyFactory, aggregateTypeName)
     {
         Snapshot = dtoToSnapshot;
         AggregateId = aggregateId;
@@ -31,8 +27,7 @@ public record SnapshotDocument : Document
         SavedVersion = savedVersion;
     }
 
-    public T? ToDto<T>()
-        where T : ISingleAggregate
+    public T? ToDto<T>() where T : ISingleAggregate
     {
         if (Snapshot is not JObject jobj)
         {

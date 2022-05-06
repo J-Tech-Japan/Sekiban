@@ -6,7 +6,4 @@ public record LoyaltyPointAdded(
     DateTime HappenedDate,
     LoyaltyPointReceiveTypeKeys Reason,
     int PointAmount,
-    string Note
-) : ChangeAggregateEvent<LoyaltyPoint>(
-    ClientId
-);
+    string Note) : ChangeAggregateEvent<LoyaltyPoint>(ClientId);

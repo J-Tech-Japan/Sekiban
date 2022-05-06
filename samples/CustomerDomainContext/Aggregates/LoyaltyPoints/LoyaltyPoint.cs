@@ -48,25 +48,16 @@ public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointDto>
         _ => null
     };
 
-    public void AddLoyaltyPoint(
-        DateTime happenedDate,
-        LoyaltyPointReceiveType reason,
-        int pointAmount,
-        string note)
+    public void AddLoyaltyPoint(DateTime happenedDate, LoyaltyPointReceiveType reason, int pointAmount, string note)
     {
         if (LastOccuredTime > happenedDate)
         {
             throw new JJLoyaltyPointCanNotHappenOnThisTimeException();
         }
-        AddAndApplyEvent(
-            new LoyaltyPointAdded(AggregateId, happenedDate, reason, pointAmount, note));
+        AddAndApplyEvent(new LoyaltyPointAdded(AggregateId, happenedDate, reason, pointAmount, note));
     }
 
-    public void UseLoyaltyPoint(
-        DateTime happenedDate,
-        LoyaltyPointUsageType reason,
-        int pointAmount,
-        string note)
+    public void UseLoyaltyPoint(DateTime happenedDate, LoyaltyPointUsageType reason, int pointAmount, string note)
     {
         if (LastOccuredTime > happenedDate)
         {
@@ -76,8 +67,7 @@ public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointDto>
         {
             throw new JJLoyaltyPointNotEnoughException();
         }
-        AddAndApplyEvent(
-            new LoyaltyPointUsed(AggregateId, happenedDate, reason, pointAmount, note));
+        AddAndApplyEvent(new LoyaltyPointUsed(AggregateId, happenedDate, reason, pointAmount, note));
     }
 
     public void Delete() =>

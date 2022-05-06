@@ -10,10 +10,7 @@ public class RecentActivity : TransferableAggregateBase<RecentActivityDto>
 
     public RecentActivity(Guid aggregateId, string firstActivity) : base(aggregateId)
     {
-        AddAndApplyEvent(
-            new RecentActivityCreated(
-                aggregateId,
-                new RecentActivityRecord(firstActivity, DateTime.UtcNow)));
+        AddAndApplyEvent(new RecentActivityCreated(aggregateId, new RecentActivityRecord(firstActivity, DateTime.UtcNow)));
     }
     protected sealed override void AddAndApplyEvent(AggregateEvent ev)
     {
@@ -46,9 +43,7 @@ public class RecentActivity : TransferableAggregateBase<RecentActivityDto>
     }
     public void AddActivity(string activity)
     {
-        var ev = new RecentActivityAdded(
-            AggregateId,
-            new RecentActivityRecord(activity, DateTime.UtcNow));
+        var ev = new RecentActivityAdded(AggregateId, new RecentActivityRecord(activity, DateTime.UtcNow));
         AddAndApplyEvent(ev);
     }
 }

@@ -16,8 +16,7 @@ public class MemoryCacheSingleAggregateProjectionQueryStore : ISingleAggregatePr
         };
         _memoryCache.Set(AggregateUniqueKey(aggregate.AggregateId, typeName), aggregate, options);
     }
-    public TAggregate? FindAggregate<TAggregate>(Guid aggregateId, string typeName)
-        where TAggregate : ISingleAggregate
+    public TAggregate? FindAggregate<TAggregate>(Guid aggregateId, string typeName) where TAggregate : ISingleAggregate
     {
         if (_memoryCache.TryGetValue(AggregateUniqueKey(aggregateId, typeName), out var content))
         {
@@ -25,9 +24,7 @@ public class MemoryCacheSingleAggregateProjectionQueryStore : ISingleAggregatePr
         }
         return default;
     }
-    public void SaveLatestAggregateList<T>(
-        SingleAggregateList<T> singleAggregateList)
-        where T : ISingleAggregate
+    public void SaveLatestAggregateList<T>(SingleAggregateList<T> singleAggregateList) where T : ISingleAggregate
     {
         var options = new MemoryCacheEntryOptions
         {
@@ -35,17 +32,11 @@ public class MemoryCacheSingleAggregateProjectionQueryStore : ISingleAggregatePr
             SlidingExpiration = TimeSpan.FromMinutes(5)
             // 5分読まれなかったら削除するが、2時間経ったらどちらにしても削除する
         };
-        _memoryCache.Set(
-            SingleAggregateList<T>.UniqueKey(),
-            singleAggregateList,
-            options);
+        _memoryCache.Set(SingleAggregateList<T>.UniqueKey(), singleAggregateList, options);
     }
-    public SingleAggregateList<T>? FindAggregateList<T>()
-        where T : ISingleAggregate
+    public SingleAggregateList<T>? FindAggregateList<T>() where T : ISingleAggregate
     {
-        if (_memoryCache.TryGetValue(
-            SingleAggregateList<T>.UniqueKey(),
-            out var content))
+        if (_memoryCache.TryGetValue(SingleAggregateList<T>.UniqueKey(), out var content))
         {
             return (SingleAggregateList<T>)content;
         }
