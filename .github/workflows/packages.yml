@@ -1,0 +1,37 @@
+name: nuget package release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup .NET 6
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 6.0.x
+    - name: Package settings
+      run: |
+        dotnet nuget add source --username USERNAME --password ${{TOMOHISA_PAT}} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/J-Tech-Japan/index.json"
+    - name: Restore dependencies
+      run: |
+        pushd ./src
+        dotnet restore Sekiban.EventSourcing.sln
+    - name: Build with dotnet
+      run: |
+        pushd ./src
+        dotnet build Sekiban.EventSourcing.sln
+    - name: Pack Core
+      run: |
+        pushd ./src/Sekiban.EventSourcing
+        dotnet pack --configuration Release
+        dotnet nuget push "bin/Release/Sekiban.EventSourcing.${{ github.event.release.name }}.nupkg" --api-key ${{TOMOHISA_PAT}} --source "github"
+    - name: Pack Cosmos
+      run: |
+        pushd ./src/Sekiban.EventSourcing.CosmosInfraStracture
+        dotnet pack --configuration Release
+        dotnet nuget push "bin/Release/Sekiban.EventSourcing.CosmosInfrastructure.${{ github.event.release.name }}.nupkg" --api-key ${{TOMOHISA_PAT}} --source "github"
