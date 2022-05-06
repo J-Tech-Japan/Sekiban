@@ -19,9 +19,9 @@ public interface IDocumentRepository
         Type originalType);
 
     Task<bool> ExistsSnapshotForAggregateAsync(
-    Guid aggregateId,
-    Type originalType, 
-    int version);
+        Guid aggregateId,
+        Type originalType,
+        int version);
 
     Task<SnapshotListDocument?> GetLatestSnapshotListForTypeAsync<T>(
         string? partitionKey,
@@ -38,4 +38,11 @@ public interface IDocumentRepository
         string partitionKey);
 }
 public interface IDocumentPersistentRepository : IDocumentRepository { }
-public interface IDocumentTemporaryRepository : IDocumentRepository { }
+public interface IDocumentTemporaryRepository : IDocumentRepository
+{
+    Task<bool> AggregateEventsForAggregateIdHasSortableUniqueIdAsync(
+        Guid aggregateId,
+        Type originalType,
+        string? partitionKey,
+        string? sortableUniqueId);
+}

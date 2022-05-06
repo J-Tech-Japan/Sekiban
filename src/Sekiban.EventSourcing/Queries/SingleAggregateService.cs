@@ -163,6 +163,10 @@ public class SingleAggregateService
             null,
             events =>
             {
+                if (events.Count() != events.Select(m => m.Id).Distinct().Count())
+                {
+                    throw new JJAggregateEventDuplicateException();
+                }
                 foreach (var e in events)
                 {
                     aggregate.ApplyEvent(e);
@@ -257,6 +261,11 @@ public class SingleAggregateService
             {
                 foreach (var e in events)
                 {
+                    if (!string.IsNullOrWhiteSpace(dto?.LastSortableUniqueId) &&
+                        string.CompareOrdinal(dto?.LastSortableUniqueId, e.SortableUniqueId) > 0)
+                    {
+                        throw new JJAggregateEventDuplicateException();
+                    }
                     aggregate.ApplyEvent(e);
                     if (toVersion.HasValue && aggregate.Version == toVersion.Value)
                     {
