@@ -86,6 +86,59 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                     }
                 }
             }
+
+            foreach (var projection in _sekibanAggregateTypes.ProjectionAggregateTypes.Where(
+                m => m.OriginalType.FullName == aggregateType.Aggregate.FullName))
+            {
+                var snapshotManagerResponseP
+                    = await _aggregateCommandExecutor
+                        .ExecChangeCommandAsync<SnapshotManager, SnapshotManagerDto, ReportAggregateVersionToSnapshotManger>(
+                            new ReportAggregateVersionToSnapshotManger(
+                                SnapshotManager.SharedId,
+                                projection.Aggregate,
+                                notification.AggregateId,
+                                notification.Version,
+                                null));
+                if (snapshotManagerResponseP.Events.Any(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken)))
+                {
+                    foreach (var taken in snapshotManagerResponseP.Events.Where(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken))
+                        .Select(m => (SnapshotManagerSnapshotTaken)m))
+                    {
+                        if (!await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
+                            notification.AggregateId,
+                            projection.Aggregate,
+                            taken.NextSnapshotVersion))
+                        {
+                            Console.WriteLine($"creating snapshot - {taken.NextSnapshotVersion}");
+
+                            dynamic? awaitable = _singleAggregateService.GetType()
+                                ?.GetMethod(nameof(_singleAggregateService.GetProjectionAsync))
+                                ?.MakeGenericMethod(projection.Aggregate)
+                                .Invoke(_singleAggregateService, new object[] { notification.AggregateId, taken.NextSnapshotVersion });
+                            if (awaitable == null) { continue; }
+                            var aggregateToSnapshot = await awaitable;
+
+                            if (aggregateToSnapshot == null)
+                            {
+                                continue;
+                            }
+                            if (taken.NextSnapshotVersion != aggregateToSnapshot.Version)
+                            {
+                                continue;
+                            }
+                            var snapshotDocument = new SnapshotDocument(
+                                new AggregateIdPartitionKeyFactory(notification.AggregateId, projection.Aggregate),
+                                projection.Aggregate.Name,
+                                aggregateToSnapshot,
+                                notification.AggregateId,
+                                aggregateToSnapshot.LastEventId,
+                                aggregateToSnapshot.LastSortableUniqueId,
+                                aggregateToSnapshot.Version);
+                            await _documentWriter.SaveAsync(snapshotDocument, projection.Aggregate);
+                        }
+                    }
+                }
+            }
         }
     }
 }

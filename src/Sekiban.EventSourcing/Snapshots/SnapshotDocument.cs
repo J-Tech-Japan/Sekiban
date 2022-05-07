@@ -14,7 +14,7 @@ public record SnapshotDocument : Document
     public SnapshotDocument(
         IPartitionKeyFactory partitionKeyFactory,
         string? aggregateTypeName,
-        AggregateDtoBase dtoToSnapshot,
+        ISingleAggregate dtoToSnapshot,
         Guid aggregateId,
         Guid lastEventId,
         string lastSortableUniqueId,

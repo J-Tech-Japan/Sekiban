@@ -5,7 +5,7 @@ public abstract class SingleAggregateProjectionBase<T> : ISingleAggregateProject
 {
     public Guid LastEventId { get; set; }
     public string LastSortableUniqueId { get; set; } = string.Empty;
-    public int AppliedSnapshotVersion { get; set; } = 0;
+    public int AppliedSnapshotVersion { get; set; }
     public int Version { get; set; }
     public bool IsDeleted { get; set; }
     public Guid AggregateId { get; set; }
@@ -27,8 +27,18 @@ public abstract class SingleAggregateProjectionBase<T> : ISingleAggregateProject
         Version++;
     }
     public abstract T ToDto();
-    public abstract void ApplySnapshot(T snapshot);
+    public void ApplySnapshot(T snapshot)
+    {
+        Version = snapshot.Version;
+        LastEventId = snapshot.LastEventId;
+        LastSortableUniqueId = snapshot.LastSortableUniqueId;
+        AppliedSnapshotVersion = snapshot.Version;
+        IsDeleted = snapshot.IsDeleted;
+        CopyPropertiesFromSnapshot(snapshot);
+    }
+
     public abstract Type OriginalAggregateType();
     public abstract T CreateInitialAggregate(Guid aggregateId);
+    protected abstract void CopyPropertiesFromSnapshot(T snapshot);
     protected abstract Action? GetApplyEventAction(AggregateEvent ev);
 }

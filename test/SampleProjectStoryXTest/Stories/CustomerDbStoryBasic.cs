@@ -105,6 +105,7 @@ public class CustomerDbStoryBasic : TestBase
         // change name
         var changeNameResult = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientDto, ChangeClientName>(
             new ChangeClientName(clientId, secondName) { ReferenceVersion = createClientResult.AggregateDto!.Version });
+
         // change name projection
         clientNameList = (await _aggregateService.DtoListAsync<ClientNameHistoryProjection>()).ToList();
         Assert.Single(clientNameList);
@@ -112,6 +113,16 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Equal(2, tanakaProjection.ClientNames.Count);
         Assert.Equal(originalName, tanakaProjection.ClientNames.First().Name);
         Assert.Equal(secondName, tanakaProjection.ClientNames[1].Name);
+
+        // test change name multiple time to create projection 
+        var versionCN = changeNameResult!.AggregateDto!.Version;
+        var countChangeName = 180;
+        foreach (var i in Enumerable.Range(0, countChangeName))
+        {
+            var changeNameResult2 = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientDto, ChangeClientName>(
+                new ChangeClientName(clientId, $"newname - {i + 1}") { ReferenceVersion = versionCN });
+            versionCN = changeNameResult2.AggregateDto!.Version;
+        }
 
         // loyalty point should be created with event subscribe
         loyaltyPointList = (await _aggregateService.DtoListAsync<LoyaltyPoint, LoyaltyPointDto>()).ToList();
@@ -157,7 +168,7 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Equal(800, loyaltyPoint!.CurrentPoint);
         // delete client
         var deleteClientResult = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientDto, DeleteClient>(
-            new DeleteClient(clientId) { ReferenceVersion = changeNameResult!.AggregateDto!.Version });
+            new DeleteClient(clientId) { ReferenceVersion = versionCN });
         Assert.NotNull(deleteClientResult);
         Assert.NotNull(deleteClientResult.AggregateDto);
         // client deleted
