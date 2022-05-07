@@ -11,7 +11,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         _inMemoryDocumentStore = inMemoryDocumentStore;
         _memoryCache = memoryCache;
     }
-    public async Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(Guid aggregateId, Type originalType) =>
+    public Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(Guid aggregateId, Type originalType) =>
         throw new NotImplementedException();
     public async Task GetAllAggregateEventsForAggregateIdAsync(
         Guid aggregateId,
@@ -49,13 +49,13 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         }
         return null;
     }
-    public async Task<SnapshotListDocument?> GetLatestSnapshotListForTypeAsync<T>(
+    public Task<SnapshotListDocument?> GetLatestSnapshotListForTypeAsync<T>(
         string? partitionKey,
         QueryListType queryListType = QueryListType.ActiveAndDeleted) where T : IAggregate =>
         throw new NotImplementedException();
-    public async Task<SnapshotListChunkDocument?> GetSnapshotListChunkByIdAsync(Guid id, string partitionKey) =>
+    public Task<SnapshotListChunkDocument?> GetSnapshotListChunkByIdAsync(Guid id, string partitionKey) =>
         throw new NotImplementedException();
-    public async Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type originalType, string partitionKey) =>
+    public Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type originalType, string partitionKey) =>
         throw new NotImplementedException();
     public async Task<bool> AggregateEventsForAggregateIdHasSortableUniqueIdAsync(
         Guid aggregateId,

@@ -24,7 +24,6 @@ public class SekibanAggregateTypes
                 var p = baseProjector.MakeGenericType(type);
                 _registeredTypes.Add(new DefaultAggregateType(type, dto, p));
             }
-            AggregateTypes = _registeredTypes.AsReadOnly();
             var projectorBase = typeof(SingleAggregateProjectionBase<>);
             var customProjectors = assembly.DefinedTypes.Where(
                 x => x.IsClass && x.BaseType?.Name == projectorBase.Name && x.BaseType?.Namespace == projectorBase.Namespace);
@@ -35,8 +34,9 @@ public class SekibanAggregateTypes
                 if (original == null) { continue; }
                 _registeredCustomProjectorTypes.Add(new ProjectionAggregateType(type, type, type, original));
             }
-            ProjectionAggregateTypes = _registeredCustomProjectorTypes.AsReadOnly();
         }
+        AggregateTypes = _registeredTypes.AsReadOnly();
+        ProjectionAggregateTypes = _registeredCustomProjectorTypes.AsReadOnly();
     }
     public record DefaultAggregateType(Type Aggregate, Type Dto, Type Projection);
     public record ProjectionAggregateType(Type Aggregate, Type Dto, Type Projection, Type OriginalType) : DefaultAggregateType(
