@@ -1,10 +1,7 @@
 using Newtonsoft.Json;
-using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
-using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
-using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Events;
 namespace Sekiban.EventSourcing.AggregateCommands;
 
-public class AggregateCommandExecutor
+public class AggregateCommandExecutor : IAggregateCommandExecutor
 {
     private static readonly SemaphoreSlim _semaphoreInMemory = new(1, 1);
     private readonly IDocumentPersistentRepository _documentPersistentRepository;
@@ -64,47 +61,47 @@ public class AggregateCommandExecutor
                 foreach (var ev in result.Aggregate.Events)
                 {
                     await _documentWriter.SaveAndPublishAggregateEvent(ev, typeof(T));
-                    if (aggregateContainerGroup != AggregateContainerGroup.InMemoryContainer)
-                    {
-                        var snapshotManagerResponse
-                            = await ExecChangeCommandAsync<SnapshotManager, SnapshotManagerDto, ReportAggregateVersionToSnapshotManger>(
-                                new ReportAggregateVersionToSnapshotManger(SnapshotManager.SharedId, typeof(T), ev.AggregateId, ev.Version, null));
-                        if (snapshotManagerResponse.Events.Any(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken)))
-                        {
-                            foreach (var taken in snapshotManagerResponse.Events.Where(
-                                    m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken))
-                                .Select(m => (SnapshotManagerSnapshotTaken)m))
-                            {
-                                if (!await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
-                                    command.AggregateId,
-                                    typeof(T),
-                                    taken.NextSnapshotVersion))
-                                {
-                                    Console.WriteLine($"creating snapshot - {taken.NextSnapshotVersion}");
-                                    var aggregateToSnapshot = await _singleAggregateService.GetAggregateDtoAsync<T, Q>(
-                                        command.AggregateId,
-                                        taken.NextSnapshotVersion);
-                                    if (aggregateToSnapshot == null)
-                                    {
-                                        continue;
-                                    }
-                                    if (taken.NextSnapshotVersion != aggregateToSnapshot.Version)
-                                    {
-                                        continue;
-                                    }
-                                    var snapshotDocument = new SnapshotDocument(
-                                        new AggregateIdPartitionKeyFactory(ev.AggregateId, typeof(T)),
-                                        typeof(T).Name,
-                                        aggregateToSnapshot,
-                                        ev.AggregateId,
-                                        aggregateToSnapshot.LastEventId,
-                                        aggregateToSnapshot.LastSortableUniqueId,
-                                        aggregateToSnapshot.Version);
-                                    await _documentWriter.SaveAsync(snapshotDocument, typeof(T));
-                                }
-                            }
-                        }
-                    }
+                    // if (aggregateContainerGroup != AggregateContainerGroup.InMemoryContainer)
+                    // {
+                    //     var snapshotManagerResponse
+                    //         = await ExecChangeCommandAsync<SnapshotManager, SnapshotManagerDto, ReportAggregateVersionToSnapshotManger>(
+                    //             new ReportAggregateVersionToSnapshotManger(SnapshotManager.SharedId, typeof(T), ev.AggregateId, ev.Version, null));
+                    //     if (snapshotManagerResponse.Events.Any(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken)))
+                    //     {
+                    //         foreach (var taken in snapshotManagerResponse.Events.Where(
+                    //                 m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken))
+                    //             .Select(m => (SnapshotManagerSnapshotTaken)m))
+                    //         {
+                    //             if (!await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
+                    //                 command.AggregateId,
+                    //                 typeof(T),
+                    //                 taken.NextSnapshotVersion))
+                    //             {
+                    //                 Console.WriteLine($"creating snapshot - {taken.NextSnapshotVersion}");
+                    //                 var aggregateToSnapshot = await _singleAggregateService.GetAggregateDtoAsync<T, Q>(
+                    //                     command.AggregateId,
+                    //                     taken.NextSnapshotVersion);
+                    //                 if (aggregateToSnapshot == null)
+                    //                 {
+                    //                     continue;
+                    //                 }
+                    //                 if (taken.NextSnapshotVersion != aggregateToSnapshot.Version)
+                    //                 {
+                    //                     continue;
+                    //                 }
+                    //                 var snapshotDocument = new SnapshotDocument(
+                    //                     new AggregateIdPartitionKeyFactory(ev.AggregateId, typeof(T)),
+                    //                     typeof(T).Name,
+                    //                     aggregateToSnapshot,
+                    //                     ev.AggregateId,
+                    //                     aggregateToSnapshot.LastEventId,
+                    //                     aggregateToSnapshot.LastSortableUniqueId,
+                    //                     aggregateToSnapshot.Version);
+                    //                 await _documentWriter.SaveAsync(snapshotDocument, typeof(T));
+                    //             }
+                    //         }
+                    //     }
+                    // }
                 }
             }
             aggregate.ResetEventsAndSnapshots();
@@ -117,10 +114,7 @@ public class AggregateCommandExecutor
         {
             toReturn.Command.Exception = JsonConvert.SerializeObject(
                 e,
-                new JsonSerializerSettings
-                {
-                    ReferenceLoopHandling = ReferenceLoopHandling.Ignore
-                });
+                new JsonSerializerSettings { ReferenceLoopHandling = ReferenceLoopHandling.Ignore });
             throw;
         }
         finally
@@ -178,10 +172,7 @@ public class AggregateCommandExecutor
         {
             toReturn.Command.Exception = JsonConvert.SerializeObject(
                 e,
-                new JsonSerializerSettings
-                {
-                    ReferenceLoopHandling = ReferenceLoopHandling.Ignore
-                });
+                new JsonSerializerSettings { ReferenceLoopHandling = ReferenceLoopHandling.Ignore });
             throw;
         }
         finally

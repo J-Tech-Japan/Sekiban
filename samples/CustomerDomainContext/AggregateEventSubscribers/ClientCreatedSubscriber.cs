@@ -5,9 +5,9 @@ namespace CustomerDomainContext.AggregateEventSubscribers;
 
 public class ClientCreatedSubscriber : AggregateEventSubscriberBase<ClientCreated>
 {
-    private readonly AggregateCommandExecutor _aggregateCommandExecutor;
+    private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
 
-    public ClientCreatedSubscriber(AggregateCommandExecutor aggregateCommandExecutor) =>
+    public ClientCreatedSubscriber(IAggregateCommandExecutor aggregateCommandExecutor) =>
         _aggregateCommandExecutor = aggregateCommandExecutor;
 
     public override async Task SubscribeAggregateEventAsync(ClientCreated ev)

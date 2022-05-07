@@ -5,9 +5,9 @@ namespace CustomerDomainContext.AggregateEventSubscribers;
 
 public class ClientDeletedSubscriber : AggregateEventSubscriberBase<ClientDeleted>
 {
-    private readonly AggregateCommandExecutor _aggregateCommandExecutor;
+    private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
 
-    public ClientDeletedSubscriber(AggregateCommandExecutor aggregateCommandExecutor) =>
+    public ClientDeletedSubscriber(IAggregateCommandExecutor aggregateCommandExecutor) =>
         _aggregateCommandExecutor = aggregateCommandExecutor;
 
     public override async Task SubscribeAggregateEventAsync(ClientDeleted ev)

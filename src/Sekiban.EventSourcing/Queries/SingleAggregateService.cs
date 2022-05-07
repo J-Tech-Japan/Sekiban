@@ -83,6 +83,7 @@ public class SingleAggregateService
         _singleAggregateProjectionQueryStore.SaveLatestAggregateList(aggregateList);
         return aggregateList;
     }
+
     private async Task<IEnumerable<T>> ListAsync<T, Q, P>(QueryListType queryListType) where T : ISingleAggregate, ISingleAggregateProjection
         where Q : ISingleAggregate
         where P : ISingleAggregateProjector<T>, new()
