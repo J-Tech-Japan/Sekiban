@@ -1,18 +1,22 @@
+using Sekiban.EventSourcing.Settings;
 namespace Sekiban.EventSourcing.Documents;
 
 public class DocumentWriterSplitter : IDocumentWriter
 {
+    private readonly IAggregateSettings _aggregateSettings;
     private readonly IDocumentPersistentWriter _documentPersistentWriter;
     private readonly IDocumentTemporaryWriter _documentTemporaryWriter;
     private readonly HybridStoreManager _hybridStoreManager;
     public DocumentWriterSplitter(
         IDocumentPersistentWriter documentPersistentWriter,
         IDocumentTemporaryWriter documentTemporaryWriter,
-        HybridStoreManager hybridStoreManager)
+        HybridStoreManager hybridStoreManager,
+        IAggregateSettings aggregateSettings)
     {
         _documentPersistentWriter = documentPersistentWriter;
         _documentTemporaryWriter = documentTemporaryWriter;
         _hybridStoreManager = hybridStoreManager;
+        _aggregateSettings = aggregateSettings;
     }
 
     public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType) where TDocument : Document
@@ -43,6 +47,7 @@ public class DocumentWriterSplitter : IDocumentWriter
 
     private async Task AddToHybridIfPossible(AggregateEvent aggregateEvent, Type aggregateType)
     {
+        if (!_aggregateSettings.CanUseHybrid(aggregateType)) { return; }
         if (aggregateEvent.IsAggregateInitialEvent)
         {
             if (_hybridStoreManager.AddPartitionKey(aggregateEvent.PartitionKey, string.Empty))

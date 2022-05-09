@@ -1,7 +1,9 @@
+using Sekiban.EventSourcing.Settings;
 namespace Sekiban.EventSourcing.Documents;
 
 public class DocumentRepositorySplitter : IDocumentRepository
 {
+    private readonly IAggregateSettings _aggregateSettings;
     private readonly IDocumentPersistentRepository _documentPersistentRepository;
     private readonly IDocumentTemporaryRepository _documentTemporaryRepository;
     private readonly IDocumentTemporaryWriter _documentTemporaryWriter;
@@ -10,12 +12,14 @@ public class DocumentRepositorySplitter : IDocumentRepository
         IDocumentPersistentRepository documentPersistentRepository,
         IDocumentTemporaryRepository documentTemporaryRepository,
         HybridStoreManager hybridStoreManager,
-        IDocumentTemporaryWriter documentTemporaryWriter)
+        IDocumentTemporaryWriter documentTemporaryWriter,
+        IAggregateSettings aggregateSettings)
     {
         _documentPersistentRepository = documentPersistentRepository;
         _documentTemporaryRepository = documentTemporaryRepository;
         _hybridStoreManager = hybridStoreManager;
         _documentTemporaryWriter = documentTemporaryWriter;
+        _aggregateSettings = aggregateSettings;
     }
 
     public async Task GetAllAggregateEventsForAggregateIdAsync(
@@ -36,7 +40,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 resultAction);
             return;
         }
-        if (partitionKey != null && _hybridStoreManager.HasPartition(partitionKey))
+        if (partitionKey != null && _aggregateSettings.CanUseHybrid(originalType) && _hybridStoreManager.HasPartition(partitionKey))
         {
             Console.WriteLine($"{_hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey)} {partitionKey}");
             if ((string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&

@@ -9,6 +9,7 @@ using Sekiban.EventSourcing.Aggregates;
 using Sekiban.EventSourcing.Documents;
 using Sekiban.EventSourcing.PubSubs;
 using Sekiban.EventSourcing.Queries;
+using Sekiban.EventSourcing.Settings;
 using Sekiban.EventSourcing.Snapshots;
 using System.Reflection;
 namespace ESSampleProjectDependency;
@@ -45,8 +46,23 @@ public static class Dependency
         services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
         services.AddTransient<IUserInformationFactory, HttpContextUserInformationFactory>();
 
-        // ドメイン統合
-        services.AddTransient<IIntegratedEventPublisher, NoIntegratedEventPublisher>();
+        // 設定はConfigurationから指定することもできる、設定オブジェクトをnewで生成することも可能
+        services.AddTransient<IAggregateSettings, ConfigurationAggregateSettings>();
+        // services.AddSingleton<IAggregateSettings>(
+        //     new AggregateSettings
+        //     {
+        //         Helper = new AggregateSettingHelper(
+        //             true,
+        //             true,
+        //             80,
+        //             15,
+        //             new List<SingleAggregateSetting>
+        //             {
+        //                 new(nameof(Client), true, true),
+        //                 new(nameof(ClientNameHistoryProjection), true, false, 111),
+        //                 new(nameof(RecentActivity), true, true, 82, 10)
+        //             })
+        //     });
 
         // 各ドメインコンテキスト
         services.AddSingleton(

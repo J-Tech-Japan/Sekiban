@@ -21,9 +21,16 @@ public class SnapshotManager : TransferableAggregateBase<SnapshotManagerDto>
     {
         AddAndApplyEvent(new SnapshotManagerCreated(aggregateId, createdAt));
     }
-    public void ReportAggregateVersion(Guid snapshotManagerId, Type aggregateType, Guid targetAggregateId, int version, int? snapshotVersion)
+    public void ReportAggregateVersion(
+        Guid snapshotManagerId,
+        Type aggregateType,
+        Guid targetAggregateId,
+        int version,
+        int? snapshotVersion,
+        int snapshotFrequency = SnapshotCount,
+        int snapshotOffset = SnapshotTakeOffset)
     {
-        var nextSnapshotVersion = version / SnapshotCount * SnapshotCount;
+        var nextSnapshotVersion = version / snapshotFrequency * snapshotFrequency;
         var offset = version - nextSnapshotVersion;
         if (nextSnapshotVersion == 0) { return; }
         var key = SnapshotKey(aggregateType.Name, targetAggregateId, nextSnapshotVersion);
@@ -32,7 +39,7 @@ public class SnapshotManager : TransferableAggregateBase<SnapshotManagerDto>
             AddAndApplyEvent(
                 new SnapshotManagerRequestAdded(snapshotManagerId, aggregateType.Name, targetAggregateId, nextSnapshotVersion, snapshotVersion));
         }
-        if (Requests.Contains(key) && !RequestTakens.Contains(key) && offset > SnapshotTakeOffset)
+        if (Requests.Contains(key) && !RequestTakens.Contains(key) && offset > snapshotOffset)
         {
             AddAndApplyEvent(
                 new SnapshotManagerSnapshotTaken(snapshotManagerId, aggregateType.Name, targetAggregateId, nextSnapshotVersion, snapshotVersion));
