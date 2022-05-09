@@ -7,22 +7,27 @@ public class AggregateSettingHelper
     public int SnapshotFrequencyDefault { get; }
     public int SnapshotOffsetDefault { get; }
 
-    public IEnumerable<SingleAggregateSetting> SingleAggregateSettings { get; }
-    public IEnumerable<SingleAggregateProjectionSetting> SingleAggregateProjectionSettings { get; }
+    public IEnumerable<SingleAggregateSetting> Exceptions { get; } = new List<SingleAggregateSetting>();
+
+    public AggregateSettingHelper()
+    {
+        UseHybridDefault = false;
+        TakeSnapshotDefault = true;
+        SnapshotFrequencyDefault = 80;
+        SnapshotOffsetDefault = 15;
+    }
 
     public AggregateSettingHelper(
         bool takeSnapshotDefault,
         bool useHybridDefault,
         int snapshotFrequencyDefault,
         int snapshotOffsetDefault,
-        IEnumerable<SingleAggregateSetting> singleAggregateSettings,
-        IEnumerable<SingleAggregateProjectionSetting> singleAggregateProjectionSettings)
+        IEnumerable<SingleAggregateSetting> exceptions)
     {
         TakeSnapshotDefault = takeSnapshotDefault;
         UseHybridDefault = useHybridDefault;
         SnapshotFrequencyDefault = snapshotFrequencyDefault;
         SnapshotOffsetDefault = snapshotOffsetDefault;
-        SingleAggregateSettings = singleAggregateSettings;
-        SingleAggregateProjectionSettings = singleAggregateProjectionSettings;
+        Exceptions = exceptions;
     }
 }

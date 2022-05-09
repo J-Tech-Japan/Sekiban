@@ -218,7 +218,7 @@ public class SingleAggregateService
         }
         await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
-            typeof(T),
+            projector.OriginalAggregateType(),
             new AggregateIdPartitionKeyFactory(aggregateId, projector.OriginalAggregateType()).GetPartitionKey(DocumentType.AggregateEvent),
             dto?.LastSortableUniqueId,
             events =>
