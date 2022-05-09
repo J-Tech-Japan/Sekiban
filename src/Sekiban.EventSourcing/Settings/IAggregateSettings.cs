@@ -1,6 +1,6 @@
 namespace Sekiban.EventSourcing.Settings;
 
-public interface IAggregateSettingHelper
+public interface IAggregateSettings
 {
     public bool ShouldTakeSnapshotForType(Type originalType);
     /// <summary>

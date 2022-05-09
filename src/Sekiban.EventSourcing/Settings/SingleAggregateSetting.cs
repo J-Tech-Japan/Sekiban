@@ -2,12 +2,13 @@ namespace Sekiban.EventSourcing.Settings;
 
 public record SingleAggregateSetting(
     string AggregateClassName,
-    bool MakeSnapshots = false,
+    bool? UseHybrid = false,
+    bool? MakeSnapshots = false,
     int? SnapshotByEachVersion = null,
-    int? SnapshotOffset = null,
-    IEnumerable<SingleAggregateProjectionSetting>? AggregateProjectionSettings = null);
+    int? SnapshotOffset = null);
 public record SingleAggregateProjectionSetting(
-    string AggregateClassName,
-    bool MakeSnapshots = false,
+    string ProjectionClassName,
+    bool? UseHybrid = false,
+    bool? MakeSnapshots = false,
     int? SnapshotByEachVersion = null,
     int? SnapshotOffset = null);

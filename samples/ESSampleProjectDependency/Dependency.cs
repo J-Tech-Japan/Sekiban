@@ -45,9 +45,6 @@ public static class Dependency
         services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
         services.AddTransient<IUserInformationFactory, HttpContextUserInformationFactory>();
 
-        // ドメイン統合
-        services.AddTransient<IIntegratedEventPublisher, NoIntegratedEventPublisher>();
-
         // 各ドメインコンテキスト
         services.AddSingleton(
             new RegisteredEventTypes(CustomerDomainContext.Shared.Dependency.GetAssembly(), Sekiban.EventSourcing.Shared.Dependency.GetAssembly()));

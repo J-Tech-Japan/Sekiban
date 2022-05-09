@@ -124,6 +124,10 @@ public class CustomerDbStoryBasic : TestBase
             versionCN = changeNameResult2.AggregateDto!.Version;
         }
 
+        // get change name dto
+        var changeNameProjection = await _aggregateService.GetProjectionAsync<ClientNameHistoryProjection>(clientId);
+        Assert.NotNull(changeNameProjection);
+
         // loyalty point should be created with event subscribe
         loyaltyPointList = (await _aggregateService.DtoListAsync<LoyaltyPoint, LoyaltyPointDto>()).ToList();
         Assert.Single(clientList);
