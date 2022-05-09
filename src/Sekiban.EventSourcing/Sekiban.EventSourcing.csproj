@@ -10,6 +10,8 @@
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Core</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
+        <PackageVersion>0.2.5</PackageVersion>
+        <Description>集約ごとの設定機能を追加</Description>
 
     </PropertyGroup>
 
