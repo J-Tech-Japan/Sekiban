@@ -6,12 +6,12 @@ namespace CustomerWebApi.Controllers;
 [Route("[controller]/[action]")]
 public class BranchController : Controller
 {
-    private readonly AggregateCommandExecutor _aggregateCommandExecutor;
+    private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
     private readonly SingleAggregateService _aggregateService;
     private readonly SnapshotListWriter _snapshotListWriter;
 
     public BranchController(
-        AggregateCommandExecutor aggregateCommandExecutor,
+        IAggregateCommandExecutor aggregateCommandExecutor,
         SingleAggregateService aggregateService,
         SnapshotListWriter snapshotListWriter)
     {

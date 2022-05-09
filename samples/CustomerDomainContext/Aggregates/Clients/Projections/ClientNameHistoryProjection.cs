@@ -13,22 +13,25 @@ public class ClientNameHistoryProjection : SingleAggregateProjectionBase<ClientN
     public Guid BranchId { get; set; } = Guid.Empty;
     public List<ClientNameHistoryProjectionRecord> ClientNames { get; init; } = new();
     public string ClientEmail { get; set; } = null!;
-    public ClientNameHistoryProjection(Guid aggregateId) => AggregateId = aggregateId;
+    public ClientNameHistoryProjection(Guid aggregateId) =>
+        AggregateId = aggregateId;
 
     public ClientNameHistoryProjection() { }
 
-    public override ClientNameHistoryProjection ToDto() => this;
-    public override void ApplySnapshot(ClientNameHistoryProjection snapshot)
+    public override ClientNameHistoryProjection ToDto() =>
+        this;
+
+    public override Type OriginalAggregateType() =>
+        typeof(Client);
+
+    public override ClientNameHistoryProjection CreateInitialAggregate(Guid aggregateId) =>
+        new(aggregateId);
+    protected override void CopyPropertiesFromSnapshot(ClientNameHistoryProjection snapshot)
     {
         BranchId = snapshot.BranchId;
         ClientNames.AddRange(snapshot.ClientNames);
         ClientEmail = snapshot.ClientEmail;
     }
-
-    public override Type OriginalAggregateType() => typeof(Client);
-
-    public override ClientNameHistoryProjection CreateInitialAggregate(Guid aggregateId) =>
-        new(aggregateId);
 
     protected override Action GetApplyEventAction(AggregateEvent ev)
     {

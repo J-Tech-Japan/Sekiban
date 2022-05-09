@@ -26,7 +26,7 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 
 app.MapControllers();
-var executor = app.Services.GetService<AggregateCommandExecutor>();
+var executor = app.Services.GetService<IAggregateCommandExecutor>();
 executor!.ExecCreateCommandAsync<SnapshotManager, SnapshotManagerDto, CreateSnapshotManager>(new CreateSnapshotManager(SnapshotManager.SharedId))
     .Wait();
 app.Run();

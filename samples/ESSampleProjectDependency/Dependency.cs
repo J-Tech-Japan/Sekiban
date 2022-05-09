@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.AggregateCommands;
 using Sekiban.EventSourcing.AggregateEvents;
+using Sekiban.EventSourcing.Aggregates;
 using Sekiban.EventSourcing.Documents;
 using Sekiban.EventSourcing.PubSubs;
 using Sekiban.EventSourcing.Queries;
@@ -22,10 +23,10 @@ public static class Dependency
         services.AddTransient<CosmosDbFactory>();
 
         // イベントソーシング
-        services.AddMediatR(Assembly.GetExecutingAssembly());
+        services.AddMediatR(Assembly.GetExecutingAssembly(), Sekiban.EventSourcing.Shared.Dependency.GetAssembly());
         services.AddTransient<AggregateEventPublisher>();
 
-        services.AddTransient<AggregateCommandExecutor>();
+        services.AddTransient<IAggregateCommandExecutor, AggregateCommandExecutor>();
         services.AddTransient<SingleAggregateService>();
         services.AddTransient<SnapshotListWriter>();
         services.AddTransient<SnapshotListReader>();
@@ -50,6 +51,10 @@ public static class Dependency
         // 各ドメインコンテキスト
         services.AddSingleton(
             new RegisteredEventTypes(CustomerDomainContext.Shared.Dependency.GetAssembly(), Sekiban.EventSourcing.Shared.Dependency.GetAssembly()));
+
+        services.AddSingleton(
+            new SekibanAggregateTypes(CustomerDomainContext.Shared.Dependency.GetAssembly(), Sekiban.EventSourcing.Shared.Dependency.GetAssembly()));
+
         services.AddTransient(CustomerDomainContext.Shared.Dependency.GetDependencies());
         services.AddTransient(Sekiban.EventSourcing.Shared.Dependency.GetDependencies());
     }

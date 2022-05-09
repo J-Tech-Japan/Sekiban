@@ -7,12 +7,12 @@ namespace CustomerWebApi.Controllers;
 [Route("[controller]/[action]")]
 public class ClientController : Controller
 {
-    private readonly AggregateCommandExecutor _aggregateCommandExecutor;
+    private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
     private readonly SingleAggregateService _singleAggregateService;
     private readonly SnapshotListWriter _snapshotListWriter;
 
     public ClientController(
-        AggregateCommandExecutor aggregateCommandExecutor,
+        IAggregateCommandExecutor aggregateCommandExecutor,
         SnapshotListWriter snapshotListWriter,
         SingleAggregateService aggregateService)
     {
@@ -43,8 +43,8 @@ public class ClientController : Controller
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<ClientNameHistoryProjection>>> ListChangeNamesAsync(
-        QueryListType queryListType = QueryListType.ActiveOnly) => new(
-        await _singleAggregateService.DtoListAsync<ClientNameHistoryProjection>(queryListType));
+        QueryListType queryListType = QueryListType.ActiveOnly) =>
+        new(await _singleAggregateService.DtoListAsync<ClientNameHistoryProjection>(queryListType));
 
     [HttpPost]
     public async Task<IActionResult> CreateAsync([FromBody] CreateClient command)

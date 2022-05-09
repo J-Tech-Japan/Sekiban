@@ -29,7 +29,7 @@ namespace SampleProjectStoryXTest.Stories;
 
 public class CustomerDbStoryBasic : TestBase
 {
-    private readonly AggregateCommandExecutor _aggregateCommandExecutor;
+    private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
     private readonly SingleAggregateService _aggregateService;
     private readonly CosmosDbFactory _cosmosDbFactory;
     private readonly IDocumentPersistentRepository _documentPersistentRepository;
@@ -38,7 +38,7 @@ public class CustomerDbStoryBasic : TestBase
     {
         _testOutputHelper = testOutputHelper;
         _cosmosDbFactory = GetService<CosmosDbFactory>();
-        _aggregateCommandExecutor = GetService<AggregateCommandExecutor>();
+        _aggregateCommandExecutor = GetService<IAggregateCommandExecutor>();
         _aggregateService = GetService<SingleAggregateService>();
         _documentPersistentRepository = GetService<IDocumentPersistentRepository>();
         // create recent activity
@@ -105,6 +105,7 @@ public class CustomerDbStoryBasic : TestBase
         // change name
         var changeNameResult = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientDto, ChangeClientName>(
             new ChangeClientName(clientId, secondName) { ReferenceVersion = createClientResult.AggregateDto!.Version });
+
         // change name projection
         clientNameList = (await _aggregateService.DtoListAsync<ClientNameHistoryProjection>()).ToList();
         Assert.Single(clientNameList);
@@ -112,6 +113,16 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Equal(2, tanakaProjection.ClientNames.Count);
         Assert.Equal(originalName, tanakaProjection.ClientNames.First().Name);
         Assert.Equal(secondName, tanakaProjection.ClientNames[1].Name);
+
+        // test change name multiple time to create projection 
+        var versionCN = changeNameResult!.AggregateDto!.Version;
+        var countChangeName = 180;
+        foreach (var i in Enumerable.Range(0, countChangeName))
+        {
+            var changeNameResult2 = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientDto, ChangeClientName>(
+                new ChangeClientName(clientId, $"newname - {i + 1}") { ReferenceVersion = versionCN });
+            versionCN = changeNameResult2.AggregateDto!.Version;
+        }
 
         // loyalty point should be created with event subscribe
         loyaltyPointList = (await _aggregateService.DtoListAsync<LoyaltyPoint, LoyaltyPointDto>()).ToList();
@@ -124,7 +135,9 @@ public class CustomerDbStoryBasic : TestBase
         var datetimeFirst = DateTime.Now;
         var addPointResult = await _aggregateCommandExecutor.ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointDto, AddLoyaltyPoint>(
             new AddLoyaltyPoint(clientId, datetimeFirst, LoyaltyPointReceiveTypeKeys.FlightDomestic, 1000, "")
-                { ReferenceVersion = loyaltyPoint.Version });
+            {
+                ReferenceVersion = loyaltyPoint.Version
+            });
         Assert.NotNull(addPointResult);
         Assert.NotNull(addPointResult.AggregateDto);
 
@@ -138,11 +151,15 @@ public class CustomerDbStoryBasic : TestBase
             {
                 await _aggregateCommandExecutor.ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointDto, UseLoyaltyPoint>(
                     new UseLoyaltyPoint(clientId, datetimeFirst.AddSeconds(1), LoyaltyPointUsageTypeKeys.FlightUpgrade, 2000, "")
-                        { ReferenceVersion = addPointResult!.AggregateDto!.Version });
+                    {
+                        ReferenceVersion = addPointResult!.AggregateDto!.Version
+                    });
             });
         var usePointResult = await _aggregateCommandExecutor.ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointDto, UseLoyaltyPoint>(
             new UseLoyaltyPoint(clientId, DateTime.Now, LoyaltyPointUsageTypeKeys.FlightUpgrade, 200, "")
-                { ReferenceVersion = addPointResult!.AggregateDto!.Version });
+            {
+                ReferenceVersion = addPointResult!.AggregateDto!.Version
+            });
         Assert.NotNull(usePointResult);
         Assert.NotNull(usePointResult.AggregateDto);
 
@@ -151,7 +168,7 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Equal(800, loyaltyPoint!.CurrentPoint);
         // delete client
         var deleteClientResult = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientDto, DeleteClient>(
-            new DeleteClient(clientId) { ReferenceVersion = changeNameResult!.AggregateDto!.Version });
+            new DeleteClient(clientId) { ReferenceVersion = versionCN });
         Assert.NotNull(deleteClientResult);
         Assert.NotNull(deleteClientResult.AggregateDto);
         // client deleted
@@ -183,7 +200,9 @@ public class CustomerDbStoryBasic : TestBase
             var recentActivityAddedResult
                 = await _aggregateCommandExecutor.ExecChangeCommandAsync<RecentActivity, RecentActivityDto, AddRecentActivity>(
                     new AddRecentActivity(createRecentActivityResult!.AggregateDto!.AggregateId, $"Message - {i + 1}")
-                        { ReferenceVersion = version });
+                    {
+                        ReferenceVersion = version
+                    });
             version = recentActivityAddedResult.AggregateDto!.Version;
         }
         recentActivityList = (await _aggregateService.DtoListAsync<RecentActivity, RecentActivityDto>()).ToList();
@@ -240,7 +259,9 @@ public class CustomerDbStoryBasic : TestBase
                         var recentActivityAddedResult
                             = await _aggregateCommandExecutor.ExecChangeCommandAsync<RecentActivity, RecentActivityDto, AddRecentActivity>(
                                 new AddRecentActivity(createRecentActivityResult!.AggregateDto!.AggregateId, $"Message - {i + 1}")
-                                    { ReferenceVersion = version });
+                                {
+                                    ReferenceVersion = version
+                                });
                         version = recentActivityAddedResult.AggregateDto!.Version;
                     }));
         }
@@ -309,7 +330,9 @@ public class CustomerDbStoryBasic : TestBase
                             = await _aggregateCommandExecutor
                                 .ExecChangeCommandAsync<RecentInMemoryActivity, RecentInMemoryActivityDto, AddRecentInMemoryActivity>(
                                     new AddRecentInMemoryActivity(createRecentActivityResult!.AggregateDto!.AggregateId, $"Message - {i + 1}")
-                                        { ReferenceVersion = version });
+                                    {
+                                        ReferenceVersion = version
+                                    });
                         version = recentActivityAddedResult.AggregateDto!.Version;
                         _testOutputHelper.WriteLine($"{i} - {recentActivityAddedResult.AggregateDto.Version.ToString()}");
                     }));

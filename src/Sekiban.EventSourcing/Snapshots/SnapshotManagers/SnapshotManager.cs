@@ -6,7 +6,7 @@ public class SnapshotManager : TransferableAggregateBase<SnapshotManagerDto>
 {
     private const int SnapshotCount = 40;
     private const int SnapshotTakeOffset = 15;
-    public static Guid SharedId { get; } = new();
+    public static Guid SharedId { get; } = Guid.NewGuid();
     private List<string> Requests
     {
         get;
@@ -40,29 +40,26 @@ public class SnapshotManager : TransferableAggregateBase<SnapshotManagerDto>
     }
     private static string SnapshotKey(string aggregateTypeName, Guid targetAggregateId, int nextSnapshotVersion) =>
         $"{aggregateTypeName}_{targetAggregateId.ToString()}_{nextSnapshotVersion}";
-    protected override Action? GetApplyEventAction(AggregateEvent ev) => ev switch
-    {
-        SnapshotManagerCreated created => () =>
+    protected override Action? GetApplyEventAction(AggregateEvent ev) =>
+        ev switch
         {
-            CreatedAt = created.CreatedAt;
-        },
-        SnapshotManagerRequestAdded requestAdded => () =>
-        {
-            Requests.Add(SnapshotKey(requestAdded.AggregateTypeName, requestAdded.TargetAggregateId, requestAdded.NextSnapshotVersion));
-        },
-        SnapshotManagerSnapshotTaken requestAdded => () =>
-        {
-            Requests.Remove(SnapshotKey(requestAdded.AggregateTypeName, requestAdded.TargetAggregateId, requestAdded.NextSnapshotVersion));
-            RequestTakens.Add(SnapshotKey(requestAdded.AggregateTypeName, requestAdded.TargetAggregateId, requestAdded.NextSnapshotVersion));
-        },
-        _ => null
-    };
-    public override SnapshotManagerDto ToDto() => new(this)
-    {
-        Requests = Requests,
-        RequestTakens = RequestTakens,
-        CreatedAt = CreatedAt
-    };
+            SnapshotManagerCreated created => () =>
+            {
+                CreatedAt = created.CreatedAt;
+            },
+            SnapshotManagerRequestAdded requestAdded => () =>
+            {
+                Requests.Add(SnapshotKey(requestAdded.AggregateTypeName, requestAdded.TargetAggregateId, requestAdded.NextSnapshotVersion));
+            },
+            SnapshotManagerSnapshotTaken requestAdded => () =>
+            {
+                Requests.Remove(SnapshotKey(requestAdded.AggregateTypeName, requestAdded.TargetAggregateId, requestAdded.NextSnapshotVersion));
+                RequestTakens.Add(SnapshotKey(requestAdded.AggregateTypeName, requestAdded.TargetAggregateId, requestAdded.NextSnapshotVersion));
+            },
+            _ => null
+        };
+    public override SnapshotManagerDto ToDto() =>
+        new(this) { Requests = Requests, RequestTakens = RequestTakens, CreatedAt = CreatedAt };
     protected override void CopyPropertiesFromSnapshot(SnapshotManagerDto snapshot)
     {
         Requests.AddRange(snapshot.Requests);

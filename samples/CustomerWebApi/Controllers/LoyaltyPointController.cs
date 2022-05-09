@@ -7,12 +7,12 @@ namespace CustomerWebApi.Controllers;
 [Route("[controller]/[action]")]
 public class LoyaltyPointController : Controller
 {
-    private readonly AggregateCommandExecutor _aggregateCommandExecutor;
+    private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
     private readonly SingleAggregateService _singleAggregateService;
     private readonly SnapshotListWriter _snapshotListWriter;
 
     public LoyaltyPointController(
-        AggregateCommandExecutor aggregateCommandExecutor,
+        IAggregateCommandExecutor aggregateCommandExecutor,
         SnapshotListWriter snapshotListWriter,
         SingleAggregateService aggregateService)
     {
@@ -30,12 +30,12 @@ public class LoyaltyPointController : Controller
         new(await _singleAggregateService.DtoListAsync<LoyaltyPoint, LoyaltyPointDto>(queryListType));
 
     [HttpGet]
-    public async Task<ActionResult<Dictionary<int, string>>> UsageTypesAsync() => new(
-        await Task.FromResult(LoyaltyPointUsageType.LoyaltyPointUsageTypes));
+    public async Task<ActionResult<Dictionary<int, string>>> UsageTypesAsync() =>
+        new(await Task.FromResult(LoyaltyPointUsageType.LoyaltyPointUsageTypes));
 
     [HttpGet]
-    public async Task<ActionResult<Dictionary<int, string>>> ReceiveTypesAsync() => new(
-        await Task.FromResult(LoyaltyPointReceiveType.LoyaltyPointReceiveTypes));
+    public async Task<ActionResult<Dictionary<int, string>>> ReceiveTypesAsync() =>
+        new(await Task.FromResult(LoyaltyPointReceiveType.LoyaltyPointReceiveTypes));
 
     [HttpPatch]
     public async Task<IActionResult> AddPointAsync([FromBody] AddLoyaltyPoint command)

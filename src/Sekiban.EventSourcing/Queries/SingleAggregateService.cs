@@ -70,9 +70,7 @@ public class SingleAggregateService
         {
             aggregateList = new SingleAggregateList<T>
             {
-                List = list,
-                LastEventId = domainEvents.Last().Id,
-                LastSortableUniqueId = domainEvents.Last().SortableUniqueId
+                List = list, LastEventId = domainEvents.Last().Id, LastSortableUniqueId = domainEvents.Last().SortableUniqueId
             };
         } else
         {
@@ -83,6 +81,7 @@ public class SingleAggregateService
         _singleAggregateProjectionQueryStore.SaveLatestAggregateList(aggregateList);
         return aggregateList;
     }
+
     private async Task<IEnumerable<T>> ListAsync<T, Q, P>(QueryListType queryListType) where T : ISingleAggregate, ISingleAggregateProjection
         where Q : ISingleAggregate
         where P : ISingleAggregateProjector<T>, new()
@@ -262,8 +261,8 @@ public class SingleAggregateService
         return aggregate == null ? default : aggregate.ToDto();
     }
 
-    public async Task<T?> GetProjectionAsync<T>(Guid aggregateId) where T : SingleAggregateProjectionBase<T>, new() =>
-        await GetAggregateDtoAsync<T, T, T>(aggregateId);
+    public async Task<T?> GetProjectionAsync<T>(Guid aggregateId, int? toVersion = null) where T : SingleAggregateProjectionBase<T>, new() =>
+        await GetAggregateDtoAsync<T, T, T>(aggregateId, toVersion);
 
     /// <summary>
     ///     スナップショット、メモリキャッシュを使用する通常版
