@@ -42,7 +42,6 @@ public class DocumentRepositorySplitter : IDocumentRepository
         }
         if (partitionKey != null && _aggregateSettings.CanUseHybrid(originalType) && _hybridStoreManager.HasPartition(partitionKey))
         {
-            Console.WriteLine($"{_hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey)} {partitionKey}");
             if ((string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
                     string.IsNullOrWhiteSpace(_hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey))) ||
                 (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
@@ -54,7 +53,6 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
                     sinceSortableUniqueId.Equals(_hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey))))
             {
-                Console.WriteLine("inmemory  ");
                 await _documentTemporaryRepository.GetAllAggregateEventsForAggregateIdAsync(
                     aggregateId,
                     originalType,
@@ -64,7 +62,6 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 return;
             }
         }
-        Console.WriteLine("cosmos  ");
         await _documentPersistentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
             originalType,
@@ -96,7 +93,6 @@ public class DocumentRepositorySplitter : IDocumentRepository
                         }
                     }
                 }
-                Console.WriteLine($"{aggregateEvents.Count} events selected");
                 resultAction(aggregateEvents.OrderBy(m => m.SortableUniqueId));
             });
     }

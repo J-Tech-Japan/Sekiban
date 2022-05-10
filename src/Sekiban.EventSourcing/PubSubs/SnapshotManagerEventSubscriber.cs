@@ -62,8 +62,6 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                             aggregateType.Aggregate,
                             taken.NextSnapshotVersion))
                         {
-                            Console.WriteLine($"creating snapshot - {taken.NextSnapshotVersion}");
-
                             dynamic? awaitable = _singleAggregateService.GetType()
                                 ?.GetMethod(nameof(_singleAggregateService.GetAggregateDtoAsync))
                                 ?.MakeGenericMethod(aggregateType.Aggregate, aggregateType.Dto)
@@ -119,8 +117,6 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                                 projection.Aggregate,
                                 taken.NextSnapshotVersion))
                             {
-                                Console.WriteLine($"creating snapshot - {taken.NextSnapshotVersion}");
-
                                 dynamic? awaitable = _singleAggregateService.GetType()
                                     ?.GetMethod(nameof(_singleAggregateService.GetProjectionAsync))
                                     ?.MakeGenericMethod(projection.Aggregate)

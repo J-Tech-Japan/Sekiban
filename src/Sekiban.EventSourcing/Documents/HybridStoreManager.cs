@@ -8,7 +8,8 @@ public class HybridStoreManager
         get;
     } = new();
     public bool Enabled { get; set; }
-    public HybridStoreManager(bool elanbled) => Enabled = elanbled;
+    public HybridStoreManager(bool elanbled) =>
+        Enabled = elanbled;
     public bool HasPartition(string partitionKey) =>
         Enabled && HybridPartitionKeys.Keys.Contains(partitionKey);
 
@@ -18,7 +19,6 @@ public class HybridStoreManager
         {
             return false;
         }
-        Console.WriteLine($"HybridPartitionKeys[{partitionKey}] = {sortableUniqueId}");
         HybridPartitionKeys[partitionKey] = sortableUniqueId;
         return true;
     }

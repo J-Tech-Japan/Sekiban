@@ -208,10 +208,6 @@ public class SingleAggregateService
         {
             aggregate.ApplySnapshot(dto);
         }
-        if (toVersion.HasValue)
-        {
-            Console.WriteLine($"toVersion {toVersion.Value} aggregate.Version");
-        }
         if (toVersion.HasValue && aggregate.Version >= toVersion.Value)
         {
             return await GetAggregateFromInitialAsync<T, P>(aggregateId, toVersion.Value);
@@ -223,7 +219,6 @@ public class SingleAggregateService
             dto?.LastSortableUniqueId,
             events =>
             {
-                Console.WriteLine($"received {events.Count()} {events.FirstOrDefault()?.Id} -{events.LastOrDefault()?.Id}");
                 foreach (var e in events)
                 {
                     if (!string.IsNullOrWhiteSpace(dto?.LastSortableUniqueId) &&

@@ -17,6 +17,7 @@ using Sekiban.EventSourcing.Aggregates;
 using Sekiban.EventSourcing.Documents;
 using Sekiban.EventSourcing.Queries;
 using Sekiban.EventSourcing.Shared.Exceptions;
+using Sekiban.EventSourcing.Snapshots;
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
 using System;
@@ -300,17 +301,21 @@ public class CustomerDbStoryBasic : TestBase
             createRecentActivityResult.AggregateDto.AggregateId,
             typeof(RecentActivity));
 
-        foreach (var snapshot in snapshots)
+        await CheckSnapshots<RecentActivity, RecentActivityDto>(snapshots, createRecentActivityResult.AggregateDto.AggregateId);
+    }
+
+    private async Task CheckSnapshots<T, Q>(List<SnapshotDocument> snapshots, Guid aggregateId)
+        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase
+    {
+        foreach (var dto in snapshots.Select(snapshot => snapshot.ToDto<RecentActivityDto>()))
         {
-            var dto = snapshot.ToDto<RecentActivityDto>();
-            var fromInitial = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<RecentActivity, RecentActivityDto>(
-                createRecentActivityResult.AggregateDto.AggregateId,
-                dto.Version);
+            if (dto == null) { throw new JJInvalidArgumentException(); }
+            var fromInitial = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<T, Q>(aggregateId, dto.Version);
+            if (fromInitial == null) { throw new JJInvalidArgumentException(); }
             Assert.Equal(fromInitial.Version, dto.Version);
             Assert.Equal(fromInitial.LastEventId, dto.LastEventId);
         }
     }
-
     [Fact(DisplayName = "インメモリストーリーテスト 。並列でたくさん動かしたらどうなるか。 Versionの重複が発生しないことを確認")]
     public async Task AsynchronousInMemoryExecutionTestAsync()
     {
@@ -412,22 +417,10 @@ public class CustomerDbStoryBasic : TestBase
         recentActivityList = (await _aggregateService.DtoListAsync<RecentActivity, RecentActivityDto>()).ToList();
         Assert.Single(recentActivityList);
 
-        Console.WriteLine("---checking---");
-
         var snapshots = await _documentPersistentRepository.GetSnapshotsForAggregateAsync(aggregateId, typeof(RecentActivity));
+        await CheckSnapshots<RecentActivity, RecentActivityDto>(snapshots, aggregateId);
 
-        foreach (var snapshot in snapshots.OrderBy(m => m.SavedVersion))
-        {
-            var dto = snapshot.ToDto<RecentActivityDto>();
-            var fromInitial
-                = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<RecentActivity, RecentActivityDto>(
-                    aggregateId,
-                    dto.Version);
-            Assert.Equal(fromInitial.Version, dto.Version);
-            Assert.Equal(fromInitial.LastEventId, dto.LastEventId);
-        }
-
-        // this works
+        // check aggregate result
         var aggregateRecentActivity
             = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<RecentActivity, RecentActivityDto>(aggregateId);
         aggregateRecentActivity2 = await _aggregateService.GetAggregateDtoAsync<RecentActivity, RecentActivityDto>(aggregateId);
