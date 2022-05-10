@@ -8,16 +8,11 @@ public class BranchController : Controller
 {
     private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
     private readonly SingleAggregateService _aggregateService;
-    private readonly SnapshotListWriter _snapshotListWriter;
 
-    public BranchController(
-        IAggregateCommandExecutor aggregateCommandExecutor,
-        SingleAggregateService aggregateService,
-        SnapshotListWriter snapshotListWriter)
+    public BranchController(IAggregateCommandExecutor aggregateCommandExecutor, SingleAggregateService aggregateService)
     {
         _aggregateCommandExecutor = aggregateCommandExecutor;
         _aggregateService = aggregateService;
-        _snapshotListWriter = snapshotListWriter;
     }
 
     [HttpPost]
@@ -30,12 +25,4 @@ public class BranchController : Controller
     [HttpGet]
     public async Task<ActionResult<IEnumerable<BranchDto>>> ListAsync() =>
         new(await _aggregateService.DtoListAsync<Branch, BranchDto>());
-
-    // [HttpPost]
-    // public async Task<IActionResult> TakeSnapshotAsync()
-    // {
-    //     await _snapshotListWriter.TakeSnapshot<Branch, BranchDto>(
-    //         new ClassPartitionKeyFactory<Branch, BranchDto>());
-    //     return Ok();
-    // }
 }

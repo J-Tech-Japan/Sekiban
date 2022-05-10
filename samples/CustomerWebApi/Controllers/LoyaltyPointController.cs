@@ -9,15 +9,10 @@ public class LoyaltyPointController : Controller
 {
     private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
     private readonly SingleAggregateService _singleAggregateService;
-    private readonly SnapshotListWriter _snapshotListWriter;
 
-    public LoyaltyPointController(
-        IAggregateCommandExecutor aggregateCommandExecutor,
-        SnapshotListWriter snapshotListWriter,
-        SingleAggregateService aggregateService)
+    public LoyaltyPointController(IAggregateCommandExecutor aggregateCommandExecutor, SingleAggregateService aggregateService)
     {
         _aggregateCommandExecutor = aggregateCommandExecutor;
-        _snapshotListWriter = snapshotListWriter;
         _singleAggregateService = aggregateService;
     }
 

@@ -39,48 +39,6 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 return null;
             });
     }
-    public async Task<SnapshotListDocument?> GetLatestSnapshotListForTypeAsync<T>(
-        string? partitionKey,
-        QueryListType queryListType = QueryListType.ActiveAndDeleted) where T : IAggregate
-    {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(T));
-
-        var aggregateName = typeof(T).Name;
-        return await _cosmosDbFactory.CosmosActionAsync(
-            DocumentType.SnapshotList,
-            aggregateContainerGroup,
-            async container =>
-            {
-                var options = new QueryRequestOptions();
-                if (partitionKey != null)
-                {
-                    options.PartitionKey = new PartitionKey(partitionKey);
-                }
-                var query = container.GetItemLinqQueryable<SnapshotListDocument>()
-                    .Where(b => b.DocumentType == DocumentType.SnapshotList && b.DocumentTypeName == aggregateName)
-                    .OrderByDescending(m => m.SortableUniqueId);
-                var feedIterator = container.GetItemQueryIterator<SnapshotListDocument>(query.ToQueryDefinition(), null, options);
-                while (feedIterator.HasMoreResults)
-                {
-                    foreach (var obj in await feedIterator.ReadNextAsync())
-                    {
-                        return obj;
-                    }
-                }
-                return null;
-            });
-    }
-    public async Task<SnapshotListChunkDocument?> GetSnapshotListChunkByIdAsync(Guid id, string partitionKey)
-    {
-        return await _cosmosDbFactory.CosmosActionAsync(
-            DocumentType.SnapshotListChunk,
-            AggregateContainerGroup.Default,
-            async container =>
-            {
-                var response = await container.ReadItemAsync<SnapshotListChunkDocument>(id.ToString(), new PartitionKey(partitionKey));
-                return response.Resource;
-            });
-    }
     public async Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type originalType, string partitionKey)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);

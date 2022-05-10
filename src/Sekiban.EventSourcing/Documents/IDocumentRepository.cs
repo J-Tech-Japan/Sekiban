@@ -18,12 +18,6 @@ public interface IDocumentRepository
 
     Task<bool> ExistsSnapshotForAggregateAsync(Guid aggregateId, Type originalType, int version);
 
-    Task<SnapshotListDocument?> GetLatestSnapshotListForTypeAsync<T>(
-        string? partitionKey,
-        QueryListType queryListType = QueryListType.ActiveAndDeleted) where T : IAggregate;
-
-    Task<SnapshotListChunkDocument?> GetSnapshotListChunkByIdAsync(Guid id, string partitionKey);
-
     Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type originalType, string partitionKey);
 }
 public interface IDocumentPersistentRepository : IDocumentRepository

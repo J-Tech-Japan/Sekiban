@@ -110,19 +110,6 @@ public class DocumentRepositorySplitter : IDocumentRepository
         return await _documentTemporaryRepository.GetLatestSnapshotForAggregateAsync(aggregateId, originalType) ??
             await _documentPersistentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, originalType);
     }
-    public Task<SnapshotListDocument?> GetLatestSnapshotListForTypeAsync<T>(
-        string? partitionKey,
-        QueryListType queryListType = QueryListType.ActiveAndDeleted) where T : IAggregate
-    {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(T));
-        if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
-        {
-            return _documentTemporaryRepository.GetLatestSnapshotListForTypeAsync<T>(partitionKey, queryListType);
-        }
-        return _documentPersistentRepository.GetLatestSnapshotListForTypeAsync<T>(partitionKey, queryListType);
-    }
-    public Task<SnapshotListChunkDocument?> GetSnapshotListChunkByIdAsync(Guid id, string partitionKey) =>
-        _documentPersistentRepository.GetSnapshotListChunkByIdAsync(id, partitionKey);
     public Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type originalType, string partitionKey)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);

@@ -49,12 +49,6 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         }
         return null;
     }
-    public Task<SnapshotListDocument?> GetLatestSnapshotListForTypeAsync<T>(
-        string? partitionKey,
-        QueryListType queryListType = QueryListType.ActiveAndDeleted) where T : IAggregate =>
-        throw new NotImplementedException();
-    public Task<SnapshotListChunkDocument?> GetSnapshotListChunkByIdAsync(Guid id, string partitionKey) =>
-        throw new NotImplementedException();
     public Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type originalType, string partitionKey) =>
         throw new NotImplementedException();
     public async Task<bool> AggregateEventsForAggregateIdHasSortableUniqueIdAsync(

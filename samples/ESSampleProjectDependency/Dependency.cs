@@ -10,7 +10,6 @@ using Sekiban.EventSourcing.Documents;
 using Sekiban.EventSourcing.PubSubs;
 using Sekiban.EventSourcing.Queries;
 using Sekiban.EventSourcing.Settings;
-using Sekiban.EventSourcing.Snapshots;
 using System.Reflection;
 namespace ESSampleProjectDependency;
 
@@ -29,8 +28,6 @@ public static class Dependency
 
         services.AddTransient<IAggregateCommandExecutor, AggregateCommandExecutor>();
         services.AddTransient<SingleAggregateService>();
-        services.AddTransient<SnapshotListWriter>();
-        services.AddTransient<SnapshotListReader>();
 
         services.AddTransient<ISingleAggregateProjectionQueryStore, MemoryCacheSingleAggregateProjectionQueryStore>();
         services.AddTransient<IDocumentPersistentWriter, CosmosDocumentWriter>();
