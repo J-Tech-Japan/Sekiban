@@ -1,6 +1,7 @@
 using CustomerDomainContext.Aggregates.Clients;
 using CustomerDomainContext.Aggregates.Clients.Commands;
 using CustomerDomainContext.Aggregates.Clients.Projections;
+using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace CustomerWebApi.Controllers;
 
 [ApiController]

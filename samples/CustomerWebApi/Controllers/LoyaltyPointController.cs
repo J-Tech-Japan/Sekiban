@@ -1,6 +1,7 @@
 using CustomerDomainContext.Aggregates.LoyaltyPoints;
 using CustomerDomainContext.Aggregates.LoyaltyPoints.Commands;
 using CustomerDomainContext.Aggregates.LoyaltyPoints.ValueObjects;
+using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace CustomerWebApi.Controllers;
 
 [ApiController]

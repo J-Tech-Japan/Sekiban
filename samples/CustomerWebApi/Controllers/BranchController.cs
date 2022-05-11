@@ -1,5 +1,6 @@
 using CustomerDomainContext.Aggregates.Branches;
 using CustomerDomainContext.Aggregates.Branches.Commands;
+using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace CustomerWebApi.Controllers;
 
 [ApiController]

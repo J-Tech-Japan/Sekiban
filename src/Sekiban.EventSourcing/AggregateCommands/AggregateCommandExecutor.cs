@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace Sekiban.EventSourcing.AggregateCommands;
 
 public class AggregateCommandExecutor : IAggregateCommandExecutor

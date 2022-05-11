@@ -1,4 +1,4 @@
-namespace Sekiban.EventSourcing.Queries;
+namespace Sekiban.EventSourcing.Queries.SingleAggregates;
 
 public class DefaultSingleAggregateProjector<T> : ISingleAggregateProjector<T> where T : AggregateBase
 {

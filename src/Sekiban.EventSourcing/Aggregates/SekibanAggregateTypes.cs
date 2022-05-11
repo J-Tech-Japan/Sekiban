@@ -1,3 +1,4 @@
+using Sekiban.EventSourcing.Queries.SingleAggregates;
 using System.Reflection;
 namespace Sekiban.EventSourcing.Aggregates;
 

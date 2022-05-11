@@ -1,18 +1,18 @@
-using Newtonsoft.Json.Linq;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace Sekiban.EventSourcing.Snapshots;
 
-public record SnapshotDocument : Document
+public record MultipleProjectionSnapshotDocument : Document
 {
     // jobjとしてはいるので変換が必要
-    public dynamic? Snapshot { get; init; }
+    public string? SnapshotJson { get; init; }
+    public Guid? BlobFileId { get; init; }
     public Guid AggregateId { get; init; }
     public Guid LastEventId { get; init; }
     public string LastSortableUniqueId { get; set; } = string.Empty;
     public int SavedVersion { get; set; }
-    public SnapshotDocument() { }
+    public MultipleProjectionSnapshotDocument() { }
 
-    public SnapshotDocument(
+    public MultipleProjectionSnapshotDocument(
         IPartitionKeyFactory partitionKeyFactory,
         string? aggregateTypeName,
         ISingleAggregate dtoToSnapshot,
@@ -21,19 +21,10 @@ public record SnapshotDocument : Document
         string lastSortableUniqueId,
         int savedVersion) : base(DocumentType.AggregateSnapshot, partitionKeyFactory, aggregateTypeName)
     {
-        Snapshot = dtoToSnapshot;
+        // Snapshot = dtoToSnapshot;
         AggregateId = aggregateId;
         LastEventId = lastEventId;
         LastSortableUniqueId = lastSortableUniqueId;
         SavedVersion = savedVersion;
-    }
-
-    public T? ToDto<T>() where T : ISingleAggregate
-    {
-        if (Snapshot is not JObject jobj)
-        {
-            return default;
-        }
-        return jobj.ToObject<T>();
     }
 }

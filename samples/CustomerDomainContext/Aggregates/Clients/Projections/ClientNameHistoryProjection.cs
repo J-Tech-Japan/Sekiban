@@ -1,4 +1,5 @@
 using CustomerDomainContext.Aggregates.Clients.Events;
+using Sekiban.EventSourcing.Queries.SingleAggregates;
 // ReSharper disable UnusedVariable
 // ReSharper disable CollectionNeverQueried.Global
 // ReSharper disable NotAccessedPositionalProperty.Global

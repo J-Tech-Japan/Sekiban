@@ -12,22 +12,21 @@ public class Branch : TransferableAggregateBase<BranchDto>
         AddAndApplyEvent(new BranchCreated(AggregateId, name));
     }
 
-    public override BranchDto ToDto() => new(this)
-    {
-        Name = Name
-    };
+    public override BranchDto ToDto() =>
+        new(this) { Name = Name };
 
     protected override void CopyPropertiesFromSnapshot(BranchDto snapshot)
     {
         Name = snapshot.Name;
     }
 
-    protected override Action? GetApplyEventAction(AggregateEvent ev) => ev switch
-    {
-        BranchCreated branchCreated => () =>
+    protected override Action? GetApplyEventAction(AggregateEvent ev) =>
+        ev switch
         {
-            Name = branchCreated.Name;
-        },
-        _ => null
-    };
+            BranchCreated branchCreated => () =>
+            {
+                Name = branchCreated.Name;
+            },
+            _ => null
+        };
 }

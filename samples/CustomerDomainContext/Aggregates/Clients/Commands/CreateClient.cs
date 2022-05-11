@@ -1,4 +1,5 @@
 ﻿using CustomerDomainContext.Aggregates.Branches;
+using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace CustomerDomainContext.Aggregates.Clients.Commands;
 
 public record CreateClient(Guid BranchId, string ClientName, string ClientEmail) : ICreateAggregateCommand<Client>;

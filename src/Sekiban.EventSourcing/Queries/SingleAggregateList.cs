@@ -1,3 +1,4 @@
+using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace Sekiban.EventSourcing.Queries;
 
 public class SingleAggregateList<T> where T : ISingleAggregate

@@ -15,38 +15,37 @@ public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointDto>
         AddAndApplyEvent(new LoyaltyPointCreated(clientId, initialPoint));
     }
 
-    public override LoyaltyPointDto ToDto() => new(this)
-    {
-        CurrentPoint = CurrentPoint
-    };
+    public override LoyaltyPointDto ToDto() =>
+        new(this) { CurrentPoint = CurrentPoint };
 
     protected override void CopyPropertiesFromSnapshot(LoyaltyPointDto snapshot)
     {
         CurrentPoint = snapshot.CurrentPoint;
     }
 
-    protected override Action? GetApplyEventAction(AggregateEvent ev) => ev switch
-    {
-        LoyaltyPointCreated created => () =>
+    protected override Action? GetApplyEventAction(AggregateEvent ev) =>
+        ev switch
         {
-            CurrentPoint = created.InitialPoint;
-        },
-        LoyaltyPointAdded added => () =>
-        {
-            CurrentPoint += added.PointAmount;
-            LastOccuredTime = added.HappenedDate;
-        },
-        LoyaltyPointUsed used => () =>
-        {
-            CurrentPoint -= used.PointAmount;
-            LastOccuredTime = used.HappenedDate;
-        },
-        LoyaltyPointDeleted => () =>
-        {
-            IsDeleted = true;
-        },
-        _ => null
-    };
+            LoyaltyPointCreated created => () =>
+            {
+                CurrentPoint = created.InitialPoint;
+            },
+            LoyaltyPointAdded added => () =>
+            {
+                CurrentPoint += added.PointAmount;
+                LastOccuredTime = added.HappenedDate;
+            },
+            LoyaltyPointUsed used => () =>
+            {
+                CurrentPoint -= used.PointAmount;
+                LastOccuredTime = used.HappenedDate;
+            },
+            LoyaltyPointDeleted => () =>
+            {
+                IsDeleted = true;
+            },
+            _ => null
+        };
 
     public void AddLoyaltyPoint(DateTime happenedDate, LoyaltyPointReceiveType reason, int pointAmount, string note)
     {

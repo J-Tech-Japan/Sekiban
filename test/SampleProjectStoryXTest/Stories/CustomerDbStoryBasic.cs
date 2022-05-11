@@ -16,6 +16,7 @@ using Sekiban.EventSourcing.AggregateCommands;
 using Sekiban.EventSourcing.Aggregates;
 using Sekiban.EventSourcing.Documents;
 using Sekiban.EventSourcing.Queries;
+using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Shared.Exceptions;
 using Sekiban.EventSourcing.Snapshots;
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers;

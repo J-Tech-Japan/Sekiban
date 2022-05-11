@@ -1,4 +1,4 @@
-namespace Sekiban.EventSourcing.Queries;
+namespace Sekiban.EventSourcing.Queries.SingleAggregates;
 
 public abstract class SingleAggregateProjectionBase<T> : ISingleAggregateProjection, ISingleAggregateProjectionDtoConvertible<T>, ISingleAggregate,
     ISingleAggregateProjector<T> where T : ISingleAggregate, ISingleAggregateProjection

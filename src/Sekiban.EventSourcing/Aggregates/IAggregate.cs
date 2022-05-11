@@ -1,4 +1,5 @@
-﻿namespace Sekiban.EventSourcing.Aggregates;
+﻿using Sekiban.EventSourcing.Queries.SingleAggregates;
+namespace Sekiban.EventSourcing.Aggregates;
 
 public interface IAggregate : ISingleAggregate, ISingleAggregateProjection
 {

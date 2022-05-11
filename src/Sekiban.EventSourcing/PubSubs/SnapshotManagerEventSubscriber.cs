@@ -1,4 +1,5 @@
 using MediatR;
+using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Settings;
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;

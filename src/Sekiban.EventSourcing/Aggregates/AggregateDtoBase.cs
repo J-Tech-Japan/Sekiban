@@ -1,3 +1,4 @@
+using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace Sekiban.EventSourcing.Aggregates;
 
 public abstract record AggregateDtoBase : ISingleAggregate

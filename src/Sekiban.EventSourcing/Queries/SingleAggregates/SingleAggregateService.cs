@@ -1,34 +1,18 @@
-namespace Sekiban.EventSourcing.Queries;
+namespace Sekiban.EventSourcing.Queries.SingleAggregates;
 
 public class SingleAggregateService
 {
     private readonly IDocumentRepository _documentRepository;
-    private readonly ISingleAggregateProjectionQueryStore _singleAggregateProjectionQueryStore;
 
-    public SingleAggregateService(ISingleAggregateProjectionQueryStore singleAggregateProjectionQueryStore, IDocumentRepository documentRepository)
-    {
-        _singleAggregateProjectionQueryStore = singleAggregateProjectionQueryStore;
+    public SingleAggregateService(IDocumentRepository documentRepository) =>
         _documentRepository = documentRepository;
-    }
 
     private async Task<SingleAggregateList<T>> GetAggregateListObjectAsync<T, Q, P>() where T : ISingleAggregate, ISingleAggregateProjection
         where Q : ISingleAggregate
         where P : ISingleAggregateProjector<T>, new()
     {
         var projector = new P();
-        var aggregateList = _singleAggregateProjectionQueryStore.FindAggregateList<T>();
-        if (aggregateList != null)
-        {
-            var allAfterEvents = new List<AggregateEvent>();
-            await _documentRepository.GetAllAggregateEventsForAggregateEventTypeAsync(
-                projector.OriginalAggregateType(),
-                aggregateList.LastSortableUniqueId,
-                events =>
-                {
-                    aggregateList = HandleListEvent(projector, events, aggregateList);
-                }); // 効率悪いけどこれで取れる
-            return aggregateList ?? new SingleAggregateList<T>();
-        }
+        SingleAggregateList<T>? aggregateList = null;
         await _documentRepository.GetAllAggregateEventsForAggregateEventTypeAsync(
             projector.OriginalAggregateType(),
             aggregateList?.LastSortableUniqueId,
@@ -78,7 +62,6 @@ public class SingleAggregateService
             aggregateList.LastEventId = domainEvents.Last().Id;
             aggregateList.LastSortableUniqueId = domainEvents.Last().SortableUniqueId;
         }
-        _singleAggregateProjectionQueryStore.SaveLatestAggregateList(aggregateList);
         return aggregateList;
     }
 
