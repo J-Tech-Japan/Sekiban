@@ -33,6 +33,8 @@ public abstract class AggregateBase : IAggregate
         LastSortableUniqueId = ev.SortableUniqueId;
         Version++;
     }
+    public bool CanApplyEvent(AggregateEvent ev) =>
+        GetApplyEventAction(ev) != null;
     public void ResetEventsAndSnapshots()
     {
         _events.Clear();

@@ -20,20 +20,10 @@ public class InMemoryDocumentStore
             partitionCollection.Add(document);
             _eventContainer.Partitions[partition] = partitionCollection;
         }
-    }
-    public void ResetEventsForPartition(string partitionKey, string beforeSortableUniqueId)
-    {
-        var partitionContainer = _eventContainer.Partitions[partitionKey];
-        var toAdd = new List<AggregateEvent>();
-
-        while (partitionContainer.TryTake(out var checkingItem))
+        if (!_eventContainer.All.Any(m => m.PartitionKey == document.PartitionKey && m.Id == document.Id))
         {
-            if (!string.IsNullOrWhiteSpace(beforeSortableUniqueId) && checkingItem.SortableUniqueId.CompareTo(beforeSortableUniqueId) > 0)
-            {
-                toAdd.Add(checkingItem);
-            }
+            _eventContainer.All.Add(document);
         }
-        foreach (var checkingItem in toAdd) { partitionContainer.Add(checkingItem); }
     }
     public AggregateEvent[] GetAllEvents() =>
         _eventContainer.All.ToArray();

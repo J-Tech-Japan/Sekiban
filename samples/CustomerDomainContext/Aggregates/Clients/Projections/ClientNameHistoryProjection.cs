@@ -34,7 +34,7 @@ public class ClientNameHistoryProjection : SingleAggregateProjectionBase<ClientN
         ClientEmail = snapshot.ClientEmail;
     }
 
-    protected override Action GetApplyEventAction(AggregateEvent ev)
+    protected override Action? GetApplyEventAction(AggregateEvent ev)
     {
         return ev switch
         {
@@ -50,7 +50,7 @@ public class ClientNameHistoryProjection : SingleAggregateProjectionBase<ClientN
 
             ClientDeleted => () => IsDeleted = true,
 
-            _ => throw new JJEventNotImplementedException()
+            _ => null
         };
     }
 

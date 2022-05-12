@@ -35,8 +35,4 @@ public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersist
         _inMemoryDocumentStore.SaveEvent(aggregateEvent, aggregateEvent.PartitionKey);
         await _eventPublisher.PublishAsync(aggregateEvent);
     }
-    public void ResetEventForPartition(string partitionKey, string beforeSortableUniqueId)
-    {
-        _inMemoryDocumentStore.ResetEventsForPartition(partitionKey, beforeSortableUniqueId);
-    }
 }

@@ -13,6 +13,57 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
         _registeredEventTypes = registeredEventTypes;
     }
 
+    public async Task GetAllAggregateEventsAsync(
+        Type multipleProjectionType,
+        string? sinceSortableUniqueId,
+        Action<IEnumerable<AggregateEvent>> resultAction)
+    {
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multipleProjectionType);
+
+        await _cosmosDbFactory.CosmosActionAsync(
+            DocumentType.AggregateEvent,
+            aggregateContainerGroup,
+            async container =>
+            {
+                var options = new QueryRequestOptions();
+                var query = container.GetItemLinqQueryable<AggregateEvent>()
+                    .Where(b => b.DocumentType == DocumentType.AggregateEvent)
+                    .OrderByDescending(m => m.SortableUniqueId);
+                var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
+                while (feedIterator.HasMoreResults)
+                {
+                    var events = new List<AggregateEvent>();
+                    var response = await feedIterator.ReadNextAsync();
+                    foreach (var item in response)
+                    {
+                        // pick out one album
+                        if (item is not JObject jobj) { continue; }
+                        var typeName = jobj.GetValue(nameof(Document.DocumentTypeName))?.ToString();
+                        if (typeName == null)
+                        {
+                            continue;
+                        }
+
+                        var toAdd = _registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
+                            .Select(m => (AggregateEvent?)jobj.ToObject(m))
+                            .FirstOrDefault(m => m != null);
+                        if (toAdd == null)
+                        {
+                            throw new JJUnregisterdEventFoundException();
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.SortableUniqueId == sinceSortableUniqueId)
+                        {
+                            resultAction(events.OrderBy(m => m.SortableUniqueId));
+                            return;
+                        }
+
+                        events.Add(toAdd);
+                    }
+                    resultAction(events.OrderBy(m => m.SortableUniqueId));
+                }
+            });
+    }
     public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type originalType)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);

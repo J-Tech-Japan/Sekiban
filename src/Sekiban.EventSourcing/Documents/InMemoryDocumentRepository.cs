@@ -38,6 +38,28 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
                 list.GetRange(index, list.Count - index).Where(m => m.SortableUniqueId != sinceSortableUniqueId).OrderBy(m => m.SortableUniqueId));
         }
     }
+    public async Task GetAllAggregateEventsAsync(
+        Type multipleProjectionType,
+        string? sinceSortableUniqueId,
+        Action<IEnumerable<AggregateEvent>> resultAction)
+    {
+        await Task.CompletedTask;
+        var list = _inMemoryDocumentStore.GetAllEvents().ToList();
+        if (sinceSortableUniqueId != null)
+        {
+            var index = list.FindIndex(m => m.SortableUniqueId == sinceSortableUniqueId);
+            if (index == list.Count - 1)
+            {
+                resultAction(new List<AggregateEvent>());
+            } else
+            {
+                resultAction(list.GetRange(index + 1, list.Count - index - 1).OrderBy(m => m.SortableUniqueId));
+            }
+        } else
+        {
+            resultAction(list.OrderBy(m => m.SortableUniqueId));
+        }
+    }
     public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type originalType)
     {
         await Task.CompletedTask;

@@ -8,6 +8,7 @@ using Sekiban.EventSourcing.AggregateEvents;
 using Sekiban.EventSourcing.Aggregates;
 using Sekiban.EventSourcing.Documents;
 using Sekiban.EventSourcing.PubSubs;
+using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Settings;
 using System.Reflection;
@@ -28,6 +29,7 @@ public static class Dependency
 
         services.AddTransient<IAggregateCommandExecutor, AggregateCommandExecutor>();
         services.AddTransient<SingleAggregateService>();
+        services.AddTransient<MultipleAggregateProjectionService>();
 
         services.AddTransient<IDocumentPersistentWriter, CosmosDocumentWriter>();
         services.AddTransient<IDocumentPersistentRepository, CosmosDocumentRepository>();

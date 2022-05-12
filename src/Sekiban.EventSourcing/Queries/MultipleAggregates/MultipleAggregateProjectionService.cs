@@ -1,3 +1,4 @@
+using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace Sekiban.EventSourcing.Queries.MultipleAggregates;
 
 public class MultipleAggregateProjectionService
@@ -22,4 +23,9 @@ public class MultipleAggregateProjectionService
             });
         return projector.ToDto();
     }
+
+    public Task<SingleAggregateProjectionDto<Q>> GetAggregateList<T, Q>() where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase =>
+        GetMultipleProjectionAsync<SingleAggregateListProjector<T, Q, DefaultSingleAggregateProjector<T>>, SingleAggregateProjectionDto<Q>>();
+    public Task<SingleAggregateProjectionDto<T>> GetSingleAggregateProjectionList<T>() where T : SingleAggregateProjectionBase<T>, new() =>
+        GetMultipleProjectionAsync<SingleAggregateListProjector<T, T, T>, SingleAggregateProjectionDto<T>>();
 }

@@ -16,6 +16,7 @@ using Sekiban.EventSourcing.AggregateCommands;
 using Sekiban.EventSourcing.Aggregates;
 using Sekiban.EventSourcing.Documents;
 using Sekiban.EventSourcing.Queries;
+using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Shared.Exceptions;
 using Sekiban.EventSourcing.Snapshots;
@@ -35,6 +36,7 @@ public class CustomerDbStoryBasic : TestBase
     private readonly SingleAggregateService _aggregateService;
     private readonly CosmosDbFactory _cosmosDbFactory;
     private readonly IDocumentPersistentRepository _documentPersistentRepository;
+    private readonly MultipleAggregateProjectionService _multipleAggregateProjectionService;
     private readonly ITestOutputHelper _testOutputHelper;
     public CustomerDbStoryBasic(TestFixture testFixture, ITestOutputHelper testOutputHelper) : base(testFixture)
     {
@@ -43,6 +45,7 @@ public class CustomerDbStoryBasic : TestBase
         _aggregateCommandExecutor = GetService<IAggregateCommandExecutor>();
         _aggregateService = GetService<SingleAggregateService>();
         _documentPersistentRepository = GetService<IDocumentPersistentRepository>();
+        _multipleAggregateProjectionService = GetService<MultipleAggregateProjectionService>();
         // create recent activity
         _aggregateCommandExecutor
             .ExecCreateCommandAsync<SnapshotManager, SnapshotManagerDto, CreateSnapshotManager>(new CreateSnapshotManager(SnapshotManager.SharedId))
@@ -68,6 +71,12 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Single(branchList);
         var branchFromList = branchList.First(m => m.AggregateId == branchId);
         Assert.NotNull(branchFromList);
+
+        var branchResult2 = await _aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchDto, CreateBranch>(new CreateBranch("USA"));
+        branchList = (await _aggregateService.DtoListAsync<Branch, BranchDto>()).ToList();
+        Assert.Equal(2, branchList.Count);
+        var branchListFromMultiple = await _multipleAggregateProjectionService.GetAggregateList<Branch, BranchDto>();
+        Assert.Equal(2, branchListFromMultiple.List.Count);
 
         // loyalty point should be []  
         var loyaltyPointList = (await _aggregateService.DtoListAsync<LoyaltyPoint, LoyaltyPointDto>()).ToList();
@@ -95,6 +104,11 @@ public class CustomerDbStoryBasic : TestBase
         var tanakaProjection = clientNameList.First(m => m.AggregateId == clientId);
         Assert.Single(tanakaProjection.ClientNames);
         Assert.Equal(originalName, tanakaProjection.ClientNames.First().Name);
+
+        var clientNameListFromMultiple = await _multipleAggregateProjectionService.GetSingleAggregateProjectionList<ClientNameHistoryProjection>();
+        Assert.Single(clientNameListFromMultiple.List);
+        Assert.Equal(clientNameList.First().AggregateId, clientNameListFromMultiple.List.First().AggregateId);
+
         var secondName = "田中 太郎";
 
         // should throw version error 

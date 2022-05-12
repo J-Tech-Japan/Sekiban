@@ -96,6 +96,19 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 resultAction(aggregateEvents.OrderBy(m => m.SortableUniqueId));
             });
     }
+    public async Task GetAllAggregateEventsAsync(
+        Type multipleProjectionType,
+        string? sinceSortableUniqueId,
+        Action<IEnumerable<AggregateEvent>> resultAction)
+    {
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multipleProjectionType);
+        if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+        {
+            await _documentTemporaryRepository.GetAllAggregateEventsAsync(multipleProjectionType, sinceSortableUniqueId, resultAction);
+            return;
+        }
+        await _documentPersistentRepository.GetAllAggregateEventsAsync(multipleProjectionType, sinceSortableUniqueId, resultAction);
+    }
     public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type originalType)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
