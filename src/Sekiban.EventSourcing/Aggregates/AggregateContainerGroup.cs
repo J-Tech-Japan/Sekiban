@@ -1,3 +1,4 @@
+using Sekiban.EventSourcing.Queries.MultipleAggregates;
 namespace Sekiban.EventSourcing.Aggregates;
 
 [AttributeUsage(AttributeTargets.Class)]
@@ -13,6 +14,10 @@ public class AggregateContainerGroupAttribute : Attribute
             var attributes = (AggregateContainerGroupAttribute[])type.GetCustomAttributes(typeof(AggregateContainerGroupAttribute), true);
             var max = attributes.Max(m => m.Group);
             return max;
+        }
+        if (type.Name.Equals(typeof(SingleAggregateListProjector<,,>).Name))
+        {
+            return FindAggregateContainerGroup(type.GenericTypeArguments.First());
         }
         return AggregateContainerGroup.Default;
     }

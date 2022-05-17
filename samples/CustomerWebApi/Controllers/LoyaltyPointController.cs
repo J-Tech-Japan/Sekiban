@@ -1,6 +1,7 @@
 using CustomerDomainContext.Aggregates.LoyaltyPoints;
 using CustomerDomainContext.Aggregates.LoyaltyPoints.Commands;
 using CustomerDomainContext.Aggregates.LoyaltyPoints.ValueObjects;
+using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace CustomerWebApi.Controllers;
 
@@ -9,12 +10,16 @@ namespace CustomerWebApi.Controllers;
 public class LoyaltyPointController : Controller
 {
     private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
+    private readonly MultipleAggregateProjectionService _multipleAggregateProjectionService;
     private readonly SingleAggregateService _singleAggregateService;
-
-    public LoyaltyPointController(IAggregateCommandExecutor aggregateCommandExecutor, SingleAggregateService aggregateService)
+    public LoyaltyPointController(
+        IAggregateCommandExecutor aggregateCommandExecutor,
+        SingleAggregateService aggregateService,
+        MultipleAggregateProjectionService multipleAggregateProjectionService)
     {
         _aggregateCommandExecutor = aggregateCommandExecutor;
         _singleAggregateService = aggregateService;
+        _multipleAggregateProjectionService = multipleAggregateProjectionService;
     }
 
     [HttpGet]
@@ -23,7 +28,7 @@ public class LoyaltyPointController : Controller
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<LoyaltyPointDto>>> ListAsync(QueryListType queryListType = QueryListType.ActiveOnly) =>
-        new(await _singleAggregateService.DtoListAsync<LoyaltyPoint, LoyaltyPointDto>(queryListType));
+        new(await _multipleAggregateProjectionService.GetAggregateList<LoyaltyPoint, LoyaltyPointDto>(queryListType));
 
     [HttpGet]
     public async Task<ActionResult<Dictionary<int, string>>> UsageTypesAsync() =>
