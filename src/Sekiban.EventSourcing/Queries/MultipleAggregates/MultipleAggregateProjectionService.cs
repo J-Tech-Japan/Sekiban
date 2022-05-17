@@ -24,6 +24,9 @@ public class MultipleAggregateProjectionService
         return projector.ToDto();
     }
 
+    public Task<P> GetProjectionAsync<P>() where P : MultipleAggregateProjectionBase<P>, IMultipleAggregateProjectionDto, new() =>
+        GetMultipleProjectionAsync<P, P>();
+
     public Task<SingleAggregateProjectionDto<Q>> GetAggregateList<T, Q>() where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase =>
         GetMultipleProjectionAsync<SingleAggregateListProjector<T, Q, DefaultSingleAggregateProjector<T>>, SingleAggregateProjectionDto<Q>>();
     public Task<SingleAggregateProjectionDto<T>> GetSingleAggregateProjectionList<T>() where T : SingleAggregateProjectionBase<T>, new() =>

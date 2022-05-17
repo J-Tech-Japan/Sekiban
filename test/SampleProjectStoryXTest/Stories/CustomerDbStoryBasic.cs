@@ -11,6 +11,7 @@ using CustomerDomainContext.Aggregates.RecentActivities;
 using CustomerDomainContext.Aggregates.RecentActivities.Commands;
 using CustomerDomainContext.Aggregates.RecentInMemoryActivities;
 using CustomerDomainContext.Aggregates.RecentInMemoryActivities.Commands;
+using CustomerDomainContext.Projections;
 using CustomerDomainContext.Shared.Exceptions;
 using Sekiban.EventSourcing.AggregateCommands;
 using Sekiban.EventSourcing.Aggregates;
@@ -132,7 +133,7 @@ public class CustomerDbStoryBasic : TestBase
 
         // test change name multiple time to create projection 
         var versionCN = changeNameResult!.AggregateDto!.Version;
-        var countChangeName = 180;
+        var countChangeName = 60;
         foreach (var i in Enumerable.Range(0, countChangeName))
         {
             var changeNameResult2 = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientDto, ChangeClientName>(
@@ -186,6 +187,12 @@ public class CustomerDbStoryBasic : TestBase
         loyaltyPoint = await _aggregateService.GetAggregateDtoAsync<LoyaltyPoint, LoyaltyPointDto>(clientId);
         Assert.NotNull(loyaltyPoint);
         Assert.Equal(800, loyaltyPoint!.CurrentPoint);
+
+        var p = await _multipleAggregateProjectionService.GetProjectionAsync<ClientLoyaltyPointMultipleProjection>();
+        Assert.NotNull(p);
+        Assert.Equal(2, p.Branches.Count);
+        Assert.Single(p.Records);
+
         // delete client
         var deleteClientResult = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientDto, DeleteClient>(
             new DeleteClient(clientId) { ReferenceVersion = versionCN });
@@ -214,7 +221,7 @@ public class CustomerDbStoryBasic : TestBase
         var recentActivityList = (await _aggregateService.DtoListAsync<RecentActivity, RecentActivityDto>()).ToList();
         Assert.Single(recentActivityList);
         var version = createRecentActivityResult.AggregateDto!.Version;
-        var count = 180;
+        var count = 60;
         foreach (var i in Enumerable.Range(0, count))
         {
             var recentActivityAddedResult
@@ -229,6 +236,10 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Single(recentActivityList);
         Assert.Equal(count + 1, version);
 
+        p = await _multipleAggregateProjectionService.GetProjectionAsync<ClientLoyaltyPointMultipleProjection>();
+        Assert.NotNull(p);
+        Assert.Equal(2, p.Branches.Count);
+        Assert.Empty(p.Records);
         var snapshotManager
             = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<SnapshotManager, SnapshotManagerDto>(SnapshotManager.SharedId);
         _testOutputHelper.WriteLine("-requests-");

@@ -1,5 +1,4 @@
-﻿using Sekiban.EventSourcing.Queries.SingleAggregates;
-using System.Reflection;
+﻿using System.Reflection;
 namespace Sekiban.EventSourcing.Aggregates;
 
 public abstract class AggregateBase : IAggregate
@@ -47,13 +46,6 @@ public abstract class AggregateBase : IAggregate
             ApplyEvent(ev);
         }
     }
-
-    // TODO: 下記2行が必要か確認する
-    public ISingleAggregateProjection CreateInitialAggregate(Guid _) =>
-        this;
-    public ISingleAggregateProjection CreateInitialAggregate<T>(Guid _) =>
-        this;
-
     public static UAggregate Create<UAggregate>(Guid aggregateId) where UAggregate : AggregateBase
     {
         if (typeof(UAggregate).GetConstructor(new[] { typeof(Guid) }) is ConstructorInfo c)
