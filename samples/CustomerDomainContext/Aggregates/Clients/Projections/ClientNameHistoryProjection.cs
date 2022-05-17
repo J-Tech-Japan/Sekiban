@@ -1,4 +1,5 @@
 using CustomerDomainContext.Aggregates.Clients.Events;
+using Sekiban.EventSourcing.Queries.SingleAggregates;
 // ReSharper disable UnusedVariable
 // ReSharper disable CollectionNeverQueried.Global
 // ReSharper disable NotAccessedPositionalProperty.Global
@@ -33,7 +34,7 @@ public class ClientNameHistoryProjection : SingleAggregateProjectionBase<ClientN
         ClientEmail = snapshot.ClientEmail;
     }
 
-    protected override Action GetApplyEventAction(AggregateEvent ev)
+    protected override Action? GetApplyEventAction(AggregateEvent ev)
     {
         return ev switch
         {
@@ -49,7 +50,7 @@ public class ClientNameHistoryProjection : SingleAggregateProjectionBase<ClientN
 
             ClientDeleted => () => IsDeleted = true,
 
-            _ => throw new JJEventNotImplementedException()
+            _ => null
         };
     }
 

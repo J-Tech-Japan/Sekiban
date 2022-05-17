@@ -17,26 +17,25 @@ public class RecentActivity : TransferableAggregateBase<RecentActivityDto>
         base.AddAndApplyEvent(ev);
     }
 
-    protected override Action? GetApplyEventAction(AggregateEvent ev) => ev switch
-    {
-        RecentActivityCreated created => () =>
+    protected override Action? GetApplyEventAction(AggregateEvent ev) =>
+        ev switch
         {
-            LatestActivities.Add(created.Activity);
-        },
-        RecentActivityAdded added => () =>
-        {
-            LatestActivities.Insert(0, added.Record);
-            if (LatestActivities.Count > 5)
+            RecentActivityCreated created => () =>
             {
-                LatestActivities.RemoveRange(5, LatestActivities.Count - 5);
-            }
-        },
-        _ => null
-    };
-    public override RecentActivityDto ToDto() => new(this)
-    {
-        LatestActivities = LatestActivities
-    };
+                LatestActivities.Add(created.Activity);
+            },
+            RecentActivityAdded added => () =>
+            {
+                LatestActivities.Insert(0, added.Record);
+                if (LatestActivities.Count > 5)
+                {
+                    LatestActivities.RemoveRange(5, LatestActivities.Count - 5);
+                }
+            },
+            _ => null
+        };
+    public override RecentActivityDto ToDto() =>
+        new(this) { LatestActivities = LatestActivities };
     protected override void CopyPropertiesFromSnapshot(RecentActivityDto snapshot)
     {
         LatestActivities = snapshot.LatestActivities;

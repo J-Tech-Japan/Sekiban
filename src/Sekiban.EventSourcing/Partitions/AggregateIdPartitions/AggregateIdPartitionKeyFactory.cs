@@ -18,9 +18,6 @@ public class AggregateIdPartitionKeyFactory : IPartitionKeyFactory
             DocumentType.AggregateCommand => $"c_{AggregateId}",
             DocumentType.AggregateEvent => $"{AggregateType.Name}_{AggregateId}",
             DocumentType.AggregateSnapshot => $"s_{AggregateType.Name}_{AggregateId}",
-            DocumentType.IntegratedEvent => $"i_{AggregateId}",
-            DocumentType.SnapshotList => $"l_{AggregateId}",
-            DocumentType.SnapshotListChunk => $"l_{AggregateId}",
             _ => throw new JJInvalidDocumentTypeException()
         };
     }

@@ -43,5 +43,6 @@ public record Document
         _partitionKey = partitionKeyFactory.GetPartitionKey(DocumentType);
     }
 
-    public override string ToString() => JsonConvert.SerializeObject(this);
+    public override string ToString() =>
+        JsonConvert.SerializeObject(this);
 }

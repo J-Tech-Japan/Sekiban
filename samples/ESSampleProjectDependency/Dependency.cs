@@ -8,9 +8,9 @@ using Sekiban.EventSourcing.AggregateEvents;
 using Sekiban.EventSourcing.Aggregates;
 using Sekiban.EventSourcing.Documents;
 using Sekiban.EventSourcing.PubSubs;
-using Sekiban.EventSourcing.Queries;
+using Sekiban.EventSourcing.Queries.MultipleAggregates;
+using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Settings;
-using Sekiban.EventSourcing.Snapshots;
 using System.Reflection;
 namespace ESSampleProjectDependency;
 
@@ -29,10 +29,8 @@ public static class Dependency
 
         services.AddTransient<IAggregateCommandExecutor, AggregateCommandExecutor>();
         services.AddTransient<SingleAggregateService>();
-        services.AddTransient<SnapshotListWriter>();
-        services.AddTransient<SnapshotListReader>();
+        services.AddTransient<MultipleAggregateProjectionService>();
 
-        services.AddTransient<ISingleAggregateProjectionQueryStore, MemoryCacheSingleAggregateProjectionQueryStore>();
         services.AddTransient<IDocumentPersistentWriter, CosmosDocumentWriter>();
         services.AddTransient<IDocumentPersistentRepository, CosmosDocumentRepository>();
         services.AddSingleton(new InMemoryDocumentStore());

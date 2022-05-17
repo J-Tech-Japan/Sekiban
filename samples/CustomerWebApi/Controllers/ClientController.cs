@@ -1,6 +1,8 @@
 using CustomerDomainContext.Aggregates.Clients;
 using CustomerDomainContext.Aggregates.Clients.Commands;
 using CustomerDomainContext.Aggregates.Clients.Projections;
+using Sekiban.EventSourcing.Queries.MultipleAggregates;
+using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace CustomerWebApi.Controllers;
 
 [ApiController]
@@ -8,17 +10,16 @@ namespace CustomerWebApi.Controllers;
 public class ClientController : Controller
 {
     private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
+    private readonly MultipleAggregateProjectionService _multipleAggregateProjectionService;
     private readonly SingleAggregateService _singleAggregateService;
-    private readonly SnapshotListWriter _snapshotListWriter;
-
     public ClientController(
         IAggregateCommandExecutor aggregateCommandExecutor,
-        SnapshotListWriter snapshotListWriter,
-        SingleAggregateService aggregateService)
+        SingleAggregateService aggregateService,
+        MultipleAggregateProjectionService multipleAggregateProjectionService)
     {
         _aggregateCommandExecutor = aggregateCommandExecutor;
-        _snapshotListWriter = snapshotListWriter;
         _singleAggregateService = aggregateService;
+        _multipleAggregateProjectionService = multipleAggregateProjectionService;
     }
 
     [HttpGet]
@@ -39,12 +40,12 @@ public class ClientController : Controller
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<ClientDto>>> ListAsync(QueryListType queryListType = QueryListType.ActiveOnly) =>
-        new(await _singleAggregateService.DtoListAsync<Client, ClientDto>(queryListType));
+        new(await _multipleAggregateProjectionService.GetAggregateList<Client, ClientDto>(queryListType));
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<ClientNameHistoryProjection>>> ListChangeNamesAsync(
         QueryListType queryListType = QueryListType.ActiveOnly) =>
-        new(await _singleAggregateService.DtoListAsync<ClientNameHistoryProjection>(queryListType));
+        new(await _multipleAggregateProjectionService.GetSingleAggregateProjectionList<ClientNameHistoryProjection>(queryListType));
 
     [HttpPost]
     public async Task<IActionResult> CreateAsync([FromBody] CreateClient command)

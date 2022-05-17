@@ -14,12 +14,8 @@ public class Client : TransferableAggregateBase<ClientDto>
         AddAndApplyEvent(new ClientCreated(AggregateId, branchId, clientName, clientEmail));
     }
 
-    public override ClientDto ToDto() => new(this)
-    {
-        BranchId = BranchId,
-        ClientName = ClientName,
-        ClientEmail = ClientEmail
-    };
+    public override ClientDto ToDto() =>
+        new(this) { BranchId = BranchId, ClientName = ClientName, ClientEmail = ClientEmail };
 
     protected override void CopyPropertiesFromSnapshot(ClientDto snapshot)
     {
@@ -28,21 +24,22 @@ public class Client : TransferableAggregateBase<ClientDto>
         ClientEmail = snapshot.ClientEmail;
     }
 
-    protected override Action? GetApplyEventAction(AggregateEvent ev) => ev switch
-    {
-        ClientCreated clientChanged => () =>
+    protected override Action? GetApplyEventAction(AggregateEvent ev) =>
+        ev switch
         {
-            BranchId = clientChanged.BranchId;
-            ClientName = clientChanged.ClientName;
-            ClientEmail = clientChanged.ClientEmail;
-        },
+            ClientCreated clientChanged => () =>
+            {
+                BranchId = clientChanged.BranchId;
+                ClientName = clientChanged.ClientName;
+                ClientEmail = clientChanged.ClientEmail;
+            },
 
-        ClientNameChanged clientNameChanged => () => ClientName = clientNameChanged.ClientName,
+            ClientNameChanged clientNameChanged => () => ClientName = clientNameChanged.ClientName,
 
-        ClientDeleted => () => IsDeleted = true,
+            ClientDeleted => () => IsDeleted = true,
 
-        _ => null
-    };
+            _ => null
+        };
 
     public void ChangeClientName(NameString clientName)
     {
@@ -51,5 +48,6 @@ public class Client : TransferableAggregateBase<ClientDto>
         AddAndApplyEvent(ev);
     }
 
-    public void Delete() => AddAndApplyEvent(new ClientDeleted(AggregateId));
+    public void Delete() =>
+        AddAndApplyEvent(new ClientDeleted(AggregateId));
 }

@@ -4,8 +4,7 @@ namespace Sekiban.EventSourcing.Aggregates;
 public abstract class AggregateBase : IAggregate
 {
     protected readonly List<AggregateEvent> _events = new();
-    protected static IPartitionKeyFactory DefaultPartitionKeyFactory =>
-        new CanNotUsePartitionKeyFactory();
+    protected static IPartitionKeyFactory DefaultPartitionKeyFactory => new CanNotUsePartitionKeyFactory();
 
     public AggregateBase(Guid aggregateId) =>
         AggregateId = aggregateId;
@@ -21,18 +20,20 @@ public abstract class AggregateBase : IAggregate
 
     public void ApplyEvent(AggregateEvent ev)
     {
+        var action = GetApplyEventAction(ev);
+        if (action == null) { return; }
         if (ev.IsAggregateInitialEvent == false && Version == 0)
         {
             throw new JJInvalidEventException();
         }
         if (ev.Id == LastEventId) { return; }
-        var action = GetApplyEventAction(ev);
-        if (action == null) { return; }
         action();
         LastEventId = ev.Id;
         LastSortableUniqueId = ev.SortableUniqueId;
         Version++;
     }
+    public bool CanApplyEvent(AggregateEvent ev) =>
+        GetApplyEventAction(ev) != null;
     public void ResetEventsAndSnapshots()
     {
         _events.Clear();
@@ -45,11 +46,6 @@ public abstract class AggregateBase : IAggregate
             ApplyEvent(ev);
         }
     }
-
-    // TODO: 下記2行が必要か確認する
-    public ISingleAggregateProjection CreateInitialAggregate(Guid _) => this;
-    public ISingleAggregateProjection CreateInitialAggregate<T>(Guid _) => this;
-
     public static UAggregate Create<UAggregate>(Guid aggregateId) where UAggregate : AggregateBase
     {
         if (typeof(UAggregate).GetConstructor(new[] { typeof(Guid) }) is ConstructorInfo c)

@@ -1,4 +1,4 @@
-namespace Sekiban.EventSourcing.Queries;
+namespace Sekiban.EventSourcing.Queries.SingleAggregates;
 
 public abstract class SingleAggregateProjectionBase<T> : ISingleAggregateProjection, ISingleAggregateProjectionDtoConvertible<T>, ISingleAggregate,
     ISingleAggregateProjector<T> where T : ISingleAggregate, ISingleAggregateProjection
@@ -26,6 +26,8 @@ public abstract class SingleAggregateProjectionBase<T> : ISingleAggregateProject
         LastSortableUniqueId = ev.SortableUniqueId;
         Version++;
     }
+    public bool CanApplyEvent(AggregateEvent ev) =>
+        GetApplyEventAction(ev) != null;
     public abstract T ToDto();
     public void ApplySnapshot(T snapshot)
     {

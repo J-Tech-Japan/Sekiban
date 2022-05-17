@@ -1,3 +1,4 @@
+using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace Sekiban.EventSourcing.Aggregates;
 
 public abstract class TransferableAggregateBase<TDto> : AggregateBase, ISingleAggregateProjectionDtoConvertible<TDto> where TDto : AggregateDtoBase

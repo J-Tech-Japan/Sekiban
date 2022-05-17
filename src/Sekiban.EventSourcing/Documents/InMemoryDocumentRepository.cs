@@ -38,6 +38,28 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
                 list.GetRange(index, list.Count - index).Where(m => m.SortableUniqueId != sinceSortableUniqueId).OrderBy(m => m.SortableUniqueId));
         }
     }
+    public async Task GetAllAggregateEventsAsync(
+        Type multipleProjectionType,
+        string? sinceSortableUniqueId,
+        Action<IEnumerable<AggregateEvent>> resultAction)
+    {
+        await Task.CompletedTask;
+        var list = _inMemoryDocumentStore.GetAllEvents().ToList();
+        if (sinceSortableUniqueId != null)
+        {
+            var index = list.FindIndex(m => m.SortableUniqueId == sinceSortableUniqueId);
+            if (index == list.Count - 1)
+            {
+                resultAction(new List<AggregateEvent>());
+            } else
+            {
+                resultAction(list.GetRange(index + 1, list.Count - index - 1).OrderBy(m => m.SortableUniqueId));
+            }
+        } else
+        {
+            resultAction(list.OrderBy(m => m.SortableUniqueId));
+        }
+    }
     public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type originalType)
     {
         await Task.CompletedTask;
@@ -49,12 +71,6 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         }
         return null;
     }
-    public Task<SnapshotListDocument?> GetLatestSnapshotListForTypeAsync<T>(
-        string? partitionKey,
-        QueryListType queryListType = QueryListType.ActiveAndDeleted) where T : IAggregate =>
-        throw new NotImplementedException();
-    public Task<SnapshotListChunkDocument?> GetSnapshotListChunkByIdAsync(Guid id, string partitionKey) =>
-        throw new NotImplementedException();
     public Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type originalType, string partitionKey) =>
         throw new NotImplementedException();
     public async Task<bool> AggregateEventsForAggregateIdHasSortableUniqueIdAsync(

@@ -34,7 +34,8 @@ public record AggregateEvent : Document, IAggregateEvent, ICallHistories
 
     public List<CallHistory> CallHistories { get; init; } = new();
 
-    public void SetVersion(int version) => _version = version;
+    public void SetVersion(int version) =>
+        _version = version;
 
     public List<CallHistory> GetCallHistoriesIncludesItself()
     {

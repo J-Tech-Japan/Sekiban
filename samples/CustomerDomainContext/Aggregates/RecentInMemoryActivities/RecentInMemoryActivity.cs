@@ -17,26 +17,25 @@ public class RecentInMemoryActivity : TransferableAggregateBase<RecentInMemoryAc
         base.AddAndApplyEvent(ev);
     }
 
-    protected override Action? GetApplyEventAction(AggregateEvent ev) => ev switch
-    {
-        RecentInMemoryActivityCreated created => () =>
+    protected override Action? GetApplyEventAction(AggregateEvent ev) =>
+        ev switch
         {
-            LatestActivities.Add(created.Activity);
-        },
-        RecentInMemoryActivityAdded added => () =>
-        {
-            LatestActivities.Insert(0, added.Record);
-            if (LatestActivities.Count > 5)
+            RecentInMemoryActivityCreated created => () =>
             {
-                LatestActivities.RemoveRange(5, LatestActivities.Count - 5);
-            }
-        },
-        _ => null
-    };
-    public override RecentInMemoryActivityDto ToDto() => new(this)
-    {
-        LatestActivities = LatestActivities
-    };
+                LatestActivities.Add(created.Activity);
+            },
+            RecentInMemoryActivityAdded added => () =>
+            {
+                LatestActivities.Insert(0, added.Record);
+                if (LatestActivities.Count > 5)
+                {
+                    LatestActivities.RemoveRange(5, LatestActivities.Count - 5);
+                }
+            },
+            _ => null
+        };
+    public override RecentInMemoryActivityDto ToDto() =>
+        new(this) { LatestActivities = LatestActivities };
     protected override void CopyPropertiesFromSnapshot(RecentInMemoryActivityDto snapshot)
     {
         LatestActivities = snapshot.LatestActivities;

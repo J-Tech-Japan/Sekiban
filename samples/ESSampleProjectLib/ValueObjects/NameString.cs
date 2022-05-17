@@ -14,6 +14,8 @@ public record NameString : IValueObject<string>
     }
     public string Value { get; }
 
-    public static implicit operator string(NameString vo) => vo.Value;
-    public static implicit operator NameString(string v) => new(v);
+    public static implicit operator string(NameString vo) =>
+        vo.Value;
+    public static implicit operator NameString(string v) =>
+        new(v);
 }
