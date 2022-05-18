@@ -40,6 +40,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
     }
     public async Task GetAllAggregateEventsAsync(
         Type multipleProjectionType,
+        IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
         Action<IEnumerable<AggregateEvent>> resultAction)
     {
@@ -53,11 +54,15 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
                 resultAction(new List<AggregateEvent>());
             } else
             {
-                resultAction(list.GetRange(index + 1, list.Count - index - 1).OrderBy(m => m.SortableUniqueId));
+                resultAction(
+                    list.GetRange(index + 1, list.Count - index - 1)
+                        .Where(m => targetAggregateNames.Count == 0 || targetAggregateNames.Contains(m.AggregateType))
+                        .OrderBy(m => m.SortableUniqueId));
             }
         } else
         {
-            resultAction(list.OrderBy(m => m.SortableUniqueId));
+            resultAction(
+                list.Where(m => targetAggregateNames.Count == 0 || targetAggregateNames.Contains(m.AggregateType)).OrderBy(m => m.SortableUniqueId));
         }
     }
     public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type originalType)

@@ -14,7 +14,11 @@ public interface IDocumentRepository
         string? sinceSortableUniqueId,
         Action<IEnumerable<AggregateEvent>> resultAction);
 
-    Task GetAllAggregateEventsAsync(Type multipleProjectionType, string? sinceSortableUniqueId, Action<IEnumerable<AggregateEvent>> resultAction);
+    Task GetAllAggregateEventsAsync(
+        Type multipleProjectionType,
+        IList<string> targetAggregateNames,
+        string? sinceSortableUniqueId,
+        Action<IEnumerable<AggregateEvent>> resultAction);
 
     Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type originalType);
 
