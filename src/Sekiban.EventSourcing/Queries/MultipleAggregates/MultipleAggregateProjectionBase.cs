@@ -26,6 +26,8 @@ public abstract class MultipleAggregateProjectionBase<TDto> : IMultipleAggregate
         AppliedSnapshotVersion = snapshot.Version;
         CopyPropertiesFromSnapshot(snapshot);
     }
+    public virtual IList<string> TargetAggregateNames() =>
+        new List<string>();
     protected abstract Action? GetApplyEventAction(AggregateEvent ev);
     protected abstract void CopyPropertiesFromSnapshot(TDto snapshot);
 }

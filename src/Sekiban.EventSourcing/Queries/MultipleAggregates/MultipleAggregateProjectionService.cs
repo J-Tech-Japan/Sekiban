@@ -13,6 +13,7 @@ public class MultipleAggregateProjectionService
         var projector = new P();
         await _documentRepository.GetAllAggregateEventsAsync(
             typeof(P),
+            projector.TargetAggregateNames(),
             null,
             events =>
             {

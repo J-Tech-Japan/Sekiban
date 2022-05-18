@@ -1,5 +1,8 @@
+using CustomerDomainContext.Aggregates.Branches;
 using CustomerDomainContext.Aggregates.Branches.Events;
+using CustomerDomainContext.Aggregates.Clients;
 using CustomerDomainContext.Aggregates.Clients.Events;
+using CustomerDomainContext.Aggregates.LoyaltyPoints;
 using CustomerDomainContext.Aggregates.LoyaltyPoints.Events;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 namespace CustomerDomainContext.Projections;
@@ -57,6 +60,8 @@ public class ClientLoyaltyPointMultipleProjection : MultipleAggregateProjectionB
             },
             _ => null
         };
+    public override IList<string> TargetAggregateNames() =>
+        new List<string> { nameof(Branch), nameof(Client), nameof(LoyaltyPoint) };
     protected override void CopyPropertiesFromSnapshot(ClientLoyaltyPointMultipleProjection snapshot)
     {
         Branches = snapshot.Branches;

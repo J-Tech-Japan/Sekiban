@@ -15,6 +15,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
 
     public async Task GetAllAggregateEventsAsync(
         Type multipleProjectionType,
+        IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
         Action<IEnumerable<AggregateEvent>> resultAction)
     {
@@ -26,9 +27,17 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             async container =>
             {
                 var options = new QueryRequestOptions();
-                var query = container.GetItemLinqQueryable<AggregateEvent>()
-                    .Where(b => b.DocumentType == DocumentType.AggregateEvent)
-                    .OrderByDescending(m => m.SortableUniqueId);
+                var query = targetAggregateNames.Count switch
+                {
+                    0 => container.GetItemLinqQueryable<AggregateEvent>()
+                        .Where(b => b.DocumentType == DocumentType.AggregateEvent)
+                        .OrderByDescending(m => m.SortableUniqueId),
+                    _ => container.GetItemLinqQueryable<AggregateEvent>()
+                        .Where(
+                            b => b.DocumentType == DocumentType.AggregateEvent &&
+                                (targetAggregateNames.Count == 0 || targetAggregateNames.Contains(b.AggregateType)))
+                        .OrderByDescending(m => m.SortableUniqueId)
+                };
                 var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
                 while (feedIterator.HasMoreResults)
                 {

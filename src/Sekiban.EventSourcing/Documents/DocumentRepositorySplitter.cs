@@ -98,16 +98,25 @@ public class DocumentRepositorySplitter : IDocumentRepository
     }
     public async Task GetAllAggregateEventsAsync(
         Type multipleProjectionType,
+        IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
         Action<IEnumerable<AggregateEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multipleProjectionType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
         {
-            await _documentTemporaryRepository.GetAllAggregateEventsAsync(multipleProjectionType, sinceSortableUniqueId, resultAction);
+            await _documentTemporaryRepository.GetAllAggregateEventsAsync(
+                multipleProjectionType,
+                targetAggregateNames,
+                sinceSortableUniqueId,
+                resultAction);
             return;
         }
-        await _documentPersistentRepository.GetAllAggregateEventsAsync(multipleProjectionType, sinceSortableUniqueId, resultAction);
+        await _documentPersistentRepository.GetAllAggregateEventsAsync(
+            multipleProjectionType,
+            targetAggregateNames,
+            sinceSortableUniqueId,
+            resultAction);
     }
     public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type originalType)
     {

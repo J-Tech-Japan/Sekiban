@@ -1,15 +1,9 @@
 ﻿using CosmosInfrastructure;
-using CosmosInfrastructure.DomainCommon.EventSourcings;
 using MediatR;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
-using Sekiban.EventSourcing.AggregateCommands;
+using Sekiban.EventSourcing;
 using Sekiban.EventSourcing.AggregateEvents;
 using Sekiban.EventSourcing.Aggregates;
-using Sekiban.EventSourcing.Documents;
-using Sekiban.EventSourcing.PubSubs;
-using Sekiban.EventSourcing.Queries.MultipleAggregates;
-using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Settings;
 using System.Reflection;
 namespace ESSampleProjectDependency;
@@ -18,50 +12,17 @@ public static class Dependency
 {
     public static void Register(IServiceCollection services)
     {
-        services.AddMemoryCache();
 
-        // データストア
-        services.AddTransient<CosmosDbFactory>();
-
-        // イベントソーシング
+        // MediatR
         services.AddMediatR(Assembly.GetExecutingAssembly(), Sekiban.EventSourcing.Shared.Dependency.GetAssembly());
-        services.AddTransient<AggregateEventPublisher>();
 
-        services.AddTransient<IAggregateCommandExecutor, AggregateCommandExecutor>();
-        services.AddTransient<SingleAggregateService>();
-        services.AddTransient<MultipleAggregateProjectionService>();
+        // Sekibanイベントソーシング
+        services.AddSekibanCore();
+        services.AddSekibanCosmosDB();
+        services.AddSekibanHTTPUser();
 
-        services.AddTransient<IDocumentPersistentWriter, CosmosDocumentWriter>();
-        services.AddTransient<IDocumentPersistentRepository, CosmosDocumentRepository>();
-        services.AddSingleton(new InMemoryDocumentStore());
-        services.AddTransient<IDocumentTemporaryWriter, InMemoryDocumentWriter>();
-        services.AddTransient<IDocumentTemporaryRepository, InMemoryDocumentRepository>();
-        services.AddTransient<IDocumentWriter, DocumentWriterSplitter>();
-        services.AddSingleton<IDocumentRepository, DocumentRepositorySplitter>();
-        services.AddSingleton(new HybridStoreManager(true));
-
-        // ユーザー情報
-        services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
-        services.AddTransient<IUserInformationFactory, HttpContextUserInformationFactory>();
-
-        // 設定はConfigurationから指定することもできる、設定オブジェクトをnewで生成することも可能
-        services.AddTransient<IAggregateSettings, ConfigurationAggregateSettings>();
-        // services.AddSingleton<IAggregateSettings>(
-        //     new AggregateSettings
-        //     {
-        //         Helper = new AggregateSettingHelper(
-        //             true,
-        //             true,
-        //             80,
-        //             15,
-        //             new List<SingleAggregateSetting>
-        //             {
-        //                 new(nameof(Client), true, true),
-        //                 new(nameof(ClientNameHistoryProjection), true, false, 111),
-        //                 new(nameof(RecentActivity), true, true, 82, 10)
-        //             })
-        //     });
-
+        services.AddSekibanSettingsFromAppSettings();
+        
         // 各ドメインコンテキスト
         services.AddSingleton(
             new RegisteredEventTypes(CustomerDomainContext.Shared.Dependency.GetAssembly(), Sekiban.EventSourcing.Shared.Dependency.GetAssembly()));

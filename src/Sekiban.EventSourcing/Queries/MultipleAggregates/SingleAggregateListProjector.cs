@@ -47,11 +47,10 @@ public class SingleAggregateListProjector<T, Q, P> : IMultipleAggregateProjector
     {
         throw new NotImplementedException();
     }
+    public IList<string> TargetAggregateNames() =>
+        new List<string> { _projector.OriginalAggregateType().Name };
     public Guid LastEventId { get; private set; } = Guid.Empty;
     public string LastSortableUniqueId { get; private set; } = string.Empty;
-    public int AppliedSnapshotVersion
-    {
-        get;
-    } = 0;
+    public int AppliedSnapshotVersion { get; } = 0;
     public int Version { get; private set; }
 }
