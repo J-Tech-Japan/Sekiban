@@ -63,6 +63,7 @@ public class MultipleDbStoryTest : TestBase
             async () => await multipleAggregateProjectionService.GetAggregateList<Branch, BranchDto>());
         Assert.Single(list);
 
+        // 何もつけない場合も Default のDbから取得
         list = await multipleAggregateProjectionService.GetAggregateList<Branch, BranchDto>();
         Assert.Single(list);
 
@@ -86,6 +87,10 @@ public class MultipleDbStoryTest : TestBase
         list = await _sekibanContext.SekibanActionAsync(
             DefaultDb,
             async () => await multipleAggregateProjectionService.GetAggregateList<Branch, BranchDto>());
+        Assert.Single(list);
+
+        // 何もつけない場合も Default のDbから取得
+        list = await multipleAggregateProjectionService.GetAggregateList<Branch, BranchDto>();
         Assert.Single(list);
 
         // Secondary で Listを取得すると3件取得
