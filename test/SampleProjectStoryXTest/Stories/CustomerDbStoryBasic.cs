@@ -19,7 +19,6 @@ using Sekiban.EventSourcing.Documents;
 using Sekiban.EventSourcing.Queries;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
-using Sekiban.EventSourcing.Settings;
 using Sekiban.EventSourcing.Shared.Exceptions;
 using Sekiban.EventSourcing.Snapshots;
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
@@ -39,13 +38,11 @@ public class CustomerDbStoryBasic : TestBase
     private readonly CosmosDbFactory _cosmosDbFactory;
     private readonly IDocumentPersistentRepository _documentPersistentRepository;
     private readonly MultipleAggregateProjectionService _multipleAggregateProjectionService;
-    private readonly ISekibanContext _sekibanContext;
     private readonly ITestOutputHelper _testOutputHelper;
 
     public CustomerDbStoryBasic(TestFixture testFixture, ITestOutputHelper testOutputHelper) : base(testFixture)
     {
         _testOutputHelper = testOutputHelper;
-        _sekibanContext = GetService<ISekibanContext>();
         _cosmosDbFactory = GetService<CosmosDbFactory>();
         _aggregateCommandExecutor = GetService<IAggregateCommandExecutor>();
         _aggregateService = GetService<SingleAggregateService>();
