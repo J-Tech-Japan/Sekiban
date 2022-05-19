@@ -1,6 +1,7 @@
 using Microsoft.Azure.Cosmos.Linq;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json.Linq;
 using Sekiban.EventSourcing.Settings;
 namespace CosmosInfrastructure;
@@ -8,15 +9,28 @@ namespace CosmosInfrastructure;
 public class CosmosDbFactory
 {
     private const string SekibanSection = "Sekiban";
+    private readonly IConfiguration _configuration;
     private readonly IMemoryCache _memoryCache;
-    private readonly IConfigurationSection? _section;
     private readonly string _sekibanContextIdentifier;
-    public CosmosDbFactory(IConfiguration configuration, IMemoryCache memoryCache, ISekibanContext sekibanContext)
+    private readonly IServiceProvider _serviceProvider;
+    private IConfigurationSection? _section
     {
+        get
+        {
+            var section = _configuration.GetSection(SekibanSection);
+            var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
+            if (!string.IsNullOrEmpty(sekibanContext?.SettingGroupIdentifier))
+            {
+                section = section?.GetSection(sekibanContext.SettingGroupIdentifier);
+            }
+            return section;
+        }
+    }
+    public CosmosDbFactory(IConfiguration configuration, IMemoryCache memoryCache, ISekibanContext sekibanContext, IServiceProvider serviceProvider)
+    {
+        _configuration = configuration;
         _memoryCache = memoryCache;
-        var section = configuration.GetSection(SekibanSection);
-        if (!string.IsNullOrEmpty(sekibanContext.SettingGroupIdentifier)) { section = section?.GetSection(sekibanContext.SettingGroupIdentifier); }
-        _section = section;
+        _serviceProvider = serviceProvider;
         _sekibanContextIdentifier = sekibanContext.SettingGroupIdentifier;
     }
     private string GetContainerId(DocumentType documentType, AggregateContainerGroup containerGroup)
