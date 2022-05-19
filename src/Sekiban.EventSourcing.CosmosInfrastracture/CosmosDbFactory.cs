@@ -2,37 +2,35 @@ using Microsoft.Azure.Cosmos.Linq;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json.Linq;
+using Sekiban.EventSourcing.Settings;
 namespace CosmosInfrastructure;
 
 public class CosmosDbFactory
 {
     private const string SekibanSection = "Sekiban";
-    private readonly IConfiguration _configuration;
     private readonly IMemoryCache _memoryCache;
-    public CosmosDbFactory(IConfiguration configuration, IMemoryCache memoryCache)
+    private readonly IConfigurationSection? _section;
+    public CosmosDbFactory(IConfiguration configuration, IMemoryCache memoryCache, ISekibanContext sekibanContext)
     {
-        _configuration = configuration;
         _memoryCache = memoryCache;
+        var section = configuration.GetSection(SekibanSection);
+        if (!string.IsNullOrEmpty(sekibanContext.SettingGroupIdentifier)) { section = section?.GetSection(sekibanContext.SettingGroupIdentifier); }
+        _section = section;
     }
     private string GetContainerId(DocumentType documentType, AggregateContainerGroup containerGroup)
     {
         return documentType switch
         {
-            DocumentType.AggregateEvent => _configuration.GetSection(SekibanSection)
-                    .GetValue<string>(
-                        $"AggregateEventCosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _configuration.GetSection(SekibanSection)
-                    .GetValue<string>($"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _configuration.GetSection(SekibanSection).GetValue<string>("CosmosDbContainer"),
-            DocumentType.AggregateCommand => _configuration.GetSection(SekibanSection)
-                    .GetValue<string>(
-                        $"AggregateCommandCosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _configuration.GetSection(SekibanSection)
-                    .GetValue<string>($"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "dissolvable" : "")}") ??
-                _configuration.GetSection(SekibanSection).GetValue<string>("CosmosDbContainer"),
-            _ => _configuration.GetSection(SekibanSection)
-                    .GetValue<string>($"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _configuration.GetSection(SekibanSection).GetValue<string>("CosmosDbContainer")
+            DocumentType.AggregateEvent => _section.GetValue<string>(
+                    $"AggregateEventCosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
+                _section.GetValue<string>($"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
+                _section.GetValue<string>("CosmosDbContainer"),
+            DocumentType.AggregateCommand => _section.GetValue<string>(
+                    $"AggregateCommandCosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
+                _section.GetValue<string>($"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "dissolvable" : "")}") ??
+                _section.GetValue<string>("CosmosDbContainer"),
+            _ => _section.GetValue<string>($"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
+                _section.GetValue<string>("CosmosDbContainer")
         };
     }
     private static string GetMemoryCacheContainerKey(DocumentType documentType, string databaseId, string containerId) =>
@@ -44,21 +42,18 @@ public class CosmosDbFactory
 
     private string GetUri(DocumentType documentType) =>
         documentType == DocumentType.AggregateEvent
-            ? _configuration.GetSection(SekibanSection).GetValue<string>("EventCosmosDbEndPointUrl") ??
-            _configuration.GetSection(SekibanSection).GetValue<string>("CosmosDbEndPointUrl")
-            : _configuration.GetSection(SekibanSection).GetValue<string>("CosmosDbEndPointUrl");
+            ? _section.GetValue<string>("EventCosmosDbEndPointUrl") ?? _section.GetValue<string>("CosmosDbEndPointUrl")
+            : _section.GetValue<string>("CosmosDbEndPointUrl");
 
     private string GetSecurityKey(DocumentType documentType) =>
         documentType == DocumentType.AggregateEvent
-            ? _configuration.GetSection(SekibanSection).GetValue<string>("EventCosmosDbAuthorizationKey") ??
-            _configuration.GetSection(SekibanSection).GetValue<string>("CosmosDbAuthorizationKey")
-            : _configuration.GetSection(SekibanSection).GetValue<string>("CosmosDbAuthorizationKey");
+            ? _section.GetValue<string>("EventCosmosDbAuthorizationKey") ?? _section.GetValue<string>("CosmosDbAuthorizationKey")
+            : _section.GetValue<string>("CosmosDbAuthorizationKey");
 
     private string GetDatabaseId(DocumentType documentType) =>
         documentType == DocumentType.AggregateEvent
-            ? _configuration.GetSection(SekibanSection).GetValue<string>("EventCosmosDbDatabase") ??
-            _configuration.GetSection(SekibanSection).GetValue<string>("CosmosDbDatabase")
-            : _configuration.GetSection(SekibanSection).GetValue<string>("CosmosDbDatabase");
+            ? _section.GetValue<string>("EventCosmosDbDatabase") ?? _section.GetValue<string>("CosmosDbDatabase")
+            : _section.GetValue<string>("CosmosDbDatabase");
 
     private async Task<Container> GetContainerAsync(DocumentType documentType, AggregateContainerGroup containerGroup)
     {

@@ -3,35 +3,52 @@ namespace Sekiban.EventSourcing.Documents;
 
 public class InMemoryDocumentStore
 {
-    private readonly InMemoryDocumentContainer<AggregateEvent> _eventContainer = new();
+    private readonly ConcurrentDictionary<string, InMemoryDocumentContainer<AggregateEvent>> _containerDictionary = new();
 
-    public void SaveEvent(AggregateEvent document, string partition)
+    public void SaveEvent(AggregateEvent document, string partition, string sekibanContextIdentifier)
     {
-        _eventContainer.All.Add(document);
-        if (_eventContainer.Partitions.ContainsKey(partition))
+        if (!_containerDictionary.ContainsKey(sekibanContextIdentifier))
         {
-            if (!_eventContainer.Partitions[partition].Any(m => m.Id == document.Id))
+            _containerDictionary[sekibanContextIdentifier] = new InMemoryDocumentContainer<AggregateEvent>();
+        }
+        var eventContainer = _containerDictionary[sekibanContextIdentifier];
+        eventContainer.All.Add(document);
+        if (eventContainer.Partitions.ContainsKey(partition))
+        {
+            if (!eventContainer.Partitions[partition].Any(m => m.Id == document.Id))
             {
-                _eventContainer.Partitions[partition].Add(document);
+                eventContainer.Partitions[partition].Add(document);
             }
         } else
         {
             var partitionCollection = new BlockingCollection<AggregateEvent>();
             partitionCollection.Add(document);
-            _eventContainer.Partitions[partition] = partitionCollection;
+            eventContainer.Partitions[partition] = partitionCollection;
         }
-        if (!_eventContainer.All.Any(m => m.PartitionKey == document.PartitionKey && m.Id == document.Id))
+        if (!eventContainer.All.Any(m => m.PartitionKey == document.PartitionKey && m.Id == document.Id))
         {
-            _eventContainer.All.Add(document);
+            eventContainer.All.Add(document);
         }
     }
-    public AggregateEvent[] GetAllEvents() =>
-        _eventContainer.All.ToArray();
-    public AggregateEvent[] GetEventPartition(string partition)
+    public AggregateEvent[] GetAllEvents(string sekibanContextIdentifier)
     {
-        if (_eventContainer.Partitions.ContainsKey(partition))
+        if (!_containerDictionary.ContainsKey(sekibanContextIdentifier))
         {
-            return _eventContainer.Partitions[partition].ToArray();
+            _containerDictionary[sekibanContextIdentifier] = new InMemoryDocumentContainer<AggregateEvent>();
+        }
+        var eventContainer = _containerDictionary[sekibanContextIdentifier];
+        return eventContainer.All.ToArray();
+    }
+    public AggregateEvent[] GetEventPartition(string partition, string sekibanContextIdentifier)
+    {
+        if (!_containerDictionary.ContainsKey(sekibanContextIdentifier))
+        {
+            _containerDictionary[sekibanContextIdentifier] = new InMemoryDocumentContainer<AggregateEvent>();
+        }
+        var eventContainer = _containerDictionary[sekibanContextIdentifier];
+        if (eventContainer.Partitions.ContainsKey(partition))
+        {
+            return eventContainer.Partitions[partition].ToArray();
         }
         return new AggregateEvent[] { };
     }

@@ -4,6 +4,8 @@ using Sekiban.EventSourcing.PubSubs;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Settings;
+using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
+using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
 namespace Sekiban.EventSourcing;
 
 public static class ServiceCollectionExtensions
@@ -22,9 +24,9 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IDocumentTemporaryWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentTemporaryRepository, InMemoryDocumentRepository>();
         services.AddTransient<IDocumentWriter, DocumentWriterSplitter>();
-        services.AddSingleton<IDocumentRepository, DocumentRepositorySplitter>();
+        services.AddTransient<IDocumentRepository, DocumentRepositorySplitter>();
         services.AddSingleton(new HybridStoreManager(true));
-
+        services.AddScoped<ISekibanContext, SekibanContext>();
         return services;
     }
 
@@ -33,6 +35,15 @@ public static class ServiceCollectionExtensions
         // ユーザー情報
         services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
         services.AddTransient<IUserInformationFactory, HttpContextUserInformationFactory>();
+        return services;
+    }
+    public static IServiceProvider StartSnapshotManager(this IServiceProvider services)
+    {
+        using var scope = services.CreateScope();
+        var executor = scope.ServiceProvider.GetService<IAggregateCommandExecutor>();
+        executor!.ExecCreateCommandAsync<SnapshotManager, SnapshotManagerDto, CreateSnapshotManager>(
+                new CreateSnapshotManager(SnapshotManager.SharedId))
+            .Wait();
         return services;
     }
     public static IServiceCollection AddSekibanSettingsFromAppSettings(this IServiceCollection services)
