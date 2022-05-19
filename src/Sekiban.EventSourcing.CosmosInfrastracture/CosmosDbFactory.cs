@@ -10,12 +10,14 @@ public class CosmosDbFactory
     private const string SekibanSection = "Sekiban";
     private readonly IMemoryCache _memoryCache;
     private readonly IConfigurationSection? _section;
+    private readonly string _sekibanContextIdentifier;
     public CosmosDbFactory(IConfiguration configuration, IMemoryCache memoryCache, ISekibanContext sekibanContext)
     {
         _memoryCache = memoryCache;
         var section = configuration.GetSection(SekibanSection);
         if (!string.IsNullOrEmpty(sekibanContext.SettingGroupIdentifier)) { section = section?.GetSection(sekibanContext.SettingGroupIdentifier); }
         _section = section;
+        _sekibanContextIdentifier = sekibanContext.SettingGroupIdentifier;
     }
     private string GetContainerId(DocumentType documentType, AggregateContainerGroup containerGroup)
     {
@@ -33,12 +35,16 @@ public class CosmosDbFactory
                 _section.GetValue<string>("CosmosDbContainer")
         };
     }
-    private static string GetMemoryCacheContainerKey(DocumentType documentType, string databaseId, string containerId) =>
-        $"{(documentType == DocumentType.AggregateEvent ? "event." : "")}cosmosdb.container.{databaseId}.{containerId}";
-    private static string GetMemoryCacheClientKey(DocumentType documentType) =>
-        $"{(documentType == DocumentType.AggregateEvent ? "event." : "")}cosmosdb.client";
-    private static string GetMemoryCacheDatabaseKey(DocumentType documentType, string databaseId) =>
-        $"{(documentType == DocumentType.AggregateEvent ? "event." : "")}cosmosdb.container.{databaseId}";
+    private static string GetMemoryCacheContainerKey(
+        DocumentType documentType,
+        string databaseId,
+        string containerId,
+        string sekibanContextIdentifier) =>
+        $"{(documentType == DocumentType.AggregateEvent ? "event." : "")}cosmosdb.container.{databaseId}.{containerId}.{sekibanContextIdentifier}";
+    private static string GetMemoryCacheClientKey(DocumentType documentType, string sekibanContextIdentifier) =>
+        $"{(documentType == DocumentType.AggregateEvent ? "event." : "")}cosmosdb.client.{sekibanContextIdentifier}";
+    private static string GetMemoryCacheDatabaseKey(DocumentType documentType, string databaseId, string sekibanContextIdentifier) =>
+        $"{(documentType == DocumentType.AggregateEvent ? "event." : "")}cosmosdb.container.{databaseId}.{sekibanContextIdentifier}";
 
     private string GetUri(DocumentType documentType) =>
         documentType == DocumentType.AggregateEvent
@@ -59,7 +65,7 @@ public class CosmosDbFactory
     {
         var databaseId = GetDatabaseId(documentType);
         var containerId = GetContainerId(documentType, containerGroup);
-        var container = (Container?)_memoryCache.Get(GetMemoryCacheContainerKey(documentType, databaseId, containerId));
+        var container = (Container?)_memoryCache.Get(GetMemoryCacheContainerKey(documentType, databaseId, containerId, _sekibanContextIdentifier));
 
         if (container != null)
         {
@@ -78,22 +84,22 @@ public class CosmosDbFactory
                     DateFormatString = "yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'"
                 })
         };
-        var client = _memoryCache.Get<CosmosClient?>(GetMemoryCacheClientKey(documentType));
+        var client = _memoryCache.Get<CosmosClient?>(GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier));
         if (client == null)
         {
             client = new CosmosClient(uri, securityKey, options);
-            _memoryCache.Set(GetMemoryCacheClientKey(documentType), client);
+            _memoryCache.Set(GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier), client);
         }
-        var database = _memoryCache.Get<Database?>(GetMemoryCacheDatabaseKey(documentType, databaseId));
+        var database = _memoryCache.Get<Database?>(GetMemoryCacheDatabaseKey(documentType, databaseId, _sekibanContextIdentifier));
         if (database == null)
         {
             database = await client.CreateDatabaseIfNotExistsAsync(databaseId);
-            _memoryCache.Set(GetMemoryCacheDatabaseKey(documentType, databaseId), database);
+            _memoryCache.Set(GetMemoryCacheDatabaseKey(documentType, databaseId, _sekibanContextIdentifier), database);
         }
 
         var containerProperties = new ContainerProperties(containerId, "/partitionkey");
         container = await database.CreateContainerIfNotExistsAsync(containerProperties, 400);
-        _memoryCache.Set(GetMemoryCacheContainerKey(documentType, databaseId, containerId), container);
+        _memoryCache.Set(GetMemoryCacheContainerKey(documentType, databaseId, containerId, _sekibanContextIdentifier), container);
 
         return container;
     }
@@ -154,9 +160,9 @@ public class CosmosDbFactory
         var databaseId = GetDatabaseId(documentType);
         // ネットワークエラーの可能性があるので、コンテナを初期化する
         // これによって次回回復したら再接続できる
-        _memoryCache.Remove(GetMemoryCacheClientKey(documentType));
-        _memoryCache.Remove(GetMemoryCacheDatabaseKey(documentType, databaseId));
-        _memoryCache.Remove(GetMemoryCacheContainerKey(documentType, databaseId, containerId));
+        _memoryCache.Remove(GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier));
+        _memoryCache.Remove(GetMemoryCacheDatabaseKey(documentType, databaseId, _sekibanContextIdentifier));
+        _memoryCache.Remove(GetMemoryCacheContainerKey(documentType, databaseId, containerId, _sekibanContextIdentifier));
     }
     public async Task CosmosActionAsync(DocumentType documentType, AggregateContainerGroup containerGroup, Func<Container, Task> cosmosAction)
     {
