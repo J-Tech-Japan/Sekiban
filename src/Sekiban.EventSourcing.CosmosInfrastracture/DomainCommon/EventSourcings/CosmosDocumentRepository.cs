@@ -1,16 +1,20 @@
 using Microsoft.Azure.Cosmos.Linq;
 using Newtonsoft.Json.Linq;
 using Sekiban.EventSourcing.Partitions.AggregateIdPartitions;
+using Sekiban.EventSourcing.Settings;
 namespace CosmosInfrastructure.DomainCommon.EventSourcings;
 
 public class CosmosDocumentRepository : IDocumentPersistentRepository
 {
     private readonly CosmosDbFactory _cosmosDbFactory;
     private readonly RegisteredEventTypes _registeredEventTypes;
-    public CosmosDocumentRepository(CosmosDbFactory cosmosDbFactory, RegisteredEventTypes registeredEventTypes)
+    private readonly ISekibanContext _sekibanContext;
+    public CosmosDocumentRepository(CosmosDbFactory cosmosDbFactory, RegisteredEventTypes registeredEventTypes, ISekibanContext sekibanContext)
     {
         _cosmosDbFactory = cosmosDbFactory;
         _registeredEventTypes = registeredEventTypes;
+        _sekibanContext = sekibanContext;
+        Console.WriteLine(_sekibanContext.SettingGroupIdentifier);
     }
 
     public async Task GetAllAggregateEventsAsync(

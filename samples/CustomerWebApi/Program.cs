@@ -1,6 +1,5 @@
 using ESSampleProjectDependency;
-using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
-using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
+using Sekiban.EventSourcing;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -26,7 +25,6 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 
 app.MapControllers();
-var executor = app.Services.GetService<IAggregateCommandExecutor>();
-executor!.ExecCreateCommandAsync<SnapshotManager, SnapshotManagerDto, CreateSnapshotManager>(new CreateSnapshotManager(SnapshotManager.SharedId))
-    .Wait();
+
+app.Services.StartSnapshotManager();
 app.Run();

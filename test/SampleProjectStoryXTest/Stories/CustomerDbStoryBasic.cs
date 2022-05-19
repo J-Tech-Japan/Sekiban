@@ -39,6 +39,7 @@ public class CustomerDbStoryBasic : TestBase
     private readonly IDocumentPersistentRepository _documentPersistentRepository;
     private readonly MultipleAggregateProjectionService _multipleAggregateProjectionService;
     private readonly ITestOutputHelper _testOutputHelper;
+
     public CustomerDbStoryBasic(TestFixture testFixture, ITestOutputHelper testOutputHelper) : base(testFixture)
     {
         _testOutputHelper = testOutputHelper;

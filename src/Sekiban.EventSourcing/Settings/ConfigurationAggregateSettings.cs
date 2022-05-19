@@ -6,9 +6,14 @@ public class ConfigurationAggregateSettings : AggregateSettings
     private const string SekibanSection = "Sekiban";
     private const string AggregatesSection = "Aggregates";
 
-    public ConfigurationAggregateSettings(IConfiguration configuration)
+    public ConfigurationAggregateSettings(IConfiguration configuration, ISekibanContext sekibanContext)
     {
-        var section = configuration?.GetSection(SekibanSection)?.GetSection(AggregatesSection);
+        var section = configuration?.GetSection(SekibanSection);
+        if (!string.IsNullOrWhiteSpace(sekibanContext.SettingGroupIdentifier))
+        {
+            section = section?.GetSection(sekibanContext.SettingGroupIdentifier);
+        }
+        section = section?.GetSection(AggregatesSection);
         var useHybridDefault = section?.GetValue<bool?>("useHybridDefault") ?? false;
         var takeSnapshotDefault = section?.GetValue<bool?>("takeSnapshotDefault") ?? false;
         var snapshotFrequencyDefault = section?.GetValue<int?>("snapshotFrequencyDefault") ?? 80;
