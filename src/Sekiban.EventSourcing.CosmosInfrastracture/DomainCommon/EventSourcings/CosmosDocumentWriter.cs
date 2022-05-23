@@ -21,7 +21,7 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
                 aggregateContainerGroup,
                 async container =>
                 {
-                    await container.UpsertItemAsync(document, new PartitionKey(document.PartitionKey));
+                    await container.CreateItemAsync(document, new PartitionKey(document.PartitionKey));
                 });
         } else
         {
@@ -30,7 +30,7 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
                 aggregateContainerGroup,
                 async container =>
                 {
-                    await container.UpsertItemAsync(document, new PartitionKey(document.PartitionKey));
+                    await container.CreateItemAsync(document, new PartitionKey(document.PartitionKey));
                 });
         }
     }

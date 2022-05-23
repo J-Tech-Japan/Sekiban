@@ -24,13 +24,10 @@ public class DocumentWriterSplitter : IDocumentWriter
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
         {
-            document.UpdateSortableUniqueId();
             await _documentTemporaryWriter.SaveAsync(document, aggregateType);
             return;
         }
         if (document.DocumentType == DocumentType.AggregateSnapshot) { }
-
-        document.UpdateSortableUniqueId();
         if (document is AggregateEvent) { }
         await _documentPersistentWriter.SaveAsync(document, aggregateType);
     }
@@ -40,11 +37,10 @@ public class DocumentWriterSplitter : IDocumentWriter
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
         {
-            aggregateEvent.UpdateSortableUniqueId();
             await _documentTemporaryWriter.SaveAndPublishAggregateEvent(aggregateEvent, aggregateType);
             return;
         }
-        aggregateEvent.UpdateSortableUniqueId();
+        //aggregateEvent.UpdateSortableUniqueId();
         await AddToHybridIfPossible(aggregateEvent, aggregateType);
         await _documentPersistentWriter.SaveAndPublishAggregateEvent(aggregateEvent, aggregateType);
     }
