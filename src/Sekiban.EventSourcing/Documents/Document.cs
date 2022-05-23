@@ -17,7 +17,7 @@ public record Document
     public DocumentType DocumentType { get; init; }
     public string DocumentTypeName { get; init; } = null!;
     public DateTime TimeStamp { get; init; }
-    public string SortableUniqueId { get; init; } = string.Empty;
+    public string SortableUniqueId { get; private set; } = string.Empty;
 
     public Document() { }
 
@@ -27,11 +27,16 @@ public record Document
         DocumentType = documentType;
         DocumentTypeName = documentTypeName ?? GetType().Name;
         TimeStamp = DateTime.UtcNow;
-        SortableUniqueId = TimeStamp.Ticks + (Math.Abs(Id.GetHashCode()) % 1000000000000).ToString("000000000000");
         if (partitionKeyFactory is not null)
         {
             SetPartitionKey(partitionKeyFactory);
         }
+        UpdateSortableUniqueId();
+    }
+
+    public void UpdateSortableUniqueId()
+    {
+        SortableUniqueId = DateTime.UtcNow.Ticks + (Math.Abs(Id.GetHashCode()) % 1000000000000).ToString("000000000000");
     }
 
     public void SetPartitionKey(IPartitionKeyFactory partitionKeyFactory)
