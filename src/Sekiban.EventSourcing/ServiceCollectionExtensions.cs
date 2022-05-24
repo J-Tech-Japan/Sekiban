@@ -6,6 +6,7 @@ using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Settings;
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
+using Sekiban.EventSourcing.TestHelpers;
 namespace Sekiban.EventSourcing;
 
 public static class ServiceCollectionExtensions
@@ -37,6 +38,28 @@ public static class ServiceCollectionExtensions
 
         services.AddTransient<IAggregateCommandExecutor, AggregateCommandExecutor>();
         services.AddTransient<ISingleAggregateService, SingleAggregateService>();
+        services.AddTransient<MultipleAggregateProjectionService>();
+
+        services.AddSingleton(new InMemoryDocumentStore());
+        services.AddTransient<IDocumentWriter, InMemoryDocumentWriter>();
+        services.AddTransient<IDocumentRepository, InMemoryDocumentRepository>();
+        services.AddSingleton(new HybridStoreManager(true));
+        services.AddScoped<ISekibanContext, SekibanContext>();
+
+        services.AddTransient<IDocumentTemporaryRepository, InMemoryDocumentRepository>();
+        services.AddTransient<IDocumentPersistentRepository, InMemoryDocumentRepository>();
+        services.AddTransient<IDocumentTemporaryWriter, InMemoryDocumentWriter>();
+        services.AddTransient<IDocumentPersistentWriter, InMemoryDocumentWriter>();
+        return services;
+    }
+    public static IServiceCollection AddSekibanCoreInAggregateTest(this IServiceCollection services)
+    {
+        services.AddMemoryCache();
+
+        services.AddTransient<AggregateEventPublisher>();
+
+        services.AddTransient<IAggregateCommandExecutor, AggregateCommandExecutor>();
+        services.AddSingleton<ISingleAggregateService>(new MemorySingleAggregateService());
         services.AddTransient<MultipleAggregateProjectionService>();
 
         services.AddSingleton(new InMemoryDocumentStore());

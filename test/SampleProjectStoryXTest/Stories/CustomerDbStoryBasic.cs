@@ -37,6 +37,7 @@ public class CustomerDbStoryBasic : TestBase
     private readonly ISingleAggregateService _aggregateService;
     private readonly CosmosDbFactory _cosmosDbFactory;
     private readonly IDocumentPersistentRepository _documentPersistentRepository;
+    private readonly HybridStoreManager _hybridStoreManager;
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
     private readonly MultipleAggregateProjectionService _multipleAggregateProjectionService;
     private readonly ITestOutputHelper _testOutputHelper;
@@ -49,7 +50,8 @@ public class CustomerDbStoryBasic : TestBase
         _documentPersistentRepository = GetService<IDocumentPersistentRepository>();
         _multipleAggregateProjectionService = GetService<MultipleAggregateProjectionService>();
         _inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
-        // create recent activity
+        _hybridStoreManager = GetService<HybridStoreManager>();
+        // create snapshot manager
         _aggregateCommandExecutor
             .ExecCreateCommandAsync<SnapshotManager, SnapshotManagerDto, CreateSnapshotManager>(new CreateSnapshotManager(SnapshotManager.SharedId))
             .Wait();
@@ -330,6 +332,13 @@ public class CustomerDbStoryBasic : TestBase
             typeof(RecentActivity));
 
         await CheckSnapshots<RecentActivity, RecentActivityDto>(snapshots, createRecentActivityResult.AggregateDto.AggregateId);
+
+        _inMemoryDocumentStore.ResetInMemoryStore();
+        _hybridStoreManager.ClearHybridPartitions();
+        _aggregateCommandExecutor
+            .ExecCreateCommandAsync<SnapshotManager, SnapshotManagerDto, CreateSnapshotManager>(new CreateSnapshotManager(SnapshotManager.SharedId))
+            .Wait();
+        await ContinuousExecutionTestAsync();
     }
 
     private async Task CheckSnapshots<T, Q>(List<SnapshotDocument> snapshots, Guid aggregateId)
@@ -401,8 +410,6 @@ public class CustomerDbStoryBasic : TestBase
         {
             _testOutputHelper.WriteLine(key);
         }
-        _inMemoryDocumentStore.ResetInMemoryStore();
-        await ContinuousExecutionTestAsync();
     }
 
     public async Task ContinuousExecutionTestAsync()

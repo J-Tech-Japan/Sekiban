@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace Sekiban.EventSourcing.TestHelpers;
 
@@ -16,6 +17,14 @@ public class AggregateTestHelper<TAggregate, TDto> where TAggregate : Transferab
         _serviceProvider = serviceProvider;
         _projector = new DefaultSingleAggregateProjector<TAggregate>();
         Aggregate = _projector.CreateInitialAggregate(Guid.Empty);
+    }
+
+    public AggregateTestHelper<TAggregate, TDto> GivenSingleAggregateDtos(List<AggregateDtoBase> dtos)
+    {
+        var singleAggregateService = _serviceProvider.GetService<ISingleAggregateService>();
+        var memorySingleAggregateService = singleAggregateService as MemorySingleAggregateService;
+        memorySingleAggregateService?.Aggregates.AddRange(dtos);
+        return this;
     }
     public AggregateTestHelper<TAggregate, TDto> Given(TDto snapshot)
     {
@@ -40,7 +49,7 @@ public class AggregateTestHelper<TAggregate, TDto> where TAggregate : Transferab
     public AggregateTestHelper<TAggregate, TDto> Given(TDto snapshot, IEnumerable<AggregateEvent> ev) =>
         Given(snapshot).Given(ev);
 
-    public async Task<AggregateTestHelper<TAggregate, TDto>> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregate>
+    public AggregateTestHelper<TAggregate, TDto> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregate>
     {
         var handler
             = _serviceProvider.GetService(typeof(ICreateAggregateCommandHandler<TAggregate, C>)) as ICreateAggregateCommandHandler<TAggregate, C>;
@@ -49,14 +58,14 @@ public class AggregateTestHelper<TAggregate, TDto> where TAggregate : Transferab
             throw new JJAggregateCommandNotRegisteredException(typeof(C).Name);
         }
         var commandDocument = new AggregateCommandDocument<C>(createCommand, new CanNotUsePartitionKeyFactory());
-        var result = await handler.HandleAsync(commandDocument);
+        var result = handler.HandleAsync(commandDocument).Result;
         Aggregate = result.Aggregate;
         LatestEvents = Aggregate.Events.ToList();
         Aggregate.ResetEventsAndSnapshots();
         return this;
     }
 
-    public async Task<AggregateTestHelper<TAggregate, TDto>> WhenChange<C>(C createCommand) where C : ChangeAggregateCommandBase<TAggregate>
+    public AggregateTestHelper<TAggregate, TDto> WhenChange<C>(C createCommand) where C : ChangeAggregateCommandBase<TAggregate>
     {
         var handler
             = _serviceProvider.GetService(typeof(IChangeAggregateCommandHandler<TAggregate, C>)) as IChangeAggregateCommandHandler<TAggregate, C>;
@@ -65,7 +74,7 @@ public class AggregateTestHelper<TAggregate, TDto> where TAggregate : Transferab
             throw new JJAggregateCommandNotRegisteredException(typeof(C).Name);
         }
         var commandDocument = new AggregateCommandDocument<C>(createCommand, new CanNotUsePartitionKeyFactory());
-        await handler.HandleAsync(commandDocument, Aggregate);
+        handler.HandleAsync(commandDocument, Aggregate).Wait();
         LatestEvents = Aggregate.Events.ToList();
         Aggregate.ResetEventsAndSnapshots();
         return this;

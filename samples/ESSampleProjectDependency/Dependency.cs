@@ -61,7 +61,7 @@ public static class Dependency
         services.AddMediatR(Assembly.GetExecutingAssembly(), Sekiban.EventSourcing.Shared.Dependency.GetAssembly());
 
         // Sekibanイベントソーシング
-        services.AddSekibanCoreInMemory();
+        services.AddSekibanCoreInAggregateTest();
 
         services.AddSekibanHTTPUser();
 
