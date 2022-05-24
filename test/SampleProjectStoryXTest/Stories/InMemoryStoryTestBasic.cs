@@ -1,4 +1,3 @@
-using CosmosInfrastructure;
 using CustomerDomainContext.Aggregates.Branches;
 using CustomerDomainContext.Aggregates.Branches.Commands;
 using CustomerDomainContext.Aggregates.Clients;
@@ -15,7 +14,6 @@ using CustomerDomainContext.Projections;
 using CustomerDomainContext.Shared.Exceptions;
 using Sekiban.EventSourcing.AggregateCommands;
 using Sekiban.EventSourcing.Aggregates;
-using Sekiban.EventSourcing.Documents;
 using Sekiban.EventSourcing.Queries;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
@@ -31,38 +29,27 @@ using Xunit;
 using Xunit.Abstractions;
 namespace SampleProjectStoryXTest.Stories;
 
-public class CustomerDbStoryBasic : TestBase
+public class InMemoryStoryTestBasic : ByTestTestBase
 {
     private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
     private readonly SingleAggregateService _aggregateService;
-    private readonly CosmosDbFactory _cosmosDbFactory;
-    private readonly IDocumentPersistentRepository _documentPersistentRepository;
-    private readonly InMemoryDocumentStore _inMemoryDocumentStore;
     private readonly MultipleAggregateProjectionService _multipleAggregateProjectionService;
     private readonly ITestOutputHelper _testOutputHelper;
-    public CustomerDbStoryBasic(TestFixture testFixture, ITestOutputHelper testOutputHelper) : base(testFixture)
+
+    public InMemoryStoryTestBasic(ITestOutputHelper testOutputHelper)
     {
         _testOutputHelper = testOutputHelper;
-        _cosmosDbFactory = GetService<CosmosDbFactory>();
         _aggregateCommandExecutor = GetService<IAggregateCommandExecutor>();
         _aggregateService = GetService<SingleAggregateService>();
-        _documentPersistentRepository = GetService<IDocumentPersistentRepository>();
         _multipleAggregateProjectionService = GetService<MultipleAggregateProjectionService>();
-        _inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
         // create recent activity
         _aggregateCommandExecutor
             .ExecCreateCommandAsync<SnapshotManager, SnapshotManagerDto, CreateSnapshotManager>(new CreateSnapshotManager(SnapshotManager.SharedId))
             .Wait();
     }
-    [Fact(DisplayName = "CosmosDb ストーリーテスト 集約の機能のテストではなく、CosmosDbと連携して正しく動くかをテストしています。")]
+    [Fact(DisplayName = "CosmosDb ストーリーテスト インメモリで集約の機能のテストを行う")]
     public async Task CosmosDbStory()
     {
-        // 先に全データを削除する
-        await _cosmosDbFactory.DeleteAllFromAggregateEventContainer(AggregateContainerGroup.Default);
-        await _cosmosDbFactory.DeleteAllFromAggregateEventContainer(AggregateContainerGroup.Dissolvable);
-        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.AggregateCommand, AggregateContainerGroup.Dissolvable);
-        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.AggregateCommand);
-
         // create list branch
         var branchList = await _multipleAggregateProjectionService.GetAggregateList<Branch, BranchDto>();
         Assert.Empty(branchList);
@@ -135,7 +122,7 @@ public class CustomerDbStoryBasic : TestBase
 
         // test change name multiple time to create projection 
         var versionCN = changeNameResult!.AggregateDto!.Version;
-        var countChangeName = 160;
+        var countChangeName = 60;
         foreach (var i in Enumerable.Range(0, countChangeName))
         {
             var changeNameResult2 = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientDto, ChangeClientName>(
@@ -223,7 +210,7 @@ public class CustomerDbStoryBasic : TestBase
         var recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentActivity, RecentActivityDto>();
         Assert.Single(recentActivityList);
         var version = createRecentActivityResult.AggregateDto!.Version;
-        var count = 160;
+        var count = 60;
         foreach (var i in Enumerable.Range(0, count))
         {
             var recentActivityAddedResult
@@ -255,24 +242,10 @@ public class CustomerDbStoryBasic : TestBase
             _testOutputHelper.WriteLine(key);
         }
     }
-    [Fact(DisplayName = "CosmosDbストーリーテスト用に削除のみを行う 。")]
-    public async Task DeleteonlyAsync()
-    {
-        // 先に全データを削除する
-        await _cosmosDbFactory.DeleteAllFromAggregateEventContainer(AggregateContainerGroup.Default);
-        await _cosmosDbFactory.DeleteAllFromAggregateEventContainer(AggregateContainerGroup.Dissolvable);
-        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.AggregateCommand, AggregateContainerGroup.Dissolvable);
-        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.AggregateCommand);
-    }
+
     [Fact(DisplayName = "CosmosDb ストーリーテスト 。並列でたくさん動かしたらどうなるか。 INoValidateCommand がRecentActivityに適応されているので、問題ないはず")]
     public async Task AsynchronousExecutionTestAsync()
     {
-        // 先に全データを削除する
-        await _cosmosDbFactory.DeleteAllFromAggregateEventContainer(AggregateContainerGroup.Default);
-        await _cosmosDbFactory.DeleteAllFromAggregateEventContainer(AggregateContainerGroup.Dissolvable);
-        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.AggregateCommand, AggregateContainerGroup.Dissolvable);
-        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.AggregateCommand);
-
         // create recent activity
         var createRecentActivityResult
             = await _aggregateCommandExecutor.ExecCreateCommandAsync<RecentActivity, RecentActivityDto, CreateRecentActivity>(
@@ -324,12 +297,6 @@ public class CustomerDbStoryBasic : TestBase
         {
             _testOutputHelper.WriteLine(key);
         }
-
-        var snapshots = await _documentPersistentRepository.GetSnapshotsForAggregateAsync(
-            createRecentActivityResult.AggregateDto.AggregateId,
-            typeof(RecentActivity));
-
-        await CheckSnapshots<RecentActivity, RecentActivityDto>(snapshots, createRecentActivityResult.AggregateDto.AggregateId);
     }
 
     private async Task CheckSnapshots<T, Q>(List<SnapshotDocument> snapshots, Guid aggregateId)
@@ -356,7 +323,7 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Single(recentActivityList);
         var version = createRecentActivityResult.AggregateDto!.Version;
         var tasks = new List<Task>();
-        var count = 140;
+        var count = 100;
         foreach (var i in Enumerable.Range(0, count))
         {
             tasks.Add(
@@ -387,72 +354,6 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + 1, aggregateRecentActivity!.Version);
-        Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
-
-        var snapshotManager
-            = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<SnapshotManager, SnapshotManagerDto>(SnapshotManager.SharedId);
-        _testOutputHelper.WriteLine("-requests-");
-        foreach (var key in snapshotManager!.Requests)
-        {
-            _testOutputHelper.WriteLine(key);
-        }
-        _testOutputHelper.WriteLine("-request takens-");
-        foreach (var key in snapshotManager!.RequestTakens)
-        {
-            _testOutputHelper.WriteLine(key);
-        }
-        _inMemoryDocumentStore.ResetInMemoryStore();
-        await ContinuousExecutionTestAsync();
-    }
-
-    public async Task ContinuousExecutionTestAsync()
-    {
-        var recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentActivity, RecentActivityDto>();
-        Assert.Single(recentActivityList);
-        var aggregateId = recentActivityList.First().AggregateId;
-
-        var aggregate = await _aggregateService.GetAggregateAsync<RecentActivity, RecentActivityDto>(aggregateId);
-        Assert.NotNull(aggregate);
-
-        var aggregateRecentActivity2 = await _aggregateService.GetAggregateDtoAsync<RecentActivity, RecentActivityDto>(aggregateId);
-        //var aggregateRecentActivity =
-        //    await _aggregateService
-        //        .GetAggregateFromInitialDefaultAggregateDtoAsync<RecentActivity, RecentActivityDto>(
-        //            aggregateId);
-        //Assert.Single(recentActivityList);
-        //Assert.NotNull(aggregateRecentActivity);
-        //Assert.NotNull(aggregateRecentActivity2);
-        //Assert.Equal(aggregateRecentActivity!.Version, aggregateRecentActivity2!.Version);
-
-        var version = recentActivityList.First().Version;
-        var tasks = new List<Task>();
-        var count = 280;
-        foreach (var i in Enumerable.Range(0, count))
-        {
-            tasks.Add(
-                Task.Run(
-                    async () =>
-                    {
-                        var recentActivityAddedResult
-                            = await _aggregateCommandExecutor.ExecChangeCommandAsync<RecentActivity, RecentActivityDto, AddRecentActivity>(
-                                new AddRecentActivity(aggregateId, $"Message - {i + 1}") { ReferenceVersion = version });
-                        version = recentActivityAddedResult.AggregateDto!.Version;
-                    }));
-        }
-        await Task.WhenAll(tasks);
-        recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentActivity, RecentActivityDto>();
-        Assert.Single(recentActivityList);
-
-        var snapshots = await _documentPersistentRepository.GetSnapshotsForAggregateAsync(aggregateId, typeof(RecentActivity));
-        await CheckSnapshots<RecentActivity, RecentActivityDto>(snapshots, aggregateId);
-
-        // check aggregate result
-        var aggregateRecentActivity
-            = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<RecentActivity, RecentActivityDto>(aggregateId);
-        aggregateRecentActivity2 = await _aggregateService.GetAggregateDtoAsync<RecentActivity, RecentActivityDto>(aggregateId);
-        Assert.Single(recentActivityList);
-        Assert.NotNull(aggregateRecentActivity);
-        Assert.Equal(count + aggregate!.ToDto().Version, aggregateRecentActivity!.Version);
         Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
 
         var snapshotManager

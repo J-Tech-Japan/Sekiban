@@ -40,7 +40,6 @@ public class DocumentWriterSplitter : IDocumentWriter
             await _documentTemporaryWriter.SaveAndPublishAggregateEvent(aggregateEvent, aggregateType);
             return;
         }
-        //aggregateEvent.UpdateSortableUniqueId();
         await AddToHybridIfPossible(aggregateEvent, aggregateType);
         await _documentPersistentWriter.SaveAndPublishAggregateEvent(aggregateEvent, aggregateType);
     }
