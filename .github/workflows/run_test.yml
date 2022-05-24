@@ -26,13 +26,10 @@ jobs:
         dotnet nuget add source --username USERNAME --password ${{secrets.TOMOHISA_PAT}} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/J-Tech-Japan/index.json"
     - name: Restore dependencies
       run: |
-        pushd ./src
-        dotnet restore Sekiban.EventSourcing.sln
+        dotnet restore Sekiban.sln
     - name: Build with dotnet
       run: |
-        pushd ./src
-        dotnet build Sekiban.EventSourcing.sln
+        dotnet build Sekiban.sln
     - name: Test dotnet
       run: |
-        pushd ./src
-        dotnet test Sekiban.EventSourcing.sln
+        dotnet test Sekiban.sln
