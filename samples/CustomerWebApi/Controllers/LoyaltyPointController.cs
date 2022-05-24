@@ -11,10 +11,10 @@ public class LoyaltyPointController : Controller
 {
     private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
     private readonly MultipleAggregateProjectionService _multipleAggregateProjectionService;
-    private readonly SingleAggregateService _singleAggregateService;
+    private readonly ISingleAggregateService _singleAggregateService;
     public LoyaltyPointController(
         IAggregateCommandExecutor aggregateCommandExecutor,
-        SingleAggregateService aggregateService,
+        ISingleAggregateService aggregateService,
         MultipleAggregateProjectionService multipleAggregateProjectionService)
     {
         _aggregateCommandExecutor = aggregateCommandExecutor;

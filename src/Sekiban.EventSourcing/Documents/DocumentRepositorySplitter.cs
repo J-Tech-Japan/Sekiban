@@ -70,26 +70,29 @@ public class DocumentRepositorySplitter : IDocumentRepository
             events =>
             {
                 var aggregateEvents = events.ToList();
-                if (partitionKey == null) { return; }
-                var hasPartitionKey = _hybridStoreManager.HasPartition(partitionKey);
-                var sinceSortableUniqueIdInPartition = _hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey);
-
-                if (string.IsNullOrWhiteSpace(sinceSortableUniqueId))
+                if (_aggregateSettings.CanUseHybrid(originalType))
                 {
-                    SaveAggregateEvents(aggregateEvents, originalType, partitionKey, string.Empty);
-                }
+                    if (partitionKey == null) { return; }
+                    var hasPartitionKey = _hybridStoreManager.HasPartition(partitionKey);
+                    var sinceSortableUniqueIdInPartition = _hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey);
 
-                if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId))
-                {
-                    if (!hasPartitionKey)
+                    if (string.IsNullOrWhiteSpace(sinceSortableUniqueId))
                     {
-                        SaveAggregateEvents(aggregateEvents, originalType, partitionKey, sinceSortableUniqueId);
-                    } else
+                        SaveAggregateEvents(aggregateEvents, originalType, partitionKey, string.Empty);
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId))
                     {
-                        if (!string.IsNullOrWhiteSpace(sinceSortableUniqueIdInPartition) &&
-                            string.Compare(sinceSortableUniqueIdInPartition!, sinceSortableUniqueId!, StringComparison.Ordinal) > 0)
+                        if (!hasPartitionKey)
                         {
                             SaveAggregateEvents(aggregateEvents, originalType, partitionKey, sinceSortableUniqueId);
+                        } else
+                        {
+                            if (!string.IsNullOrWhiteSpace(sinceSortableUniqueIdInPartition) &&
+                                string.Compare(sinceSortableUniqueIdInPartition!, sinceSortableUniqueId!, StringComparison.Ordinal) > 0)
+                            {
+                                SaveAggregateEvents(aggregateEvents, originalType, partitionKey, sinceSortableUniqueId);
+                            }
                         }
                     }
                 }

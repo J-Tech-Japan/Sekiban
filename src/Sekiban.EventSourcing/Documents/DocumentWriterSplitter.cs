@@ -28,7 +28,6 @@ public class DocumentWriterSplitter : IDocumentWriter
             return;
         }
         if (document.DocumentType == DocumentType.AggregateSnapshot) { }
-
         if (document is AggregateEvent) { }
         await _documentPersistentWriter.SaveAsync(document, aggregateType);
     }

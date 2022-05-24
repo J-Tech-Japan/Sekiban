@@ -12,7 +12,10 @@ public class HybridStoreManager
         Enabled = elanbled;
     public bool HasPartition(string partitionKey) =>
         Enabled && HybridPartitionKeys.Keys.Contains(partitionKey);
-
+    public void ClearHybridPartitions()
+    {
+        HybridPartitionKeys.Clear();
+    }
     public bool AddPartitionKey(string partitionKey, string sortableUniqueId)
     {
         if (!Enabled)

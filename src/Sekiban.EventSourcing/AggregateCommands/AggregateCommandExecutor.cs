@@ -7,13 +7,13 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
     private static readonly SemaphoreSlim _semaphoreInMemory = new(1, 1);
     private readonly IDocumentWriter _documentWriter;
     private readonly IServiceProvider _serviceProvider;
-    private readonly SingleAggregateService _singleAggregateService;
+    private readonly ISingleAggregateService _singleAggregateService;
     private readonly IUserInformationFactory _userInformationFactory;
 
     public AggregateCommandExecutor(
         IDocumentWriter documentWriter,
         IServiceProvider serviceProvider,
-        SingleAggregateService singleAggregateService,
+        ISingleAggregateService singleAggregateService,
         IUserInformationFactory userInformationFactory)
     {
         _documentWriter = documentWriter;

@@ -1,0 +1,35 @@
+name: Run Backend Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - "src/**"
+  pull_request:
+    branches: [ main ]
+    paths:
+      - "src/**"
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup .NET 6
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 6.0.x
+    - name: Package settings
+      run: |
+        dotnet nuget add source --username USERNAME --password ${{secrets.TOMOHISA_PAT}} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/J-Tech-Japan/index.json"
+    - name: Restore dependencies
+      run: |
+        dotnet restore Sekiban.sln
+    - name: Build with dotnet
+      run: |
+        dotnet build Sekiban.sln
+    - name: Test dotnet
+      run: |
+        dotnet test Sekiban.sln
