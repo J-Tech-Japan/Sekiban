@@ -17,7 +17,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<AggregateEventPublisher>();
 
         services.AddTransient<IAggregateCommandExecutor, AggregateCommandExecutor>();
-        services.AddTransient<SingleAggregateService>();
+        services.AddTransient<ISingleAggregateService, SingleAggregateService>();
         services.AddTransient<MultipleAggregateProjectionService>();
 
         services.AddSingleton(new InMemoryDocumentStore());
@@ -36,7 +36,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<AggregateEventPublisher>();
 
         services.AddTransient<IAggregateCommandExecutor, AggregateCommandExecutor>();
-        services.AddTransient<SingleAggregateService>();
+        services.AddTransient<ISingleAggregateService, SingleAggregateService>();
         services.AddTransient<MultipleAggregateProjectionService>();
 
         services.AddSingleton(new InMemoryDocumentStore());

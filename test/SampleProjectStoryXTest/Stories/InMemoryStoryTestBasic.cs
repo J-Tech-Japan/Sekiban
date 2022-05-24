@@ -32,7 +32,7 @@ namespace SampleProjectStoryXTest.Stories;
 public class InMemoryStoryTestBasic : ByTestTestBase
 {
     private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
-    private readonly SingleAggregateService _aggregateService;
+    private readonly ISingleAggregateService _aggregateService;
     private readonly MultipleAggregateProjectionService _multipleAggregateProjectionService;
     private readonly ITestOutputHelper _testOutputHelper;
 
@@ -40,7 +40,7 @@ public class InMemoryStoryTestBasic : ByTestTestBase
     {
         _testOutputHelper = testOutputHelper;
         _aggregateCommandExecutor = GetService<IAggregateCommandExecutor>();
-        _aggregateService = GetService<SingleAggregateService>();
+        _aggregateService = GetService<ISingleAggregateService>();
         _multipleAggregateProjectionService = GetService<MultipleAggregateProjectionService>();
         // create recent activity
         _aggregateCommandExecutor

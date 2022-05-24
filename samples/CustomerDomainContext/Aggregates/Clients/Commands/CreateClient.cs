@@ -5,9 +5,9 @@ namespace CustomerDomainContext.Aggregates.Clients.Commands;
 public record CreateClient(Guid BranchId, string ClientName, string ClientEmail) : ICreateAggregateCommand<Client>;
 public class CreateClientHandler : CreateAggregateCommandHandlerBase<Client, CreateClient>
 {
-    private readonly SingleAggregateService _singleAggregateService;
+    private readonly ISingleAggregateService _singleAggregateService;
 
-    public CreateClientHandler(SingleAggregateService singleAggregateService) =>
+    public CreateClientHandler(ISingleAggregateService singleAggregateService) =>
         _singleAggregateService = singleAggregateService;
 
     protected override async Task<Client> CreateAggregateAsync(CreateClient command)

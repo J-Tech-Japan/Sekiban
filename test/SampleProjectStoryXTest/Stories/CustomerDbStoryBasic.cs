@@ -34,7 +34,7 @@ namespace SampleProjectStoryXTest.Stories;
 public class CustomerDbStoryBasic : TestBase
 {
     private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
-    private readonly SingleAggregateService _aggregateService;
+    private readonly ISingleAggregateService _aggregateService;
     private readonly CosmosDbFactory _cosmosDbFactory;
     private readonly IDocumentPersistentRepository _documentPersistentRepository;
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
@@ -45,7 +45,7 @@ public class CustomerDbStoryBasic : TestBase
         _testOutputHelper = testOutputHelper;
         _cosmosDbFactory = GetService<CosmosDbFactory>();
         _aggregateCommandExecutor = GetService<IAggregateCommandExecutor>();
-        _aggregateService = GetService<SingleAggregateService>();
+        _aggregateService = GetService<ISingleAggregateService>();
         _documentPersistentRepository = GetService<IDocumentPersistentRepository>();
         _multipleAggregateProjectionService = GetService<MultipleAggregateProjectionService>();
         _inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
