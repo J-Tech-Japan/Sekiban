@@ -36,20 +36,19 @@ https://github.com/J-Tech-Japan/JJ_Sekiban/blob/main/test/SampleProjectStoryXTes
 上記にサンプルコードを記述しています。今のところはとても簡単なテストですが、集約の機能が増えてきた時に、まず集約で正しくイベントが生成されるか、それによってステータスがどのように変化するかを確認することが可能です。
 
 ```aggregateTest.cs
-public class ClientSpec : SingleAggregateTestBase
+public class ClientSpec : SingleAggregateTestBase<Client, ClientDto>
 {
     [Fact]
     public void ClientCreateSpec()
     {
-        const string TestClientName = "TestName";
-        const string TestClientChangedName = "TestName2";
-        const string TestEmail = "test@example.com";
-        var helper = new AggregateTestHelper<Client, ClientDto>(_serviceProvider);
+        const string testClientName = "TestName";
+        const string testClientChangedName = "TestName2";
+        const string testEmail = "test@example.com";
         var branchDto = new BranchDto { AggregateId = Guid.NewGuid(), Name = "TEST", Version = 1 };
         // CreateコマンドでBranchを参照するため、BranchDtoオブジェクトを参照ように渡す
-        helper.GivenSingleAggregateDtos(new List<AggregateDtoBase> { branchDto })
+        _helper.GivenSingleAggregateDtos(new List<AggregateDtoBase> { branchDto })
             // CreateClient コマンドを実行する
-            .WhenCreate(new CreateClient(branchDto.AggregateId, TestClientName, TestEmail))
+            .WhenCreate(new CreateClient(branchDto.AggregateId, testClientName, testEmail))
             // コマンドによって生成されたイベントを検証する
             .Then(
                 (AggregateEvent ev) =>
@@ -57,8 +56,8 @@ public class ClientSpec : SingleAggregateTestBase
                     Assert.IsType<ClientCreated>(ev);
                     if (ev is ClientCreated clientCreated)
                     {
-                        Assert.Equal(TestClientName, clientCreated.ClientName);
-                        Assert.Equal(TestEmail, clientCreated.ClientEmail);
+                        Assert.Equal(testClientName, clientCreated.ClientName);
+                        Assert.Equal(testEmail, clientCreated.ClientEmail);
                     }
                 })
             // 現在の集約のステータスを検証する
@@ -66,11 +65,11 @@ public class ClientSpec : SingleAggregateTestBase
                 dto =>
                 {
                     Assert.Equal(branchDto.AggregateId, dto.BranchId);
-                    Assert.Equal(TestClientName, dto.ClientName);
-                    Assert.Equal(TestEmail, dto.ClientEmail);
+                    Assert.Equal(testClientName, dto.ClientName);
+                    Assert.Equal(testEmail, dto.ClientEmail);
                 })
             // 名前変更コマンドを実行する
-            .WhenChange(new ChangeClientName(helper.Aggregate.AggregateId, TestClientChangedName) { ReferenceVersion = helper.Aggregate.Version })
+            .WhenChange(new ChangeClientName(_helper.Aggregate.AggregateId, testClientChangedName) { ReferenceVersion = _helper.Aggregate.Version })
             // コマンドによって生成されたイベントを検証する
             .Then(
                 (AggregateEvent ev) =>
@@ -78,8 +77,8 @@ public class ClientSpec : SingleAggregateTestBase
                     Assert.IsType<ClientNameChanged>(ev);
                     if (ev is ClientNameChanged clientNameChanged)
                     {
-                        Assert.Equal(helper.Aggregate.AggregateId, clientNameChanged.ClientId);
-                        Assert.Equal(TestClientChangedName, clientNameChanged.ClientName);
+                        Assert.Equal(_helper.Aggregate.AggregateId, clientNameChanged.ClientId);
+                        Assert.Equal(testClientChangedName, clientNameChanged.ClientName);
                     }
                 })
             // 現在の集約のステータスを検証する
@@ -87,8 +86,8 @@ public class ClientSpec : SingleAggregateTestBase
                 dto =>
                 {
                     Assert.Equal(branchDto.AggregateId, dto.BranchId);
-                    Assert.Equal(TestClientChangedName, dto.ClientName);
-                    Assert.Equal(TestEmail, dto.ClientEmail);
+                    Assert.Equal(testClientChangedName, dto.ClientName);
+                    Assert.Equal(testEmail, dto.ClientEmail);
                 });
     }
 }
