@@ -20,9 +20,23 @@ https://github.com/J-Tech-Japan/JJ_Sekiban/blob/0.3.2/test/SampleProjectStoryXTe
 https://github.com/J-Tech-Japan/JJ_Sekiban/blob/main/test/SampleProjectStoryXTest/Stories/InMemoryStoryTestBasic.cs
 ちなみに上記のテストは、1.のCosmosDBを使ったテストと基本的に同じコードです。（DIの初期化処理のみ調整しています。）そのため正しく設定すれば、テストを書いている時に基本的にインメモリでテストを実行しつつ、時々CosmosDB相手にテストをすることなども可能です。
 
-3. 単集約のみの挙動のテスト Given When Then Expect テスト
+3. 単集約のみの挙動のユニットテスト Given When Then Expect テスト
 
 こちらはイベントソーシングコミュニティで推奨されているテストの形式です。
+https://buildplease.com/pages/fpc-14/
+https://github.com/heynickc/AggregateSource
+こちらは、以下の要素を簡単に記述できるヘルパー機能を作成することにより、集約毎のテストを簡単に記述できるようにするテストの形式です。
+- Given (与えられるもの)テストする前までに生成されたはずのイベント、スナップショットを集約に与えることにより、テストの準備をする
+- When コマンドを実行するか集約のパブリックメソッドをパラメーターを渡して叩く
+- Then コマンドによって発生したイベントを確認して正しいかチェックする
+- Expect コマンド実行が終了した際の集約Dtoを取得して、正しいかチェックする
+
+上記にサンプルコードを記述しています。今のところはとても簡単なテストですが、集約の機能が増えてきた時に、まず集約で正しくイベントが生成されるか、それによってステータスがどのように変化するかを確認することが可能です。
+https://github.com/J-Tech-Japan/JJ_Sekiban/blob/main/test/SampleProjectStoryXTest/SingleAggregates/ClientSpec.cs
+
+
+# まとめ
+Sekiban開発者は、主に 1. の機能をテストし、Sekibanを使用してアプリケーションを開発する開発者は主に、２、３をテストします。２、３の配分に関しては、プロジェクトによると思います。複雑な集約に関しては、３を重点的に、簡易な集約に関しては、２により基本動作と他の集約との連携を確認できるかと思います。
 
 
 
