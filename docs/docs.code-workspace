@@ -1,0 +1,20 @@
+{
+    "folders": [
+        {
+            "path": ".",
+        },
+    ],
+    "settings": {
+        "markdown-image.coding.path": "images",
+        "markdown-image.github.path": "",
+        "markdown-image.local.path": "images",
+    },
+    "extensions": {
+        "recommendations": [
+            "bierner.github-markdown-preview",
+            "hancel.markdown-image",
+            "bierner.markdown-mermaid",
+            "GitHub.vscode-pull-request-github",
+        ],
+    },
+}
