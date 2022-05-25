@@ -1,19 +1,16 @@
 using Microsoft.Extensions.DependencyInjection;
-using Sekiban.EventSourcing.TestHelpers;
-using System;
 using Xunit;
-namespace SampleProjectStoryXTest;
+namespace Sekiban.EventSourcing.TestHelpers;
 
 [Collection("Sequential")]
-public class ByTestTestBase : IDisposable
+public abstract class ByTestTestBase : IDisposable
 {
-    protected readonly ServiceProvider _serviceProvider;
-    public ByTestTestBase()
-    {
-        var testFixture = new TestFixture();
-        _serviceProvider = DependencyHelper.CreateDefaultProvider(testFixture, true);
-    }
+    protected readonly IServiceProvider _serviceProvider;
+    public ByTestTestBase(bool inMemory) =>
+        // ReSharper disable once VirtualMemberCallInConstructor
+        _serviceProvider = SetupService(inMemory);
     public void Dispose() { }
+    public abstract IServiceProvider SetupService(bool inMemory);
     public T GetService<T>()
     {
         var toreturn = _serviceProvider.GetService<T>();

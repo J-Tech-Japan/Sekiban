@@ -8,7 +8,7 @@ using System.Collections.Generic;
 using Xunit;
 namespace SampleProjectStoryXTest.SingleAggregates;
 
-public class ClientSpec : SPSingleAggregateTestBase<Client, ClientDto>
+public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientDto>
 {
     [Fact(DisplayName = "集約コマンドを実行してテストする")]
     public void ClientCreateSpec()
@@ -26,11 +26,9 @@ public class ClientSpec : SPSingleAggregateTestBase<Client, ClientDto>
             ev =>
             {
                 Assert.IsType<ClientCreated>(ev);
-                if (ev is ClientCreated clientCreated)
-                {
-                    Assert.Equal(testClientName, clientCreated.ClientName);
-                    Assert.Equal(testEmail, clientCreated.ClientEmail);
-                }
+                if (ev is not ClientCreated clientCreated) { return; }
+                Assert.Equal(testClientName, clientCreated.ClientName);
+                Assert.Equal(testEmail, clientCreated.ClientEmail);
             });
         // 現在の集約のステータスを検証する
         Expect(
@@ -47,11 +45,9 @@ public class ClientSpec : SPSingleAggregateTestBase<Client, ClientDto>
             (ev, client) =>
             {
                 Assert.IsType<ClientNameChanged>(ev);
-                if (ev is ClientNameChanged clientNameChanged)
-                {
-                    Assert.Equal(client.AggregateId, clientNameChanged.ClientId);
-                    Assert.Equal(testClientChangedName, clientNameChanged.ClientName);
-                }
+                if (ev is not ClientNameChanged clientNameChanged) { return; }
+                Assert.Equal(client.AggregateId, clientNameChanged.ClientId);
+                Assert.Equal(testClientChangedName, clientNameChanged.ClientName);
             });
         // 現在の集約のステータスを検証する
         Expect(
@@ -76,11 +72,9 @@ public class ClientSpec : SPSingleAggregateTestBase<Client, ClientDto>
                 ev =>
                 {
                     Assert.IsType<ClientCreated>(ev);
-                    if (ev is ClientCreated clientCreated)
-                    {
-                        Assert.Equal(testClientName, clientCreated.ClientName);
-                        Assert.Equal(testEmail, clientCreated.ClientEmail);
-                    }
+                    if (ev is not ClientCreated clientCreated) { return; }
+                    Assert.Equal(testClientName, clientCreated.ClientName);
+                    Assert.Equal(testEmail, clientCreated.ClientEmail);
                 })
             // 現在の集約のステータスを検証する
             .Expect(
@@ -100,11 +94,9 @@ public class ClientSpec : SPSingleAggregateTestBase<Client, ClientDto>
                 (ev, client) =>
                 {
                     Assert.IsType<ClientNameChanged>(ev);
-                    if (ev is ClientNameChanged clientNameChanged)
-                    {
-                        Assert.Equal(client.AggregateId, clientNameChanged.ClientId);
-                        Assert.Equal(testClientChangedName, clientNameChanged.ClientName);
-                    }
+                    if (ev is not ClientNameChanged clientNameChanged) { return; }
+                    Assert.Equal(client.AggregateId, clientNameChanged.ClientId);
+                    Assert.Equal(testClientChangedName, clientNameChanged.ClientName);
                 })
             // 現在の集約のステータスを検証する
             .Expect(
@@ -131,11 +123,9 @@ public class ClientSpec : SPSingleAggregateTestBase<Client, ClientDto>
                 (ev, client) =>
                 {
                     Assert.IsType<ClientNameChanged>(ev);
-                    if (ev is ClientNameChanged clientNameChanged)
-                    {
-                        Assert.Equal(client.AggregateId, clientNameChanged.ClientId);
-                        Assert.Equal(testClientChangedNameV3, clientNameChanged.ClientName);
-                    }
+                    if (ev is not ClientNameChanged clientNameChanged) { return; }
+                    Assert.Equal(client.AggregateId, clientNameChanged.ClientId);
+                    Assert.Equal(testClientChangedNameV3, clientNameChanged.ClientName);
                 })
             // 現在の集約のステータスを検証する
             .Expect(
@@ -170,11 +160,9 @@ public class ClientSpec : SPSingleAggregateTestBase<Client, ClientDto>
                 (ev, client) =>
                 {
                     Assert.IsType<ClientNameChanged>(ev);
-                    if (ev is ClientNameChanged clientNameChanged)
-                    {
-                        Assert.Equal(client.AggregateId, clientNameChanged.ClientId);
-                        Assert.Equal(testClientChangedName, clientNameChanged.ClientName);
-                    }
+                    if (ev is not ClientNameChanged clientNameChanged) { return; }
+                    Assert.Equal(client.AggregateId, clientNameChanged.ClientId);
+                    Assert.Equal(testClientChangedName, clientNameChanged.ClientName);
                 })
             // 現在の集約のステータスを検証する
             .Expect(

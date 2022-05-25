@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 namespace Sekiban.EventSourcing.TestHelpers;
 
@@ -6,15 +5,11 @@ public abstract class SingleAggregateTestBase<TAggregate, TDto> : IDisposable, I
     where TAggregate : TransferableAggregateBase<TDto> where TDto : AggregateDtoBase
 {
     private readonly AggregateTestHelper<TAggregate, TDto> _helper;
-    protected readonly ServiceProvider _serviceProvider;
+    protected readonly IServiceProvider _serviceProvider;
     public SingleAggregateTestBase()
     {
-        var testFixture = new TestFixture();
-        var services = new ServiceCollection();
-        services.AddSingleton<IConfiguration>(testFixture.Configuration);
         // ReSharper disable once VirtualMemberCallInConstructor
-        SetupService(services);
-        _serviceProvider = services.BuildServiceProvider();
+        _serviceProvider = SetupService();
         _helper = new AggregateTestHelper<TAggregate, TDto>(_serviceProvider);
     }
     public AggregateTestHelper<TAggregate, TDto> GivenEnvironmentDtos(List<AggregateDtoBase> dtos) =>
@@ -54,7 +49,7 @@ public abstract class SingleAggregateTestBase<TAggregate, TDto> : IDisposable, I
     public AggregateTestHelper<TAggregate, TDto> Expect(Action<TDto> checkDtoAction) =>
         _helper.Expect(checkDtoAction);
     public void Dispose() { }
-    public abstract void SetupService(IServiceCollection serviceCollection);
+    public abstract IServiceProvider SetupService();
     public T GetService<T>()
     {
         var toreturn = _serviceProvider.GetService<T>();
