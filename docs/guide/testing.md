@@ -31,9 +31,68 @@ https://github.com/heynickc/AggregateSource
 - Then コマンドによって発生したイベントを確認して正しいかチェックする
 - Expect コマンド実行が終了した際の集約Dtoを取得して、正しいかチェックする
 
-上記にサンプルコードを記述しています。今のところはとても簡単なテストですが、集約の機能が増えてきた時に、まず集約で正しくイベントが生成されるか、それによってステータスがどのように変化するかを確認することが可能です。
 https://github.com/J-Tech-Japan/JJ_Sekiban/blob/main/test/SampleProjectStoryXTest/SingleAggregates/ClientSpec.cs
 
+上記にサンプルコードを記述しています。今のところはとても簡単なテストですが、集約の機能が増えてきた時に、まず集約で正しくイベントが生成されるか、それによってステータスがどのように変化するかを確認することが可能です。
+
+```
+public class ClientSpec : SingleAggregateTestBase
+{
+    [Fact]
+    public void ClientCreateSpec()
+    {
+        const string TestClientName = "TestName";
+        const string TestClientChangedName = "TestName2";
+        const string TestEmail = "test@example.com";
+        var helper = new AggregateTestHelper<Client, ClientDto>(_serviceProvider);
+        var branchDto = new BranchDto { AggregateId = Guid.NewGuid(), Name = "TEST", Version = 1 };
+        // CreateコマンドでBranchを参照するため、BranchDtoオブジェクトを参照ように渡す
+        helper.GivenSingleAggregateDtos(new List<AggregateDtoBase> { branchDto })
+            // CreateClient コマンドを実行する
+            .WhenCreate(new CreateClient(branchDto.AggregateId, TestClientName, TestEmail))
+            // コマンドによって生成されたイベントを検証する
+            .Then(
+                (AggregateEvent ev) =>
+                {
+                    Assert.IsType<ClientCreated>(ev);
+                    if (ev is ClientCreated clientCreated)
+                    {
+                        Assert.Equal(TestClientName, clientCreated.ClientName);
+                        Assert.Equal(TestEmail, clientCreated.ClientEmail);
+                    }
+                })
+            // 現在の集約のステータスを検証する
+            .Expect(
+                dto =>
+                {
+                    Assert.Equal(branchDto.AggregateId, dto.BranchId);
+                    Assert.Equal(TestClientName, dto.ClientName);
+                    Assert.Equal(TestEmail, dto.ClientEmail);
+                })
+            // 名前変更コマンドを実行する
+            .WhenChange(new ChangeClientName(helper.Aggregate.AggregateId, TestClientChangedName) { ReferenceVersion = helper.Aggregate.Version })
+            // コマンドによって生成されたイベントを検証する
+            .Then(
+                (AggregateEvent ev) =>
+                {
+                    Assert.IsType<ClientNameChanged>(ev);
+                    if (ev is ClientNameChanged clientNameChanged)
+                    {
+                        Assert.Equal(helper.Aggregate.AggregateId, clientNameChanged.ClientId);
+                        Assert.Equal(TestClientChangedName, clientNameChanged.ClientName);
+                    }
+                })
+            // 現在の集約のステータスを検証する
+            .Expect(
+                dto =>
+                {
+                    Assert.Equal(branchDto.AggregateId, dto.BranchId);
+                    Assert.Equal(TestClientChangedName, dto.ClientName);
+                    Assert.Equal(TestEmail, dto.ClientEmail);
+                });
+    }
+}
+```
 
 # まとめ
 Sekiban開発者は、主に 1. の機能をテストし、Sekibanを使用してアプリケーションを開発する開発者は主に、２、３をテストします。２、３の配分に関しては、プロジェクトによると思います。複雑な集約に関しては、３を重点的に、簡易な集約に関しては、２により基本動作と他の集約との連携を確認できるかと思います。
