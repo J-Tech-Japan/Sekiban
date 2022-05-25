@@ -6,12 +6,12 @@
         <Nullable>enable</Nullable>
         <RootNamespace>CosmosInfrastructure</RootNamespace>
         <PackageId>JJ_Sekiban.EventSourcing.CosmosInfrastructure</PackageId>
-        <Version>0.3.2</Version>
+        <Version>0.3.3</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework CosmosInfrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.3.2</PackageVersion>
+        <PackageVersion>0.3.3</PackageVersion>
         <Description>集約ごとの設定機能を追加</Description>
     </PropertyGroup>
 

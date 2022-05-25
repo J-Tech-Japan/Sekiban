@@ -29,14 +29,14 @@ using Xunit;
 using Xunit.Abstractions;
 namespace SampleProjectStoryXTest.Stories;
 
-public class InMemoryStoryTestBasic : ByTestTestBase
+public class InMemoryStoryTestBasic : ProjectByTestTestBase
 {
     private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
     private readonly ISingleAggregateService _aggregateService;
     private readonly MultipleAggregateProjectionService _multipleAggregateProjectionService;
     private readonly ITestOutputHelper _testOutputHelper;
 
-    public InMemoryStoryTestBasic(ITestOutputHelper testOutputHelper)
+    public InMemoryStoryTestBasic(ITestOutputHelper testOutputHelper, bool inMemory = true) : base(inMemory)
     {
         _testOutputHelper = testOutputHelper;
         _aggregateCommandExecutor = GetService<IAggregateCommandExecutor>();

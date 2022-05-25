@@ -8,6 +8,7 @@ using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Settings;
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
+using Sekiban.EventSourcing.TestHelpers;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;

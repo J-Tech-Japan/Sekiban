@@ -2,10 +2,12 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace Sekiban.EventSourcing.TestHelpers;
 
-public class AggregateTestHelper<TAggregate, TDto> where TAggregate : TransferableAggregateBase<TDto> where TDto : AggregateDtoBase
+public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggregate, TDto>
+    where TAggregate : TransferableAggregateBase<TDto> where TDto : AggregateDtoBase
 {
     private readonly IServiceProvider _serviceProvider;
-    public TAggregate Aggregate { get; set; }
+    private TAggregate Aggregate { get; set; }
+
     public List<AggregateEvent> LatestEvents { get; set; } = new();
     private DefaultSingleAggregateProjector<TAggregate> _projector
     {
@@ -19,7 +21,7 @@ public class AggregateTestHelper<TAggregate, TDto> where TAggregate : Transferab
         Aggregate = _projector.CreateInitialAggregate(Guid.Empty);
     }
 
-    public AggregateTestHelper<TAggregate, TDto> GivenSingleAggregateDtos(List<AggregateDtoBase> dtos)
+    public AggregateTestHelper<TAggregate, TDto> GivenEnvironmentDtos(List<AggregateDtoBase> dtos)
     {
         var singleAggregateService = _serviceProvider.GetService<ISingleAggregateService>();
         var memorySingleAggregateService = singleAggregateService as MemorySingleAggregateService;
@@ -33,6 +35,12 @@ public class AggregateTestHelper<TAggregate, TDto> where TAggregate : Transferab
     }
     public AggregateTestHelper<TAggregate, TDto> Given(AggregateEvent ev)
     {
+        if (Aggregate.CanApplyEvent(ev)) { Aggregate.ApplyEvent(ev); }
+        return this;
+    }
+    public AggregateTestHelper<TAggregate, TDto> Given(Func<TAggregate, AggregateEvent> evFunc)
+    {
+        var ev = evFunc(Aggregate);
         if (Aggregate.CanApplyEvent(ev)) { Aggregate.ApplyEvent(ev); }
         return this;
     }
@@ -79,16 +87,62 @@ public class AggregateTestHelper<TAggregate, TDto> where TAggregate : Transferab
         Aggregate.ResetEventsAndSnapshots();
         return this;
     }
+    public AggregateTestHelper<TAggregate, TDto> WhenChange<C>(Func<TAggregate, C> commandFunc) where C : ChangeAggregateCommandBase<TAggregate>
+    {
+        var handler
+            = _serviceProvider.GetService(typeof(IChangeAggregateCommandHandler<TAggregate, C>)) as IChangeAggregateCommandHandler<TAggregate, C>;
+        if (handler == null)
+        {
+            throw new JJAggregateCommandNotRegisteredException(typeof(C).Name);
+        }
+        var command = commandFunc(Aggregate);
+        var commandDocument = new AggregateCommandDocument<C>(command, new CanNotUsePartitionKeyFactory());
+        handler.HandleAsync(commandDocument, Aggregate).Wait();
+        LatestEvents = Aggregate.Events.ToList();
+        Aggregate.ResetEventsAndSnapshots();
+        return this;
+    }
 
-    public AggregateTestHelper<TAggregate, TDto> Then(Action<List<AggregateEvent>> checkEventsAction)
+    public AggregateTestHelper<TAggregate, TDto> WhenMethod(Action<TAggregate> action)
+    {
+        action(Aggregate);
+        LatestEvents = Aggregate.Events.ToList();
+        Aggregate.ResetEventsAndSnapshots();
+        return this;
+    }
+    public AggregateTestHelper<TAggregate, TDto> WhenConstructor(TAggregate aggregate)
+    {
+        Aggregate = aggregate;
+        LatestEvents = Aggregate.Events.ToList();
+        Aggregate.ResetEventsAndSnapshots();
+        return this;
+    }
+
+    public AggregateTestHelper<TAggregate, TDto> ThenEvents(Action<List<AggregateEvent>, TAggregate> checkEventsAction)
+    {
+        checkEventsAction(LatestEvents, Aggregate);
+        return this;
+    }
+    public AggregateTestHelper<TAggregate, TDto> ThenEvents(Action<List<AggregateEvent>> checkEventsAction)
     {
         checkEventsAction(LatestEvents);
         return this;
     }
-    public AggregateTestHelper<TAggregate, TDto> Then(Action<AggregateEvent> checkEventAction)
+    public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent(Action<AggregateEvent, TAggregate> checkEventAction)
+    {
+        if (LatestEvents.Count != 1) { throw new JJInvalidArgumentException(); }
+        checkEventAction(LatestEvents.First(), Aggregate);
+        return this;
+    }
+    public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent(Action<AggregateEvent> checkEventAction)
     {
         if (LatestEvents.Count != 1) { throw new JJInvalidArgumentException(); }
         checkEventAction(LatestEvents.First());
+        return this;
+    }
+    public AggregateTestHelper<TAggregate, TDto> Expect(Action<TDto, TAggregate> checkDtoAction)
+    {
+        checkDtoAction(Aggregate.ToDto(), Aggregate);
         return this;
     }
     public AggregateTestHelper<TAggregate, TDto> Expect(Action<TDto> checkDtoAction)

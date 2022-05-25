@@ -23,6 +23,7 @@ using Sekiban.EventSourcing.Shared.Exceptions;
 using Sekiban.EventSourcing.Snapshots;
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
+using Sekiban.EventSourcing.TestHelpers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
