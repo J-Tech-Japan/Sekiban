@@ -1,0 +1,67 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+namespace Sekiban.EventSourcing.TestHelpers;
+
+public abstract class SingleAggregateTestBase<TAggregate, TDto> : IDisposable, IAggregateTestHelper<TAggregate, TDto>
+    where TAggregate : TransferableAggregateBase<TDto> where TDto : AggregateDtoBase
+{
+    private readonly AggregateTestHelper<TAggregate, TDto> _helper;
+    protected readonly ServiceProvider _serviceProvider;
+    public SingleAggregateTestBase()
+    {
+        var testFixture = new TestFixture();
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(testFixture.Configuration);
+        // ReSharper disable once VirtualMemberCallInConstructor
+        SetupService(services);
+        _serviceProvider = services.BuildServiceProvider();
+        _helper = new AggregateTestHelper<TAggregate, TDto>(_serviceProvider);
+    }
+    public AggregateTestHelper<TAggregate, TDto> GivenEnvironmentDtos(List<AggregateDtoBase> dtos) =>
+        _helper.GivenEnvironmentDtos(dtos);
+    public AggregateTestHelper<TAggregate, TDto> Given(TDto snapshot) =>
+        _helper.Given(snapshot);
+    public AggregateTestHelper<TAggregate, TDto> Given(AggregateEvent ev) =>
+        _helper.Given(ev);
+    public AggregateTestHelper<TAggregate, TDto> Given(Func<TAggregate, AggregateEvent> evFunc) =>
+        _helper.Given(evFunc);
+    public AggregateTestHelper<TAggregate, TDto> Given(IEnumerable<AggregateEvent> events) =>
+        _helper.Given(events);
+    public AggregateTestHelper<TAggregate, TDto> Given(TDto snapshot, AggregateEvent ev) =>
+        _helper.Given(snapshot, ev);
+    public AggregateTestHelper<TAggregate, TDto> Given(TDto snapshot, IEnumerable<AggregateEvent> ev) =>
+        _helper.Given(snapshot, ev);
+    public AggregateTestHelper<TAggregate, TDto> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregate> =>
+        _helper.WhenCreate(createCommand);
+    public AggregateTestHelper<TAggregate, TDto> WhenChange<C>(C changeCommand) where C : ChangeAggregateCommandBase<TAggregate> =>
+        _helper.WhenChange(changeCommand);
+    public AggregateTestHelper<TAggregate, TDto> WhenChange<C>(Func<TAggregate, C> commandFunc) where C : ChangeAggregateCommandBase<TAggregate> =>
+        _helper.WhenChange(commandFunc);
+    public AggregateTestHelper<TAggregate, TDto> WhenMethod(Action<TAggregate> action) =>
+        _helper.WhenMethod(action);
+    public AggregateTestHelper<TAggregate, TDto> WhenConstructor(TAggregate aggregate) =>
+        _helper.WhenConstructor(aggregate);
+    public AggregateTestHelper<TAggregate, TDto> ThenEvents(Action<List<AggregateEvent>, TAggregate> checkEventsAction) =>
+        _helper.ThenEvents(checkEventsAction);
+    public AggregateTestHelper<TAggregate, TDto> ThenEvents(Action<List<AggregateEvent>> checkEventsAction) =>
+        _helper.ThenEvents(checkEventsAction);
+    public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent(Action<AggregateEvent, TAggregate> checkEventAction) =>
+        _helper.ThenSingleEvent(checkEventAction);
+    public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent(Action<AggregateEvent> checkEventAction) =>
+        _helper.ThenSingleEvent(checkEventAction);
+    public AggregateTestHelper<TAggregate, TDto> Expect(Action<TDto, TAggregate> checkDtoAction) =>
+        _helper.Expect(checkDtoAction);
+    public AggregateTestHelper<TAggregate, TDto> Expect(Action<TDto> checkDtoAction) =>
+        _helper.Expect(checkDtoAction);
+    public void Dispose() { }
+    public abstract void SetupService(IServiceCollection serviceCollection);
+    public T GetService<T>()
+    {
+        var toreturn = _serviceProvider.GetService<T>();
+        if (toreturn == null)
+        {
+            throw new Exception("オブジェクトが登録されていません。" + typeof(T));
+        }
+        return toreturn;
+    }
+}

@@ -1,6 +1,7 @@
 using ESSampleProjectDependency;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Sekiban.EventSourcing.TestHelpers;
 namespace SampleProjectStoryXTest;
 
 public static class DependencyHelper

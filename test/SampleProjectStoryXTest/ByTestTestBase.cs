@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Sekiban.EventSourcing.TestHelpers;
 using System;
 using Xunit;
 namespace SampleProjectStoryXTest;

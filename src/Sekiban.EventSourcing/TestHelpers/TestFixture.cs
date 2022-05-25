@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.PlatformAbstractions;
-namespace SampleProjectStoryXTest;
+namespace Sekiban.EventSourcing.TestHelpers;
 
 public class TestFixture
 {
