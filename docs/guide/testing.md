@@ -22,7 +22,7 @@ https://github.com/J-Tech-Japan/JJ_Sekiban/blob/main/test/SampleProjectStoryXTes
 
 3. 単集約のみの挙動のユニットテスト Given When Then Expect テスト
 
-こちらはイベントソーシングコミュニティで推奨されているテストの形式です。
+こちらはイベントソーシングコミュニティでよく使用されているテストの形式です。
 https://buildplease.com/pages/fpc-14/
 https://github.com/heynickc/AggregateSource
 こちらは、以下の要素を簡単に記述できるヘルパー機能を作成することにより、集約毎のテストを簡単に記述できるようにするテストの形式です。
@@ -34,6 +34,8 @@ https://github.com/heynickc/AggregateSource
 https://github.com/J-Tech-Japan/JJ_Sekiban/blob/main/test/SampleProjectStoryXTest/SingleAggregates/ClientSpec.cs
 
 上記にサンプルコードを記述しています。今のところはとても簡単なテストですが、集約の機能が増えてきた時に、まず集約で正しくイベントが生成されるか、それによってステータスがどのように変化するかを確認することが可能です。
+記法に関しては、クラス内にメソッドがあるため、ドット記法で書くことも、ドット記法をつかない方法も可能です。
+
 
 ```aggregateTest.cs
 public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientDto>
