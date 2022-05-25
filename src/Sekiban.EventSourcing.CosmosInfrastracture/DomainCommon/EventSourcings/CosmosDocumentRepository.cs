@@ -14,7 +14,6 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
         _cosmosDbFactory = cosmosDbFactory;
         _registeredEventTypes = registeredEventTypes;
         _sekibanContext = sekibanContext;
-        Console.WriteLine(_sekibanContext.SettingGroupIdentifier);
     }
 
     public async Task GetAllAggregateEventsAsync(

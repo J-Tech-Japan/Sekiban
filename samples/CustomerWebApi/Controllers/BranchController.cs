@@ -9,12 +9,12 @@ namespace CustomerWebApi.Controllers;
 public class BranchController : Controller
 {
     private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
-    private readonly SingleAggregateService _aggregateService;
+    private readonly ISingleAggregateService _aggregateService;
     private readonly MultipleAggregateProjectionService _multipleAggregateProjectionService;
 
     public BranchController(
         IAggregateCommandExecutor aggregateCommandExecutor,
-        SingleAggregateService aggregateService,
+        ISingleAggregateService aggregateService,
         MultipleAggregateProjectionService multipleAggregateProjectionService)
     {
         _aggregateCommandExecutor = aggregateCommandExecutor;

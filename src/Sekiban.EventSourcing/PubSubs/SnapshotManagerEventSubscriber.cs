@@ -14,13 +14,13 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
     private readonly IDocumentWriter _documentWriter;
     private readonly RegisteredEventTypes _registeredEventTypes;
     private readonly SekibanAggregateTypes _sekibanAggregateTypes;
-    private readonly SingleAggregateService _singleAggregateService;
+    private readonly ISingleAggregateService _singleAggregateService;
     public SnapshotManagerEventSubscriber(
         RegisteredEventTypes registeredEventTypes,
         SekibanAggregateTypes sekibanAggregateTypes,
         IAggregateCommandExecutor aggregateCommandExecutor,
         IDocumentPersistentRepository documentPersistentRepository,
-        SingleAggregateService singleAggregateService,
+        ISingleAggregateService singleAggregateService,
         IDocumentWriter documentWriter,
         IAggregateSettings aggregateSettings)
     {

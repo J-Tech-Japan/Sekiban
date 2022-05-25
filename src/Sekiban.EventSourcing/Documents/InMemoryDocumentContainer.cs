@@ -4,7 +4,10 @@ namespace Sekiban.EventSourcing.Documents;
 public class InMemoryDocumentStore
 {
     private readonly ConcurrentDictionary<string, InMemoryDocumentContainer<AggregateEvent>> _containerDictionary = new();
-
+    public void ResetInMemoryStore()
+    {
+        _containerDictionary.Clear();
+    }
     public void SaveEvent(AggregateEvent document, string partition, string sekibanContextIdentifier)
     {
         if (!_containerDictionary.ContainsKey(sekibanContextIdentifier))

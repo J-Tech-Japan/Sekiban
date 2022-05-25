@@ -8,10 +8,10 @@ public class TestBase : IClassFixture<TestFixture>, IDisposable
 {
     protected readonly ServiceProvider _serviceProvider;
     protected readonly TestFixture _testFixture;
-    public TestBase(TestFixture testFixture)
+    public TestBase(TestFixture testFixture, bool inMemory = false)
     {
         _testFixture = testFixture;
-        _serviceProvider = DependencyHelper.CreateDefaultProvider(testFixture);
+        _serviceProvider = DependencyHelper.CreateDefaultProvider(testFixture, inMemory);
     }
     public void Dispose()
     {

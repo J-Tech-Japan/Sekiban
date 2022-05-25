@@ -1,6 +1,6 @@
 namespace Sekiban.EventSourcing.Queries.SingleAggregates;
 
-public class SingleAggregateService
+public class SingleAggregateService : ISingleAggregateService
 {
     private readonly IDocumentRepository _documentRepository;
 
@@ -76,6 +76,35 @@ public class SingleAggregateService
         where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase =>
         (await GetAggregateFromInitialAsync<T, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion))?.ToDto();
 
+    public async Task<T?> GetProjectionAsync<T>(Guid aggregateId, int? toVersion = null) where T : SingleAggregateProjectionBase<T>, new() =>
+        await GetAggregateDtoAsync<T, T, T>(aggregateId, toVersion);
+
+    /// <summary>
+    ///     スナップショット、メモリキャッシュを使用する通常版
+    ///     こちらはデフォルトプロジェクトション（集約のデフォルトステータス）
+    /// </summary>
+    /// <param name="aggregateId"></param>
+    /// <typeparam name="T"></typeparam>
+    /// <typeparam name="Q"></typeparam>
+    /// <returns></returns>
+    public async Task<T?> GetAggregateAsync<T, Q>(Guid aggregateId, int? toVersion = null)
+        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase =>
+        await GetAggregateAsync<T, Q, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion);
+    /// <summary>
+    ///     スナップショット、メモリキャッシュを使用する通常版
+    ///     こちらはデフォルトプロジェクトション（集約のデフォルトステータス）
+    /// </summary>
+    /// <param name="aggregateId"></param>
+    /// <typeparam name="T"></typeparam>
+    /// <typeparam name="Q"></typeparam>
+    /// <returns></returns>
+    public async Task<Q?> GetAggregateDtoAsync<T, Q>(Guid aggregateId, int? toVersion = null)
+        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase
+    {
+        var aggregate = await GetAggregateAsync<T, Q, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion);
+        return aggregate?.ToDto();
+    }
+
     /// <summary>
     ///     スナップショット、メモリキャッシュを使用する通常版
     /// </summary>
@@ -144,34 +173,5 @@ public class SingleAggregateService
     {
         var aggregate = await GetAggregateAsync<T, Q, P>(aggregateId, toVersion);
         return aggregate == null ? default : aggregate.ToDto();
-    }
-
-    public async Task<T?> GetProjectionAsync<T>(Guid aggregateId, int? toVersion = null) where T : SingleAggregateProjectionBase<T>, new() =>
-        await GetAggregateDtoAsync<T, T, T>(aggregateId, toVersion);
-
-    /// <summary>
-    ///     スナップショット、メモリキャッシュを使用する通常版
-    ///     こちらはデフォルトプロジェクトション（集約のデフォルトステータス）
-    /// </summary>
-    /// <param name="aggregateId"></param>
-    /// <typeparam name="T"></typeparam>
-    /// <typeparam name="Q"></typeparam>
-    /// <returns></returns>
-    public async Task<T?> GetAggregateAsync<T, Q>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase =>
-        await GetAggregateAsync<T, Q, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion);
-    /// <summary>
-    ///     スナップショット、メモリキャッシュを使用する通常版
-    ///     こちらはデフォルトプロジェクトション（集約のデフォルトステータス）
-    /// </summary>
-    /// <param name="aggregateId"></param>
-    /// <typeparam name="T"></typeparam>
-    /// <typeparam name="Q"></typeparam>
-    /// <returns></returns>
-    public async Task<Q?> GetAggregateDtoAsync<T, Q>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase
-    {
-        var aggregate = await GetAggregateAsync<T, Q, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion);
-        return aggregate?.ToDto();
     }
 }

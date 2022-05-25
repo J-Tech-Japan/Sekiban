@@ -14,8 +14,11 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         _memoryCache = memoryCache;
         _serviceProvider = serviceProvider;
     }
-    public Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(Guid aggregateId, Type originalType) =>
-        throw new NotImplementedException();
+    public async Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(Guid aggregateId, Type originalType)
+    {
+        await Task.CompletedTask;
+        return new List<SnapshotDocument>();
+    }
     public async Task GetAllAggregateEventsForAggregateIdAsync(
         Guid aggregateId,
         Type originalType,

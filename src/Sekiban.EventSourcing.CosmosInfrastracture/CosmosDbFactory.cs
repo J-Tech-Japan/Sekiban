@@ -96,7 +96,9 @@ public class CosmosDbFactory
                 {
                     // TypeNameHandling = TypeNameHandling.Auto
                     DateFormatString = "yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'"
-                })
+                }),
+            AllowBulkExecution = true,
+            MaxRequestsPerTcpConnection = 50
         };
         var client = _memoryCache.Get<CosmosClient?>(GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier));
         if (client == null)
@@ -140,10 +142,12 @@ public class CosmosDbFactory
                         todelete.Add(jobj.ToObject<Document>() ?? throw new Exception());
                     }
                 }
+                var concurrencyTasks = new List<Task>();
                 foreach (var d in todelete)
                 {
-                    await container.DeleteItemAsync<Document>(d.Id.ToString(), new PartitionKey(d.PartitionKey));
+                    concurrencyTasks.Add(container.DeleteItemAsync<Document>(d.Id.ToString(), new PartitionKey(d.PartitionKey)));
                 }
+                await Task.WhenAll(concurrencyTasks);
                 return null;
             });
     }
