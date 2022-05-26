@@ -22,13 +22,11 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientDto>
         // CreateClient コマンドを実行する
         WhenCreate(new CreateClient(branchDto.AggregateId, testClientName, testEmail));
         // コマンドによって生成されたイベントを検証する
-        ThenSingleEvent(
+        ThenSingleEvent<ClientCreated>(
             ev =>
             {
-                Assert.IsType<ClientCreated>(ev);
-                if (ev is not ClientCreated clientCreated) { return; }
-                Assert.Equal(testClientName, clientCreated.ClientName);
-                Assert.Equal(testEmail, clientCreated.ClientEmail);
+                Assert.Equal(testClientName, ev.ClientName);
+                Assert.Equal(testEmail, ev.ClientEmail);
             });
         // 現在の集約のステータスを検証する
         Expect(
@@ -41,13 +39,11 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientDto>
         // 名前変更コマンドを実行する
         WhenChange(client => new ChangeClientName(client.AggregateId, testClientChangedName) { ReferenceVersion = client.Version });
         // コマンドによって生成されたイベントを検証する
-        ThenSingleEvent(
+        ThenSingleEvent<ClientNameChanged>(
             (ev, client) =>
             {
-                Assert.IsType<ClientNameChanged>(ev);
-                if (ev is not ClientNameChanged clientNameChanged) { return; }
-                Assert.Equal(client.AggregateId, clientNameChanged.ClientId);
-                Assert.Equal(testClientChangedName, clientNameChanged.ClientName);
+                Assert.Equal(client.AggregateId, ev.ClientId);
+                Assert.Equal(testClientChangedName, ev.ClientName);
             });
         // 現在の集約のステータスを検証する
         Expect(
@@ -68,13 +64,11 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientDto>
 
         WhenConstructor(new Client(branchId, testClientName, testEmail))
             // コマンドによって生成されたイベントを検証する
-            .ThenSingleEvent(
+            .ThenSingleEvent<ClientCreated>(
                 ev =>
                 {
-                    Assert.IsType<ClientCreated>(ev);
-                    if (ev is not ClientCreated clientCreated) { return; }
-                    Assert.Equal(testClientName, clientCreated.ClientName);
-                    Assert.Equal(testEmail, clientCreated.ClientEmail);
+                    Assert.Equal(testClientName, ev.ClientName);
+                    Assert.Equal(testEmail, ev.ClientEmail);
                 })
             // 現在の集約のステータスを検証する
             .Expect(
@@ -90,13 +84,11 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientDto>
                     aggregate.ChangeClientName(testClientChangedName);
                 })
             // コマンドによって生成されたイベントを検証する
-            .ThenSingleEvent(
+            .ThenSingleEvent<ClientNameChanged>(
                 (ev, client) =>
                 {
-                    Assert.IsType<ClientNameChanged>(ev);
-                    if (ev is not ClientNameChanged clientNameChanged) { return; }
-                    Assert.Equal(client.AggregateId, clientNameChanged.ClientId);
-                    Assert.Equal(testClientChangedName, clientNameChanged.ClientName);
+                    Assert.Equal(client.AggregateId, ev.ClientId);
+                    Assert.Equal(testClientChangedName, ev.ClientName);
                 })
             // 現在の集約のステータスを検証する
             .Expect(
@@ -119,13 +111,11 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientDto>
             .Given(client => new ClientNameChanged(client.AggregateId, testClientChangedName))
             .WhenMethod(client => client.ChangeClientName(testClientChangedNameV3))
             // コマンドによって生成されたイベントを検証する
-            .ThenSingleEvent(
+            .ThenSingleEvent<ClientNameChanged>(
                 (ev, client) =>
                 {
-                    Assert.IsType<ClientNameChanged>(ev);
-                    if (ev is not ClientNameChanged clientNameChanged) { return; }
-                    Assert.Equal(client.AggregateId, clientNameChanged.ClientId);
-                    Assert.Equal(testClientChangedNameV3, clientNameChanged.ClientName);
+                    Assert.Equal(client.AggregateId, ev.ClientId);
+                    Assert.Equal(testClientChangedNameV3, ev.ClientName);
                 })
             // 現在の集約のステータスを検証する
             .Expect(
@@ -156,13 +146,11 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientDto>
                 })
             .WhenMethod(client => client.ChangeClientName(testClientChangedName))
             // コマンドによって生成されたイベントを検証する
-            .ThenSingleEvent(
+            .ThenSingleEvent<ClientNameChanged>(
                 (ev, client) =>
                 {
-                    Assert.IsType<ClientNameChanged>(ev);
-                    if (ev is not ClientNameChanged clientNameChanged) { return; }
-                    Assert.Equal(client.AggregateId, clientNameChanged.ClientId);
-                    Assert.Equal(testClientChangedName, clientNameChanged.ClientName);
+                    Assert.Equal(client.AggregateId, ev.ClientId);
+                    Assert.Equal(testClientChangedName, ev.ClientName);
                 })
             // 現在の集約のステータスを検証する
             .Expect(
