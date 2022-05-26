@@ -24,11 +24,11 @@ public class ClientController : Controller
 
     [HttpGet]
     public async Task<ActionResult<ClientDto>> GetAsync(Guid clientId) =>
-        await _singleAggregateService.GetAggregateDtoAsync<Client, ClientDto>(clientId) ?? throw new JJInvalidArgumentException();
+        await _singleAggregateService.GetAggregateDtoAsync<Client, ClientDto>(clientId) ?? throw new SekibanInvalidArgumentException();
 
     [HttpGet]
     public async Task<ActionResult<ClientNameHistoryProjection>> GetNameHistoryAsync(Guid clientId) =>
-        await _singleAggregateService.GetProjectionAsync<ClientNameHistoryProjection>(clientId) ?? throw new JJInvalidArgumentException();
+        await _singleAggregateService.GetProjectionAsync<ClientNameHistoryProjection>(clientId) ?? throw new SekibanInvalidArgumentException();
 
     // [HttpPost]
     // public async Task<IActionResult> TakeSnapshotAsync(Guid branchId)

@@ -1,11 +1,11 @@
 namespace Sekiban.EventSourcing.Shared.Exceptions;
 
-public class JJAggregateCommandInconsistentVersionException : Exception, IJJException
+public class SekibanAggregateCommandInconsistentVersionException : Exception, ISekibanException
 {
     public Guid AggregateId { get; set; }
     public int CorrectVersion { get; set; }
 
-    public JJAggregateCommandInconsistentVersionException(Guid aggregateId, int correctVersion)
+    public SekibanAggregateCommandInconsistentVersionException(Guid aggregateId, int correctVersion)
     {
         AggregateId = aggregateId;
         CorrectVersion = correctVersion;

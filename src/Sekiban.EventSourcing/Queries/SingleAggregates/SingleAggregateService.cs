@@ -32,7 +32,7 @@ public class SingleAggregateService : ISingleAggregateService
             {
                 if (events.Count() != events.Select(m => m.Id).Distinct().Count())
                 {
-                    throw new JJAggregateEventDuplicateException();
+                    throw new SekibanAggregateEventDuplicateException();
                 }
                 if (addFinished) { return; }
                 foreach (var e in events)
@@ -144,7 +144,7 @@ public class SingleAggregateService : ISingleAggregateService
                     if (!string.IsNullOrWhiteSpace(dto?.LastSortableUniqueId) &&
                         string.CompareOrdinal(dto?.LastSortableUniqueId, e.SortableUniqueId) > 0)
                     {
-                        throw new JJAggregateEventDuplicateException();
+                        throw new SekibanAggregateEventDuplicateException();
                     }
                     aggregate.ApplyEvent(e);
                     if (toVersion.HasValue && aggregate.Version == toVersion.Value)
@@ -156,7 +156,7 @@ public class SingleAggregateService : ISingleAggregateService
         if (aggregate.Version == 0) { return default; }
         if (toVersion.HasValue && aggregate.Version < toVersion.Value)
         {
-            throw new JJVersionNotReachToSpecificVersion();
+            throw new SekibanVersionNotReachToSpecificVersion();
         }
         return aggregate;
     }

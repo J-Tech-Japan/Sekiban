@@ -63,7 +63,7 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
             = _serviceProvider.GetService(typeof(ICreateAggregateCommandHandler<TAggregate, C>)) as ICreateAggregateCommandHandler<TAggregate, C>;
         if (handler == null)
         {
-            throw new JJAggregateCommandNotRegisteredException(typeof(C).Name);
+            throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
         }
         var commandDocument = new AggregateCommandDocument<C>(createCommand, new CanNotUsePartitionKeyFactory());
         var result = handler.HandleAsync(commandDocument).Result;
@@ -79,7 +79,7 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
             = _serviceProvider.GetService(typeof(IChangeAggregateCommandHandler<TAggregate, C>)) as IChangeAggregateCommandHandler<TAggregate, C>;
         if (handler == null)
         {
-            throw new JJAggregateCommandNotRegisteredException(typeof(C).Name);
+            throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
         }
         var commandDocument = new AggregateCommandDocument<C>(createCommand, new CanNotUsePartitionKeyFactory());
         handler.HandleAsync(commandDocument, Aggregate).Wait();
@@ -93,7 +93,7 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
             = _serviceProvider.GetService(typeof(IChangeAggregateCommandHandler<TAggregate, C>)) as IChangeAggregateCommandHandler<TAggregate, C>;
         if (handler == null)
         {
-            throw new JJAggregateCommandNotRegisteredException(typeof(C).Name);
+            throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
         }
         var command = commandFunc(Aggregate);
         var commandDocument = new AggregateCommandDocument<C>(command, new CanNotUsePartitionKeyFactory());
@@ -130,13 +130,13 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
     }
     public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent(Action<AggregateEvent, TAggregate> checkEventAction)
     {
-        if (LatestEvents.Count != 1) { throw new JJInvalidArgumentException(); }
+        if (LatestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
         checkEventAction(LatestEvents.First(), Aggregate);
         return this;
     }
     public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent(Action<AggregateEvent> checkEventAction)
     {
-        if (LatestEvents.Count != 1) { throw new JJInvalidArgumentException(); }
+        if (LatestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
         checkEventAction(LatestEvents.First());
         return this;
     }

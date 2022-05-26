@@ -51,7 +51,7 @@ public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointDto>
     {
         if (LastOccuredTime > happenedDate)
         {
-            throw new JJLoyaltyPointCanNotHappenOnThisTimeException();
+            throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
         }
         AddAndApplyEvent(new LoyaltyPointAdded(AggregateId, happenedDate, reason, pointAmount, note));
     }
@@ -60,11 +60,11 @@ public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointDto>
     {
         if (LastOccuredTime > happenedDate)
         {
-            throw new JJLoyaltyPointCanNotHappenOnThisTimeException();
+            throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
         }
         if (CurrentPoint - pointAmount < 0)
         {
-            throw new JJLoyaltyPointNotEnoughException();
+            throw new SekibanLoyaltyPointNotEnoughException();
         }
         AddAndApplyEvent(new LoyaltyPointUsed(AggregateId, happenedDate, reason, pointAmount, note));
     }
