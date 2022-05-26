@@ -4,8 +4,6 @@ using Sekiban.EventSourcing.PubSubs;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Settings;
-using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
-using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
 using Sekiban.EventSourcing.TestHelpers;
 namespace Sekiban.EventSourcing;
 
@@ -80,15 +78,6 @@ public static class ServiceCollectionExtensions
         // ユーザー情報
         services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
         services.AddTransient<IUserInformationFactory, HttpContextUserInformationFactory>();
-        return services;
-    }
-    public static IServiceProvider StartSnapshotManager(this IServiceProvider services)
-    {
-        using var scope = services.CreateScope();
-        var executor = scope.ServiceProvider.GetService<IAggregateCommandExecutor>();
-        executor!.ExecCreateCommandAsync<SnapshotManager, SnapshotManagerDto, CreateSnapshotManager>(
-                new CreateSnapshotManager(SnapshotManager.SharedId))
-            .Wait();
         return services;
     }
     public static IServiceCollection AddSekibanSettingsFromAppSettings(this IServiceCollection services)

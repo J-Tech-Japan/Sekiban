@@ -20,7 +20,6 @@ using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Shared.Exceptions;
 using Sekiban.EventSourcing.Snapshots;
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
-using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -42,10 +41,6 @@ public class InMemoryStoryTestBasic : ProjectByTestTestBase
         _aggregateCommandExecutor = GetService<IAggregateCommandExecutor>();
         _aggregateService = GetService<ISingleAggregateService>();
         _multipleAggregateProjectionService = GetService<MultipleAggregateProjectionService>();
-        // create recent activity
-        _aggregateCommandExecutor
-            .ExecCreateCommandAsync<SnapshotManager, SnapshotManagerDto, CreateSnapshotManager>(new CreateSnapshotManager(SnapshotManager.SharedId))
-            .Wait();
     }
     [Fact(DisplayName = "CosmosDb ストーリーテスト インメモリで集約の機能のテストを行う")]
     public async Task CosmosDbStory()
@@ -355,18 +350,5 @@ public class InMemoryStoryTestBasic : ProjectByTestTestBase
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + 1, aggregateRecentActivity!.Version);
         Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
-
-        var snapshotManager
-            = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<SnapshotManager, SnapshotManagerDto>(SnapshotManager.SharedId);
-        _testOutputHelper.WriteLine("-requests-");
-        foreach (var key in snapshotManager!.Requests)
-        {
-            _testOutputHelper.WriteLine(key);
-        }
-        _testOutputHelper.WriteLine("-request takens-");
-        foreach (var key in snapshotManager!.RequestTakens)
-        {
-            _testOutputHelper.WriteLine(key);
-        }
     }
 }

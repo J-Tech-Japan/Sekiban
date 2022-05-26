@@ -22,7 +22,6 @@ using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Shared.Exceptions;
 using Sekiban.EventSourcing.Snapshots;
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
-using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
 using Sekiban.EventSourcing.TestHelpers;
 using System;
 using System.Collections.Generic;
@@ -52,10 +51,6 @@ public class CustomerDbStoryBasic : TestBase
         _multipleAggregateProjectionService = GetService<MultipleAggregateProjectionService>();
         _inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
         _hybridStoreManager = GetService<HybridStoreManager>();
-        // create snapshot manager
-        _aggregateCommandExecutor
-            .ExecCreateCommandAsync<SnapshotManager, SnapshotManagerDto, CreateSnapshotManager>(new CreateSnapshotManager(SnapshotManager.SharedId))
-            .Wait();
     }
     [Fact(DisplayName = "CosmosDb ストーリーテスト 集約の機能のテストではなく、CosmosDbと連携して正しく動くかをテストしています。")]
     public async Task CosmosDbStory()
@@ -336,9 +331,6 @@ public class CustomerDbStoryBasic : TestBase
 
         _inMemoryDocumentStore.ResetInMemoryStore();
         _hybridStoreManager.ClearHybridPartitions();
-        _aggregateCommandExecutor
-            .ExecCreateCommandAsync<SnapshotManager, SnapshotManagerDto, CreateSnapshotManager>(new CreateSnapshotManager(SnapshotManager.SharedId))
-            .Wait();
         await ContinuousExecutionTestAsync();
     }
 
@@ -398,19 +390,6 @@ public class CustomerDbStoryBasic : TestBase
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + 1, aggregateRecentActivity!.Version);
         Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
-
-        var snapshotManager
-            = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<SnapshotManager, SnapshotManagerDto>(SnapshotManager.SharedId);
-        _testOutputHelper.WriteLine("-requests-");
-        foreach (var key in snapshotManager!.Requests)
-        {
-            _testOutputHelper.WriteLine(key);
-        }
-        _testOutputHelper.WriteLine("-request takens-");
-        foreach (var key in snapshotManager!.RequestTakens)
-        {
-            _testOutputHelper.WriteLine(key);
-        }
     }
 
     public async Task ContinuousExecutionTestAsync()

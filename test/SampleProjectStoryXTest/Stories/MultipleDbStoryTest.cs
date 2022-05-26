@@ -6,8 +6,6 @@ using Sekiban.EventSourcing.Aggregates;
 using Sekiban.EventSourcing.Documents;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Settings;
-using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
-using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
 using Sekiban.EventSourcing.TestHelpers;
 using System.Threading.Tasks;
 using Xunit;
@@ -29,17 +27,6 @@ public class MultipleDbStoryTest : TestBase
         var cosmosDbFactory = GetService<CosmosDbFactory>();
         var aggregateCommandExecutor = GetService<IAggregateCommandExecutor>();
         var multipleAggregateProjectionService = GetService<MultipleAggregateProjectionService>();
-
-        await aggregateCommandExecutor.ExecCreateCommandAsync<SnapshotManager, SnapshotManagerDto, CreateSnapshotManager>(
-            new CreateSnapshotManager(SnapshotManager.SharedId));
-        // Secondary の設定ないでも、SnapshotManagerを実行する必要がある
-        await _sekibanContext.SekibanActionAsync(
-            SecondaryDb,
-            async () =>
-            {
-                await aggregateCommandExecutor.ExecCreateCommandAsync<SnapshotManager, SnapshotManagerDto, CreateSnapshotManager>(
-                    new CreateSnapshotManager(SnapshotManager.SharedId));
-            });
 
         // 何もしないで実行したら "Default"の動作となる
         // 先に全データを削除する

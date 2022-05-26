@@ -12,25 +12,25 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
     private readonly IAggregateSettings _aggregateSettings;
     private readonly IDocumentPersistentRepository _documentPersistentRepository;
     private readonly IDocumentWriter _documentWriter;
-    private readonly RegisteredEventTypes _registeredEventTypes;
     private readonly SekibanAggregateTypes _sekibanAggregateTypes;
+    private readonly ISekibanContext _sekibanContext;
     private readonly ISingleAggregateService _singleAggregateService;
     public SnapshotManagerEventSubscriber(
-        RegisteredEventTypes registeredEventTypes,
         SekibanAggregateTypes sekibanAggregateTypes,
         IAggregateCommandExecutor aggregateCommandExecutor,
         IDocumentPersistentRepository documentPersistentRepository,
         ISingleAggregateService singleAggregateService,
         IDocumentWriter documentWriter,
-        IAggregateSettings aggregateSettings)
+        IAggregateSettings aggregateSettings,
+        ISekibanContext sekibanContext)
     {
-        _registeredEventTypes = registeredEventTypes;
         _sekibanAggregateTypes = sekibanAggregateTypes;
         _aggregateCommandExecutor = aggregateCommandExecutor;
         _documentPersistentRepository = documentPersistentRepository;
         _singleAggregateService = singleAggregateService;
         _documentWriter = documentWriter;
         _aggregateSettings = aggregateSettings;
+        _sekibanContext = sekibanContext;
     }
 
     public async Task Handle(TEvent notification, CancellationToken cancellationToken)
@@ -42,6 +42,13 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
 
         if (aggregateContainerGroup != AggregateContainerGroup.InMemoryContainer)
         {
+            var aggregate = await _singleAggregateService.GetAggregateAsync<SnapshotManager, SnapshotManagerDto>(SnapshotManager.SharedId);
+            if (aggregate == default)
+            {
+                await _aggregateCommandExecutor.ExecCreateCommandAsync<SnapshotManager, SnapshotManagerDto, CreateSnapshotManager>(
+                    new CreateSnapshotManager(SnapshotManager.SharedId));
+            }
+
             if (_aggregateSettings.ShouldTakeSnapshotForType(aggregateType.Aggregate))
             {
                 var snapshotManagerResponse
@@ -58,38 +65,39 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                     foreach (var taken in snapshotManagerResponse.Events.Where(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken))
                         .Select(m => (SnapshotManagerSnapshotTaken)m))
                     {
-                        if (!await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
+                        if (await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
                             notification.AggregateId,
                             aggregateType.Aggregate,
                             taken.NextSnapshotVersion))
                         {
-                            dynamic? awaitable = _singleAggregateService.GetType()
-                                ?.GetMethod(nameof(_singleAggregateService.GetAggregateDtoAsync))
-                                ?.MakeGenericMethod(aggregateType.Aggregate, aggregateType.Dto)
-                                .Invoke(_singleAggregateService, new object[] { notification.AggregateId, taken.NextSnapshotVersion });
-                            if (awaitable == null) { continue; }
-                            var aggregateToSnapshot = await awaitable;
-                            // var aggregateToSnapshot = await _singleAggregateService.GetAggregateDtoAsync<T, Q>(
-                            // command.AggregateId,
-                            // taken.NextSnapshotVersion);
-                            if (aggregateToSnapshot == null)
-                            {
-                                continue;
-                            }
-                            if (taken.NextSnapshotVersion != aggregateToSnapshot.Version)
-                            {
-                                continue;
-                            }
-                            var snapshotDocument = new SnapshotDocument(
-                                new AggregateIdPartitionKeyFactory(notification.AggregateId, aggregateType.Aggregate),
-                                aggregateType.Aggregate.Name,
-                                aggregateToSnapshot,
-                                notification.AggregateId,
-                                aggregateToSnapshot.LastEventId,
-                                aggregateToSnapshot.LastSortableUniqueId,
-                                aggregateToSnapshot.Version);
-                            await _documentWriter.SaveAsync(snapshotDocument, aggregateType.Aggregate);
+                            continue;
                         }
+                        dynamic? awaitable = _singleAggregateService.GetType()
+                            ?.GetMethod(nameof(_singleAggregateService.GetAggregateDtoAsync))
+                            ?.MakeGenericMethod(aggregateType.Aggregate, aggregateType.Dto)
+                            .Invoke(_singleAggregateService, new object[] { notification.AggregateId, taken.NextSnapshotVersion });
+                        if (awaitable == null) { continue; }
+                        var aggregateToSnapshot = await awaitable;
+                        // var aggregateToSnapshot = await _singleAggregateService.GetAggregateDtoAsync<T, Q>(
+                        // command.AggregateId,
+                        // taken.NextSnapshotVersion);
+                        if (aggregateToSnapshot == null)
+                        {
+                            continue;
+                        }
+                        if (taken.NextSnapshotVersion != aggregateToSnapshot.Version)
+                        {
+                            continue;
+                        }
+                        var snapshotDocument = new SnapshotDocument(
+                            new AggregateIdPartitionKeyFactory(notification.AggregateId, aggregateType.Aggregate),
+                            aggregateType.Aggregate.Name,
+                            aggregateToSnapshot,
+                            notification.AggregateId,
+                            aggregateToSnapshot.LastEventId,
+                            aggregateToSnapshot.LastSortableUniqueId,
+                            aggregateToSnapshot.Version);
+                        await _documentWriter.SaveAsync(snapshotDocument, aggregateType.Aggregate);
                     }
                 }
             }
@@ -97,54 +105,58 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
             foreach (var projection in _sekibanAggregateTypes.ProjectionAggregateTypes.Where(
                 m => m.OriginalType.FullName == aggregateType.Aggregate.FullName))
             {
-                if (_aggregateSettings.ShouldTakeSnapshotForType(projection.Aggregate))
+                if (!_aggregateSettings.ShouldTakeSnapshotForType(projection.Aggregate))
                 {
-                    var snapshotManagerResponseP
-                        = await _aggregateCommandExecutor
-                            .ExecChangeCommandAsync<SnapshotManager, SnapshotManagerDto, ReportAggregateVersionToSnapshotManger>(
-                                new ReportAggregateVersionToSnapshotManger(
-                                    SnapshotManager.SharedId,
-                                    projection.Aggregate,
-                                    notification.AggregateId,
-                                    notification.Version,
-                                    null));
-                    if (snapshotManagerResponseP.Events.Any(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken)))
-                    {
-                        foreach (var taken in snapshotManagerResponseP.Events.Where(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken))
-                            .Select(m => (SnapshotManagerSnapshotTaken)m))
-                        {
-                            if (!await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
-                                notification.AggregateId,
+                    continue;
+                }
+                var snapshotManagerResponseP
+                    = await _aggregateCommandExecutor
+                        .ExecChangeCommandAsync<SnapshotManager, SnapshotManagerDto, ReportAggregateVersionToSnapshotManger>(
+                            new ReportAggregateVersionToSnapshotManger(
+                                SnapshotManager.SharedId,
                                 projection.Aggregate,
-                                taken.NextSnapshotVersion))
-                            {
-                                dynamic? awaitable = _singleAggregateService.GetType()
-                                    ?.GetMethod(nameof(_singleAggregateService.GetProjectionAsync))
-                                    ?.MakeGenericMethod(projection.Aggregate)
-                                    .Invoke(_singleAggregateService, new object[] { notification.AggregateId, taken.NextSnapshotVersion });
-                                if (awaitable == null) { continue; }
-                                var aggregateToSnapshot = await awaitable;
+                                notification.AggregateId,
+                                notification.Version,
+                                null));
+                if (snapshotManagerResponseP.Events.All(m => m.DocumentTypeName != nameof(SnapshotManagerSnapshotTaken)))
+                {
+                    continue;
+                }
 
-                                if (aggregateToSnapshot == null)
-                                {
-                                    continue;
-                                }
-                                if (taken.NextSnapshotVersion != aggregateToSnapshot.Version)
-                                {
-                                    continue;
-                                }
-                                var snapshotDocument = new SnapshotDocument(
-                                    new AggregateIdPartitionKeyFactory(notification.AggregateId, projection.Aggregate),
-                                    projection.Aggregate.Name,
-                                    aggregateToSnapshot,
-                                    notification.AggregateId,
-                                    aggregateToSnapshot.LastEventId,
-                                    aggregateToSnapshot.LastSortableUniqueId,
-                                    aggregateToSnapshot.Version);
-                                await _documentWriter.SaveAsync(snapshotDocument, projection.Aggregate);
-                            }
-                        }
+                foreach (var taken in snapshotManagerResponseP.Events.Where(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken))
+                    .Select(m => (SnapshotManagerSnapshotTaken)m))
+                {
+                    if (await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
+                        notification.AggregateId,
+                        projection.Aggregate,
+                        taken.NextSnapshotVersion))
+                    {
+                        continue;
                     }
+                    dynamic? awaitable = _singleAggregateService.GetType()
+                        ?.GetMethod(nameof(_singleAggregateService.GetProjectionAsync))
+                        ?.MakeGenericMethod(projection.Aggregate)
+                        .Invoke(_singleAggregateService, new object[] { notification.AggregateId, taken.NextSnapshotVersion });
+                    if (awaitable == null) { continue; }
+                    var aggregateToSnapshot = await awaitable;
+
+                    if (aggregateToSnapshot == null)
+                    {
+                        continue;
+                    }
+                    if (taken.NextSnapshotVersion != aggregateToSnapshot.Version)
+                    {
+                        continue;
+                    }
+                    var snapshotDocument = new SnapshotDocument(
+                        new AggregateIdPartitionKeyFactory(notification.AggregateId, projection.Aggregate),
+                        projection.Aggregate.Name,
+                        aggregateToSnapshot,
+                        notification.AggregateId,
+                        aggregateToSnapshot.LastEventId,
+                        aggregateToSnapshot.LastSortableUniqueId,
+                        aggregateToSnapshot.Version);
+                    await _documentWriter.SaveAsync(snapshotDocument, projection.Aggregate);
                 }
             }
         }
