@@ -22,7 +22,7 @@ public abstract class TransferableAggregateBase<TDto> : AggregateBase, ISingleAg
     {
         if (GetApplyEventAction(ev) == null)
         {
-            throw new JJEventNotImplementedException();
+            throw new SekibanEventNotImplementedException();
         }
 
         // Add Event

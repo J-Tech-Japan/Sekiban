@@ -37,12 +37,12 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
             var handler = _serviceProvider.GetService(typeof(IChangeAggregateCommandHandler<T, C>)) as IChangeAggregateCommandHandler<T, C>;
             if (handler == null)
             {
-                throw new JJAggregateCommandNotRegisteredException(typeof(C).Name);
+                throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
             }
             var aggregate = await _singleAggregateService.GetAggregateAsync<T, Q>(command.AggregateId);
             if (aggregate == null)
             {
-                throw new JJInvalidArgumentException();
+                throw new SekibanInvalidArgumentException();
             }
             aggregate.ResetEventsAndSnapshots();
             var result = await handler.HandleAsync(toReturn.Command, aggregate);
@@ -64,7 +64,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
             aggregate.ResetEventsAndSnapshots();
             if (result == null)
             {
-                throw new JJInvalidArgumentException();
+                throw new SekibanInvalidArgumentException();
             }
         }
         catch (Exception e)
@@ -101,7 +101,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
             var handler = _serviceProvider.GetService(typeof(ICreateAggregateCommandHandler<T, C>)) as ICreateAggregateCommandHandler<T, C>;
             if (handler == null)
             {
-                throw new JJAggregateCommandNotRegisteredException(typeof(C).Name);
+                throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
             }
             var result = await handler.HandleAsync(toReturn.Command);
             toReturn.Command.SetPartitionKey(new AggregateIdPartitionKeyFactory(result.Aggregate.AggregateId, typeof(T)));
@@ -122,7 +122,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
             result.Aggregate.ResetEventsAndSnapshots();
             if (result == null)
             {
-                throw new JJInvalidArgumentException();
+                throw new SekibanInvalidArgumentException();
             }
         }
         catch (Exception e)

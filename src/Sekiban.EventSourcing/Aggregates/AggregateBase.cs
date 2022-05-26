@@ -24,7 +24,7 @@ public abstract class AggregateBase : IAggregate
         if (action == null) { return; }
         if (ev.IsAggregateInitialEvent == false && Version == 0)
         {
-            throw new JJInvalidEventException();
+            throw new SekibanInvalidEventException();
         }
         if (ev.Id == LastEventId) { return; }
         action();

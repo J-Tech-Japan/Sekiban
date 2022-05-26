@@ -16,7 +16,7 @@ public class CreateClientHandler : CreateAggregateCommandHandlerBase<Client, Cre
         var branchDto = await _singleAggregateService.GetAggregateDtoAsync<Branch, BranchDto>(command.BranchId);
         if (branchDto is null)
         {
-            throw new JJAggregateNotExistsException(command.BranchId, nameof(Branch));
+            throw new SekibanAggregateNotExistsException(command.BranchId, nameof(Branch));
         }
 
         return new Client(command.BranchId, command.ClientName, command.ClientEmail);

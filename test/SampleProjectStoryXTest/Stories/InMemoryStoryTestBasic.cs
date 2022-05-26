@@ -97,7 +97,7 @@ public class InMemoryStoryTestBasic : ProjectByTestTestBase
         var secondName = "田中 太郎";
 
         // should throw version error 
-        await Assert.ThrowsAsync<JJAggregateCommandInconsistentVersionException>(
+        await Assert.ThrowsAsync<SekibanAggregateCommandInconsistentVersionException>(
             async () =>
             {
                 await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientDto, ChangeClientName>(
@@ -151,7 +151,7 @@ public class InMemoryStoryTestBasic : ProjectByTestTestBase
         Assert.Equal(1000, loyaltyPoint!.CurrentPoint);
 
         // should throw not enough point error 
-        await Assert.ThrowsAsync<JJLoyaltyPointNotEnoughException>(
+        await Assert.ThrowsAsync<SekibanLoyaltyPointNotEnoughException>(
             async () =>
             {
                 await _aggregateCommandExecutor.ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointDto, UseLoyaltyPoint>(
@@ -299,9 +299,9 @@ public class InMemoryStoryTestBasic : ProjectByTestTestBase
     {
         foreach (var dto in snapshots.Select(snapshot => snapshot.ToDto<RecentActivityDto>()))
         {
-            if (dto == null) { throw new JJInvalidArgumentException(); }
+            if (dto == null) { throw new SekibanInvalidArgumentException(); }
             var fromInitial = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<T, Q>(aggregateId, dto.Version);
-            if (fromInitial == null) { throw new JJInvalidArgumentException(); }
+            if (fromInitial == null) { throw new SekibanInvalidArgumentException(); }
             Assert.Equal(fromInitial.Version, dto.Version);
             Assert.Equal(fromInitial.LastEventId, dto.LastEventId);
         }
