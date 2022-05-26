@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
+using Xunit;
 namespace Sekiban.EventSourcing.TestHelpers;
 
 public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggregate, TDto>
@@ -134,6 +135,7 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
         checkEventAction(LatestEvents.First(), Aggregate);
         return this;
     }
+
     public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent(Action<AggregateEvent> checkEventAction)
     {
         if (LatestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
@@ -148,6 +150,20 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
     public AggregateTestHelper<TAggregate, TDto> Expect(Action<TDto> checkDtoAction)
     {
         checkDtoAction(Aggregate.ToDto());
+        return this;
+    }
+    public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent<T>(Action<T, TAggregate> checkEventAction) where T : AggregateEvent
+    {
+        if (LatestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
+        Assert.IsType<T>(LatestEvents.First());
+        checkEventAction((T)LatestEvents.First(), Aggregate);
+        return this;
+    }
+    public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent<T>(Action<T> checkEventAction) where T : AggregateEvent
+    {
+        if (LatestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
+        Assert.IsType<T>(LatestEvents.First());
+        checkEventAction((T)LatestEvents.First());
         return this;
     }
 }

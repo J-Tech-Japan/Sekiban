@@ -44,6 +44,11 @@ public abstract class SingleAggregateTestBase<TAggregate, TDto> : IDisposable, I
         _helper.ThenSingleEvent(checkEventAction);
     public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent(Action<AggregateEvent> checkEventAction) =>
         _helper.ThenSingleEvent(checkEventAction);
+    public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent<T>(Action<T, TAggregate> checkEventAction) where T : AggregateEvent =>
+        _helper.ThenSingleEvent(checkEventAction);
+    public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent<T>(Action<T> checkEventAction) where T : AggregateEvent =>
+        _helper.ThenSingleEvent(checkEventAction);
+
     public AggregateTestHelper<TAggregate, TDto> Expect(Action<TDto, TAggregate> checkDtoAction) =>
         _helper.Expect(checkDtoAction);
     public AggregateTestHelper<TAggregate, TDto> Expect(Action<TDto> checkDtoAction) =>
