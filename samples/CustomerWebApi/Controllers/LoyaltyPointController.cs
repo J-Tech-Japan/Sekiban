@@ -24,7 +24,7 @@ public class LoyaltyPointController : Controller
 
     [HttpGet]
     public async Task<ActionResult<LoyaltyPointDto>> GetAsync(Guid clientId) =>
-        await _singleAggregateService.GetAggregateDtoAsync<LoyaltyPoint, LoyaltyPointDto>(clientId) ?? throw new JJInvalidArgumentException();
+        await _singleAggregateService.GetAggregateDtoAsync<LoyaltyPoint, LoyaltyPointDto>(clientId) ?? throw new SekibanInvalidArgumentException();
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<LoyaltyPointDto>>> ListAsync(QueryListType queryListType = QueryListType.ActiveOnly) =>

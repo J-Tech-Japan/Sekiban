@@ -18,7 +18,7 @@ public class AggregateIdPartitionKeyFactory : IPartitionKeyFactory
             DocumentType.AggregateCommand => $"c_{AggregateId}",
             DocumentType.AggregateEvent => $"{AggregateType.Name}_{AggregateId}",
             DocumentType.AggregateSnapshot => $"s_{AggregateType.Name}_{AggregateId}",
-            _ => throw new JJInvalidDocumentTypeException()
+            _ => throw new SekibanInvalidDocumentTypeException()
         };
     }
 }

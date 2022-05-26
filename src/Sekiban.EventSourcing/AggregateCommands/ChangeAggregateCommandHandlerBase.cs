@@ -12,13 +12,13 @@ public abstract class ChangeAggregateCommandHandlerBase<T, C> : IChangeAggregate
         // Validate Aggregate is deleted
         if (command is not INoValidateCommand && aggregate.IsDeleted)
         {
-            throw new JJAggregateNotExistsException(aggregate.AggregateId, typeof(T).Name);
+            throw new SekibanAggregateNotExistsException(aggregate.AggregateId, typeof(T).Name);
         }
 
         // Validate Aggregate Version
         if (command is not INoValidateCommand && command.ReferenceVersion != aggregate.Version)
         {
-            throw new JJAggregateCommandInconsistentVersionException(aggregate.AggregateId, aggregate.Version);
+            throw new SekibanAggregateCommandInconsistentVersionException(aggregate.AggregateId, aggregate.Version);
         }
 
         // Execute Command
