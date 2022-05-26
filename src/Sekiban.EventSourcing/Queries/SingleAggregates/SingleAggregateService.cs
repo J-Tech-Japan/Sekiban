@@ -45,6 +45,7 @@ public class SingleAggregateService : ISingleAggregateService
                     }
                 }
             });
+        if (aggregate.Version == 0) { return default; }
         return aggregate;
     }
 
@@ -148,10 +149,11 @@ public class SingleAggregateService : ISingleAggregateService
                     aggregate.ApplyEvent(e);
                     if (toVersion.HasValue && aggregate.Version == toVersion.Value)
                     {
-                        break;
+                        break; 
                     }
                 }
             });
+        if (aggregate.Version == 0) { return default; }
         if (toVersion.HasValue && aggregate.Version < toVersion.Value)
         {
             throw new JJVersionNotReachToSpecificVersion();
