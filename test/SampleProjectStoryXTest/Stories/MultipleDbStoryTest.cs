@@ -30,9 +30,16 @@ public class MultipleDbStoryTest : TestBase
         var aggregateCommandExecutor = GetService<IAggregateCommandExecutor>();
         var multipleAggregateProjectionService = GetService<MultipleAggregateProjectionService>();
 
-        aggregateCommandExecutor
-            .ExecCreateCommandAsync<SnapshotManager, SnapshotManagerDto, CreateSnapshotManager>(new CreateSnapshotManager(SnapshotManager.SharedId))
-            .Wait();
+        await aggregateCommandExecutor.ExecCreateCommandAsync<SnapshotManager, SnapshotManagerDto, CreateSnapshotManager>(
+            new CreateSnapshotManager(SnapshotManager.SharedId));
+        // Secondary の設定ないでも、SnapshotManagerを実行する必要がある
+        await _sekibanContext.SekibanActionAsync(
+            SecondaryDb,
+            async () =>
+            {
+                await aggregateCommandExecutor.ExecCreateCommandAsync<SnapshotManager, SnapshotManagerDto, CreateSnapshotManager>(
+                    new CreateSnapshotManager(SnapshotManager.SharedId));
+            });
 
         // 何もしないで実行したら "Default"の動作となる
         // 先に全データを削除する
