@@ -34,7 +34,7 @@ https://github.com/heynickc/AggregateSource
 https://github.com/J-Tech-Japan/JJ_Sekiban/blob/main/test/SampleProjectStoryXTest/SingleAggregates/ClientSpec.cs
 
 上記にサンプルコードを記述しています。今のところはとても簡単なテストですが、集約の機能が増えてきた時に、まず集約で正しくイベントが生成されるか、それによってステータスがどのように変化するかを確認することが可能です。
-記法に関しては、クラス内にメソッドがあるため、ドット記法で書くことも、ドット記法をつかない方法も可能です。
+記法に関しては、クラス内にメソッドがあるため、ドット記法で書くことも、ドット記法をつかわない方法も可能です。
 
 
 ```aggregateTest.cs
