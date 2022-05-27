@@ -2,6 +2,7 @@ using CustomerDomainContext.Aggregates.Branches;
 using CustomerDomainContext.Aggregates.Clients;
 using CustomerDomainContext.Aggregates.Clients.Commands;
 using CustomerDomainContext.Aggregates.Clients.Events;
+using CustomerDomainContext.Shared.Exceptions;
 using Sekiban.EventSourcing.Aggregates;
 using System;
 using System.Collections.Generic;
@@ -53,6 +54,26 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientDto>
                 Assert.Equal(testClientChangedName, dto.ClientName);
                 Assert.Equal(testEmail, dto.ClientEmail);
             });
+    }
+    [Fact(DisplayName = "重複したメールアドレスが存在する場合、作成失敗する")]
+    public void ClientCreateDuplicateEmailSpec()
+    {
+        const string testClientName = "TestName";
+        const string testClientChangedName = "TestName2";
+        const string testEmail = "test@example.com";
+        var branchDto = new BranchDto { AggregateId = Guid.NewGuid(), Name = "TEST", Version = 1 };
+        var clientDto = new ClientDto
+        {
+            AggregateId = Guid.NewGuid(),
+            ClientName = "NOT DUPLICATED NAME",
+            ClientEmail = testEmail,
+            BranchId = Guid.NewGuid(),
+            Version = 1
+        };
+        // CreateコマンドでBranchを参照するため、BranchDtoオブジェクトを参照ように渡す
+        GivenEnvironmentDtos(new List<AggregateDtoBase> { branchDto, clientDto });
+        // CreateClient コマンドを実行する エラーになるはず
+        Assert.Throws<SekibanEmailAlreadyRegistered>(() => WhenCreate(new CreateClient(branchDto.AggregateId, testClientName, testEmail)));
     }
     [Fact(DisplayName = "コマンドではなく、集約メソッドをテストする")]
     public void UsingAggregateFunctionNoCommand()

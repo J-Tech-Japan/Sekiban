@@ -26,7 +26,7 @@ public class MultipleDbStoryTest : TestBase
     {
         var cosmosDbFactory = GetService<CosmosDbFactory>();
         var aggregateCommandExecutor = GetService<IAggregateCommandExecutor>();
-        var multipleAggregateProjectionService = GetService<MultipleAggregateProjectionService>();
+        var multipleAggregateProjectionService = GetService<IMultipleAggregateProjectionService>();
 
         // 何もしないで実行したら "Default"の動作となる
         // 先に全データを削除する
