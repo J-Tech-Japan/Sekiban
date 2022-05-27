@@ -1,6 +1,5 @@
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 using System.ComponentModel.DataAnnotations;
-
 namespace Sekiban.EventSourcing.Aggregates;
 
 public abstract record AggregateDtoBase : ISingleAggregate
@@ -46,4 +45,13 @@ public abstract record AggregateDtoBase : ISingleAggregate
     [Required]
     [Description("並べ替え可能なユニークID（自動付与）、このIDの順番でイベントは常に順番を決定する")]
     public string LastSortableUniqueId { get; init; } = string.Empty;
+
+    public dynamic GetComparableObject(AggregateDtoBase original, bool copyVersion = true) =>
+        this with
+        {
+            Version = copyVersion ? original.Version : Version,
+            LastEventId = original.LastEventId,
+            AppliedSnapshotVersion = original.AppliedSnapshotVersion,
+            LastSortableUniqueId = original.LastSortableUniqueId
+        };
 }
