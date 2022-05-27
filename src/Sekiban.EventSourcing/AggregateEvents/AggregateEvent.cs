@@ -34,6 +34,16 @@ public record AggregateEvent : Document, IAggregateEvent, ICallHistories
 
     public List<CallHistory> CallHistories { get; init; } = new();
 
+    public dynamic GetComparableObject(AggregateEvent original, bool copyVersion = true) =>
+        this with
+        {
+            Version = copyVersion ? original.Version : Version,
+            SortableUniqueId = original.SortableUniqueId,
+            CallHistories = original.CallHistories,
+            Id = original.Id,
+            TimeStamp = original.TimeStamp
+        };
+
     public void SetVersion(int version) =>
         _version = version;
 

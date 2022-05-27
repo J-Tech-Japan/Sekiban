@@ -8,9 +8,9 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
     where TAggregate : TransferableAggregateBase<TDto> where TDto : AggregateDtoBase
 {
     private readonly IServiceProvider _serviceProvider;
-    private TAggregate Aggregate { get; set; }
-
-    public List<AggregateEvent> LatestEvents { get; set; } = new();
+    private TAggregate _aggregate { get; set; }
+    private Exception _latestException { get; set; }
+    private List<AggregateEvent> _latestEvents { get; set; } = new();
     private DefaultSingleAggregateProjector<TAggregate> _projector
     {
         get;
@@ -20,7 +20,7 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
     {
         _serviceProvider = serviceProvider;
         _projector = new DefaultSingleAggregateProjector<TAggregate>();
-        Aggregate = _projector.CreateInitialAggregate(Guid.Empty);
+        _aggregate = _projector.CreateInitialAggregate(Guid.Empty);
     }
 
     public AggregateTestHelper<TAggregate, TDto> GivenEnvironmentDtos(List<AggregateDtoBase> dtos)
@@ -36,25 +36,25 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
     }
     public AggregateTestHelper<TAggregate, TDto> Given(TDto snapshot)
     {
-        Aggregate.ApplySnapshot(snapshot);
+        _aggregate.ApplySnapshot(snapshot);
         return this;
     }
     public AggregateTestHelper<TAggregate, TDto> Given(AggregateEvent ev)
     {
-        if (Aggregate.CanApplyEvent(ev)) { Aggregate.ApplyEvent(ev); }
+        if (_aggregate.CanApplyEvent(ev)) { _aggregate.ApplyEvent(ev); }
         return this;
     }
     public AggregateTestHelper<TAggregate, TDto> Given(Func<TAggregate, AggregateEvent> evFunc)
     {
-        var ev = evFunc(Aggregate);
-        if (Aggregate.CanApplyEvent(ev)) { Aggregate.ApplyEvent(ev); }
+        var ev = evFunc(_aggregate);
+        if (_aggregate.CanApplyEvent(ev)) { _aggregate.ApplyEvent(ev); }
         return this;
     }
     public AggregateTestHelper<TAggregate, TDto> Given(IEnumerable<AggregateEvent> events)
     {
         foreach (var ev in events)
         {
-            if (Aggregate.CanApplyEvent(ev)) { Aggregate.ApplyEvent(ev); }
+            if (_aggregate.CanApplyEvent(ev)) { _aggregate.ApplyEvent(ev); }
         }
         return this;
     }
@@ -75,14 +75,15 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
         try
         {
             var result = handler.HandleAsync(commandDocument).Result;
-            Aggregate = result.Aggregate;
+            _aggregate = result.Aggregate;
         }
-        catch (AggregateException ex)
+        catch (Exception ex)
         {
-            throw ex.InnerExceptions.First();
+            _latestException = ex;
+            return this;
         }
-        LatestEvents = Aggregate.Events.ToList();
-        Aggregate.ResetEventsAndSnapshots();
+        _latestEvents = _aggregate.Events.ToList();
+        _aggregate.ResetEventsAndSnapshots();
         return this;
     }
 
@@ -97,14 +98,15 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
         var commandDocument = new AggregateCommandDocument<C>(createCommand, new CanNotUsePartitionKeyFactory());
         try
         {
-            handler.HandleAsync(commandDocument, Aggregate).Wait();
+            handler.HandleAsync(commandDocument, _aggregate).Wait();
         }
-        catch (AggregateException ex)
+        catch (Exception ex)
         {
-            throw ex.InnerExceptions.First();
+            _latestException = ex;
+            return this;
         }
-        LatestEvents = Aggregate.Events.ToList();
-        Aggregate.ResetEventsAndSnapshots();
+        _latestEvents = _aggregate.Events.ToList();
+        _aggregate.ResetEventsAndSnapshots();
         return this;
     }
     public AggregateTestHelper<TAggregate, TDto> WhenChange<C>(Func<TAggregate, C> commandFunc) where C : ChangeAggregateCommandBase<TAggregate>
@@ -115,74 +117,125 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
         {
             throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
         }
-        var command = commandFunc(Aggregate);
+        var command = commandFunc(_aggregate);
         var commandDocument = new AggregateCommandDocument<C>(command, new CanNotUsePartitionKeyFactory());
-        handler.HandleAsync(commandDocument, Aggregate).Wait();
-        LatestEvents = Aggregate.Events.ToList();
-        Aggregate.ResetEventsAndSnapshots();
+        try
+        {
+            handler.HandleAsync(commandDocument, _aggregate).Wait();
+        }
+        catch (Exception ex)
+        {
+            _latestException = ex;
+            return this;
+        }
+
+        _latestEvents = _aggregate.Events.ToList();
+        _aggregate.ResetEventsAndSnapshots();
         return this;
     }
 
     public AggregateTestHelper<TAggregate, TDto> WhenMethod(Action<TAggregate> action)
     {
-        action(Aggregate);
-        LatestEvents = Aggregate.Events.ToList();
-        Aggregate.ResetEventsAndSnapshots();
+        try
+        {
+            action(_aggregate);
+        }
+        catch (Exception ex)
+        {
+            _latestException = ex;
+            return this;
+        }
+        _latestEvents = _aggregate.Events.ToList();
+        _aggregate.ResetEventsAndSnapshots();
         return this;
     }
-    public AggregateTestHelper<TAggregate, TDto> WhenConstructor(TAggregate aggregate)
+    public AggregateTestHelper<TAggregate, TDto> WhenConstructor(Func<TAggregate> aggregateFunc)
     {
-        Aggregate = aggregate;
-        LatestEvents = Aggregate.Events.ToList();
-        Aggregate.ResetEventsAndSnapshots();
+        try
+        {
+            _aggregate = aggregateFunc();
+        }
+        catch (Exception ex)
+        {
+            _latestException = ex;
+            return this;
+        }
+        _latestEvents = _aggregate.Events.ToList();
+        _aggregate.ResetEventsAndSnapshots();
         return this;
     }
 
     public AggregateTestHelper<TAggregate, TDto> ThenEvents(Action<List<AggregateEvent>, TAggregate> checkEventsAction)
     {
-        checkEventsAction(LatestEvents, Aggregate);
+        checkEventsAction(_latestEvents, _aggregate);
         return this;
     }
     public AggregateTestHelper<TAggregate, TDto> ThenEvents(Action<List<AggregateEvent>> checkEventsAction)
     {
-        checkEventsAction(LatestEvents);
+        checkEventsAction(_latestEvents);
         return this;
     }
     public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent(Action<AggregateEvent, TAggregate> checkEventAction)
     {
-        if (LatestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
-        checkEventAction(LatestEvents.First(), Aggregate);
+        if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
+        checkEventAction(_latestEvents.First(), _aggregate);
         return this;
     }
 
     public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent(Action<AggregateEvent> checkEventAction)
     {
-        if (LatestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
-        checkEventAction(LatestEvents.First());
+        if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
+        checkEventAction(_latestEvents.First());
         return this;
     }
     public AggregateTestHelper<TAggregate, TDto> Expect(Action<TDto, TAggregate> checkDtoAction)
     {
-        checkDtoAction(Aggregate.ToDto(), Aggregate);
+        checkDtoAction(_aggregate.ToDto(), _aggregate);
         return this;
     }
     public AggregateTestHelper<TAggregate, TDto> Expect(Action<TDto> checkDtoAction)
     {
-        checkDtoAction(Aggregate.ToDto());
+        checkDtoAction(_aggregate.ToDto());
         return this;
     }
     public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent<T>(Action<T, TAggregate> checkEventAction) where T : AggregateEvent
     {
-        if (LatestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
-        Assert.IsType<T>(LatestEvents.First());
-        checkEventAction((T)LatestEvents.First(), Aggregate);
+        if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
+        Assert.IsType<T>(_latestEvents.First());
+        checkEventAction((T)_latestEvents.First(), _aggregate);
         return this;
     }
+
     public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent<T>(Action<T> checkEventAction) where T : AggregateEvent
     {
-        if (LatestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
-        Assert.IsType<T>(LatestEvents.First());
-        checkEventAction((T)LatestEvents.First());
+        if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
+        Assert.IsType<T>(_latestEvents.First());
+        checkEventAction((T)_latestEvents.First());
+        return this;
+    }
+
+    public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent<T>(Func<TAggregate, T> constructExpectedEvent) where T : AggregateEvent
+    {
+        if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
+        Assert.IsType<T>(_latestEvents.First());
+        var actual = _latestEvents.First();
+        var expected = constructExpectedEvent(_aggregate);
+        expected = constructExpectedEvent(_aggregate).GetComparableObject(actual, expected.Version == 0);
+        Assert.Equal((T)actual, expected);
+        return this;
+    }
+    public AggregateTestHelper<TAggregate, TDto> Expect(Func<TAggregate, TDto> constructExpectedDto)
+    {
+        var actual = _aggregate.ToDto();
+        var expected = constructExpectedDto(_aggregate).GetComparableObject(actual);
+        Assert.Equal(actual, (TDto)expected);
+        return this;
+    }
+
+    public AggregateTestHelper<TAggregate, TDto> ShouldThrows<T>() where T : Exception
+    {
+        var exception = _latestException is AggregateException aggregateException ? aggregateException.InnerExceptions.First() : _latestException;
+        Assert.IsType<T>(exception);
         return this;
     }
 }
