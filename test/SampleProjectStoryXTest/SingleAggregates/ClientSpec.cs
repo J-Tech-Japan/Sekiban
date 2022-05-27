@@ -11,12 +11,14 @@ namespace SampleProjectStoryXTest.SingleAggregates;
 
 public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientDto>
 {
+    private const string testClientName = "TestName";
+    private const string testClientChangedName = "TestName2";
+    private const string testEmail = "test@example.com";
+    private const string testClientChangedNameV3 = "TestName3";
+
     [Fact(DisplayName = "集約コマンドを実行してテストする")]
     public void ClientCreateSpec()
     {
-        const string testClientName = "TestName";
-        const string testClientChangedName = "TestName2";
-        const string testEmail = "test@example.com";
         var branchDto = new BranchDto { AggregateId = Guid.NewGuid(), Name = "TEST", Version = 1 };
         // CreateコマンドでBranchを参照するため、BranchDtoオブジェクトを参照ように渡す
         GivenEnvironmentDtos(new List<AggregateDtoBase> { branchDto });
@@ -25,7 +27,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientDto>
         // コマンドによって生成されたイベントを検証する
         ThenSingleEvent(client => new ClientCreated(client.AggregateId, branchDto.AggregateId, testClientName, testEmail));
         // 現在の集約のステータスを検証する
-        Expect(
+        ThenState(
             client => new ClientDto
             {
                 AggregateId = client.AggregateId,
@@ -39,7 +41,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientDto>
         // コマンドによって生成されたイベントを検証する
         ThenSingleEvent(client => new ClientNameChanged(client.AggregateId, testClientChangedName));
         // 現在の集約のステータスを検証する
-        Expect(
+        ThenState(
             client => new ClientDto
             {
                 AggregateId = client.AggregateId,
@@ -52,9 +54,6 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientDto>
     [Fact(DisplayName = "重複したメールアドレスが存在する場合、作成失敗する")]
     public void ClientCreateDuplicateEmailSpec()
     {
-        const string testClientName = "TestName";
-        const string testClientChangedName = "TestName2";
-        const string testEmail = "test@example.com";
         var branchDto = new BranchDto { AggregateId = Guid.NewGuid(), Name = "TEST", Version = 1 };
         var clientDto = new ClientDto
         {
@@ -67,21 +66,18 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientDto>
         // CreateコマンドでBranchを参照するため、BranchDtoオブジェクトを参照ように渡す
         GivenEnvironmentDtos(new List<AggregateDtoBase> { branchDto, clientDto });
         // CreateClient コマンドを実行する エラーになるはず
-        WhenCreate(new CreateClient(branchDto.AggregateId, testClientName, testEmail)).ShouldThrows<SekibanEmailAlreadyRegistered>();
+        WhenCreate(new CreateClient(branchDto.AggregateId, testClientName, testEmail)).ThenThrows<SekibanEmailAlreadyRegistered>();
     }
     [Fact(DisplayName = "コマンドではなく、集約メソッドをテストする")]
     public void UsingAggregateFunctionNoCommand()
     {
-        const string testClientName = "TestName";
-        const string testClientChangedName = "TestName2";
-        const string testEmail = "test@example.com";
         var branchId = Guid.NewGuid();
 
         WhenConstructor(() => new Client(branchId, testClientName, testEmail))
             // コマンドによって生成されたイベントを検証する
             .ThenSingleEvent(client => new ClientCreated(client.AggregateId, branchId, testClientName, testEmail))
             // 現在の集約のステータスを検証する
-            .Expect(
+            .ThenState(
                 client => new ClientDto
                 {
                     AggregateId = client.AggregateId,
@@ -98,7 +94,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientDto>
             // コマンドによって生成されたイベントを検証する
             .ThenSingleEvent(client => new ClientNameChanged(client.AggregateId, testClientChangedName))
             // 現在の集約のステータスを検証する
-            .Expect(
+            .ThenState(
                 client => new ClientDto
                 {
                     AggregateId = client.AggregateId,
@@ -111,10 +107,6 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientDto>
     [Fact(DisplayName = "イベントを渡してスタートする")]
     public void StartWithEvents()
     {
-        const string testClientName = "TestName";
-        const string testClientChangedName = "TestName2";
-        const string testClientChangedNameV3 = "TestName3";
-        const string testEmail = "test@example.com";
         var branchId = Guid.NewGuid();
         Given(new ClientCreated(Guid.NewGuid(), branchId, testClientName, testEmail))
             .Given(client => new ClientNameChanged(client.AggregateId, testClientChangedName))
@@ -122,7 +114,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientDto>
             // コマンドによって生成されたイベントを検証する
             .ThenSingleEvent(client => new ClientNameChanged(client.AggregateId, testClientChangedNameV3))
             // 現在の集約のステータスを検証する
-            .Expect(
+            .ThenState(
                 client => new ClientDto
                 {
                     AggregateId = client.AggregateId,
@@ -135,9 +127,6 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientDto>
     [Fact(DisplayName = "スナップショットを使用してテストを開始")]
     public void StartWithSnapshot()
     {
-        const string testClientName = "TestName";
-        const string testClientChangedName = "TestName2";
-        const string testEmail = "test@example.com";
         var branchId = Guid.NewGuid();
         var clientId = Guid.NewGuid();
 
@@ -154,7 +143,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientDto>
             // コマンドによって生成されたイベントを検証する
             .ThenSingleEvent(client => new ClientNameChanged(client.AggregateId, testClientChangedName))
             // 現在の集約のステータスを検証する
-            .Expect(
+            .ThenState(
                 client => new ClientDto
                 {
                     AggregateId = client.AggregateId,
