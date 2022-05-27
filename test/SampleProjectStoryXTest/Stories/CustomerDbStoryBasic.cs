@@ -39,7 +39,7 @@ public class CustomerDbStoryBasic : TestBase
     private readonly IDocumentPersistentRepository _documentPersistentRepository;
     private readonly HybridStoreManager _hybridStoreManager;
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
-    private readonly MultipleAggregateProjectionService _multipleAggregateProjectionService;
+    private readonly IMultipleAggregateProjectionService _multipleAggregateProjectionService;
     private readonly ITestOutputHelper _testOutputHelper;
     public CustomerDbStoryBasic(TestFixture testFixture, ITestOutputHelper testOutputHelper) : base(testFixture)
     {
@@ -48,7 +48,7 @@ public class CustomerDbStoryBasic : TestBase
         _aggregateCommandExecutor = GetService<IAggregateCommandExecutor>();
         _aggregateService = GetService<ISingleAggregateService>();
         _documentPersistentRepository = GetService<IDocumentPersistentRepository>();
-        _multipleAggregateProjectionService = GetService<MultipleAggregateProjectionService>();
+        _multipleAggregateProjectionService = GetService<IMultipleAggregateProjectionService>();
         _inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
         _hybridStoreManager = GetService<HybridStoreManager>();
     }

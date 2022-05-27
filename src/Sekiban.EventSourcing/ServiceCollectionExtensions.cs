@@ -17,7 +17,7 @@ public static class ServiceCollectionExtensions
 
         services.AddTransient<IAggregateCommandExecutor, AggregateCommandExecutor>();
         services.AddTransient<ISingleAggregateService, SingleAggregateService>();
-        services.AddTransient<MultipleAggregateProjectionService>();
+        services.AddTransient<IMultipleAggregateProjectionService, MultipleAggregateProjectionService>();
 
         services.AddSingleton(new InMemoryDocumentStore());
         services.AddTransient<IDocumentTemporaryWriter, InMemoryDocumentWriter>();
@@ -36,7 +36,7 @@ public static class ServiceCollectionExtensions
 
         services.AddTransient<IAggregateCommandExecutor, AggregateCommandExecutor>();
         services.AddTransient<ISingleAggregateService, SingleAggregateService>();
-        services.AddTransient<MultipleAggregateProjectionService>();
+        services.AddTransient<IMultipleAggregateProjectionService, MultipleAggregateProjectionService>();
 
         services.AddSingleton(new InMemoryDocumentStore());
         services.AddTransient<IDocumentWriter, InMemoryDocumentWriter>();
@@ -58,7 +58,7 @@ public static class ServiceCollectionExtensions
 
         services.AddTransient<IAggregateCommandExecutor, AggregateCommandExecutor>();
         services.AddSingleton<ISingleAggregateService>(new MemorySingleAggregateService());
-        services.AddTransient<MultipleAggregateProjectionService>();
+        services.AddSingleton<IMultipleAggregateProjectionService>(new MemoryMultipleAggregateProjectionService());
 
         services.AddSingleton(new InMemoryDocumentStore());
         services.AddTransient<IDocumentWriter, InMemoryDocumentWriter>();

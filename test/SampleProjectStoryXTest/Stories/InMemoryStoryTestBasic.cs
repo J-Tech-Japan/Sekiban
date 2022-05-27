@@ -32,7 +32,7 @@ public class InMemoryStoryTestBasic : ProjectByTestTestBase
 {
     private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
     private readonly ISingleAggregateService _aggregateService;
-    private readonly MultipleAggregateProjectionService _multipleAggregateProjectionService;
+    private readonly IMultipleAggregateProjectionService _multipleAggregateProjectionService;
     private readonly ITestOutputHelper _testOutputHelper;
 
     public InMemoryStoryTestBasic(ITestOutputHelper testOutputHelper, bool inMemory = true) : base(inMemory)
@@ -40,7 +40,7 @@ public class InMemoryStoryTestBasic : ProjectByTestTestBase
         _testOutputHelper = testOutputHelper;
         _aggregateCommandExecutor = GetService<IAggregateCommandExecutor>();
         _aggregateService = GetService<ISingleAggregateService>();
-        _multipleAggregateProjectionService = GetService<MultipleAggregateProjectionService>();
+        _multipleAggregateProjectionService = GetService<IMultipleAggregateProjectionService>();
     }
     [Fact(DisplayName = "CosmosDb ストーリーテスト インメモリで集約の機能のテストを行う")]
     public async Task CosmosDbStory()

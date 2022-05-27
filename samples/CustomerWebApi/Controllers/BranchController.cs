@@ -10,12 +10,12 @@ public class BranchController : Controller
 {
     private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
     private readonly ISingleAggregateService _aggregateService;
-    private readonly MultipleAggregateProjectionService _multipleAggregateProjectionService;
+    private readonly IMultipleAggregateProjectionService _multipleAggregateProjectionService;
 
     public BranchController(
         IAggregateCommandExecutor aggregateCommandExecutor,
         ISingleAggregateService aggregateService,
-        MultipleAggregateProjectionService multipleAggregateProjectionService)
+        IMultipleAggregateProjectionService multipleAggregateProjectionService)
     {
         _aggregateCommandExecutor = aggregateCommandExecutor;
         _aggregateService = aggregateService;

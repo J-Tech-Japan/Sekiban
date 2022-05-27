@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Xunit;
 namespace Sekiban.EventSourcing.TestHelpers;
@@ -27,6 +28,10 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
         var singleAggregateService = _serviceProvider.GetService<ISingleAggregateService>();
         var memorySingleAggregateService = singleAggregateService as MemorySingleAggregateService;
         memorySingleAggregateService?.Aggregates.AddRange(dtos);
+
+        var multipleAggregateService = _serviceProvider.GetService<IMultipleAggregateProjectionService>() as MemoryMultipleAggregateProjectionService;
+        multipleAggregateService?.Objects.AddRange(dtos);
+
         return this;
     }
     public AggregateTestHelper<TAggregate, TDto> Given(TDto snapshot)
@@ -67,8 +72,15 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
             throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
         }
         var commandDocument = new AggregateCommandDocument<C>(createCommand, new CanNotUsePartitionKeyFactory());
-        var result = handler.HandleAsync(commandDocument).Result;
-        Aggregate = result.Aggregate;
+        try
+        {
+            var result = handler.HandleAsync(commandDocument).Result;
+            Aggregate = result.Aggregate;
+        }
+        catch (AggregateException ex)
+        {
+            throw ex.InnerExceptions.First();
+        }
         LatestEvents = Aggregate.Events.ToList();
         Aggregate.ResetEventsAndSnapshots();
         return this;
@@ -83,7 +95,14 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
             throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
         }
         var commandDocument = new AggregateCommandDocument<C>(createCommand, new CanNotUsePartitionKeyFactory());
-        handler.HandleAsync(commandDocument, Aggregate).Wait();
+        try
+        {
+            handler.HandleAsync(commandDocument, Aggregate).Wait();
+        }
+        catch (AggregateException ex)
+        {
+            throw ex.InnerExceptions.First();
+        }
         LatestEvents = Aggregate.Events.ToList();
         Aggregate.ResetEventsAndSnapshots();
         return this;

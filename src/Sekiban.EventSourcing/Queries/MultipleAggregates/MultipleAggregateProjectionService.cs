@@ -1,29 +1,12 @@
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace Sekiban.EventSourcing.Queries.MultipleAggregates;
 
-public class MultipleAggregateProjectionService
+public class MultipleAggregateProjectionService : IMultipleAggregateProjectionService
 {
     private readonly IDocumentRepository _documentRepository;
 
     public MultipleAggregateProjectionService(IDocumentRepository documentRepository) =>
         _documentRepository = documentRepository;
-
-    private async Task<Q> GetMultipleProjectionAsync<P, Q>() where P : IMultipleAggregateProjector<Q>, new() where Q : IMultipleAggregateProjectionDto
-    {
-        var projector = new P();
-        await _documentRepository.GetAllAggregateEventsAsync(
-            typeof(P),
-            projector.TargetAggregateNames(),
-            null,
-            events =>
-            {
-                foreach (var ev in events)
-                {
-                    projector.ApplyEvent(ev);
-                }
-            });
-        return projector.ToDto();
-    }
 
     public Task<P> GetProjectionAsync<P>() where P : MultipleAggregateProjectionBase<P>, IMultipleAggregateProjectionDto, new() =>
         GetMultipleProjectionAsync<P, P>();
@@ -56,5 +39,22 @@ public class MultipleAggregateProjectionService
             QueryListType.DeletedOnly => list.Where(m => m.IsDeleted).ToList(),
             _ => list.Where(m => m.IsDeleted == false).ToList()
         };
+    }
+
+    private async Task<Q> GetMultipleProjectionAsync<P, Q>() where P : IMultipleAggregateProjector<Q>, new() where Q : IMultipleAggregateProjectionDto
+    {
+        var projector = new P();
+        await _documentRepository.GetAllAggregateEventsAsync(
+            typeof(P),
+            projector.TargetAggregateNames(),
+            null,
+            events =>
+            {
+                foreach (var ev in events)
+                {
+                    projector.ApplyEvent(ev);
+                }
+            });
+        return projector.ToDto();
     }
 }

@@ -10,12 +10,12 @@ namespace CustomerWebApi.Controllers;
 public class LoyaltyPointController : Controller
 {
     private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
-    private readonly MultipleAggregateProjectionService _multipleAggregateProjectionService;
+    private readonly IMultipleAggregateProjectionService _multipleAggregateProjectionService;
     private readonly ISingleAggregateService _singleAggregateService;
     public LoyaltyPointController(
         IAggregateCommandExecutor aggregateCommandExecutor,
         ISingleAggregateService aggregateService,
-        MultipleAggregateProjectionService multipleAggregateProjectionService)
+        IMultipleAggregateProjectionService multipleAggregateProjectionService)
     {
         _aggregateCommandExecutor = aggregateCommandExecutor;
         _singleAggregateService = aggregateService;
