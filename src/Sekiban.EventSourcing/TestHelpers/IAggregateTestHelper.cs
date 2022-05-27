@@ -3,6 +3,7 @@ namespace Sekiban.EventSourcing.TestHelpers;
 public interface IAggregateTestHelper<TAggregate, TDto> where TAggregate : TransferableAggregateBase<TDto> where TDto : AggregateDtoBase
 {
     public AggregateTestHelper<TAggregate, TDto> GivenEnvironmentDtos(List<AggregateDtoBase> dtos);
+    public AggregateTestHelper<TAggregate, TDto> GivenEnvironmentDto(AggregateDtoBase dto);
     public AggregateTestHelper<TAggregate, TDto> Given(TDto snapshot);
     public AggregateTestHelper<TAggregate, TDto> Given(AggregateEvent ev);
     public AggregateTestHelper<TAggregate, TDto> Given(Func<TAggregate, AggregateEvent> evFunc);
@@ -16,14 +17,13 @@ public interface IAggregateTestHelper<TAggregate, TDto> where TAggregate : Trans
     public AggregateTestHelper<TAggregate, TDto> WhenConstructor(Func<TAggregate> aggregateFunc);
     public AggregateTestHelper<TAggregate, TDto> ThenEvents(Action<List<AggregateEvent>, TAggregate> checkEventsAction);
     public AggregateTestHelper<TAggregate, TDto> ThenEvents(Action<List<AggregateEvent>> checkEventsAction);
-    public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent(Action<AggregateEvent, TAggregate> checkEventAction);
-    public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent(Action<AggregateEvent> checkEventAction);
     public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent<T>(Action<T, TAggregate> checkEventAction) where T : AggregateEvent;
     public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent<T>(Action<T> checkEventAction) where T : AggregateEvent;
     public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent<T>(Func<TAggregate, T> constructExpectedEvent) where T : AggregateEvent;
 
-    public AggregateTestHelper<TAggregate, TDto> Expect(Action<TDto, TAggregate> checkDtoAction);
-    public AggregateTestHelper<TAggregate, TDto> Expect(Action<TDto> checkDtoAction);
-    public AggregateTestHelper<TAggregate, TDto> Expect(Func<TAggregate, TDto> constructExpectedDto);
-    public AggregateTestHelper<TAggregate, TDto> ShouldThrows<T>() where T : Exception;
+    public AggregateTestHelper<TAggregate, TDto> ThenState(Action<TDto, TAggregate> checkDtoAction);
+    public AggregateTestHelper<TAggregate, TDto> ThenState(Action<TDto> checkDtoAction);
+    public AggregateTestHelper<TAggregate, TDto> ThenState(Func<TAggregate, TDto> constructExpectedDto);
+    public AggregateTestHelper<TAggregate, TDto> ThenThrows<T>() where T : Exception;
+    public AggregateTestHelper<TAggregate, TDto> ThenThrows<T>(Action<T> checkException) where T : Exception;
 }

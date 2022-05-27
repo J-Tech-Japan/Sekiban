@@ -9,7 +9,7 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
 {
     private readonly IServiceProvider _serviceProvider;
     private TAggregate _aggregate { get; set; }
-    private Exception _latestException { get; set; }
+    private Exception? _latestException { get; set; }
     private List<AggregateEvent> _latestEvents { get; set; } = new();
     private DefaultSingleAggregateProjector<TAggregate> _projector
     {
@@ -34,6 +34,8 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
 
         return this;
     }
+    public AggregateTestHelper<TAggregate, TDto> GivenEnvironmentDto(AggregateDtoBase dto) =>
+        GivenEnvironmentDtos(new List<AggregateDtoBase> { dto });
     public AggregateTestHelper<TAggregate, TDto> Given(TDto snapshot)
     {
         _aggregate.ApplySnapshot(snapshot);
@@ -65,6 +67,7 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
 
     public AggregateTestHelper<TAggregate, TDto> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregate>
     {
+        ResetBeforeCommand();
         var handler
             = _serviceProvider.GetService(typeof(ICreateAggregateCommandHandler<TAggregate, C>)) as ICreateAggregateCommandHandler<TAggregate, C>;
         if (handler == null)
@@ -89,6 +92,7 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
 
     public AggregateTestHelper<TAggregate, TDto> WhenChange<C>(C createCommand) where C : ChangeAggregateCommandBase<TAggregate>
     {
+        ResetBeforeCommand();
         var handler
             = _serviceProvider.GetService(typeof(IChangeAggregateCommandHandler<TAggregate, C>)) as IChangeAggregateCommandHandler<TAggregate, C>;
         if (handler == null)
@@ -111,6 +115,7 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
     }
     public AggregateTestHelper<TAggregate, TDto> WhenChange<C>(Func<TAggregate, C> commandFunc) where C : ChangeAggregateCommandBase<TAggregate>
     {
+        ResetBeforeCommand();
         var handler
             = _serviceProvider.GetService(typeof(IChangeAggregateCommandHandler<TAggregate, C>)) as IChangeAggregateCommandHandler<TAggregate, C>;
         if (handler == null)
@@ -136,6 +141,7 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
 
     public AggregateTestHelper<TAggregate, TDto> WhenMethod(Action<TAggregate> action)
     {
+        ResetBeforeCommand();
         try
         {
             action(_aggregate);
@@ -151,6 +157,7 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
     }
     public AggregateTestHelper<TAggregate, TDto> WhenConstructor(Func<TAggregate> aggregateFunc)
     {
+        ResetBeforeCommand();
         try
         {
             _aggregate = aggregateFunc();
@@ -175,25 +182,12 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
         checkEventsAction(_latestEvents);
         return this;
     }
-    public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent(Action<AggregateEvent, TAggregate> checkEventAction)
-    {
-        if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
-        checkEventAction(_latestEvents.First(), _aggregate);
-        return this;
-    }
-
-    public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent(Action<AggregateEvent> checkEventAction)
-    {
-        if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
-        checkEventAction(_latestEvents.First());
-        return this;
-    }
-    public AggregateTestHelper<TAggregate, TDto> Expect(Action<TDto, TAggregate> checkDtoAction)
+    public AggregateTestHelper<TAggregate, TDto> ThenState(Action<TDto, TAggregate> checkDtoAction)
     {
         checkDtoAction(_aggregate.ToDto(), _aggregate);
         return this;
     }
-    public AggregateTestHelper<TAggregate, TDto> Expect(Action<TDto> checkDtoAction)
+    public AggregateTestHelper<TAggregate, TDto> ThenState(Action<TDto> checkDtoAction)
     {
         checkDtoAction(_aggregate.ToDto());
         return this;
@@ -224,7 +218,7 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
         Assert.Equal((T)actual, expected);
         return this;
     }
-    public AggregateTestHelper<TAggregate, TDto> Expect(Func<TAggregate, TDto> constructExpectedDto)
+    public AggregateTestHelper<TAggregate, TDto> ThenState(Func<TAggregate, TDto> constructExpectedDto)
     {
         var actual = _aggregate.ToDto();
         var expected = constructExpectedDto(_aggregate).GetComparableObject(actual);
@@ -232,10 +226,36 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
         return this;
     }
 
-    public AggregateTestHelper<TAggregate, TDto> ShouldThrows<T>() where T : Exception
+    public AggregateTestHelper<TAggregate, TDto> ThenThrows<T>() where T : Exception
     {
         var exception = _latestException is AggregateException aggregateException ? aggregateException.InnerExceptions.First() : _latestException;
         Assert.IsType<T>(exception);
         return this;
+    }
+    public AggregateTestHelper<TAggregate, TDto> ThenThrows<T>(Action<T> checkException) where T : Exception
+    {
+        var exception = _latestException is AggregateException aggregateException ? aggregateException.InnerExceptions.First() : _latestException;
+        Assert.IsType<T>(exception);
+        checkException((exception as T)!);
+        return this;
+    }
+    public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent(Action<AggregateEvent, TAggregate> checkEventAction)
+    {
+        if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
+        checkEventAction(_latestEvents.First(), _aggregate);
+        return this;
+    }
+
+    public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent(Action<AggregateEvent> checkEventAction)
+    {
+        if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
+        checkEventAction(_latestEvents.First());
+        return this;
+    }
+
+    private void ResetBeforeCommand()
+    {
+        _latestEvents = new List<AggregateEvent>();
+        _latestException = null;
     }
 }

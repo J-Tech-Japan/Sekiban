@@ -70,14 +70,14 @@ public class ClientLoyaltyPointMultipleProjection : MultipleAggregateProjectionB
     public class ProjectedBranch
     {
         public Guid BranchId { get; set; }
-        public string BranchName { get; set; }
+        public string BranchName { get; set; } = string.Empty;
     }
     public class ProjectedRecord
     {
         public Guid BranchId { get; set; }
-        public string BranchName { get; set; }
+        public string BranchName { get; set; } = string.Empty;
         public Guid ClientId { get; set; }
-        public string ClientName { get; set; }
+        public string ClientName { get; set; } = string.Empty;
         public int Point { get; set; }
     }
 }

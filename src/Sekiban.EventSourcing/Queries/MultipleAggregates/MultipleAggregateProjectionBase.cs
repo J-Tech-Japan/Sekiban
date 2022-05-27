@@ -5,7 +5,7 @@ public abstract class MultipleAggregateProjectionBase<TDto> : IMultipleAggregate
 {
 
     public Guid LastEventId { get; set; }
-    public string LastSortableUniqueId { get; set; }
+    public string LastSortableUniqueId { get; set; } = string.Empty;
     public int AppliedSnapshotVersion { get; set; }
     public int Version { get; set; }
     public void ApplyEvent(AggregateEvent ev)

@@ -14,6 +14,8 @@ public abstract class SingleAggregateTestBase<TAggregate, TDto> : IDisposable, I
     }
     public AggregateTestHelper<TAggregate, TDto> GivenEnvironmentDtos(List<AggregateDtoBase> dtos) =>
         _helper.GivenEnvironmentDtos(dtos);
+    public AggregateTestHelper<TAggregate, TDto> GivenEnvironmentDto(AggregateDtoBase dto) =>
+        _helper.GivenEnvironmentDto(dto);
     public AggregateTestHelper<TAggregate, TDto> Given(TDto snapshot) =>
         _helper.Given(snapshot);
     public AggregateTestHelper<TAggregate, TDto> Given(AggregateEvent ev) =>
@@ -40,10 +42,6 @@ public abstract class SingleAggregateTestBase<TAggregate, TDto> : IDisposable, I
         _helper.ThenEvents(checkEventsAction);
     public AggregateTestHelper<TAggregate, TDto> ThenEvents(Action<List<AggregateEvent>> checkEventsAction) =>
         _helper.ThenEvents(checkEventsAction);
-    public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent(Action<AggregateEvent, TAggregate> checkEventAction) =>
-        _helper.ThenSingleEvent(checkEventAction);
-    public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent(Action<AggregateEvent> checkEventAction) =>
-        _helper.ThenSingleEvent(checkEventAction);
     public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent<T>(Action<T, TAggregate> checkEventAction) where T : AggregateEvent =>
         _helper.ThenSingleEvent(checkEventAction);
     public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent<T>(Action<T> checkEventAction) where T : AggregateEvent =>
@@ -51,14 +49,16 @@ public abstract class SingleAggregateTestBase<TAggregate, TDto> : IDisposable, I
     public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent<T>(Func<TAggregate, T> constructExpectedEvent) where T : AggregateEvent =>
         _helper.ThenSingleEvent(constructExpectedEvent);
 
-    public AggregateTestHelper<TAggregate, TDto> Expect(Action<TDto, TAggregate> checkDtoAction) =>
-        _helper.Expect(checkDtoAction);
-    public AggregateTestHelper<TAggregate, TDto> Expect(Action<TDto> checkDtoAction) =>
-        _helper.Expect(checkDtoAction);
-    public AggregateTestHelper<TAggregate, TDto> Expect(Func<TAggregate, TDto> constructExpectedDto) =>
-        _helper.Expect(constructExpectedDto);
-    public AggregateTestHelper<TAggregate, TDto> ShouldThrows<T>() where T : Exception =>
-        _helper.ShouldThrows<T>();
+    public AggregateTestHelper<TAggregate, TDto> ThenState(Action<TDto, TAggregate> checkDtoAction) =>
+        _helper.ThenState(checkDtoAction);
+    public AggregateTestHelper<TAggregate, TDto> ThenState(Action<TDto> checkDtoAction) =>
+        _helper.ThenState(checkDtoAction);
+    public AggregateTestHelper<TAggregate, TDto> ThenState(Func<TAggregate, TDto> constructExpectedDto) =>
+        _helper.ThenState(constructExpectedDto);
+    public AggregateTestHelper<TAggregate, TDto> ThenThrows<T>() where T : Exception =>
+        _helper.ThenThrows<T>();
+    public AggregateTestHelper<TAggregate, TDto> ThenThrows<T>(Action<T> checkException) where T : Exception =>
+        throw new NotImplementedException();
     public void Dispose() { }
     public abstract IServiceProvider SetupService();
     public T GetService<T>()
