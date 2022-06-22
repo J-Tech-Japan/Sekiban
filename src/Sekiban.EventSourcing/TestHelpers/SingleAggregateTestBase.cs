@@ -58,7 +58,9 @@ public abstract class SingleAggregateTestBase<TAggregate, TDto> : IDisposable, I
     public AggregateTestHelper<TAggregate, TDto> ThenThrows<T>() where T : Exception =>
         _helper.ThenThrows<T>();
     public AggregateTestHelper<TAggregate, TDto> ThenThrows<T>(Action<T> checkException) where T : Exception =>
-        throw new NotImplementedException();
+        _helper.ThenThrows(checkException);
+    public AggregateTestHelper<TAggregate, TDto> ThenNotThrowsAnException() =>
+        _helper.ThenNotThrowsAnException();
     public void Dispose() { }
     public abstract IServiceProvider SetupService();
     public T GetService<T>()

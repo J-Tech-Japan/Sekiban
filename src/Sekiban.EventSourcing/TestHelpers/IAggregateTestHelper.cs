@@ -26,4 +26,5 @@ public interface IAggregateTestHelper<TAggregate, TDto> where TAggregate : Trans
     public AggregateTestHelper<TAggregate, TDto> ThenState(Func<TAggregate, TDto> constructExpectedDto);
     public AggregateTestHelper<TAggregate, TDto> ThenThrows<T>() where T : Exception;
     public AggregateTestHelper<TAggregate, TDto> ThenThrows<T>(Action<T> checkException) where T : Exception;
+    public AggregateTestHelper<TAggregate, TDto> ThenNotThrowsAnException();
 }
