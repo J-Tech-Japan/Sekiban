@@ -239,6 +239,12 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
         checkException((exception as T)!);
         return this;
     }
+    public AggregateTestHelper<TAggregate, TDto> ThenNotThrowsAnException()
+    {
+        var exception = _latestException is AggregateException aggregateException ? aggregateException.InnerExceptions.First() : _latestException;
+        Assert.Null(exception);
+        return this;
+    }
     public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent(Action<AggregateEvent, TAggregate> checkEventAction)
     {
         if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }

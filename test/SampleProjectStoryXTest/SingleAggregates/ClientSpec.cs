@@ -24,6 +24,8 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientDto>
         GivenEnvironmentDtos(new List<AggregateDtoBase> { branchDto });
         // CreateClient コマンドを実行する
         WhenCreate(new CreateClient(branchDto.AggregateId, testClientName, testEmail));
+        // エラーとならない
+        ThenNotThrowsAnException();
         // コマンドによって生成されたイベントを検証する
         ThenSingleEvent(client => new ClientCreated(client.AggregateId, branchDto.AggregateId, testClientName, testEmail));
         // 現在の集約のステータスを検証する
