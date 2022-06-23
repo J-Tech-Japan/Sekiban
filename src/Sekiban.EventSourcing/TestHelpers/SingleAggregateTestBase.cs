@@ -12,6 +12,7 @@ public abstract class SingleAggregateTestBase<TAggregate, TDto> : IDisposable, I
         _serviceProvider = SetupService();
         _helper = new AggregateTestHelper<TAggregate, TDto>(_serviceProvider);
     }
+    public AggregateTestHelper<TAggregate, TDto> GivenTestResult(Action initialAction) => _helper.GivenTestResult(initialAction);
     public AggregateTestHelper<TAggregate, TDto> GivenEnvironmentDtos(List<AggregateDtoBase> dtos) =>
         _helper.GivenEnvironmentDtos(dtos);
     public AggregateTestHelper<TAggregate, TDto> GivenEnvironmentDto(AggregateDtoBase dto) =>

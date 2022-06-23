@@ -23,6 +23,11 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
         _aggregate = _projector.CreateInitialAggregate(Guid.Empty);
     }
 
+    public AggregateTestHelper<TAggregate, TDto> GivenTestResult(Action initialAction)
+    {
+        initialAction();
+        return this;
+    } 
     public AggregateTestHelper<TAggregate, TDto> GivenEnvironmentDtos(List<AggregateDtoBase> dtos)
     {
         var singleAggregateService = _serviceProvider.GetService<ISingleAggregateService>();
