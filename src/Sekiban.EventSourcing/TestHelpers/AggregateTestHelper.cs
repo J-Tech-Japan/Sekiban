@@ -27,7 +27,7 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
     {
         initialAction();
         return this;
-    } 
+    }
     public AggregateTestHelper<TAggregate, TDto> GivenEnvironmentDtos(List<AggregateDtoBase> dtos)
     {
         var singleAggregateService = _serviceProvider.GetService<ISingleAggregateService>();
@@ -242,6 +242,11 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
         var exception = _latestException is AggregateException aggregateException ? aggregateException.InnerExceptions.First() : _latestException;
         Assert.IsType<T>(exception);
         checkException((exception as T)!);
+        return this;
+    }
+    public AggregateTestHelper<TAggregate, TDto> ThenAggregateCheck(Action<TAggregate> checkAction)
+    {
+        checkAction(_aggregate);
         return this;
     }
     public AggregateTestHelper<TAggregate, TDto> ThenNotThrowsAnException()
