@@ -12,7 +12,8 @@ public abstract class SingleAggregateTestBase<TAggregate, TDto> : IDisposable, I
         _serviceProvider = SetupService();
         _helper = new AggregateTestHelper<TAggregate, TDto>(_serviceProvider);
     }
-    public AggregateTestHelper<TAggregate, TDto> GivenTestResult(Action initialAction) => _helper.GivenTestResult(initialAction);
+    public AggregateTestHelper<TAggregate, TDto> GivenTestResult(Action initialAction) =>
+        _helper.GivenTestResult(initialAction);
     public AggregateTestHelper<TAggregate, TDto> GivenEnvironmentDtos(List<AggregateDtoBase> dtos) =>
         _helper.GivenEnvironmentDtos(dtos);
     public AggregateTestHelper<TAggregate, TDto> GivenEnvironmentDto(AggregateDtoBase dto) =>
@@ -60,6 +61,8 @@ public abstract class SingleAggregateTestBase<TAggregate, TDto> : IDisposable, I
         _helper.ThenThrows<T>();
     public AggregateTestHelper<TAggregate, TDto> ThenThrows<T>(Action<T> checkException) where T : Exception =>
         _helper.ThenThrows(checkException);
+    public AggregateTestHelper<TAggregate, TDto> ThenAggregateCheck(Action<TAggregate> checkAction) =>
+        _helper.ThenAggregateCheck(checkAction);
     public AggregateTestHelper<TAggregate, TDto> ThenNotThrowsAnException() =>
         _helper.ThenNotThrowsAnException();
     public void Dispose() { }
