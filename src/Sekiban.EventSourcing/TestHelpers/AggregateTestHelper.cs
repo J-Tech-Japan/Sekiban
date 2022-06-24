@@ -23,7 +23,7 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
         _aggregate = _projector.CreateInitialAggregate(Guid.Empty);
     }
 
-    public AggregateTestHelper<TAggregate, TDto> GivenTestResult(Action initialAction)
+    public AggregateTestHelper<TAggregate, TDto> GivenScenario(Action initialAction)
     {
         initialAction();
         return this;

@@ -2,7 +2,7 @@ namespace Sekiban.EventSourcing.TestHelpers;
 
 public interface IAggregateTestHelper<TAggregate, TDto> where TAggregate : TransferableAggregateBase<TDto> where TDto : AggregateDtoBase
 {
-    public AggregateTestHelper<TAggregate, TDto> GivenTestResult(Action initialAction);
+    public AggregateTestHelper<TAggregate, TDto> GivenScenario(Action initialAction);
     public AggregateTestHelper<TAggregate, TDto> GivenEnvironmentDtos(List<AggregateDtoBase> dtos);
     public AggregateTestHelper<TAggregate, TDto> GivenEnvironmentDto(AggregateDtoBase dto);
     public AggregateTestHelper<TAggregate, TDto> Given(TDto snapshot);
