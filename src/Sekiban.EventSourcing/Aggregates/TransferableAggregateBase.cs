@@ -18,7 +18,7 @@ public abstract class TransferableAggregateBase<TDto> : AggregateBase, ISingleAg
     }
     protected abstract void CopyPropertiesFromSnapshot(TDto snapshot);
 
-    protected override void AddAndApplyEvent(AggregateEvent ev)
+    protected sealed override void AddAndApplyEvent(AggregateEvent ev)
     {
         if (GetApplyEventAction(ev) == null)
         {

@@ -6,13 +6,13 @@
         <Nullable>enable</Nullable>
         <RootNamespace>CosmosInfrastructure</RootNamespace>
         <PackageId>JJ_Sekiban.EventSourcing.CosmosInfrastructure</PackageId>
-        <Version>0.3.12</Version>
+        <Version>0.3.14</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework CosmosInfrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.3.12</PackageVersion>
-        <Description>テストフレームワークにGivenScenarioの追加</Description>
+        <PackageVersion>0.3.14</PackageVersion>
+        <Description>TransferableAggregateBase.AddAndApplyEvent をSealedに変更</Description>
     </PropertyGroup>
 
     <ItemGroup>

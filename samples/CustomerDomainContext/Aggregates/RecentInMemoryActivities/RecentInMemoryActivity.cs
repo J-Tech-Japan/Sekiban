@@ -12,10 +12,6 @@ public class RecentInMemoryActivity : TransferableAggregateBase<RecentInMemoryAc
     {
         AddAndApplyEvent(new RecentInMemoryActivityCreated(aggregateId, new RecentInMemoryActivityRecord(firstActivity, DateTime.UtcNow)));
     }
-    protected sealed override void AddAndApplyEvent(AggregateEvent ev)
-    {
-        base.AddAndApplyEvent(ev);
-    }
 
     protected override Action? GetApplyEventAction(AggregateEvent ev) =>
         ev switch
