@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Newtonsoft.Json;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Xunit;
@@ -39,8 +40,10 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
 
         return this;
     }
-    public AggregateTestHelper<TAggregate, TDto> GivenEnvironmentDto(AggregateDtoBase dto) =>
-        GivenEnvironmentDtos(new List<AggregateDtoBase> { dto });
+    public AggregateTestHelper<TAggregate, TDto> GivenEnvironmentDto(AggregateDtoBase dto)
+    {
+        return GivenEnvironmentDtos(new List<AggregateDtoBase> { dto });
+    }
     public AggregateTestHelper<TAggregate, TDto> Given(TDto snapshot)
     {
         _aggregate.ApplySnapshot(snapshot);
@@ -65,10 +68,14 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
         }
         return this;
     }
-    public AggregateTestHelper<TAggregate, TDto> Given(TDto snapshot, AggregateEvent ev) =>
-        Given(snapshot).Given(ev);
-    public AggregateTestHelper<TAggregate, TDto> Given(TDto snapshot, IEnumerable<AggregateEvent> ev) =>
-        Given(snapshot).Given(ev);
+    public AggregateTestHelper<TAggregate, TDto> Given(TDto snapshot, AggregateEvent ev)
+    {
+        return Given(snapshot).Given(ev);
+    }
+    public AggregateTestHelper<TAggregate, TDto> Given(TDto snapshot, IEnumerable<AggregateEvent> ev)
+    {
+        return Given(snapshot).Given(ev);
+    }
 
     public AggregateTestHelper<TAggregate, TDto> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregate>
     {
@@ -91,7 +98,12 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
             return this;
         }
         _latestEvents = _aggregate.Events.ToList();
+        if (_latestEvents.Count == 0)
+        {
+            throw new SekibanCreateHasToMakeEventException();
+        }
         _aggregate.ResetEventsAndSnapshots();
+        CheckStateJSONSupports();
         return this;
     }
 
@@ -116,6 +128,7 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
         }
         _latestEvents = _aggregate.Events.ToList();
         _aggregate.ResetEventsAndSnapshots();
+        CheckStateJSONSupports();
         return this;
     }
     public AggregateTestHelper<TAggregate, TDto> WhenChange<C>(Func<TAggregate, C> commandFunc) where C : ChangeAggregateCommandBase<TAggregate>
@@ -141,6 +154,7 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
 
         _latestEvents = _aggregate.Events.ToList();
         _aggregate.ResetEventsAndSnapshots();
+        CheckStateJSONSupports();
         return this;
     }
 
@@ -158,6 +172,7 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
         }
         _latestEvents = _aggregate.Events.ToList();
         _aggregate.ResetEventsAndSnapshots();
+        CheckStateJSONSupports();
         return this;
     }
     public AggregateTestHelper<TAggregate, TDto> WhenConstructor(Func<TAggregate> aggregateFunc)
@@ -174,6 +189,7 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
         }
         _latestEvents = _aggregate.Events.ToList();
         _aggregate.ResetEventsAndSnapshots();
+        CheckStateJSONSupports();
         return this;
     }
 
@@ -254,6 +270,31 @@ public class AggregateTestHelper<TAggregate, TDto> : IAggregateTestHelper<TAggre
         var exception = _latestException is AggregateException aggregateException ? aggregateException.InnerExceptions.First() : _latestException;
         Assert.Null(exception);
         return this;
+    }
+
+    private void CheckStateJSONSupports()
+    {
+        var dto = _aggregate.ToDto();
+        var fromDto = _projector.CreateInitialAggregate(dto.AggregateId);
+        fromDto.ApplySnapshot(dto);
+        var dtoFromSnapshot = fromDto.ToDto().GetComparableObject(dto);
+        Assert.Equal(dto, dtoFromSnapshot);
+        var json = JsonConvert.SerializeObject(dto);
+        var dtoFromJson = JsonConvert.DeserializeObject<TDto>(json);
+        Assert.Equal(dto, dtoFromJson);
+        CheckEventJsonCompatibility();
+    }
+
+    private void CheckEventJsonCompatibility()
+    {
+        foreach (var ev in _latestEvents)
+        {
+            var type = ev.GetType();
+            var json = JsonConvert.SerializeObject(ev);
+            var eventFromJson = JsonConvert.DeserializeObject(json, type);
+            var json2 = JsonConvert.SerializeObject(eventFromJson);
+            Assert.Equal(json, json2);
+        }
     }
     public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent(Action<AggregateEvent, TAggregate> checkEventAction)
     {
