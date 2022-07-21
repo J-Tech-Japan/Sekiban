@@ -21,10 +21,13 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         _singleAggregateService = singleAggregateService;
         _userInformationFactory = userInformationFactory;
     }
-    public async Task<AggregateCommandExecutorResponse<Q, C>> ExecChangeCommandAsync<T, Q, C>(C command, List<CallHistory>? callHistories = null)
-        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase, new() where C : ChangeAggregateCommandBase<T>
+    public async Task<AggregateCommandExecutorResponse<TContents, C>> ExecChangeCommandAsync<T, TContents, C>(
+        C command,
+        List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>
+        where TContents : IAggregateContents, new()
+        where C : ChangeAggregateCommandBase<T>
     {
-        var toReturn = new AggregateCommandExecutorResponse<Q, C>(
+        var toReturn = new AggregateCommandExecutorResponse<TContents, C>(
             new AggregateCommandDocument<C>(command, new AggregateIdPartitionKeyFactory(command.AggregateId, typeof(T)), callHistories));
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(T));
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
@@ -39,7 +42,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
             {
                 throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
             }
-            var aggregate = await _singleAggregateService.GetAggregateAsync<T, Q>(command.AggregateId);
+            var aggregate = await _singleAggregateService.GetAggregateAsync<T, TContents>(command.AggregateId);
             if (aggregate == null)
             {
                 throw new SekibanInvalidArgumentException();
@@ -85,10 +88,13 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         return toReturn;
     }
 
-    public async Task<AggregateCommandExecutorResponse<Q, C>> ExecCreateCommandAsync<T, Q, C>(C command, List<CallHistory>? callHistories = null)
-        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase, new() where C : ICreateAggregateCommand<T>
+    public async Task<AggregateCommandExecutorResponse<TContents, C>> ExecCreateCommandAsync<T, TContents, C>(
+        C command,
+        List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>
+        where TContents : IAggregateContents, new()
+        where C : ICreateAggregateCommand<T>
     {
-        var toReturn = new AggregateCommandExecutorResponse<Q, C>(
+        var toReturn = new AggregateCommandExecutorResponse<TContents, C>(
             new AggregateCommandDocument<C>(command, new CanNotUsePartitionKeyFactory(), callHistories));
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(T));
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)

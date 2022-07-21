@@ -23,9 +23,10 @@ public interface ISingleAggregateService
     /// <param name="aggregateId"></param>
     /// <param name="toVersion"></param>
     /// <typeparam name="T"></typeparam>
+    /// <typeparam name="TContents"></typeparam>
     /// <returns></returns>
-    public Task<T?> GetAggregateFromInitialDefaultAggregateAsync<T, Q>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase;
+    public Task<T?> GetAggregateFromInitialDefaultAggregateAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
+        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents;
 
     /// <summary>
     ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
@@ -35,9 +36,10 @@ public interface ISingleAggregateService
     /// <param name="aggregateId"></param>
     /// <param name="toVersion"></param>
     /// <typeparam name="T"></typeparam>
+    /// <typeparam name="TContents"></typeparam>
     /// <returns></returns>
-    public Task<Q?> GetAggregateFromInitialDefaultAggregateDtoAsync<T, Q>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase;
+    public Task<AggregateDtoBase<TContents>?> GetAggregateFromInitialDefaultAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
+        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents;
     /// <summary>
     ///     カスタムプロジェククションを取得
     /// </summary>
@@ -54,10 +56,10 @@ public interface ISingleAggregateService
     /// <param name="aggregateId"></param>
     /// <param name="toVersion"></param>
     /// <typeparam name="T"></typeparam>
-    /// <typeparam name="Q"></typeparam>
+    /// <typeparam name="TContents"></typeparam>
     /// <returns></returns>
-    public Task<T?> GetAggregateAsync<T, Q>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase;
+    public Task<T?> GetAggregateAsync<T, TContents>(Guid aggregateId, int? toVersion = null) where T : TransferableAggregateBase<TContents>
+        where TContents : IAggregateContents;
 
     /// <summary>
     ///     スナップショット、メモリキャッシュを使用する通常版
@@ -65,8 +67,8 @@ public interface ISingleAggregateService
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <typeparam name="T"></typeparam>
-    /// <typeparam name="Q"></typeparam>
+    /// <typeparam name="TContents"></typeparam>
     /// <returns></returns>
-    public Task<Q?> GetAggregateDtoAsync<T, Q>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase;
+    public Task<AggregateDtoBase<TContents>?> GetAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
+        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents;
 }

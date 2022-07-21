@@ -57,10 +57,10 @@ public class SingleAggregateService : ISingleAggregateService
     /// <param name="aggregateId"></param>
     /// <param name="toVersion"></param>
     /// <typeparam name="T"></typeparam>
-    /// <typeparam name="P"></typeparam>
+    /// <typeparam name="TContents"></typeparam>
     /// <returns></returns>
-    public async Task<T?> GetAggregateFromInitialDefaultAggregateAsync<T, Q>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase =>
+    public async Task<T?> GetAggregateFromInitialDefaultAggregateAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
+        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents =>
         await GetAggregateFromInitialAsync<T, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion);
 
     /// <summary>
@@ -73,8 +73,9 @@ public class SingleAggregateService : ISingleAggregateService
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
-    public async Task<Q?> GetAggregateFromInitialDefaultAggregateDtoAsync<T, Q>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase =>
+    public async Task<AggregateDtoBase<TContents>?> GetAggregateFromInitialDefaultAggregateDtoAsync<T, TContents>(
+        Guid aggregateId,
+        int? toVersion = null) where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents =>
         (await GetAggregateFromInitialAsync<T, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion))?.ToDto();
 
     public async Task<T?> GetProjectionAsync<T>(Guid aggregateId, int? toVersion = null) where T : SingleAggregateProjectionBase<T>, new() =>
@@ -85,24 +86,26 @@ public class SingleAggregateService : ISingleAggregateService
     ///     こちらはデフォルトプロジェクトション（集約のデフォルトステータス）
     /// </summary>
     /// <param name="aggregateId"></param>
+    /// <param name="toVersion"></param>
     /// <typeparam name="T"></typeparam>
-    /// <typeparam name="Q"></typeparam>
+    /// <typeparam name="TContents"></typeparam>
     /// <returns></returns>
-    public async Task<T?> GetAggregateAsync<T, Q>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase =>
-        await GetAggregateAsync<T, Q, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion);
+    public async Task<T?> GetAggregateAsync<T, TContents>(Guid aggregateId, int? toVersion = null) where T : TransferableAggregateBase<TContents>
+        where TContents : IAggregateContents =>
+        await GetAggregateAsync<T, AggregateDtoBase<TContents>, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion);
     /// <summary>
     ///     スナップショット、メモリキャッシュを使用する通常版
     ///     こちらはデフォルトプロジェクトション（集約のデフォルトステータス）
     /// </summary>
     /// <param name="aggregateId"></param>
+    /// <param name="toVersion"></param>
     /// <typeparam name="T"></typeparam>
-    /// <typeparam name="Q"></typeparam>
+    /// <typeparam name="TContents"></typeparam>
     /// <returns></returns>
-    public async Task<Q?> GetAggregateDtoAsync<T, Q>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase
+    public async Task<AggregateDtoBase<TContents>?> GetAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
+        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents
     {
-        var aggregate = await GetAggregateAsync<T, Q, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion);
+        var aggregate = await GetAggregateAsync<T, AggregateDtoBase<TContents>, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion);
         return aggregate?.ToDto();
     }
 
@@ -110,6 +113,7 @@ public class SingleAggregateService : ISingleAggregateService
     ///     スナップショット、メモリキャッシュを使用する通常版
     /// </summary>
     /// <param name="aggregateId"></param>
+    /// <param name="toVersion"></param>
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="Q"></typeparam>
     /// <typeparam name="P"></typeparam>
@@ -149,7 +153,7 @@ public class SingleAggregateService : ISingleAggregateService
                     aggregate.ApplyEvent(e);
                     if (toVersion.HasValue && aggregate.Version == toVersion.Value)
                     {
-                        break; 
+                        break;
                     }
                 }
             });
@@ -164,6 +168,7 @@ public class SingleAggregateService : ISingleAggregateService
     ///     スナップショット、メモリキャッシュを使用する通常版
     /// </summary>
     /// <param name="aggregateId"></param>
+    /// <param name="toVersion"></param>
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="Q"></typeparam>
     /// <typeparam name="P"></typeparam>
