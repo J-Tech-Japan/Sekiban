@@ -18,7 +18,7 @@ public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointContents>
         {
             LoyaltyPointCreated created => () =>
             {
-                Contents = new LoyaltyPointContents(created.InitialPoint, created.TimeStamp);
+                Contents = new LoyaltyPointContents(created.InitialPoint, null);
             },
             LoyaltyPointAdded added => () =>
             {
@@ -37,7 +37,7 @@ public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointContents>
 
     public void AddLoyaltyPoint(DateTime happenedDate, LoyaltyPointReceiveType reason, int pointAmount, string note)
     {
-        if (Contents.LastOccuredTime > happenedDate)
+        if (Contents.LastOccuredTime != null && Contents.LastOccuredTime > happenedDate)
         {
             throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
         }

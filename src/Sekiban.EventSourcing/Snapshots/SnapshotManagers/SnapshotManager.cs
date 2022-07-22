@@ -43,7 +43,7 @@ public class SnapshotManager : TransferableAggregateBase<SnapshotManagerContents
         {
             SnapshotManagerCreated created => () =>
             {
-                Contents = Contents with { CreatedAt = created.CreatedAt };
+                Contents = new SnapshotManagerContents();
             },
             SnapshotManagerRequestAdded requestAdded => () =>
             {
