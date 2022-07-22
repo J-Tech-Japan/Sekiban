@@ -1,6 +1,6 @@
 namespace CustomerDomainContext.Aggregates.RecentActivities.Commands;
 
-public record AddRecentActivity(Guid AggregateId, string Activity) : ChangeAggregateCommandBase<RecentActivity>(AggregateId), INoValidateCommand;
+public record AddRecentActivity(string Activity) : ChangeAggregateCommandBase<RecentActivity>, INoValidateCommand;
 public class AddRecentActivityHandler : ChangeAggregateCommandHandlerBase<RecentActivity, AddRecentActivity>
 {
     protected override async Task ExecCommandAsync(RecentActivity aggregate, AddRecentActivity command)

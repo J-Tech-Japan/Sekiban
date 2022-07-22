@@ -1,6 +1,6 @@
 ﻿namespace CustomerDomainContext.Aggregates.LoyaltyPoints.Commands;
 
-public record DeleteLoyaltyPoint(Guid ClientId) : ChangeAggregateCommandBase<LoyaltyPoint>(ClientId), INoValidateCommand;
+public record DeleteLoyaltyPoint : ChangeAggregateCommandBase<LoyaltyPoint>, INoValidateCommand;
 public class DeleteLoyaltyPointHandler : ChangeAggregateCommandHandlerBase<LoyaltyPoint, DeleteLoyaltyPoint>
 {
     protected override async Task ExecCommandAsync(LoyaltyPoint aggregate, DeleteLoyaltyPoint _)

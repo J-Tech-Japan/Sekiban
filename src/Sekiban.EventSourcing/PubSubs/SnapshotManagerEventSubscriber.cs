@@ -43,7 +43,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
         if (aggregateContainerGroup != AggregateContainerGroup.InMemoryContainer)
         {
             var aggregate = await _singleAggregateService.GetAggregateAsync<SnapshotManager, SnapshotManagerContents>(SnapshotManager.SharedId);
-            if (aggregate == default)
+            if (aggregate == null)
             {
                 await _aggregateCommandExecutor.ExecCreateCommandAsync<SnapshotManager, SnapshotManagerContents, CreateSnapshotManager>(
                     new CreateSnapshotManager(SnapshotManager.SharedId));
@@ -54,8 +54,8 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                 var snapshotManagerResponse
                     = await _aggregateCommandExecutor
                         .ExecChangeCommandAsync<SnapshotManager, SnapshotManagerContents, ReportAggregateVersionToSnapshotManger>(
+                            SnapshotManager.SharedId,
                             new ReportAggregateVersionToSnapshotManger(
-                                SnapshotManager.SharedId,
                                 aggregateType.Aggregate,
                                 notification.AggregateId,
                                 notification.Version,
@@ -112,12 +112,8 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                 var snapshotManagerResponseP
                     = await _aggregateCommandExecutor
                         .ExecChangeCommandAsync<SnapshotManager, SnapshotManagerContents, ReportAggregateVersionToSnapshotManger>(
-                            new ReportAggregateVersionToSnapshotManger(
-                                SnapshotManager.SharedId,
-                                projection.Aggregate,
-                                notification.AggregateId,
-                                notification.Version,
-                                null));
+                            SnapshotManager.SharedId,
+                            new ReportAggregateVersionToSnapshotManger(projection.Aggregate, notification.AggregateId, notification.Version, null));
                 if (snapshotManagerResponseP.Events.All(m => m.DocumentTypeName != nameof(SnapshotManagerSnapshotTaken)))
                 {
                     continue;

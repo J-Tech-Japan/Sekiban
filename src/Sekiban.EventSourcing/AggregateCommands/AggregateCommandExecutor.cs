@@ -22,16 +22,18 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         _userInformationFactory = userInformationFactory;
     }
     public async Task<AggregateCommandExecutorResponse<TContents, C>> ExecChangeCommandAsync<T, TContents, C>(
+        Guid aggregateId,
         C command,
         List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>
         where TContents : IAggregateContents
         where C : ChangeAggregateCommandBase<T>
     {
         AggregateDto<TContents>? aggregateDto = null;
-        var commandDocument = new AggregateCommandDocument<C>(
-            command,
-            new AggregateIdPartitionKeyFactory(command.AggregateId, typeof(T)),
-            callHistories) { ExecutedUser = _userInformationFactory.GetCurrentUserInformation() };
+        var commandDocument
+            = new AggregateCommandDocument<C>(command, new AggregateIdPartitionKeyFactory(aggregateId, typeof(T)), callHistories)
+            {
+                ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
+            };
         List<IAggregateEvent> events = new();
 
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(T));
@@ -46,7 +48,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
             {
                 throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
             }
-            var aggregate = await _singleAggregateService.GetAggregateAsync<T, TContents>(command.AggregateId);
+            var aggregate = await _singleAggregateService.GetAggregateAsync<T, TContents>(aggregateId);
             if (aggregate == null)
             {
                 throw new SekibanInvalidArgumentException();

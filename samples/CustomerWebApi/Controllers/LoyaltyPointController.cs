@@ -43,14 +43,18 @@ public class LoyaltyPointController : Controller
     [HttpPatch]
     public async Task<IActionResult> AddPointAsync([FromBody] AddLoyaltyPoint command)
     {
-        var result = await _aggregateCommandExecutor.ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointContents, AddLoyaltyPoint>(command);
+        var result = await _aggregateCommandExecutor.ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointContents, AddLoyaltyPoint>(
+            command.ClientId,
+            command);
         return Ok(result);
     }
 
     [HttpPatch]
     public async Task<IActionResult> UsePointAsync([FromBody] UseLoyaltyPoint command)
     {
-        var result = await _aggregateCommandExecutor.ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointContents, UseLoyaltyPoint>(command);
+        var result = await _aggregateCommandExecutor.ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointContents, UseLoyaltyPoint>(
+            command.ClientId,
+            command);
         return Ok(result);
     }
 }

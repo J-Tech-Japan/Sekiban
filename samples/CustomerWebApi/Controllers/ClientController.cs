@@ -39,8 +39,7 @@ public class ClientController : Controller
     // }
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<AggregateDto<ClientContents>>>>
-        ListAsync(QueryListType queryListType = QueryListType.ActiveOnly) =>
+    public async Task<ActionResult<IEnumerable<AggregateDto<ClientContents>>>> ListAsync(QueryListType queryListType = QueryListType.ActiveOnly) =>
         new(await _multipleAggregateProjectionService.GetAggregateList<Client, ClientContents>(queryListType));
 
     [HttpGet]
@@ -58,14 +57,14 @@ public class ClientController : Controller
     [HttpPatch]
     public async Task<IActionResult> ChangeNameAsync(ChangeClientName command)
     {
-        var result = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientContents, ChangeClientName>(command);
+        var result = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientContents, ChangeClientName>(command.ClientId, command);
         return Ok(result);
     }
 
     [HttpDelete]
     public async Task<IActionResult> DeleteAsync(DeleteClient command)
     {
-        await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientContents, DeleteClient>(command);
+        await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientContents, DeleteClient>(command.ClientId, command);
         return Ok();
     }
 }

@@ -117,10 +117,12 @@ public class CustomerDbStoryBasic : TestBase
             async () =>
             {
                 await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientContents, ChangeClientName>(
+                    clientId,
                     new ChangeClientName(clientId, secondName));
             });
         // change name
         var changeNameResult = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientContents, ChangeClientName>(
+            clientId,
             new ChangeClientName(clientId, secondName) { ReferenceVersion = createClientResult.AggregateDto!.Version });
 
         // change name projection
@@ -137,6 +139,7 @@ public class CustomerDbStoryBasic : TestBase
         foreach (var i in Enumerable.Range(0, countChangeName))
         {
             var changeNameResult2 = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientContents, ChangeClientName>(
+                clientId,
                 new ChangeClientName(clientId, $"newname - {i + 1}") { ReferenceVersion = versionCN });
             versionCN = changeNameResult2.AggregateDto!.Version;
         }
@@ -155,6 +158,7 @@ public class CustomerDbStoryBasic : TestBase
 
         var datetimeFirst = DateTime.Now;
         var addPointResult = await _aggregateCommandExecutor.ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointContents, AddLoyaltyPoint>(
+            clientId,
             new AddLoyaltyPoint(clientId, datetimeFirst, LoyaltyPointReceiveTypeKeys.FlightDomestic, 1000, "")
             {
                 ReferenceVersion = loyaltyPoint.Version
@@ -171,12 +175,14 @@ public class CustomerDbStoryBasic : TestBase
             async () =>
             {
                 await _aggregateCommandExecutor.ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointContents, UseLoyaltyPoint>(
+                    clientId,
                     new UseLoyaltyPoint(clientId, datetimeFirst.AddSeconds(1), LoyaltyPointUsageTypeKeys.FlightUpgrade, 2000, "")
                     {
                         ReferenceVersion = addPointResult!.AggregateDto!.Version
                     });
             });
         var usePointResult = await _aggregateCommandExecutor.ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointContents, UseLoyaltyPoint>(
+            clientId,
             new UseLoyaltyPoint(clientId, DateTime.Now, LoyaltyPointUsageTypeKeys.FlightUpgrade, 200, "")
             {
                 ReferenceVersion = addPointResult!.AggregateDto!.Version
@@ -195,6 +201,7 @@ public class CustomerDbStoryBasic : TestBase
 
         // delete client
         var deleteClientResult = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientContents, DeleteClient>(
+            clientId,
             new DeleteClient(clientId) { ReferenceVersion = versionCN });
         Assert.NotNull(deleteClientResult);
         Assert.NotNull(deleteClientResult.AggregateDto);
@@ -226,10 +233,8 @@ public class CustomerDbStoryBasic : TestBase
         {
             var recentActivityAddedResult
                 = await _aggregateCommandExecutor.ExecChangeCommandAsync<RecentActivity, RecentActivityContents, AddRecentActivity>(
-                    new AddRecentActivity(createRecentActivityResult!.AggregateDto!.AggregateId, $"Message - {i + 1}")
-                    {
-                        ReferenceVersion = version
-                    });
+                    createRecentActivityResult!.AggregateDto!.AggregateId,
+                    new AddRecentActivity($"Message - {i + 1}") { ReferenceVersion = version });
             version = recentActivityAddedResult.AggregateDto!.Version;
         }
         recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentActivity, RecentActivityContents>();
@@ -290,10 +295,8 @@ public class CustomerDbStoryBasic : TestBase
                     {
                         var recentActivityAddedResult
                             = await _aggregateCommandExecutor.ExecChangeCommandAsync<RecentActivity, RecentActivityContents, AddRecentActivity>(
-                                new AddRecentActivity(createRecentActivityResult!.AggregateDto!.AggregateId, $"Message - {i + 1}")
-                                {
-                                    ReferenceVersion = version
-                                });
+                                createRecentActivityResult!.AggregateDto!.AggregateId,
+                                new AddRecentActivity($"Message - {i + 1}") { ReferenceVersion = version });
                         version = recentActivityAddedResult.AggregateDto!.Version;
                     }));
         }
@@ -372,10 +375,8 @@ public class CustomerDbStoryBasic : TestBase
                         var recentActivityAddedResult
                             = await _aggregateCommandExecutor
                                 .ExecChangeCommandAsync<RecentInMemoryActivity, RecentInMemoryActivityContents, AddRecentInMemoryActivity>(
-                                    new AddRecentInMemoryActivity(createRecentActivityResult!.AggregateDto!.AggregateId, $"Message - {i + 1}")
-                                    {
-                                        ReferenceVersion = version
-                                    });
+                                    createRecentActivityResult!.AggregateDto!.AggregateId,
+                                    new AddRecentInMemoryActivity($"Message - {i + 1}") { ReferenceVersion = version });
                         version = recentActivityAddedResult.AggregateDto!.Version;
                         _testOutputHelper.WriteLine($"{i} - {recentActivityAddedResult.AggregateDto.Version.ToString()}");
                     }));
@@ -426,7 +427,8 @@ public class CustomerDbStoryBasic : TestBase
                     {
                         var recentActivityAddedResult
                             = await _aggregateCommandExecutor.ExecChangeCommandAsync<RecentActivity, RecentActivityContents, AddRecentActivity>(
-                                new AddRecentActivity(aggregateId, $"Message - {i + 1}") { ReferenceVersion = version });
+                                aggregateId,
+                                new AddRecentActivity($"Message - {i + 1}") { ReferenceVersion = version });
                         version = recentActivityAddedResult.AggregateDto!.Version;
                     }));
         }

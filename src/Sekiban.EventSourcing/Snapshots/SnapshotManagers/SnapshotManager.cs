@@ -13,7 +13,6 @@ public class SnapshotManager : TransferableAggregateBase<SnapshotManagerContents
         AddAndApplyEvent(new SnapshotManagerCreated(createdAt));
     }
     public void ReportAggregateVersion(
-        Guid snapshotManagerId,
         Type aggregateType,
         Guid targetAggregateId,
         int version,
