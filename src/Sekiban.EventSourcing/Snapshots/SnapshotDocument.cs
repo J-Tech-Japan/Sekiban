@@ -10,7 +10,6 @@ public record SnapshotDocument : Document
     public Guid LastEventId { get; init; }
     public string LastSortableUniqueId { get; set; } = string.Empty;
     public int SavedVersion { get; set; }
-    public SnapshotDocument() { }
 
     public SnapshotDocument(
         IPartitionKeyFactory partitionKeyFactory,
