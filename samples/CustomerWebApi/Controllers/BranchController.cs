@@ -30,6 +30,6 @@ public class BranchController : Controller
     }
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<AggregateDtoBase<BranchContents>>>> ListAsync() =>
+    public async Task<ActionResult<IEnumerable<AggregateDto<BranchContents>>>> ListAsync() =>
         new(await _multipleAggregateProjectionService.GetAggregateList<Branch, BranchContents>());
 }

@@ -300,7 +300,7 @@ public class InMemoryStoryTestBasic : ProjectByTestTestBase
     private async Task CheckSnapshots<T, TContents>(List<SnapshotDocument> snapshots, Guid aggregateId) where T : TransferableAggregateBase<TContents>
         where TContents : IAggregateContents
     {
-        foreach (var dto in snapshots.Select(snapshot => snapshot.ToDto<AggregateDtoBase<TContents>>()))
+        foreach (var dto in snapshots.Select(snapshot => snapshot.ToDto<AggregateDto<TContents>>()))
         {
             if (dto == null) { throw new SekibanInvalidArgumentException(); }
             var fromInitial = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<T, TContents>(aggregateId, dto.Version);

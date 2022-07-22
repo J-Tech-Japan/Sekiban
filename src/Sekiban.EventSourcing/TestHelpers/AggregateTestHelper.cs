@@ -40,7 +40,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
 
         return this;
     }
-    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDtoBase<TContents> snapshot)
+    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot)
     {
         _aggregate.ApplySnapshot(snapshot);
         return this;
@@ -64,9 +64,9 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         }
         return this;
     }
-    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDtoBase<TContents> snapshot, AggregateEvent ev) =>
+    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, AggregateEvent ev) =>
         Given(snapshot).Given(ev);
-    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDtoBase<TContents> snapshot, IEnumerable<AggregateEvent> ev) =>
+    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IEnumerable<AggregateEvent> ev) =>
         Given(snapshot).Given(ev);
 
     public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregate>
@@ -195,12 +195,12 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         checkEventsAction(_latestEvents);
         return this;
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenState(Action<AggregateDtoBase<TContents>, TAggregate> checkDtoAction)
+    public IAggregateTestHelper<TAggregate, TContents> ThenState(Action<AggregateDto<TContents>, TAggregate> checkDtoAction)
     {
         checkDtoAction(_aggregate.ToDto(), _aggregate);
         return this;
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenState(Action<AggregateDtoBase<TContents>> checkDtoAction)
+    public IAggregateTestHelper<TAggregate, TContents> ThenState(Action<AggregateDto<TContents>> checkDtoAction)
     {
         checkDtoAction(_aggregate.ToDto());
         return this;
@@ -231,11 +231,11 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         Assert.Equal((T)actual, expected);
         return this;
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenState(Func<TAggregate, AggregateDtoBase<TContents>> constructExpectedDto)
+    public IAggregateTestHelper<TAggregate, TContents> ThenState(Func<TAggregate, AggregateDto<TContents>> constructExpectedDto)
     {
         var actual = _aggregate.ToDto();
         var expected = constructExpectedDto(_aggregate).GetComparableObject(actual);
-        Assert.Equal(actual, (AggregateDtoBase<TContents>)expected);
+        Assert.Equal(actual, (AggregateDto<TContents>)expected);
         return this;
     }
 
@@ -274,7 +274,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         var dtoFromSnapshot = fromDto.ToDto().GetComparableObject(dto);
         Assert.Equal(dto, dtoFromSnapshot);
         var json = JsonConvert.SerializeObject(dto);
-        var dtoFromJson = JsonConvert.DeserializeObject<AggregateDtoBase<TContents>>(json);
+        var dtoFromJson = JsonConvert.DeserializeObject<AggregateDto<TContents>>(json);
         Assert.Equal(dto, dtoFromJson);
         CheckEventJsonCompatibility();
     }

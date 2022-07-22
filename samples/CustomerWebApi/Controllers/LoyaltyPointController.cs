@@ -23,12 +23,12 @@ public class LoyaltyPointController : Controller
     }
 
     [HttpGet]
-    public async Task<ActionResult<AggregateDtoBase<LoyaltyPointContents>>> GetAsync(Guid clientId) =>
+    public async Task<ActionResult<AggregateDto<LoyaltyPointContents>>> GetAsync(Guid clientId) =>
         await _singleAggregateService.GetAggregateDtoAsync<LoyaltyPoint, LoyaltyPointContents>(clientId) ??
         throw new SekibanInvalidArgumentException();
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<AggregateDtoBase<LoyaltyPointContents>>>> ListAsync(
+    public async Task<ActionResult<IEnumerable<AggregateDto<LoyaltyPointContents>>>> ListAsync(
         QueryListType queryListType = QueryListType.ActiveOnly) =>
         new(await _multipleAggregateProjectionService.GetAggregateList<LoyaltyPoint, LoyaltyPointContents>(queryListType));
 

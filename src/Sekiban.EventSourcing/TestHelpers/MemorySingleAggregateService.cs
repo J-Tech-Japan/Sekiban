@@ -14,7 +14,7 @@ public class MemorySingleAggregateService : ISingleAggregateService
     public Task<T?> GetAggregateFromInitialDefaultAggregateAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
         where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents =>
         GetAggregateAsync<T, TContents>(aggregateId, toVersion);
-    public Task<AggregateDtoBase<TContents>?> GetAggregateFromInitialDefaultAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
+    public Task<AggregateDto<TContents>?> GetAggregateFromInitialDefaultAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
         where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents =>
         GetAggregateDtoAsync<T, TContents>(aggregateId, toVersion);
     public async Task<T?> GetProjectionAsync<T>(Guid aggregateId, int? toVersion = null) where T : SingleAggregateProjectionBase<T>, new()
@@ -33,11 +33,11 @@ public class MemorySingleAggregateService : ISingleAggregateService
         aggregate.ApplySnapshot(dto);
         return aggregate;
     }
-    public async Task<AggregateDtoBase<TContents>?> GetAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
+    public async Task<AggregateDto<TContents>?> GetAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
         where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents
     {
         var aggregate = Aggregates.FirstOrDefault(m => m.Contents.GetType().Name == typeof(TContents).Name && m.AggregateId == aggregateId);
         await Task.CompletedTask;
-        return (AggregateDtoBase<TContents>?)aggregate;
+        return (AggregateDto<TContents>?)aggregate;
     }
 }

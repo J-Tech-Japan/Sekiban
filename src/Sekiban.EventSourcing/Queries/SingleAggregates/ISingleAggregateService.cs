@@ -38,7 +38,7 @@ public interface ISingleAggregateService
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TContents"></typeparam>
     /// <returns></returns>
-    public Task<AggregateDtoBase<TContents>?> GetAggregateFromInitialDefaultAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
+    public Task<AggregateDto<TContents>?> GetAggregateFromInitialDefaultAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
         where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents;
     /// <summary>
     ///     カスタムプロジェククションを取得
@@ -69,6 +69,6 @@ public interface ISingleAggregateService
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TContents"></typeparam>
     /// <returns></returns>
-    public Task<AggregateDtoBase<TContents>?> GetAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
+    public Task<AggregateDto<TContents>?> GetAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
         where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents;
 }

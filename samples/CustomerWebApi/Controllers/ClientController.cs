@@ -23,7 +23,7 @@ public class ClientController : Controller
     }
 
     [HttpGet]
-    public async Task<ActionResult<AggregateDtoBase<ClientContents>>> GetAsync(Guid clientId) =>
+    public async Task<ActionResult<AggregateDto<ClientContents>>> GetAsync(Guid clientId) =>
         await _singleAggregateService.GetAggregateDtoAsync<Client, ClientContents>(clientId) ?? throw new SekibanInvalidArgumentException();
 
     [HttpGet]
@@ -39,7 +39,7 @@ public class ClientController : Controller
     // }
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<AggregateDtoBase<ClientContents>>>>
+    public async Task<ActionResult<IEnumerable<AggregateDto<ClientContents>>>>
         ListAsync(QueryListType queryListType = QueryListType.ActiveOnly) =>
         new(await _multipleAggregateProjectionService.GetAggregateList<Client, ClientContents>(queryListType));
 

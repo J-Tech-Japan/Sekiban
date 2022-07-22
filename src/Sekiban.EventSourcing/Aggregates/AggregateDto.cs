@@ -2,19 +2,19 @@ using Sekiban.EventSourcing.Queries.SingleAggregates;
 using System.ComponentModel.DataAnnotations;
 namespace Sekiban.EventSourcing.Aggregates;
 
-public record AggregateDtoBase<TContents> : ISingleAggregate where TContents : IAggregateContents
+public record AggregateDto<TContents> : ISingleAggregate where TContents : IAggregateContents
 {
     public TContents Contents { get; init; }
 
     /// <summary>
     ///     スナップショットからの再構築用。
     /// </summary>
-    public AggregateDtoBase() { }
+    public AggregateDto() { }
     /// <summary>
     ///     一般の構築用。
     /// </summary>
     /// <param name="aggregate"></param>
-    public AggregateDtoBase(IAggregate aggregate)
+    public AggregateDto(IAggregate aggregate)
     {
         AggregateId = aggregate.AggregateId;
         Version = aggregate.Version;
@@ -24,7 +24,7 @@ public record AggregateDtoBase<TContents> : ISingleAggregate where TContents : I
         IsDeleted = aggregate.IsDeleted;
     }
 
-    public AggregateDtoBase(IAggregate aggregate, TContents contents) : this(aggregate) =>
+    public AggregateDto(IAggregate aggregate, TContents contents) : this(aggregate) =>
         Contents = contents;
 
     [Required]
@@ -51,7 +51,7 @@ public record AggregateDtoBase<TContents> : ISingleAggregate where TContents : I
     [Description("並べ替え可能なユニークID（自動付与）、このIDの順番でイベントは常に順番を決定する")]
     public string LastSortableUniqueId { get; init; } = string.Empty;
 
-    public dynamic GetComparableObject(AggregateDtoBase<TContents> original, bool copyVersion = true) =>
+    public dynamic GetComparableObject(AggregateDto<TContents> original, bool copyVersion = true) =>
         this with
         {
             Version = copyVersion ? original.Version : Version,

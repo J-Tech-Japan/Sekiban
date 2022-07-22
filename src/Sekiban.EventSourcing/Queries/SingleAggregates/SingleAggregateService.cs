@@ -73,7 +73,7 @@ public class SingleAggregateService : ISingleAggregateService
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
-    public async Task<AggregateDtoBase<TContents>?> GetAggregateFromInitialDefaultAggregateDtoAsync<T, TContents>(
+    public async Task<AggregateDto<TContents>?> GetAggregateFromInitialDefaultAggregateDtoAsync<T, TContents>(
         Guid aggregateId,
         int? toVersion = null) where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents =>
         (await GetAggregateFromInitialAsync<T, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion))?.ToDto();
@@ -92,7 +92,7 @@ public class SingleAggregateService : ISingleAggregateService
     /// <returns></returns>
     public async Task<T?> GetAggregateAsync<T, TContents>(Guid aggregateId, int? toVersion = null) where T : TransferableAggregateBase<TContents>
         where TContents : IAggregateContents =>
-        await GetAggregateAsync<T, AggregateDtoBase<TContents>, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion);
+        await GetAggregateAsync<T, AggregateDto<TContents>, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion);
     /// <summary>
     ///     スナップショット、メモリキャッシュを使用する通常版
     ///     こちらはデフォルトプロジェクトション（集約のデフォルトステータス）
@@ -102,10 +102,10 @@ public class SingleAggregateService : ISingleAggregateService
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TContents"></typeparam>
     /// <returns></returns>
-    public async Task<AggregateDtoBase<TContents>?> GetAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
+    public async Task<AggregateDto<TContents>?> GetAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
         where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents
     {
-        var aggregate = await GetAggregateAsync<T, AggregateDtoBase<TContents>, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion);
+        var aggregate = await GetAggregateAsync<T, AggregateDto<TContents>, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion);
         return aggregate?.ToDto();
     }
 

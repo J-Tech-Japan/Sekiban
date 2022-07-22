@@ -7,12 +7,12 @@ public interface IAggregateTestHelper<TAggregate, TContents>
     public IAggregateTestHelper<TAggregate, TContents> GivenScenario(Action initialAction);
     public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtos(List<ISingleAggregate> dtos);
     public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDto(ISingleAggregate dto);
-    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDtoBase<TContents> snapshot);
+    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot);
     public IAggregateTestHelper<TAggregate, TContents> Given(AggregateEvent ev);
     public IAggregateTestHelper<TAggregate, TContents> Given(Func<TAggregate, AggregateEvent> evFunc);
     public IAggregateTestHelper<TAggregate, TContents> Given(IEnumerable<AggregateEvent> events);
-    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDtoBase<TContents> snapshot, AggregateEvent ev);
-    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDtoBase<TContents> snapshot, IEnumerable<AggregateEvent> ev);
+    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, AggregateEvent ev);
+    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IEnumerable<AggregateEvent> ev);
     public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregate>;
     public IAggregateTestHelper<TAggregate, TContents> WhenChange<C>(C changeCommand) where C : ChangeAggregateCommandBase<TAggregate>;
     public IAggregateTestHelper<TAggregate, TContents> WhenChange<C>(Func<TAggregate, C> commandFunc)
@@ -25,9 +25,9 @@ public interface IAggregateTestHelper<TAggregate, TContents>
     public IAggregateTestHelper<TAggregate, TContents> ThenSingleEvent<T>(Action<T> checkEventAction) where T : AggregateEvent;
     public IAggregateTestHelper<TAggregate, TContents> ThenSingleEvent<T>(Func<TAggregate, T> constructExpectedEvent) where T : AggregateEvent;
 
-    public IAggregateTestHelper<TAggregate, TContents> ThenState(Action<AggregateDtoBase<TContents>, TAggregate> checkDtoAction);
-    public IAggregateTestHelper<TAggregate, TContents> ThenState(Action<AggregateDtoBase<TContents>> checkDtoAction);
-    public IAggregateTestHelper<TAggregate, TContents> ThenState(Func<TAggregate, AggregateDtoBase<TContents>> constructExpectedDto);
+    public IAggregateTestHelper<TAggregate, TContents> ThenState(Action<AggregateDto<TContents>, TAggregate> checkDtoAction);
+    public IAggregateTestHelper<TAggregate, TContents> ThenState(Action<AggregateDto<TContents>> checkDtoAction);
+    public IAggregateTestHelper<TAggregate, TContents> ThenState(Func<TAggregate, AggregateDto<TContents>> constructExpectedDto);
     public IAggregateTestHelper<TAggregate, TContents> ThenThrows<T>() where T : Exception;
     public IAggregateTestHelper<TAggregate, TContents> ThenThrows<T>(Action<T> checkException) where T : Exception;
     public IAggregateTestHelper<TAggregate, TContents> ThenAggregateCheck(Action<TAggregate> checkAction);

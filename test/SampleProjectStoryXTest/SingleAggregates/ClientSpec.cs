@@ -20,7 +20,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
     [Fact(DisplayName = "集約コマンドを実行してテストする")]
     public void ClientCreateSpec()
     {
-        var branchDto = new AggregateDtoBase<BranchContents>
+        var branchDto = new AggregateDto<BranchContents>
         {
             AggregateId = Guid.NewGuid(), Contents = new BranchContents { Name = "TEST" }, Version = 1
         };
@@ -34,7 +34,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
         ThenSingleEvent(client => new ClientCreated(client.AggregateId, branchDto.AggregateId, testClientName, testEmail));
         // 現在の集約のステータスを検証する
         ThenState(
-            client => new AggregateDtoBase<ClientContents>
+            client => new AggregateDto<ClientContents>
             {
                 AggregateId = client.AggregateId,
                 Version = client.Version,
@@ -46,7 +46,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
         ThenSingleEvent(client => new ClientNameChanged(client.AggregateId, testClientChangedName));
         // 現在の集約のステータスを検証する
         ThenState(
-            client => new AggregateDtoBase<ClientContents>
+            client => new AggregateDto<ClientContents>
             {
                 AggregateId = client.AggregateId,
                 Version = client.Version,
@@ -56,11 +56,11 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
     [Fact(DisplayName = "重複したメールアドレスが存在する場合、作成失敗する")]
     public void ClientCreateDuplicateEmailSpec()
     {
-        var branchDto = new AggregateDtoBase<BranchContents>
+        var branchDto = new AggregateDto<BranchContents>
         {
             AggregateId = Guid.NewGuid(), Contents = new BranchContents { Name = "TEST" }, Version = 1
         };
-        var clientDto = new AggregateDtoBase<ClientContents>
+        var clientDto = new AggregateDto<ClientContents>
         {
             AggregateId = Guid.NewGuid(), Version = 1, Contents = new ClientContents(Guid.NewGuid(), "NOT DUPLICATED NAME", testEmail)
         };
@@ -79,7 +79,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
             .ThenSingleEvent(client => new ClientCreated(client.AggregateId, branchId, testClientName, testEmail))
             // 現在の集約のステータスを検証する
             .ThenState(
-                client => new AggregateDtoBase<ClientContents>
+                client => new AggregateDto<ClientContents>
                 {
                     AggregateId = client.AggregateId, Version = client.Version, Contents = new ClientContents(branchId, testClientName, testEmail)
                 })
@@ -92,7 +92,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
             .ThenSingleEvent(client => new ClientNameChanged(client.AggregateId, testClientChangedName))
             // 現在の集約のステータスを検証する
             .ThenState(
-                client => new AggregateDtoBase<ClientContents>
+                client => new AggregateDto<ClientContents>
                 {
                     AggregateId = client.AggregateId,
                     Version = client.Version,
@@ -110,7 +110,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
             .ThenSingleEvent(client => new ClientNameChanged(client.AggregateId, testClientChangedNameV3))
             // 現在の集約のステータスを検証する
             .ThenState(
-                client => new AggregateDtoBase<ClientContents>
+                client => new AggregateDto<ClientContents>
                 {
                     AggregateId = client.AggregateId,
                     Version = client.Version,
@@ -124,7 +124,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
         var clientId = Guid.NewGuid();
 
         Given(
-                new AggregateDtoBase<ClientContents>
+                new AggregateDto<ClientContents>
                 {
                     AggregateId = clientId, Version = 1, Contents = new ClientContents(branchId, testClientName, testEmail)
                 })
@@ -133,7 +133,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
             .ThenSingleEvent(client => new ClientNameChanged(client.AggregateId, testClientChangedName))
             // 現在の集約のステータスを検証する
             .ThenState(
-                client => new AggregateDtoBase<ClientContents>
+                client => new AggregateDto<ClientContents>
                 {
                     AggregateId = client.AggregateId,
                     Version = client.Version,
