@@ -1,3 +1,3 @@
 ﻿namespace CustomerDomainContext.Aggregates.Clients.Events;
 
-public record ClientCreated(Guid BranchId, string ClientName, string ClientEmail) : IChangedEventPayload;
+public record ClientCreated(Guid BranchId, string ClientName, string ClientEmail) : ICreatedEventPayload;

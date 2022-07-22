@@ -13,7 +13,7 @@ public class RecentActivity : TransferableAggregateBase<RecentActivityContents>
     }
 
     protected override Action? GetApplyEventAction(IAggregateEvent ev) =>
-        ev.Payload switch
+        ev.GetPayload() switch
         {
             RecentActivityCreated created => () =>
             {

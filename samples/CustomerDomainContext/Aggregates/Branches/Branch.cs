@@ -11,7 +11,7 @@ public class Branch : TransferableAggregateBase<BranchContents>
     }
 
     protected override Action? GetApplyEventAction(IAggregateEvent ev) =>
-        ev.Payload switch
+        ev.GetPayload() switch
         {
             BranchCreated branchCreated => () =>
             {

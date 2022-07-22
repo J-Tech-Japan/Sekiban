@@ -5,6 +5,10 @@ namespace Sekiban.EventSourcing.AggregateEvents;
 [SekibanEventType]
 public record AggregateEvent<TEventPayload> : IAggregateEvent where TEventPayload : IEventPayload
 {
+
+    [DataMember]
+    [JsonProperty]
+    public TEventPayload Payload { get; init; }
     public AggregateEvent(Guid aggregateId, TEventPayload payload, Type aggregateTypeObject, bool isAggregateInitialEvent = false)
     {
         Id = Guid.NewGuid();
@@ -55,9 +59,6 @@ public record AggregateEvent<TEventPayload> : IAggregateEvent where TEventPayloa
     public int Version { get; init; }
 
     [DataMember]
-    public IEventPayload Payload { get; init; }
-
-    [DataMember]
     public List<CallHistory> CallHistories { get; init; } = new();
 
     public dynamic GetComparableObject(IAggregateEvent original, bool copyVersion = true) =>
@@ -69,6 +70,8 @@ public record AggregateEvent<TEventPayload> : IAggregateEvent where TEventPayloa
             Id = original.Id,
             TimeStamp = original.TimeStamp
         };
+    public IEventPayload GetPayload() =>
+        Payload;
 
     public static AggregateEvent<TEventPayload> CreatedEvent(Guid aggregateId, TEventPayload payload, Type aggregateType) =>
         new(aggregateId, payload, aggregateType, true);

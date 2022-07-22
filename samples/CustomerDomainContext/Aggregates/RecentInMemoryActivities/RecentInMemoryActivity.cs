@@ -13,7 +13,7 @@ public class RecentInMemoryActivity : TransferableAggregateBase<RecentInMemoryAc
     }
 
     protected override Action? GetApplyEventAction(IAggregateEvent ev) =>
-        ev.Payload switch
+        ev.GetPayload() switch
         {
             RecentInMemoryActivityCreated created => () =>
             {

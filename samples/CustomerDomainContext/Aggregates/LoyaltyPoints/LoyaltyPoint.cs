@@ -13,7 +13,7 @@ public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointContents>
     }
 
     protected override Action? GetApplyEventAction(IAggregateEvent ev) =>
-        ev.Payload switch
+        ev.GetPayload() switch
         {
             LoyaltyPointCreated created => () =>
             {

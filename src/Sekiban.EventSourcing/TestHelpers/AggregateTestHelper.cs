@@ -205,8 +205,8 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
     public IAggregateTestHelper<TAggregate, TContents> ThenSingleEventPayload<T>(T payload) where T : IEventPayload
     {
         if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
-        Assert.IsType<T>(_latestEvents.First());
-        Assert.Equal(_latestEvents.First().Payload, payload);
+        Assert.IsType<AggregateEvent<T>>(_latestEvents.First());
+        Assert.Equal(_latestEvents.First().GetPayload(), payload);
         return this;
     }
     public IAggregateTestHelper<TAggregate, TContents> ThenState(Action<AggregateDto<TContents>, TAggregate> checkDtoAction)

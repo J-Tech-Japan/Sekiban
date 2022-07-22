@@ -11,8 +11,11 @@ public record SnapshotDocument : IDocument
     public dynamic? Snapshot { get; init; }
     public Guid AggregateId { get; init; }
     public Guid LastEventId { get; init; }
-    public string LastSortableUniqueId { get; set; } = string.Empty;
-    public int SavedVersion { get; set; }
+    public string LastSortableUniqueId { get; init; } = string.Empty;
+    public int SavedVersion { get; init; }
+
+    [JsonConstructor]
+    public SnapshotDocument() { }
 
     public SnapshotDocument(
         IPartitionKeyFactory partitionKeyFactory,
@@ -28,7 +31,7 @@ public record SnapshotDocument : IDocument
         DocumentTypeName = aggregateTypeName ?? string.Empty;
         TimeStamp = DateTime.UtcNow;
         SortableUniqueId = SortableUniqueIdGenerator.Generate(TimeStamp, Id);
-
+        PartitionKey = partitionKeyFactory.GetPartitionKey(DocumentType);
         Snapshot = dtoToSnapshot;
         AggregateId = aggregateId;
         LastEventId = lastEventId;

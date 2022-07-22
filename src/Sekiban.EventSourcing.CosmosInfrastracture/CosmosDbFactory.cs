@@ -113,7 +113,7 @@ public class CosmosDbFactory
             _memoryCache.Set(GetMemoryCacheDatabaseKey(documentType, databaseId, _sekibanContextIdentifier), database);
         }
 
-        var containerProperties = new ContainerProperties(containerId, "/partitionkey");
+        var containerProperties = new ContainerProperties(containerId, "/PartitionKey");
         container = await database.CreateContainerIfNotExistsAsync(containerProperties, 400);
         _memoryCache.Set(GetMemoryCacheContainerKey(documentType, databaseId, containerId, _sekibanContextIdentifier), container);
 
@@ -139,7 +139,7 @@ public class CosmosDbFactory
                     {
                         if (item == null) { continue; }
                         if (item is not JObject jobj) { continue; }
-                        todelete.Add(jobj.ToObject<IDocument>() ?? throw new Exception());
+                        todelete.Add(jobj.ToObject<Document>() ?? throw new Exception());
                     }
                 }
                 var concurrencyTasks = new List<Task>();

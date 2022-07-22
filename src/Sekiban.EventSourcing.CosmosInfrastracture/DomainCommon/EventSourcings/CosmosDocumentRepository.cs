@@ -58,7 +58,12 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                         var baseType = typeof(AggregateEvent<>);
 
                         var toAdd = _registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
-                            .Select(m => (IAggregateEvent?)jobj.ToObject(baseType.MakeGenericType(m)))
+                            .Select(
+                                m =>
+                                {
+                                    var actualType = baseType.MakeGenericType(m);
+                                    return (IAggregateEvent?)jobj.ToObject(actualType);
+                                })
                             .FirstOrDefault(m => m != null);
                         if (toAdd == null)
                         {

@@ -35,7 +35,7 @@ public class ClientNameHistoryProjection : SingleAggregateProjectionBase<ClientN
     }
 
     protected override Action? GetApplyEventAction(IAggregateEvent ev) =>
-        ev.Payload switch
+        ev.GetPayload() switch
         {
             ClientCreated clientCreated => () =>
             {

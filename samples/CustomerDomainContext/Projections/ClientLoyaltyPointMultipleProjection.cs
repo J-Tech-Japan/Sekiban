@@ -15,7 +15,7 @@ public class ClientLoyaltyPointMultipleProjection : MultipleAggregateProjectionB
     public override ClientLoyaltyPointMultipleProjection ToDto() =>
         this;
     protected override Action? GetApplyEventAction(IAggregateEvent ev) =>
-        ev.Payload switch
+        ev.GetPayload() switch
         {
             BranchCreated branchCreated => () =>
             {

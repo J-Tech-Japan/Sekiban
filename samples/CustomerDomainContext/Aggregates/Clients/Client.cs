@@ -12,7 +12,7 @@ public class Client : TransferableAggregateBase<ClientContents>
     }
 
     protected override Action? GetApplyEventAction(IAggregateEvent ev) =>
-        ev.Payload switch
+        ev.GetPayload() switch
         {
             ClientCreated clientChanged => () =>
             {

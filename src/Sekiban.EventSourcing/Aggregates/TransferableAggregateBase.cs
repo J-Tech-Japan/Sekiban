@@ -30,7 +30,7 @@ public abstract class TransferableAggregateBase<TContents> : AggregateBase, ISin
         {
             throw new SekibanEventNotImplementedException();
         }
-
+        ev = ev with { Version = Version };
         // Apply Event
         ApplyEvent(ev);
         ev = ev with { Version = Version };
