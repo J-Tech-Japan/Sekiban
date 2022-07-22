@@ -1,11 +1,12 @@
+using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace Sekiban.EventSourcing.TestHelpers;
 
 public interface IAggregateTestHelper<TAggregate, TContents>
     where TAggregate : TransferableAggregateBase<TContents> where TContents : IAggregateContents
 {
     public IAggregateTestHelper<TAggregate, TContents> GivenScenario(Action initialAction);
-    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtos(List<AggregateDtoBase<TContents>> dtos);
-    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDto(AggregateDtoBase<TContents> dto);
+    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtos(List<ISingleAggregate> dtos);
+    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDto(ISingleAggregate dto);
     public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDtoBase<TContents> snapshot);
     public IAggregateTestHelper<TAggregate, TContents> Given(AggregateEvent ev);
     public IAggregateTestHelper<TAggregate, TContents> Given(Func<TAggregate, AggregateEvent> evFunc);

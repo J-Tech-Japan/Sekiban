@@ -12,7 +12,7 @@ public class ClientDeletedSubscriber : AggregateEventSubscriberBase<ClientDelete
 
     public override async Task SubscribeAggregateEventAsync(ClientDeleted ev)
     {
-        await _aggregateCommandExecutor.ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointDto, DeleteLoyaltyPoint>(
+        await _aggregateCommandExecutor.ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointContents, DeleteLoyaltyPoint>(
             new DeleteLoyaltyPoint(ev.ClientId),
             ev.GetCallHistoriesIncludesItself());
     }

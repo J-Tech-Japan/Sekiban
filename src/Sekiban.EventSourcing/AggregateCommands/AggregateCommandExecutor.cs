@@ -24,7 +24,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
     public async Task<AggregateCommandExecutorResponse<TContents, C>> ExecChangeCommandAsync<T, TContents, C>(
         C command,
         List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>
-        where TContents : IAggregateContents, new()
+        where TContents : IAggregateContents
         where C : ChangeAggregateCommandBase<T>
     {
         var toReturn = new AggregateCommandExecutorResponse<TContents, C>(
@@ -91,7 +91,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
     public async Task<AggregateCommandExecutorResponse<TContents, C>> ExecCreateCommandAsync<T, TContents, C>(
         C command,
         List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>
-        where TContents : IAggregateContents, new()
+        where TContents : IAggregateContents
         where C : ICreateAggregateCommand<T>
     {
         var toReturn = new AggregateCommandExecutorResponse<TContents, C>(

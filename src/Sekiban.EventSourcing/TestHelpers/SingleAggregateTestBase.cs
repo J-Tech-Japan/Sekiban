@@ -1,69 +1,71 @@
 using Microsoft.Extensions.DependencyInjection;
+using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace Sekiban.EventSourcing.TestHelpers;
 
-public abstract class SingleAggregateTestBase<TAggregate, TDto> : IDisposable, IAggregateTestHelper<TAggregate, TDto>
-    where TAggregate : TransferableAggregateBase<TDto> where TDto : AggregateDtoBase
+public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposable, IAggregateTestHelper<TAggregate, TContents>
+    where TAggregate : TransferableAggregateBase<TContents> where TContents : IAggregateContents
 {
-    private readonly AggregateTestHelper<TAggregate, TDto> _helper;
+    private readonly IAggregateTestHelper<TAggregate, TContents> _helper;
     protected readonly IServiceProvider _serviceProvider;
     public SingleAggregateTestBase()
     {
         // ReSharper disable once VirtualMemberCallInConstructor
         _serviceProvider = SetupService();
-        _helper = new AggregateTestHelper<TAggregate, TDto>(_serviceProvider);
+        _helper = new AggregateTestHelper<TAggregate, TContents>(_serviceProvider);
     }
-    public AggregateTestHelper<TAggregate, TDto> GivenScenario(Action initialAction) =>
+    public IAggregateTestHelper<TAggregate, TContents> GivenScenario(Action initialAction) =>
         _helper.GivenScenario(initialAction);
-    public AggregateTestHelper<TAggregate, TDto> GivenEnvironmentDtos(List<AggregateDtoBase> dtos) =>
+    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtos(List<ISingleAggregate> dtos) =>
         _helper.GivenEnvironmentDtos(dtos);
-    public AggregateTestHelper<TAggregate, TDto> GivenEnvironmentDto(AggregateDtoBase dto) =>
+    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDto(ISingleAggregate dto) =>
         _helper.GivenEnvironmentDto(dto);
-    public AggregateTestHelper<TAggregate, TDto> Given(TDto snapshot) =>
+    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDtoBase<TContents> snapshot) =>
         _helper.Given(snapshot);
-    public AggregateTestHelper<TAggregate, TDto> Given(AggregateEvent ev) =>
+    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateEvent ev) =>
         _helper.Given(ev);
-    public AggregateTestHelper<TAggregate, TDto> Given(Func<TAggregate, AggregateEvent> evFunc) =>
+    public IAggregateTestHelper<TAggregate, TContents> Given(Func<TAggregate, AggregateEvent> evFunc) =>
         _helper.Given(evFunc);
-    public AggregateTestHelper<TAggregate, TDto> Given(IEnumerable<AggregateEvent> events) =>
+    public IAggregateTestHelper<TAggregate, TContents> Given(IEnumerable<AggregateEvent> events) =>
         _helper.Given(events);
-    public AggregateTestHelper<TAggregate, TDto> Given(TDto snapshot, AggregateEvent ev) =>
+    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDtoBase<TContents> snapshot, AggregateEvent ev) =>
         _helper.Given(snapshot, ev);
-    public AggregateTestHelper<TAggregate, TDto> Given(TDto snapshot, IEnumerable<AggregateEvent> ev) =>
+    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDtoBase<TContents> snapshot, IEnumerable<AggregateEvent> ev) =>
         _helper.Given(snapshot, ev);
-    public AggregateTestHelper<TAggregate, TDto> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregate> =>
+    public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregate> =>
         _helper.WhenCreate(createCommand);
-    public AggregateTestHelper<TAggregate, TDto> WhenChange<C>(C changeCommand) where C : ChangeAggregateCommandBase<TAggregate> =>
+    public IAggregateTestHelper<TAggregate, TContents> WhenChange<C>(C changeCommand) where C : ChangeAggregateCommandBase<TAggregate> =>
         _helper.WhenChange(changeCommand);
-    public AggregateTestHelper<TAggregate, TDto> WhenChange<C>(Func<TAggregate, C> commandFunc) where C : ChangeAggregateCommandBase<TAggregate> =>
+    public IAggregateTestHelper<TAggregate, TContents> WhenChange<C>(Func<TAggregate, C> commandFunc)
+        where C : ChangeAggregateCommandBase<TAggregate> =>
         _helper.WhenChange(commandFunc);
-    public AggregateTestHelper<TAggregate, TDto> WhenMethod(Action<TAggregate> action) =>
+    public IAggregateTestHelper<TAggregate, TContents> WhenMethod(Action<TAggregate> action) =>
         _helper.WhenMethod(action);
-    public AggregateTestHelper<TAggregate, TDto> WhenConstructor(Func<TAggregate> aggregateFunc) =>
+    public IAggregateTestHelper<TAggregate, TContents> WhenConstructor(Func<TAggregate> aggregateFunc) =>
         _helper.WhenConstructor(aggregateFunc);
-    public AggregateTestHelper<TAggregate, TDto> ThenEvents(Action<List<AggregateEvent>, TAggregate> checkEventsAction) =>
+    public IAggregateTestHelper<TAggregate, TContents> ThenEvents(Action<List<AggregateEvent>, TAggregate> checkEventsAction) =>
         _helper.ThenEvents(checkEventsAction);
-    public AggregateTestHelper<TAggregate, TDto> ThenEvents(Action<List<AggregateEvent>> checkEventsAction) =>
+    public IAggregateTestHelper<TAggregate, TContents> ThenEvents(Action<List<AggregateEvent>> checkEventsAction) =>
         _helper.ThenEvents(checkEventsAction);
-    public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent<T>(Action<T, TAggregate> checkEventAction) where T : AggregateEvent =>
+    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEvent<T>(Action<T, TAggregate> checkEventAction) where T : AggregateEvent =>
         _helper.ThenSingleEvent(checkEventAction);
-    public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent<T>(Action<T> checkEventAction) where T : AggregateEvent =>
+    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEvent<T>(Action<T> checkEventAction) where T : AggregateEvent =>
         _helper.ThenSingleEvent(checkEventAction);
-    public AggregateTestHelper<TAggregate, TDto> ThenSingleEvent<T>(Func<TAggregate, T> constructExpectedEvent) where T : AggregateEvent =>
+    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEvent<T>(Func<TAggregate, T> constructExpectedEvent) where T : AggregateEvent =>
         _helper.ThenSingleEvent(constructExpectedEvent);
 
-    public AggregateTestHelper<TAggregate, TDto> ThenState(Action<TDto, TAggregate> checkDtoAction) =>
+    public IAggregateTestHelper<TAggregate, TContents> ThenState(Action<AggregateDtoBase<TContents>, TAggregate> checkDtoAction) =>
         _helper.ThenState(checkDtoAction);
-    public AggregateTestHelper<TAggregate, TDto> ThenState(Action<TDto> checkDtoAction) =>
+    public IAggregateTestHelper<TAggregate, TContents> ThenState(Action<AggregateDtoBase<TContents>> checkDtoAction) =>
         _helper.ThenState(checkDtoAction);
-    public AggregateTestHelper<TAggregate, TDto> ThenState(Func<TAggregate, TDto> constructExpectedDto) =>
+    public IAggregateTestHelper<TAggregate, TContents> ThenState(Func<TAggregate, AggregateDtoBase<TContents>> constructExpectedDto) =>
         _helper.ThenState(constructExpectedDto);
-    public AggregateTestHelper<TAggregate, TDto> ThenThrows<T>() where T : Exception =>
+    public IAggregateTestHelper<TAggregate, TContents> ThenThrows<T>() where T : Exception =>
         _helper.ThenThrows<T>();
-    public AggregateTestHelper<TAggregate, TDto> ThenThrows<T>(Action<T> checkException) where T : Exception =>
+    public IAggregateTestHelper<TAggregate, TContents> ThenThrows<T>(Action<T> checkException) where T : Exception =>
         _helper.ThenThrows(checkException);
-    public AggregateTestHelper<TAggregate, TDto> ThenAggregateCheck(Action<TAggregate> checkAction) =>
+    public IAggregateTestHelper<TAggregate, TContents> ThenAggregateCheck(Action<TAggregate> checkAction) =>
         _helper.ThenAggregateCheck(checkAction);
-    public AggregateTestHelper<TAggregate, TDto> ThenNotThrowsAnException() =>
+    public IAggregateTestHelper<TAggregate, TContents> ThenNotThrowsAnException() =>
         _helper.ThenNotThrowsAnException();
     public void Dispose() { }
     public abstract IServiceProvider SetupService();
