@@ -20,8 +20,12 @@ public abstract class TransferableAggregateBase<TContents> : AggregateBase, ISin
         CopyPropertiesFromSnapshot(snapshot);
     }
 
-    protected sealed override void AddAndApplyEvent(IAggregateEvent ev)
+    protected sealed override void AddAndApplyEvent<TEventPayload>(TEventPayload eventPayload)
     {
+        var ev = eventPayload is ICreatedEventPayload
+            ? AggregateEvent<TEventPayload>.CreatedEvent(AggregateId, eventPayload, GetType())
+            : AggregateEvent<TEventPayload>.ChangedEvent(AggregateId, eventPayload, GetType());
+
         if (GetApplyEventAction(ev) == null)
         {
             throw new SekibanEventNotImplementedException();

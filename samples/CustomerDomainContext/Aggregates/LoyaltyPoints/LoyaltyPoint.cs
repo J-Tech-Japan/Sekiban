@@ -5,16 +5,15 @@ namespace CustomerDomainContext.Aggregates.LoyaltyPoints;
 
 public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointContents>
 {
-
     public LoyaltyPoint(Guid aggregateId) : base(aggregateId) { }
 
     public LoyaltyPoint(Guid clientId, int initialPoint) : base(clientId)
     {
-        AddAndApplyEvent(new LoyaltyPointCreated(clientId, initialPoint));
+        AddAndApplyEvent(new LoyaltyPointCreated(initialPoint));
     }
 
-    protected override Action? GetApplyEventAction(AggregateEvent ev) =>
-        ev switch
+    protected override Action? GetApplyEventAction(IAggregateEvent ev) =>
+        ev.Payload switch
         {
             LoyaltyPointCreated created => () =>
             {
@@ -41,7 +40,7 @@ public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointContents>
         {
             throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
         }
-        AddAndApplyEvent(new LoyaltyPointAdded(AggregateId, happenedDate, reason, pointAmount, note));
+        AddAndApplyEvent(new LoyaltyPointAdded(happenedDate, reason, pointAmount, note));
     }
 
     public void UseLoyaltyPoint(DateTime happenedDate, LoyaltyPointUsageType reason, int pointAmount, string note)
@@ -54,9 +53,9 @@ public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointContents>
         {
             throw new SekibanLoyaltyPointNotEnoughException();
         }
-        AddAndApplyEvent(new LoyaltyPointUsed(AggregateId, happenedDate, reason, pointAmount, note));
+        AddAndApplyEvent(new LoyaltyPointUsed(happenedDate, reason, pointAmount, note));
     }
 
     public void Delete() =>
-        AddAndApplyEvent(new LoyaltyPointDeleted(AggregateId));
+        AddAndApplyEvent(new LoyaltyPointDeleted());
 }

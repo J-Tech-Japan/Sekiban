@@ -4,4 +4,4 @@ public record SnapshotManagerRequestAdded(
     string AggregateTypeName,
     Guid TargetAggregateId,
     int NextSnapshotVersion,
-    int? SnapshotVersion) : IEventPayload;
+    int? SnapshotVersion) : IChangedEventPayload;

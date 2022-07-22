@@ -10,7 +10,7 @@ public class SnapshotManager : TransferableAggregateBase<SnapshotManagerContents
     public SnapshotManager(Guid aggregateId) : base(aggregateId) { }
     public SnapshotManager(Guid aggregateId, DateTime createdAt) : base(aggregateId)
     {
-        AddAndApplyEvent(new CreateAggregateEvent<SnapshotManager, SnapshotManagerCreated>(aggregateId, new SnapshotManagerCreated(createdAt)));
+        AddAndApplyEvent(new SnapshotManagerCreated(createdAt));
     }
     public void ReportAggregateVersion(
         Guid snapshotManagerId,
@@ -27,17 +27,11 @@ public class SnapshotManager : TransferableAggregateBase<SnapshotManagerContents
         var key = SnapshotKey(aggregateType.Name, targetAggregateId, nextSnapshotVersion);
         if (!Contents.Requests.Contains(key) && !Contents.RequestTakens.Contains(key))
         {
-            AddAndApplyEvent(
-                new ChangeAggregateEvent<SnapshotManager, SnapshotManagerRequestAdded>(
-                    AggregateId,
-                    new SnapshotManagerRequestAdded(aggregateType.Name, targetAggregateId, nextSnapshotVersion, snapshotVersion)));
+            AddAndApplyEvent(new SnapshotManagerRequestAdded(aggregateType.Name, targetAggregateId, nextSnapshotVersion, snapshotVersion));
         }
         if (Contents.Requests.Contains(key) && !Contents.RequestTakens.Contains(key) && offset > snapshotOffset)
         {
-            AddAndApplyEvent(
-                new ChangeAggregateEvent<SnapshotManager, SnapshotManagerSnapshotTaken>(
-                    snapshotManagerId,
-                    new SnapshotManagerSnapshotTaken(aggregateType.Name, targetAggregateId, nextSnapshotVersion, snapshotVersion)));
+            AddAndApplyEvent(new SnapshotManagerSnapshotTaken(aggregateType.Name, targetAggregateId, nextSnapshotVersion, snapshotVersion));
         }
     }
     private static string SnapshotKey(string aggregateTypeName, Guid targetAggregateId, int nextSnapshotVersion) =>

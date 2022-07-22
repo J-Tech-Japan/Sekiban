@@ -23,6 +23,11 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposab
         _helper.Given(snapshot);
     public IAggregateTestHelper<TAggregate, TContents> Given(IAggregateEvent ev) =>
         _helper.Given(ev);
+    public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(Guid aggregateId, TEventPayload payload)
+        where TEventPayload : ICreatedEventPayload =>
+        _helper.Given(aggregateId, payload);
+    public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(TEventPayload payload) where TEventPayload : IChangedEventPayload =>
+        _helper.Given(payload);
     public IAggregateTestHelper<TAggregate, TContents> Given(Func<TAggregate, IAggregateEvent> evFunc) =>
         _helper.Given(evFunc);
     public IAggregateTestHelper<TAggregate, TContents> Given(IEnumerable<IAggregateEvent> events) =>
@@ -52,6 +57,8 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposab
         _helper.ThenSingleEvent(checkEventAction);
     public IAggregateTestHelper<TAggregate, TContents> ThenSingleEvent<T>(Func<TAggregate, T> constructExpectedEvent) where T : IAggregateEvent =>
         _helper.ThenSingleEvent(constructExpectedEvent);
+    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEventPayload<T>(T payload) where T : IEventPayload =>
+        _helper.ThenSingleEventPayload(payload);
 
     public IAggregateTestHelper<TAggregate, TContents> ThenState(Action<AggregateDto<TContents>, TAggregate> checkDtoAction) =>
         _helper.ThenState(checkDtoAction);

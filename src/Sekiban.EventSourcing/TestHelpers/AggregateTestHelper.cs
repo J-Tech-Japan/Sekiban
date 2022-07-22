@@ -50,6 +50,13 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         if (_aggregate.CanApplyEvent(ev)) { _aggregate.ApplyEvent(ev); }
         return this;
     }
+    public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(TEventPayload payload) where TEventPayload : IChangedEventPayload
+    {
+        var ev = AggregateEvent<TEventPayload>.ChangedEvent(_aggregate.AggregateId, payload, typeof(TAggregate));
+        if (_aggregate.CanApplyEvent(ev)) { _aggregate.ApplyEvent(ev); }
+
+        return this;
+    }
     public IAggregateTestHelper<TAggregate, TContents> Given(Func<TAggregate, IAggregateEvent> evFunc)
     {
         var ev = evFunc(_aggregate);
@@ -195,6 +202,13 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         checkEventsAction(_latestEvents);
         return this;
     }
+    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEventPayload<T>(T payload) where T : IEventPayload
+    {
+        if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
+        Assert.IsType<T>(_latestEvents.First());
+        Assert.Equal(_latestEvents.First().Payload, payload);
+        return this;
+    }
     public IAggregateTestHelper<TAggregate, TContents> ThenState(Action<AggregateDto<TContents>, TAggregate> checkDtoAction)
     {
         checkDtoAction(_aggregate.ToDto(), _aggregate);
@@ -265,6 +279,15 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
     }
     public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDto(ISingleAggregate dto) =>
         GivenEnvironmentDtos(new List<ISingleAggregate> { dto });
+    public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(Guid aggregateId, TEventPayload payload)
+        where TEventPayload : ICreatedEventPayload
+    {
+        var ev = AggregateEvent<TEventPayload>.CreatedEvent(aggregateId, payload, typeof(TAggregate));
+        if (_aggregate.CanApplyEvent(ev)) { _aggregate.ApplyEvent(ev); }
+        return this;
+    }
+    public IAggregateTestHelper<TAggregate, TContents> Given(IChangedEventPayload payload) =>
+        throw new NotImplementedException();
 
     private void CheckStateJSONSupports()
     {

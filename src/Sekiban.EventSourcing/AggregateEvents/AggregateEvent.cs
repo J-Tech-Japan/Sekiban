@@ -56,10 +56,10 @@ public record AggregateEvent<TEventPayload> : Document, IAggregateEvent where TE
 
     public void SetVersion(int version) =>
         _version = version;
-    public static AggregateEvent<TEventPayload> CreatedEvent<TAggregate>(Guid aggregateId, TEventPayload payload) where TAggregate : IAggregate =>
-        new(aggregateId, payload, typeof(TEventPayload), true);
-    public static AggregateEvent<TEventPayload> ChangedEvent<TAggregate>(Guid aggregateId, TEventPayload payload) where TAggregate : IAggregate =>
-        new(aggregateId, payload, typeof(TEventPayload));
+    public static AggregateEvent<TEventPayload> CreatedEvent(Guid aggregateId, TEventPayload payload, Type aggregateType) =>
+        new(aggregateId, payload, aggregateType, true);
+    public static AggregateEvent<TEventPayload> ChangedEvent(Guid aggregateId, TEventPayload payload, Type aggregateType) =>
+        new(aggregateId, payload, aggregateType);
 
     public List<CallHistory> GetCallHistoriesIncludesItself()
     {

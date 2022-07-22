@@ -1,12 +1,13 @@
 using MediatR;
 namespace Sekiban.EventSourcing.PubSubs;
 
-public abstract class AggregateEventSubscriberBase<TEvent> : INotificationHandler<TEvent> where TEvent : IAggregateEvent
+public abstract class AggregateEventSubscriberBase<TEventPayload> : INotificationHandler<AggregateEvent<TEventPayload>>
+    where TEventPayload : IEventPayload
 {
-    public async Task Handle(TEvent ev, CancellationToken cancellationToken)
+    public async Task Handle(AggregateEvent<TEventPayload> ev, CancellationToken cancellationToken)
     {
         await SubscribeAggregateEventAsync(ev);
     }
 
-    public abstract Task SubscribeAggregateEventAsync(TEvent ev);
+    public abstract Task SubscribeAggregateEventAsync(AggregateEvent<TEventPayload> ev);
 }

@@ -9,11 +9,11 @@ public class RecentActivity : TransferableAggregateBase<RecentActivityContents>
 
     public RecentActivity(Guid aggregateId, string firstActivity) : base(aggregateId)
     {
-        AddAndApplyEvent(new RecentActivityCreated(aggregateId, new RecentActivityRecord(firstActivity, DateTime.UtcNow)));
+        AddAndApplyEvent(new RecentActivityCreated(new RecentActivityRecord(firstActivity, DateTime.UtcNow)));
     }
 
-    protected override Action? GetApplyEventAction(AggregateEvent ev) =>
-        ev switch
+    protected override Action? GetApplyEventAction(IAggregateEvent ev) =>
+        ev.Payload switch
         {
             RecentActivityCreated created => () =>
             {
@@ -33,7 +33,7 @@ public class RecentActivity : TransferableAggregateBase<RecentActivityContents>
         };
     public void AddActivity(string activity)
     {
-        var ev = new RecentActivityAdded(AggregateId, new RecentActivityRecord(activity, DateTime.UtcNow));
+        var ev = new RecentActivityAdded(new RecentActivityRecord(activity, DateTime.UtcNow));
         AddAndApplyEvent(ev);
     }
 }

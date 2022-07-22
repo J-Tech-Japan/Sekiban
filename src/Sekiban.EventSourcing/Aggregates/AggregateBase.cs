@@ -60,5 +60,5 @@ public abstract class AggregateBase : IAggregate
 
     protected abstract Action? GetApplyEventAction(IAggregateEvent ev);
 
-    protected abstract void AddAndApplyEvent(IAggregateEvent ev);
+    protected abstract void AddAndApplyEvent<TEventPayload>(TEventPayload eventPayload) where TEventPayload : IEventPayload;
 }

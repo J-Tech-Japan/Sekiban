@@ -3,6 +3,7 @@ using CustomerDomainContext.Aggregates.Clients;
 using CustomerDomainContext.Aggregates.Clients.Commands;
 using CustomerDomainContext.Aggregates.Clients.Events;
 using CustomerDomainContext.Shared.Exceptions;
+using Sekiban.EventSourcing.AggregateEvents;
 using Sekiban.EventSourcing.Aggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 using System;
@@ -31,7 +32,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
         // エラーとならない
         ThenNotThrowsAnException();
         // コマンドによって生成されたイベントを検証する
-        ThenSingleEvent(client => new ClientCreated(client.AggregateId, branchDto.AggregateId, testClientName, testEmail));
+        ThenSingleEventPayload(new ClientCreated(branchDto.AggregateId, testClientName, testEmail));
         // 現在の集約のステータスを検証する
         ThenState(
             client => new AggregateDto<ClientContents>
@@ -43,7 +44,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
         // 名前変更コマンドを実行する
         WhenChange(client => new ChangeClientName(client.AggregateId, testClientChangedName) { ReferenceVersion = client.Version });
         // コマンドによって生成されたイベントを検証する
-        ThenSingleEvent(client => new ClientNameChanged(client.AggregateId, testClientChangedName));
+        ThenSingleEventPayload(new ClientNameChanged(testClientChangedName));
         // 現在の集約のステータスを検証する
         ThenState(
             client => new AggregateDto<ClientContents>
@@ -76,7 +77,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
 
         WhenConstructor(() => new Client(branchId, testClientName, testEmail))
             // コマンドによって生成されたイベントを検証する
-            .ThenSingleEvent(client => new ClientCreated(client.AggregateId, branchId, testClientName, testEmail))
+            .ThenSingleEventPayload(new ClientCreated(branchId, testClientName, testEmail))
             // 現在の集約のステータスを検証する
             .ThenState(
                 client => new AggregateDto<ClientContents>
@@ -89,7 +90,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
                     aggregate.ChangeClientName(testClientChangedName);
                 })
             // コマンドによって生成されたイベントを検証する
-            .ThenSingleEvent(client => new ClientNameChanged(client.AggregateId, testClientChangedName))
+            .ThenSingleEventPayload(new ClientNameChanged(testClientChangedName))
             // 現在の集約のステータスを検証する
             .ThenState(
                 client => new AggregateDto<ClientContents>
@@ -103,11 +104,12 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
     public void StartWithEvents()
     {
         var branchId = Guid.NewGuid();
-        Given(new ClientCreated(Guid.NewGuid(), branchId, testClientName, testEmail))
-            .Given(client => new ClientNameChanged(client.AggregateId, testClientChangedName))
+        var clientId = Guid.NewGuid();
+        Given(AggregateEvent<ClientCreated>.CreatedEvent(clientId, new ClientCreated(branchId, testClientName, testEmail), typeof(Client)))
+            .Given(new ClientNameChanged(testClientChangedName))
             .WhenMethod(client => client.ChangeClientName(testClientChangedNameV3))
             // コマンドによって生成されたイベントを検証する
-            .ThenSingleEvent(client => new ClientNameChanged(client.AggregateId, testClientChangedNameV3))
+            .ThenSingleEventPayload(new ClientNameChanged(testClientChangedNameV3))
             // 現在の集約のステータスを検証する
             .ThenState(
                 client => new AggregateDto<ClientContents>
@@ -130,7 +132,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
                 })
             .WhenMethod(client => client.ChangeClientName(testClientChangedName))
             // コマンドによって生成されたイベントを検証する
-            .ThenSingleEvent(client => new ClientNameChanged(client.AggregateId, testClientChangedName))
+            .ThenSingleEventPayload(new ClientNameChanged(testClientChangedName))
             // 現在の集約のステータスを検証する
             .ThenState(
                 client => new AggregateDto<ClientContents>

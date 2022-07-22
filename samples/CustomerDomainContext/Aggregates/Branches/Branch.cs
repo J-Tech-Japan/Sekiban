@@ -7,11 +7,11 @@ public class Branch : TransferableAggregateBase<BranchContents>
 
     public Branch(NameString name) : base(Guid.NewGuid())
     {
-        AddAndApplyEvent(new BranchCreated(AggregateId, name));
+        AddAndApplyEvent(new BranchCreated(name));
     }
 
-    protected override Action? GetApplyEventAction(AggregateEvent ev) =>
-        ev switch
+    protected override Action? GetApplyEventAction(IAggregateEvent ev) =>
+        ev.Payload switch
         {
             BranchCreated branchCreated => () =>
             {
