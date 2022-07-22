@@ -11,6 +11,5 @@ public interface IAggregateEvent : INotification, ICallHistories, IDocument
     public int Version { get; }
 
     public IEventPayload Payload { get; }
-    public void SetVersion(int version);
     public dynamic GetComparableObject(IAggregateEvent original, bool copyVersion = true);
 }

@@ -3,21 +3,40 @@ using System.Runtime.Serialization;
 namespace Sekiban.EventSourcing.AggregateEvents;
 
 [SekibanEventType]
-public record AggregateEvent<TEventPayload> : Document, IAggregateEvent where TEventPayload : IEventPayload
+public record AggregateEvent<TEventPayload> : IAggregateEvent where TEventPayload : IEventPayload
 {
-    private int _version;
-    public AggregateEvent(Guid aggregateId, TEventPayload payload, Type aggregateTypeObject, bool isAggregateInitialEvent = false) : base(
-        DocumentType.AggregateEvent,
-        null)
+    public AggregateEvent(Guid aggregateId, TEventPayload payload, Type aggregateTypeObject, bool isAggregateInitialEvent = false)
     {
+        Id = Guid.NewGuid();
+        DocumentType = DocumentType.AggregateEvent;
+        DocumentTypeName = typeof(TEventPayload).Name;
+        TimeStamp = DateTime.UtcNow;
+        SortableUniqueId = SortableUniqueIdGenerator.Generate(TimeStamp, Id);
         AggregateId = aggregateId;
         Payload = payload;
         AggregateType = aggregateTypeObject.Name;
-        SetPartitionKey(new AggregateIdPartitionKeyFactory(aggregateId, aggregateTypeObject));
+        var partitionKeyFactory = new AggregateIdPartitionKeyFactory(aggregateId, aggregateTypeObject);
+        PartitionKey = partitionKeyFactory.GetPartitionKey(DocumentType);
         IsAggregateInitialEvent = isAggregateInitialEvent;
     }
+
     [JsonConstructor]
-    protected AggregateEvent() : base(DocumentType.AggregateEvent, null) { }
+    protected AggregateEvent() { }
+
+    [JsonProperty("id")]
+    [DataMember]
+    public Guid Id { get; init; }
+    [DataMember]
+    public string PartitionKey { get; init; }
+
+    [DataMember]
+    public DocumentType DocumentType { get; init; }
+    [DataMember]
+    public string DocumentTypeName { get; init; } = null!;
+    [DataMember]
+    public DateTime TimeStamp { get; init; }
+    [DataMember]
+    public string SortableUniqueId { get; init; } = string.Empty;
     [DataMember]
     public Guid AggregateId { get; init; }
     [DataMember]
@@ -27,17 +46,14 @@ public record AggregateEvent<TEventPayload> : Document, IAggregateEvent where TE
     ///     集約のスタートイベントの場合はtrueにする。
     /// </summary>
     [DataMember]
-    public bool IsAggregateInitialEvent { get; protected set; }
+    public bool IsAggregateInitialEvent { get; init; }
 
     /// <summary>
     ///     集約のイベント適用後のバージョン
     /// </summary>
     [DataMember]
-    public int Version
-    {
-        get => _version;
-        init => _version = value;
-    }
+    public int Version { get; init; }
+
     [DataMember]
     public IEventPayload Payload { get; init; }
 
@@ -54,8 +70,6 @@ public record AggregateEvent<TEventPayload> : Document, IAggregateEvent where TE
             TimeStamp = original.TimeStamp
         };
 
-    public void SetVersion(int version) =>
-        _version = version;
     public static AggregateEvent<TEventPayload> CreatedEvent(Guid aggregateId, TEventPayload payload, Type aggregateType) =>
         new(aggregateId, payload, aggregateType, true);
     public static AggregateEvent<TEventPayload> ChangedEvent(Guid aggregateId, TEventPayload payload, Type aggregateType) =>

@@ -50,7 +50,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     {
                         // pick out one album
                         if (item is not JObject jobj) { continue; }
-                        var typeName = jobj.GetValue(nameof(Document.DocumentTypeName))?.ToString();
+                        var typeName = jobj.GetValue(nameof(IDocument.DocumentTypeName))?.ToString();
                         if (typeName == null)
                         {
                             continue;
@@ -178,7 +178,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                         {
                             continue;
                         }
-                        var typeName = jobj.GetValue(nameof(Document.DocumentTypeName))?.ToString();
+                        var typeName = jobj.GetValue(nameof(IDocument.DocumentTypeName))?.ToString();
                         var baseType = typeof(AggregateEvent<>);
                         var toAdd = types.Where(m => m.Name == typeName)
                             .Select(m => (IAggregateEvent?)jobj.ToObject(baseType.MakeGenericType(m)))
@@ -225,7 +225,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     {
                         // pick out one album
                         if (item is not JObject jobj) { continue; }
-                        var typeName = jobj.GetValue(nameof(Document.DocumentTypeName))?.ToString();
+                        var typeName = jobj.GetValue(nameof(IDocument.DocumentTypeName))?.ToString();
                         if (typeName == null)
                         {
                             continue;

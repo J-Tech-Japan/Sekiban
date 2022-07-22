@@ -129,9 +129,9 @@ public class CosmosDbFactory
             containerGroup,
             async container =>
             {
-                var query = container.GetItemLinqQueryable<Document>().Where(b => true);
+                var query = container.GetItemLinqQueryable<IDocument>().Where(b => true);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition());
-                var todelete = new List<Document>();
+                var todelete = new List<IDocument>();
                 while (feedIterator.HasMoreResults)
                 {
                     var response = await feedIterator.ReadNextAsync();
@@ -139,13 +139,13 @@ public class CosmosDbFactory
                     {
                         if (item == null) { continue; }
                         if (item is not JObject jobj) { continue; }
-                        todelete.Add(jobj.ToObject<Document>() ?? throw new Exception());
+                        todelete.Add(jobj.ToObject<IDocument>() ?? throw new Exception());
                     }
                 }
                 var concurrencyTasks = new List<Task>();
                 foreach (var d in todelete)
                 {
-                    concurrencyTasks.Add(container.DeleteItemAsync<Document>(d.Id.ToString(), new PartitionKey(d.PartitionKey)));
+                    concurrencyTasks.Add(container.DeleteItemAsync<IDocument>(d.Id.ToString(), new PartitionKey(d.PartitionKey)));
                 }
                 await Task.WhenAll(concurrencyTasks);
                 return null;

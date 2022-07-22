@@ -10,6 +10,6 @@ public abstract record ChangeAggregateCommandBase<T> : IAggregateCommand where T
     [Description("コマンドの対象となる集約のバージョン(この数字を利用して必要な場合楽観ロックを実施します)")]
     public int ReferenceVersion { get; init; }
 
-    public ChangeAggregateCommandBase(Guid aggregateId) =>
+    protected ChangeAggregateCommandBase(Guid aggregateId) =>
         AggregateId = aggregateId;
 }

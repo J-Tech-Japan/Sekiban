@@ -31,12 +31,11 @@ public abstract class TransferableAggregateBase<TContents> : AggregateBase, ISin
             throw new SekibanEventNotImplementedException();
         }
 
-        // Add Event
-        _events.Add(ev);
-
         // Apply Event
         ApplyEvent(ev);
-        ev.SetVersion(Version);
+        ev = ev with { Version = Version };
+        // Add Event
+        _events.Add(ev);
     }
     protected void CopyPropertiesFromSnapshot(AggregateDto<TContents> snapshot)
     {
