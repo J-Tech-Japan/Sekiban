@@ -3,10 +3,8 @@ using CustomerDomainContext.Aggregates.LoyaltyPoints.ValueObjects;
 using CustomerDomainContext.Shared.Exceptions;
 namespace CustomerDomainContext.Aggregates.LoyaltyPoints;
 
-public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointDto>
+public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointContents>
 {
-    private int CurrentPoint { get; set; }
-    private DateTime LastOccuredTime { get; set; }
 
     public LoyaltyPoint(Guid aggregateId) : base(aggregateId) { }
 
@@ -15,30 +13,20 @@ public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointDto>
         AddAndApplyEvent(new LoyaltyPointCreated(clientId, initialPoint));
     }
 
-    public override LoyaltyPointDto ToDto() =>
-        new(this) { CurrentPoint = CurrentPoint };
-
-    protected override void CopyPropertiesFromSnapshot(LoyaltyPointDto snapshot)
-    {
-        CurrentPoint = snapshot.CurrentPoint;
-    }
-
     protected override Action? GetApplyEventAction(AggregateEvent ev) =>
         ev switch
         {
             LoyaltyPointCreated created => () =>
             {
-                CurrentPoint = created.InitialPoint;
+                Contents = new LoyaltyPointContents(created.InitialPoint, null);
             },
             LoyaltyPointAdded added => () =>
             {
-                CurrentPoint += added.PointAmount;
-                LastOccuredTime = added.HappenedDate;
+                Contents = new LoyaltyPointContents(Contents.CurrentPoint + added.PointAmount, added.HappenedDate);
             },
             LoyaltyPointUsed used => () =>
             {
-                CurrentPoint -= used.PointAmount;
-                LastOccuredTime = used.HappenedDate;
+                Contents = new LoyaltyPointContents(Contents.CurrentPoint - used.PointAmount, used.HappenedDate);
             },
             LoyaltyPointDeleted => () =>
             {
@@ -49,7 +37,7 @@ public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointDto>
 
     public void AddLoyaltyPoint(DateTime happenedDate, LoyaltyPointReceiveType reason, int pointAmount, string note)
     {
-        if (LastOccuredTime > happenedDate)
+        if (Contents.LastOccuredTime != null && Contents.LastOccuredTime > happenedDate)
         {
             throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
         }
@@ -58,11 +46,11 @@ public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointDto>
 
     public void UseLoyaltyPoint(DateTime happenedDate, LoyaltyPointUsageType reason, int pointAmount, string note)
     {
-        if (LastOccuredTime > happenedDate)
+        if (Contents.LastOccuredTime > happenedDate)
         {
             throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
         }
-        if (CurrentPoint - pointAmount < 0)
+        if (Contents.CurrentPoint - pointAmount < 0)
         {
             throw new SekibanLoyaltyPointNotEnoughException();
         }

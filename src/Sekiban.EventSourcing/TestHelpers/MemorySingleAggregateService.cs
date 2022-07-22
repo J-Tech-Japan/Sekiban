@@ -11,33 +11,33 @@ public class MemorySingleAggregateService : ISingleAggregateService
         await Task.CompletedTask;
         return (T?)aggregate;
     }
-    public Task<T?> GetAggregateFromInitialDefaultAggregateAsync<T, Q>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase =>
-        GetAggregateAsync<T, Q>(aggregateId, toVersion);
-    public Task<Q?> GetAggregateFromInitialDefaultAggregateDtoAsync<T, Q>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase =>
-        GetAggregateDtoAsync<T, Q>(aggregateId, toVersion);
+    public Task<T?> GetAggregateFromInitialDefaultAggregateAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
+        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents =>
+        GetAggregateAsync<T, TContents>(aggregateId, toVersion);
+    public Task<AggregateDto<TContents>?> GetAggregateFromInitialDefaultAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
+        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents =>
+        GetAggregateDtoAsync<T, TContents>(aggregateId, toVersion);
     public async Task<T?> GetProjectionAsync<T>(Guid aggregateId, int? toVersion = null) where T : SingleAggregateProjectionBase<T>, new()
     {
         var aggregate = Aggregates.FirstOrDefault(m => m.GetType().Name == typeof(T).Name && m.AggregateId == aggregateId);
         await Task.CompletedTask;
         return (T?)aggregate;
     }
-    public async Task<T?> GetAggregateAsync<T, Q>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase
+    public async Task<T?> GetAggregateAsync<T, TContents>(Guid aggregateId, int? toVersion = null) where T : TransferableAggregateBase<TContents>
+        where TContents : IAggregateContents
     {
-        var dto = await GetAggregateDtoAsync<T, Q>(aggregateId, toVersion);
+        var dto = await GetAggregateDtoAsync<T, TContents>(aggregateId, toVersion);
         if (dto == default) { return default; }
         var projection = new DefaultSingleAggregateProjector<T>();
         var aggregate = projection.CreateInitialAggregate(aggregateId);
         aggregate.ApplySnapshot(dto);
         return aggregate;
     }
-    public async Task<Q?> GetAggregateDtoAsync<T, Q>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase
+    public async Task<AggregateDto<TContents>?> GetAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
+        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents
     {
-        var aggregate = Aggregates.FirstOrDefault(m => m.GetType().Name == typeof(Q).Name && m.AggregateId == aggregateId);
+        var aggregate = Aggregates.FirstOrDefault(m => m.Contents.GetType().Name == typeof(TContents).Name && m.AggregateId == aggregateId);
         await Task.CompletedTask;
-        return (Q?)aggregate;
+        return (AggregateDto<TContents>?)aggregate;
     }
 }

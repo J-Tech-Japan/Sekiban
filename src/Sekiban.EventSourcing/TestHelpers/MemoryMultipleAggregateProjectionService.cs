@@ -11,18 +11,18 @@ public class MemoryMultipleAggregateProjectionService : IMultipleAggregateProjec
         await Task.CompletedTask;
         return Objects.FirstOrDefault(m => m is P) ?? throw new SekibanProjectionNotExistsException();
     }
-    public async Task<SingleAggregateProjectionDto<Q>> GetAggregateListObject<T, Q>()
-        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase
+    public async Task<SingleAggregateProjectionDto<AggregateDto<TContents>>> GetAggregateListObject<T, TContents>()
+        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents
     {
-        var aggregates = Objects.Where(m => m.GetType().Name == typeof(Q).Name).Select(m => (Q)m).ToList();
+        var aggregates = Objects.Where(m => m.Contents.GetType().Name == typeof(TContents).Name).Select(m => (AggregateDto<TContents>)m).ToList();
         await Task.CompletedTask;
-        return new SingleAggregateProjectionDto<Q>(aggregates, Guid.Empty, string.Empty, 0, aggregates.Count);
+        return new SingleAggregateProjectionDto<AggregateDto<TContents>>(aggregates, Guid.Empty, string.Empty, 0, aggregates.Count);
     }
 
-    public async Task<List<Q>> GetAggregateList<T, Q>(QueryListType queryListType = QueryListType.ActiveOnly)
-        where T : TransferableAggregateBase<Q> where Q : AggregateDtoBase
+    public async Task<List<AggregateDto<TContents>>> GetAggregateList<T, TContents>(QueryListType queryListType = QueryListType.ActiveOnly)
+        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents
     {
-        var aggregates = Objects.Where(m => m.GetType().Name == typeof(Q).Name).Select(m => (Q)m).ToList();
+        var aggregates = Objects.Where(m => m.Contents.GetType().Name == typeof(TContents).Name).Select(m => (AggregateDto<TContents>)m).ToList();
         await Task.CompletedTask;
         return aggregates;
     }

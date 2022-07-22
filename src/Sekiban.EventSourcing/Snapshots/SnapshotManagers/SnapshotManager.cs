@@ -2,20 +2,11 @@ using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Events;
 namespace Sekiban.EventSourcing.Snapshots.SnapshotManagers;
 
 [AggregateContainerGroup(AggregateContainerGroup.InMemoryContainer)]
-public class SnapshotManager : TransferableAggregateBase<SnapshotManagerDto>
+public class SnapshotManager : TransferableAggregateBase<SnapshotManagerContents>
 {
     private const int SnapshotCount = 40;
     private const int SnapshotTakeOffset = 15;
     public static Guid SharedId { get; } = Guid.NewGuid();
-    private List<string> Requests
-    {
-        get;
-    } = new();
-    private List<string> RequestTakens
-    {
-        get;
-    } = new();
-    private DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public SnapshotManager(Guid aggregateId) : base(aggregateId) { }
     public SnapshotManager(Guid aggregateId, DateTime createdAt) : base(aggregateId)
     {
@@ -34,12 +25,12 @@ public class SnapshotManager : TransferableAggregateBase<SnapshotManagerDto>
         var offset = version - nextSnapshotVersion;
         if (nextSnapshotVersion == 0) { return; }
         var key = SnapshotKey(aggregateType.Name, targetAggregateId, nextSnapshotVersion);
-        if (!Requests.Contains(key) && !RequestTakens.Contains(key))
+        if (!Contents.Requests.Contains(key) && !Contents.RequestTakens.Contains(key))
         {
             AddAndApplyEvent(
                 new SnapshotManagerRequestAdded(snapshotManagerId, aggregateType.Name, targetAggregateId, nextSnapshotVersion, snapshotVersion));
         }
-        if (Requests.Contains(key) && !RequestTakens.Contains(key) && offset > snapshotOffset)
+        if (Contents.Requests.Contains(key) && !Contents.RequestTakens.Contains(key) && offset > snapshotOffset)
         {
             AddAndApplyEvent(
                 new SnapshotManagerSnapshotTaken(snapshotManagerId, aggregateType.Name, targetAggregateId, nextSnapshotVersion, snapshotVersion));
@@ -52,25 +43,22 @@ public class SnapshotManager : TransferableAggregateBase<SnapshotManagerDto>
         {
             SnapshotManagerCreated created => () =>
             {
-                CreatedAt = created.CreatedAt;
+                Contents = new SnapshotManagerContents();
             },
             SnapshotManagerRequestAdded requestAdded => () =>
             {
-                Requests.Add(SnapshotKey(requestAdded.AggregateTypeName, requestAdded.TargetAggregateId, requestAdded.NextSnapshotVersion));
+                var requests = Contents.Requests.ToList();
+                requests.Add(SnapshotKey(requestAdded.AggregateTypeName, requestAdded.TargetAggregateId, requestAdded.NextSnapshotVersion));
+                Contents = Contents with { Requests = requests };
             },
             SnapshotManagerSnapshotTaken requestAdded => () =>
             {
-                Requests.Remove(SnapshotKey(requestAdded.AggregateTypeName, requestAdded.TargetAggregateId, requestAdded.NextSnapshotVersion));
-                RequestTakens.Add(SnapshotKey(requestAdded.AggregateTypeName, requestAdded.TargetAggregateId, requestAdded.NextSnapshotVersion));
+                var requests = Contents.Requests.ToList();
+                var requestTakens = Contents.RequestTakens.ToList();
+                requests.Remove(SnapshotKey(requestAdded.AggregateTypeName, requestAdded.TargetAggregateId, requestAdded.NextSnapshotVersion));
+                requestTakens.Add(SnapshotKey(requestAdded.AggregateTypeName, requestAdded.TargetAggregateId, requestAdded.NextSnapshotVersion));
+                Contents = Contents with { Requests = requests, RequestTakens = requestTakens };
             },
             _ => null
         };
-    public override SnapshotManagerDto ToDto() =>
-        new(this) { Requests = Requests, RequestTakens = RequestTakens, CreatedAt = CreatedAt };
-    protected override void CopyPropertiesFromSnapshot(SnapshotManagerDto snapshot)
-    {
-        Requests.AddRange(snapshot.Requests);
-        RequestTakens.AddRange(snapshot.RequestTakens);
-        CreatedAt = snapshot.CreatedAt;
-    }
 }

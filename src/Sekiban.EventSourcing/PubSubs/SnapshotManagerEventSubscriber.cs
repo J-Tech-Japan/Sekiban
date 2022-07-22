@@ -42,10 +42,10 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
 
         if (aggregateContainerGroup != AggregateContainerGroup.InMemoryContainer)
         {
-            var aggregate = await _singleAggregateService.GetAggregateAsync<SnapshotManager, SnapshotManagerDto>(SnapshotManager.SharedId);
+            var aggregate = await _singleAggregateService.GetAggregateAsync<SnapshotManager, SnapshotManagerContents>(SnapshotManager.SharedId);
             if (aggregate == default)
             {
-                await _aggregateCommandExecutor.ExecCreateCommandAsync<SnapshotManager, SnapshotManagerDto, CreateSnapshotManager>(
+                await _aggregateCommandExecutor.ExecCreateCommandAsync<SnapshotManager, SnapshotManagerContents, CreateSnapshotManager>(
                     new CreateSnapshotManager(SnapshotManager.SharedId));
             }
 
@@ -53,7 +53,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
             {
                 var snapshotManagerResponse
                     = await _aggregateCommandExecutor
-                        .ExecChangeCommandAsync<SnapshotManager, SnapshotManagerDto, ReportAggregateVersionToSnapshotManger>(
+                        .ExecChangeCommandAsync<SnapshotManager, SnapshotManagerContents, ReportAggregateVersionToSnapshotManger>(
                             new ReportAggregateVersionToSnapshotManger(
                                 SnapshotManager.SharedId,
                                 aggregateType.Aggregate,
@@ -111,7 +111,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                 }
                 var snapshotManagerResponseP
                     = await _aggregateCommandExecutor
-                        .ExecChangeCommandAsync<SnapshotManager, SnapshotManagerDto, ReportAggregateVersionToSnapshotManger>(
+                        .ExecChangeCommandAsync<SnapshotManager, SnapshotManagerContents, ReportAggregateVersionToSnapshotManger>(
                             new ReportAggregateVersionToSnapshotManger(
                                 SnapshotManager.SharedId,
                                 projection.Aggregate,

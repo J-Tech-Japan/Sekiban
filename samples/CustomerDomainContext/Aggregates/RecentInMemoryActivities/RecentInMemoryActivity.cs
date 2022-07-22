@@ -2,9 +2,8 @@ using CustomerDomainContext.Aggregates.RecentInMemoryActivities.Events;
 namespace CustomerDomainContext.Aggregates.RecentInMemoryActivities;
 
 [AggregateContainerGroup(AggregateContainerGroup.InMemoryContainer)]
-public class RecentInMemoryActivity : TransferableAggregateBase<RecentInMemoryActivityDto>
+public class RecentInMemoryActivity : TransferableAggregateBase<RecentInMemoryActivityContents>
 {
-    private List<RecentInMemoryActivityRecord> LatestActivities { get; set; } = new();
 
     public RecentInMemoryActivity(Guid aggregateId) : base(aggregateId) { }
 
@@ -18,24 +17,20 @@ public class RecentInMemoryActivity : TransferableAggregateBase<RecentInMemoryAc
         {
             RecentInMemoryActivityCreated created => () =>
             {
-                LatestActivities.Add(created.Activity);
+                Contents = new RecentInMemoryActivityContents(new List<RecentInMemoryActivityRecord> { created.Activity });
             },
             RecentInMemoryActivityAdded added => () =>
             {
-                LatestActivities.Insert(0, added.Record);
-                if (LatestActivities.Count > 5)
+                var records = Contents.LatestActivities.ToList();
+                records.Insert(0, added.Record);
+                if (records.Count > 5)
                 {
-                    LatestActivities.RemoveRange(5, LatestActivities.Count - 5);
+                    records.RemoveRange(5, records.Count - 5);
                 }
+                Contents = new RecentInMemoryActivityContents(records);
             },
             _ => null
         };
-    public override RecentInMemoryActivityDto ToDto() =>
-        new(this) { LatestActivities = LatestActivities };
-    protected override void CopyPropertiesFromSnapshot(RecentInMemoryActivityDto snapshot)
-    {
-        LatestActivities = snapshot.LatestActivities;
-    }
     public void AddActivity(string activity)
     {
         var ev = new RecentInMemoryActivityAdded(AggregateId, new RecentInMemoryActivityRecord(activity, DateTime.UtcNow));

@@ -1,11 +1,8 @@
 using CustomerDomainContext.Aggregates.Clients.Events;
 namespace CustomerDomainContext.Aggregates.Clients;
 
-public class Client : TransferableAggregateBase<ClientDto>
+public class Client : TransferableAggregateBase<ClientContents>
 {
-    private Guid BranchId { get; set; }
-    private NameString ClientName { get; set; } = null!;
-    private EmailString ClientEmail { get; set; } = null!;
 
     public Client(Guid clientId) : base(clientId) { }
 
@@ -14,27 +11,15 @@ public class Client : TransferableAggregateBase<ClientDto>
         AddAndApplyEvent(new ClientCreated(AggregateId, branchId, clientName, clientEmail));
     }
 
-    public override ClientDto ToDto() =>
-        new(this) { BranchId = BranchId, ClientName = ClientName, ClientEmail = ClientEmail };
-
-    protected override void CopyPropertiesFromSnapshot(ClientDto snapshot)
-    {
-        BranchId = snapshot.BranchId;
-        ClientName = snapshot.ClientName;
-        ClientEmail = snapshot.ClientEmail;
-    }
-
     protected override Action? GetApplyEventAction(AggregateEvent ev) =>
         ev switch
         {
             ClientCreated clientChanged => () =>
             {
-                BranchId = clientChanged.BranchId;
-                ClientName = clientChanged.ClientName;
-                ClientEmail = clientChanged.ClientEmail;
+                Contents = new ClientContents(clientChanged.BranchId, clientChanged.ClientName, clientChanged.ClientEmail);
             },
 
-            ClientNameChanged clientNameChanged => () => ClientName = clientNameChanged.ClientName,
+            ClientNameChanged clientNameChanged => () => Contents = Contents with { ClientName = clientNameChanged.ClientName },
 
             ClientDeleted => () => IsDeleted = true,
 

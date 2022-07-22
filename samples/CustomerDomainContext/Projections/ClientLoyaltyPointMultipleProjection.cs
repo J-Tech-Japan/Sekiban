@@ -35,7 +35,7 @@ public class ClientLoyaltyPointMultipleProjection : MultipleAggregateProjectionB
             },
             ClientNameChanged clientNameChanged => () =>
             {
-                var record = Records.First(m => m.ClientId == clientNameChanged.ClientId);
+                var record = Records.First(m => m.ClientId == clientNameChanged.AggregateId);
                 record.ClientName = clientNameChanged.ClientName;
             },
             ClientDeleted clientDeleted => () =>

@@ -18,15 +18,15 @@ public class CreateClientHandler : CreateAggregateCommandHandlerBase<Client, Cre
     protected override async Task<Client> CreateAggregateAsync(CreateClient command)
     {
         // Check if branch exists
-        var branchDto = await _singleAggregateService.GetAggregateDtoAsync<Branch, BranchDto>(command.BranchId);
+        var branchDto = await _singleAggregateService.GetAggregateDtoAsync<Branch, BranchContents>(command.BranchId);
         if (branchDto is null)
         {
             throw new SekibanAggregateNotExistsException(command.BranchId, nameof(Branch));
         }
 
         // Check no email duplicates
-        var list = await _multipleAggregateProjectionService.GetAggregateList<Client, ClientDto>();
-        if (list.Any(a => a.ClientEmail == command.ClientEmail))
+        var list = await _multipleAggregateProjectionService.GetAggregateList<Client, ClientContents>();
+        if (list.Any(a => a.Contents.ClientEmail == command.ClientEmail))
         {
             throw new SekibanEmailAlreadyRegistered();
         }

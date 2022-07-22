@@ -8,8 +8,8 @@ using Xunit;
 namespace SampleProjectStoryXTest;
 
 [Collection("Sequential")]
-public class SampleSingleAggregateTestBase<TAggregate, TDto> : SingleAggregateTestBase<TAggregate, TDto>
-    where TAggregate : TransferableAggregateBase<TDto> where TDto : AggregateDtoBase
+public class SampleSingleAggregateTestBase<TAggregate, TContents> : SingleAggregateTestBase<TAggregate, TContents>
+    where TAggregate : TransferableAggregateBase<TContents> where TContents : IAggregateContents
 {
 
     public override IServiceProvider SetupService()

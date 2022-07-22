@@ -1,25 +1,30 @@
 using Newtonsoft.Json;
+using System.Runtime.Serialization;
 namespace Sekiban.EventSourcing.Documents;
 
 public record Document
 {
 
     private string _partitionKey = string.Empty;
-    [JsonProperty("id")]
+    [JsonProperty("id")] [DataMember]
+
     public Guid Id { get; init; }
     [JsonProperty("partitionkey")]
+    [DataMember]
     public string PartitionKey
     {
         get => _partitionKey;
         init => _partitionKey = value;
     }
 
+    [DataMember]
     public DocumentType DocumentType { get; init; }
+    [DataMember]
     public string DocumentTypeName { get; init; } = null!;
+    [DataMember]
     public DateTime TimeStamp { get; init; }
+    [DataMember]
     public string SortableUniqueId { get; init; } = string.Empty;
-
-    public Document() { }
 
     public Document(DocumentType documentType, IPartitionKeyFactory? partitionKeyFactory, string? documentTypeName = null)
     {

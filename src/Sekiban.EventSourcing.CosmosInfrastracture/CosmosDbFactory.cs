@@ -95,7 +95,7 @@ public class CosmosDbFactory
                 new JsonSerializerSettings
                 {
                     // TypeNameHandling = TypeNameHandling.Auto
-                    DateFormatString = "yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'"
+                    DateFormatString = "yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'", NullValueHandling = NullValueHandling.Ignore
                 }),
             AllowBulkExecution = true,
             MaxRequestsPerTcpConnection = 50

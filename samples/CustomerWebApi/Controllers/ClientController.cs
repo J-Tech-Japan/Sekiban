@@ -23,8 +23,8 @@ public class ClientController : Controller
     }
 
     [HttpGet]
-    public async Task<ActionResult<ClientDto>> GetAsync(Guid clientId) =>
-        await _singleAggregateService.GetAggregateDtoAsync<Client, ClientDto>(clientId) ?? throw new SekibanInvalidArgumentException();
+    public async Task<ActionResult<AggregateDto<ClientContents>>> GetAsync(Guid clientId) =>
+        await _singleAggregateService.GetAggregateDtoAsync<Client, ClientContents>(clientId) ?? throw new SekibanInvalidArgumentException();
 
     [HttpGet]
     public async Task<ActionResult<ClientNameHistoryProjection>> GetNameHistoryAsync(Guid clientId) =>
@@ -39,8 +39,9 @@ public class ClientController : Controller
     // }
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<ClientDto>>> ListAsync(QueryListType queryListType = QueryListType.ActiveOnly) =>
-        new(await _multipleAggregateProjectionService.GetAggregateList<Client, ClientDto>(queryListType));
+    public async Task<ActionResult<IEnumerable<AggregateDto<ClientContents>>>>
+        ListAsync(QueryListType queryListType = QueryListType.ActiveOnly) =>
+        new(await _multipleAggregateProjectionService.GetAggregateList<Client, ClientContents>(queryListType));
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<ClientNameHistoryProjection>>> ListChangeNamesAsync(
@@ -50,21 +51,21 @@ public class ClientController : Controller
     [HttpPost]
     public async Task<IActionResult> CreateAsync([FromBody] CreateClient command)
     {
-        var createdResult = await _aggregateCommandExecutor.ExecCreateCommandAsync<Client, ClientDto, CreateClient>(command);
+        var createdResult = await _aggregateCommandExecutor.ExecCreateCommandAsync<Client, ClientContents, CreateClient>(command);
         return Ok(createdResult);
     }
 
     [HttpPatch]
     public async Task<IActionResult> ChangeNameAsync(ChangeClientName command)
     {
-        var result = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientDto, ChangeClientName>(command);
+        var result = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientContents, ChangeClientName>(command);
         return Ok(result);
     }
 
     [HttpDelete]
     public async Task<IActionResult> DeleteAsync(DeleteClient command)
     {
-        await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientDto, DeleteClient>(command);
+        await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientContents, DeleteClient>(command);
         return Ok();
     }
 }

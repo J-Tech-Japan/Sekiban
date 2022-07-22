@@ -10,7 +10,6 @@ public record MultipleProjectionSnapshotDocument : Document
     public Guid LastEventId { get; init; }
     public string LastSortableUniqueId { get; set; } = string.Empty;
     public int SavedVersion { get; set; }
-    public MultipleProjectionSnapshotDocument() { }
 
     public MultipleProjectionSnapshotDocument(
         IPartitionKeyFactory partitionKeyFactory,

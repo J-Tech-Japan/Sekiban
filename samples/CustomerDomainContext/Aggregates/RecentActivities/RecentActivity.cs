@@ -2,9 +2,8 @@ using CustomerDomainContext.Aggregates.RecentActivities.Events;
 namespace CustomerDomainContext.Aggregates.RecentActivities;
 
 [AggregateContainerGroup(AggregateContainerGroup.Dissolvable)]
-public class RecentActivity : TransferableAggregateBase<RecentActivityDto>
+public class RecentActivity : TransferableAggregateBase<RecentActivityContents>
 {
-    private List<RecentActivityRecord> LatestActivities { get; set; } = new();
 
     public RecentActivity(Guid aggregateId) : base(aggregateId) { }
 
@@ -18,24 +17,20 @@ public class RecentActivity : TransferableAggregateBase<RecentActivityDto>
         {
             RecentActivityCreated created => () =>
             {
-                LatestActivities.Add(created.Activity);
+                Contents = new RecentActivityContents(new List<RecentActivityRecord> { created.Activity });
             },
             RecentActivityAdded added => () =>
             {
-                LatestActivities.Insert(0, added.Record);
-                if (LatestActivities.Count > 5)
+                var records = Contents.LatestActivities.ToList();
+                records.Insert(0, added.Record);
+                if (records.Count > 5)
                 {
-                    LatestActivities.RemoveRange(5, LatestActivities.Count - 5);
+                    records.RemoveRange(5, records.Count - 5);
                 }
+                Contents = new RecentActivityContents(records);
             },
             _ => null
         };
-    public override RecentActivityDto ToDto() =>
-        new(this) { LatestActivities = LatestActivities };
-    protected override void CopyPropertiesFromSnapshot(RecentActivityDto snapshot)
-    {
-        LatestActivities = snapshot.LatestActivities;
-    }
     public void AddActivity(string activity)
     {
         var ev = new RecentActivityAdded(AggregateId, new RecentActivityRecord(activity, DateTime.UtcNow));
