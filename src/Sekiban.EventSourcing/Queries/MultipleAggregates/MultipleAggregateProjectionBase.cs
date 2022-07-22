@@ -8,7 +8,7 @@ public abstract class MultipleAggregateProjectionBase<TDto> : IMultipleAggregate
     public string LastSortableUniqueId { get; set; } = string.Empty;
     public int AppliedSnapshotVersion { get; set; }
     public int Version { get; set; }
-    public void ApplyEvent(AggregateEvent ev)
+    public void ApplyEvent(IAggregateEvent ev)
     {
         var action = GetApplyEventAction(ev);
         if (action == null) { return; }
@@ -28,6 +28,6 @@ public abstract class MultipleAggregateProjectionBase<TDto> : IMultipleAggregate
     }
     public virtual IList<string> TargetAggregateNames() =>
         new List<string>();
-    protected abstract Action? GetApplyEventAction(AggregateEvent ev);
+    protected abstract Action? GetApplyEventAction(IAggregateEvent ev);
     protected abstract void CopyPropertiesFromSnapshot(TDto snapshot);
 }

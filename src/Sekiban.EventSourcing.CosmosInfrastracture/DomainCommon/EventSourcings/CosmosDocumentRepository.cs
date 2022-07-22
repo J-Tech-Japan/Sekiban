@@ -20,7 +20,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
         Type multipleProjectionType,
         IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
-        Action<IEnumerable<AggregateEvent>> resultAction)
+        Action<IEnumerable<IAggregateEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multipleProjectionType);
 
@@ -32,10 +32,10 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 var options = new QueryRequestOptions();
                 var query = targetAggregateNames.Count switch
                 {
-                    0 => container.GetItemLinqQueryable<AggregateEvent>()
+                    0 => container.GetItemLinqQueryable<IAggregateEvent>()
                         .Where(b => b.DocumentType == DocumentType.AggregateEvent)
                         .OrderByDescending(m => m.SortableUniqueId),
-                    _ => container.GetItemLinqQueryable<AggregateEvent>()
+                    _ => container.GetItemLinqQueryable<IAggregateEvent>()
                         .Where(
                             b => b.DocumentType == DocumentType.AggregateEvent &&
                                 (targetAggregateNames.Count == 0 || targetAggregateNames.Contains(b.AggregateType)))
@@ -44,7 +44,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
                 while (feedIterator.HasMoreResults)
                 {
-                    var events = new List<AggregateEvent>();
+                    var events = new List<IAggregateEvent>();
                     var response = await feedIterator.ReadNextAsync();
                     foreach (var item in response)
                     {
@@ -55,9 +55,10 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                         {
                             continue;
                         }
+                        var baseType = typeof(AggregateEvent<>);
 
                         var toAdd = _registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
-                            .Select(m => (AggregateEvent?)jobj.ToObject(m))
+                            .Select(m => (IAggregateEvent?)jobj.ToObject(baseType.MakeGenericType(m)))
                             .FirstOrDefault(m => m != null);
                         if (toAdd == null)
                         {
@@ -146,7 +147,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
         Type originalType,
         string? partitionKey,
         string? sinceSortableUniqueId,
-        Action<IEnumerable<AggregateEvent>> resultAction)
+        Action<IEnumerable<IAggregateEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
 
@@ -162,13 +163,13 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     options.PartitionKey = new PartitionKey(partitionKey);
                 }
 
-                var query = container.GetItemLinqQueryable<AggregateEvent>()
+                var query = container.GetItemLinqQueryable<IAggregateEvent>()
                     .Where(b => b.DocumentType == DocumentType.AggregateEvent && b.AggregateId == aggregateId);
                 query = sinceSortableUniqueId != null ? query.OrderByDescending(m => m.SortableUniqueId) : query.OrderBy(m => m.SortableUniqueId);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
                 while (feedIterator.HasMoreResults)
                 {
-                    var events = new List<AggregateEvent>();
+                    var events = new List<IAggregateEvent>();
                     var response = await feedIterator.ReadNextAsync();
                     foreach (var item in response)
                     {
@@ -178,8 +179,9 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                             continue;
                         }
                         var typeName = jobj.GetValue(nameof(Document.DocumentTypeName))?.ToString();
+                        var baseType = typeof(AggregateEvent<>);
                         var toAdd = types.Where(m => m.Name == typeName)
-                            .Select(m => (AggregateEvent?)jobj.ToObject(m))
+                            .Select(m => (IAggregateEvent?)jobj.ToObject(baseType.MakeGenericType(m)))
                             .FirstOrDefault(m => m != null);
                         if (toAdd == null)
                         {
@@ -200,7 +202,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
     public async Task GetAllAggregateEventsForAggregateEventTypeAsync(
         Type originalType,
         string? sinceSortableUniqueId,
-        Action<IEnumerable<AggregateEvent>> resultAction)
+        Action<IEnumerable<IAggregateEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
 
@@ -211,13 +213,13 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             {
                 var options = new QueryRequestOptions();
                 var eventTypes = _registeredEventTypes.RegisteredTypes.Select(m => m.Name);
-                var query = container.GetItemLinqQueryable<AggregateEvent>()
+                var query = container.GetItemLinqQueryable<IAggregateEvent>()
                     .Where(b => b.DocumentType == DocumentType.AggregateEvent && b.AggregateType == originalType.Name)
                     .OrderByDescending(m => m.SortableUniqueId);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
                 while (feedIterator.HasMoreResults)
                 {
-                    var events = new List<AggregateEvent>();
+                    var events = new List<IAggregateEvent>();
                     var response = await feedIterator.ReadNextAsync();
                     foreach (var item in response)
                     {
@@ -229,8 +231,9 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                             continue;
                         }
 
+                        var baseType = typeof(AggregateEvent<>);
                         var toAdd = _registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
-                            .Select(m => (AggregateEvent?)jobj.ToObject(m))
+                            .Select(m => (IAggregateEvent?)jobj.ToObject(baseType.MakeGenericType(m)))
                             .FirstOrDefault(m => m != null);
                         if (toAdd == null)
                         {

@@ -13,11 +13,7 @@ public class RegisteredEventTypes
         var attributeType = typeof(SekibanEventTypeAttribute);
         foreach (var assembly in assemblies)
         {
-            var decoratedTypes = assembly.DefinedTypes.Where(
-                x => x.IsClass &&
-                    (x.CustomAttributes.Any(a => a.AttributeType == attributeType) ||
-                        (x.BaseType?.CustomAttributes.Any(a => a.AttributeType == attributeType) ?? false) ||
-                        (x.BaseType?.BaseType?.CustomAttributes.Any(a => a.AttributeType == attributeType) ?? false)));
+            var decoratedTypes = assembly.DefinedTypes.Where(x => x.IsClass && x.ImplementedInterfaces.Contains(typeof(IEventPayload)));
             foreach (var type in decoratedTypes)
             {
                 _registeredTypes.Add(type);

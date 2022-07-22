@@ -20,7 +20,7 @@ public abstract class TransferableAggregateBase<TContents> : AggregateBase, ISin
         CopyPropertiesFromSnapshot(snapshot);
     }
 
-    protected sealed override void AddAndApplyEvent(AggregateEvent ev)
+    protected sealed override void AddAndApplyEvent(IAggregateEvent ev)
     {
         if (GetApplyEventAction(ev) == null)
         {

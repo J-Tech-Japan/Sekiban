@@ -2,7 +2,7 @@ namespace Sekiban.EventSourcing.Queries.MultipleAggregates;
 
 public interface IMultipleAggregateProjector<TDto> : IProjection where TDto : IMultipleAggregateProjectionDto
 {
-    void ApplyEvent(AggregateEvent ev);
+    void ApplyEvent(IAggregateEvent ev);
     TDto ToDto();
     void ApplySnapshot(TDto snapshot);
     /// <summary>

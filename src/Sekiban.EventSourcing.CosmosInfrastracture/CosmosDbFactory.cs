@@ -124,7 +124,7 @@ public class CosmosDbFactory
         DocumentType documentType,
         AggregateContainerGroup containerGroup = AggregateContainerGroup.Default)
     {
-        await CosmosActionAsync<IEnumerable<AggregateEvent>?>(
+        await CosmosActionAsync<IEnumerable<IAggregateEvent>?>(
             documentType,
             containerGroup,
             async container =>

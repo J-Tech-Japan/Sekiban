@@ -19,7 +19,7 @@ public class DocumentWriterSplitter : IDocumentWriter
         _aggregateSettings = aggregateSettings;
     }
 
-    public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType) where TDocument : Document
+    public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType) where TDocument : IDocument
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
@@ -28,11 +28,11 @@ public class DocumentWriterSplitter : IDocumentWriter
             return;
         }
         if (document.DocumentType == DocumentType.AggregateSnapshot) { }
-        if (document is AggregateEvent) { }
+        if (document is IAggregateEvent) { }
         await _documentPersistentWriter.SaveAsync(document, aggregateType);
     }
     public async Task SaveAndPublishAggregateEvent<TAggregateEvent>(TAggregateEvent aggregateEvent, Type aggregateType)
-        where TAggregateEvent : AggregateEvent
+        where TAggregateEvent : IAggregateEvent
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
@@ -44,7 +44,7 @@ public class DocumentWriterSplitter : IDocumentWriter
         await _documentPersistentWriter.SaveAndPublishAggregateEvent(aggregateEvent, aggregateType);
     }
 
-    private async Task AddToHybridIfPossible(AggregateEvent aggregateEvent, Type aggregateType)
+    private async Task AddToHybridIfPossible(IAggregateEvent aggregateEvent, Type aggregateType)
     {
         if (!_aggregateSettings.CanUseHybrid(aggregateType)) { return; }
         if (aggregateEvent.IsAggregateInitialEvent)

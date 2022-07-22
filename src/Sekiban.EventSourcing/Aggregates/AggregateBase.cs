@@ -3,11 +3,13 @@ namespace Sekiban.EventSourcing.Aggregates;
 
 public abstract class AggregateBase : IAggregate
 {
-    protected readonly List<AggregateEvent> _events = new();
+    protected readonly List<IAggregateEvent> _events = new();
     protected static IPartitionKeyFactory DefaultPartitionKeyFactory => new CanNotUsePartitionKeyFactory();
 
     public AggregateBase(Guid aggregateId) =>
         AggregateId = aggregateId;
+
+    public ReadOnlyCollection<IAggregateEvent> Events => _events.AsReadOnly();
 
     public Guid AggregateId { get; }
     public Guid LastEventId { get; protected set; } = Guid.Empty;
@@ -15,10 +17,10 @@ public abstract class AggregateBase : IAggregate
     public int AppliedSnapshotVersion { get; protected set; }
     public int Version { get; protected set; }
     public bool IsDeleted { get; protected set; }
+    public bool CanApplyEvent(IAggregateEvent ev) =>
+        GetApplyEventAction(ev) != null;
 
-    public ReadOnlyCollection<AggregateEvent> Events => _events.AsReadOnly();
-
-    public void ApplyEvent(AggregateEvent ev)
+    public void ApplyEvent(IAggregateEvent ev)
     {
         var action = GetApplyEventAction(ev);
         if (action == null) { return; }
@@ -32,14 +34,12 @@ public abstract class AggregateBase : IAggregate
         LastSortableUniqueId = ev.SortableUniqueId;
         Version++;
     }
-    public bool CanApplyEvent(AggregateEvent ev) =>
-        GetApplyEventAction(ev) != null;
     public void ResetEventsAndSnapshots()
     {
         _events.Clear();
     }
 
-    public void FromEventHistory(IEnumerable<AggregateEvent> events)
+    public void FromEventHistory(IEnumerable<IAggregateEvent> events)
     {
         foreach (var ev in events.OrderBy(m => m.SortableUniqueId))
         {
@@ -58,7 +58,7 @@ public abstract class AggregateBase : IAggregate
         // C#の将来の正式バージョンで、インターフェースに静的メソッドを定義できるようになったら、書き換える。
     }
 
-    protected abstract Action? GetApplyEventAction(AggregateEvent ev);
+    protected abstract Action? GetApplyEventAction(IAggregateEvent ev);
 
-    protected abstract void AddAndApplyEvent(AggregateEvent ev);
+    protected abstract void AddAndApplyEvent(IAggregateEvent ev);
 }

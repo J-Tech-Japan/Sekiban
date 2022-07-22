@@ -3,9 +3,21 @@ using System.Runtime.Serialization;
 namespace Sekiban.EventSourcing.AggregateEvents;
 
 [SekibanEventType]
-public record AggregateEvent : Document, IAggregateEvent, ICallHistories
+public record AggregateEvent<TEventPayload> : Document, IAggregateEvent where TEventPayload : IEventPayload
 {
     private int _version;
+    public AggregateEvent(Guid aggregateId, TEventPayload payload, Type aggregateTypeObject, bool isAggregateInitialEvent = false) : base(
+        DocumentType.AggregateEvent,
+        null)
+    {
+        AggregateId = aggregateId;
+        Payload = payload;
+        AggregateType = aggregateTypeObject.Name;
+        SetPartitionKey(new AggregateIdPartitionKeyFactory(aggregateId, aggregateTypeObject));
+        IsAggregateInitialEvent = isAggregateInitialEvent;
+    }
+    [JsonConstructor]
+    protected AggregateEvent() : base(DocumentType.AggregateEvent, null) { }
     [DataMember]
     public Guid AggregateId { get; init; }
     [DataMember]
@@ -26,20 +38,13 @@ public record AggregateEvent : Document, IAggregateEvent, ICallHistories
         get => _version;
         init => _version = value;
     }
-    public AggregateEvent(Guid aggregateId, Type aggregateTypeObject, bool isAggregateInitialEvent = false) : base(DocumentType.AggregateEvent, null)
-    {
-        AggregateId = aggregateId;
-        AggregateType = aggregateTypeObject.Name;
-        SetPartitionKey(new AggregateIdPartitionKeyFactory(aggregateId, aggregateTypeObject));
-        IsAggregateInitialEvent = isAggregateInitialEvent;
-    }
-    [JsonConstructor]
-    protected AggregateEvent() : base(DocumentType.AggregateEvent, null) { }
+    [DataMember]
+    public IEventPayload Payload { get; init; }
 
     [DataMember]
     public List<CallHistory> CallHistories { get; init; } = new();
 
-    public dynamic GetComparableObject(AggregateEvent original, bool copyVersion = true) =>
+    public dynamic GetComparableObject(IAggregateEvent original, bool copyVersion = true) =>
         this with
         {
             Version = copyVersion ? original.Version : Version,
@@ -51,6 +56,10 @@ public record AggregateEvent : Document, IAggregateEvent, ICallHistories
 
     public void SetVersion(int version) =>
         _version = version;
+    public static AggregateEvent<TEventPayload> CreatedEvent<TAggregate>(Guid aggregateId, TEventPayload payload) where TAggregate : IAggregate =>
+        new(aggregateId, payload, typeof(TEventPayload), true);
+    public static AggregateEvent<TEventPayload> ChangedEvent<TAggregate>(Guid aggregateId, TEventPayload payload) where TAggregate : IAggregate =>
+        new(aggregateId, payload, typeof(TEventPayload));
 
     public List<CallHistory> GetCallHistoriesIncludesItself()
     {

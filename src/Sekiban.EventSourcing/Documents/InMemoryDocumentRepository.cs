@@ -24,7 +24,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         Type originalType,
         string? partitionKey,
         string? sinceSortableUniqueId,
-        Action<IEnumerable<AggregateEvent>> resultAction)
+        Action<IEnumerable<IAggregateEvent>> resultAction)
     {
         var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
         var sekibanIdentifier = string.IsNullOrWhiteSpace(sekibanContext?.SettingGroupIdentifier)
@@ -43,7 +43,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             var index = list.Any(m => m.SortableUniqueId == sinceSortableUniqueId)
                 ? list.FindIndex(m => m.SortableUniqueId == sinceSortableUniqueId)
                 : 0;
-            if (index == list.Count - 1) { resultAction(new List<AggregateEvent>()); }
+            if (index == list.Count - 1) { resultAction(new List<IAggregateEvent>()); }
             resultAction(
                 list.GetRange(index, list.Count - index).Where(m => m.SortableUniqueId != sinceSortableUniqueId).OrderBy(m => m.SortableUniqueId));
         }
@@ -52,7 +52,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         Type multipleProjectionType,
         IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
-        Action<IEnumerable<AggregateEvent>> resultAction)
+        Action<IEnumerable<IAggregateEvent>> resultAction)
     {
         var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
         var sekibanIdentifier = string.IsNullOrWhiteSpace(sekibanContext?.SettingGroupIdentifier)
@@ -65,7 +65,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             var index = list.FindIndex(m => m.SortableUniqueId == sinceSortableUniqueId);
             if (index == list.Count - 1)
             {
-                resultAction(new List<AggregateEvent>());
+                resultAction(new List<IAggregateEvent>());
             } else
             {
                 resultAction(
@@ -115,7 +115,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
     public async Task GetAllAggregateEventsForAggregateEventTypeAsync(
         Type originalType,
         string? sinceSortableUniqueId,
-        Action<IEnumerable<AggregateEvent>> resultAction)
+        Action<IEnumerable<IAggregateEvent>> resultAction)
     {
         await Task.CompletedTask;
         var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
@@ -129,7 +129,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             var index = list.FindIndex(m => m.SortableUniqueId == sinceSortableUniqueId);
             if (index == list.Count - 1)
             {
-                resultAction(new List<AggregateEvent>());
+                resultAction(new List<IAggregateEvent>());
             } else
             {
                 resultAction(list.GetRange(index + 1, list.Count - index - 1).OrderBy(m => m.SortableUniqueId));

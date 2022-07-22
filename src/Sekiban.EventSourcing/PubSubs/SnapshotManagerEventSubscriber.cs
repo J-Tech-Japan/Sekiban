@@ -6,7 +6,7 @@ using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Events;
 namespace Sekiban.EventSourcing.PubSubs;
 
-public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEvent> where TEvent : AggregateEvent
+public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEvent> where TEvent : IAggregateEvent
 {
     private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
     private readonly IAggregateSettings _aggregateSettings;
