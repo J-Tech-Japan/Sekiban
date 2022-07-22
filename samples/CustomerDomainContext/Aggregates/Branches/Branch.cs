@@ -10,8 +10,8 @@ public class Branch : TransferableAggregateBase<BranchContents>
         AddAndApplyEvent(new BranchCreated(name));
     }
 
-    protected override Action? GetApplyEventAction(IAggregateEvent ev) =>
-        ev.GetPayload() switch
+    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload) =>
+        payload switch
         {
             BranchCreated branchCreated => () =>
             {

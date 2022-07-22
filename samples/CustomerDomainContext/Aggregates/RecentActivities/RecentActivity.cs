@@ -12,8 +12,8 @@ public class RecentActivity : TransferableAggregateBase<RecentActivityContents>
         AddAndApplyEvent(new RecentActivityCreated(new RecentActivityRecord(firstActivity, DateTime.UtcNow)));
     }
 
-    protected override Action? GetApplyEventAction(IAggregateEvent ev) =>
-        ev.GetPayload() switch
+    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload) =>
+        payload switch
         {
             RecentActivityCreated created => () =>
             {

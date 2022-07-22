@@ -11,8 +11,8 @@ public class Client : TransferableAggregateBase<ClientContents>
         AddAndApplyEvent(new ClientCreated(branchId, clientName, clientEmail));
     }
 
-    protected override Action? GetApplyEventAction(IAggregateEvent ev) =>
-        ev.GetPayload() switch
+    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload) =>
+        payload switch
         {
             ClientCreated clientChanged => () =>
             {

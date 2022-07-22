@@ -26,15 +26,14 @@ public abstract class TransferableAggregateBase<TContents> : AggregateBase, ISin
             ? AggregateEvent<TEventPayload>.CreatedEvent(AggregateId, eventPayload, GetType())
             : AggregateEvent<TEventPayload>.ChangedEvent(AggregateId, eventPayload, GetType());
 
-        if (GetApplyEventAction(ev) == null)
+        if (GetApplyEventAction(ev, eventPayload) == null)
         {
             throw new SekibanEventNotImplementedException();
         }
+        // バージョンが変わる前に、イベントには現在のバージョンを入れて動かす
         ev = ev with { Version = Version };
-        // Apply Event
         ApplyEvent(ev);
         ev = ev with { Version = Version };
-        // Add Event
         _events.Add(ev);
     }
     protected void CopyPropertiesFromSnapshot(AggregateDto<TContents> snapshot)

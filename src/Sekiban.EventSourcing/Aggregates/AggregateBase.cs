@@ -18,11 +18,11 @@ public abstract class AggregateBase : IAggregate
     public int Version { get; protected set; }
     public bool IsDeleted { get; protected set; }
     public bool CanApplyEvent(IAggregateEvent ev) =>
-        GetApplyEventAction(ev) != null;
+        GetApplyEventAction(ev, ev.GetPayload()) != null;
 
     public void ApplyEvent(IAggregateEvent ev)
     {
-        var action = GetApplyEventAction(ev);
+        var action = GetApplyEventAction(ev, ev.GetPayload());
         if (action == null) { return; }
         if (ev.IsAggregateInitialEvent == false && Version == 0)
         {
@@ -58,7 +58,7 @@ public abstract class AggregateBase : IAggregate
         // C#の将来の正式バージョンで、インターフェースに静的メソッドを定義できるようになったら、書き換える。
     }
 
-    protected abstract Action? GetApplyEventAction(IAggregateEvent ev);
+    protected abstract Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload);
 
     protected abstract void AddAndApplyEvent<TEventPayload>(TEventPayload eventPayload) where TEventPayload : IEventPayload;
 }

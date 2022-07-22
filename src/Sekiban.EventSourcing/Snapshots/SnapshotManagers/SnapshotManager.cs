@@ -35,8 +35,8 @@ public class SnapshotManager : TransferableAggregateBase<SnapshotManagerContents
     }
     private static string SnapshotKey(string aggregateTypeName, Guid targetAggregateId, int nextSnapshotVersion) =>
         $"{aggregateTypeName}_{targetAggregateId.ToString()}_{nextSnapshotVersion}";
-    protected override Action? GetApplyEventAction(IAggregateEvent ev) =>
-        ev.GetPayload() switch
+    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload) =>
+        payload switch
         {
             SnapshotManagerCreated created => () =>
             {

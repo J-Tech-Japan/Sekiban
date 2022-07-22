@@ -12,8 +12,8 @@ public class RecentInMemoryActivity : TransferableAggregateBase<RecentInMemoryAc
         AddAndApplyEvent(new RecentInMemoryActivityCreated(new RecentInMemoryActivityRecord(firstActivity, DateTime.UtcNow)));
     }
 
-    protected override Action? GetApplyEventAction(IAggregateEvent ev) =>
-        ev.GetPayload() switch
+    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload) =>
+        payload switch
         {
             RecentInMemoryActivityCreated created => () =>
             {
