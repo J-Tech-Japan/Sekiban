@@ -3,7 +3,7 @@ using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace Sekiban.EventSourcing.TestHelpers;
 
 public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposable, IAggregateTestHelper<TAggregate, TContents>
-    where TAggregate : TransferableAggregateBase<TContents> where TContents : IAggregateContents
+    where TAggregate : TransferableAggregateBase<TContents>, new() where TContents : IAggregateContents, new()
 {
     private readonly IAggregateTestHelper<TAggregate, TContents> _helper;
     protected readonly IServiceProvider _serviceProvider;
@@ -36,8 +36,9 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposab
         _helper.Given(snapshot, ev);
     public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IEnumerable<IAggregateEvent> ev) =>
         _helper.Given(snapshot, ev);
-    public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregate> =>
-        _helper.WhenCreate(createCommand);
+    public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>(Guid aggregateId, C createCommand)
+        where C : ICreateAggregateCommand<TAggregate> =>
+        _helper.WhenCreate(aggregateId, createCommand);
     public IAggregateTestHelper<TAggregate, TContents> WhenChange<C>(C changeCommand) where C : ChangeAggregateCommandBase<TAggregate> =>
         _helper.WhenChange(changeCommand);
     public IAggregateTestHelper<TAggregate, TContents> WhenChange<C>(Func<TAggregate, C> commandFunc)
@@ -45,8 +46,7 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposab
         _helper.WhenChange(commandFunc);
     public IAggregateTestHelper<TAggregate, TContents> WhenMethod(Action<TAggregate> action) =>
         _helper.WhenMethod(action);
-    public IAggregateTestHelper<TAggregate, TContents> WhenConstructor(Func<TAggregate> aggregateFunc) =>
-        _helper.WhenConstructor(aggregateFunc);
+
     public IAggregateTestHelper<TAggregate, TContents> ThenEvents(Action<List<IAggregateEvent>, TAggregate> checkEventsAction) =>
         _helper.ThenEvents(checkEventsAction);
     public IAggregateTestHelper<TAggregate, TContents> ThenEvents(Action<List<IAggregateEvent>> checkEventsAction) =>

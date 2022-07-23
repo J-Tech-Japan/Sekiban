@@ -2,21 +2,20 @@ using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace Sekiban.EventSourcing.Aggregates;
 
 public abstract class TransferableAggregateBase<TContents> : AggregateBase, ISingleAggregateProjectionDtoConvertible<AggregateDto<TContents>>
-    where TContents : IAggregateContents
+    where TContents : IAggregateContents, new()
 {
-    protected TContents Contents { get; set; }
-    public TransferableAggregateBase(Guid aggregateId) : base(aggregateId) { }
+    protected TContents Contents { get; set; } = new();
 
     public AggregateDto<TContents> ToDto() =>
         new(this, Contents);
 
     public void ApplySnapshot(AggregateDto<TContents> snapshot)
     {
-        Version = snapshot.Version;
-        LastEventId = snapshot.LastEventId;
-        LastSortableUniqueId = snapshot.LastSortableUniqueId;
-        AppliedSnapshotVersion = snapshot.Version;
-        IsDeleted = snapshot.IsDeleted;
+        _basicInfo.Version = snapshot.Version;
+        _basicInfo.LastEventId = snapshot.LastEventId;
+        _basicInfo.LastSortableUniqueId = snapshot.LastSortableUniqueId;
+        _basicInfo.AppliedSnapshotVersion = snapshot.Version;
+        _basicInfo.IsDeleted = snapshot.IsDeleted;
         CopyPropertiesFromSnapshot(snapshot);
     }
 
@@ -34,7 +33,7 @@ public abstract class TransferableAggregateBase<TContents> : AggregateBase, ISin
         ev = ev with { Version = Version };
         ApplyEvent(ev);
         ev = ev with { Version = Version };
-        _events.Add(ev);
+        _basicInfo.Events.Add(ev);
     }
     protected void CopyPropertiesFromSnapshot(AggregateDto<TContents> snapshot)
     {

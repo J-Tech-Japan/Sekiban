@@ -1,11 +1,11 @@
 namespace Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
 
-public record CreateSnapshotManager(Guid AggregateId) : ICreateAggregateCommand<SnapshotManager>;
+public record CreateSnapshotManager : ICreateAggregateCommand<SnapshotManager>;
 public class CreateSnapshotManagerHandler : CreateAggregateCommandHandlerBase<SnapshotManager, CreateSnapshotManager>
 {
-    protected override async Task<SnapshotManager> CreateAggregateAsync(CreateSnapshotManager command)
+    protected override async Task ExecCreateCommandAsync(SnapshotManager aggregate, CreateSnapshotManager command)
     {
         await Task.CompletedTask;
-        return new SnapshotManager(command.AggregateId, DateTime.UtcNow);
+        aggregate.Created(DateTime.UtcNow);
     }
 }

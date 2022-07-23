@@ -12,11 +12,11 @@ public class MultipleAggregateProjectionService : IMultipleAggregateProjectionSe
         GetMultipleProjectionAsync<P, P>();
 
     public Task<SingleAggregateProjectionDto<AggregateDto<TContents>>> GetAggregateListObject<T, TContents>()
-        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents =>
+        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new() =>
         GetMultipleProjectionAsync<SingleAggregateListProjector<T, AggregateDto<TContents>, DefaultSingleAggregateProjector<T>>,
             SingleAggregateProjectionDto<AggregateDto<TContents>>>();
     public async Task<List<AggregateDto<TContents>>> GetAggregateList<T, TContents>(QueryListType queryListType = QueryListType.ActiveOnly)
-        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents
+        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new()
     {
         var list = (await GetMultipleProjectionAsync<SingleAggregateListProjector<T, AggregateDto<TContents>, DefaultSingleAggregateProjector<T>>,
             SingleAggregateProjectionDto<AggregateDto<TContents>>>()).List;

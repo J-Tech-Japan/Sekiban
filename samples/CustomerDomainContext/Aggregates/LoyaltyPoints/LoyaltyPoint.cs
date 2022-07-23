@@ -5,9 +5,8 @@ namespace CustomerDomainContext.Aggregates.LoyaltyPoints;
 
 public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointContents>
 {
-    public LoyaltyPoint(Guid aggregateId) : base(aggregateId) { }
 
-    public LoyaltyPoint(Guid clientId, int initialPoint) : base(clientId)
+    public void CreateLoyaltyPoint(int initialPoint)
     {
         AddAndApplyEvent(new LoyaltyPointCreated(initialPoint));
     }

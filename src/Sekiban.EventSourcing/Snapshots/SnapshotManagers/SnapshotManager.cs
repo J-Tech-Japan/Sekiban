@@ -7,8 +7,7 @@ public class SnapshotManager : TransferableAggregateBase<SnapshotManagerContents
     private const int SnapshotCount = 40;
     private const int SnapshotTakeOffset = 15;
     public static Guid SharedId { get; } = Guid.NewGuid();
-    public SnapshotManager(Guid aggregateId) : base(aggregateId) { }
-    public SnapshotManager(Guid aggregateId, DateTime createdAt) : base(aggregateId)
+    public void Created(DateTime createdAt)
     {
         AddAndApplyEvent(new SnapshotManagerCreated(createdAt));
     }

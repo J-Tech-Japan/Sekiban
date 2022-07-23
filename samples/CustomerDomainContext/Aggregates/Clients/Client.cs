@@ -3,10 +3,7 @@ namespace CustomerDomainContext.Aggregates.Clients;
 
 public class Client : TransferableAggregateBase<ClientContents>
 {
-
-    public Client(Guid clientId) : base(clientId) { }
-
-    public Client(Guid branchId, NameString clientName, EmailString clientEmail) : base(Guid.NewGuid())
+    public void CreateClient(Guid branchId, NameString clientName, EmailString clientEmail)
     {
         AddAndApplyEvent(new ClientCreated(branchId, clientName, clientEmail));
     }

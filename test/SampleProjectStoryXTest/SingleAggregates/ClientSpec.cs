@@ -17,6 +17,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
     private const string testClientChangedName = "TestName2";
     private const string testEmail = "test@example.com";
     private const string testClientChangedNameV3 = "TestName3";
+    private static readonly Guid clientId = Guid.NewGuid();
 
     [Fact(DisplayName = "集約コマンドを実行してテストする")]
     public void ClientCreateSpec()
@@ -28,7 +29,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
         // CreateコマンドでBranchを参照するため、BranchDtoオブジェクトを参照ように渡す
         GivenEnvironmentDtos(new List<ISingleAggregate> { branchDto });
         // CreateClient コマンドを実行する
-        WhenCreate(new CreateClient(branchDto.AggregateId, testClientName, testEmail));
+        WhenCreate(clientId, new CreateClient(clientId, branchDto.AggregateId, testClientName, testEmail));
         // エラーとならない
         ThenNotThrowsAnException();
         // コマンドによって生成されたイベントを検証する
@@ -68,38 +69,10 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
         // CreateコマンドでBranchを参照するため、BranchDtoオブジェクトを参照ように渡す
         GivenEnvironmentDtos(new List<ISingleAggregate> { branchDto, clientDto });
         // CreateClient コマンドを実行する エラーになるはず
-        WhenCreate(new CreateClient(branchDto.AggregateId, testClientName, testEmail)).ThenThrows<SekibanEmailAlreadyRegistered>();
+        WhenCreate(clientId, new CreateClient(clientId, branchDto.AggregateId, testClientName, testEmail))
+            .ThenThrows<SekibanEmailAlreadyRegistered>();
     }
-    [Fact(DisplayName = "コマンドではなく、集約メソッドをテストする")]
-    public void UsingAggregateFunctionNoCommand()
-    {
-        var branchId = Guid.NewGuid();
 
-        WhenConstructor(() => new Client(branchId, testClientName, testEmail))
-            // コマンドによって生成されたイベントを検証する
-            .ThenSingleEventPayload(new ClientCreated(branchId, testClientName, testEmail))
-            // 現在の集約のステータスを検証する
-            .ThenState(
-                client => new AggregateDto<ClientContents>
-                {
-                    AggregateId = client.AggregateId, Version = client.Version, Contents = new ClientContents(branchId, testClientName, testEmail)
-                })
-            .WhenMethod(
-                aggregate =>
-                {
-                    aggregate.ChangeClientName(testClientChangedName);
-                })
-            // コマンドによって生成されたイベントを検証する
-            .ThenSingleEventPayload(new ClientNameChanged(testClientChangedName))
-            // 現在の集約のステータスを検証する
-            .ThenState(
-                client => new AggregateDto<ClientContents>
-                {
-                    AggregateId = client.AggregateId,
-                    Version = client.Version,
-                    Contents = new ClientContents(branchId, testClientChangedName, testEmail)
-                });
-    }
     [Fact(DisplayName = "イベントを渡してスタートする")]
     public void StartWithEvents()
     {

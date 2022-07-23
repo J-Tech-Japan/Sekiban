@@ -3,20 +3,18 @@ namespace Sekiban.EventSourcing.Aggregates;
 
 public abstract class AggregateBase : IAggregate
 {
-    protected readonly List<IAggregateEvent> _events = new();
-    protected static IPartitionKeyFactory DefaultPartitionKeyFactory => new CanNotUsePartitionKeyFactory();
-
-    public AggregateBase(Guid aggregateId) =>
-        AggregateId = aggregateId;
-
-    public ReadOnlyCollection<IAggregateEvent> Events => _events.AsReadOnly();
-
-    public Guid AggregateId { get; }
-    public Guid LastEventId { get; protected set; } = Guid.Empty;
-    public string LastSortableUniqueId { get; protected set; } = string.Empty;
-    public int AppliedSnapshotVersion { get; protected set; }
-    public int Version { get; protected set; }
-    public bool IsDeleted { get; protected set; }
+    protected AggregateBasicInfo _basicInfo = new();
+    public ReadOnlyCollection<IAggregateEvent> Events => _basicInfo.Events.AsReadOnly();
+    public Guid AggregateId
+    {
+        get => _basicInfo.AggregateId;
+        init => _basicInfo.AggregateId = value;
+    }
+    public Guid LastEventId => _basicInfo.LastEventId;
+    public string LastSortableUniqueId => _basicInfo.LastSortableUniqueId;
+    public int AppliedSnapshotVersion => _basicInfo.AppliedSnapshotVersion;
+    public int Version => _basicInfo.Version;
+    public bool IsDeleted { get => _basicInfo.IsDeleted; protected set => _basicInfo.IsDeleted = value; }
     public bool CanApplyEvent(IAggregateEvent ev) =>
         GetApplyEventAction(ev, ev.GetPayload()) != null;
 
@@ -30,13 +28,13 @@ public abstract class AggregateBase : IAggregate
         }
         if (ev.Id == LastEventId) { return; }
         action();
-        LastEventId = ev.Id;
-        LastSortableUniqueId = ev.SortableUniqueId;
-        Version++;
+        _basicInfo.LastEventId = ev.Id;
+        _basicInfo.LastSortableUniqueId = ev.SortableUniqueId;
+        _basicInfo.Version++;
     }
     public void ResetEventsAndSnapshots()
     {
-        _events.Clear();
+        _basicInfo.Events.Clear();
     }
 
     public void FromEventHistory(IEnumerable<IAggregateEvent> events)
@@ -48,9 +46,11 @@ public abstract class AggregateBase : IAggregate
     }
     public static UAggregate Create<UAggregate>(Guid aggregateId) where UAggregate : AggregateBase
     {
-        if (typeof(UAggregate).GetConstructor(new[] { typeof(Guid) }) is ConstructorInfo c)
+        if (typeof(UAggregate).GetConstructor(Type.EmptyTypes) is ConstructorInfo c)
         {
-            return c.Invoke(new object[] { aggregateId }) as UAggregate ?? throw new InvalidProgramException();
+            var aggregate = c.Invoke(new object[] { }) as UAggregate ?? throw new InvalidProgramException();
+            aggregate._basicInfo.AggregateId = aggregateId;
+            return aggregate;
         }
 
         throw new InvalidProgramException();

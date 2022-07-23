@@ -3,9 +3,7 @@ namespace CustomerDomainContext.Aggregates.Branches;
 
 public class Branch : TransferableAggregateBase<BranchContents>
 {
-    public Branch(Guid branchId) : base(branchId) { }
-
-    public Branch(NameString name) : base(Guid.NewGuid())
+    public void Created(NameString name)
     {
         AddAndApplyEvent(new BranchCreated(name));
     }

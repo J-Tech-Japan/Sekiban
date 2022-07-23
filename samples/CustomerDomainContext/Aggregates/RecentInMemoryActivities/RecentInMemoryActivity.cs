@@ -5,9 +5,7 @@ namespace CustomerDomainContext.Aggregates.RecentInMemoryActivities;
 public class RecentInMemoryActivity : TransferableAggregateBase<RecentInMemoryActivityContents>
 {
 
-    public RecentInMemoryActivity(Guid aggregateId) : base(aggregateId) { }
-
-    public RecentInMemoryActivity(Guid aggregateId, string firstActivity) : base(aggregateId)
+    public void CreateRecentInMemoryActivity(string firstActivity)
     {
         AddAndApplyEvent(new RecentInMemoryActivityCreated(new RecentInMemoryActivityRecord(firstActivity, DateTime.UtcNow)));
     }

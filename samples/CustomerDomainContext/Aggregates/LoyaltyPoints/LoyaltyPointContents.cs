@@ -9,4 +9,5 @@ public record LoyaltyPointContents : IAggregateContents
         CurrentPoint = currentPoint;
         LastOccuredTime = lastOccuredTime;
     }
+    public LoyaltyPointContents() { }
 }

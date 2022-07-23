@@ -12,7 +12,7 @@ public class MemoryMultipleAggregateProjectionService : IMultipleAggregateProjec
         return Objects.FirstOrDefault(m => m is P) ?? throw new SekibanProjectionNotExistsException();
     }
     public async Task<SingleAggregateProjectionDto<AggregateDto<TContents>>> GetAggregateListObject<T, TContents>()
-        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents
+        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new()
     {
         var aggregates = Objects.Where(m => m.Contents.GetType().Name == typeof(TContents).Name).Select(m => (AggregateDto<TContents>)m).ToList();
         await Task.CompletedTask;
@@ -20,7 +20,7 @@ public class MemoryMultipleAggregateProjectionService : IMultipleAggregateProjec
     }
 
     public async Task<List<AggregateDto<TContents>>> GetAggregateList<T, TContents>(QueryListType queryListType = QueryListType.ActiveOnly)
-        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents
+        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new()
     {
         var aggregates = Objects.Where(m => m.Contents.GetType().Name == typeof(TContents).Name).Select(m => (AggregateDto<TContents>)m).ToList();
         await Task.CompletedTask;

@@ -6,7 +6,7 @@ using Xunit;
 namespace Sekiban.EventSourcing.TestHelpers;
 
 public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<TAggregate, TContents>
-    where TAggregate : TransferableAggregateBase<TContents> where TContents : IAggregateContents
+    where TAggregate : TransferableAggregateBase<TContents>, new() where TContents : IAggregateContents, new()
 {
     private readonly IServiceProvider _serviceProvider;
     private TAggregate _aggregate { get; set; }
@@ -76,7 +76,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
     public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IEnumerable<IAggregateEvent> ev) =>
         Given(snapshot).Given(ev);
 
-    public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregate>
+    public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>(Guid aggregateId, C createCommand) where C : ICreateAggregateCommand<TAggregate>
     {
         ResetBeforeCommand();
         var handler
@@ -88,7 +88,8 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         var commandDocument = new AggregateCommandDocument<C>(createCommand, new CanNotUsePartitionKeyFactory());
         try
         {
-            var result = handler.HandleAsync(commandDocument).Result;
+            var aggregate = new TAggregate { AggregateId = aggregateId };
+            var result = handler.HandleAsync(commandDocument, aggregate).Result;
             _aggregate = result.Aggregate;
         }
         catch (Exception ex)

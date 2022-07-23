@@ -25,7 +25,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         Guid aggregateId,
         C command,
         List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>
-        where TContents : IAggregateContents
+        where TContents : IAggregateContents, new()
         where C : ChangeAggregateCommandBase<T>
     {
         AggregateDto<TContents>? aggregateDto = null;
@@ -96,9 +96,10 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
     }
 
     public async Task<AggregateCommandExecutorResponse<TContents, C>> ExecCreateCommandAsync<T, TContents, C>(
+        Guid aggregateId,
         C command,
-        List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>
-        where TContents : IAggregateContents
+        List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>, new()
+        where TContents : IAggregateContents, new()
         where C : ICreateAggregateCommand<T>
     {
         AggregateDto<TContents>? aggregateDto = null;
@@ -121,7 +122,9 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
             {
                 throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
             }
-            var result = await handler.HandleAsync(commandDocument);
+            var aggregate = new T { AggregateId = aggregateId };
+
+            var result = await handler.HandleAsync(commandDocument, aggregate);
             var partitionKeyFactory = new AggregateIdPartitionKeyFactory(result.Aggregate.AggregateId, typeof(T));
             commandDocument = commandDocument with
             {

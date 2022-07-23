@@ -64,16 +64,23 @@ public class CustomerDbStoryBasic : TestBase
         // create list branch
         var branchList = await _multipleAggregateProjectionService.GetAggregateList<Branch, BranchContents>();
         Assert.Empty(branchList);
-        var branchResult = await _aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchContents, CreateBranch>(new CreateBranch("Japan"));
+        var branchId = Guid.NewGuid();
+        var branchResult
+            = await _aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchContents, CreateBranch>(
+                branchId,
+                new CreateBranch(branchId, "Japan"));
         Assert.NotNull(branchResult);
         Assert.NotNull(branchResult.AggregateDto);
-        var branchId = branchResult.AggregateDto!.AggregateId;
         branchList = await _multipleAggregateProjectionService.GetAggregateList<Branch, BranchContents>();
         Assert.Single(branchList);
         var branchFromList = branchList.First(m => m.AggregateId == branchId);
         Assert.NotNull(branchFromList);
 
-        var branchResult2 = await _aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchContents, CreateBranch>(new CreateBranch("USA"));
+        var branchId2 = Guid.NewGuid();
+        var branchResult2
+            = await _aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchContents, CreateBranch>(
+                branchId2,
+                new CreateBranch(branchId2, "USA"));
         branchList = await _multipleAggregateProjectionService.GetAggregateList<Branch, BranchContents>();
         Assert.Equal(2, branchList.Count);
         var branchListFromMultiple = await _multipleAggregateProjectionService.GetAggregateList<Branch, BranchContents>();
@@ -89,13 +96,13 @@ public class CustomerDbStoryBasic : TestBase
         // create client
         var clientList = await _multipleAggregateProjectionService.GetAggregateList<Client, ClientContents>();
         Assert.Empty(clientList);
+        var clientId = Guid.NewGuid();
         var originalName = "Tanaka Taro";
-        var createClientResult
-            = await _aggregateCommandExecutor.ExecCreateCommandAsync<Client, ClientContents, CreateClient>(
-                new CreateClient(branchId, originalName, "tanaka@example.com"));
+        var createClientResult = await _aggregateCommandExecutor.ExecCreateCommandAsync<Client, ClientContents, CreateClient>(
+            clientId,
+            new CreateClient(clientId, branchId, originalName, "tanaka@example.com"));
         Assert.NotNull(createClientResult);
         Assert.NotNull(createClientResult.AggregateDto);
-        var clientId = createClientResult.AggregateDto!.AggregateId;
         clientList = await _multipleAggregateProjectionService.GetAggregateList<Client, ClientContents>();
         Assert.Single(clientList);
 
@@ -220,10 +227,12 @@ public class CustomerDbStoryBasic : TestBase
         loyaltyPointList = await _multipleAggregateProjectionService.GetAggregateList<LoyaltyPoint, LoyaltyPointContents>(QueryListType.DeletedOnly);
         Assert.Single(loyaltyPointList);
 
+        var recentActivityId = Guid.NewGuid();
         // create recent activity
         var createRecentActivityResult
             = await _aggregateCommandExecutor.ExecCreateCommandAsync<RecentActivity, RecentActivityContents, CreateRecentActivity>(
-                new CreateRecentActivity(Guid.NewGuid()));
+                recentActivityId,
+                new CreateRecentActivity(recentActivityId));
 
         var recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentActivity, RecentActivityContents>();
         Assert.Single(recentActivityList);
@@ -277,10 +286,12 @@ public class CustomerDbStoryBasic : TestBase
         await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.AggregateCommand, AggregateContainerGroup.Dissolvable);
         await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.AggregateCommand);
 
+        var recentActivityId = Guid.NewGuid();
         // create recent activity
         var createRecentActivityResult
             = await _aggregateCommandExecutor.ExecCreateCommandAsync<RecentActivity, RecentActivityContents, CreateRecentActivity>(
-                new CreateRecentActivity(Guid.NewGuid()));
+                recentActivityId,
+                new CreateRecentActivity(recentActivityId));
 
         var recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentActivity, RecentActivityContents>();
         Assert.Single(recentActivityList);
@@ -340,8 +351,8 @@ public class CustomerDbStoryBasic : TestBase
         await ContinuousExecutionTestAsync();
     }
 
-    private async Task CheckSnapshots<T, TContents>(List<SnapshotDocument> snapshots, Guid aggregateId) where T : TransferableAggregateBase<TContents>
-        where TContents : IAggregateContents
+    private async Task CheckSnapshots<T, TContents>(List<SnapshotDocument> snapshots, Guid aggregateId)
+        where T : TransferableAggregateBase<TContents>, new() where TContents : IAggregateContents, new()
     {
         foreach (var dto in snapshots.Select(snapshot => snapshot.ToDto<AggregateDto<TContents>>()))
         {
@@ -355,11 +366,13 @@ public class CustomerDbStoryBasic : TestBase
     [Fact(DisplayName = "インメモリストーリーテスト 。並列でたくさん動かしたらどうなるか。 Versionの重複が発生しないことを確認")]
     public async Task AsynchronousInMemoryExecutionTestAsync()
     {
+        var inMemoryActivityId = Guid.NewGuid();
         // create recent activity
         var createRecentActivityResult
             = await _aggregateCommandExecutor
                 .ExecCreateCommandAsync<RecentInMemoryActivity, RecentInMemoryActivityContents, CreateRecentInMemoryActivity>(
-                    new CreateRecentInMemoryActivity(Guid.NewGuid()));
+                    inMemoryActivityId,
+                    new CreateRecentInMemoryActivity(inMemoryActivityId));
 
         var recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentInMemoryActivity, RecentInMemoryActivityContents>();
         Assert.Single(recentActivityList);

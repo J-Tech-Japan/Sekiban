@@ -1,11 +1,11 @@
 namespace CustomerDomainContext.Aggregates.Branches.Commands;
 
-public record CreateBranch(string Name) : ICreateAggregateCommand<Branch>;
+public record CreateBranch(Guid branchId, string Name) : ICreateAggregateCommand<Branch>;
 public class CreateBranchHandler : CreateAggregateCommandHandlerBase<Branch, CreateBranch>
 {
-    protected override async Task<Branch> CreateAggregateAsync(CreateBranch command)
+    protected override async Task ExecCreateCommandAsync(Branch aggregate, CreateBranch command)
     {
         await Task.CompletedTask;
-        return new Branch(command.Name);
+        aggregate.Created(command.Name);
     }
 }
