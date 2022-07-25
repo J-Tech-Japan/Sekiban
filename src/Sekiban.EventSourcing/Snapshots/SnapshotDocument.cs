@@ -6,8 +6,6 @@ public record SnapshotDocument : DocumentBase, IDocument
 {
     public dynamic? Snapshot { get; init; }
 
-    public Guid AggregateId { get; init; }
-
     public Guid LastEventId { get; init; }
 
     public string LastSortableUniqueId { get; init; } = string.Empty;
@@ -25,6 +23,7 @@ public record SnapshotDocument : DocumentBase, IDocument
         string lastSortableUniqueId,
         int savedVersion
     ) : base(
+        aggregateId: aggregateId,
         partitionKey: PartitionKeyCreator.ForAggregateSnapshot(aggregateId, aggregateType),
         documentType: DocumentType.AggregateSnapshot,
         documentTypeName: aggregateType.Name ?? string.Empty

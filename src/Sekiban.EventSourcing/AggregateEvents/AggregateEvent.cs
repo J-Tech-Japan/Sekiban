@@ -6,8 +6,6 @@ public record AggregateEvent<TEventPayload> : DocumentBase, IAggregateEvent
 {
     public TEventPayload Payload { get; init; } = default!;
 
-    public Guid AggregateId { get; init; }
-
     public string AggregateType { get; init; } = null!;
 
     /// <summary>
@@ -31,13 +29,13 @@ public record AggregateEvent<TEventPayload> : DocumentBase, IAggregateEvent
         TEventPayload eventPayload,
         bool isAggregateInitialEvent = false
     ) : base(
+        aggregateId: aggregateId,
         partitionKey: PartitionKeyCreator.ForAggregateEvent(aggregateId, aggregateType),
         documentType: DocumentType.AggregateEvent,
         documentTypeName: typeof(TEventPayload).Name
     )
     {
         Payload = eventPayload;
-        AggregateId = aggregateId;
         AggregateType = aggregateType.Name;
         IsAggregateInitialEvent = isAggregateInitialEvent;
     }

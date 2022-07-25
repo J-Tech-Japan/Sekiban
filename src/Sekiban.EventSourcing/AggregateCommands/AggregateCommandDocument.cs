@@ -9,11 +9,6 @@ public record AggregateCommandDocument<T> : DocumentBase, IDocument, ICallHistor
     public T Payload { get; init; } = default!;
 
     /// <summary>
-    ///     対象集約ID
-    /// </summary>
-    public Guid AggregateId { get; init; } = Guid.Empty;
-
-    /// <summary>
     ///     実行ユーザー
     ///     AggregateCommandDocumentで入力する
     /// </summary>
@@ -38,13 +33,13 @@ public record AggregateCommandDocument<T> : DocumentBase, IDocument, ICallHistor
         T commandPayload,
         List<CallHistory>? callHistories = null
     ) : base(
+        aggregateId: aggregateId,
         partitionKey: PartitionKeyCreator.ForAggregateCommand(aggregateId),
         documentType: DocumentType.AggregateCommand,
         documentTypeName: typeof(T).Name
     )
     {
         Payload = commandPayload;
-        AggregateId = aggregateId;
         CallHistories = callHistories ?? new List<CallHistory>();
     }
 
