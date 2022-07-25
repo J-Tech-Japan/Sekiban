@@ -4,7 +4,6 @@ global using Sekiban.EventSourcing.Aggregates;
 global using Sekiban.EventSourcing.Documents;
 global using Sekiban.EventSourcing.Histories;
 global using Sekiban.EventSourcing.Partitions;
-global using Sekiban.EventSourcing.Partitions.AggregateIdPartitions;
 global using Sekiban.EventSourcing.Queries;
 global using Sekiban.EventSourcing.Shared.Exceptions;
 global using Sekiban.EventSourcing.Snapshots;
