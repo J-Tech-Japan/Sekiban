@@ -21,7 +21,7 @@ public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersist
         _memoryCache = memoryCache;
         _serviceProvider = serviceProvider;
     }
-    public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType) where TDocument : Document
+    public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType) where TDocument : IDocument
     {
         var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
         var sekibanIdentifier = string.IsNullOrWhiteSpace(sekibanContext?.SettingGroupIdentifier)
@@ -30,7 +30,7 @@ public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersist
         switch (document.DocumentType)
         {
             case DocumentType.AggregateEvent:
-                _inMemoryDocumentStore.SaveEvent((document as AggregateEvent)!, document.PartitionKey, sekibanIdentifier);
+                _inMemoryDocumentStore.SaveEvent((document as IAggregateEvent)!, document.PartitionKey, sekibanIdentifier);
                 break;
             case DocumentType.AggregateSnapshot:
                 if (document is SnapshotDocument sd)
@@ -42,7 +42,7 @@ public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersist
         await Task.CompletedTask;
     }
     public async Task SaveAndPublishAggregateEvent<TAggregateEvent>(TAggregateEvent aggregateEvent, Type aggregateType)
-        where TAggregateEvent : AggregateEvent
+        where TAggregateEvent : IAggregateEvent
     {
         var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
         var sekibanIdentifier = string.IsNullOrWhiteSpace(sekibanContext?.SettingGroupIdentifier)

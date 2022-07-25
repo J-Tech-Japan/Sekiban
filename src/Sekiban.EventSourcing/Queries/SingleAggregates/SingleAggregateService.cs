@@ -60,7 +60,7 @@ public class SingleAggregateService : ISingleAggregateService
     /// <typeparam name="TContents"></typeparam>
     /// <returns></returns>
     public async Task<T?> GetAggregateFromInitialDefaultAggregateAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents =>
+        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new() =>
         await GetAggregateFromInitialAsync<T, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion);
 
     /// <summary>
@@ -73,9 +73,8 @@ public class SingleAggregateService : ISingleAggregateService
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
-    public async Task<AggregateDto<TContents>?> GetAggregateFromInitialDefaultAggregateDtoAsync<T, TContents>(
-        Guid aggregateId,
-        int? toVersion = null) where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents =>
+    public async Task<AggregateDto<TContents>?> GetAggregateFromInitialDefaultAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
+        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new() =>
         (await GetAggregateFromInitialAsync<T, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion))?.ToDto();
 
     public async Task<T?> GetProjectionAsync<T>(Guid aggregateId, int? toVersion = null) where T : SingleAggregateProjectionBase<T>, new() =>
@@ -91,7 +90,7 @@ public class SingleAggregateService : ISingleAggregateService
     /// <typeparam name="TContents"></typeparam>
     /// <returns></returns>
     public async Task<T?> GetAggregateAsync<T, TContents>(Guid aggregateId, int? toVersion = null) where T : TransferableAggregateBase<TContents>
-        where TContents : IAggregateContents =>
+        where TContents : IAggregateContents, new() =>
         await GetAggregateAsync<T, AggregateDto<TContents>, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion);
     /// <summary>
     ///     スナップショット、メモリキャッシュを使用する通常版
@@ -103,7 +102,7 @@ public class SingleAggregateService : ISingleAggregateService
     /// <typeparam name="TContents"></typeparam>
     /// <returns></returns>
     public async Task<AggregateDto<TContents>?> GetAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents
+        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new()
     {
         var aggregate = await GetAggregateAsync<T, AggregateDto<TContents>, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion);
         return aggregate?.ToDto();

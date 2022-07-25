@@ -34,25 +34,23 @@ public class ClientNameHistoryProjection : SingleAggregateProjectionBase<ClientN
         ClientEmail = snapshot.ClientEmail;
     }
 
-    protected override Action? GetApplyEventAction(AggregateEvent ev)
-    {
-        return ev switch
+    protected override Action? GetApplyEventAction(IAggregateEvent ev) =>
+        ev.GetPayload() switch
         {
             ClientCreated clientCreated => () =>
             {
                 BranchId = clientCreated.BranchId;
-                ClientNames.Add(new ClientNameHistoryProjectionRecord(clientCreated.ClientName, clientCreated.TimeStamp));
+                ClientNames.Add(new ClientNameHistoryProjectionRecord(clientCreated.ClientName, ev.TimeStamp));
                 ClientEmail = clientCreated.ClientEmail;
             },
 
             ClientNameChanged clientNameChanged => () =>
-                ClientNames.Add(new ClientNameHistoryProjectionRecord(clientNameChanged.ClientName, clientNameChanged.TimeStamp)),
+                ClientNames.Add(new ClientNameHistoryProjectionRecord(clientNameChanged.ClientName, ev.TimeStamp)),
 
             ClientDeleted => () => IsDeleted = true,
 
             _ => null
         };
-    }
 
     public record ClientNameHistoryProjectionRecord(string Name, DateTime DateChanged);
 }

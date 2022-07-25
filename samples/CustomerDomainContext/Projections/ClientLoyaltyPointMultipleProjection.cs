@@ -14,12 +14,12 @@ public class ClientLoyaltyPointMultipleProjection : MultipleAggregateProjectionB
 
     public override ClientLoyaltyPointMultipleProjection ToDto() =>
         this;
-    protected override Action? GetApplyEventAction(AggregateEvent ev) =>
-        ev switch
+    protected override Action? GetApplyEventAction(IAggregateEvent ev) =>
+        ev.GetPayload() switch
         {
             BranchCreated branchCreated => () =>
             {
-                Branches.Add(new ProjectedBranch { BranchId = branchCreated.BranchId, BranchName = branchCreated.Name });
+                Branches.Add(new ProjectedBranch { BranchId = ev.AggregateId, BranchName = branchCreated.Name });
             },
             ClientCreated clientCreated => () =>
             {
@@ -28,34 +28,34 @@ public class ClientLoyaltyPointMultipleProjection : MultipleAggregateProjectionB
                     {
                         BranchId = clientCreated.BranchId,
                         BranchName = Branches.First(m => m.BranchId == clientCreated.BranchId).BranchName,
-                        ClientId = clientCreated.ClientId,
+                        ClientId = ev.AggregateId,
                         ClientName = clientCreated.ClientName,
                         Point = 0
                     });
             },
             ClientNameChanged clientNameChanged => () =>
             {
-                var record = Records.First(m => m.ClientId == clientNameChanged.AggregateId);
+                var record = Records.First(m => m.ClientId == ev.AggregateId);
                 record.ClientName = clientNameChanged.ClientName;
             },
             ClientDeleted clientDeleted => () =>
             {
-                var record = Records.First(m => m.ClientId == clientDeleted.ClientId);
+                var record = Records.First(m => m.ClientId == ev.AggregateId);
                 Records.Remove(record);
             },
             LoyaltyPointCreated loyaltyPointCreated => () =>
             {
-                var record = Records.First(m => m.ClientId == loyaltyPointCreated.ClientId);
+                var record = Records.First(m => m.ClientId == ev.AggregateId);
                 record.Point = loyaltyPointCreated.InitialPoint;
             },
             LoyaltyPointAdded loyaltyPointAdded => () =>
             {
-                var record = Records.First(m => m.ClientId == loyaltyPointAdded.ClientId);
+                var record = Records.First(m => m.ClientId == ev.AggregateId);
                 record.Point += loyaltyPointAdded.PointAmount;
             },
             LoyaltyPointUsed loyaltyPointUsed => () =>
             {
-                var record = Records.First(m => m.ClientId == loyaltyPointUsed.ClientId);
+                var record = Records.First(m => m.ClientId == ev.AggregateId);
                 record.Point -= loyaltyPointUsed.PointAmount;
             },
             _ => null

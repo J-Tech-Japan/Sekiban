@@ -113,7 +113,7 @@ public class CosmosDbFactory
             _memoryCache.Set(GetMemoryCacheDatabaseKey(documentType, databaseId, _sekibanContextIdentifier), database);
         }
 
-        var containerProperties = new ContainerProperties(containerId, "/partitionkey");
+        var containerProperties = new ContainerProperties(containerId, "/PartitionKey");
         container = await database.CreateContainerIfNotExistsAsync(containerProperties, 400);
         _memoryCache.Set(GetMemoryCacheContainerKey(documentType, databaseId, containerId, _sekibanContextIdentifier), container);
 
@@ -124,14 +124,14 @@ public class CosmosDbFactory
         DocumentType documentType,
         AggregateContainerGroup containerGroup = AggregateContainerGroup.Default)
     {
-        await CosmosActionAsync<IEnumerable<AggregateEvent>?>(
+        await CosmosActionAsync<IEnumerable<IAggregateEvent>?>(
             documentType,
             containerGroup,
             async container =>
             {
-                var query = container.GetItemLinqQueryable<Document>().Where(b => true);
+                var query = container.GetItemLinqQueryable<IDocument>().Where(b => true);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition());
-                var todelete = new List<Document>();
+                var todelete = new List<IDocument>();
                 while (feedIterator.HasMoreResults)
                 {
                     var response = await feedIterator.ReadNextAsync();
@@ -145,7 +145,7 @@ public class CosmosDbFactory
                 var concurrencyTasks = new List<Task>();
                 foreach (var d in todelete)
                 {
-                    concurrencyTasks.Add(container.DeleteItemAsync<Document>(d.Id.ToString(), new PartitionKey(d.PartitionKey)));
+                    concurrencyTasks.Add(container.DeleteItemAsync<IDocument>(d.Id.ToString(), new PartitionKey(d.PartitionKey)));
                 }
                 await Task.WhenAll(concurrencyTasks);
                 return null;

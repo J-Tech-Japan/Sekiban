@@ -11,7 +11,7 @@ public class SingleAggregateListProjector<T, Q, P> : IMultipleAggregateProjector
     public List<T> List { get; } = new();
     public SingleAggregateListProjector() =>
         _eventChecker = _projector.CreateInitialAggregate(Guid.Empty);
-    public void ApplyEvent(AggregateEvent ev)
+    public void ApplyEvent(IAggregateEvent ev)
     {
         if (_eventChecker.CanApplyEvent(ev))
         {

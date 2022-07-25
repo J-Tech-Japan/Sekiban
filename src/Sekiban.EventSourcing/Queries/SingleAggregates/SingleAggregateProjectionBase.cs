@@ -9,7 +9,7 @@ public abstract class SingleAggregateProjectionBase<T> : ISingleAggregateProject
     public int Version { get; set; }
     public bool IsDeleted { get; set; }
     public Guid AggregateId { get; set; }
-    public void ApplyEvent(AggregateEvent ev)
+    public void ApplyEvent(IAggregateEvent ev)
     {
         // IsAggregateInitialEvent は V0 の時のみ
         // IsAggregateInitialEvent == false は V0以外
@@ -26,7 +26,7 @@ public abstract class SingleAggregateProjectionBase<T> : ISingleAggregateProject
         LastSortableUniqueId = ev.SortableUniqueId;
         Version++;
     }
-    public bool CanApplyEvent(AggregateEvent ev) =>
+    public bool CanApplyEvent(IAggregateEvent ev) =>
         GetApplyEventAction(ev) != null;
     public abstract T ToDto();
     public void ApplySnapshot(T snapshot)
@@ -42,5 +42,5 @@ public abstract class SingleAggregateProjectionBase<T> : ISingleAggregateProject
     public abstract Type OriginalAggregateType();
     public abstract T CreateInitialAggregate(Guid aggregateId);
     protected abstract void CopyPropertiesFromSnapshot(T snapshot);
-    protected abstract Action? GetApplyEventAction(AggregateEvent ev);
+    protected abstract Action? GetApplyEventAction(IAggregateEvent ev);
 }

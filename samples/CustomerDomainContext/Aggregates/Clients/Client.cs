@@ -3,16 +3,13 @@ namespace CustomerDomainContext.Aggregates.Clients;
 
 public class Client : TransferableAggregateBase<ClientContents>
 {
-
-    public Client(Guid clientId) : base(clientId) { }
-
-    public Client(Guid branchId, NameString clientName, EmailString clientEmail) : base(Guid.NewGuid())
+    public void CreateClient(Guid branchId, NameString clientName, EmailString clientEmail)
     {
-        AddAndApplyEvent(new ClientCreated(AggregateId, branchId, clientName, clientEmail));
+        AddAndApplyEvent(new ClientCreated(branchId, clientName, clientEmail));
     }
 
-    protected override Action? GetApplyEventAction(AggregateEvent ev) =>
-        ev switch
+    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload) =>
+        payload switch
         {
             ClientCreated clientChanged => () =>
             {
@@ -28,11 +25,11 @@ public class Client : TransferableAggregateBase<ClientContents>
 
     public void ChangeClientName(NameString clientName)
     {
-        var ev = new ClientNameChanged(AggregateId, clientName);
+        var ev = new ClientNameChanged(clientName);
         // ValueObjectへの代入では行えない集約内の検証をここに記述する。
         AddAndApplyEvent(ev);
     }
 
     public void Delete() =>
-        AddAndApplyEvent(new ClientDeleted(AggregateId));
+        AddAndApplyEvent(new ClientDeleted());
 }

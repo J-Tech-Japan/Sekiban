@@ -2,11 +2,10 @@ using Sekiban.EventSourcing.Settings;
 namespace Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
 
 public record ReportAggregateVersionToSnapshotManger(
-    Guid AggregateId,
     Type AggregateType,
     Guid TargetAggregateId,
     int Version,
-    int? SnapshotVersion) : ChangeAggregateCommandBase<SnapshotManager>(AggregateId), INoValidateCommand;
+    int? SnapshotVersion) : ChangeAggregateCommandBase<SnapshotManager>, INoValidateCommand;
 public class ReportAggregateVersionToSnapshotMangerHandler : ChangeAggregateCommandHandlerBase<SnapshotManager,
     ReportAggregateVersionToSnapshotManger>
 {
@@ -20,7 +19,6 @@ public class ReportAggregateVersionToSnapshotMangerHandler : ChangeAggregateComm
         var snapshotOffset = _aggregateSettings.SnapshotOffsetForType(command.AggregateType);
 
         aggregate.ReportAggregateVersion(
-            command.AggregateId,
             command.AggregateType,
             command.TargetAggregateId,
             command.Version,

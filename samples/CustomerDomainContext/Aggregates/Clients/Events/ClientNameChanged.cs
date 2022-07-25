@@ -1,8 +1,8 @@
 ﻿namespace CustomerDomainContext.Aggregates.Clients.Events;
 
-public record ClientNameChanged : ChangeAggregateEvent<Client>
+public record ClientNameChanged : IChangedEventPayload
 {
     public string ClientName { get; init; }
-    public ClientNameChanged(Guid clientId, string clientName) : base(clientId) =>
+    public ClientNameChanged(string clientName) =>
         ClientName = clientName;
 }

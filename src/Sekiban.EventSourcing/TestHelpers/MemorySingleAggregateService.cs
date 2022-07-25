@@ -12,10 +12,10 @@ public class MemorySingleAggregateService : ISingleAggregateService
         return (T?)aggregate;
     }
     public Task<T?> GetAggregateFromInitialDefaultAggregateAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents =>
+        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new() =>
         GetAggregateAsync<T, TContents>(aggregateId, toVersion);
     public Task<AggregateDto<TContents>?> GetAggregateFromInitialDefaultAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents =>
+        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new() =>
         GetAggregateDtoAsync<T, TContents>(aggregateId, toVersion);
     public async Task<T?> GetProjectionAsync<T>(Guid aggregateId, int? toVersion = null) where T : SingleAggregateProjectionBase<T>, new()
     {
@@ -24,7 +24,7 @@ public class MemorySingleAggregateService : ISingleAggregateService
         return (T?)aggregate;
     }
     public async Task<T?> GetAggregateAsync<T, TContents>(Guid aggregateId, int? toVersion = null) where T : TransferableAggregateBase<TContents>
-        where TContents : IAggregateContents
+        where TContents : IAggregateContents, new()
     {
         var dto = await GetAggregateDtoAsync<T, TContents>(aggregateId, toVersion);
         if (dto == default) { return default; }
@@ -34,7 +34,7 @@ public class MemorySingleAggregateService : ISingleAggregateService
         return aggregate;
     }
     public async Task<AggregateDto<TContents>?> GetAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents
+        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new()
     {
         var aggregate = Aggregates.FirstOrDefault(m => m.Contents.GetType().Name == typeof(TContents).Name && m.AggregateId == aggregateId);
         await Task.CompletedTask;

@@ -11,7 +11,7 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
         _eventPublisher = eventPublisher;
     }
 
-    public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType) where TDocument : Document
+    public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType) where TDocument : IDocument
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
         if (document.DocumentType == DocumentType.AggregateEvent)
@@ -30,13 +30,14 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
                 aggregateContainerGroup,
                 async container =>
                 {
+                    Console.WriteLine(document.ToString());
                     await container.CreateItemAsync(document, new PartitionKey(document.PartitionKey));
                 });
         }
     }
 
     public async Task SaveAndPublishAggregateEvent<TAggregateEvent>(TAggregateEvent aggregateEvent, Type aggregateType)
-        where TAggregateEvent : AggregateEvent
+        where TAggregateEvent : IAggregateEvent
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
         await _cosmosDbFactory.CosmosActionAsync(
@@ -44,7 +45,7 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
             aggregateContainerGroup,
             async container =>
             {
-                await container.UpsertItemAsync(aggregateEvent, new PartitionKey(aggregateEvent.PartitionKey));
+                await container.UpsertItemAsync<dynamic>(aggregateEvent, new PartitionKey(aggregateEvent.PartitionKey));
             });
         await _eventPublisher.PublishAsync(aggregateEvent);
     }

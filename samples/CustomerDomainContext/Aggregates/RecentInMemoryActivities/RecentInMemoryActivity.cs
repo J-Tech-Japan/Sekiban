@@ -5,15 +5,13 @@ namespace CustomerDomainContext.Aggregates.RecentInMemoryActivities;
 public class RecentInMemoryActivity : TransferableAggregateBase<RecentInMemoryActivityContents>
 {
 
-    public RecentInMemoryActivity(Guid aggregateId) : base(aggregateId) { }
-
-    public RecentInMemoryActivity(Guid aggregateId, string firstActivity) : base(aggregateId)
+    public void CreateRecentInMemoryActivity(string firstActivity)
     {
-        AddAndApplyEvent(new RecentInMemoryActivityCreated(aggregateId, new RecentInMemoryActivityRecord(firstActivity, DateTime.UtcNow)));
+        AddAndApplyEvent(new RecentInMemoryActivityCreated(new RecentInMemoryActivityRecord(firstActivity, DateTime.UtcNow)));
     }
 
-    protected override Action? GetApplyEventAction(AggregateEvent ev) =>
-        ev switch
+    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload) =>
+        payload switch
         {
             RecentInMemoryActivityCreated created => () =>
             {
@@ -33,7 +31,7 @@ public class RecentInMemoryActivity : TransferableAggregateBase<RecentInMemoryAc
         };
     public void AddActivity(string activity)
     {
-        var ev = new RecentInMemoryActivityAdded(AggregateId, new RecentInMemoryActivityRecord(activity, DateTime.UtcNow));
+        var ev = new RecentInMemoryActivityAdded(new RecentInMemoryActivityRecord(activity, DateTime.UtcNow));
         AddAndApplyEvent(ev);
     }
 }

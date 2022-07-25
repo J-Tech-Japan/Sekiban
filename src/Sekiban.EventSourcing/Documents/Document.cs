@@ -1,53 +1,51 @@
-using Newtonsoft.Json;
-using System.Runtime.Serialization;
 namespace Sekiban.EventSourcing.Documents;
 
-public record Document
+public record Document : IDocument
 {
 
-    private string _partitionKey = string.Empty;
-    [JsonProperty("id")] [DataMember]
-
-    public Guid Id { get; init; }
-    [JsonProperty("partitionkey")]
-    [DataMember]
+    public Document(
+        Guid id,
+        string partitionKey,
+        DocumentType documentType,
+        string documentTypeName,
+        DateTime timeStamp,
+        string sortableUniqueId)
+    {
+        Id = id;
+        PartitionKey = partitionKey;
+        DocumentType = documentType;
+        DocumentTypeName = documentTypeName;
+        TimeStamp = timeStamp;
+        SortableUniqueId = sortableUniqueId;
+    }
+    public Guid Id
+    {
+        get;
+        init;
+    }
     public string PartitionKey
     {
-        get => _partitionKey;
-        init => _partitionKey = value;
+        get;
+        init;
     }
-
-    [DataMember]
-    public DocumentType DocumentType { get; init; }
-    [DataMember]
-    public string DocumentTypeName { get; init; } = null!;
-    [DataMember]
-    public DateTime TimeStamp { get; init; }
-    [DataMember]
-    public string SortableUniqueId { get; init; } = string.Empty;
-
-    public Document(DocumentType documentType, IPartitionKeyFactory? partitionKeyFactory, string? documentTypeName = null)
+    public DocumentType DocumentType
     {
-        Id = Guid.NewGuid();
-        DocumentType = documentType;
-        DocumentTypeName = documentTypeName ?? GetType().Name;
-        TimeStamp = DateTime.UtcNow;
-        SortableUniqueId = TimeStamp.Ticks + (Math.Abs(Id.GetHashCode()) % 1000000000000).ToString("000000000000");
-        if (partitionKeyFactory is not null)
-        {
-            SetPartitionKey(partitionKeyFactory);
-        }
+        get;
+        init;
     }
-
-    public void SetPartitionKey(IPartitionKeyFactory partitionKeyFactory)
+    public string DocumentTypeName
     {
-        if (partitionKeyFactory is CanNotUsePartitionKeyFactory)
-        {
-            return;
-        }
-        _partitionKey = partitionKeyFactory.GetPartitionKey(DocumentType);
+        get;
+        init;
     }
-
-    public override string ToString() =>
-        JsonConvert.SerializeObject(this);
+    public DateTime TimeStamp
+    {
+        get;
+        init;
+    }
+    public string SortableUniqueId
+    {
+        get;
+        init;
+    }
 }

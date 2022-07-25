@@ -6,5 +6,5 @@ namespace Sekiban.EventSourcing.Partitions;
 public class CanNotUsePartitionKeyFactory : IPartitionKeyFactory
 {
     public string GetPartitionKey(DocumentType documentType) =>
-        throw new NotImplementedException();
+        string.Empty;
 }

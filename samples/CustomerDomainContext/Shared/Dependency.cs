@@ -21,9 +21,9 @@ public static class Dependency
     public static IEnumerable<(Type serviceType, Type? implementationType)> GetDependencies()
     {
         // Aggregate Event Subscribers
-        yield return (typeof(INotificationHandler<ClientCreated>), typeof(ClientCreatedSubscriber));
+        yield return (typeof(INotificationHandler<AggregateEvent<ClientCreated>>), typeof(ClientCreatedSubscriber));
 
-        yield return (typeof(INotificationHandler<ClientDeleted>), typeof(ClientDeletedSubscriber));
+        yield return (typeof(INotificationHandler<AggregateEvent<ClientDeleted>>), typeof(ClientDeletedSubscriber));
 
         // Aggregate: Branch
         yield return (typeof(ICreateAggregateCommandHandler<Branch, CreateBranch>), typeof(CreateBranchHandler));

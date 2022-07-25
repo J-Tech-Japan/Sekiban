@@ -4,7 +4,7 @@ using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace CustomerDomainContext.Aggregates.Clients.Commands;
 
-public record CreateClient(Guid BranchId, string ClientName, string ClientEmail) : ICreateAggregateCommand<Client>;
+public record CreateClient(Guid ClientId, Guid BranchId, string ClientName, string ClientEmail) : ICreateAggregateCommand<Client>;
 public class CreateClientHandler : CreateAggregateCommandHandlerBase<Client, CreateClient>
 {
     private readonly IMultipleAggregateProjectionService _multipleAggregateProjectionService;
@@ -15,7 +15,7 @@ public class CreateClientHandler : CreateAggregateCommandHandlerBase<Client, Cre
         _multipleAggregateProjectionService = multipleAggregateProjectionService;
     }
 
-    protected override async Task<Client> CreateAggregateAsync(CreateClient command)
+    protected override async Task ExecCreateCommandAsync(Client aggregate, CreateClient command)
     {
         // Check if branch exists
         var branchDto = await _singleAggregateService.GetAggregateDtoAsync<Branch, BranchContents>(command.BranchId);
@@ -31,6 +31,6 @@ public class CreateClientHandler : CreateAggregateCommandHandlerBase<Client, Cre
             throw new SekibanEmailAlreadyRegistered();
         }
 
-        return new Client(command.BranchId, command.ClientName, command.ClientEmail);
+        aggregate.CreateClient(command.BranchId, command.ClientName, command.ClientEmail);
     }
 }

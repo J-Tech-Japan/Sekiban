@@ -7,13 +7,11 @@ public class SnapshotManager : TransferableAggregateBase<SnapshotManagerContents
     private const int SnapshotCount = 40;
     private const int SnapshotTakeOffset = 15;
     public static Guid SharedId { get; } = Guid.NewGuid();
-    public SnapshotManager(Guid aggregateId) : base(aggregateId) { }
-    public SnapshotManager(Guid aggregateId, DateTime createdAt) : base(aggregateId)
+    public void Created(DateTime createdAt)
     {
-        AddAndApplyEvent(new SnapshotManagerCreated(aggregateId, createdAt));
+        AddAndApplyEvent(new SnapshotManagerCreated(createdAt));
     }
     public void ReportAggregateVersion(
-        Guid snapshotManagerId,
         Type aggregateType,
         Guid targetAggregateId,
         int version,
@@ -27,19 +25,17 @@ public class SnapshotManager : TransferableAggregateBase<SnapshotManagerContents
         var key = SnapshotKey(aggregateType.Name, targetAggregateId, nextSnapshotVersion);
         if (!Contents.Requests.Contains(key) && !Contents.RequestTakens.Contains(key))
         {
-            AddAndApplyEvent(
-                new SnapshotManagerRequestAdded(snapshotManagerId, aggregateType.Name, targetAggregateId, nextSnapshotVersion, snapshotVersion));
+            AddAndApplyEvent(new SnapshotManagerRequestAdded(aggregateType.Name, targetAggregateId, nextSnapshotVersion, snapshotVersion));
         }
         if (Contents.Requests.Contains(key) && !Contents.RequestTakens.Contains(key) && offset > snapshotOffset)
         {
-            AddAndApplyEvent(
-                new SnapshotManagerSnapshotTaken(snapshotManagerId, aggregateType.Name, targetAggregateId, nextSnapshotVersion, snapshotVersion));
+            AddAndApplyEvent(new SnapshotManagerSnapshotTaken(aggregateType.Name, targetAggregateId, nextSnapshotVersion, snapshotVersion));
         }
     }
     private static string SnapshotKey(string aggregateTypeName, Guid targetAggregateId, int nextSnapshotVersion) =>
         $"{aggregateTypeName}_{targetAggregateId.ToString()}_{nextSnapshotVersion}";
-    protected override Action? GetApplyEventAction(AggregateEvent ev) =>
-        ev switch
+    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload) =>
+        payload switch
         {
             SnapshotManagerCreated created => () =>
             {

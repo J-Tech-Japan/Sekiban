@@ -9,7 +9,7 @@ namespace SampleProjectStoryXTest;
 
 [Collection("Sequential")]
 public class SampleSingleAggregateTestBase<TAggregate, TContents> : SingleAggregateTestBase<TAggregate, TContents>
-    where TAggregate : TransferableAggregateBase<TContents> where TContents : IAggregateContents
+    where TAggregate : TransferableAggregateBase<TContents>, new() where TContents : IAggregateContents, new()
 {
 
     public override IServiceProvider SetupService()

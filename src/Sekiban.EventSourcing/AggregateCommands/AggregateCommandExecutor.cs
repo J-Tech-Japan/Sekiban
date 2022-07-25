@@ -22,13 +22,20 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         _userInformationFactory = userInformationFactory;
     }
     public async Task<AggregateCommandExecutorResponse<TContents, C>> ExecChangeCommandAsync<T, TContents, C>(
+        Guid aggregateId,
         C command,
         List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>
-        where TContents : IAggregateContents
+        where TContents : IAggregateContents, new()
         where C : ChangeAggregateCommandBase<T>
     {
-        var toReturn = new AggregateCommandExecutorResponse<TContents, C>(
-            new AggregateCommandDocument<C>(command, new AggregateIdPartitionKeyFactory(command.AggregateId, typeof(T)), callHistories));
+        AggregateDto<TContents>? aggregateDto = null;
+        var commandDocument
+            = new AggregateCommandDocument<C>(command, new AggregateIdPartitionKeyFactory(aggregateId, typeof(T)), callHistories)
+            {
+                ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
+            };
+        List<IAggregateEvent> events = new();
+
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(T));
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
         {
@@ -36,29 +43,28 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         }
         try
         {
-            toReturn.Command.ExecutedUser = _userInformationFactory.GetCurrentUserInformation();
             var handler = _serviceProvider.GetService(typeof(IChangeAggregateCommandHandler<T, C>)) as IChangeAggregateCommandHandler<T, C>;
             if (handler == null)
             {
                 throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
             }
-            var aggregate = await _singleAggregateService.GetAggregateAsync<T, TContents>(command.AggregateId);
+            var aggregate = await _singleAggregateService.GetAggregateAsync<T, TContents>(aggregateId);
             if (aggregate == null)
             {
                 throw new SekibanInvalidArgumentException();
             }
             aggregate.ResetEventsAndSnapshots();
-            var result = await handler.HandleAsync(toReturn.Command, aggregate);
-            toReturn.Command.AggregateId = result.Aggregate.AggregateId;
+            var result = await handler.HandleAsync(commandDocument, aggregate);
+            commandDocument = commandDocument with { AggregateId = result.Aggregate.AggregateId };
 
-            toReturn.AggregateDto = result.Aggregate.ToDto();
+            aggregateDto = result.Aggregate.ToDto();
             if (result.Aggregate.Events.Any())
             {
                 foreach (var ev in result.Aggregate.Events)
                 {
-                    ev.CallHistories.AddRange(toReturn.Command.GetCallHistoriesIncludesItself());
+                    ev.CallHistories.AddRange(commandDocument.GetCallHistoriesIncludesItself());
                 }
-                toReturn.Events.AddRange(result.Aggregate.Events);
+                events.AddRange(result.Aggregate.Events);
                 foreach (var ev in result.Aggregate.Events)
                 {
                     await _documentWriter.SaveAndPublishAggregateEvent(ev, typeof(T));
@@ -72,30 +78,38 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         }
         catch (Exception e)
         {
-            toReturn.Command.Exception = JsonConvert.SerializeObject(
-                e,
-                new JsonSerializerSettings { ReferenceLoopHandling = ReferenceLoopHandling.Ignore });
+            commandDocument = commandDocument with
+            {
+                Exception = JsonConvert.SerializeObject(e, new JsonSerializerSettings { ReferenceLoopHandling = ReferenceLoopHandling.Ignore })
+            };
             throw;
         }
         finally
         {
-            await _documentWriter.SaveAsync(toReturn.Command, typeof(T));
+            await _documentWriter.SaveAsync(commandDocument, typeof(T));
             if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
             {
                 _semaphoreInMemory.Release();
             }
         }
-        return toReturn;
+        return new AggregateCommandExecutorResponse<TContents, C>(commandDocument) { AggregateDto = aggregateDto, Events = events };
     }
 
     public async Task<AggregateCommandExecutorResponse<TContents, C>> ExecCreateCommandAsync<T, TContents, C>(
+        Guid aggregateId,
         C command,
-        List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>
-        where TContents : IAggregateContents
+        List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>, new()
+        where TContents : IAggregateContents, new()
         where C : ICreateAggregateCommand<T>
     {
-        var toReturn = new AggregateCommandExecutorResponse<TContents, C>(
-            new AggregateCommandDocument<C>(command, new CanNotUsePartitionKeyFactory(), callHistories));
+        AggregateDto<TContents>? aggregateDto = null;
+        var commandDocument
+            = new AggregateCommandDocument<C>(command, new CanNotUsePartitionKeyFactory(), callHistories)
+            {
+                ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
+            };
+        List<IAggregateEvent> events = new();
+
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(T));
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
         {
@@ -103,23 +117,27 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         }
         try
         {
-            toReturn.Command.ExecutedUser = _userInformationFactory.GetCurrentUserInformation();
             var handler = _serviceProvider.GetService(typeof(ICreateAggregateCommandHandler<T, C>)) as ICreateAggregateCommandHandler<T, C>;
             if (handler == null)
             {
                 throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
             }
-            var result = await handler.HandleAsync(toReturn.Command);
-            toReturn.Command.SetPartitionKey(new AggregateIdPartitionKeyFactory(result.Aggregate.AggregateId, typeof(T)));
-            toReturn.Command.AggregateId = result.Aggregate.AggregateId;
-            toReturn.AggregateDto = result.Aggregate.ToDto();
+            var aggregate = new T { AggregateId = aggregateId };
+
+            var result = await handler.HandleAsync(commandDocument, aggregate);
+            var partitionKeyFactory = new AggregateIdPartitionKeyFactory(result.Aggregate.AggregateId, typeof(T));
+            commandDocument = commandDocument with
+            {
+                PartitionKey = partitionKeyFactory.GetPartitionKey(commandDocument.DocumentType), AggregateId = result.Aggregate.AggregateId
+            };
+            aggregateDto = result.Aggregate.ToDto();
             if (result.Aggregate.Events.Any())
             {
                 foreach (var ev in result.Aggregate.Events)
                 {
-                    ev.CallHistories.AddRange(toReturn.Command.GetCallHistoriesIncludesItself());
+                    ev.CallHistories.AddRange(commandDocument.GetCallHistoriesIncludesItself());
                 }
-                toReturn.Events.AddRange(result.Aggregate.Events);
+                events.AddRange(result.Aggregate.Events);
                 foreach (var ev in result.Aggregate.Events)
                 {
                     await _documentWriter.SaveAndPublishAggregateEvent(ev, typeof(T));
@@ -133,19 +151,20 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         }
         catch (Exception e)
         {
-            toReturn.Command.Exception = JsonConvert.SerializeObject(
-                e,
-                new JsonSerializerSettings { ReferenceLoopHandling = ReferenceLoopHandling.Ignore });
+            commandDocument = commandDocument with
+            {
+                Exception = JsonConvert.SerializeObject(e, new JsonSerializerSettings { ReferenceLoopHandling = ReferenceLoopHandling.Ignore })
+            };
             throw;
         }
         finally
         {
-            await _documentWriter.SaveAsync(toReturn.Command, typeof(T));
+            await _documentWriter.SaveAsync(commandDocument, typeof(T));
             if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
             {
                 _semaphoreInMemory.Release();
             }
         }
-        return toReturn;
+        return new AggregateCommandExecutorResponse<TContents, C>(commandDocument) { AggregateDto = aggregateDto, Events = events };
     }
 }

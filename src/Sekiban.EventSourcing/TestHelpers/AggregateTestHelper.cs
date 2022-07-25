@@ -6,12 +6,12 @@ using Xunit;
 namespace Sekiban.EventSourcing.TestHelpers;
 
 public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<TAggregate, TContents>
-    where TAggregate : TransferableAggregateBase<TContents> where TContents : IAggregateContents
+    where TAggregate : TransferableAggregateBase<TContents>, new() where TContents : IAggregateContents, new()
 {
     private readonly IServiceProvider _serviceProvider;
     private TAggregate _aggregate { get; set; }
     private Exception? _latestException { get; set; }
-    private List<AggregateEvent> _latestEvents { get; set; } = new();
+    private List<IAggregateEvent> _latestEvents { get; set; } = new();
     private DefaultSingleAggregateProjector<TAggregate> _projector
     {
         get;
@@ -45,18 +45,25 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         _aggregate.ApplySnapshot(snapshot);
         return this;
     }
-    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateEvent ev)
+    public IAggregateTestHelper<TAggregate, TContents> Given(IAggregateEvent ev)
     {
         if (_aggregate.CanApplyEvent(ev)) { _aggregate.ApplyEvent(ev); }
         return this;
     }
-    public IAggregateTestHelper<TAggregate, TContents> Given(Func<TAggregate, AggregateEvent> evFunc)
+    public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(TEventPayload payload) where TEventPayload : IChangedEventPayload
+    {
+        var ev = AggregateEvent<TEventPayload>.ChangedEvent(_aggregate.AggregateId, payload, typeof(TAggregate));
+        if (_aggregate.CanApplyEvent(ev)) { _aggregate.ApplyEvent(ev); }
+
+        return this;
+    }
+    public IAggregateTestHelper<TAggregate, TContents> Given(Func<TAggregate, IAggregateEvent> evFunc)
     {
         var ev = evFunc(_aggregate);
         if (_aggregate.CanApplyEvent(ev)) { _aggregate.ApplyEvent(ev); }
         return this;
     }
-    public IAggregateTestHelper<TAggregate, TContents> Given(IEnumerable<AggregateEvent> events)
+    public IAggregateTestHelper<TAggregate, TContents> Given(IEnumerable<IAggregateEvent> events)
     {
         foreach (var ev in events)
         {
@@ -64,12 +71,12 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         }
         return this;
     }
-    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, AggregateEvent ev) =>
+    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IAggregateEvent ev) =>
         Given(snapshot).Given(ev);
-    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IEnumerable<AggregateEvent> ev) =>
+    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IEnumerable<IAggregateEvent> ev) =>
         Given(snapshot).Given(ev);
 
-    public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregate>
+    public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>(Guid aggregateId, C createCommand) where C : ICreateAggregateCommand<TAggregate>
     {
         ResetBeforeCommand();
         var handler
@@ -81,7 +88,8 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         var commandDocument = new AggregateCommandDocument<C>(createCommand, new CanNotUsePartitionKeyFactory());
         try
         {
-            var result = handler.HandleAsync(commandDocument).Result;
+            var aggregate = new TAggregate { AggregateId = aggregateId };
+            var result = handler.HandleAsync(commandDocument, aggregate).Result;
             _aggregate = result.Aggregate;
         }
         catch (Exception ex)
@@ -185,14 +193,21 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         return this;
     }
 
-    public IAggregateTestHelper<TAggregate, TContents> ThenEvents(Action<List<AggregateEvent>, TAggregate> checkEventsAction)
+    public IAggregateTestHelper<TAggregate, TContents> ThenEvents(Action<List<IAggregateEvent>, TAggregate> checkEventsAction)
     {
         checkEventsAction(_latestEvents, _aggregate);
         return this;
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenEvents(Action<List<AggregateEvent>> checkEventsAction)
+    public IAggregateTestHelper<TAggregate, TContents> ThenEvents(Action<List<IAggregateEvent>> checkEventsAction)
     {
         checkEventsAction(_latestEvents);
+        return this;
+    }
+    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEventPayload<T>(T payload) where T : IEventPayload
+    {
+        if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
+        Assert.IsType<AggregateEvent<T>>(_latestEvents.First());
+        Assert.Equal(_latestEvents.First().GetPayload(), payload);
         return this;
     }
     public IAggregateTestHelper<TAggregate, TContents> ThenState(Action<AggregateDto<TContents>, TAggregate> checkDtoAction)
@@ -205,7 +220,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         checkDtoAction(_aggregate.ToDto());
         return this;
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEvent<T>(Action<T, TAggregate> checkEventAction) where T : AggregateEvent
+    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEvent<T>(Action<T, TAggregate> checkEventAction) where T : IAggregateEvent
     {
         if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
         Assert.IsType<T>(_latestEvents.First());
@@ -213,7 +228,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         return this;
     }
 
-    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEvent<T>(Action<T> checkEventAction) where T : AggregateEvent
+    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEvent<T>(Action<T> checkEventAction) where T : IAggregateEvent
     {
         if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
         Assert.IsType<T>(_latestEvents.First());
@@ -221,7 +236,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         return this;
     }
 
-    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEvent<T>(Func<TAggregate, T> constructExpectedEvent) where T : AggregateEvent
+    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEvent<T>(Func<TAggregate, T> constructExpectedEvent) where T : IAggregateEvent
     {
         if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
         Assert.IsType<T>(_latestEvents.First());
@@ -265,6 +280,15 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
     }
     public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDto(ISingleAggregate dto) =>
         GivenEnvironmentDtos(new List<ISingleAggregate> { dto });
+    public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(Guid aggregateId, TEventPayload payload)
+        where TEventPayload : ICreatedEventPayload
+    {
+        var ev = AggregateEvent<TEventPayload>.CreatedEvent(aggregateId, payload, typeof(TAggregate));
+        if (_aggregate.CanApplyEvent(ev)) { _aggregate.ApplyEvent(ev); }
+        return this;
+    }
+    public IAggregateTestHelper<TAggregate, TContents> Given(IChangedEventPayload payload) =>
+        throw new NotImplementedException();
 
     private void CheckStateJSONSupports()
     {
@@ -290,14 +314,14 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
             Assert.Equal(json, json2);
         }
     }
-    public AggregateTestHelper<TAggregate, TContents> ThenSingleEvent(Action<AggregateEvent, TAggregate> checkEventAction)
+    public AggregateTestHelper<TAggregate, TContents> ThenSingleEvent(Action<IAggregateEvent, TAggregate> checkEventAction)
     {
         if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
         checkEventAction(_latestEvents.First(), _aggregate);
         return this;
     }
 
-    public AggregateTestHelper<TAggregate, TContents> ThenSingleEvent(Action<AggregateEvent> checkEventAction)
+    public AggregateTestHelper<TAggregate, TContents> ThenSingleEvent(Action<IAggregateEvent> checkEventAction)
     {
         if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
         checkEventAction(_latestEvents.First());
@@ -306,7 +330,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
 
     private void ResetBeforeCommand()
     {
-        _latestEvents = new List<AggregateEvent>();
+        _latestEvents = new List<IAggregateEvent>();
         _latestException = null;
     }
 }

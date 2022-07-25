@@ -27,7 +27,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
         Type originalType,
         string? partitionKey,
         string? sinceSortableUniqueId,
-        Action<IEnumerable<AggregateEvent>> resultAction)
+        Action<IEnumerable<IAggregateEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
@@ -103,7 +103,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
         Type multipleProjectionType,
         IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
-        Action<IEnumerable<AggregateEvent>> resultAction)
+        Action<IEnumerable<IAggregateEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multipleProjectionType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
@@ -143,7 +143,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
     public Task GetAllAggregateEventsForAggregateEventTypeAsync(
         Type originalType,
         string? sinceSortableUniqueId,
-        Action<IEnumerable<AggregateEvent>> resultAction)
+        Action<IEnumerable<IAggregateEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
@@ -168,7 +168,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
         }
         return await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(aggregateId, originalType, version);
     }
-    private void SaveAggregateEvents(List<AggregateEvent> aggregateEvents, Type originalType, string partitionKey, string sortableUniqueKey)
+    private void SaveAggregateEvents(List<IAggregateEvent> aggregateEvents, Type originalType, string partitionKey, string sortableUniqueKey)
     {
         _hybridStoreManager.AddPartitionKey(partitionKey, sortableUniqueKey);
         foreach (var aggregateEvent in aggregateEvents)

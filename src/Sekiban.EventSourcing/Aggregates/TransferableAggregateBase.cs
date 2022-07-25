@@ -2,37 +2,38 @@ using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace Sekiban.EventSourcing.Aggregates;
 
 public abstract class TransferableAggregateBase<TContents> : AggregateBase, ISingleAggregateProjectionDtoConvertible<AggregateDto<TContents>>
-    where TContents : IAggregateContents
+    where TContents : IAggregateContents, new()
 {
-    protected TContents Contents { get; set; }
-    public TransferableAggregateBase(Guid aggregateId) : base(aggregateId) { }
+    protected TContents Contents { get; set; } = new();
 
     public AggregateDto<TContents> ToDto() =>
         new(this, Contents);
 
     public void ApplySnapshot(AggregateDto<TContents> snapshot)
     {
-        Version = snapshot.Version;
-        LastEventId = snapshot.LastEventId;
-        LastSortableUniqueId = snapshot.LastSortableUniqueId;
-        AppliedSnapshotVersion = snapshot.Version;
-        IsDeleted = snapshot.IsDeleted;
+        _basicInfo.Version = snapshot.Version;
+        _basicInfo.LastEventId = snapshot.LastEventId;
+        _basicInfo.LastSortableUniqueId = snapshot.LastSortableUniqueId;
+        _basicInfo.AppliedSnapshotVersion = snapshot.Version;
+        _basicInfo.IsDeleted = snapshot.IsDeleted;
         CopyPropertiesFromSnapshot(snapshot);
     }
 
-    protected sealed override void AddAndApplyEvent(AggregateEvent ev)
+    protected sealed override void AddAndApplyEvent<TEventPayload>(TEventPayload eventPayload)
     {
-        if (GetApplyEventAction(ev) == null)
+        var ev = eventPayload is ICreatedEventPayload
+            ? AggregateEvent<TEventPayload>.CreatedEvent(AggregateId, eventPayload, GetType())
+            : AggregateEvent<TEventPayload>.ChangedEvent(AggregateId, eventPayload, GetType());
+
+        if (GetApplyEventAction(ev, eventPayload) == null)
         {
             throw new SekibanEventNotImplementedException();
         }
-
-        // Add Event
-        _events.Add(ev);
-
-        // Apply Event
+        // バージョンが変わる前に、イベントには現在のバージョンを入れて動かす
+        ev = ev with { Version = Version };
         ApplyEvent(ev);
-        ev.SetVersion(Version);
+        ev = ev with { Version = Version };
+        _basicInfo.Events.Add(ev);
     }
     protected void CopyPropertiesFromSnapshot(AggregateDto<TContents> snapshot)
     {

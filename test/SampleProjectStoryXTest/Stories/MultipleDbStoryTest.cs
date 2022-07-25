@@ -7,6 +7,7 @@ using Sekiban.EventSourcing.Documents;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Settings;
 using Sekiban.EventSourcing.TestHelpers;
+using System;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
@@ -43,13 +44,15 @@ public class MultipleDbStoryTest : TestBase
                 await cosmosDbFactory.DeleteAllFromAggregateEventContainer(AggregateContainerGroup.Default);
                 await cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.AggregateCommand);
             });
-
+        var branchId = Guid.NewGuid();
         // Default を明示的に指定して、１件データを作成
         await _sekibanContext.SekibanActionAsync(
             DefaultDb,
             async () =>
             {
-                await aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchContents, CreateBranch>(new CreateBranch("TEST"));
+                await aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchContents, CreateBranch>(
+                    branchId,
+                    new CreateBranch(branchId, "TEST"));
             });
 
         // Default で Listを取得すると1件取得
@@ -68,14 +71,23 @@ public class MultipleDbStoryTest : TestBase
             async () => await multipleAggregateProjectionService.GetAggregateList<Branch, BranchContents>());
         Assert.Empty(list);
 
+        var branchId1 = Guid.NewGuid();
+        var branchId2 = Guid.NewGuid();
+        var branchId3 = Guid.NewGuid();
         // Secondaryで3件データを作成
         await _sekibanContext.SekibanActionAsync(
             SecondaryDb,
             async () =>
             {
-                await aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchContents, CreateBranch>(new CreateBranch("JAPAN"));
-                await aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchContents, CreateBranch>(new CreateBranch("USA"));
-                await aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchContents, CreateBranch>(new CreateBranch("MEXICO"));
+                await aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchContents, CreateBranch>(
+                    branchId1,
+                    new CreateBranch(branchId1, "JAPAN"));
+                await aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchContents, CreateBranch>(
+                    branchId2,
+                    new CreateBranch(branchId2, "USA"));
+                await aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchContents, CreateBranch>(
+                    branchId3,
+                    new CreateBranch(branchId3, "MEXICO"));
             });
 
         // Default で Listを取得すると1件取得
