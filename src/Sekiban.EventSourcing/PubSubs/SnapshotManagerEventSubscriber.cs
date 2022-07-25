@@ -46,7 +46,6 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
             if (aggregate == null)
             {
                 await _aggregateCommandExecutor.ExecCreateCommandAsync<SnapshotManager, SnapshotManagerContents, CreateSnapshotManager>(
-                    SnapshotManager.SharedId,
                     new CreateSnapshotManager());
             }
 

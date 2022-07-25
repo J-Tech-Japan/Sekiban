@@ -1,8 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
+using Sekiban.EventSourcing.Shared;
 using Xunit;
-
 namespace Sekiban.EventSourcing.TestHelpers;
 
 public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<TAggregate, TContents>
@@ -76,7 +76,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
     public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IEnumerable<IAggregateEvent> ev) =>
         Given(snapshot).Given(ev);
 
-    public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>(Guid aggregateId, C createCommand) where C : ICreateAggregateCommand<TAggregate>
+    public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregate>
     {
         ResetBeforeCommand();
         var handler
@@ -85,6 +85,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         {
             throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
         }
+        var aggregateId = handler.GenerateAggregateId(createCommand);
         var commandDocument = new AggregateCommandDocument<C>(aggregateId, createCommand);
         try
         {
@@ -164,23 +165,6 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         try
         {
             action(_aggregate);
-        }
-        catch (Exception ex)
-        {
-            _latestException = ex;
-            return this;
-        }
-        _latestEvents = _aggregate.Events.ToList();
-        _aggregate.ResetEventsAndSnapshots();
-        CheckStateJSONSupports();
-        return this;
-    }
-    public IAggregateTestHelper<TAggregate, TContents> WhenConstructor(Func<TAggregate> aggregateFunc)
-    {
-        ResetBeforeCommand();
-        try
-        {
-            _aggregate = aggregateFunc();
         }
         catch (Exception ex)
         {
@@ -287,6 +271,23 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         if (_aggregate.CanApplyEvent(ev)) { _aggregate.ApplyEvent(ev); }
         return this;
     }
+    public IAggregateTestHelper<TAggregate, TContents> WhenConstructor(Func<TAggregate> aggregateFunc)
+    {
+        ResetBeforeCommand();
+        try
+        {
+            _aggregate = aggregateFunc();
+        }
+        catch (Exception ex)
+        {
+            _latestException = ex;
+            return this;
+        }
+        _latestEvents = _aggregate.Events.ToList();
+        _aggregate.ResetEventsAndSnapshots();
+        CheckStateJSONSupports();
+        return this;
+    }
     public IAggregateTestHelper<TAggregate, TContents> Given(IChangedEventPayload payload) =>
         throw new NotImplementedException();
 
@@ -297,8 +298,8 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         fromDto.ApplySnapshot(dto);
         var dtoFromSnapshot = fromDto.ToDto().GetComparableObject(dto);
         Assert.Equal(dto, dtoFromSnapshot);
-        var json = Shared.SekibanJsonHelper.Serialize(dto);
-        var dtoFromJson = Shared.SekibanJsonHelper.Deserialize<AggregateDto<TContents>>(json);
+        var json = SekibanJsonHelper.Serialize(dto);
+        var dtoFromJson = SekibanJsonHelper.Deserialize<AggregateDto<TContents>>(json);
         Assert.Equal(dto, dtoFromJson);
         CheckEventJsonCompatibility();
     }
@@ -308,9 +309,9 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         foreach (var ev in _latestEvents)
         {
             var type = ev.GetType();
-            var json = Shared.SekibanJsonHelper.Serialize(ev);
-            var eventFromJson = Shared.SekibanJsonHelper.Deserialize(json, type);
-            var json2 = Shared.SekibanJsonHelper.Serialize(eventFromJson);
+            var json = SekibanJsonHelper.Serialize(ev);
+            var eventFromJson = SekibanJsonHelper.Deserialize(json, type);
+            var json2 = SekibanJsonHelper.Serialize(eventFromJson);
             Assert.Equal(json, json2);
         }
     }

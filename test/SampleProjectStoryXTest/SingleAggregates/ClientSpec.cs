@@ -29,7 +29,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
         // CreateコマンドでBranchを参照するため、BranchDtoオブジェクトを参照ように渡す
         GivenEnvironmentDtos(new List<ISingleAggregate> { branchDto });
         // CreateClient コマンドを実行する
-        WhenCreate(clientId, new CreateClient(clientId, branchDto.AggregateId, testClientName, testEmail));
+        WhenCreate(new CreateClient(branchDto.AggregateId, testClientName, testEmail));
         // エラーとならない
         ThenNotThrowsAnException();
         // コマンドによって生成されたイベントを検証する
@@ -69,8 +69,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
         // CreateコマンドでBranchを参照するため、BranchDtoオブジェクトを参照ように渡す
         GivenEnvironmentDtos(new List<ISingleAggregate> { branchDto, clientDto });
         // CreateClient コマンドを実行する エラーになるはず
-        WhenCreate(clientId, new CreateClient(clientId, branchDto.AggregateId, testClientName, testEmail))
-            .ThenThrows<SekibanEmailAlreadyRegistered>();
+        WhenCreate(new CreateClient(branchDto.AggregateId, testClientName, testEmail)).ThenThrows<SekibanEmailAlreadyRegistered>();
     }
 
     [Fact(DisplayName = "イベントを渡してスタートする")]

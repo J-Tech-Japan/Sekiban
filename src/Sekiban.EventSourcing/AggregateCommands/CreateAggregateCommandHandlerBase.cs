@@ -9,6 +9,7 @@ public abstract class CreateAggregateCommandHandlerBase<T, C> : ICreateAggregate
         await ExecCreateCommandAsync(aggregate, command.Payload);
         return await Task.FromResult(new AggregateCommandResponse<T>(aggregate));
     }
+    public abstract Guid GenerateAggregateId(C command);
 
     protected abstract Task ExecCreateCommandAsync(T aggregate, C command);
 }

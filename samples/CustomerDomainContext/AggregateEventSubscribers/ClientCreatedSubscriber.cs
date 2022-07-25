@@ -13,7 +13,6 @@ public class ClientCreatedSubscriber : AggregateEventSubscriberBase<ClientCreate
     public override async Task SubscribeAggregateEventAsync(AggregateEvent<ClientCreated> ev)
     {
         await _aggregateCommandExecutor.ExecCreateCommandAsync<LoyaltyPoint, LoyaltyPointContents, CreateLoyaltyPoint>(
-            ev.AggregateId,
             new CreateLoyaltyPoint(ev.AggregateId, 0),
             ev.GetCallHistoriesIncludesItself());
     }

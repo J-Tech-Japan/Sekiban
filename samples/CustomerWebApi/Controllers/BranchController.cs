@@ -25,7 +25,7 @@ public class BranchController : Controller
     [HttpPost]
     public async Task<ActionResult<AggregateCommandExecutorResponse<BranchContents, CreateBranch>>> CreateAsync(CreateBranch command)
     {
-        var result = await _aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchContents, CreateBranch>(command.BranchId, command);
+        var result = await _aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchContents, CreateBranch>(command);
         return result;
     }
 
