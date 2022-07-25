@@ -126,23 +126,27 @@ public class CosmosDbFactory
             {
                 var query = container.GetItemLinqQueryable<IDocument>().Where(b => true);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition());
-                var todelete = new List<IDocument>();
+
+                var deleteItemIds = new List<(Guid id, string partitionKey)>();
                 while (feedIterator.HasMoreResults)
                 {
                     var response = await feedIterator.ReadNextAsync();
                     foreach (var item in response)
                     {
-                        if (Sekiban.EventSourcing.Shared.SekibanJsonHelper.ConvertTo<Document>(item) is not Document document)
+                        var id = Sekiban.EventSourcing.Shared.SekibanJsonHelper.GetValue<Guid>(item, nameof(IDocument.Id));
+                        var partitionKey = Sekiban.EventSourcing.Shared.SekibanJsonHelper.GetValue<string>(item, nameof(IDocument.PartitionKey));
+                        if (id is null || partitionKey is null)
                             continue;
 
-                        todelete.Add(document);
+                        deleteItemIds.Add((id, partitionKey));
                     }
                 }
                 var concurrencyTasks = new List<Task>();
-                foreach (var d in todelete)
+                foreach (var (id, partitionKey) in deleteItemIds)
                 {
-                    concurrencyTasks.Add(container.DeleteItemAsync<IDocument>(d.Id.ToString(), new PartitionKey(d.PartitionKey)));
+                    concurrencyTasks.Add(container.DeleteItemAsync<IDocument>(id.ToString(), new PartitionKey(partitionKey)));
                 }
+
                 await Task.WhenAll(concurrencyTasks);
                 return null;
             });
