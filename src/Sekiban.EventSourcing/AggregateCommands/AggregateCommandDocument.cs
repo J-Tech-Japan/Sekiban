@@ -8,7 +8,7 @@ public record AggregateCommandDocument<T> : IDocument, ICallHistories where T : 
     /// <summary>
     ///     コマンド内容
     /// </summary>
-    public T Payload { get; init; }
+    public T Payload { get; init; } = default!;
 
     /// <summary>
     ///     対象集約ID
@@ -28,7 +28,9 @@ public record AggregateCommandDocument<T> : IDocument, ICallHistories where T : 
     public string? Exception { get; init; } = null;
 
     [JsonConstructor]
-    protected AggregateCommandDocument() { }
+    protected AggregateCommandDocument()
+    { }
+    
     public AggregateCommandDocument(T payload, IPartitionKeyFactory partitionKeyFactory, List<CallHistory>? callHistories = null)
     {
         Id = Guid.NewGuid();

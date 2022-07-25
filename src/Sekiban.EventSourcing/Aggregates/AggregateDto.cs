@@ -4,12 +4,14 @@ namespace Sekiban.EventSourcing.Aggregates;
 
 public record AggregateDto<TContents> : ISingleAggregate where TContents : IAggregateContents
 {
-    public TContents Contents { get; init; }
+    public TContents Contents { get; init; } = default!;
 
     /// <summary>
     ///     スナップショットからの再構築用。
     /// </summary>
-    public AggregateDto() { }
+    public AggregateDto()
+    { }
+    
     /// <summary>
     ///     一般の構築用。
     /// </summary>

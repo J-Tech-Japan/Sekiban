@@ -6,6 +6,20 @@ namespace Sekiban.EventSourcing.Snapshots;
 
 public record SnapshotDocument : IDocument
 {
+    [JsonProperty("id")]
+    [DataMember]
+    public Guid Id { get; init; }
+    [DataMember]
+    public string PartitionKey { get; init; } = default!;
+
+    [DataMember]
+    public DocumentType DocumentType { get; init; }
+    [DataMember]
+    public string DocumentTypeName { get; init; } = null!;
+    [DataMember]
+    public DateTime TimeStamp { get; init; }
+    [DataMember]
+    public string SortableUniqueId { get; init; } = string.Empty;
 
     // jobjとしてはいるので変換が必要
     public dynamic? Snapshot { get; init; }
@@ -15,7 +29,8 @@ public record SnapshotDocument : IDocument
     public int SavedVersion { get; init; }
 
     [JsonConstructor]
-    public SnapshotDocument() { }
+    public SnapshotDocument()
+    { }
 
     public SnapshotDocument(
         IPartitionKeyFactory partitionKeyFactory,
@@ -38,20 +53,6 @@ public record SnapshotDocument : IDocument
         LastSortableUniqueId = lastSortableUniqueId;
         SavedVersion = savedVersion;
     }
-    [JsonProperty("id")]
-    [DataMember]
-    public Guid Id { get; init; }
-    [DataMember]
-    public string PartitionKey { get; init; }
-
-    [DataMember]
-    public DocumentType DocumentType { get; init; }
-    [DataMember]
-    public string DocumentTypeName { get; init; } = null!;
-    [DataMember]
-    public DateTime TimeStamp { get; init; }
-    [DataMember]
-    public string SortableUniqueId { get; init; } = string.Empty;
 
     public T? ToDto<T>() where T : ISingleAggregate
     {

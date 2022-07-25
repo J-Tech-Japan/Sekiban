@@ -5,10 +5,39 @@ namespace Sekiban.EventSourcing.AggregateEvents;
 [SekibanEventType]
 public record AggregateEvent<TEventPayload> : IAggregateEvent where TEventPayload : IEventPayload
 {
+    [JsonProperty("id")]
+    [DataMember]
+    public Guid Id { get; init; }
+
+    [DataMember]
+    public string PartitionKey { get; init; } = default!;
+
+    [DataMember]
+    public DocumentType DocumentType { get; init; }
+
+    [DataMember]
+    public string DocumentTypeName { get; init; } = null!;
+
+    [DataMember]
+    public DateTime TimeStamp { get; init; }
+
+    [DataMember]
+    public string SortableUniqueId { get; init; } = string.Empty;
+
+    [DataMember]
+    public Guid AggregateId { get; init; }
+
+    [DataMember]
+    public string AggregateType { get; init; } = null!;
 
     [DataMember]
     [JsonProperty]
-    public TEventPayload Payload { get; init; }
+    public TEventPayload Payload { get; init; } = default!;
+
+    [JsonConstructor]
+    protected AggregateEvent()
+    { }
+
     public AggregateEvent(Guid aggregateId, TEventPayload payload, Type aggregateTypeObject, bool isAggregateInitialEvent = false)
     {
         Id = Guid.NewGuid();
@@ -23,28 +52,6 @@ public record AggregateEvent<TEventPayload> : IAggregateEvent where TEventPayloa
         PartitionKey = partitionKeyFactory.GetPartitionKey(DocumentType);
         IsAggregateInitialEvent = isAggregateInitialEvent;
     }
-
-    [JsonConstructor]
-    protected AggregateEvent() { }
-
-    [JsonProperty("id")]
-    [DataMember]
-    public Guid Id { get; init; }
-    [DataMember]
-    public string PartitionKey { get; init; }
-
-    [DataMember]
-    public DocumentType DocumentType { get; init; }
-    [DataMember]
-    public string DocumentTypeName { get; init; } = null!;
-    [DataMember]
-    public DateTime TimeStamp { get; init; }
-    [DataMember]
-    public string SortableUniqueId { get; init; } = string.Empty;
-    [DataMember]
-    public Guid AggregateId { get; init; }
-    [DataMember]
-    public string AggregateType { get; init; } = null!;
 
     /// <summary>
     ///     集約のスタートイベントの場合はtrueにする。
