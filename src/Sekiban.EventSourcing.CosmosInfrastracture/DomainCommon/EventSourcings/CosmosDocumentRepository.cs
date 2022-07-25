@@ -1,7 +1,7 @@
 using Microsoft.Azure.Cosmos.Linq;
-using Newtonsoft.Json.Linq;
 using Sekiban.EventSourcing.Partitions.AggregateIdPartitions;
 using Sekiban.EventSourcing.Settings;
+
 namespace CosmosInfrastructure.DomainCommon.EventSourcings;
 
 public class CosmosDocumentRepository : IDocumentPersistentRepository
@@ -49,22 +49,13 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     foreach (var item in response)
                     {
                         // pick out one album
-                        if (item is not JObject jobj) { continue; }
-                        var typeName = jobj.GetValue(nameof(IDocument.DocumentTypeName))?.ToString();
-                        if (typeName == null)
-                        {
+                        if (Sekiban.EventSourcing.Shared.SekibanJsonHelper.GetValue<string>(item, nameof(IDocument.DocumentTypeName)) is not string typeName)
                             continue;
-                        }
-                        var baseType = typeof(AggregateEvent<>);
 
-                        var toAdd = _registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
-                            .Select(
-                                m =>
-                                {
-                                    var actualType = baseType.MakeGenericType(m);
-                                    return (IAggregateEvent?)jobj.ToObject(actualType);
-                                })
-                            .FirstOrDefault(m => m != null);
+                        var toAdd = _registeredEventTypes.RegisteredTypes
+                            .Where(m => m.Name == typeName)
+                            .Select(m => Sekiban.EventSourcing.Shared.SekibanJsonHelper.ConvertTo(item, typeof(AggregateEvent<>).MakeGenericType(m)) as IAggregateEvent)
+                            .FirstOrDefault(m => m is not null);
                         if (toAdd == null)
                         {
                             throw new SekibanUnregisterdEventFoundException();
@@ -179,15 +170,12 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     foreach (var item in response)
                     {
                         // pick out one album
-                        if (item is not JObject jobj)
-                        {
+                        if (Sekiban.EventSourcing.Shared.SekibanJsonHelper.GetValue<string>(item, nameof(IDocument.DocumentTypeName)) is not string typeName)
                             continue;
-                        }
-                        var typeName = jobj.GetValue(nameof(IDocument.DocumentTypeName))?.ToString();
-                        var baseType = typeof(AggregateEvent<>);
+
                         var toAdd = types.Where(m => m.Name == typeName)
-                            .Select(m => (IAggregateEvent?)jobj.ToObject(baseType.MakeGenericType(m)))
-                            .FirstOrDefault(m => m != null);
+                            .Select(m => Sekiban.EventSourcing.Shared.SekibanJsonHelper.ConvertTo(item, typeof(AggregateEvent<>).MakeGenericType(m)) as IAggregateEvent)
+                            .FirstOrDefault(m => m is not null);
                         if (toAdd == null)
                         {
                             throw new SekibanUnregisterdEventFoundException();
@@ -229,17 +217,12 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     foreach (var item in response)
                     {
                         // pick out one album
-                        if (item is not JObject jobj) { continue; }
-                        var typeName = jobj.GetValue(nameof(IDocument.DocumentTypeName))?.ToString();
-                        if (typeName == null)
-                        {
+                        if (Sekiban.EventSourcing.Shared.SekibanJsonHelper.GetValue<string>(item, nameof(IDocument.DocumentTypeName)) is not string typeName)
                             continue;
-                        }
 
-                        var baseType = typeof(AggregateEvent<>);
                         var toAdd = _registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
-                            .Select(m => (IAggregateEvent?)jobj.ToObject(baseType.MakeGenericType(m)))
-                            .FirstOrDefault(m => m != null);
+                            .Select(m => Sekiban.EventSourcing.Shared.SekibanJsonHelper.ConvertTo(item, typeof(AggregateEvent<>).MakeGenericType(m)) as IAggregateEvent)
+                            .FirstOrDefault(m => m is not null);
                         if (toAdd == null)
                         {
                             throw new SekibanUnregisterdEventFoundException();

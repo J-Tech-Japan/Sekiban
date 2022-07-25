@@ -1,14 +1,24 @@
-using Newtonsoft.Json;
-using System.Runtime.Serialization;
 namespace Sekiban.EventSourcing.AggregateCommands;
 
 public record AggregateCommandDocument<T> : IDocument, ICallHistories where T : IAggregateCommand
 {
+    [JsonPropertyName("id")]
+    public Guid Id { get; init; }
+
+    public string PartitionKey { get; init; } = string.Empty;
+
+    public DocumentType DocumentType { get; init; }
+
+    public string DocumentTypeName { get; init; } = null!;
+
+    public DateTime TimeStamp { get; init; }
+
+    public string SortableUniqueId { get; init; } = string.Empty;
 
     /// <summary>
     ///     コマンド内容
     /// </summary>
-    public T Payload { get; init; }
+    public T Payload { get; init; } = default!;
 
     /// <summary>
     ///     対象集約ID
@@ -27,8 +37,14 @@ public record AggregateCommandDocument<T> : IDocument, ICallHistories where T : 
     /// </summary>
     public string? Exception { get; init; } = null;
 
-    [JsonConstructor]
-    protected AggregateCommandDocument() { }
+    /// <summary>
+    ///     イベント、コマンドの呼び出し履歴
+    /// </summary>
+    public List<CallHistory> CallHistories { get; init; } = new();
+
+    public AggregateCommandDocument()
+    { }
+    
     public AggregateCommandDocument(T payload, IPartitionKeyFactory partitionKeyFactory, List<CallHistory>? callHistories = null)
     {
         Id = Guid.NewGuid();
@@ -41,25 +57,6 @@ public record AggregateCommandDocument<T> : IDocument, ICallHistories where T : 
         PartitionKey = partitionKeyFactory.GetPartitionKey(DocumentType);
         CallHistories = callHistories ?? new List<CallHistory>();
     }
-
-    /// <summary>
-    ///     イベント、コマンドの呼び出し履歴
-    /// </summary>
-    public List<CallHistory> CallHistories { get; init; } = new();
-    [JsonProperty("id")]
-    [DataMember]
-    public Guid Id { get; init; }
-    [DataMember]
-    public string PartitionKey { get; init; } = string.Empty;
-
-    [DataMember]
-    public DocumentType DocumentType { get; init; }
-    [DataMember]
-    public string DocumentTypeName { get; init; } = null!;
-    [DataMember]
-    public DateTime TimeStamp { get; init; }
-    [DataMember]
-    public string SortableUniqueId { get; init; } = string.Empty;
 
     public List<CallHistory> GetCallHistoriesIncludesItself()
     {

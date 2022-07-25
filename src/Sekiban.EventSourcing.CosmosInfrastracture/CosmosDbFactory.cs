@@ -2,8 +2,8 @@ using Microsoft.Azure.Cosmos.Linq;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Newtonsoft.Json.Linq;
 using Sekiban.EventSourcing.Settings;
+
 namespace CosmosInfrastructure;
 
 public class CosmosDbFactory
@@ -91,12 +91,7 @@ public class CosmosDbFactory
 
         var options = new CosmosClientOptions
         {
-            Serializer = new ESJsonSerializer(
-                new JsonSerializerSettings
-                {
-                    // TypeNameHandling = TypeNameHandling.Auto
-                    DateFormatString = "yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'", NullValueHandling = NullValueHandling.Ignore
-                }),
+            Serializer = new SekibanCosmosSerializer(),
             AllowBulkExecution = true,
             MaxRequestsPerTcpConnection = 50
         };
@@ -131,22 +126,27 @@ public class CosmosDbFactory
             {
                 var query = container.GetItemLinqQueryable<IDocument>().Where(b => true);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition());
-                var todelete = new List<IDocument>();
+
+                var deleteItemIds = new List<(Guid id, string partitionKey)>();
                 while (feedIterator.HasMoreResults)
                 {
                     var response = await feedIterator.ReadNextAsync();
                     foreach (var item in response)
                     {
-                        if (item == null) { continue; }
-                        if (item is not JObject jobj) { continue; }
-                        todelete.Add(jobj.ToObject<Document>() ?? throw new Exception());
+                        var id = Sekiban.EventSourcing.Shared.SekibanJsonHelper.GetValue<Guid>(item, nameof(IDocument.Id));
+                        var partitionKey = Sekiban.EventSourcing.Shared.SekibanJsonHelper.GetValue<string>(item, nameof(IDocument.PartitionKey));
+                        if (id is null || partitionKey is null)
+                            continue;
+
+                        deleteItemIds.Add((id, partitionKey));
                     }
                 }
                 var concurrencyTasks = new List<Task>();
-                foreach (var d in todelete)
+                foreach (var (id, partitionKey) in deleteItemIds)
                 {
-                    concurrencyTasks.Add(container.DeleteItemAsync<IDocument>(d.Id.ToString(), new PartitionKey(d.PartitionKey)));
+                    concurrencyTasks.Add(container.DeleteItemAsync<IDocument>(id.ToString(), new PartitionKey(partitionKey)));
                 }
+
                 await Task.WhenAll(concurrencyTasks);
                 return null;
             });

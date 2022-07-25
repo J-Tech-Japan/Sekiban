@@ -4,29 +4,6 @@ namespace Sekiban.EventSourcing.Aggregates;
 
 public record AggregateDto<TContents> : ISingleAggregate where TContents : IAggregateContents
 {
-    public TContents Contents { get; init; }
-
-    /// <summary>
-    ///     スナップショットからの再構築用。
-    /// </summary>
-    public AggregateDto() { }
-    /// <summary>
-    ///     一般の構築用。
-    /// </summary>
-    /// <param name="aggregate"></param>
-    public AggregateDto(IAggregate aggregate)
-    {
-        AggregateId = aggregate.AggregateId;
-        Version = aggregate.Version;
-        LastEventId = aggregate.LastEventId;
-        LastSortableUniqueId = aggregate.LastSortableUniqueId;
-        AppliedSnapshotVersion = aggregate.AppliedSnapshotVersion;
-        IsDeleted = aggregate.IsDeleted;
-    }
-
-    public AggregateDto(IAggregate aggregate, TContents contents) : this(aggregate) =>
-        Contents = contents;
-
     [Required]
     [Description("集約が削除済みかどうか")]
     public bool IsDeleted { get; init; }
@@ -50,6 +27,31 @@ public record AggregateDto<TContents> : ISingleAggregate where TContents : IAggr
     [Required]
     [Description("並べ替え可能なユニークID（自動付与）、このIDの順番でイベントは常に順番を決定する")]
     public string LastSortableUniqueId { get; init; } = string.Empty;
+
+    public TContents Contents { get; init; } = default!;
+
+    /// <summary>
+    ///     スナップショットからの再構築用。
+    /// </summary>
+    public AggregateDto()
+    { }
+    
+    /// <summary>
+    ///     一般の構築用。
+    /// </summary>
+    /// <param name="aggregate"></param>
+    public AggregateDto(IAggregate aggregate)
+    {
+        AggregateId = aggregate.AggregateId;
+        Version = aggregate.Version;
+        LastEventId = aggregate.LastEventId;
+        LastSortableUniqueId = aggregate.LastSortableUniqueId;
+        AppliedSnapshotVersion = aggregate.AppliedSnapshotVersion;
+        IsDeleted = aggregate.IsDeleted;
+    }
+
+    public AggregateDto(IAggregate aggregate, TContents contents) : this(aggregate) =>
+        Contents = contents;
 
     public dynamic GetComparableObject(AggregateDto<TContents> original, bool copyVersion = true) =>
         this with
