@@ -2,8 +2,8 @@ using Microsoft.Azure.Cosmos.Linq;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Newtonsoft.Json.Linq;
 using Sekiban.EventSourcing.Settings;
+
 namespace CosmosInfrastructure;
 
 public class CosmosDbFactory
@@ -91,12 +91,7 @@ public class CosmosDbFactory
 
         var options = new CosmosClientOptions
         {
-            Serializer = new ESJsonSerializer(
-                new JsonSerializerSettings
-                {
-                    // TypeNameHandling = TypeNameHandling.Auto
-                    DateFormatString = "yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'", NullValueHandling = NullValueHandling.Ignore
-                }),
+            Serializer = new SekibanCosmosSerializer(),
             AllowBulkExecution = true,
             MaxRequestsPerTcpConnection = 50
         };
@@ -137,9 +132,10 @@ public class CosmosDbFactory
                     var response = await feedIterator.ReadNextAsync();
                     foreach (var item in response)
                     {
-                        if (item == null) { continue; }
-                        if (item is not JObject jobj) { continue; }
-                        todelete.Add(jobj.ToObject<Document>() ?? throw new Exception());
+                        if (Sekiban.EventSourcing.Shared.SekibanJsonHelper.ConvertTo<Document>(item) is not Document document)
+                            continue;
+
+                        todelete.Add(document);
                     }
                 }
                 var concurrencyTasks = new List<Task>();

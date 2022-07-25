@@ -46,6 +46,15 @@ public static class SekibanJsonHelper
         return JsonSerializer.Deserialize<T>(jsonString, GetDefaultJsonSerializerOptions());
     }
 
+    public static object? ConvertTo(dynamic? jsonObj, Type returnType)
+    {
+        if (jsonObj is null)
+            return default;
+
+        var jsonString = Serialize(jsonObj);
+        return Deserialize(jsonString, returnType);
+    }
+
     public static T? ConvertTo<T>(dynamic? jsonObj)
     {
         if (jsonObj is null)
