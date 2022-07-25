@@ -35,7 +35,7 @@ public record AggregateCommandDocument<T> : DocumentBase, IDocument, ICallHistor
     
     public AggregateCommandDocument(
         Guid aggregateId,
-        T payload,
+        T commandPayload,
         List<CallHistory>? callHistories = null
     ) : base(
         partitionKey: PartitionKeyCreator.ForAggregateCommand(aggregateId),
@@ -43,7 +43,8 @@ public record AggregateCommandDocument<T> : DocumentBase, IDocument, ICallHistor
         documentTypeName: typeof(T).Name
     )
     {
-        Payload = payload;
+        Payload = commandPayload;
+        AggregateId = aggregateId;
         CallHistories = callHistories ?? new List<CallHistory>();
     }
 

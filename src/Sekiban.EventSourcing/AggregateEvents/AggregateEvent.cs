@@ -4,11 +4,11 @@ namespace Sekiban.EventSourcing.AggregateEvents;
 public record AggregateEvent<TEventPayload> : DocumentBase, IAggregateEvent
     where TEventPayload : IEventPayload
 {
+    public TEventPayload Payload { get; init; } = default!;
+
     public Guid AggregateId { get; init; }
 
     public string AggregateType { get; init; } = null!;
-
-    public TEventPayload Payload { get; init; } = default!;
 
     /// <summary>
     /// 集約のスタートイベントの場合はtrueにする。
@@ -28,7 +28,7 @@ public record AggregateEvent<TEventPayload> : DocumentBase, IAggregateEvent
     public AggregateEvent(
         Guid aggregateId,
         Type aggregateType,
-        TEventPayload payload,
+        TEventPayload eventPayload,
         bool isAggregateInitialEvent = false
     ) : base(
         partitionKey: PartitionKeyCreator.ForAggregateEvent(aggregateId, aggregateType),
@@ -36,9 +36,9 @@ public record AggregateEvent<TEventPayload> : DocumentBase, IAggregateEvent
         documentTypeName: typeof(TEventPayload).Name
     )
     {
+        Payload = eventPayload;
         AggregateId = aggregateId;
         AggregateType = aggregateType.Name;
-        Payload = payload;
         IsAggregateInitialEvent = isAggregateInitialEvent;
     }
 
@@ -63,9 +63,9 @@ public record AggregateEvent<TEventPayload> : DocumentBase, IAggregateEvent
         return histories;
     }
 
-    public static AggregateEvent<TEventPayload> CreatedEvent(Guid aggregateId, Type aggregateType, TEventPayload payload) =>
-        new(aggregateId, aggregateType, payload, true);
+    public static AggregateEvent<TEventPayload> CreatedEvent(Guid aggregateId, Type aggregateType, TEventPayload eventPayload) =>
+        new(aggregateId, aggregateType, eventPayload, true);
 
-    public static AggregateEvent<TEventPayload> ChangedEvent(Guid aggregateId, Type aggregateType, TEventPayload payload) =>
-        new(aggregateId, aggregateType, payload);
+    public static AggregateEvent<TEventPayload> ChangedEvent(Guid aggregateId, Type aggregateType, TEventPayload eventPayload) =>
+        new(aggregateId, aggregateType, eventPayload);
 }
