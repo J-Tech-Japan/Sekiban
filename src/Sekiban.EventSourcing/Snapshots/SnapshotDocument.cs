@@ -17,7 +17,6 @@ public record SnapshotDocument : IDocument
 
     public string SortableUniqueId { get; init; } = string.Empty;
 
-    // jobjとしてはいるので変換が必要
     public dynamic? Snapshot { get; init; }
     public Guid AggregateId { get; init; }
     public Guid LastEventId { get; init; }
@@ -52,6 +51,6 @@ public record SnapshotDocument : IDocument
 
     public T? ToDto<T>() where T : ISingleAggregate
     {
-        return Shared.SekibanJsonHelper.Deserialize<T>(Snapshot);
+        return Shared.SekibanJsonHelper.ConvertTo<T>(Snapshot);
     }
 }

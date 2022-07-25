@@ -1,8 +1,4 @@
-﻿using System.Text.Json;
-using System.Text.Json.Nodes;
-using System.Text.Json.Serialization;
-
-namespace Sekiban.EventSourcing.Shared;
+﻿namespace Sekiban.EventSourcing.Shared;
 
 public static class SekibanJsonHelper
 {
@@ -46,13 +42,13 @@ public static class SekibanJsonHelper
         return JsonSerializer.Deserialize<T>(jsonString, GetDefaultJsonSerializerOptions());
     }
 
-    public static object? ConvertTo(dynamic? jsonObj, Type returnType)
+    public static object? ConvertTo(dynamic? jsonObj, Type convertionType)
     {
         if (jsonObj is null)
             return default;
 
         var jsonString = Serialize(jsonObj);
-        return Deserialize(jsonString, returnType);
+        return Deserialize(jsonString, convertionType);
     }
 
     public static T? ConvertTo<T>(dynamic? jsonObj)

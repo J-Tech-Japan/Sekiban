@@ -42,7 +42,7 @@ public record AggregateCommandDocument<T> : IDocument, ICallHistories where T : 
     /// </summary>
     public List<CallHistory> CallHistories { get; init; } = new();
 
-    protected AggregateCommandDocument()
+    public AggregateCommandDocument()
     { }
     
     public AggregateCommandDocument(T payload, IPartitionKeyFactory partitionKeyFactory, List<CallHistory>? callHistories = null)

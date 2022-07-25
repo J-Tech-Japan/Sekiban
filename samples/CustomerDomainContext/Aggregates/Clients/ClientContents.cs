@@ -5,7 +5,8 @@ public record ClientContents : IAggregateContents
     public Guid BranchId { get; init; }
     public string ClientName { get; init; } = default!;
     public string ClientEmail { get; init; } = default!;
-    
+
+    [System.Text.Json.Serialization.JsonConstructor]
     public ClientContents()
     { }
     

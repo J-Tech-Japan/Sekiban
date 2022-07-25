@@ -34,8 +34,7 @@ public record AggregateEvent<TEventPayload> : IAggregateEvent where TEventPayloa
 
     public List<CallHistory> CallHistories { get; init; } = new();
 
-    [JsonConstructor]
-    protected AggregateEvent()
+    public AggregateEvent()
     { }
 
     public AggregateEvent(Guid aggregateId, TEventPayload payload, Type aggregateTypeObject, bool isAggregateInitialEvent = false)
@@ -62,6 +61,7 @@ public record AggregateEvent<TEventPayload> : IAggregateEvent where TEventPayloa
             Id = original.Id,
             TimeStamp = original.TimeStamp
         };
+
     public IEventPayload GetPayload() =>
         Payload;
 
