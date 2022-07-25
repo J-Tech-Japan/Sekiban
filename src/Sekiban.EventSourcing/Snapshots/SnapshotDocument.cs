@@ -23,7 +23,6 @@ public record SnapshotDocument : IDocument
     public string LastSortableUniqueId { get; init; } = string.Empty;
     public int SavedVersion { get; init; }
 
-    [JsonConstructor]
     public SnapshotDocument()
     { }
 
