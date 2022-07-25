@@ -78,7 +78,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
     {
         var branchId = Guid.NewGuid();
         var clientId = Guid.NewGuid();
-        Given(AggregateEvent<ClientCreated>.CreatedEvent(clientId, new ClientCreated(branchId, testClientName, testEmail), typeof(Client)))
+        Given(AggregateEvent<ClientCreated>.CreatedEvent(clientId, typeof(Client), new ClientCreated(branchId, testClientName, testEmail)))
             .Given(new ClientNameChanged(testClientChangedName))
             .WhenMethod(client => client.ChangeClientName(testClientChangedNameV3))
             // コマンドによって生成されたイベントを検証する

@@ -29,8 +29,8 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         where C : ChangeAggregateCommandBase<T>
     {
         AggregateDto<TContents>? aggregateDto = null;
-        var commandDocument
-            = new AggregateCommandDocument<C>(command, new AggregateIdPartitionKeyFactory(aggregateId, typeof(T)), callHistories)
+        var commandDocument =
+            new AggregateCommandDocument<C>(aggregateId, command, callHistories)
             {
                 ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
             };
@@ -103,8 +103,8 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         where C : ICreateAggregateCommand<T>
     {
         AggregateDto<TContents>? aggregateDto = null;
-        var commandDocument
-            = new AggregateCommandDocument<C>(command, new CanNotUsePartitionKeyFactory(), callHistories)
+        var commandDocument =
+            new AggregateCommandDocument<C>(aggregateId, command, callHistories)
             {
                 ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
             };
@@ -125,11 +125,6 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
             var aggregate = new T { AggregateId = aggregateId };
 
             var result = await handler.HandleAsync(commandDocument, aggregate);
-            var partitionKeyFactory = new AggregateIdPartitionKeyFactory(result.Aggregate.AggregateId, typeof(T));
-            commandDocument = commandDocument with
-            {
-                PartitionKey = partitionKeyFactory.GetPartitionKey(commandDocument.DocumentType), AggregateId = result.Aggregate.AggregateId
-            };
             aggregateDto = result.Aggregate.ToDto();
             if (result.Aggregate.Events.Any())
             {

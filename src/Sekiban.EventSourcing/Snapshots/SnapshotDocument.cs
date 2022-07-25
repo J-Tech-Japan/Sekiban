@@ -2,45 +2,34 @@ using Sekiban.EventSourcing.Queries.SingleAggregates;
 
 namespace Sekiban.EventSourcing.Snapshots;
 
-public record SnapshotDocument : IDocument
+public record SnapshotDocument : DocumentBase, IDocument
 {
-    [JsonPropertyName("id")]
-    public Guid Id { get; init; }
-
-    public string PartitionKey { get; init; } = default!;
-
-    public DocumentType DocumentType { get; init; }
-
-    public string DocumentTypeName { get; init; } = null!;
-
-    public DateTime TimeStamp { get; init; }
-
-    public string SortableUniqueId { get; init; } = string.Empty;
-
     public dynamic? Snapshot { get; init; }
+
     public Guid AggregateId { get; init; }
+
     public Guid LastEventId { get; init; }
+
     public string LastSortableUniqueId { get; init; } = string.Empty;
+
     public int SavedVersion { get; init; }
 
     public SnapshotDocument()
     { }
 
     public SnapshotDocument(
-        IPartitionKeyFactory partitionKeyFactory,
-        string? aggregateTypeName,
-        ISingleAggregate dtoToSnapshot,
         Guid aggregateId,
+        Type aggregateType,
+        ISingleAggregate dtoToSnapshot,
         Guid lastEventId,
         string lastSortableUniqueId,
-        int savedVersion)
+        int savedVersion
+    ) : base(
+        partitionKey: PartitionKeyCreator.ForAggregateSnapshot(aggregateId, aggregateType),
+        documentType: DocumentType.AggregateSnapshot,
+        documentTypeName: aggregateType.Name ?? string.Empty
+    )
     {
-        Id = Guid.NewGuid();
-        DocumentType = DocumentType.AggregateSnapshot;
-        DocumentTypeName = aggregateTypeName ?? string.Empty;
-        TimeStamp = DateTime.UtcNow;
-        SortableUniqueId = SortableUniqueIdGenerator.Generate(TimeStamp, Id);
-        PartitionKey = partitionKeyFactory.GetPartitionKey(DocumentType);
         Snapshot = dtoToSnapshot;
         AggregateId = aggregateId;
         LastEventId = lastEventId;

@@ -52,7 +52,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
     }
     public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(TEventPayload payload) where TEventPayload : IChangedEventPayload
     {
-        var ev = AggregateEvent<TEventPayload>.ChangedEvent(_aggregate.AggregateId, payload, typeof(TAggregate));
+        var ev = AggregateEvent<TEventPayload>.ChangedEvent(_aggregate.AggregateId, typeof(TAggregate), payload);
         if (_aggregate.CanApplyEvent(ev)) { _aggregate.ApplyEvent(ev); }
 
         return this;
@@ -85,7 +85,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         {
             throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
         }
-        var commandDocument = new AggregateCommandDocument<C>(createCommand, new CanNotUsePartitionKeyFactory());
+        var commandDocument = new AggregateCommandDocument<C>(aggregateId, createCommand);
         try
         {
             var aggregate = new TAggregate { AggregateId = aggregateId };
@@ -107,7 +107,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         return this;
     }
 
-    public IAggregateTestHelper<TAggregate, TContents> WhenChange<C>(C createCommand) where C : ChangeAggregateCommandBase<TAggregate>
+    public IAggregateTestHelper<TAggregate, TContents> WhenChange<C>(C changeCommand) where C : ChangeAggregateCommandBase<TAggregate>
     {
         ResetBeforeCommand();
         var handler
@@ -116,7 +116,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         {
             throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
         }
-        var commandDocument = new AggregateCommandDocument<C>(createCommand, new CanNotUsePartitionKeyFactory());
+        var commandDocument = new AggregateCommandDocument<C>(_aggregate.AggregateId, changeCommand);
         try
         {
             handler.HandleAsync(commandDocument, _aggregate).Wait();
@@ -141,7 +141,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
             throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
         }
         var command = commandFunc(_aggregate);
-        var commandDocument = new AggregateCommandDocument<C>(command, new CanNotUsePartitionKeyFactory());
+        var commandDocument = new AggregateCommandDocument<C>(_aggregate.AggregateId, command);
         try
         {
             handler.HandleAsync(commandDocument, _aggregate).Wait();
@@ -283,7 +283,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
     public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(Guid aggregateId, TEventPayload payload)
         where TEventPayload : ICreatedEventPayload
     {
-        var ev = AggregateEvent<TEventPayload>.CreatedEvent(aggregateId, payload, typeof(TAggregate));
+        var ev = AggregateEvent<TEventPayload>.CreatedEvent(aggregateId, typeof(TAggregate), payload);
         if (_aggregate.CanApplyEvent(ev)) { _aggregate.ApplyEvent(ev); }
         return this;
     }

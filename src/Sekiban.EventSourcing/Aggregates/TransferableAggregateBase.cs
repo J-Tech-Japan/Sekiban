@@ -22,8 +22,8 @@ public abstract class TransferableAggregateBase<TContents> : AggregateBase, ISin
     protected sealed override void AddAndApplyEvent<TEventPayload>(TEventPayload eventPayload)
     {
         var ev = eventPayload is ICreatedEventPayload
-            ? AggregateEvent<TEventPayload>.CreatedEvent(AggregateId, eventPayload, GetType())
-            : AggregateEvent<TEventPayload>.ChangedEvent(AggregateId, eventPayload, GetType());
+            ? AggregateEvent<TEventPayload>.CreatedEvent(AggregateId, GetType(), eventPayload)
+            : AggregateEvent<TEventPayload>.ChangedEvent(AggregateId, GetType(), eventPayload);
 
         if (GetApplyEventAction(ev, eventPayload) == null)
         {
