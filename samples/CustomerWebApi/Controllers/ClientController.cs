@@ -50,7 +50,7 @@ public class ClientController : Controller
     [HttpPost]
     public async Task<IActionResult> CreateAsync([FromBody] CreateClient command)
     {
-        var createdResult = await _aggregateCommandExecutor.ExecCreateCommandAsync<Client, ClientContents, CreateClient>(command.ClientId, command);
+        var createdResult = await _aggregateCommandExecutor.ExecCreateCommandAsync<Client, ClientContents, CreateClient>(command);
         return Ok(createdResult);
     }
 

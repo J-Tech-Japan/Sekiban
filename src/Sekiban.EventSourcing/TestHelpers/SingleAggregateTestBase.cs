@@ -36,9 +36,9 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposab
         _helper.Given(snapshot, ev);
     public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IEnumerable<IAggregateEvent> ev) =>
         _helper.Given(snapshot, ev);
-    public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>(Guid aggregateId, C createCommand)
+    public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>( C createCommand)
         where C : ICreateAggregateCommand<TAggregate> =>
-        _helper.WhenCreate(aggregateId, createCommand);
+        _helper.WhenCreate(createCommand);
     public IAggregateTestHelper<TAggregate, TContents> WhenChange<C>(C changeCommand) where C : ChangeAggregateCommandBase<TAggregate> =>
         _helper.WhenChange(changeCommand);
     public IAggregateTestHelper<TAggregate, TContents> WhenChange<C>(Func<TAggregate, C> commandFunc)

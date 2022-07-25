@@ -1,5 +1,5 @@
 using Sekiban.EventSourcing.Queries.SingleAggregates;
-
+using Sekiban.EventSourcing.Shared;
 namespace Sekiban.EventSourcing.AggregateCommands;
 
 public class AggregateCommandExecutor : IAggregateCommandExecutor
@@ -29,8 +29,8 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         where C : ChangeAggregateCommandBase<T>
     {
         AggregateDto<TContents>? aggregateDto = null;
-        var commandDocument =
-            new AggregateCommandDocument<C>(aggregateId, command, callHistories)
+        var commandDocument
+            = new AggregateCommandDocument<C>(aggregateId, command, callHistories)
             {
                 ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
             };
@@ -78,10 +78,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         }
         catch (Exception e)
         {
-            commandDocument = commandDocument with
-            {
-                Exception = Shared.SekibanJsonHelper.Serialize(e)
-            };
+            commandDocument = commandDocument with { Exception = SekibanJsonHelper.Serialize(e) };
             throw;
         }
         finally
@@ -96,15 +93,14 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
     }
 
     public async Task<AggregateCommandExecutorResponse<TContents, C>> ExecCreateCommandAsync<T, TContents, C>(
-        Guid aggregateId,
         C command,
         List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>, new()
         where TContents : IAggregateContents, new()
         where C : ICreateAggregateCommand<T>
     {
         AggregateDto<TContents>? aggregateDto = null;
-        var commandDocument =
-            new AggregateCommandDocument<C>(aggregateId, command, callHistories)
+        var commandDocument
+            = new AggregateCommandDocument<C>(Guid.Empty, command, callHistories)
             {
                 ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
             };
@@ -122,6 +118,12 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
             {
                 throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
             }
+            var aggregateId = handler.GenerateAggregateId(command);
+            commandDocument
+                = new AggregateCommandDocument<C>(aggregateId, command, callHistories)
+                {
+                    ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
+                };
             var aggregate = new T { AggregateId = aggregateId };
 
             var result = await handler.HandleAsync(commandDocument, aggregate);
@@ -146,10 +148,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         }
         catch (Exception e)
         {
-            commandDocument = commandDocument with
-            {
-                Exception = Shared.SekibanJsonHelper.Serialize(e)
-            };
+            commandDocument = commandDocument with { Exception = SekibanJsonHelper.Serialize(e) };
             throw;
         }
         finally

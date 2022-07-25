@@ -16,7 +16,7 @@ public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : 
     public IAggregateTestHelper<TAggregate, TContents> Given(IEnumerable<IAggregateEvent> events);
     public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IAggregateEvent ev);
     public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IEnumerable<IAggregateEvent> ev);
-    public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>(Guid aggregateId, C createCommand) where C : ICreateAggregateCommand<TAggregate>;
+    public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregate>;
     public IAggregateTestHelper<TAggregate, TContents> WhenChange<C>(C changeCommand) where C : ChangeAggregateCommandBase<TAggregate>;
     public IAggregateTestHelper<TAggregate, TContents> WhenChange<C>(Func<TAggregate, C> commandFunc)
         where C : ChangeAggregateCommandBase<TAggregate>;
