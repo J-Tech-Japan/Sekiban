@@ -1,8 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
-using Newtonsoft.Json;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Xunit;
+
 namespace Sekiban.EventSourcing.TestHelpers;
 
 public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<TAggregate, TContents>
@@ -297,8 +297,8 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         fromDto.ApplySnapshot(dto);
         var dtoFromSnapshot = fromDto.ToDto().GetComparableObject(dto);
         Assert.Equal(dto, dtoFromSnapshot);
-        var json = JsonConvert.SerializeObject(dto);
-        var dtoFromJson = JsonConvert.DeserializeObject<AggregateDto<TContents>>(json);
+        var json = Shared.SekibanJsonHelper.Serialize(dto);
+        var dtoFromJson = Shared.SekibanJsonHelper.Deserialize<AggregateDto<TContents>>(json);
         Assert.Equal(dto, dtoFromJson);
         CheckEventJsonCompatibility();
     }
@@ -308,9 +308,9 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         foreach (var ev in _latestEvents)
         {
             var type = ev.GetType();
-            var json = JsonConvert.SerializeObject(ev);
-            var eventFromJson = JsonConvert.DeserializeObject(json, type);
-            var json2 = JsonConvert.SerializeObject(eventFromJson);
+            var json = Shared.SekibanJsonHelper.Serialize(ev);
+            var eventFromJson = Shared.SekibanJsonHelper.Deserialize(json, type);
+            var json2 = Shared.SekibanJsonHelper.Serialize(eventFromJson);
             Assert.Equal(json, json2);
         }
     }

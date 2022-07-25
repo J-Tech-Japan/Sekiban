@@ -1,38 +1,38 @@
-using Newtonsoft.Json;
-using System.Runtime.Serialization;
 namespace Sekiban.EventSourcing.AggregateEvents;
 
 [SekibanEventType]
 public record AggregateEvent<TEventPayload> : IAggregateEvent where TEventPayload : IEventPayload
 {
-    [JsonProperty("id")]
-    [DataMember]
+    [JsonPropertyName("id")]
     public Guid Id { get; init; }
 
-    [DataMember]
     public string PartitionKey { get; init; } = default!;
 
-    [DataMember]
     public DocumentType DocumentType { get; init; }
 
-    [DataMember]
     public string DocumentTypeName { get; init; } = null!;
 
-    [DataMember]
     public DateTime TimeStamp { get; init; }
 
-    [DataMember]
     public string SortableUniqueId { get; init; } = string.Empty;
 
-    [DataMember]
     public Guid AggregateId { get; init; }
 
-    [DataMember]
     public string AggregateType { get; init; } = null!;
 
-    [DataMember]
-    [JsonProperty]
     public TEventPayload Payload { get; init; } = default!;
+
+    /// <summary>
+    ///     集約のスタートイベントの場合はtrueにする。
+    /// </summary>
+    public bool IsAggregateInitialEvent { get; init; }
+
+    /// <summary>
+    ///     集約のイベント適用後のバージョン
+    /// </summary>
+    public int Version { get; init; }
+
+    public List<CallHistory> CallHistories { get; init; } = new();
 
     [JsonConstructor]
     protected AggregateEvent()
@@ -53,21 +53,6 @@ public record AggregateEvent<TEventPayload> : IAggregateEvent where TEventPayloa
         IsAggregateInitialEvent = isAggregateInitialEvent;
     }
 
-    /// <summary>
-    ///     集約のスタートイベントの場合はtrueにする。
-    /// </summary>
-    [DataMember]
-    public bool IsAggregateInitialEvent { get; init; }
-
-    /// <summary>
-    ///     集約のイベント適用後のバージョン
-    /// </summary>
-    [DataMember]
-    public int Version { get; init; }
-
-    [DataMember]
-    public List<CallHistory> CallHistories { get; init; } = new();
-
     public dynamic GetComparableObject(IAggregateEvent original, bool copyVersion = true) =>
         this with
         {
@@ -82,6 +67,7 @@ public record AggregateEvent<TEventPayload> : IAggregateEvent where TEventPayloa
 
     public static AggregateEvent<TEventPayload> CreatedEvent(Guid aggregateId, TEventPayload payload, Type aggregateType) =>
         new(aggregateId, payload, aggregateType, true);
+
     public static AggregateEvent<TEventPayload> ChangedEvent(Guid aggregateId, TEventPayload payload, Type aggregateType) =>
         new(aggregateId, payload, aggregateType);
 
