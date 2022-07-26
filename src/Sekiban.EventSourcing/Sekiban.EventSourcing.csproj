@@ -5,13 +5,13 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>JJ_Sekiban.EventSourcing</PackageId>
-        <Version>0.4.8</Version>
+        <Version>0.4.9</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Core</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.4.8</PackageVersion>
-        <Description>テストフレームワークの効率化</Description>
+        <PackageVersion>0.4.9</PackageVersion>
+        <Description>テストフレームワークの効率化 GivenEnvironmentDtoContents</Description>
 
     </PropertyGroup>
 

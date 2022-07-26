@@ -40,6 +40,11 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
 
         return this;
     }
+    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtoContents<DAggregate, DAggregateContents>(
+        Guid aggregateId,
+        DAggregateContents contents) where DAggregate : TransferableAggregateBase<DAggregateContents>, new()
+        where DAggregateContents : IAggregateContents, new() =>
+        GivenEnvironmentDto(new AggregateDto<DAggregateContents>(new DAggregate { AggregateId = aggregateId }, contents) { Version = 1 });
     public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot)
     {
         _aggregate.ApplySnapshot(snapshot);
@@ -52,7 +57,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
     }
     public IAggregateTestHelper<TAggregate, TContents> Given(Guid aggregateId, TContents contents)
     {
-        Given(new AggregateDto<TContents>(new TAggregate { AggregateId = aggregateId }, contents));
+        Given(new AggregateDto<TContents>(new TAggregate { AggregateId = aggregateId }, contents) { Version = 1 });
         return this;
     }
     public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(TEventPayload payload) where TEventPayload : IChangedEventPayload
