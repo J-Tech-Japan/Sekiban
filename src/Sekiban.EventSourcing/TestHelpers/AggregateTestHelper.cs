@@ -191,7 +191,10 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
     {
         if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
         Assert.IsType<AggregateEvent<T>>(_latestEvents.First());
-        Assert.Equal(_latestEvents.First().GetPayload(), payload);
+
+        var actualJson = SekibanJsonHelper.Serialize(_latestEvents.First().GetPayload());
+        var expectedJson = SekibanJsonHelper.Serialize(payload);
+        Assert.Equal(actualJson, expectedJson);
         return this;
     }
     public IAggregateTestHelper<TAggregate, TContents> ThenState(Action<AggregateDto<TContents>, TAggregate> checkDtoAction)
@@ -227,14 +230,18 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         var actual = _latestEvents.First();
         var expected = constructExpectedEvent(_aggregate);
         expected = constructExpectedEvent(_aggregate).GetComparableObject(actual, expected.Version == 0);
-        Assert.Equal((T)actual, expected);
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(actualJson, expectedJson);
         return this;
     }
     public IAggregateTestHelper<TAggregate, TContents> ThenState(Func<TAggregate, AggregateDto<TContents>> constructExpectedDto)
     {
         var actual = _aggregate.ToDto();
         var expected = constructExpectedDto(_aggregate).GetComparableObject(actual);
-        Assert.Equal(actual, (AggregateDto<TContents>)expected);
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(actualJson, expectedJson);
         return this;
     }
 
@@ -297,10 +304,13 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         var fromDto = _projector.CreateInitialAggregate(dto.AggregateId);
         fromDto.ApplySnapshot(dto);
         var dtoFromSnapshot = fromDto.ToDto().GetComparableObject(dto);
-        Assert.Equal(dto, dtoFromSnapshot);
+        var actualJson = SekibanJsonHelper.Serialize(dto);
+        var expectedJson = SekibanJsonHelper.Serialize(dtoFromSnapshot);
+        Assert.Equal(actualJson, expectedJson);
         var json = SekibanJsonHelper.Serialize(dto);
         var dtoFromJson = SekibanJsonHelper.Deserialize<AggregateDto<TContents>>(json);
-        Assert.Equal(dto, dtoFromJson);
+        var dtoFromJsonJson = SekibanJsonHelper.Serialize(dtoFromJson);
+        Assert.Equal(json, dtoFromJsonJson);
         CheckEventJsonCompatibility();
     }
 
