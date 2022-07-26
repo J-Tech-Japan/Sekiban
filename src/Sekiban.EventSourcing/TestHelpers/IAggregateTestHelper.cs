@@ -9,6 +9,7 @@ public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : 
     public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDto(ISingleAggregate dto);
     public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot);
     public IAggregateTestHelper<TAggregate, TContents> Given(IAggregateEvent ev);
+    public IAggregateTestHelper<TAggregate, TContents> Given(Guid aggregateId, TContents contents);
     public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(Guid aggregateId, TEventPayload payload)
         where TEventPayload : ICreatedEventPayload;
     public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(TEventPayload payload) where TEventPayload : IChangedEventPayload;
@@ -21,7 +22,6 @@ public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : 
     public IAggregateTestHelper<TAggregate, TContents> WhenChange<C>(Func<TAggregate, C> commandFunc)
         where C : ChangeAggregateCommandBase<TAggregate>;
     public IAggregateTestHelper<TAggregate, TContents> WhenMethod(Action<TAggregate> action);
-
     public IAggregateTestHelper<TAggregate, TContents> ThenEvents(Action<List<IAggregateEvent>, TAggregate> checkEventsAction);
     public IAggregateTestHelper<TAggregate, TContents> ThenEvents(Action<List<IAggregateEvent>> checkEventsAction);
     public IAggregateTestHelper<TAggregate, TContents> ThenSingleEvent<T>(Action<T, TAggregate> checkEventAction) where T : IAggregateEvent;
@@ -32,6 +32,9 @@ public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : 
     public IAggregateTestHelper<TAggregate, TContents> ThenState(Action<AggregateDto<TContents>, TAggregate> checkDtoAction);
     public IAggregateTestHelper<TAggregate, TContents> ThenState(Action<AggregateDto<TContents>> checkDtoAction);
     public IAggregateTestHelper<TAggregate, TContents> ThenState(Func<TAggregate, AggregateDto<TContents>> constructExpectedDto);
+    public IAggregateTestHelper<TAggregate, TContents> ThenContents(TContents contents);
+    public IAggregateTestHelper<TAggregate, TContents> ThenContents(Func<TAggregate, TContents> constructExpectedDto);
+
     public IAggregateTestHelper<TAggregate, TContents> ThenThrows<T>() where T : Exception;
     public IAggregateTestHelper<TAggregate, TContents> ThenThrows<T>(Action<T> checkException) where T : Exception;
     public IAggregateTestHelper<TAggregate, TContents> ThenAggregateCheck(Action<TAggregate> checkAction);

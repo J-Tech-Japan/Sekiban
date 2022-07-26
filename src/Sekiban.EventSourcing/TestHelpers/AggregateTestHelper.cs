@@ -50,6 +50,11 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         if (_aggregate.CanApplyEvent(ev)) { _aggregate.ApplyEvent(ev); }
         return this;
     }
+    public IAggregateTestHelper<TAggregate, TContents> Given(Guid aggregateId, TContents contents)
+    {
+        Given(new AggregateDto<TContents>(new TAggregate { AggregateId = aggregateId }, contents));
+        return this;
+    }
     public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(TEventPayload payload) where TEventPayload : IChangedEventPayload
     {
         var ev = AggregateEvent<TEventPayload>.ChangedEvent(_aggregate.AggregateId, typeof(TAggregate), payload);
@@ -176,7 +181,6 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         CheckStateJSONSupports();
         return this;
     }
-
     public IAggregateTestHelper<TAggregate, TContents> ThenEvents(Action<List<IAggregateEvent>, TAggregate> checkEventsAction)
     {
         checkEventsAction(_latestEvents, _aggregate);
@@ -244,6 +248,24 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         Assert.Equal(actualJson, expectedJson);
         return this;
     }
+    public IAggregateTestHelper<TAggregate, TContents> ThenContents(TContents contents)
+    {
+        var actual = _aggregate.ToDto().Contents;
+        var expected = contents;
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(actualJson, expectedJson);
+        return this;
+    }
+    public IAggregateTestHelper<TAggregate, TContents> ThenContents(Func<TAggregate, TContents> constructExpectedDto)
+    {
+        var actual = _aggregate.ToDto().Contents;
+        var expected = constructExpectedDto(_aggregate);
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(actualJson, expectedJson);
+        return this;
+    }
 
     public IAggregateTestHelper<TAggregate, TContents> ThenThrows<T>() where T : Exception
     {
@@ -278,25 +300,6 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         if (_aggregate.CanApplyEvent(ev)) { _aggregate.ApplyEvent(ev); }
         return this;
     }
-    public IAggregateTestHelper<TAggregate, TContents> WhenConstructor(Func<TAggregate> aggregateFunc)
-    {
-        ResetBeforeCommand();
-        try
-        {
-            _aggregate = aggregateFunc();
-        }
-        catch (Exception ex)
-        {
-            _latestException = ex;
-            return this;
-        }
-        _latestEvents = _aggregate.Events.ToList();
-        _aggregate.ResetEventsAndSnapshots();
-        CheckStateJSONSupports();
-        return this;
-    }
-    public IAggregateTestHelper<TAggregate, TContents> Given(IChangedEventPayload payload) =>
-        throw new NotImplementedException();
 
     private void CheckStateJSONSupports()
     {
