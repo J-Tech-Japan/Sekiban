@@ -6,6 +6,10 @@ public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : 
 {
     public IAggregateTestHelper<TAggregate, TContents> GivenScenario(Action initialAction);
     public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtos(List<ISingleAggregate> dtos);
+    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtoContents<DAggregate, DAggregateContents>(
+        Guid aggregateId,
+        DAggregateContents contents) where DAggregateContents : IAggregateContents, new()
+        where DAggregate : TransferableAggregateBase<DAggregateContents>, new();
     public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDto(ISingleAggregate dto);
     public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot);
     public IAggregateTestHelper<TAggregate, TContents> Given(IAggregateEvent ev);

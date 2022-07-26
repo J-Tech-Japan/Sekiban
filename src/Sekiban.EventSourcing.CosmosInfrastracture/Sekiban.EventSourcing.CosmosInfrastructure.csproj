@@ -6,13 +6,13 @@
         <Nullable>enable</Nullable>
         <RootNamespace>CosmosInfrastructure</RootNamespace>
         <PackageId>JJ_Sekiban.EventSourcing.CosmosInfrastructure</PackageId>
-        <Version>0.4.8</Version>
+        <Version>0.4.9</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework CosmosInfrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.4.8</PackageVersion>
-        <Description>テストフレームワークの効率化</Description>
+        <PackageVersion>0.4.9</PackageVersion>
+        <Description>テストフレームワークの効率化 GivenEnvironmentDtoContents</Description>
     </PropertyGroup>
 
     <ItemGroup>

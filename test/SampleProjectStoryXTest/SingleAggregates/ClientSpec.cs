@@ -66,6 +66,8 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
         {
             AggregateId = Guid.NewGuid(), Version = 1, Contents = new ClientContents(Guid.NewGuid(), "NOT DUPLICATED NAME", testEmail)
         };
+        GivenEnvironmentDtoContents<Branch, BranchContents>(Guid.NewGuid(), new BranchContents { Name = "TEST" });
+        GivenEnvironmentDtoContents<Client, ClientContents>(Guid.NewGuid(), new ClientContents(Guid.NewGuid(), "NOT DUPLICATED NAME", testEmail));
         // CreateコマンドでBranchを参照するため、BranchDtoオブジェクトを参照ように渡す
         GivenEnvironmentDtos(new List<ISingleAggregate> { branchDto, clientDto });
         // CreateClient コマンドを実行する エラーになるはず
@@ -97,11 +99,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
         var branchId = Guid.NewGuid();
         var clientId = Guid.NewGuid();
 
-        Given(
-                new AggregateDto<ClientContents>
-                {
-                    AggregateId = clientId, Version = 1, Contents = new ClientContents(branchId, testClientName, testEmail)
-                })
+        Given(clientId, new ClientContents(branchId, testClientName, testEmail))
             .WhenMethod(client => client.ChangeClientName(testClientChangedName))
             // コマンドによって生成されたイベントを検証する
             .ThenSingleEventPayload(new ClientNameChanged(testClientChangedName))
