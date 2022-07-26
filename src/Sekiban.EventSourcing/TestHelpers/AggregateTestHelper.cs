@@ -201,6 +201,11 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         Assert.Equal(actualJson, expectedJson);
         return this;
     }
+    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEventPayload<T>(Func<TAggregate, T> constructExpectedEvent) where T : IEventPayload
+    {
+        var payload = constructExpectedEvent(_aggregate);
+        return ThenSingleEventPayload(payload);
+    }
     public IAggregateTestHelper<TAggregate, TContents> ThenState(Action<AggregateDto<TContents>, TAggregate> checkDtoAction)
     {
         checkDtoAction(_aggregate.ToDto(), _aggregate);

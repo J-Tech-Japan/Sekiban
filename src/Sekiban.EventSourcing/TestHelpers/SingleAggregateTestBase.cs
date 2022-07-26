@@ -59,6 +59,8 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposab
         _helper.ThenSingleEvent(constructExpectedEvent);
     public IAggregateTestHelper<TAggregate, TContents> ThenSingleEventPayload<T>(T payload) where T : IEventPayload =>
         _helper.ThenSingleEventPayload(payload);
+    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEventPayload<T>(Func<TAggregate, T> constructExpectedEvent) where T : IEventPayload =>
+        _helper.ThenSingleEventPayload(constructExpectedEvent);
 
     public IAggregateTestHelper<TAggregate, TContents> ThenState(Action<AggregateDto<TContents>, TAggregate> checkDtoAction) =>
         _helper.ThenState(checkDtoAction);
