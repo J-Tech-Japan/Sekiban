@@ -19,10 +19,10 @@ public class BaseQueryController<TAggregate, TAggregateContents> : ControllerBas
 
     [HttpGet]
     [Route("{aggregateId}")]
-    public async Task<IActionResult> CreateCommandExecuterAsync(string aggregateName, Guid aggregateId, int? toVersion = null) =>
+    public async Task<ActionResult<AggregateDto<TAggregateContents>>> GetAsync(Guid aggregateId, int? toVersion = null) =>
         Ok(await _singleAggregateService.GetAggregateAsync<TAggregate, TAggregateContents>(aggregateId, toVersion));
     [HttpGet]
     [Route("list")]
-    public async Task<IActionResult> ListAsync(string aggregateName) =>
+    public async Task<ActionResult<IEnumerable<AggregateDto<TAggregateContents>>>> ListAsync() =>
         Ok(await _multipleAggregateProjectionService.GetAggregateList<TAggregate, TAggregateContents>());
 }

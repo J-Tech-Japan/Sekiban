@@ -10,11 +10,13 @@ using System.Reflection;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-
+var controllerItems = new SekibanControllerItems(Dependency.GetAggregateTypes().ToList(), Dependency.GetDependencies().ToList());
+builder.Services.AddSingleton<ISekibanControllerItems>(controllerItems);
+var controllerOptions = new SekibanControllerOptions();
+builder.Services.AddSingleton(controllerOptions);
 #if true
-builder.Services.AddControllers(options => options.Conventions.Add(new SekibanControllerRouteConvention()))
-    .ConfigureApplicationPartManager(
-        m => m.FeatureProviders.Add(new SekibanControllerFeatureProvider(Dependency.GetDependencies(), Dependency.GetAggregateTypes())));
+builder.Services.AddControllers(options => options.Conventions.Add(new SekibanControllerRouteConvention(controllerOptions)))
+    .ConfigureApplicationPartManager(m => m.FeatureProviders.Add(new SekibanControllerFeatureProvider(controllerItems)));
 #else
 builder.Services.AddControllers();
 #endif
