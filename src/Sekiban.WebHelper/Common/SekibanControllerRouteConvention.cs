@@ -19,7 +19,6 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
         {
             var generic1 = controller.ControllerType.GenericTypeArguments[0];
             var generic3 = controller.ControllerType.GenericTypeArguments[2];
-            controller.ApiExplorer.IsVisible = true;
             controller.Selectors.Add(
                 new SelectorModel
                 {
@@ -33,7 +32,6 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
         {
             var generic1 = controller.ControllerType.GenericTypeArguments[0];
             var generic3 = controller.ControllerType.GenericTypeArguments[2];
-            controller.ApiExplorer.IsVisible = true;
             controller.Selectors.Add(
                 new SelectorModel
                 {
@@ -46,7 +44,6 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
             new List<string> { typeof(BaseQueryController<,>).Name }.Contains(controller.ControllerType.Name))
         {
             var genericAggregate = controller.ControllerType.GenericTypeArguments[0];
-            controller.ApiExplorer.IsVisible = true;
             controller.Selectors.Add(
                 new SelectorModel
                 {
@@ -57,7 +54,6 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
         if (controller.ControllerType.Name == nameof(SekibanApiListController) ||
             controller.ControllerType.BaseType?.Name == nameof(SekibanApiListController))
         {
-            controller.ApiExplorer.IsVisible = true;
             controller.Selectors.Add(
                 new SelectorModel { AttributeRouteModel = new AttributeRouteModel(new RouteAttribute(_sekibanControllerOptions.IndexPrefix)) });
         }

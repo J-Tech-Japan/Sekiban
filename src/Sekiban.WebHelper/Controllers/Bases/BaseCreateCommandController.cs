@@ -4,7 +4,6 @@ using Sekiban.EventSourcing.Aggregates;
 namespace Sekiban.WebHelper.Controllers.Bases;
 
 [ApiController]
-[ApiExplorerSettings(IgnoreApi = false)]
 public class BaseCreateCommandController<TAggregate, TAggregateContents, TAggregateCommand>
     where TAggregate : TransferableAggregateBase<TAggregateContents>, new()
     where TAggregateContents : IAggregateContents, new()
