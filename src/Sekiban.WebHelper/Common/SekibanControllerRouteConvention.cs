@@ -1,7 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ApplicationModels;
-using Sekiban.WebHelper.Controllers;
-using Sekiban.WebHelper.Controllers.Bases;
 namespace Sekiban.WebHelper.Common;
 
 public class SekibanControllerRouteConvention : IControllerModelConvention
@@ -15,7 +13,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
     public void Apply(ControllerModel controller)
     {
         if (controller.ControllerType.IsGenericType &&
-            new List<string> { typeof(BaseChangeCommandController<,,>).Name }.Contains(controller.ControllerType.Name))
+            new List<string> { _sekibanControllerOptions.BaseChangeControllerType.Name }.Contains(controller.ControllerType.Name))
         {
             var generic1 = controller.ControllerType.GenericTypeArguments[0];
             var generic3 = controller.ControllerType.GenericTypeArguments[2];
@@ -28,7 +26,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                 });
         }
         if (controller.ControllerType.IsGenericType &&
-            new List<string> { typeof(BaseCreateCommandController<,,>).Name }.Contains(controller.ControllerType.Name))
+            new List<string> { _sekibanControllerOptions.BaseCreateControllerType.Name }.Contains(controller.ControllerType.Name))
         {
             var generic1 = controller.ControllerType.GenericTypeArguments[0];
             var generic3 = controller.ControllerType.GenericTypeArguments[2];
@@ -41,7 +39,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                 });
         }
         if (controller.ControllerType.IsGenericType &&
-            new List<string> { typeof(BaseQueryController<,>).Name }.Contains(controller.ControllerType.Name))
+            new List<string> { _sekibanControllerOptions.BaseQueryControllerType.Name }.Contains(controller.ControllerType.Name))
         {
             var genericAggregate = controller.ControllerType.GenericTypeArguments[0];
             controller.Selectors.Add(
@@ -51,8 +49,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                         new RouteAttribute($"{_sekibanControllerOptions.QueryPrefix}/{genericAggregate.Name.ToLower()}"))
                 });
         }
-        if (controller.ControllerType.Name == typeof(SekibanApiListController<>).Name ||
-            controller.ControllerType.BaseType?.Name == typeof(SekibanApiListController<>).Name)
+        if (controller.ControllerType.Name == _sekibanControllerOptions.BaseIndexControllerType.Name)
         {
             controller.Selectors.Add(
                 new SelectorModel { AttributeRouteModel = new AttributeRouteModel(new RouteAttribute(_sekibanControllerOptions.IndexPrefix)) });

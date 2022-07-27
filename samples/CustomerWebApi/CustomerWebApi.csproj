@@ -17,8 +17,4 @@
         <ProjectReference Include="..\ESSampleProjectDependency\ESSampleProjectDependency.csproj" />
     </ItemGroup>
 
-    <ItemGroup>
-      <Folder Include="Controllers" />
-    </ItemGroup>
-
 </Project>

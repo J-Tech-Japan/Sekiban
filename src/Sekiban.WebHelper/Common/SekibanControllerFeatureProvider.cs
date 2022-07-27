@@ -1,16 +1,18 @@
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Sekiban.EventSourcing.AggregateCommands;
-using Sekiban.WebHelper.Controllers;
-using Sekiban.WebHelper.Controllers.Bases;
 using System.Reflection;
 namespace Sekiban.WebHelper.Common;
 
 public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<ControllerFeature>
 {
     private readonly ISekibanControllerItems _sekibanControllerItems;
-    public SekibanControllerFeatureProvider(ISekibanControllerItems sekibanControllerItems) =>
+    private readonly SekibanControllerOptions _sekibanControllerOptions;
+    public SekibanControllerFeatureProvider(ISekibanControllerItems sekibanControllerItems, SekibanControllerOptions sekibanControllerOptions)
+    {
         _sekibanControllerItems = sekibanControllerItems;
+        _sekibanControllerOptions = sekibanControllerOptions;
+    }
 
     public void PopulateFeature(IEnumerable<ApplicationPart> parts, ControllerFeature feature)
     {
@@ -25,7 +27,8 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
                 var aggregateContentsType = aggregateType?.BaseType?.GenericTypeArguments[0];
                 if (aggregateType == null || commandType == null || aggregateContentsType == null) { continue; }
                 feature.Controllers.Add(
-                    typeof(BaseCreateCommandController<,,>).MakeGenericType(aggregateType, aggregateContentsType, commandType).GetTypeInfo());
+                    _sekibanControllerOptions.BaseCreateControllerType.MakeGenericType(aggregateType, aggregateContentsType, commandType)
+                        .GetTypeInfo());
             }
             if (interfaceType?.Name == typeof(IChangeAggregateCommandHandler<,>).Name)
             {
@@ -34,15 +37,17 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
                 var aggregateContentsType = aggregateType?.BaseType?.GenericTypeArguments[0];
                 if (aggregateType == null || commandType == null || aggregateContentsType == null) { continue; }
                 feature.Controllers.Add(
-                    typeof(BaseChangeCommandController<,,>).MakeGenericType(aggregateType, aggregateContentsType, commandType).GetTypeInfo());
+                    _sekibanControllerOptions.BaseChangeControllerType.MakeGenericType(aggregateType, aggregateContentsType, commandType)
+                        .GetTypeInfo());
             }
         }
         foreach (var aggregateType in _sekibanControllerItems.SekibanAggregates)
         {
             var aggregateContentsType = aggregateType?.BaseType?.GenericTypeArguments[0];
             if (aggregateType == null || aggregateContentsType == null) { continue; }
-            feature.Controllers.Add(typeof(BaseQueryController<,>).MakeGenericType(aggregateType, aggregateContentsType).GetTypeInfo());
+            feature.Controllers.Add(
+                _sekibanControllerOptions.BaseQueryControllerType.MakeGenericType(aggregateType, aggregateContentsType).GetTypeInfo());
         }
-        feature.Controllers.Add(typeof(SekibanApiListController<>).MakeGenericType(typeof(object)).GetTypeInfo());
+        feature.Controllers.Add(_sekibanControllerOptions.BaseIndexControllerType.MakeGenericType(typeof(object)).GetTypeInfo());
     }
 }

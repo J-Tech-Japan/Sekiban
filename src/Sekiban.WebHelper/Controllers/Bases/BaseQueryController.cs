@@ -17,9 +17,9 @@ public class BaseQueryController<TAggregate, TAggregateContents> : ControllerBas
     }
 
     [HttpGet]
-    [Route("{aggregateId}")]
-    public async Task<ActionResult<AggregateDto<TAggregateContents>>> GetAsync(Guid aggregateId, int? toVersion = null) =>
-        Ok(await _singleAggregateService.GetAggregateAsync<TAggregate, TAggregateContents>(aggregateId, toVersion));
+    [Route("{id}")]
+    public async Task<ActionResult<AggregateDto<TAggregateContents>>> GetAsync(Guid id, int? toVersion = null) =>
+        Ok(await _singleAggregateService.GetAggregateAsync<TAggregate, TAggregateContents>(id, toVersion));
     [HttpGet]
     [Route("list")]
     public async Task<ActionResult<IEnumerable<AggregateDto<TAggregateContents>>>> ListAsync() =>
