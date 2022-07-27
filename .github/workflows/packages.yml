@@ -35,3 +35,8 @@ jobs:
         pushd ./src/Sekiban.EventSourcing.CosmosInfrastracture
         dotnet pack --configuration Release
         dotnet nuget push "bin/Release/JJ_Sekiban.EventSourcing.CosmosInfrastructure.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
+    - name: Pack WebHelper
+      run: |
+        pushd ./src/Sekiban.EventSourcing.WebHelper
+        dotnet pack --configuration Release
+        dotnet nuget push "bin/Release/JJ_Sekiban.EventSourcing.WebHelper.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
