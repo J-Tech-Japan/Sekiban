@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ApplicationModels;
-namespace Sekiban.WebHelper.Common;
+namespace Sekiban.EventSourcing.WebHelper.Common;
 
 public class SekibanControllerRouteConvention : IControllerModelConvention
 {

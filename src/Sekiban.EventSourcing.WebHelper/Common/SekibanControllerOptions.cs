@@ -1,6 +1,6 @@
-using Sekiban.WebHelper.Controllers;
-using Sekiban.WebHelper.Controllers.Bases;
-namespace Sekiban.WebHelper.Common;
+using Sekiban.EventSourcing.WebHelper.Controllers;
+using Sekiban.EventSourcing.WebHelper.Controllers.Bases;
+namespace Sekiban.EventSourcing.WebHelper.Common;
 
 public class SekibanControllerOptions
 {

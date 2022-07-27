@@ -1,6 +1,6 @@
 using CustomerDomainContext.Shared;
 using CustomerWebApi.Controllers.Bases;
-using Sekiban.WebHelper.Common;
+using Sekiban.EventSourcing.WebHelper.Common;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.

@@ -1,4 +1,4 @@
-namespace Sekiban.WebHelper.Common;
+namespace Sekiban.EventSourcing.WebHelper.Common;
 
 public record SekibanControllerItems(
     IReadOnlyCollection<Type> SekibanAggregates,

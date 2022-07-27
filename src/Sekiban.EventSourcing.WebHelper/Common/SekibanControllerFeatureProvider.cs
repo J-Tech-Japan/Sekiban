@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Sekiban.EventSourcing.AggregateCommands;
 using System.Reflection;
-namespace Sekiban.WebHelper.Common;
+namespace Sekiban.EventSourcing.WebHelper.Common;
 
 public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<ControllerFeature>
 {
