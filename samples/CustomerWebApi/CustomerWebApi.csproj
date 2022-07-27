@@ -12,7 +12,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\..\src\Sekiban.EventSourcing.CosmosInfrastracture\Sekiban.EventSourcing.CosmosInfrastructure.csproj" />
-        <ProjectReference Include="..\..\src\Sekiban.WebHelper\Sekiban.WebHelper.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.EventSourcing.WebHelper\Sekiban.EventSourcing.WebHelper.csproj" />
         <ProjectReference Include="..\CustomerDomainContext\CustomerDomainContext.csproj" />
         <ProjectReference Include="..\ESSampleProjectDependency\ESSampleProjectDependency.csproj" />
     </ItemGroup>

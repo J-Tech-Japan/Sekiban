@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-namespace Sekiban.WebHelper.Controllers;
+namespace Sekiban.EventSourcing.WebHelper.Controllers;
 
 [ApiController]
 public class SekibanApiListController<T> : ControllerBase

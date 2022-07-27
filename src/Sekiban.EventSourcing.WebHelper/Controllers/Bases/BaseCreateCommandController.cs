@@ -1,21 +1,21 @@
 using Microsoft.AspNetCore.Mvc;
 using Sekiban.EventSourcing.AggregateCommands;
 using Sekiban.EventSourcing.Aggregates;
-namespace Sekiban.WebHelper.Controllers.Bases;
+namespace Sekiban.EventSourcing.WebHelper.Controllers.Bases;
 
 [ApiController]
-public class BaseChangeCommandController<TAggregate, TAggregateContents, TAggregateCommand>
+public class BaseCreateCommandController<TAggregate, TAggregateContents, TAggregateCommand>
     where TAggregate : TransferableAggregateBase<TAggregateContents>, new()
     where TAggregateContents : IAggregateContents, new()
-    where TAggregateCommand : ChangeAggregateCommandBase<TAggregate>
+    where TAggregateCommand : ICreateAggregateCommand<TAggregate>
 {
     private readonly IAggregateCommandExecutor _executor;
-    public BaseChangeCommandController(IAggregateCommandExecutor executor) =>
+    public BaseCreateCommandController(IAggregateCommandExecutor executor) =>
         _executor = executor;
 
-    [HttpPatch]
+    [HttpPost]
     [Route("")]
     public async Task<ActionResult<AggregateCommandExecutorResponse<TAggregateContents, TAggregateCommand>>> Execute(
         [FromBody] TAggregateCommand command) =>
-        new(await _executor.ExecChangeCommandAsync<TAggregate, TAggregateContents, TAggregateCommand>(command));
+        new(await _executor.ExecCreateCommandAsync<TAggregate, TAggregateContents, TAggregateCommand>(command));
 }

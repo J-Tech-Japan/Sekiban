@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Sekiban.EventSourcing.Aggregates;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
-namespace Sekiban.WebHelper.Controllers.Bases;
+namespace Sekiban.EventSourcing.WebHelper.Controllers.Bases;
 
 [ApiController]
 public class BaseQueryController<TAggregate, TAggregateContents> : ControllerBase

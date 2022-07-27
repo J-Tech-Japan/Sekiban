@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
-using Sekiban.WebHelper.Controllers.Bases;
+using Sekiban.EventSourcing.WebHelper.Controllers.Bases;
 namespace CustomerWebApi.Controllers.Bases;
 
 [Authorize]

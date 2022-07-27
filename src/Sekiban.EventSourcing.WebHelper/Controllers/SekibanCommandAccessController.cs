@@ -1,4 +1,4 @@
-namespace Sekiban.WebHelper.Controllers;
+namespace Sekiban.EventSourcing.WebHelper.Controllers;
 #if false
 [ApiController]
 [Route("api/command")]

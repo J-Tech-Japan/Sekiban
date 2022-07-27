@@ -1,4 +1,4 @@
-namespace Sekiban.WebHelper.Common.Extensions;
+namespace Sekiban.EventSourcing.WebHelper.Common.Extensions;
 
 public static class ServiceCollectionExtension
 {

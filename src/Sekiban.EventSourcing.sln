@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.EventSourcing", "Se
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.EventSourcing.CosmosInfrastructure", "Sekiban.EventSourcing.CosmosInfrastracture\Sekiban.EventSourcing.CosmosInfrastructure.csproj", "{EE5451F8-8C1C-451F-8B0E-990E57548361}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.EventSourcing.WebHelper", "Sekiban.EventSourcing.WebHelper\Sekiban.EventSourcing.WebHelper.csproj", "{0E40F19F-E6B9-48CB-8AF3-72B116F2E97F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -24,5 +26,9 @@ Global
 		{EE5451F8-8C1C-451F-8B0E-990E57548361}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{EE5451F8-8C1C-451F-8B0E-990E57548361}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{EE5451F8-8C1C-451F-8B0E-990E57548361}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0E40F19F-E6B9-48CB-8AF3-72B116F2E97F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0E40F19F-E6B9-48CB-8AF3-72B116F2E97F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0E40F19F-E6B9-48CB-8AF3-72B116F2E97F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0E40F19F-E6B9-48CB-8AF3-72B116F2E97F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
