@@ -6,7 +6,11 @@ public record UseLoyaltyPoint(
     DateTime HappenedDate,
     LoyaltyPointUsageTypeKeys Reason,
     int PointAmount,
-    string Note) : ChangeAggregateCommandBase<LoyaltyPoint>;
+    string Note) : ChangeAggregateCommandBase<LoyaltyPoint>
+{
+    public override Guid GetAggregateId() =>
+        ClientId;
+}
 public class UseLoyaltyPointHandler : ChangeAggregateCommandHandlerBase<LoyaltyPoint, UseLoyaltyPoint>
 {
     protected override async Task ExecCommandAsync(LoyaltyPoint aggregate, UseLoyaltyPoint command)

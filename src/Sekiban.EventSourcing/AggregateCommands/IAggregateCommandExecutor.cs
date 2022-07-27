@@ -12,12 +12,8 @@ public interface IAggregateCommandExecutor
     /// <typeparam name="TContents">DTOクラス</typeparam>
     /// <typeparam name="C">コマンドクラス</typeparam>
     /// <returns></returns>
-    Task<AggregateCommandExecutorResponse<TContents, C>> ExecChangeCommandAsync<T, TContents, C>(
-        Guid aggregateId,
-        C command,
-        List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>
-        where TContents : IAggregateContents, new()
-        where C : ChangeAggregateCommandBase<T>;
+    Task<AggregateCommandExecutorResponse<TContents, C>> ExecChangeCommandAsync<T, TContents, C>(C command, List<CallHistory>? callHistories = null)
+        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new() where C : ChangeAggregateCommandBase<T>;
     /// <summary>
     ///     集約コマンドを実行する
     ///     こちらのメソッドは集約の新規作成機能のメソッドとなります。

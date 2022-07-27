@@ -17,7 +17,14 @@ public static class Dependency
 {
     public static Assembly GetAssembly() =>
         Assembly.GetExecutingAssembly();
-
+    public static IEnumerable<Type> GetAggregateTypes()
+    {
+        yield return typeof(Branch);
+        yield return typeof(Client);
+        yield return typeof(LoyaltyPoint);
+        yield return typeof(RecentActivity);
+        yield return typeof(RecentInMemoryActivity);
+    }
     public static IEnumerable<(Type serviceType, Type? implementationType)> GetDependencies()
     {
         // Aggregate Event Subscribers
