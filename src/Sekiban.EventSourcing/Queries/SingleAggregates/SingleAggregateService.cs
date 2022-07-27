@@ -26,7 +26,7 @@ public class SingleAggregateService : ISingleAggregateService
         await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
             typeof(T),
-            PartitionKeyCreator.ForAggregateEvent(aggregateId, projector.OriginalAggregateType()),
+            PartitionKeyGenerator.ForAggregateEvent(aggregateId, projector.OriginalAggregateType()),
             null,
             events =>
             {
@@ -138,7 +138,7 @@ public class SingleAggregateService : ISingleAggregateService
         await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
             projector.OriginalAggregateType(),
-            PartitionKeyCreator.ForAggregateEvent(aggregateId, projector.OriginalAggregateType()),
+            PartitionKeyGenerator.ForAggregateEvent(aggregateId, projector.OriginalAggregateType()),
             dto?.LastSortableUniqueId,
             events =>
             {

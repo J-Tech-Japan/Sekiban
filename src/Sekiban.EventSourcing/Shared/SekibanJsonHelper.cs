@@ -61,14 +61,23 @@ public static class SekibanJsonHelper
         return Deserialize<T>(jsonString);
     }
 
-    public static T? GetValue<T>(dynamic? jsonObj, string propertyName)
+    public static T? GetValue<T>(dynamic? jsonObj, string propertyName) =>
+        GetValue<T>(Serialize(jsonObj), propertyName);
+
+    public static T? GetValue<T>(string? jsonString, string propertyName)
     {
-        var jsonString = Serialize(jsonObj);
-        return JsonNode.Parse(jsonString,
+        if (jsonString is null)
+            return default;
+
+        var node = JsonNode.Parse(jsonString,
             new JsonNodeOptions()
             {
                 PropertyNameCaseInsensitive = true,
             })
-            ?[propertyName]?.GetValue<T>();
+            ?[propertyName];
+        if (node is null)
+            return default;
+
+        return node.GetValue<T>();
     }
 }

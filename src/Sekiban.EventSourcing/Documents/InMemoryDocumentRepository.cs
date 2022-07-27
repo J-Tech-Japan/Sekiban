@@ -82,7 +82,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
     public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type originalType)
     {
         await Task.CompletedTask;
-        if (_memoryCache.TryGetValue<SnapshotDocument>(PartitionKeyCreator.ForAggregateSnapshot(aggregateId, originalType), out var sd))
+        if (_memoryCache.TryGetValue<SnapshotDocument>(PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, originalType), out var sd))
         {
             return sd;
         }
