@@ -24,7 +24,7 @@ public record SnapshotDocument : DocumentBase, IDocument
         int savedVersion
     ) : base(
         aggregateId: aggregateId,
-        partitionKey: PartitionKeyCreator.ForAggregateSnapshot(aggregateId, aggregateType),
+        partitionKey: PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregateType),
         documentType: DocumentType.AggregateSnapshot,
         documentTypeName: aggregateType.Name ?? string.Empty
     )

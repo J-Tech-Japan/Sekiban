@@ -30,7 +30,7 @@ public record AggregateEvent<TEventPayload> : DocumentBase, IAggregateEvent
         bool isAggregateInitialEvent = false
     ) : base(
         aggregateId: aggregateId,
-        partitionKey: PartitionKeyCreator.ForAggregateEvent(aggregateId, aggregateType),
+        partitionKey: PartitionKeyGenerator.ForAggregateEvent(aggregateId, aggregateType),
         documentType: DocumentType.AggregateEvent,
         documentTypeName: typeof(TEventPayload).Name
     )
