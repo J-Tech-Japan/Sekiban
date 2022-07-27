@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 namespace Sekiban.EventSourcing.WebHelper.Common.Extensions;
 
 public static class ServiceCollectionExtension
