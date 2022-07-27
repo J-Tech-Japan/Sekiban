@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
         <TargetFramework>net6.0</TargetFramework>
@@ -7,12 +7,12 @@
         <OutputType>Library</OutputType>
         <RootNamespace>Sekiban.EventSourcing.WebHelper</RootNamespace>
         <PackageId>JJ_Sekiban.WebHelper</PackageId>
-        <Version>0.4.11</Version>
+        <Version>0.4.12</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework WebHelper</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.4.11</PackageVersion>
+        <PackageVersion>0.4.12</PackageVersion>
         <Description>ChangeコマンドのExecuteからAggregateIdを削除</Description>
     </PropertyGroup>
 
