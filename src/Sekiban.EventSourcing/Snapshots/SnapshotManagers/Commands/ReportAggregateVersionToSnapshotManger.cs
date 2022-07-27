@@ -2,10 +2,15 @@ using Sekiban.EventSourcing.Settings;
 namespace Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
 
 public record ReportAggregateVersionToSnapshotManger(
+    Guid SnapshotManagerId,
     Type AggregateType,
     Guid TargetAggregateId,
     int Version,
-    int? SnapshotVersion) : ChangeAggregateCommandBase<SnapshotManager>, INoValidateCommand;
+    int? SnapshotVersion) : ChangeAggregateCommandBase<SnapshotManager>, INoValidateCommand
+{
+    public override Guid GetAggregateId() =>
+        SnapshotManagerId;
+}
 public class ReportAggregateVersionToSnapshotMangerHandler : ChangeAggregateCommandHandlerBase<SnapshotManager,
     ReportAggregateVersionToSnapshotManger>
 {

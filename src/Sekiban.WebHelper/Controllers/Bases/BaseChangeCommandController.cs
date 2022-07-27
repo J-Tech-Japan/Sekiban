@@ -14,9 +14,8 @@ public class BaseChangeCommandController<TAggregate, TAggregateContents, TAggreg
         _executor = executor;
 
     [HttpPatch]
-    [Route("{id}")]
+    [Route("")]
     public async Task<ActionResult<AggregateCommandExecutorResponse<TAggregateContents, TAggregateCommand>>> Execute(
-        Guid id,
         [FromBody] TAggregateCommand command) =>
-        new(await _executor.ExecChangeCommandAsync<TAggregate, TAggregateContents, TAggregateCommand>(id, command));
+        new(await _executor.ExecChangeCommandAsync<TAggregate, TAggregateContents, TAggregateCommand>(command));
 }

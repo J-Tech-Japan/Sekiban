@@ -54,8 +54,8 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                 var snapshotManagerResponse
                     = await _aggregateCommandExecutor
                         .ExecChangeCommandAsync<SnapshotManager, SnapshotManagerContents, ReportAggregateVersionToSnapshotManger>(
-                            SnapshotManager.SharedId,
                             new ReportAggregateVersionToSnapshotManger(
+                                SnapshotManager.SharedId,
                                 aggregateType.Aggregate,
                                 notification.AggregateId,
                                 notification.Version,
@@ -111,8 +111,12 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                 var snapshotManagerResponseP
                     = await _aggregateCommandExecutor
                         .ExecChangeCommandAsync<SnapshotManager, SnapshotManagerContents, ReportAggregateVersionToSnapshotManger>(
-                            SnapshotManager.SharedId,
-                            new ReportAggregateVersionToSnapshotManger(projection.Aggregate, notification.AggregateId, notification.Version, null));
+                            new ReportAggregateVersionToSnapshotManger(
+                                SnapshotManager.SharedId,
+                                projection.Aggregate,
+                                notification.AggregateId,
+                                notification.Version,
+                                null));
                 if (snapshotManagerResponseP.Events.All(m => m.DocumentTypeName != nameof(SnapshotManagerSnapshotTaken)))
                 {
                     continue;
