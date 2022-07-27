@@ -1,6 +1,6 @@
 ﻿namespace Sekiban.EventSourcing.Partitions;
 
-public static class PartitionKeyCreator
+public static class PartitionKeyGenerator
 {
     public static string ForAggregateCommand(Guid aggregateId) => $"c_{aggregateId}";
 

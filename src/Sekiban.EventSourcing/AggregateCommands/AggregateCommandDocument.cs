@@ -34,7 +34,7 @@ public record AggregateCommandDocument<T> : DocumentBase, IDocument, ICallHistor
         List<CallHistory>? callHistories = null
     ) : base(
         aggregateId: aggregateId,
-        partitionKey: PartitionKeyCreator.ForAggregateCommand(aggregateId),
+        partitionKey: PartitionKeyGenerator.ForAggregateCommand(aggregateId),
         documentType: DocumentType.AggregateCommand,
         documentTypeName: typeof(T).Name
     )

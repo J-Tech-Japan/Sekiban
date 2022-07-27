@@ -83,7 +83,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 var options = new QueryRequestOptions()
                 {
                     PartitionKey = new PartitionKey(
-                        Sekiban.EventSourcing.Partitions.PartitionKeyCreator.ForAggregateSnapshot(aggregateId, originalType))
+                        Sekiban.EventSourcing.Partitions.PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, originalType))
                 };
                 var query = container.GetItemLinqQueryable<SnapshotDocument>()
                     .Where(b => b.DocumentType == DocumentType.AggregateSnapshot && b.AggregateId == aggregateId)
@@ -123,7 +123,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 var options = new QueryRequestOptions()
                 {
                     PartitionKey = new PartitionKey(
-                        Sekiban.EventSourcing.Partitions.PartitionKeyCreator.ForAggregateSnapshot(aggregateId, originalType))
+                        Sekiban.EventSourcing.Partitions.PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, originalType))
                 };
                 var query = container.GetItemLinqQueryable<SnapshotDocument>()
                     .Where(b => b.DocumentType == DocumentType.AggregateSnapshot && b.AggregateId == aggregateId)
@@ -253,7 +253,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 var options = new QueryRequestOptions()
                 {
                     PartitionKey = new PartitionKey(
-                        Sekiban.EventSourcing.Partitions.PartitionKeyCreator.ForAggregateSnapshot(aggregateId, originalType))
+                        Sekiban.EventSourcing.Partitions.PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, originalType))
                 };
                 var query = container.GetItemLinqQueryable<SnapshotDocument>()
                     .Where(b => b.DocumentType == DocumentType.AggregateSnapshot && b.AggregateId == aggregateId && b.SavedVersion == version)
