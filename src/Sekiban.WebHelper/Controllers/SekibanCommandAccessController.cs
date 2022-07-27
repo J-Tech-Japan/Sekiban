@@ -1,9 +1,5 @@
-using Microsoft.AspNetCore.Mvc;
-using Sekiban.EventSourcing.AggregateCommands;
-using Sekiban.EventSourcing.Shared;
-using Dependency = CustomerDomainContext.Shared.Dependency;
 namespace Sekiban.WebHelper.Controllers;
-
+#if false
 [ApiController]
 [Route("api/command")]
 public class SekibanCommandAccessController : ControllerBase
@@ -93,3 +89,4 @@ public class SekibanCommandAccessController : ControllerBase
         return Problem("Aggregate Command not found");
     }
 }
+#endif

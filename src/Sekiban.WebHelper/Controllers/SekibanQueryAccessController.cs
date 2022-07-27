@@ -1,12 +1,5 @@
-using CustomerDomainContext.Aggregates.Branches;
-using CustomerDomainContext.Aggregates.Clients;
-using CustomerDomainContext.Aggregates.LoyaltyPoints;
-using Microsoft.AspNetCore.Mvc;
-using Sekiban.EventSourcing.Queries;
-using Sekiban.EventSourcing.Queries.MultipleAggregates;
-using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace Sekiban.WebHelper.Controllers;
-
+#if false
 [ApiController]
 [Route("api/query")]
 public class SekibanQueryAccessController : ControllerBase
@@ -79,3 +72,4 @@ public class SekibanQueryAccessController : ControllerBase
         return Problem("Aggregate Command not found");
     }
 }
+#endif

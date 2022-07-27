@@ -4,8 +4,7 @@ using Sekiban.EventSourcing.Aggregates;
 namespace Sekiban.WebHelper.Controllers.Bases;
 
 [ApiController]
-[Route("{controller}")]
-[ApiExplorerSettings(IgnoreApi = true)]
+[ApiExplorerSettings(IgnoreApi = false)]
 public class BaseCreateCommandController<TAggregate, TAggregateContents, TAggregateCommand>
     where TAggregate : TransferableAggregateBase<TAggregateContents>, new()
     where TAggregateContents : IAggregateContents, new()
@@ -16,6 +15,7 @@ public class BaseCreateCommandController<TAggregate, TAggregateContents, TAggreg
         _executor = executor;
 
     [HttpPost]
+    [Route("")]
     public async Task<ActionResult<AggregateCommandExecutorResponse<TAggregateContents, TAggregateCommand>>> Execute(
         [FromBody] TAggregateCommand command) =>
         new(await _executor.ExecCreateCommandAsync<TAggregate, TAggregateContents, TAggregateCommand>(command));
