@@ -1,5 +1,4 @@
 using Microsoft.Azure.Cosmos.Linq;
-using Sekiban.EventSourcing.Partitions.AggregateIdPartitions;
 using Sekiban.EventSourcing.Settings;
 
 namespace CosmosInfrastructure.DomainCommon.EventSourcings;
@@ -81,10 +80,11 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             aggregateContainerGroup,
             async container =>
             {
-                var partitionKeyFactory = new AggregateIdPartitionKeyFactory(aggregateId, originalType);
-                var partitionKey = partitionKeyFactory.GetPartitionKey(DocumentType.AggregateSnapshot);
-                var options = new QueryRequestOptions();
-                options.PartitionKey = new PartitionKey(partitionKey);
+                var options = new QueryRequestOptions()
+                {
+                    PartitionKey = new PartitionKey(
+                        Sekiban.EventSourcing.Partitions.PartitionKeyCreator.ForAggregateSnapshot(aggregateId, originalType))
+                };
                 var query = container.GetItemLinqQueryable<SnapshotDocument>()
                     .Where(b => b.DocumentType == DocumentType.AggregateSnapshot && b.AggregateId == aggregateId)
                     .OrderByDescending(m => m.LastSortableUniqueId);
@@ -120,10 +120,11 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             async container =>
             {
                 var list = new List<SnapshotDocument>();
-                var partitionKeyFactory = new AggregateIdPartitionKeyFactory(aggregateId, originalType);
-                var partitionKey = partitionKeyFactory.GetPartitionKey(DocumentType.AggregateSnapshot);
-                var options = new QueryRequestOptions();
-                options.PartitionKey = new PartitionKey(partitionKey);
+                var options = new QueryRequestOptions()
+                {
+                    PartitionKey = new PartitionKey(
+                        Sekiban.EventSourcing.Partitions.PartitionKeyCreator.ForAggregateSnapshot(aggregateId, originalType))
+                };
                 var query = container.GetItemLinqQueryable<SnapshotDocument>()
                     .Where(b => b.DocumentType == DocumentType.AggregateSnapshot && b.AggregateId == aggregateId)
                     .OrderByDescending(m => m.LastSortableUniqueId);
@@ -249,10 +250,11 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             aggregateContainerGroup,
             async container =>
             {
-                var partitionKeyFactory = new AggregateIdPartitionKeyFactory(aggregateId, originalType);
-                var partitionKey = partitionKeyFactory.GetPartitionKey(DocumentType.AggregateSnapshot);
-                var options = new QueryRequestOptions();
-                options.PartitionKey = new PartitionKey(partitionKey);
+                var options = new QueryRequestOptions()
+                {
+                    PartitionKey = new PartitionKey(
+                        Sekiban.EventSourcing.Partitions.PartitionKeyCreator.ForAggregateSnapshot(aggregateId, originalType))
+                };
                 var query = container.GetItemLinqQueryable<SnapshotDocument>()
                     .Where(b => b.DocumentType == DocumentType.AggregateSnapshot && b.AggregateId == aggregateId && b.SavedVersion == version)
                     .OrderByDescending(m => m.LastSortableUniqueId);

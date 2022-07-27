@@ -46,7 +46,6 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
             if (aggregate == null)
             {
                 await _aggregateCommandExecutor.ExecCreateCommandAsync<SnapshotManager, SnapshotManagerContents, CreateSnapshotManager>(
-                    SnapshotManager.SharedId,
                     new CreateSnapshotManager());
             }
 
@@ -91,10 +90,9 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                             continue;
                         }
                         var snapshotDocument = new SnapshotDocument(
-                            new AggregateIdPartitionKeyFactory(notification.AggregateId, aggregateType.Aggregate),
-                            aggregateType.Aggregate.Name,
-                            aggregateToSnapshot,
                             notification.AggregateId,
+                            aggregateType.Aggregate,
+                            aggregateToSnapshot,
                             aggregateToSnapshot.LastEventId,
                             aggregateToSnapshot.LastSortableUniqueId,
                             aggregateToSnapshot.Version);
@@ -146,10 +144,9 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                         continue;
                     }
                     var snapshotDocument = new SnapshotDocument(
-                        new AggregateIdPartitionKeyFactory(notification.AggregateId, projection.Aggregate),
-                        projection.Aggregate.Name,
-                        aggregateToSnapshot,
                         notification.AggregateId,
+                        projection.Aggregate,
+                        aggregateToSnapshot,
                         aggregateToSnapshot.LastEventId,
                         aggregateToSnapshot.LastSortableUniqueId,
                         aggregateToSnapshot.Version);

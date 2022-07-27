@@ -63,8 +63,7 @@ public class DocumentWriterSplitter : IDocumentWriter
     }
     private async Task SaveSnapshotToHybridIfPossible(SnapshotDocument snapshot, Type aggregateType)
     {
-        var partitionKeyFactory = new AggregateIdPartitionKeyFactory(snapshot.AggregateId, aggregateType);
-        if (_hybridStoreManager.HasPartition(partitionKeyFactory.GetPartitionKey(DocumentType.AggregateEvent)))
+        if (_hybridStoreManager.HasPartition(PartitionKeyCreator.ForAggregateEvent(snapshot.AggregateId, aggregateType)))
         {
             await _documentTemporaryWriter.SaveAsync(snapshot, aggregateType);
         }

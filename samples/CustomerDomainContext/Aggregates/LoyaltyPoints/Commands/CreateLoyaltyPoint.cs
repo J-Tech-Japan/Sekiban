@@ -4,6 +4,8 @@ public record CreateLoyaltyPoint(Guid ClientId, int InitialPoint) : ICreateAggre
 public class CreateLoyaltyPointHandler : CreateAggregateCommandHandlerBase<LoyaltyPoint, CreateLoyaltyPoint>
 {
 
+    public override Guid GenerateAggregateId(CreateLoyaltyPoint command) =>
+        command.ClientId;
     protected override async Task ExecCreateCommandAsync(LoyaltyPoint aggregate, CreateLoyaltyPoint command)
     {
         await Task.CompletedTask;

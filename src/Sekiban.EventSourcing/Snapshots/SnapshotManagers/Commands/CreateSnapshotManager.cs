@@ -8,4 +8,6 @@ public class CreateSnapshotManagerHandler : CreateAggregateCommandHandlerBase<Sn
         await Task.CompletedTask;
         aggregate.Created(DateTime.UtcNow);
     }
+    public override Guid GenerateAggregateId(CreateSnapshotManager command) =>
+        SnapshotManager.SharedId;
 }

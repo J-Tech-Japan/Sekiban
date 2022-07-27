@@ -29,7 +29,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
         // CreateコマンドでBranchを参照するため、BranchDtoオブジェクトを参照ように渡す
         GivenEnvironmentDtos(new List<ISingleAggregate> { branchDto });
         // CreateClient コマンドを実行する
-        WhenCreate(clientId, new CreateClient(clientId, branchDto.AggregateId, testClientName, testEmail));
+        WhenCreate(new CreateClient(branchDto.AggregateId, testClientName, testEmail));
         // エラーとならない
         ThenNotThrowsAnException();
         // コマンドによって生成されたイベントを検証する
@@ -66,11 +66,12 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
         {
             AggregateId = Guid.NewGuid(), Version = 1, Contents = new ClientContents(Guid.NewGuid(), "NOT DUPLICATED NAME", testEmail)
         };
+        GivenEnvironmentDtoContents<Branch, BranchContents>(Guid.NewGuid(), new BranchContents { Name = "TEST" });
+        GivenEnvironmentDtoContents<Client, ClientContents>(Guid.NewGuid(), new ClientContents(Guid.NewGuid(), "NOT DUPLICATED NAME", testEmail));
         // CreateコマンドでBranchを参照するため、BranchDtoオブジェクトを参照ように渡す
         GivenEnvironmentDtos(new List<ISingleAggregate> { branchDto, clientDto });
         // CreateClient コマンドを実行する エラーになるはず
-        WhenCreate(clientId, new CreateClient(clientId, branchDto.AggregateId, testClientName, testEmail))
-            .ThenThrows<SekibanEmailAlreadyRegistered>();
+        WhenCreate(new CreateClient(branchDto.AggregateId, testClientName, testEmail)).ThenThrows<SekibanEmailAlreadyRegistered>();
     }
 
     [Fact(DisplayName = "イベントを渡してスタートする")]
@@ -78,7 +79,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
     {
         var branchId = Guid.NewGuid();
         var clientId = Guid.NewGuid();
-        Given(AggregateEvent<ClientCreated>.CreatedEvent(clientId, new ClientCreated(branchId, testClientName, testEmail), typeof(Client)))
+        Given(AggregateEvent<ClientCreated>.CreatedEvent(clientId, typeof(Client), new ClientCreated(branchId, testClientName, testEmail)))
             .Given(new ClientNameChanged(testClientChangedName))
             .WhenMethod(client => client.ChangeClientName(testClientChangedNameV3))
             // コマンドによって生成されたイベントを検証する
@@ -98,11 +99,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
         var branchId = Guid.NewGuid();
         var clientId = Guid.NewGuid();
 
-        Given(
-                new AggregateDto<ClientContents>
-                {
-                    AggregateId = clientId, Version = 1, Contents = new ClientContents(branchId, testClientName, testEmail)
-                })
+        Given(clientId, new ClientContents(branchId, testClientName, testEmail))
             .WhenMethod(client => client.ChangeClientName(testClientChangedName))
             // コマンドによって生成されたイベントを検証する
             .ThenSingleEventPayload(new ClientNameChanged(testClientChangedName))

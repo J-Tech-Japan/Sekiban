@@ -1,29 +1,12 @@
 namespace Sekiban.EventSourcing.AggregateCommands;
 
-public record AggregateCommandDocument<T> : IDocument, ICallHistories where T : IAggregateCommand
+public record AggregateCommandDocument<T> : DocumentBase, IDocument, ICallHistories
+    where T : IAggregateCommand
 {
-    [JsonPropertyName("id")]
-    public Guid Id { get; init; }
-
-    public string PartitionKey { get; init; } = string.Empty;
-
-    public DocumentType DocumentType { get; init; }
-
-    public string DocumentTypeName { get; init; } = null!;
-
-    public DateTime TimeStamp { get; init; }
-
-    public string SortableUniqueId { get; init; } = string.Empty;
-
     /// <summary>
     ///     コマンド内容
     /// </summary>
     public T Payload { get; init; } = default!;
-
-    /// <summary>
-    ///     対象集約ID
-    /// </summary>
-    public Guid AggregateId { get; init; } = Guid.Empty;
 
     /// <summary>
     ///     実行ユーザー
@@ -45,16 +28,18 @@ public record AggregateCommandDocument<T> : IDocument, ICallHistories where T : 
     public AggregateCommandDocument()
     { }
     
-    public AggregateCommandDocument(T payload, IPartitionKeyFactory partitionKeyFactory, List<CallHistory>? callHistories = null)
+    public AggregateCommandDocument(
+        Guid aggregateId,
+        T commandPayload,
+        List<CallHistory>? callHistories = null
+    ) : base(
+        aggregateId: aggregateId,
+        partitionKey: PartitionKeyCreator.ForAggregateCommand(aggregateId),
+        documentType: DocumentType.AggregateCommand,
+        documentTypeName: typeof(T).Name
+    )
     {
-        Id = Guid.NewGuid();
-        DocumentType = DocumentType.AggregateCommand;
-        DocumentTypeName = typeof(T).Name;
-        TimeStamp = DateTime.UtcNow;
-        SortableUniqueId = SortableUniqueIdGenerator.Generate(TimeStamp, Id);
-
-        Payload = payload;
-        PartitionKey = partitionKeyFactory.GetPartitionKey(DocumentType);
+        Payload = commandPayload;
         CallHistories = callHistories ?? new List<CallHistory>();
     }
 

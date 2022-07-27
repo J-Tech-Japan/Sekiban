@@ -18,6 +18,7 @@ public static class SekibanJsonHelper
 
     public static string? Serialize(Exception ex)
     {
+        // System.Text.JsonはException型を直接シリアライズできないので、匿名型にしてからシリアライズする
         return Serialize(new
         {
             ex.Message,
