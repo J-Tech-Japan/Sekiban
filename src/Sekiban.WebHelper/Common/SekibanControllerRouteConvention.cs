@@ -51,8 +51,8 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                         new RouteAttribute($"{_sekibanControllerOptions.QueryPrefix}/{genericAggregate.Name.ToLower()}"))
                 });
         }
-        if (controller.ControllerType.Name == nameof(SekibanApiListController) ||
-            controller.ControllerType.BaseType?.Name == nameof(SekibanApiListController))
+        if (controller.ControllerType.Name == typeof(SekibanApiListController<>).Name ||
+            controller.ControllerType.BaseType?.Name == typeof(SekibanApiListController<>).Name)
         {
             controller.Selectors.Add(
                 new SelectorModel { AttributeRouteModel = new AttributeRouteModel(new RouteAttribute(_sekibanControllerOptions.IndexPrefix)) });

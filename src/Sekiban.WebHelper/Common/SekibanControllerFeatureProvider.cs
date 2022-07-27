@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Sekiban.EventSourcing.AggregateCommands;
+using Sekiban.WebHelper.Controllers;
 using Sekiban.WebHelper.Controllers.Bases;
 using System.Reflection;
 namespace Sekiban.WebHelper.Common;
@@ -42,5 +43,6 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
             if (aggregateType == null || aggregateContentsType == null) { continue; }
             feature.Controllers.Add(typeof(BaseQueryController<,>).MakeGenericType(aggregateType, aggregateContentsType).GetTypeInfo());
         }
+        feature.Controllers.Add(typeof(SekibanApiListController<>).MakeGenericType(typeof(object)).GetTypeInfo());
     }
 }

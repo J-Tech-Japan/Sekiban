@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Sekiban.WebHelper.Controllers;
 
 [ApiController]
-public class SekibanApiListController : ControllerBase
+public class SekibanApiListController<T> : ControllerBase
 {
     [HttpGet]
     [Route("createCommands")]

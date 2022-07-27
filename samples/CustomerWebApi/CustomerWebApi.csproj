@@ -7,13 +7,18 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.2.3"/>
+        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.2.3" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Sekiban.EventSourcing.CosmosInfrastracture\Sekiban.EventSourcing.CosmosInfrastructure.csproj"/>
-        <ProjectReference Include="..\CustomerDomainContext\CustomerDomainContext.csproj"/>
-        <ProjectReference Include="..\ESSampleProjectDependency\ESSampleProjectDependency.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.EventSourcing.CosmosInfrastracture\Sekiban.EventSourcing.CosmosInfrastructure.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.WebHelper\Sekiban.WebHelper.csproj" />
+        <ProjectReference Include="..\CustomerDomainContext\CustomerDomainContext.csproj" />
+        <ProjectReference Include="..\ESSampleProjectDependency\ESSampleProjectDependency.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="Controllers" />
     </ItemGroup>
 
 </Project>
