@@ -1,17 +1,25 @@
+using Microsoft.AspNetCore.Mvc;
+using Sekiban.EventSourcing.AggregateCommands;
+using Sekiban.EventSourcing.Shared;
+using Sekiban.EventSourcing.WebHelper.Common;
 namespace Sekiban.EventSourcing.WebHelper.Controllers;
-#if false
+#if true
 [ApiController]
-[Route("api/command")]
+[Route("api/sample/command")]
 public class SekibanCommandAccessController : ControllerBase
 {
     private readonly IAggregateCommandExecutor _executor;
-    public SekibanCommandAccessController(IAggregateCommandExecutor executor) =>
+    private readonly ISekibanControllerItems _sekibanControllerItems;
+    public SekibanCommandAccessController(IAggregateCommandExecutor executor, ISekibanControllerItems sekibanControllerItems)
+    {
         _executor = executor;
+        _sekibanControllerItems = sekibanControllerItems;
+    }
     [HttpPost]
     [Route("{aggregateName}/{commandName}")]
     public async Task<IActionResult> CreateCommandExecuterAsync(string aggregateName, string commandName, [FromBody] dynamic command)
     {
-        var list = Dependency.GetDependencies();
+        var list = _sekibanControllerItems.SekibanCommands;
         foreach (var (serviceType, implementationType) in list)
         {
             var interfaceType = serviceType;
@@ -33,12 +41,8 @@ public class SekibanCommandAccessController : ControllerBase
                 var createMethod = _executor.GetType().GetMethod(nameof(IAggregateCommandExecutor.ExecCreateCommandAsync));
                 var methodInfo = createMethod?.MakeGenericMethod(aggregateType, aggregateContentsType, commandType);
                 if (methodInfo == null) { return Problem("Aggregate Command can not execute."); }
-                var responseTask = (Task?)methodInfo.Invoke(_executor, new object?[] { commandObject, null });
-                if (responseTask == null) { return Problem("Aggregate Command can not execute."); }
-                await responseTask;
-                var resultProperty = responseTask.GetType().GetProperty("Result");
-                if (resultProperty == null) { return Problem("Aggregate Command can not execute."); }
-                var result = resultProperty.GetValue(responseTask);
+
+                var result = await (dynamic)methodInfo.Invoke(_executor, new object?[] { commandObject, null });
                 return Ok(result);
             }
         }
