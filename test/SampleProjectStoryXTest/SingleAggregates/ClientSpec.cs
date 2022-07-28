@@ -26,7 +26,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
         {
             AggregateId = Guid.NewGuid(), Contents = new BranchContents { Name = "TEST" }, Version = 1
         };
-        // CreateコマンドでBranchを参照するため、BranchDtoオブジェクトを参照ように渡す
+        // CreateコマンドでBranchを参照するため、BranchDtoオブジェクトを参照用に渡す
         GivenEnvironmentDtos(new List<ISingleAggregate> { branchDto });
         // CreateClient コマンドを実行する
         WhenCreate(new CreateClient(branchDto.AggregateId, testClientName, testEmail));
@@ -68,7 +68,7 @@ public class ClientSpec : SampleSingleAggregateTestBase<Client, ClientContents>
         };
         GivenEnvironmentDtoContents<Branch, BranchContents>(Guid.NewGuid(), new BranchContents { Name = "TEST" });
         GivenEnvironmentDtoContents<Client, ClientContents>(Guid.NewGuid(), new ClientContents(Guid.NewGuid(), "NOT DUPLICATED NAME", testEmail));
-        // CreateコマンドでBranchを参照するため、BranchDtoオブジェクトを参照ように渡す
+        // CreateコマンドでBranchを参照するため、BranchDtoオブジェクトを参照用に渡す
         GivenEnvironmentDtos(new List<ISingleAggregate> { branchDto, clientDto });
         // CreateClient コマンドを実行する エラーになるはず
         WhenCreate(new CreateClient(branchDto.AggregateId, testClientName, testEmail)).ThenThrows<SekibanEmailAlreadyRegistered>();
