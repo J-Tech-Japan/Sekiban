@@ -4,7 +4,10 @@ using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace CustomerDomainContext.Aggregates.Clients.Commands;
 
-public record CreateClient(Guid BranchId, string ClientName, string ClientEmail) : ICreateAggregateCommand<Client>;
+public record CreateClient(Guid BranchId, string ClientName, string ClientEmail) : ICreateAggregateCommand<Client>
+{
+    public CreateClient() : this(Guid.Empty, string.Empty, string.Empty) { }
+}
 public class CreateClientHandler : CreateAggregateCommandHandlerBase<Client, CreateClient>
 {
     private readonly IMultipleAggregateProjectionService _multipleAggregateProjectionService;

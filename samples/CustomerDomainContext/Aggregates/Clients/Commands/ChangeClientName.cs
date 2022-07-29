@@ -2,6 +2,7 @@
 
 public record ChangeClientName(Guid ClientId, string ClientName) : ChangeAggregateCommandBase<Client>
 {
+    public ChangeClientName() : this(Guid.Empty, string.Empty) { }
     public override Guid GetAggregateId() =>
         ClientId;
 }

@@ -2,6 +2,7 @@ namespace CustomerDomainContext.Aggregates.RecentActivities.Commands;
 
 public record AddRecentActivity(Guid RecentActivityId, string Activity) : ChangeAggregateCommandBase<RecentActivity>, INoValidateCommand
 {
+    public AddRecentActivity() : this(Guid.Empty, string.Empty) { }
     public override Guid GetAggregateId() =>
         RecentActivityId;
 }

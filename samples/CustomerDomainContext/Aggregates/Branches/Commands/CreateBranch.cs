@@ -1,6 +1,9 @@
 namespace CustomerDomainContext.Aggregates.Branches.Commands;
 
-public record CreateBranch(string Name) : ICreateAggregateCommand<Branch>;
+public record CreateBranch(string Name) : ICreateAggregateCommand<Branch>
+{
+    public CreateBranch() : this(string.Empty) { }
+}
 public class CreateBranchHandler : CreateAggregateCommandHandlerBase<Branch, CreateBranch>
 {
     public override Guid GenerateAggregateId(CreateBranch command) =>

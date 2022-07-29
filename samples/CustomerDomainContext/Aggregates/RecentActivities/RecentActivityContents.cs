@@ -2,7 +2,7 @@ namespace CustomerDomainContext.Aggregates.RecentActivities;
 
 public record RecentActivityContents : IAggregateContents
 {
-    public IReadOnlyCollection<RecentActivityRecord> LatestActivities { get; set; } = new List<RecentActivityRecord>();
+    public IReadOnlyCollection<RecentActivityRecord> LatestActivities { get; set; } = new List<RecentActivityRecord>(){new RecentActivityRecord()};
     public RecentActivityContents(IReadOnlyCollection<RecentActivityRecord> latestActivities) =>
         LatestActivities = latestActivities;
     public RecentActivityContents() { }

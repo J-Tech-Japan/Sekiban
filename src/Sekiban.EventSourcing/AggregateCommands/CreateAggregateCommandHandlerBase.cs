@@ -1,7 +1,7 @@
 ﻿namespace Sekiban.EventSourcing.AggregateCommands;
 
 public abstract class CreateAggregateCommandHandlerBase<T, C> : ICreateAggregateCommandHandler<T, C>
-    where T : IAggregate where C : ICreateAggregateCommand<T>
+    where T : IAggregate where C : ICreateAggregateCommand<T>, new()
 {
 
     async Task<AggregateCommandResponse<T>> ICreateAggregateCommandHandler<T, C>.HandleAsync(AggregateCommandDocument<C> command, T aggregate)
