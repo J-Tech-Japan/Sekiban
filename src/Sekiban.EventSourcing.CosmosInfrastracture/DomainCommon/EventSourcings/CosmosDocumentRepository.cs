@@ -1,6 +1,7 @@
 using Microsoft.Azure.Cosmos.Linq;
+using Sekiban.EventSourcing.Partitions;
 using Sekiban.EventSourcing.Settings;
-
+using Sekiban.EventSourcing.Shared;
 namespace CosmosInfrastructure.DomainCommon.EventSourcings;
 
 public class CosmosDocumentRepository : IDocumentPersistentRepository
@@ -48,12 +49,13 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     foreach (var item in response)
                     {
                         // pick out one album
-                        if (Sekiban.EventSourcing.Shared.SekibanJsonHelper.GetValue<string>(item, nameof(IDocument.DocumentTypeName)) is not string typeName)
+                        if (SekibanJsonHelper.GetValue<string>(item, nameof(IDocument.DocumentTypeName)) is not string typeName)
+                        {
                             continue;
+                        }
 
-                        var toAdd = _registeredEventTypes.RegisteredTypes
-                            .Where(m => m.Name == typeName)
-                            .Select(m => Sekiban.EventSourcing.Shared.SekibanJsonHelper.ConvertTo(item, typeof(AggregateEvent<>).MakeGenericType(m)) as IAggregateEvent)
+                        var toAdd = _registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
+                            .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(AggregateEvent<>).MakeGenericType(m)) as IAggregateEvent)
                             .FirstOrDefault(m => m is not null);
                         if (toAdd == null)
                         {
@@ -80,10 +82,9 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             aggregateContainerGroup,
             async container =>
             {
-                var options = new QueryRequestOptions()
+                var options = new QueryRequestOptions
                 {
-                    PartitionKey = new PartitionKey(
-                        Sekiban.EventSourcing.Partitions.PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, originalType))
+                    PartitionKey = new PartitionKey(PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, originalType))
                 };
                 var query = container.GetItemLinqQueryable<SnapshotDocument>()
                     .Where(b => b.DocumentType == DocumentType.AggregateSnapshot && b.AggregateId == aggregateId)
@@ -120,10 +121,9 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             async container =>
             {
                 var list = new List<SnapshotDocument>();
-                var options = new QueryRequestOptions()
+                var options = new QueryRequestOptions
                 {
-                    PartitionKey = new PartitionKey(
-                        Sekiban.EventSourcing.Partitions.PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, originalType))
+                    PartitionKey = new PartitionKey(PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, originalType))
                 };
                 var query = container.GetItemLinqQueryable<SnapshotDocument>()
                     .Where(b => b.DocumentType == DocumentType.AggregateSnapshot && b.AggregateId == aggregateId)
@@ -171,11 +171,13 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     foreach (var item in response)
                     {
                         // pick out one album
-                        if (Sekiban.EventSourcing.Shared.SekibanJsonHelper.GetValue<string>(item, nameof(IDocument.DocumentTypeName)) is not string typeName)
+                        if (SekibanJsonHelper.GetValue<string>(item, nameof(IDocument.DocumentTypeName)) is not string typeName)
+                        {
                             continue;
+                        }
 
                         var toAdd = types.Where(m => m.Name == typeName)
-                            .Select(m => Sekiban.EventSourcing.Shared.SekibanJsonHelper.ConvertTo(item, typeof(AggregateEvent<>).MakeGenericType(m)) as IAggregateEvent)
+                            .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(AggregateEvent<>).MakeGenericType(m)) as IAggregateEvent)
                             .FirstOrDefault(m => m is not null);
                         if (toAdd == null)
                         {
@@ -193,6 +195,29 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 }
             });
     }
+    public async Task GetAllAggregateEventStringsForAggregateIdAsync(
+        Guid aggregateId,
+        Type originalType,
+        string? partitionKey,
+        string? sinceSortableUniqueId,
+        Action<IEnumerable<string>> resultAction) =>
+        await GetAllAggregateEventsForAggregateIdAsync(
+            aggregateId,
+            originalType,
+            partitionKey,
+            sinceSortableUniqueId,
+            events =>
+            {
+                resultAction(events.Select(SekibanJsonHelper.Serialize).Where(m => !string.IsNullOrEmpty(m))!);
+            });
+
+    public async Task GetAllAggregateCommandStringsForAggregateIdAsync(
+        Guid aggregateId,
+        Type originalType,
+        string? partitionKey,
+        string? sinceSortableUniqueId,
+        Action<IEnumerable<string>> resultAction) =>
+        throw new NotImplementedException();
     public async Task GetAllAggregateEventsForAggregateEventTypeAsync(
         Type originalType,
         string? sinceSortableUniqueId,
@@ -218,11 +243,13 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     foreach (var item in response)
                     {
                         // pick out one album
-                        if (Sekiban.EventSourcing.Shared.SekibanJsonHelper.GetValue<string>(item, nameof(IDocument.DocumentTypeName)) is not string typeName)
+                        if (SekibanJsonHelper.GetValue<string>(item, nameof(IDocument.DocumentTypeName)) is not string typeName)
+                        {
                             continue;
+                        }
 
                         var toAdd = _registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
-                            .Select(m => Sekiban.EventSourcing.Shared.SekibanJsonHelper.ConvertTo(item, typeof(AggregateEvent<>).MakeGenericType(m)) as IAggregateEvent)
+                            .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(AggregateEvent<>).MakeGenericType(m)) as IAggregateEvent)
                             .FirstOrDefault(m => m is not null);
                         if (toAdd == null)
                         {
@@ -250,10 +277,9 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             aggregateContainerGroup,
             async container =>
             {
-                var options = new QueryRequestOptions()
+                var options = new QueryRequestOptions
                 {
-                    PartitionKey = new PartitionKey(
-                        Sekiban.EventSourcing.Partitions.PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, originalType))
+                    PartitionKey = new PartitionKey(PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, originalType))
                 };
                 var query = container.GetItemLinqQueryable<SnapshotDocument>()
                     .Where(b => b.DocumentType == DocumentType.AggregateSnapshot && b.AggregateId == aggregateId && b.SavedVersion == version)

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Settings;
+using Sekiban.EventSourcing.Shared;
 namespace Sekiban.EventSourcing.Documents;
 
 public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumentPersistentRepository
@@ -48,6 +49,30 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
                 list.GetRange(index, list.Count - index).Where(m => m.SortableUniqueId != sinceSortableUniqueId).OrderBy(m => m.SortableUniqueId));
         }
     }
+    public async Task GetAllAggregateEventStringsForAggregateIdAsync(
+        Guid aggregateId,
+        Type originalType,
+        string? partitionKey,
+        string? sinceSortableUniqueId,
+        Action<IEnumerable<string>> resultAction)
+    {
+        await GetAllAggregateEventsForAggregateIdAsync(
+            aggregateId,
+            originalType,
+            partitionKey,
+            sinceSortableUniqueId,
+            events =>
+            {
+                resultAction(events.Select(SekibanJsonHelper.Serialize).Where(m => !string.IsNullOrEmpty(m))!);
+            });
+    }
+    public async Task GetAllAggregateCommandStringsForAggregateIdAsync(
+        Guid aggregateId,
+        Type originalType,
+        string? partitionKey,
+        string? sinceSortableUniqueId,
+        Action<IEnumerable<string>> resultAction) =>
+        throw new NotImplementedException();
     public async Task GetAllAggregateEventsAsync(
         Type multipleProjectionType,
         IList<string> targetAggregateNames,
