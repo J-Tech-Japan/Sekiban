@@ -119,10 +119,25 @@ public class DocumentRepositorySplitter : IDocumentRepository
     public async Task GetAllAggregateCommandStringsForAggregateIdAsync(
         Guid aggregateId,
         Type originalType,
-        string? partitionKey,
         string? sinceSortableUniqueId,
-        Action<IEnumerable<string>> resultAction) =>
-        throw new NotImplementedException();
+        Action<IEnumerable<string>> resultAction)
+    {
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
+        if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+        {
+            await _documentTemporaryRepository.GetAllAggregateCommandStringsForAggregateIdAsync(
+                aggregateId,
+                originalType,
+                sinceSortableUniqueId,
+                resultAction);
+            return;
+        }
+        await _documentPersistentRepository.GetAllAggregateCommandStringsForAggregateIdAsync(
+            aggregateId,
+            originalType,
+            sinceSortableUniqueId,
+            resultAction);
+    }
 
     public async Task GetAllAggregateEventsAsync(
         Type multipleProjectionType,

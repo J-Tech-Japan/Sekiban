@@ -1,7 +1,6 @@
 namespace Sekiban.EventSourcing.AggregateCommands;
 
-public record AggregateCommandDocument<T> : DocumentBase, IDocument, ICallHistories
-    where T : IAggregateCommand
+public record AggregateCommandDocument<T> : DocumentBase, IDocument, ICallHistories where T : IAggregateCommand
 {
     /// <summary>
     ///     コマンド内容
@@ -20,28 +19,22 @@ public record AggregateCommandDocument<T> : DocumentBase, IDocument, ICallHistor
     /// </summary>
     public string? Exception { get; init; } = null;
 
-    /// <summary>
-    ///     イベント、コマンドの呼び出し履歴
-    /// </summary>
-    public List<CallHistory> CallHistories { get; init; } = new();
+    public AggregateCommandDocument() { }
 
-    public AggregateCommandDocument()
-    { }
-    
-    public AggregateCommandDocument(
-        Guid aggregateId,
-        T commandPayload,
-        List<CallHistory>? callHistories = null
-    ) : base(
-        aggregateId: aggregateId,
-        partitionKey: PartitionKeyGenerator.ForAggregateCommand(aggregateId),
-        documentType: DocumentType.AggregateCommand,
-        documentTypeName: typeof(T).Name
-    )
+    public AggregateCommandDocument(Guid aggregateId, T commandPayload, Type aggregateType, List<CallHistory>? callHistories = null) : base(
+        aggregateId,
+        PartitionKeyGenerator.ForAggregateCommand(aggregateId, aggregateType),
+        DocumentType.AggregateCommand,
+        typeof(T).Name)
     {
         Payload = commandPayload;
         CallHistories = callHistories ?? new List<CallHistory>();
     }
+
+    /// <summary>
+    ///     イベント、コマンドの呼び出し履歴
+    /// </summary>
+    public List<CallHistory> CallHistories { get; init; } = new();
 
     public List<CallHistory> GetCallHistoriesIncludesItself()
     {

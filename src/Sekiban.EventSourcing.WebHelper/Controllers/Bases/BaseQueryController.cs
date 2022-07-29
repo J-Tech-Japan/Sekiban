@@ -4,6 +4,7 @@ using Sekiban.EventSourcing.Documents;
 using Sekiban.EventSourcing.Partitions;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
+using Sekiban.EventSourcing.Shared;
 namespace Sekiban.EventSourcing.WebHelper.Controllers.Bases;
 
 [ApiController]
@@ -40,6 +41,21 @@ public class BaseQueryController<TAggregate, TAggregateContents> : ControllerBas
             eventObjects =>
             {
                 events.AddRange(eventObjects);
+            });
+        return Ok(events);
+    }
+    [HttpGet]
+    [Route("{id}/commands")]
+    public async Task<ActionResult<IEnumerable<dynamic>>> GetCommandsAsync(Guid id)
+    {
+        var events = new List<dynamic>();
+        await _documentRepository.GetAllAggregateCommandStringsForAggregateIdAsync(
+            id,
+            typeof(TAggregate),
+            null,
+            eventObjects =>
+            {
+                events.AddRange(eventObjects.Select(m => SekibanJsonHelper.Deserialize(m, typeof(object))!));
             });
         return Ok(events);
     }

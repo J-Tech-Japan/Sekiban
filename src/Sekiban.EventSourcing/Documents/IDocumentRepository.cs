@@ -18,7 +18,6 @@ public interface IDocumentRepository
     Task GetAllAggregateCommandStringsForAggregateIdAsync(
         Guid aggregateId,
         Type originalType,
-        string? partitionKey,
         string? sinceSortableUniqueId,
         Action<IEnumerable<string>> resultAction);
 

@@ -214,10 +214,36 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
     public async Task GetAllAggregateCommandStringsForAggregateIdAsync(
         Guid aggregateId,
         Type originalType,
-        string? partitionKey,
         string? sinceSortableUniqueId,
-        Action<IEnumerable<string>> resultAction) =>
-        throw new NotImplementedException();
+        Action<IEnumerable<string>> resultAction)
+    {
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
+
+        await _cosmosDbFactory.CosmosActionAsync(
+            DocumentType.AggregateCommand,
+            aggregateContainerGroup,
+            async container =>
+            {
+                var types = _registeredEventTypes.RegisteredTypes;
+                var options = new QueryRequestOptions();
+                options.PartitionKey = new PartitionKey(PartitionKeyGenerator.ForAggregateCommand(aggregateId, originalType));
+
+                var query = container.GetItemLinqQueryable<IDocument>()
+                    .Where(b => b.DocumentType == DocumentType.AggregateCommand && b.AggregateId == aggregateId);
+                query = sinceSortableUniqueId is not null ? query.OrderByDescending(m => m.SortableUniqueId) : query.OrderBy(m => m.SortableUniqueId);
+                var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
+                while (feedIterator.HasMoreResults)
+                {
+                    var events = new List<string>();
+                    var response = await feedIterator.ReadNextAsync();
+                    foreach (var item in response)
+                    {
+                        events.Add(SekibanJsonHelper.Serialize(item));
+                    }
+                    resultAction(events);
+                }
+            });
+    }
     public async Task GetAllAggregateEventsForAggregateEventTypeAsync(
         Type originalType,
         string? sinceSortableUniqueId,

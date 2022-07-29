@@ -68,10 +68,9 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
     public async Task GetAllAggregateCommandStringsForAggregateIdAsync(
         Guid aggregateId,
         Type originalType,
-        string? partitionKey,
         string? sinceSortableUniqueId,
         Action<IEnumerable<string>> resultAction) =>
-        throw new NotImplementedException();
+        resultAction(new List<string>());
     public async Task GetAllAggregateEventsAsync(
         Type multipleProjectionType,
         IList<string> targetAggregateNames,

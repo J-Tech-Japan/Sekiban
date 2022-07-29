@@ -96,7 +96,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
             throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
         }
         var aggregateId = handler.GenerateAggregateId(createCommand);
-        var commandDocument = new AggregateCommandDocument<C>(aggregateId, createCommand);
+        var commandDocument = new AggregateCommandDocument<C>(aggregateId, createCommand, typeof(TAggregate));
         try
         {
             var aggregate = new TAggregate { AggregateId = aggregateId };
@@ -127,7 +127,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         {
             throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
         }
-        var commandDocument = new AggregateCommandDocument<C>(_aggregate.AggregateId, changeCommand);
+        var commandDocument = new AggregateCommandDocument<C>(_aggregate.AggregateId, changeCommand, typeof(TAggregate));
         try
         {
             handler.HandleAsync(commandDocument, _aggregate).Wait();
@@ -152,7 +152,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
             throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
         }
         var command = commandFunc(_aggregate);
-        var commandDocument = new AggregateCommandDocument<C>(_aggregate.AggregateId, command);
+        var commandDocument = new AggregateCommandDocument<C>(_aggregate.AggregateId, command, typeof(TAggregate));
         try
         {
             handler.HandleAsync(commandDocument, _aggregate).Wait();

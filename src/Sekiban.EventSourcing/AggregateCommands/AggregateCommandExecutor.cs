@@ -28,7 +28,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         where C : ChangeAggregateCommandBase<T>
     {
         AggregateDto<TContents>? aggregateDto = null;
-        var commandDocument = new AggregateCommandDocument<C>(command.GetAggregateId(), command, callHistories)
+        var commandDocument = new AggregateCommandDocument<C>(command.GetAggregateId(), command, typeof(T), callHistories)
         {
             ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
         };
@@ -99,7 +99,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
     {
         AggregateDto<TContents>? aggregateDto = null;
         var commandDocument
-            = new AggregateCommandDocument<C>(Guid.Empty, command, callHistories)
+            = new AggregateCommandDocument<C>(Guid.Empty, command, typeof(T), callHistories)
             {
                 ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
             };
@@ -119,7 +119,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
             }
             var aggregateId = handler.GenerateAggregateId(command);
             commandDocument
-                = new AggregateCommandDocument<C>(aggregateId, command, callHistories)
+                = new AggregateCommandDocument<C>(aggregateId, command, typeof(T), callHistories)
                 {
                     ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
                 };
