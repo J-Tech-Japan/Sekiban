@@ -23,7 +23,7 @@ public class SingleAggregateListProjector<T, Q, P> : IMultipleAggregateProjector
             } else
             {
                 var targetAggregate = List.FirstOrDefault(m => m.AggregateId == ev.AggregateId);
-                if (targetAggregate != null)
+                if (targetAggregate is not null)
                 {
                     targetAggregate.ApplyEvent(ev);
                 }

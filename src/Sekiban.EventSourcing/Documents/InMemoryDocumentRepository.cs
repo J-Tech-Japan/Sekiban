@@ -32,8 +32,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             ? string.Empty
             : sekibanContext.SettingGroupIdentifier;
         await Task.CompletedTask;
-        if (partitionKey == null) { }
-        var list = partitionKey == null
+        var list = partitionKey is null
             ? _inMemoryDocumentStore.GetAllEvents(sekibanIdentifier).Where(m => m.AggregateId == aggregateId).ToList()
             : _inMemoryDocumentStore.GetEventPartition(partitionKey, sekibanIdentifier).OrderBy(m => m.SortableUniqueId).ToList();
         if (string.IsNullOrWhiteSpace(sinceSortableUniqueId))
@@ -85,7 +84,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             : sekibanContext.SettingGroupIdentifier;
         await Task.CompletedTask;
         var list = _inMemoryDocumentStore.GetAllEvents(sekibanIdentifier).ToList();
-        if (sinceSortableUniqueId != null)
+        if (sinceSortableUniqueId is not null)
         {
             var index = list.FindIndex(m => m.SortableUniqueId == sinceSortableUniqueId);
             if (index == list.Count - 1)
@@ -127,7 +126,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             ? string.Empty
             : sekibanContext.SettingGroupIdentifier;
 
-        if (partitionKey == null) { return false; }
+        if (partitionKey is null) { return false; }
         var list = _inMemoryDocumentStore.GetEventPartition(partitionKey, sekibanIdentifier).ToList();
         if (string.IsNullOrWhiteSpace(sortableUniqueId))
         {
@@ -147,7 +146,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             : sekibanContext.SettingGroupIdentifier;
 
         var list = _inMemoryDocumentStore.GetAllEvents(sekibanIdentifier).Where(m => m.AggregateType == originalType.Name).ToList();
-        if (sinceSortableUniqueId != null)
+        if (sinceSortableUniqueId is not null)
         {
             var index = list.FindIndex(m => m.SortableUniqueId == sinceSortableUniqueId);
             if (index == list.Count - 1)

@@ -91,7 +91,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         ResetBeforeCommand();
         var handler
             = _serviceProvider.GetService(typeof(ICreateAggregateCommandHandler<TAggregate, C>)) as ICreateAggregateCommandHandler<TAggregate, C>;
-        if (handler == null)
+        if (handler is null)
         {
             throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
         }
@@ -123,7 +123,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         ResetBeforeCommand();
         var handler
             = _serviceProvider.GetService(typeof(IChangeAggregateCommandHandler<TAggregate, C>)) as IChangeAggregateCommandHandler<TAggregate, C>;
-        if (handler == null)
+        if (handler is null)
         {
             throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
         }
@@ -147,7 +147,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         ResetBeforeCommand();
         var handler
             = _serviceProvider.GetService(typeof(IChangeAggregateCommandHandler<TAggregate, C>)) as IChangeAggregateCommandHandler<TAggregate, C>;
-        if (handler == null)
+        if (handler is null)
         {
             throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
         }

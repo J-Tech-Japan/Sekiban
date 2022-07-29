@@ -81,7 +81,7 @@ public class CosmosDbFactory
         var containerId = GetContainerId(documentType, containerGroup);
         var container = (Container?)_memoryCache.Get(GetMemoryCacheContainerKey(documentType, databaseId, containerId, _sekibanContextIdentifier));
 
-        if (container != null)
+        if (container is not null)
         {
             return container;
         }
@@ -96,13 +96,13 @@ public class CosmosDbFactory
             MaxRequestsPerTcpConnection = 50
         };
         var client = _memoryCache.Get<CosmosClient?>(GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier));
-        if (client == null)
+        if (client is null)
         {
             client = new CosmosClient(uri, securityKey, options);
             _memoryCache.Set(GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier), client);
         }
         var database = _memoryCache.Get<Database?>(GetMemoryCacheDatabaseKey(documentType, databaseId, _sekibanContextIdentifier));
-        if (database == null)
+        if (database is null)
         {
             database = await client.CreateDatabaseIfNotExistsAsync(databaseId);
             _memoryCache.Set(GetMemoryCacheDatabaseKey(documentType, databaseId, _sekibanContextIdentifier), database);

@@ -35,7 +35,7 @@ public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointContents>
 
     public void AddLoyaltyPoint(DateTime happenedDate, LoyaltyPointReceiveType reason, int pointAmount, string note)
     {
-        if (Contents.LastOccuredTime != null && Contents.LastOccuredTime > happenedDate)
+        if (Contents.LastOccuredTime is not null && Contents.LastOccuredTime > happenedDate)
         {
             throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
         }

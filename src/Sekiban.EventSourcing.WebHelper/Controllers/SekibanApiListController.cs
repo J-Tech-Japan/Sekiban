@@ -30,7 +30,7 @@ public class SekibanApiListController<T> : ControllerBase
                 var aggregateType = interfaceType?.GenericTypeArguments[0];
                 var commandType = interfaceType?.GenericTypeArguments[1];
                 var aggregateContentsType = aggregateType?.BaseType?.GenericTypeArguments[0];
-                if (aggregateType == null || commandType == null || aggregateContentsType == null) { continue; }
+                if (aggregateType is null || commandType is null || aggregateContentsType is null) { continue; }
                 list.Add(
                     new SekibanURLInfo
                     {
@@ -58,7 +58,7 @@ public class SekibanApiListController<T> : ControllerBase
                 var aggregateType = interfaceType?.GenericTypeArguments[0];
                 var commandType = interfaceType?.GenericTypeArguments[1];
                 var aggregateContentsType = aggregateType?.BaseType?.GenericTypeArguments[0];
-                if (aggregateType == null || commandType == null || aggregateContentsType == null) { continue; }
+                if (aggregateType is null || commandType is null || aggregateContentsType is null) { continue; }
                 list.Add(
                     new SekibanURLInfo
                     {
@@ -80,7 +80,7 @@ public class SekibanApiListController<T> : ControllerBase
         foreach (var aggregateType in _sekibanControllerItems.SekibanAggregates)
         {
             var aggregateContentsType = aggregateType?.BaseType?.GenericTypeArguments[0];
-            if (aggregateType == null || aggregateContentsType == null) { continue; }
+            if (aggregateType is null || aggregateContentsType is null) { continue; }
             list.Add(new SekibanURLInfo { Url = $"/{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name}/{{id}}", Method = "GET" });
         }
         return Ok(list);
@@ -94,7 +94,7 @@ public class SekibanApiListController<T> : ControllerBase
         foreach (var aggregateType in _sekibanControllerItems.SekibanAggregates)
         {
             var aggregateContentsType = aggregateType?.BaseType?.GenericTypeArguments[0];
-            if (aggregateType == null || aggregateContentsType == null) { continue; }
+            if (aggregateType is null || aggregateContentsType is null) { continue; }
             list.Add(new SekibanURLInfo { Url = $"/{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name}", Method = "GET" });
         }
         return Ok(list);

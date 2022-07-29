@@ -92,7 +92,7 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposab
     public T GetService<T>()
     {
         var toreturn = _serviceProvider.GetService<T>();
-        if (toreturn == null)
+        if (toreturn is null)
         {
             throw new Exception("オブジェクトが登録されていません。" + typeof(T));
         }

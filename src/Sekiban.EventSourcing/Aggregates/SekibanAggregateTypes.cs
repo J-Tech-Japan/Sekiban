@@ -20,7 +20,7 @@ public class SekibanAggregateTypes
             foreach (var type in aggregates)
             {
                 var dto = type.BaseType?.GetGenericArguments()?.First();
-                if (dto == null) { continue; }
+                if (dto is null) { continue; }
                 var baseProjector = typeof(DefaultSingleAggregateProjector<>);
                 var p = baseProjector.MakeGenericType(type);
                 _registeredTypes.Add(new DefaultAggregateType(type, dto, p));
@@ -32,7 +32,7 @@ public class SekibanAggregateTypes
             {
                 var instance = (dynamic?)Activator.CreateInstance(type);
                 var original = instance?.OriginalAggregateType();
-                if (original == null) { continue; }
+                if (original is null) { continue; }
                 _registeredCustomProjectorTypes.Add(new ProjectionAggregateType(type, type, type, original));
             }
         }

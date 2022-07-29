@@ -19,7 +19,7 @@ public abstract class SingleAggregateProjectionBase<T> : ISingleAggregateProject
         }
         if (ev.Id == LastEventId) { return; }
         var action = GetApplyEventAction(ev);
-        if (action == null) { return; }
+        if (action is null) { return; }
         action();
 
         LastEventId = ev.Id;
@@ -27,7 +27,7 @@ public abstract class SingleAggregateProjectionBase<T> : ISingleAggregateProject
         Version++;
     }
     public bool CanApplyEvent(IAggregateEvent ev) =>
-        GetApplyEventAction(ev) != null;
+        GetApplyEventAction(ev) is not null;
     public abstract T ToDto();
     public void ApplySnapshot(T snapshot)
     {

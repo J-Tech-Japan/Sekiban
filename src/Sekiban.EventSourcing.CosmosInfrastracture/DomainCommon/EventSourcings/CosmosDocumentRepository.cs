@@ -57,7 +57,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                         var toAdd = _registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
                             .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(AggregateEvent<>).MakeGenericType(m)) as IAggregateEvent)
                             .FirstOrDefault(m => m is not null);
-                        if (toAdd == null)
+                        if (toAdd is null)
                         {
                             throw new SekibanUnregisterdEventFoundException();
                         }
@@ -155,14 +155,14 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             {
                 var types = _registeredEventTypes.RegisteredTypes;
                 var options = new QueryRequestOptions();
-                if (partitionKey != null)
+                if (partitionKey is not null)
                 {
                     options.PartitionKey = new PartitionKey(partitionKey);
                 }
 
                 var query = container.GetItemLinqQueryable<IAggregateEvent>()
                     .Where(b => b.DocumentType == DocumentType.AggregateEvent && b.AggregateId == aggregateId);
-                query = sinceSortableUniqueId != null ? query.OrderByDescending(m => m.SortableUniqueId) : query.OrderBy(m => m.SortableUniqueId);
+                query = sinceSortableUniqueId is not null ? query.OrderByDescending(m => m.SortableUniqueId) : query.OrderBy(m => m.SortableUniqueId);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
                 while (feedIterator.HasMoreResults)
                 {
@@ -179,7 +179,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                         var toAdd = types.Where(m => m.Name == typeName)
                             .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(AggregateEvent<>).MakeGenericType(m)) as IAggregateEvent)
                             .FirstOrDefault(m => m is not null);
-                        if (toAdd == null)
+                        if (toAdd is null)
                         {
                             throw new SekibanUnregisterdEventFoundException();
                         }
@@ -251,7 +251,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                         var toAdd = _registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
                             .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(AggregateEvent<>).MakeGenericType(m)) as IAggregateEvent)
                             .FirstOrDefault(m => m is not null);
-                        if (toAdd == null)
+                        if (toAdd is null)
                         {
                             throw new SekibanUnregisterdEventFoundException();
                         }

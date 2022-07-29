@@ -41,7 +41,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 resultAction);
             return;
         }
-        if (partitionKey != null && _aggregateSettings.CanUseHybrid(originalType) && _hybridStoreManager.HasPartition(partitionKey))
+        if (partitionKey is not null && _aggregateSettings.CanUseHybrid(originalType) && _hybridStoreManager.HasPartition(partitionKey))
         {
             if ((string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
                     string.IsNullOrWhiteSpace(_hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey))) ||
@@ -73,7 +73,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 var aggregateEvents = events.ToList();
                 if (_aggregateSettings.CanUseHybrid(originalType))
                 {
-                    if (partitionKey == null) { return; }
+                    if (partitionKey is null) { return; }
                     var hasPartitionKey = _hybridStoreManager.HasPartition(partitionKey);
                     var sinceSortableUniqueIdInPartition = _hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey);
 
