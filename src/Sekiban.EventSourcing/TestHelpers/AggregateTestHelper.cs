@@ -91,12 +91,12 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         ResetBeforeCommand();
         var handler
             = _serviceProvider.GetService(typeof(ICreateAggregateCommandHandler<TAggregate, C>)) as ICreateAggregateCommandHandler<TAggregate, C>;
-        if (handler == null)
+        if (handler is null)
         {
             throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
         }
         var aggregateId = handler.GenerateAggregateId(createCommand);
-        var commandDocument = new AggregateCommandDocument<C>(aggregateId, createCommand);
+        var commandDocument = new AggregateCommandDocument<C>(aggregateId, createCommand, typeof(TAggregate));
         try
         {
             var aggregate = new TAggregate { AggregateId = aggregateId };
@@ -113,6 +113,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         {
             throw new SekibanCreateHasToMakeEventException();
         }
+        CheckCommandJSONSupports(commandDocument);
         _aggregate.ResetEventsAndSnapshots();
         CheckStateJSONSupports();
         return this;
@@ -123,11 +124,11 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         ResetBeforeCommand();
         var handler
             = _serviceProvider.GetService(typeof(IChangeAggregateCommandHandler<TAggregate, C>)) as IChangeAggregateCommandHandler<TAggregate, C>;
-        if (handler == null)
+        if (handler is null)
         {
             throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
         }
-        var commandDocument = new AggregateCommandDocument<C>(_aggregate.AggregateId, changeCommand);
+        var commandDocument = new AggregateCommandDocument<C>(_aggregate.AggregateId, changeCommand, typeof(TAggregate));
         try
         {
             handler.HandleAsync(commandDocument, _aggregate).Wait();
@@ -137,6 +138,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
             _latestException = ex;
             return this;
         }
+        CheckCommandJSONSupports(commandDocument);
         _latestEvents = _aggregate.Events.ToList();
         _aggregate.ResetEventsAndSnapshots();
         CheckStateJSONSupports();
@@ -147,12 +149,12 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         ResetBeforeCommand();
         var handler
             = _serviceProvider.GetService(typeof(IChangeAggregateCommandHandler<TAggregate, C>)) as IChangeAggregateCommandHandler<TAggregate, C>;
-        if (handler == null)
+        if (handler is null)
         {
             throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
         }
         var command = commandFunc(_aggregate);
-        var commandDocument = new AggregateCommandDocument<C>(_aggregate.AggregateId, command);
+        var commandDocument = new AggregateCommandDocument<C>(_aggregate.AggregateId, command, typeof(TAggregate));
         try
         {
             handler.HandleAsync(commandDocument, _aggregate).Wait();
@@ -162,7 +164,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
             _latestException = ex;
             return this;
         }
-
+        CheckCommandJSONSupports(commandDocument);
         _latestEvents = _aggregate.Events.ToList();
         _aggregate.ResetEventsAndSnapshots();
         CheckStateJSONSupports();
@@ -325,6 +327,14 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         var dtoFromJsonJson = SekibanJsonHelper.Serialize(dtoFromJson);
         Assert.Equal(json, dtoFromJsonJson);
         CheckEventJsonCompatibility();
+    }
+    private void CheckCommandJSONSupports(IDocument command)
+    {
+        var type = command.GetType();
+        var json = SekibanJsonHelper.Serialize(command);
+        var eventFromJson = SekibanJsonHelper.Deserialize(json, type);
+        var json2 = SekibanJsonHelper.Serialize(eventFromJson);
+        Assert.Equal(json, json2);
     }
 
     private void CheckEventJsonCompatibility()

@@ -6,13 +6,13 @@
         <Nullable>enable</Nullable>
         <RootNamespace>CosmosInfrastructure</RootNamespace>
         <PackageId>JJ_Sekiban.EventSourcing.CosmosInfrastructure</PackageId>
-        <Version>0.4.13</Version>
+        <Version>0.4.14</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework CosmosInfrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.4.13</PackageVersion>
-        <Description>ChangeコマンドのExecuteからAggregateIdを削除</Description>
+        <PackageVersion>0.4.14</PackageVersion>
+        <Description>WebHelperの機能追加</Description>
     </PropertyGroup>
 
     <ItemGroup>

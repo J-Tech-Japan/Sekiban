@@ -3,6 +3,7 @@ namespace CustomerDomainContext.Aggregates.RecentInMemoryActivities.Commands;
 public record AddRecentInMemoryActivity(Guid RecentInMemoryActivityId, string Activity) : ChangeAggregateCommandBase<RecentInMemoryActivity>,
     INoValidateCommand
 {
+    public AddRecentInMemoryActivity() : this(Guid.Empty, string.Empty) { }
     public override Guid GetAggregateId() =>
         RecentInMemoryActivityId;
 }

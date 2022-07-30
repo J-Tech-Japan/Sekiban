@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Settings;
+using Sekiban.EventSourcing.Shared;
 namespace Sekiban.EventSourcing.Documents;
 
 public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumentPersistentRepository
@@ -31,8 +32,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             ? string.Empty
             : sekibanContext.SettingGroupIdentifier;
         await Task.CompletedTask;
-        if (partitionKey == null) { }
-        var list = partitionKey == null
+        var list = partitionKey is null
             ? _inMemoryDocumentStore.GetAllEvents(sekibanIdentifier).Where(m => m.AggregateId == aggregateId).ToList()
             : _inMemoryDocumentStore.GetEventPartition(partitionKey, sekibanIdentifier).OrderBy(m => m.SortableUniqueId).ToList();
         if (string.IsNullOrWhiteSpace(sinceSortableUniqueId))
@@ -48,6 +48,29 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
                 list.GetRange(index, list.Count - index).Where(m => m.SortableUniqueId != sinceSortableUniqueId).OrderBy(m => m.SortableUniqueId));
         }
     }
+    public async Task GetAllAggregateEventStringsForAggregateIdAsync(
+        Guid aggregateId,
+        Type originalType,
+        string? partitionKey,
+        string? sinceSortableUniqueId,
+        Action<IEnumerable<string>> resultAction)
+    {
+        await GetAllAggregateEventsForAggregateIdAsync(
+            aggregateId,
+            originalType,
+            partitionKey,
+            sinceSortableUniqueId,
+            events =>
+            {
+                resultAction(events.Select(SekibanJsonHelper.Serialize).Where(m => !string.IsNullOrEmpty(m))!);
+            });
+    }
+    public async Task GetAllAggregateCommandStringsForAggregateIdAsync(
+        Guid aggregateId,
+        Type originalType,
+        string? sinceSortableUniqueId,
+        Action<IEnumerable<string>> resultAction) =>
+        resultAction(new List<string>());
     public async Task GetAllAggregateEventsAsync(
         Type multipleProjectionType,
         IList<string> targetAggregateNames,
@@ -60,7 +83,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             : sekibanContext.SettingGroupIdentifier;
         await Task.CompletedTask;
         var list = _inMemoryDocumentStore.GetAllEvents(sekibanIdentifier).ToList();
-        if (sinceSortableUniqueId != null)
+        if (sinceSortableUniqueId is not null)
         {
             var index = list.FindIndex(m => m.SortableUniqueId == sinceSortableUniqueId);
             if (index == list.Count - 1)
@@ -102,7 +125,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             ? string.Empty
             : sekibanContext.SettingGroupIdentifier;
 
-        if (partitionKey == null) { return false; }
+        if (partitionKey is null) { return false; }
         var list = _inMemoryDocumentStore.GetEventPartition(partitionKey, sekibanIdentifier).ToList();
         if (string.IsNullOrWhiteSpace(sortableUniqueId))
         {
@@ -122,7 +145,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             : sekibanContext.SettingGroupIdentifier;
 
         var list = _inMemoryDocumentStore.GetAllEvents(sekibanIdentifier).Where(m => m.AggregateType == originalType.Name).ToList();
-        if (sinceSortableUniqueId != null)
+        if (sinceSortableUniqueId is not null)
         {
             var index = list.FindIndex(m => m.SortableUniqueId == sinceSortableUniqueId);
             if (index == list.Count - 1)

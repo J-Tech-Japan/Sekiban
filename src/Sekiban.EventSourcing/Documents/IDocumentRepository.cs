@@ -9,6 +9,18 @@ public interface IDocumentRepository
         string? sinceSortableUniqueId,
         Action<IEnumerable<IAggregateEvent>> resultAction);
 
+    Task GetAllAggregateEventStringsForAggregateIdAsync(
+        Guid aggregateId,
+        Type originalType,
+        string? partitionKey,
+        string? sinceSortableUniqueId,
+        Action<IEnumerable<string>> resultAction);
+    Task GetAllAggregateCommandStringsForAggregateIdAsync(
+        Guid aggregateId,
+        Type originalType,
+        string? sinceSortableUniqueId,
+        Action<IEnumerable<string>> resultAction);
+
     Task GetAllAggregateEventsForAggregateEventTypeAsync(
         Type originalType,
         string? sinceSortableUniqueId,

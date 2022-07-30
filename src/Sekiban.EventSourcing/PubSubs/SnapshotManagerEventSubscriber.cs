@@ -36,14 +36,14 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
     public async Task Handle(TEvent notification, CancellationToken cancellationToken)
     {
         var aggregateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == notification.AggregateType);
-        if (aggregateType == null) { return; }
+        if (aggregateType is null) { return; }
 
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType.Aggregate);
 
         if (aggregateContainerGroup != AggregateContainerGroup.InMemoryContainer)
         {
             var aggregate = await _singleAggregateService.GetAggregateAsync<SnapshotManager, SnapshotManagerContents>(SnapshotManager.SharedId);
-            if (aggregate == null)
+            if (aggregate is null)
             {
                 await _aggregateCommandExecutor.ExecCreateCommandAsync<SnapshotManager, SnapshotManagerContents, CreateSnapshotManager>(
                     new CreateSnapshotManager());
@@ -76,12 +76,12 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                             ?.GetMethod(nameof(_singleAggregateService.GetAggregateDtoAsync))
                             ?.MakeGenericMethod(aggregateType.Aggregate, aggregateType.Dto)
                             .Invoke(_singleAggregateService, new object[] { notification.AggregateId, taken.Payload.NextSnapshotVersion });
-                        if (awaitable == null) { continue; }
+                        if (awaitable is null) { continue; }
                         var aggregateToSnapshot = await awaitable;
                         // var aggregateToSnapshot = await _singleAggregateService.GetAggregateDtoAsync<T, Q>(
                         // command.AggregateId,
                         // taken.NextSnapshotVersion);
-                        if (aggregateToSnapshot == null)
+                        if (aggregateToSnapshot is null)
                         {
                             continue;
                         }
@@ -136,10 +136,10 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                         ?.GetMethod(nameof(_singleAggregateService.GetProjectionAsync))
                         ?.MakeGenericMethod(projection.Aggregate)
                         .Invoke(_singleAggregateService, new object[] { notification.AggregateId, taken.Payload.NextSnapshotVersion });
-                    if (awaitable == null) { continue; }
+                    if (awaitable is null) { continue; }
                     var aggregateToSnapshot = await awaitable;
 
-                    if (aggregateToSnapshot == null)
+                    if (aggregateToSnapshot is null)
                     {
                         continue;
                     }

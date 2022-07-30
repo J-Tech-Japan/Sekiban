@@ -8,6 +8,7 @@ public record ReportAggregateVersionToSnapshotManger(
     int Version,
     int? SnapshotVersion) : ChangeAggregateCommandBase<SnapshotManager>, INoValidateCommand
 {
+    public ReportAggregateVersionToSnapshotManger() : this(Guid.Empty, typeof(object), Guid.Empty, 0, null) { }
     public override Guid GetAggregateId() =>
         SnapshotManagerId;
 }

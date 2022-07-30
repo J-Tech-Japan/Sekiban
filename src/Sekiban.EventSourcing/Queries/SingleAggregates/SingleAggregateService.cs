@@ -126,8 +126,8 @@ public class SingleAggregateService : ISingleAggregateService
         var aggregate = projector.CreateInitialAggregate(aggregateId);
 
         var snapshotDocument = await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(T));
-        var dto = snapshotDocument == null ? default : snapshotDocument.ToDto<Q>();
-        if (dto != null)
+        var dto = snapshotDocument is null ? default : snapshotDocument.ToDto<Q>();
+        if (dto is not null)
         {
             aggregate.ApplySnapshot(dto);
         }
@@ -178,6 +178,6 @@ public class SingleAggregateService : ISingleAggregateService
         where P : ISingleAggregateProjector<T>, new()
     {
         var aggregate = await GetAggregateAsync<T, Q, P>(aggregateId, toVersion);
-        return aggregate == null ? default : aggregate.ToDto();
+        return aggregate is null ? default : aggregate.ToDto();
     }
 }

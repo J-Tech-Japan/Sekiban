@@ -2,6 +2,7 @@
 
 public record DeleteClient(Guid ClientId) : ChangeAggregateCommandBase<Client>
 {
+    public DeleteClient() : this(Guid.Empty) { }
     public override Guid GetAggregateId() =>
         ClientId;
 }

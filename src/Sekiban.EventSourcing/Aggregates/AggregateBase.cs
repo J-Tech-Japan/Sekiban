@@ -16,12 +16,12 @@ public abstract class AggregateBase : IAggregate
     public int Version => _basicInfo.Version;
     public bool IsDeleted { get => _basicInfo.IsDeleted; protected set => _basicInfo.IsDeleted = value; }
     public bool CanApplyEvent(IAggregateEvent ev) =>
-        GetApplyEventAction(ev, ev.GetPayload()) != null;
+        GetApplyEventAction(ev, ev.GetPayload()) is not null;
 
     public void ApplyEvent(IAggregateEvent ev)
     {
         var action = GetApplyEventAction(ev, ev.GetPayload());
-        if (action == null) { return; }
+        if (action is null) { return; }
         if (ev.IsAggregateInitialEvent == false && Version == 0)
         {
             throw new SekibanInvalidEventException();

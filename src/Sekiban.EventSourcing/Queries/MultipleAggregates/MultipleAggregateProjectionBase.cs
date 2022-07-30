@@ -11,7 +11,7 @@ public abstract class MultipleAggregateProjectionBase<TDto> : IMultipleAggregate
     public void ApplyEvent(IAggregateEvent ev)
     {
         var action = GetApplyEventAction(ev);
-        if (action == null) { return; }
+        if (action is null) { return; }
         action();
         Version++;
         LastEventId = ev.Id;

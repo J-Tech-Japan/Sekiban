@@ -340,9 +340,9 @@ public class CustomerDbStoryBasic : TestBase
     {
         foreach (var dto in snapshots.Select(snapshot => snapshot.ToDto<AggregateDto<TContents>>()))
         {
-            if (dto == null) { throw new SekibanInvalidArgumentException(); }
+            if (dto is null) { throw new SekibanInvalidArgumentException(); }
             var fromInitial = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<T, TContents>(aggregateId, dto.Version);
-            if (fromInitial == null) { throw new SekibanInvalidArgumentException(); }
+            if (fromInitial is null) { throw new SekibanInvalidArgumentException(); }
             Assert.Equal(fromInitial.Version, dto.Version);
             Assert.Equal(fromInitial.LastEventId, dto.LastEventId);
         }

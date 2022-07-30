@@ -1,7 +1,7 @@
 ﻿namespace Sekiban.EventSourcing.AggregateCommands;
 
 public abstract class ChangeAggregateCommandHandlerBase<T, C> : IChangeAggregateCommandHandler<T, C>
-    where T : IAggregate where C : ChangeAggregateCommandBase<T>
+    where T : IAggregate where C : ChangeAggregateCommandBase<T>, new()
 {
     async Task<AggregateCommandResponse<T>> IChangeAggregateCommandHandler<T, C>.HandleAsync(
         AggregateCommandDocument<C> aggregateCommandDocument,

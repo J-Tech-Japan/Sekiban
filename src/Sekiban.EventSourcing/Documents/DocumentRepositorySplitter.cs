@@ -1,4 +1,5 @@
 using Sekiban.EventSourcing.Settings;
+using Sekiban.EventSourcing.Shared;
 namespace Sekiban.EventSourcing.Documents;
 
 public class DocumentRepositorySplitter : IDocumentRepository
@@ -40,7 +41,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 resultAction);
             return;
         }
-        if (partitionKey != null && _aggregateSettings.CanUseHybrid(originalType) && _hybridStoreManager.HasPartition(partitionKey))
+        if (partitionKey is not null && _aggregateSettings.CanUseHybrid(originalType) && _hybridStoreManager.HasPartition(partitionKey))
         {
             if ((string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
                     string.IsNullOrWhiteSpace(_hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey))) ||
@@ -72,7 +73,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 var aggregateEvents = events.ToList();
                 if (_aggregateSettings.CanUseHybrid(originalType))
                 {
-                    if (partitionKey == null) { return; }
+                    if (partitionKey is null) { return; }
                     var hasPartitionKey = _hybridStoreManager.HasPartition(partitionKey);
                     var sinceSortableUniqueIdInPartition = _hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey);
 
@@ -99,6 +100,45 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 resultAction(aggregateEvents.OrderBy(m => m.SortableUniqueId));
             });
     }
+    public async Task GetAllAggregateEventStringsForAggregateIdAsync(
+        Guid aggregateId,
+        Type originalType,
+        string? partitionKey,
+        string? sinceSortableUniqueId,
+        Action<IEnumerable<string>> resultAction) =>
+        await GetAllAggregateEventsForAggregateIdAsync(
+            aggregateId,
+            originalType,
+            partitionKey,
+            sinceSortableUniqueId,
+            events =>
+            {
+                resultAction(events.Select(SekibanJsonHelper.Serialize).Where(m => !string.IsNullOrEmpty(m))!);
+            });
+
+    public async Task GetAllAggregateCommandStringsForAggregateIdAsync(
+        Guid aggregateId,
+        Type originalType,
+        string? sinceSortableUniqueId,
+        Action<IEnumerable<string>> resultAction)
+    {
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
+        if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+        {
+            await _documentTemporaryRepository.GetAllAggregateCommandStringsForAggregateIdAsync(
+                aggregateId,
+                originalType,
+                sinceSortableUniqueId,
+                resultAction);
+            return;
+        }
+        await _documentPersistentRepository.GetAllAggregateCommandStringsForAggregateIdAsync(
+            aggregateId,
+            originalType,
+            sinceSortableUniqueId,
+            resultAction);
+    }
+
     public async Task GetAllAggregateEventsAsync(
         Type multipleProjectionType,
         IList<string> targetAggregateNames,

@@ -28,7 +28,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         where C : ChangeAggregateCommandBase<T>
     {
         AggregateDto<TContents>? aggregateDto = null;
-        var commandDocument = new AggregateCommandDocument<C>(command.GetAggregateId(), command, callHistories)
+        var commandDocument = new AggregateCommandDocument<C>(command.GetAggregateId(), command, typeof(T), callHistories)
         {
             ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
         };
@@ -43,12 +43,12 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         try
         {
             var handler = _serviceProvider.GetService(typeof(IChangeAggregateCommandHandler<T, C>)) as IChangeAggregateCommandHandler<T, C>;
-            if (handler == null)
+            if (handler is null)
             {
                 throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
             }
             var aggregate = await _singleAggregateService.GetAggregateAsync<T, TContents>(command.GetAggregateId());
-            if (aggregate == null)
+            if (aggregate is null)
             {
                 throw new SekibanInvalidArgumentException();
             }
@@ -70,7 +70,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
                 }
             }
             aggregate.ResetEventsAndSnapshots();
-            if (result == null)
+            if (result is null)
             {
                 throw new SekibanInvalidArgumentException();
             }
@@ -99,7 +99,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
     {
         AggregateDto<TContents>? aggregateDto = null;
         var commandDocument
-            = new AggregateCommandDocument<C>(Guid.Empty, command, callHistories)
+            = new AggregateCommandDocument<C>(Guid.Empty, command, typeof(T), callHistories)
             {
                 ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
             };
@@ -113,13 +113,13 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         try
         {
             var handler = _serviceProvider.GetService(typeof(ICreateAggregateCommandHandler<T, C>)) as ICreateAggregateCommandHandler<T, C>;
-            if (handler == null)
+            if (handler is null)
             {
                 throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
             }
             var aggregateId = handler.GenerateAggregateId(command);
             commandDocument
-                = new AggregateCommandDocument<C>(aggregateId, command, callHistories)
+                = new AggregateCommandDocument<C>(aggregateId, command, typeof(T), callHistories)
                 {
                     ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
                 };
@@ -140,7 +140,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
                 }
             }
             result.Aggregate.ResetEventsAndSnapshots();
-            if (result == null)
+            if (result is null)
             {
                 throw new SekibanInvalidArgumentException();
             }

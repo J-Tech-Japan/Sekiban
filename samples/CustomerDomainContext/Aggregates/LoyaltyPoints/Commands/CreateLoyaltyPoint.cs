@@ -1,6 +1,9 @@
 ﻿namespace CustomerDomainContext.Aggregates.LoyaltyPoints.Commands;
 
-public record CreateLoyaltyPoint(Guid ClientId, int InitialPoint) : ICreateAggregateCommand<LoyaltyPoint>;
+public record CreateLoyaltyPoint(Guid ClientId, int InitialPoint) : ICreateAggregateCommand<LoyaltyPoint>
+{
+    public CreateLoyaltyPoint() : this(Guid.Empty, 0) { }
+}
 public class CreateLoyaltyPointHandler : CreateAggregateCommandHandlerBase<LoyaltyPoint, CreateLoyaltyPoint>
 {
 

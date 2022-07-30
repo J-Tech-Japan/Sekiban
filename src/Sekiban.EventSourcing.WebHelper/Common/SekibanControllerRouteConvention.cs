@@ -15,44 +15,72 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
         if (controller.ControllerType.IsGenericType &&
             new List<string> { _sekibanControllerOptions.BaseChangeControllerType.Name }.Contains(controller.ControllerType.Name))
         {
-            var generic1 = controller.ControllerType.GenericTypeArguments[0];
-            var generic3 = controller.ControllerType.GenericTypeArguments[2];
+            var aggregateType = controller.ControllerType.GenericTypeArguments[0];
+            var commandType = controller.ControllerType.GenericTypeArguments[2];
+            controller.ControllerName = aggregateType.Name;
             controller.Selectors.Add(
                 new SelectorModel
                 {
                     AttributeRouteModel = new AttributeRouteModel(
                         new RouteAttribute(
-                            $"{_sekibanControllerOptions.ChangeCommandPrefix}/{generic1.Name.ToLower()}/{generic3.Name.ToLower()}"))
+                            $"{_sekibanControllerOptions.ChangeCommandPrefix}/{aggregateType.Name.ToLower()}/{commandType.Name.ToLower()}")
+                        {
+                            Name = commandType.Name
+                        })
                 });
         }
         if (controller.ControllerType.IsGenericType &&
             new List<string> { _sekibanControllerOptions.BaseCreateControllerType.Name }.Contains(controller.ControllerType.Name))
         {
-            var generic1 = controller.ControllerType.GenericTypeArguments[0];
-            var generic3 = controller.ControllerType.GenericTypeArguments[2];
+            var aggregateType = controller.ControllerType.GenericTypeArguments[0];
+            var commandType = controller.ControllerType.GenericTypeArguments[2];
+            controller.ControllerName = aggregateType.Name;
             controller.Selectors.Add(
                 new SelectorModel
                 {
                     AttributeRouteModel = new AttributeRouteModel(
                         new RouteAttribute(
-                            $"{_sekibanControllerOptions.CreateCommandPrefix}/{generic1.Name.ToLower()}/{generic3.Name.ToLower()}"))
+                            $"{_sekibanControllerOptions.CreateCommandPrefix}/{aggregateType.Name.ToLower()}/{commandType.Name.ToLower()}"))
+                    {
+                        Name = commandType.Name
+                    }
                 });
         }
         if (controller.ControllerType.IsGenericType &&
-            new List<string> { _sekibanControllerOptions.BaseQueryControllerType.Name }.Contains(controller.ControllerType.Name))
+            new List<string> { _sekibanControllerOptions.BaseQueryGetControllerType.Name }.Contains(controller.ControllerType.Name))
         {
-            var genericAggregate = controller.ControllerType.GenericTypeArguments[0];
+            var aggregateType = controller.ControllerType.GenericTypeArguments[0];
+            controller.ControllerName = aggregateType.Name;
             controller.Selectors.Add(
                 new SelectorModel
                 {
                     AttributeRouteModel = new AttributeRouteModel(
-                        new RouteAttribute($"{_sekibanControllerOptions.QueryPrefix}/{genericAggregate.Name.ToLower()}"))
+                        new RouteAttribute($"{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name.ToLower()}/get"))
+                    {
+                        Name = aggregateType.Name + "Get"
+                    }
+                });
+        }
+        if (controller.ControllerType.IsGenericType &&
+            new List<string> { _sekibanControllerOptions.BaseQueryListControllerType.Name }.Contains(controller.ControllerType.Name))
+        {
+            var aggregateType = controller.ControllerType.GenericTypeArguments[0];
+            controller.ControllerName = aggregateType.Name;
+            controller.Selectors.Add(
+                new SelectorModel
+                {
+                    AttributeRouteModel = new AttributeRouteModel(
+                        new RouteAttribute($"{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name.ToLower()}/list"))
+                    {
+                        Name = aggregateType.Name + "List"
+                    }
                 });
         }
         if (controller.ControllerType.Name == _sekibanControllerOptions.BaseIndexControllerType.Name)
         {
+            controller.ControllerName = "SekibanInfo";
             controller.Selectors.Add(
-                new SelectorModel { AttributeRouteModel = new AttributeRouteModel(new RouteAttribute(_sekibanControllerOptions.IndexPrefix)) });
+                new SelectorModel { AttributeRouteModel = new AttributeRouteModel(new RouteAttribute(_sekibanControllerOptions.InfoPrefix)) });
         }
     }
 }

@@ -25,7 +25,7 @@ public abstract class TransferableAggregateBase<TContents> : AggregateBase, ISin
             ? AggregateEvent<TEventPayload>.CreatedEvent(AggregateId, GetType(), eventPayload)
             : AggregateEvent<TEventPayload>.ChangedEvent(AggregateId, GetType(), eventPayload);
 
-        if (GetApplyEventAction(ev, eventPayload) == null)
+        if (GetApplyEventAction(ev, eventPayload) is null)
         {
             throw new SekibanEventNotImplementedException();
         }
