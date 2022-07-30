@@ -3,6 +3,9 @@
 /* eslint-disable */
 export const $LoyaltyPointContentsAggregateDto = {
     properties: {
+        contents: {
+            type: 'LoyaltyPointContents',
+        },
         isDeleted: {
             type: 'boolean',
             isRequired: true,
@@ -30,9 +33,6 @@ export const $LoyaltyPointContentsAggregateDto = {
         lastSortableUniqueId: {
             type: 'string',
             isRequired: true,
-        },
-        contents: {
-            type: 'LoyaltyPointContents',
         },
     },
 };

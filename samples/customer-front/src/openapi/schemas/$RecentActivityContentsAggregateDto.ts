@@ -3,6 +3,9 @@
 /* eslint-disable */
 export const $RecentActivityContentsAggregateDto = {
     properties: {
+        contents: {
+            type: 'RecentActivityContents',
+        },
         isDeleted: {
             type: 'boolean',
             isRequired: true,
@@ -30,9 +33,6 @@ export const $RecentActivityContentsAggregateDto = {
         lastSortableUniqueId: {
             type: 'string',
             isRequired: true,
-        },
-        contents: {
-            type: 'RecentActivityContents',
         },
     },
 };

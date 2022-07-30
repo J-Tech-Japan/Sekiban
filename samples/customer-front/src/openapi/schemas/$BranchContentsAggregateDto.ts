@@ -3,6 +3,9 @@
 /* eslint-disable */
 export const $BranchContentsAggregateDto = {
     properties: {
+        contents: {
+            type: 'BranchContents',
+        },
         isDeleted: {
             type: 'boolean',
             isRequired: true,
@@ -30,9 +33,6 @@ export const $BranchContentsAggregateDto = {
         lastSortableUniqueId: {
             type: 'string',
             isRequired: true,
-        },
-        contents: {
-            type: 'BranchContents',
         },
     },
 };

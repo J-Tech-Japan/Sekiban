@@ -3,6 +3,9 @@
 /* eslint-disable */
 export const $ClientContentsAggregateDto = {
     properties: {
+        contents: {
+            type: 'ClientContents',
+        },
         isDeleted: {
             type: 'boolean',
             isRequired: true,
@@ -30,9 +33,6 @@ export const $ClientContentsAggregateDto = {
         lastSortableUniqueId: {
             type: 'string',
             isRequired: true,
-        },
-        contents: {
-            type: 'ClientContents',
         },
     },
 };
