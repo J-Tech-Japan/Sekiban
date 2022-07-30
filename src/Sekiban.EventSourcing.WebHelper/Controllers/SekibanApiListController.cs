@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Sekiban.EventSourcing.AggregateCommands;
 using Sekiban.EventSourcing.Aggregates;
+using Sekiban.EventSourcing.Documents;
+using Sekiban.EventSourcing.Partitions;
+using Sekiban.EventSourcing.Shared;
 using Sekiban.EventSourcing.WebHelper.Common;
 using System.Reflection;
 namespace Sekiban.EventSourcing.WebHelper.Controllers;
@@ -8,13 +11,18 @@ namespace Sekiban.EventSourcing.WebHelper.Controllers;
 [ApiController]
 public class SekibanApiListController<T> : ControllerBase
 {
+    private readonly IDocumentRepository _documentRepository;
     private readonly ISekibanControllerItems _sekibanControllerItems;
     private readonly SekibanControllerOptions _sekibanControllerOptions;
 
-    public SekibanApiListController(SekibanControllerOptions sekibanControllerOptions, ISekibanControllerItems sekibanControllerItems)
+    public SekibanApiListController(
+        SekibanControllerOptions sekibanControllerOptions,
+        ISekibanControllerItems sekibanControllerItems,
+        IDocumentRepository documentRepository)
     {
         _sekibanControllerOptions = sekibanControllerOptions;
         _sekibanControllerItems = sekibanControllerItems;
+        _documentRepository = documentRepository;
     }
 
     [HttpGet]
@@ -126,5 +134,47 @@ public class SekibanApiListController<T> : ControllerBase
                 });
         }
         return Ok(list);
+    }
+
+    [HttpGet]
+    [Route("{aggregateName}/{id}/events")]
+    public async Task<ActionResult<IEnumerable<dynamic>>> GetEventsAsync(string aggregateName, Guid id)
+    {
+        foreach (var aggregateType in _sekibanControllerItems.SekibanAggregates)
+        {
+            if (!string.Equals(aggregateName, aggregateType.Name, StringComparison.CurrentCultureIgnoreCase)) { continue; }
+            var events = new List<dynamic>();
+            await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
+                id,
+                aggregateType,
+                PartitionKeyGenerator.ForAggregateEvent(id, aggregateType),
+                null,
+                eventObjects =>
+                {
+                    events.AddRange(eventObjects);
+                });
+            return Ok(events);
+        }
+        return Problem("Aggregate name not exists");
+    }
+    [HttpGet]
+    [Route("{aggregateName}/{id}/commands")]
+    public async Task<ActionResult<IEnumerable<dynamic>>> GetCommandsAsync(string aggregateName, Guid id)
+    {
+        foreach (var aggregateType in _sekibanControllerItems.SekibanAggregates)
+        {
+            if (!string.Equals(aggregateName, aggregateType.Name, StringComparison.CurrentCultureIgnoreCase)) { continue; }
+            var events = new List<dynamic>();
+            await _documentRepository.GetAllAggregateCommandStringsForAggregateIdAsync(
+                id,
+                aggregateType,
+                null,
+                eventObjects =>
+                {
+                    events.AddRange(eventObjects.Select(m => SekibanJsonHelper.Deserialize(m, typeof(object))!));
+                });
+            return Ok(events);
+        }
+        return Problem("Aggregate name not exists");
     }
 }
