@@ -7,5 +7,5 @@ public record SekibanCommandInfo
     public string JsonBodyType { get; init; }
     public dynamic SampleBodyObject { get; set; }
     public dynamic SampleResponseObject { get; set; }
-    public string AggregateType { get; set; }
+    public bool IsCreateEvent { get; set; }
 }

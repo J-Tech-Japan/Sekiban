@@ -46,7 +46,9 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
             var aggregateContentsType = aggregateType?.BaseType?.GenericTypeArguments[0];
             if (aggregateType is null || aggregateContentsType is null) { continue; }
             feature.Controllers.Add(
-                _sekibanControllerOptions.BaseQueryControllerType.MakeGenericType(aggregateType, aggregateContentsType).GetTypeInfo());
+                _sekibanControllerOptions.BaseQueryGetControllerType.MakeGenericType(aggregateType, aggregateContentsType).GetTypeInfo());
+            feature.Controllers.Add(
+                _sekibanControllerOptions.BaseQueryListControllerType.MakeGenericType(aggregateType, aggregateContentsType).GetTypeInfo());
         }
         feature.Controllers.Add(_sekibanControllerOptions.BaseIndexControllerType.MakeGenericType(typeof(object)).GetTypeInfo());
     }

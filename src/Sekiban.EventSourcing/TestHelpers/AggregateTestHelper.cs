@@ -113,6 +113,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         {
             throw new SekibanCreateHasToMakeEventException();
         }
+        CheckCommandJSONSupports(commandDocument);
         _aggregate.ResetEventsAndSnapshots();
         CheckStateJSONSupports();
         return this;
@@ -137,6 +138,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
             _latestException = ex;
             return this;
         }
+        CheckCommandJSONSupports(commandDocument);
         _latestEvents = _aggregate.Events.ToList();
         _aggregate.ResetEventsAndSnapshots();
         CheckStateJSONSupports();
@@ -162,7 +164,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
             _latestException = ex;
             return this;
         }
-
+        CheckCommandJSONSupports(commandDocument);
         _latestEvents = _aggregate.Events.ToList();
         _aggregate.ResetEventsAndSnapshots();
         CheckStateJSONSupports();
@@ -325,6 +327,14 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         var dtoFromJsonJson = SekibanJsonHelper.Serialize(dtoFromJson);
         Assert.Equal(json, dtoFromJsonJson);
         CheckEventJsonCompatibility();
+    }
+    private void CheckCommandJSONSupports(IDocument command)
+    {
+        var type = command.GetType();
+        var json = SekibanJsonHelper.Serialize(command);
+        var eventFromJson = SekibanJsonHelper.Deserialize(json, type);
+        var json2 = SekibanJsonHelper.Serialize(eventFromJson);
+        Assert.Equal(json, json2);
     }
 
     private void CheckEventJsonCompatibility()

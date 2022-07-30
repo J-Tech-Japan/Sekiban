@@ -26,119 +26,80 @@ public class SekibanApiListController<T> : ControllerBase
     }
 
     [HttpGet]
-    [Route("createCommands")]
-    public async Task<ActionResult<List<SekibanCommandInfo>>> CreateCommandListAsync()
+    [Route("aggregates", Name = "SekibanAggregates")]
+    public async Task<ActionResult<List<SekibanAggregateInfo>>> AggregateInfoAsync()
     {
         await Task.CompletedTask;
-        var list = new List<SekibanCommandInfo>();
-        foreach (var (serviceType, implementationType) in _sekibanControllerItems.SekibanCommands)
+        var list = new List<SekibanAggregateInfo>();
+        foreach (var aggregateType in _sekibanControllerItems.SekibanAggregates)
         {
-            var interfaceType = serviceType;
-
-            if (interfaceType?.Name == typeof(ICreateAggregateCommandHandler<,>).Name)
+            var aggregateContentsType = aggregateType?.BaseType?.GenericTypeArguments[0];
+            var dtoResponseType = typeof(AggregateDto<>).MakeGenericType(aggregateContentsType).GetTypeInfo();
+            var aggregateInfo = new SekibanAggregateInfo(
+                aggregateType.Name,
+                new SekibanQueryInfo
+                {
+                    GetUrl = $"/{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name}/get",
+                    ListUrl = $"/{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name}/list",
+                    GetEventsUrl = $"/{_sekibanControllerOptions.InfoPrefix}/events/{aggregateType.Name}/{{id}}",
+                    GetCommandsUrl = $"/{_sekibanControllerOptions.InfoPrefix}/commands/{aggregateType.Name}/{{id}}",
+                    Method = "GET",
+                    SampleResponseObject = Activator.CreateInstance(dtoResponseType)!
+                },
+                new List<SekibanCommandInfo>());
+            list.Add(aggregateInfo);
+            foreach (var (serviceType, implementationType) in _sekibanControllerItems.SekibanCommands)
             {
-                var aggregateType = interfaceType?.GenericTypeArguments[0];
-                var commandType = interfaceType?.GenericTypeArguments[1];
-                var aggregateContentsType = aggregateType?.BaseType?.GenericTypeArguments[0];
-                var responseType = typeof(AggregateCommandExecutorResponse<,>);
-                var actualResponseType = responseType.MakeGenericType(aggregateContentsType, commandType).GetTypeInfo();
-                if (aggregateType is null || commandType is null || aggregateContentsType is null) { continue; }
-                list.Add(
-                    new SekibanCommandInfo
-                    {
-                        Url = $"/{_sekibanControllerOptions.CreateCommandPrefix}/{aggregateType.Name}/{commandType.Name}",
-                        JsonBodyType = commandType.Name,
-                        Method = "POST",
-                        AggregateType = aggregateType.Name,
-                        SampleBodyObject = Activator.CreateInstance(commandType)!,
-                        SampleResponseObject = Activator.CreateInstance(actualResponseType)!
-                    });
+                var interfaceType = serviceType;
+
+                if (interfaceType?.Name == typeof(ICreateAggregateCommandHandler<,>).Name)
+                {
+                    if (aggregateType.Name != interfaceType?.GenericTypeArguments[0].Name) { continue; }
+                    var commandType = interfaceType?.GenericTypeArguments[1];
+                    var responseType = typeof(AggregateCommandExecutorResponse<,>);
+                    var actualResponseType = responseType.MakeGenericType(aggregateContentsType, commandType).GetTypeInfo();
+                    if (aggregateType is null || commandType is null || aggregateContentsType is null) { continue; }
+                    aggregateInfo.commands.Add(
+                        new SekibanCommandInfo
+                        {
+                            Url = $"/{_sekibanControllerOptions.CreateCommandPrefix}/{aggregateType.Name}/{commandType.Name}",
+                            JsonBodyType = commandType.Name,
+                            Method = "POST",
+                            SampleBodyObject = Activator.CreateInstance(commandType)!,
+                            SampleResponseObject = Activator.CreateInstance(actualResponseType)!,
+                            IsCreateEvent = true
+                        });
+                }
+            }
+            foreach (var (serviceType, implementationType) in _sekibanControllerItems.SekibanCommands)
+            {
+                var interfaceType = serviceType;
+
+                if (interfaceType?.Name == typeof(IChangeAggregateCommandHandler<,>).Name)
+                {
+                    if (aggregateType.Name != interfaceType?.GenericTypeArguments[0].Name) { continue; }
+                    var commandType = interfaceType?.GenericTypeArguments[1];
+                    var responseType = typeof(AggregateCommandExecutorResponse<,>);
+                    var actualResponseType = responseType.MakeGenericType(aggregateContentsType, commandType).GetTypeInfo();
+                    if (aggregateType is null || commandType is null || aggregateContentsType is null) { continue; }
+                    aggregateInfo.commands.Add(
+                        new SekibanCommandInfo
+                        {
+                            Url = $"/{_sekibanControllerOptions.ChangeCommandPrefix}/{aggregateType.Name}/{commandType.Name}",
+                            JsonBodyType = commandType.Name,
+                            Method = "PATCH",
+                            IsCreateEvent = false,
+                            SampleBodyObject = Activator.CreateInstance(commandType)!,
+                            SampleResponseObject = Activator.CreateInstance(actualResponseType)!
+                        });
+                }
             }
         }
         return Ok(list);
     }
-
     [HttpGet]
-    [Route("changeCommands")]
-    public async Task<ActionResult<List<SekibanCommandInfo>>> ChangeCommandListAsync()
-    {
-        await Task.CompletedTask;
-        var list = new List<SekibanCommandInfo>();
-        foreach (var (serviceType, implementationType) in _sekibanControllerItems.SekibanCommands)
-        {
-            var interfaceType = serviceType;
-
-            if (interfaceType?.Name == typeof(IChangeAggregateCommandHandler<,>).Name)
-            {
-                var aggregateType = interfaceType?.GenericTypeArguments[0];
-                var commandType = interfaceType?.GenericTypeArguments[1];
-                var aggregateContentsType = aggregateType?.BaseType?.GenericTypeArguments[0];
-                var responseType = typeof(AggregateCommandExecutorResponse<,>);
-                var actualResponseType = responseType.MakeGenericType(aggregateContentsType, commandType).GetTypeInfo();
-                if (aggregateType is null || commandType is null || aggregateContentsType is null) { continue; }
-                list.Add(
-                    new SekibanCommandInfo
-                    {
-                        Url = $"/{_sekibanControllerOptions.ChangeCommandPrefix}/{aggregateType.Name}/{commandType.Name}",
-                        JsonBodyType = commandType.Name,
-                        Method = "PATCH",
-                        AggregateType = aggregateType.Name,
-                        SampleBodyObject = Activator.CreateInstance(commandType)!,
-                        SampleResponseObject = Activator.CreateInstance(actualResponseType)!
-                    });
-            }
-        }
-        return Ok(list);
-    }
-
-    [HttpGet]
-    [Route("getQueries")]
-    public async Task<ActionResult<List<SekibanQueryInfo>>> GetQueryListAsync()
-    {
-        await Task.CompletedTask;
-        var list = new List<SekibanQueryInfo>();
-        foreach (var aggregateType in _sekibanControllerItems.SekibanAggregates)
-        {
-            var aggregateContentsType = aggregateType?.BaseType?.GenericTypeArguments[0];
-            var responseType = typeof(AggregateDto<>).MakeGenericType(aggregateContentsType).GetTypeInfo();
-            if (aggregateType is null || aggregateContentsType is null) { continue; }
-            list.Add(
-                new SekibanQueryInfo
-                {
-                    Url = $"/{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name}/{{id}}",
-                    Method = "GET",
-                    AggregateType = aggregateType.Name,
-                    SampleResponseObject = Activator.CreateInstance(responseType)!
-                });
-        }
-        return Ok(list);
-    }
-    [HttpGet]
-    [Route("listQueries")]
-    public async Task<ActionResult<List<SekibanQueryInfo>>> GetListQueryListAsync()
-    {
-        await Task.CompletedTask;
-        var list = new List<SekibanQueryInfo>();
-        foreach (var aggregateType in _sekibanControllerItems.SekibanAggregates)
-        {
-            var aggregateContentsType = aggregateType?.BaseType?.GenericTypeArguments[0];
-            var responseType = typeof(AggregateDto<>).MakeGenericType(aggregateContentsType).GetTypeInfo();
-            if (aggregateType is null || aggregateContentsType is null) { continue; }
-            list.Add(
-                new SekibanQueryInfo
-                {
-                    Url = $"/{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name}",
-                    Method = "GET",
-                    AggregateType = aggregateType.Name,
-                    SampleResponseObject = new List<dynamic> { Activator.CreateInstance(responseType)! }
-                });
-        }
-        return Ok(list);
-    }
-
-    [HttpGet]
-    [Route("{aggregateName}/{id}/events")]
-    public async Task<ActionResult<IEnumerable<dynamic>>> GetEventsAsync(string aggregateName, Guid id)
+    [Route("events/{aggregateName}/{id}", Name = "SekibanEvents")]
+    public async Task<ActionResult<IEnumerable<dynamic>>> EventsAsync(string aggregateName, Guid id)
     {
         foreach (var aggregateType in _sekibanControllerItems.SekibanAggregates)
         {
@@ -158,8 +119,8 @@ public class SekibanApiListController<T> : ControllerBase
         return Problem("Aggregate name not exists");
     }
     [HttpGet]
-    [Route("{aggregateName}/{id}/commands")]
-    public async Task<ActionResult<IEnumerable<dynamic>>> GetCommandsAsync(string aggregateName, Guid id)
+    [Route("commands/{aggregateName}/{id}", Name = "SekibanCommands")]
+    public async Task<ActionResult<IEnumerable<dynamic>>> CommandsAsync(string aggregateName, Guid id)
     {
         foreach (var aggregateType in _sekibanControllerItems.SekibanAggregates)
         {
