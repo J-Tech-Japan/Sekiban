@@ -15,9 +15,9 @@ public record SortableUniqueIdValue(string Value)
     public static string Generate(DateTime timestamp, Guid id) =>
         timestamp.Ticks + (Math.Abs(id.GetHashCode()) % 1000000000000).ToString("000000000000");
     public static string GetSafeIdFromUtc() =>
-        DateTime.UtcNow.AddSeconds(-1).Ticks + (Math.Abs(Guid.Empty.GetHashCode()) % 1000000000000).ToString("000000000000");
+        DateTime.UtcNow.AddMilliseconds(-100).Ticks + (Math.Abs(Guid.Empty.GetHashCode()) % 1000000000000).ToString("000000000000");
     public string GetSafeId() =>
-        GetTicks().AddSeconds(-1).Ticks + (Math.Abs(Guid.Empty.GetHashCode()) % 1000000000000).ToString("000000000000");
+        GetTicks().AddSeconds(-100).Ticks + (Math.Abs(Guid.Empty.GetHashCode()) % 1000000000000).ToString("000000000000");
 
     public bool EarlierThan(SortableUniqueIdValue toCompare) =>
         Value.CompareTo(toCompare) < 0;

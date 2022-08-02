@@ -29,10 +29,10 @@ public abstract class QueryPerformanceTestBase : TestBase
     protected QueryPerformanceTestBase(
         TestFixture testFixture,
         ITestOutputHelper testOutputHelper,
-        ServiceCollectionExtensions.MultipleProjectionType multipleProjectionType) : base(testFixture, false, multipleProjectionType)
+        ServiceCollectionExtensions.MultipleProjectionType multipleProjectionType) : base(testFixture, false,multipleProjectionType)
     {
         _testOutputHelper = testOutputHelper;
-        _cosmosDbFactory = GetService<CosmosDbFactory>();
+     _cosmosDbFactory = GetService<CosmosDbFactory>();
         _aggregateCommandExecutor = GetService<IAggregateCommandExecutor>();
         _aggregateService = GetService<ISingleAggregateService>();
         _documentPersistentRepository = GetService<IDocumentPersistentRepository>();
@@ -40,39 +40,62 @@ public abstract class QueryPerformanceTestBase : TestBase
         _hybridStoreManager = GetService<HybridStoreManager>();
         _multipleAggregateProjectionService = GetService<IMultipleAggregateProjectionService>();
 
+    }
+    [Fact]
+    public void TestQuery1() {
         // 先に全データを削除する
         _cosmosDbFactory.DeleteAllFromAggregateEventContainer(AggregateContainerGroup.Default).Wait();
         _cosmosDbFactory.DeleteAllFromAggregateEventContainer(AggregateContainerGroup.Dissolvable).Wait();
         _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.AggregateCommand, AggregateContainerGroup.Dissolvable).Wait();
         _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.AggregateCommand).Wait();
     }
-    [Fact]
-    public void TestQuery1() { }
 
     [Theory]
-    [InlineData(5, 5, 100)]
-    public async Task TestQuery2(int numberOfBranch, int numberOfClient, int changeNameCount)
+    [InlineData(3, 3, 3, 1)]
+    [InlineData(3, 3, 3, 2)]
+    [InlineData(3, 3, 3, 3)]
+    [InlineData(3, 3, 3, 4)]
+    [InlineData(3, 3, 3, 5)]
+    [InlineData(3, 3, 3, 6)]
+    [InlineData(3, 3, 3, 7)]
+    [InlineData(3, 3, 3, 8)]
+    [InlineData(3, 3, 3, 9)]
+    [InlineData(3, 3, 3, 10)]
+    [InlineData(1, 1, 100, 11)]
+    [InlineData(1, 1, 100, 12)]
+    [InlineData(1, 1, 100, 13)]
+    [InlineData(1, 1, 100, 14)]
+    [InlineData(1, 1, 100, 15)]
+    [InlineData(1, 1, 100, 16)]
+    [InlineData(1, 1, 100, 17)]
+    [InlineData(1, 1, 100, 18)]
+    [InlineData(1, 1, 100, 19)]
+    public async Task TestQuery2(int numberOfBranch, int numberOfClient, int changeNameCount, int id)
     {
         for (var i = 0; i < numberOfBranch; i++)
         {
             // create list branch
             var branchList = await _multipleAggregateProjectionService.GetAggregateList<Branch, BranchContents>();
-            Assert.Equal(i, branchList.Count);
+            
+            var firstcount = branchList.Count;
             var branchResult
                 = await _aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchContents, CreateBranch>(new CreateBranch($"Branch {i}"));
             var branchId = branchResult!.Command.AggregateId;
             Assert.NotNull(branchResult);
             Assert.NotNull(branchResult.AggregateDto);
             branchList = await _multipleAggregateProjectionService.GetAggregateList<Branch, BranchContents>();
-            Assert.Equal(i + 1, branchList.Count);
+            Assert.Equal(firstcount + 1, branchList.Count);
             var branchFromList = branchList.First(m => m.AggregateId == branchId);
             Assert.NotNull(branchFromList);
             for (var j = 0; j < numberOfClient; j++)
             {
+                var clientList = await _multipleAggregateProjectionService.GetAggregateList<Client, ClientContents>();
+                var firstClientCount = clientList.Count;
                 var clientCreateResult
                     = await _aggregateCommandExecutor.ExecCreateCommandAsync<Client, ClientContents, CreateClient>(
-                        new CreateClient(branchId, $"clientname {i}-{j}", $"test{i}.{j}@example.com"));
-                var clientList = await _multipleAggregateProjectionService.GetAggregateList<Client, ClientContents>();
+                        new CreateClient(branchId, $"clientname {i}-{j}", $"test{i}.{j}.{id}@example.com"));
+                clientList = await _multipleAggregateProjectionService.GetAggregateList<Client, ClientContents>();
+                Assert.Equal(firstClientCount + 1, clientList.Count);
                 for (var k = 0; k < changeNameCount; k++)
                 {
                     var aggregate = await _aggregateService.GetAggregateDtoAsync<Client, ClientContents>(clientCreateResult.Command.AggregateId);
@@ -82,6 +105,7 @@ public abstract class QueryPerformanceTestBase : TestBase
                             ReferenceVersion = aggregate?.Version ?? 0
                         });
                     clientList = await _multipleAggregateProjectionService.GetAggregateList<Client, ClientContents>();
+                    Assert.Equal(firstClientCount + 1, clientList.Count);
                 }
             }
         }
