@@ -1,8 +1,5 @@
-using Sekiban.EventSourcing;
-using Sekiban.EventSourcing.TestHelpers;
-using Xunit.Abstractions;
 namespace SampleProjectStoryXTest.Stories.QueryPerformances;
-
+#if false
 public class SimpleQueryPerformanceTest : QueryPerformanceTestBase
 {
 
@@ -11,3 +8,4 @@ public class SimpleQueryPerformanceTest : QueryPerformanceTestBase
         testOutputHelper,
         ServiceCollectionExtensions.MultipleProjectionType.Simple) { }
 }
+#endif

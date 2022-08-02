@@ -1,4 +1,5 @@
 using Microsoft.Azure.Cosmos.Linq;
+using Sekiban.EventSourcing.Documents.ValueObjects;
 using Sekiban.EventSourcing.Partitions;
 using Sekiban.EventSourcing.Settings;
 using Sekiban.EventSourcing.Shared;
@@ -166,11 +167,13 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
 
                 var query = container.GetItemLinqQueryable<IAggregateEvent>()
                     .Where(b => b.DocumentType == DocumentType.AggregateEvent && b.AggregateId == aggregateId);
-                query = sinceSortableUniqueId is not null ? query.OrderByDescending(m => m.SortableUniqueId) : query.OrderBy(m => m.SortableUniqueId);
+                query = sinceSortableUniqueId is not null
+                    ? query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0).OrderByDescending(m => m.SortableUniqueId)
+                    : query.OrderBy(m => m.SortableUniqueId);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
+                var events = new List<IAggregateEvent>();
                 while (feedIterator.HasMoreResults)
                 {
-                    var events = new List<IAggregateEvent>();
                     var response = await feedIterator.ReadNextAsync();
                     foreach (var item in response)
                     {
@@ -188,15 +191,14 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                             throw new SekibanUnregisterdEventFoundException();
                         }
 
-                        if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.SortableUniqueId == sinceSortableUniqueId)
+                        if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().EarlierThan(sinceSortableUniqueId))
                         {
-                            resultAction(events.OrderBy(m => m.SortableUniqueId));
-                            return;
+                            continue;
                         }
                         events.Add(toAdd);
                     }
-                    resultAction(events.OrderBy(m => m.SortableUniqueId));
                 }
+                resultAction(events.OrderBy(m => m.SortableUniqueId));
             });
     }
     public async Task GetAllAggregateEventStringsForAggregateIdAsync(
@@ -234,18 +236,24 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
 
                 var query = container.GetItemLinqQueryable<IDocument>()
                     .Where(b => b.DocumentType == DocumentType.AggregateCommand && b.AggregateId == aggregateId);
-                query = sinceSortableUniqueId is not null ? query.OrderByDescending(m => m.SortableUniqueId) : query.OrderBy(m => m.SortableUniqueId);
+                query = sinceSortableUniqueId is not null
+                    ? query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0).OrderByDescending(m => m.SortableUniqueId)
+                    : query.OrderBy(m => m.SortableUniqueId);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
+                var commands = new List<string>();
                 while (feedIterator.HasMoreResults)
                 {
-                    var events = new List<string>();
                     var response = await feedIterator.ReadNextAsync();
                     foreach (var item in response)
                     {
-                        events.Add(SekibanJsonHelper.Serialize(item));
+                        if (sinceSortableUniqueId is not null && new SortableUniqueIdValue(item.SortableUniqueId).EarlierThan(sinceSortableUniqueId))
+                        {
+                            continue;
+                        }
+                        commands.Add(SekibanJsonHelper.Serialize(item));
                     }
-                    resultAction(events);
                 }
+                resultAction(commands);
             });
     }
     public async Task GetAllAggregateEventsForAggregateEventTypeAsync(
@@ -263,12 +271,15 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 var options = new QueryRequestOptions();
                 var eventTypes = _registeredEventTypes.RegisteredTypes.Select(m => m.Name);
                 var query = container.GetItemLinqQueryable<IAggregateEvent>()
-                    .Where(b => b.DocumentType == DocumentType.AggregateEvent && b.AggregateType == originalType.Name)
-                    .OrderByDescending(m => m.SortableUniqueId);
+                    .Where(b => b.DocumentType == DocumentType.AggregateEvent && b.AggregateType == originalType.Name);
+
+                query = sinceSortableUniqueId is not null
+                    ? query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0).OrderByDescending(m => m.SortableUniqueId)
+                    : query.OrderByDescending(m => m.SortableUniqueId);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
+                var events = new List<IAggregateEvent>();
                 while (feedIterator.HasMoreResults)
                 {
-                    var events = new List<IAggregateEvent>();
                     var response = await feedIterator.ReadNextAsync();
                     foreach (var item in response)
                     {
@@ -286,16 +297,14 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                             throw new SekibanUnregisterdEventFoundException();
                         }
 
-                        if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.SortableUniqueId == sinceSortableUniqueId)
+                        if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().EarlierThan(sinceSortableUniqueId))
                         {
-                            resultAction(events.OrderBy(m => m.SortableUniqueId));
-                            return;
+                            continue;
                         }
-
                         events.Add(toAdd);
                     }
-                    resultAction(events.OrderBy(m => m.SortableUniqueId));
                 }
+                resultAction(events.OrderBy(m => m.SortableUniqueId));
             });
     }
 
