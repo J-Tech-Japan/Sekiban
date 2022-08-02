@@ -1,3 +1,4 @@
+using Sekiban.EventSourcing.Documents.ValueObjects;
 namespace Sekiban.EventSourcing.Documents;
 
 public interface IDocument
@@ -9,4 +10,5 @@ public interface IDocument
     public string DocumentTypeName { get; init; }
     public DateTime TimeStamp { get; init; }
     public string SortableUniqueId { get; init; }
+    public SortableUniqueIdValue GetSortableUniqueId();
 }

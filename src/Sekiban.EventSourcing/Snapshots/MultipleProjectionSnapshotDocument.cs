@@ -1,26 +1,13 @@
+using Sekiban.EventSourcing.Documents.ValueObjects;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
-
 namespace Sekiban.EventSourcing.Snapshots;
 
 public record MultipleProjectionSnapshotDocument : IDocument
 {
-    [JsonPropertyName("id")]
-    public Guid Id { get; init; }
-
-    public string PartitionKey { get; init; }
-
-    public DocumentType DocumentType { get; init; }
-
-    public string DocumentTypeName { get; init; } = null!;
-
-    public DateTime TimeStamp { get; init; }
-
-    public string SortableUniqueId { get; init; } = string.Empty;
 
     // jobjとしてはいるので変換が必要
     public string? SnapshotJson { get; init; }
     public Guid? BlobFileId { get; init; }
-    public Guid AggregateId { get; init; }
     public Guid LastEventId { get; init; }
     public string LastSortableUniqueId { get; set; } = string.Empty;
     public int SavedVersion { get; set; }
@@ -38,7 +25,7 @@ public record MultipleProjectionSnapshotDocument : IDocument
         DocumentType = DocumentType.MultipleAggregateSnapshot;
         DocumentTypeName = aggregateTypeName ?? string.Empty;
         TimeStamp = DateTime.UtcNow;
-        SortableUniqueId = SortableUniqueIdGenerator.Generate(TimeStamp, Id);
+        SortableUniqueId = SortableUniqueIdValue.Generate(TimeStamp, Id);
         PartitionKey = partitionKeyFactory.GetPartitionKey(DocumentType);
         // Snapshot = dtoToSnapshot;
         AggregateId = aggregateId;
@@ -46,4 +33,19 @@ public record MultipleProjectionSnapshotDocument : IDocument
         LastSortableUniqueId = lastSortableUniqueId;
         SavedVersion = savedVersion;
     }
+    [JsonPropertyName("id")]
+    public Guid Id { get; init; }
+
+    public string PartitionKey { get; init; }
+
+    public DocumentType DocumentType { get; init; }
+
+    public string DocumentTypeName { get; init; } = null!;
+
+    public DateTime TimeStamp { get; init; }
+
+    public string SortableUniqueId { get; init; } = string.Empty;
+    public SortableUniqueIdValue GetSortableUniqueId() =>
+        SortableUniqueId;
+    public Guid AggregateId { get; init; }
 }

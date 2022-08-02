@@ -5,17 +5,20 @@ using Sekiban.EventSourcing;
 using Sekiban.EventSourcing.AggregateEvents;
 using Sekiban.EventSourcing.Aggregates;
 using System.Reflection;
+using ServiceCollectionExtensions = Sekiban.EventSourcing.ServiceCollectionExtensions;
 namespace ESSampleProjectDependency;
 
 public static class Dependency
 {
-    public static void Register(IServiceCollection services)
+    public static void Register(
+        IServiceCollection services,
+        ServiceCollectionExtensions.MultipleProjectionType multipleProjectionType = ServiceCollectionExtensions.MultipleProjectionType.MemoryCache)
     {
         // MediatR
         services.AddMediatR(Assembly.GetExecutingAssembly(), Sekiban.EventSourcing.Shared.Dependency.GetAssembly());
 
         // Sekibanイベントソーシング
-        services.AddSekibanCore();
+        services.AddSekibanCore(multipleProjectionType);
         services.AddSekibanCosmosDB();
         services.AddSekibanHTTPUser();
 

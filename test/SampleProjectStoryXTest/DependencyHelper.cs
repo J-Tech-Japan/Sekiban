@@ -1,12 +1,16 @@
 using ESSampleProjectDependency;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Sekiban.EventSourcing;
 using Sekiban.EventSourcing.TestHelpers;
 namespace SampleProjectStoryXTest;
 
 public static class DependencyHelper
 {
-    public static ServiceProvider CreateDefaultProvider(TestFixture fixture, bool inMemory = false, int loginType = LoginType.Admin)
+    public static ServiceProvider CreateDefaultProvider(
+        TestFixture fixture,
+        bool inMemory = false,
+        ServiceCollectionExtensions.MultipleProjectionType multipleProjectionType = ServiceCollectionExtensions.MultipleProjectionType.MemoryCache)
     {
         var services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(fixture.Configuration);
@@ -15,7 +19,7 @@ public static class DependencyHelper
             Dependency.RegisterForInMemoryTest(services);
         } else
         {
-            Dependency.Register(services);
+            Dependency.Register(services, multipleProjectionType);
         }
         return services.BuildServiceProvider();
     }

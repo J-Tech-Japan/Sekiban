@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.PubSubs;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
+using Sekiban.EventSourcing.Queries.MultipleAggregates.MultipleProjection;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Settings;
 using Sekiban.EventSourcing.TestHelpers;
@@ -9,7 +10,14 @@ namespace Sekiban.EventSourcing;
 
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddSekibanCore(this IServiceCollection services)
+    public enum MultipleProjectionType
+    {
+        Simple = 1,
+        MemoryCache = 2
+    }
+    public static IServiceCollection AddSekibanCore(
+        this IServiceCollection services,
+        MultipleProjectionType multipleProjectionType = MultipleProjectionType.MemoryCache)
     {
         services.AddMemoryCache();
 
@@ -18,7 +26,15 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IAggregateCommandExecutor, AggregateCommandExecutor>();
         services.AddTransient<ISingleAggregateService, SingleAggregateService>();
         services.AddTransient<IMultipleAggregateProjectionService, MultipleAggregateProjectionService>();
-        services.AddTransient<IMultipleProjection, SimpleMultipleProjection>();
+        switch (multipleProjectionType)
+        {
+            case MultipleProjectionType.Simple:
+                services.AddTransient<IMultipleProjection, SimpleMultipleProjection>();
+                break;
+            case MultipleProjectionType.MemoryCache:
+                services.AddTransient<IMultipleProjection, MemoryCacheMultipleProjection>();
+                break;
+        }
         services.AddSingleton(new InMemoryDocumentStore());
         services.AddTransient<IDocumentTemporaryWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentTemporaryRepository, InMemoryDocumentRepository>();
@@ -37,8 +53,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IAggregateCommandExecutor, AggregateCommandExecutor>();
         services.AddTransient<ISingleAggregateService, SingleAggregateService>();
         services.AddTransient<IMultipleAggregateProjectionService, MultipleAggregateProjectionService>();
-        services.AddTransient<IMultipleProjection, SimpleMultipleProjection>();
-
+        services.AddTransient<IMultipleProjection, MemoryCacheMultipleProjection>();
         services.AddSingleton(new InMemoryDocumentStore());
         services.AddTransient<IDocumentWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentRepository, InMemoryDocumentRepository>();

@@ -1,4 +1,4 @@
-namespace Sekiban.EventSourcing.Queries.MultipleAggregates;
+namespace Sekiban.EventSourcing.Queries.MultipleAggregates.MultipleProjection;
 
 public class SimpleMultipleProjection : IMultipleProjection
 {
@@ -7,7 +7,8 @@ public class SimpleMultipleProjection : IMultipleProjection
     public SimpleMultipleProjection(IDocumentRepository documentRepository) =>
         _documentRepository = documentRepository;
 
-    public async Task<Q> GetMultipleProjectionAsync<P, Q>() where P : IMultipleAggregateProjector<Q>, new() where Q : IMultipleAggregateProjectionDto
+    public async Task<Q> GetMultipleProjectionAsync<P, Q>() where P : IMultipleAggregateProjector<Q>, new()
+        where Q : IMultipleAggregateProjectionDto, new()
     {
         var projector = new P();
         await _documentRepository.GetAllAggregateEventsAsync(

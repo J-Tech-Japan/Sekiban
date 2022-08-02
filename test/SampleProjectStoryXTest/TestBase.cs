@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Sekiban.EventSourcing;
 using Sekiban.EventSourcing.TestHelpers;
 using System;
 using Xunit;
@@ -9,10 +10,14 @@ public class TestBase : IClassFixture<TestFixture>, IDisposable
 {
     protected readonly ServiceProvider _serviceProvider;
     protected readonly TestFixture _testFixture;
-    public TestBase(TestFixture testFixture, bool inMemory = false)
+
+    public TestBase(
+        TestFixture testFixture,
+        bool inMemory = false,
+        ServiceCollectionExtensions.MultipleProjectionType multipleProjectionType = ServiceCollectionExtensions.MultipleProjectionType.MemoryCache)
     {
         _testFixture = testFixture;
-        _serviceProvider = DependencyHelper.CreateDefaultProvider(testFixture, inMemory);
+        _serviceProvider = DependencyHelper.CreateDefaultProvider(testFixture, inMemory, multipleProjectionType);
     }
     public void Dispose()
     {

@@ -1,3 +1,4 @@
+using Sekiban.EventSourcing.Queries.MultipleAggregates.MultipleProjection;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace Sekiban.EventSourcing.Queries.MultipleAggregates;
 

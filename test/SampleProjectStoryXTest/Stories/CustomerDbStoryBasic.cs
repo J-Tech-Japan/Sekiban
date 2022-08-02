@@ -109,6 +109,10 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Single(clientNameListFromMultiple);
         Assert.Equal(clientNameList.First().AggregateId, clientNameListFromMultiple.First().AggregateId);
 
+        var branchResult3
+            = await _aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchContents, CreateBranch>(new CreateBranch("California"));
+        branchList = await _multipleAggregateProjectionService.GetAggregateList<Branch, BranchContents>();
+
         var secondName = "田中 太郎";
         // should throw version error 
         await Assert.ThrowsAsync<SekibanAggregateCommandInconsistentVersionException>(
@@ -188,7 +192,7 @@ public class CustomerDbStoryBasic : TestBase
 
         var p = await _multipleAggregateProjectionService.GetProjectionAsync<ClientLoyaltyPointMultipleProjection>();
         Assert.NotNull(p);
-        Assert.Equal(2, p.Branches.Count);
+        Assert.Equal(3, p.Branches.Count);
         Assert.Single(p.Records);
 
         // delete client
@@ -235,7 +239,7 @@ public class CustomerDbStoryBasic : TestBase
 
         p = await _multipleAggregateProjectionService.GetProjectionAsync<ClientLoyaltyPointMultipleProjection>();
         Assert.NotNull(p);
-        Assert.Equal(2, p.Branches.Count);
+        Assert.Equal(3, p.Branches.Count);
         Assert.Empty(p.Records);
         var snapshotManager
             = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<SnapshotManager, SnapshotManagerContents>(
@@ -250,6 +254,9 @@ public class CustomerDbStoryBasic : TestBase
         {
             _testOutputHelper.WriteLine(key);
         }
+
+        branchList = await _multipleAggregateProjectionService.GetAggregateList<Branch, BranchContents>();
+        Assert.Equal(3, branchList.Count);
     }
     [Fact(DisplayName = "CosmosDbストーリーテスト用に削除のみを行う 。")]
     public async Task DeleteonlyAsync()
