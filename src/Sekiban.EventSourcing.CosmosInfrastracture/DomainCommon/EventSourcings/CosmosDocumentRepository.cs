@@ -32,23 +32,26 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 var options = new QueryRequestOptions();
                 var query = targetAggregateNames.Count switch
                 {
-                    0 => container.GetItemLinqQueryable<IAggregateEvent>()
-                        .Where(b => b.DocumentType == DocumentType.AggregateEvent)
-                        .OrderByDescending(m => m.SortableUniqueId),
+                    0 => container.GetItemLinqQueryable<IAggregateEvent>().Where(b => b.DocumentType == DocumentType.AggregateEvent),
                     _ => container.GetItemLinqQueryable<IAggregateEvent>()
                         .Where(
                             b => b.DocumentType == DocumentType.AggregateEvent &&
                                 (targetAggregateNames.Count == 0 || targetAggregateNames.Contains(b.AggregateType)))
-                        .OrderByDescending(m => m.SortableUniqueId)
                 };
+                if (!string.IsNullOrEmpty(sinceSortableUniqueId))
+                {
+                    query = query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0);
+                }
+
+                query = query.OrderByDescending(m => m.SortableUniqueId);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
+                var events = new List<IAggregateEvent>();
                 while (feedIterator.HasMoreResults)
                 {
-                    var events = new List<IAggregateEvent>();
                     var response = await feedIterator.ReadNextAsync();
                     foreach (var item in response)
                     {
-                        // pick out one album
+                        // pick out one item
                         if (SekibanJsonHelper.GetValue<string>(item, nameof(IDocument.DocumentTypeName)) is not string typeName)
                         {
                             continue;
@@ -62,16 +65,17 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                             throw new SekibanUnregisterdEventFoundException();
                         }
 
-                        if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.SortableUniqueId == sinceSortableUniqueId)
+                        if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().EarlierThan(sinceSortableUniqueId))
                         {
-                            resultAction(events.OrderBy(m => m.SortableUniqueId));
-                            return;
+                            Console.WriteLine("cancel events...");
+                            continue;
                         }
 
                         events.Add(toAdd);
                     }
-                    resultAction(events.OrderBy(m => m.SortableUniqueId));
                 }
+                Console.WriteLine("adding events:" + events.Count + "-" + sinceSortableUniqueId);
+                resultAction(events.OrderBy(m => m.SortableUniqueId));
             });
     }
     public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type originalType)
