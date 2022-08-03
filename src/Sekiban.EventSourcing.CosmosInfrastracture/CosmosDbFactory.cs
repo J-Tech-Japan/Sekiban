@@ -93,8 +93,8 @@ public class CosmosDbFactory
         {
             Serializer = new SekibanCosmosSerializer(),
             AllowBulkExecution = true,
-            MaxRequestsPerTcpConnection = 100,
-            MaxRetryAttemptsOnRateLimitedRequests = 100,
+            MaxRequestsPerTcpConnection = 150,
+            MaxRetryAttemptsOnRateLimitedRequests = 150,
             MaxTcpConnectionsPerEndpoint = 50,
         };
         var client = _memoryCache.Get<CosmosClient?>(GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier));
