@@ -4,6 +4,7 @@ using Sekiban.EventSourcing.PubSubs;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.MultipleAggregates.MultipleProjection;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
+using Sekiban.EventSourcing.Queries.SingleAggregates.SingleProjection;
 using Sekiban.EventSourcing.Settings;
 using Sekiban.EventSourcing.TestHelpers;
 namespace Sekiban.EventSourcing;
@@ -35,6 +36,9 @@ public static class ServiceCollectionExtensions
                 services.AddTransient<IMultipleProjection, MemoryCacheMultipleProjection>();
                 break;
         }
+
+        services.AddTransient<ISingleProjection, SimpleProjectionWithSnapshot>();
+        services.AddTransient<ISingleAggregateFromInitial, SimpleSingleAggregateFromInitial>();
         services.AddSingleton(new InMemoryDocumentStore());
         services.AddTransient<IDocumentTemporaryWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentTemporaryRepository, InMemoryDocumentRepository>();
