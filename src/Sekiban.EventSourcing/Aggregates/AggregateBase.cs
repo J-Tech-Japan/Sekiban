@@ -10,6 +10,7 @@ public abstract class AggregateBase : IAggregate
         get => _basicInfo.AggregateId;
         init => _basicInfo.AggregateId = value;
     }
+
     public Guid LastEventId => _basicInfo.LastEventId;
     public string LastSortableUniqueId => _basicInfo.LastSortableUniqueId;
     public int AppliedSnapshotVersion => _basicInfo.AppliedSnapshotVersion;

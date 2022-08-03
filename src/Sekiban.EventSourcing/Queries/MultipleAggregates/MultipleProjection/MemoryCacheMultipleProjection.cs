@@ -26,11 +26,11 @@ public class MemoryCacheMultipleProjection : IMultipleProjection
         }
 
         var projector = new P();
-        if (savedContainer.safeDto is null && savedContainer?.SafeSortableUniqueId?.Value is null)
+        if (savedContainer.SafeDto is null && savedContainer?.SafeSortableUniqueId?.Value is null)
         {
             return await GetInitialProjection<P, Q>();
         }
-        projector.ApplySnapshot(savedContainer.safeDto!);
+        projector.ApplySnapshot(savedContainer.SafeDto!);
         var container = new MultipleMemoryProjectionContainer<P, Q>();
         await _documentRepository.GetAllAggregateEventsAsync(
             typeof(P),
@@ -41,10 +41,10 @@ public class MemoryCacheMultipleProjection : IMultipleProjection
                 var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
                 foreach (var ev in events)
                 {
-                    if (container.LastSortableUniqueId == null && ev.GetSortableUniqueId().LaterThan(targetSafeId) && projector.Version > 0)
+                    if (container.LastSortableUniqueId == null && ev.GetSortableUniqueId().EarlierThan(targetSafeId) && projector.Version > 0)
                     {
-                        container.safeDto = projector.ToDto();
-                        container.SafeSortableUniqueId = container.safeDto.LastSortableUniqueId;
+                        container.SafeDto = projector.ToDto();
+                        container.SafeSortableUniqueId = container.SafeDto.LastSortableUniqueId;
                     }
                     if (ev.GetSortableUniqueId().LaterThan(savedContainer.SafeSortableUniqueId!))
                     {
@@ -57,18 +57,18 @@ public class MemoryCacheMultipleProjection : IMultipleProjection
                     }
                 }
             });
-        Console.WriteLine($"{typeof(P).FullName},{projector.Version} cacheVersion {savedContainer?.safeDto?.Version}");
-        container.dto = projector.ToDto();
+        Console.WriteLine($"{typeof(P).FullName},{projector.Version} cacheVersion {savedContainer?.SafeDto?.Version}");
+        container.Dto = projector.ToDto();
         if (container.LastSortableUniqueId != null && container.SafeSortableUniqueId == null)
         {
-            container.safeDto = container.dto;
+            container.SafeDto = container.Dto;
             container.SafeSortableUniqueId = container.LastSortableUniqueId;
         }
-        if (container.safeDto is not null && container.SafeSortableUniqueId != savedContainer.SafeSortableUniqueId)
+        if (container.SafeDto is not null && container.SafeSortableUniqueId != savedContainer?.SafeSortableUniqueId)
         {
             _memoryCache.Set(GetInMemoryKey<P, Q>(), container, GetMemoryCacheOptions());
         }
-        return container.dto;
+        return container.Dto;
     }
 
     private async Task<Q> GetInitialProjection<P, Q>() where P : IMultipleAggregateProjector<Q>, new()
@@ -85,10 +85,10 @@ public class MemoryCacheMultipleProjection : IMultipleProjection
                 var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
                 foreach (var ev in events)
                 {
-                    if (container.LastSortableUniqueId == null && ev.GetSortableUniqueId().LaterThan(targetSafeId) && projector.Version > 0)
+                    if (container.LastSortableUniqueId == null && ev.GetSortableUniqueId().EarlierThan(targetSafeId) && projector.Version > 0)
                     {
-                        container.safeDto = projector.ToDto();
-                        container.SafeSortableUniqueId = container.safeDto.LastSortableUniqueId;
+                        container.SafeDto = projector.ToDto();
+                        container.SafeSortableUniqueId = container.SafeDto.LastSortableUniqueId;
                     }
                     projector.ApplyEvent(ev);
                     container.LastSortableUniqueId = ev.GetSortableUniqueId();
@@ -100,19 +100,19 @@ public class MemoryCacheMultipleProjection : IMultipleProjection
                 }
             });
         Console.WriteLine($"{typeof(P).FullName},{projector.Version}");
-        container.dto = projector.ToDto();
+        container.Dto = projector.ToDto();
         if (container.LastSortableUniqueId != null &&
             container.SafeSortableUniqueId == null &&
             container.LastSortableUniqueId?.EarlierThan(SortableUniqueIdValue.GetSafeIdFromUtc()) == true)
         {
-            container.safeDto = container.dto;
+            container.SafeDto = container.Dto;
             container.SafeSortableUniqueId = container.LastSortableUniqueId;
         }
-        if (container.safeDto is not null)
+        if (container.SafeDto is not null)
         {
             _memoryCache.Set(GetInMemoryKey<P, Q>(), container, GetMemoryCacheOptions());
         }
-        return container.dto;
+        return container.Dto;
     }
     private static MemoryCacheEntryOptions GetMemoryCacheOptions() =>
         new()

@@ -37,7 +37,7 @@ public static class ServiceCollectionExtensions
                 break;
         }
 
-        services.AddTransient<ISingleProjection, SimpleProjectionWithSnapshot>();
+        services.AddTransient<ISingleProjection, MemoryCacheSingleProjection>();
         services.AddTransient<ISingleAggregateFromInitial, SimpleSingleAggregateFromInitial>();
         services.AddSingleton(new InMemoryDocumentStore());
         services.AddTransient<IDocumentTemporaryWriter, InMemoryDocumentWriter>();
@@ -58,6 +58,8 @@ public static class ServiceCollectionExtensions
         services.AddTransient<ISingleAggregateService, SingleAggregateService>();
         services.AddTransient<IMultipleAggregateProjectionService, MultipleAggregateProjectionService>();
         services.AddTransient<IMultipleProjection, MemoryCacheMultipleProjection>();
+        services.AddTransient<ISingleProjection, SimpleProjectionWithSnapshot>();
+        services.AddTransient<ISingleAggregateFromInitial, SimpleSingleAggregateFromInitial>();
         services.AddSingleton(new InMemoryDocumentStore());
         services.AddTransient<IDocumentWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentRepository, InMemoryDocumentRepository>();
