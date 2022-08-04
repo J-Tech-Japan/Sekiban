@@ -1,16 +1,18 @@
 using Microsoft.Extensions.Caching.Memory;
 using Sekiban.EventSourcing.Documents.ValueObjects;
+using Sekiban.EventSourcing.Queries.UpdateNotices;
 namespace Sekiban.EventSourcing.Queries.SingleAggregates.SingleProjection;
 
 public class MemoryCacheSingleProjection : ISingleProjection
 {
     private readonly IDocumentRepository _documentRepository;
     private readonly IMemoryCache _memoryCache;
-
-    public MemoryCacheSingleProjection(IDocumentRepository documentRepository, IMemoryCache memoryCache)
+    private readonly IUpdateNotice _updateNotice;
+    public MemoryCacheSingleProjection(IDocumentRepository documentRepository, IMemoryCache memoryCache, IUpdateNotice updateNotice)
     {
         _documentRepository = documentRepository;
         _memoryCache = memoryCache;
+        _updateNotice = updateNotice;
     }
     public async Task<T?> GetAggregateAsync<T, Q, P>(Guid aggregateId, int? toVersion = null)
         where T : ISingleAggregate, ISingleAggregateProjection, ISingleAggregateProjectionDtoConvertible<Q>
@@ -30,6 +32,11 @@ public class MemoryCacheSingleProjection : ISingleProjection
         var aggregate = projector.CreateInitialAggregate(aggregateId);
         aggregate.ApplySnapshot(savedContainer.SafeDto!);
 
+        var (updated, type) = _updateNotice.HasUpdateAfter(typeof(T).Name, aggregateId, savedContainer.LastSortableUniqueId!);
+        if (!updated)
+        {
+            return aggregate;
+        }
         var container = new SingleMemoryCacheProjectionContainer<T, Q>(aggregateId);
         await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
@@ -101,6 +108,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
         {
             return await GetAggregateFromInitialAsync<T, Q, P>(aggregateId, toVersion.Value);
         }
+
         await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
             projector.OriginalAggregateType(),

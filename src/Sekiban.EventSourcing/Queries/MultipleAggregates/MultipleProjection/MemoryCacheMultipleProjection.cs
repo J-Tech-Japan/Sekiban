@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Documents.ValueObjects;
+using Sekiban.EventSourcing.Queries.UpdateNotices;
 using Sekiban.EventSourcing.Settings;
 namespace Sekiban.EventSourcing.Queries.MultipleAggregates.MultipleProjection;
 
@@ -9,12 +10,17 @@ public class MemoryCacheMultipleProjection : IMultipleProjection
     private readonly IDocumentRepository _documentRepository;
     private readonly IMemoryCache _memoryCache;
     private readonly IServiceProvider _serviceProvider;
-
-    public MemoryCacheMultipleProjection(IMemoryCache memoryCache, IDocumentRepository documentRepository, IServiceProvider serviceProvider)
+    private readonly IUpdateNotice _updateNotice;
+    public MemoryCacheMultipleProjection(
+        IMemoryCache memoryCache,
+        IDocumentRepository documentRepository,
+        IServiceProvider serviceProvider,
+        IUpdateNotice updateNotice)
     {
         _memoryCache = memoryCache;
         _documentRepository = documentRepository;
         _serviceProvider = serviceProvider;
+        _updateNotice = updateNotice;
     }
     public async Task<Q> GetMultipleProjectionAsync<P, Q>() where P : IMultipleAggregateProjector<Q>, new()
         where Q : IMultipleAggregateProjectionDto, new()
@@ -31,6 +37,16 @@ public class MemoryCacheMultipleProjection : IMultipleProjection
             return await GetInitialProjection<P, Q>();
         }
         projector.ApplySnapshot(savedContainer.SafeDto!);
+
+        if (projector.TargetAggregateNames().Count == 1)
+        {
+            var (updated, type) = _updateNotice.HasUpdateAfter(projector.TargetAggregateNames().First(), savedContainer.LastSortableUniqueId!);
+            if (!updated)
+            {
+                return savedContainer.Dto!;
+            }
+        }
+
         var container = new MultipleMemoryProjectionContainer<P, Q>();
         await _documentRepository.GetAllAggregateEventsAsync(
             typeof(P),

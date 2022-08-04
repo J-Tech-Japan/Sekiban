@@ -5,6 +5,7 @@ using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.MultipleAggregates.MultipleProjection;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates.SingleProjection;
+using Sekiban.EventSourcing.Queries.UpdateNotices;
 using Sekiban.EventSourcing.Settings;
 using Sekiban.EventSourcing.TestHelpers;
 namespace Sekiban.EventSourcing;
@@ -36,6 +37,8 @@ public static class ServiceCollectionExtensions
                 services.AddTransient<IMultipleProjection, MemoryCacheMultipleProjection>();
                 break;
         }
+
+        services.AddSingleton<IUpdateNotice>(new SekibanUpdateNoticeManager());
 
         services.AddTransient<ISingleProjection, MemoryCacheSingleProjection>();
         services.AddTransient<ISingleAggregateFromInitial, SimpleSingleAggregateFromInitial>();
