@@ -68,14 +68,12 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
 
                         if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().EarlierThan(sinceSortableUniqueId))
                         {
-                            Console.WriteLine("cancel events...");
                             continue;
                         }
 
                         events.Add(toAdd);
                     }
                 }
-                Console.WriteLine("adding events:" + events.Count + "-" + sinceSortableUniqueId);
                 resultAction(events.OrderBy(m => m.SortableUniqueId));
             });
     }

@@ -57,7 +57,6 @@ public class MemoryCacheMultipleProjection : IMultipleProjection
                     }
                 }
             });
-        Console.WriteLine($"{typeof(P).FullName},{projector.Version} cacheVersion {savedContainer?.SafeDto?.Version}");
         container.Dto = projector.ToDto();
         if (container.LastSortableUniqueId != null && container.SafeSortableUniqueId == null)
         {
@@ -92,14 +91,12 @@ public class MemoryCacheMultipleProjection : IMultipleProjection
                     }
                     projector.ApplyEvent(ev);
                     container.LastSortableUniqueId = ev.GetSortableUniqueId();
-                    Console.WriteLine(container.LastSortableUniqueId.Value + "-" + projector.Version);
                     if (ev.GetSortableUniqueId().LaterThan(targetSafeId))
                     {
                         container.UnsafeEvents.Add(ev);
                     }
                 }
             });
-        Console.WriteLine($"{typeof(P).FullName},{projector.Version}");
         container.Dto = projector.ToDto();
         if (container.LastSortableUniqueId != null &&
             container.SafeSortableUniqueId == null &&
