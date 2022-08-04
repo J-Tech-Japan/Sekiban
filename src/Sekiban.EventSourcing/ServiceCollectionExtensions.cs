@@ -62,6 +62,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IMultipleAggregateProjectionService, MultipleAggregateProjectionService>();
         services.AddTransient<IMultipleProjection, MemoryCacheMultipleProjection>();
         services.AddTransient<ISingleProjection, SimpleProjectionWithSnapshot>();
+        services.AddSingleton<IUpdateNotice>(new SekibanUpdateNoticeManager());
         services.AddTransient<ISingleAggregateFromInitial, SimpleSingleAggregateFromInitial>();
         services.AddSingleton(new InMemoryDocumentStore());
         services.AddTransient<IDocumentWriter, InMemoryDocumentWriter>();
