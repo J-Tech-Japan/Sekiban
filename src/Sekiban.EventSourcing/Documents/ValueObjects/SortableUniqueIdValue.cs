@@ -2,7 +2,7 @@ namespace Sekiban.EventSourcing.Documents.ValueObjects;
 
 public record SortableUniqueIdValue(string Value)
 {
-    public static int safeMilliseconds = 2000;
+    public static int safeMilliseconds = 5000;
 
     public DateTime GetTicks()
     {
