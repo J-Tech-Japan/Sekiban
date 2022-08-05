@@ -8,7 +8,7 @@ public class SingleAggregateListProjector<T, Q, P> : IMultipleAggregateProjector
 {
     private T _eventChecker;
     private P _projector = new();
-    public List<T> List { get; } = new();
+    public List<T> List { get; private set; } = new();
     public SingleAggregateListProjector() =>
         _eventChecker = _projector.CreateInitialAggregate(Guid.Empty);
     public void ApplyEvent(IAggregateEvent ev)
@@ -45,12 +45,23 @@ public class SingleAggregateListProjector<T, Q, P> : IMultipleAggregateProjector
     }
     public void ApplySnapshot(SingleAggregateProjectionDto<Q> snapshot)
     {
-        throw new NotImplementedException();
+        List = snapshot.List.Select(
+                m =>
+                {
+                    var aggregate = _projector.CreateInitialAggregate(m.AggregateId);
+                    aggregate.ApplySnapshot(m);
+                    return aggregate;
+                })
+            .ToList();
+        LastEventId = snapshot.LastEventId;
+        LastSortableUniqueId = snapshot.LastSortableUniqueId;
+        AppliedSnapshotVersion = snapshot.AppliedSnapshotVersion;
+        Version = snapshot.Version;
     }
     public IList<string> TargetAggregateNames() =>
         new List<string> { _projector.OriginalAggregateType().Name };
     public Guid LastEventId { get; private set; } = Guid.Empty;
     public string LastSortableUniqueId { get; private set; } = string.Empty;
-    public int AppliedSnapshotVersion { get; } = 0;
+    public int AppliedSnapshotVersion { get; private set; }
     public int Version { get; private set; }
 }

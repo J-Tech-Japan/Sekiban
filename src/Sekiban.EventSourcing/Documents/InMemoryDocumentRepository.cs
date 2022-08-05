@@ -69,8 +69,11 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         Guid aggregateId,
         Type originalType,
         string? sinceSortableUniqueId,
-        Action<IEnumerable<string>> resultAction) =>
+        Action<IEnumerable<string>> resultAction)
+    {
+        await Task.CompletedTask;
         resultAction(new List<string>());
+    }
     public async Task GetAllAggregateEventsAsync(
         Type multipleProjectionType,
         IList<string> targetAggregateNames,

@@ -12,6 +12,7 @@ public class SingleAggregateProjectionDto<Q> : IMultipleAggregateProjectionDto w
         AppliedSnapshotVersion = appliedSnapshotVersion;
         Version = version;
     }
+    public SingleAggregateProjectionDto() : this(new List<Q>(), Guid.Empty, string.Empty, 0, 0) { }
     public Guid LastEventId { get; }
     public string LastSortableUniqueId { get; }
     public int AppliedSnapshotVersion { get; }

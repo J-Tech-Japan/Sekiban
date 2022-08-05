@@ -1,11 +1,15 @@
+using Sekiban.EventSourcing.Queries.SingleAggregates.SingleProjection;
 namespace Sekiban.EventSourcing.Queries.SingleAggregates;
 
 public class SingleAggregateService : ISingleAggregateService
 {
-    private readonly IDocumentRepository _documentRepository;
-
-    public SingleAggregateService(IDocumentRepository documentRepository) =>
-        _documentRepository = documentRepository;
+    private readonly ISingleAggregateFromInitial _singleAggregateFromInitial;
+    private readonly ISingleProjection _singleProjection;
+    public SingleAggregateService(ISingleProjection singleProjection, ISingleAggregateFromInitial singleAggregateFromInitial)
+    {
+        _singleProjection = singleProjection;
+        _singleAggregateFromInitial = singleAggregateFromInitial;
+    }
 
     /// <summary>
     ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
@@ -18,36 +22,8 @@ public class SingleAggregateService : ISingleAggregateService
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
     public async Task<T?> GetAggregateFromInitialAsync<T, P>(Guid aggregateId, int? toVersion) where T : ISingleAggregate, ISingleAggregateProjection
-        where P : ISingleAggregateProjector<T>, new()
-    {
-        var projector = new P();
-        var aggregate = projector.CreateInitialAggregate(aggregateId);
-        var addFinished = false;
-        await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
-            aggregateId,
-            typeof(T),
-            PartitionKeyGenerator.ForAggregateEvent(aggregateId, projector.OriginalAggregateType()),
-            null,
-            events =>
-            {
-                if (events.Count() != events.Select(m => m.Id).Distinct().Count())
-                {
-                    throw new SekibanAggregateEventDuplicateException();
-                }
-                if (addFinished) { return; }
-                foreach (var e in events)
-                {
-                    aggregate.ApplyEvent(e);
-                    if (toVersion.HasValue && toVersion.Value == aggregate.Version)
-                    {
-                        addFinished = true;
-                        break;
-                    }
-                }
-            });
-        if (aggregate.Version == 0) { return default; }
-        return aggregate;
-    }
+        where P : ISingleAggregateProjector<T>, new() =>
+        await _singleAggregateFromInitial.GetAggregateFromInitialAsync<T, P>(aggregateId, toVersion);
 
     /// <summary>
     ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
@@ -91,7 +67,7 @@ public class SingleAggregateService : ISingleAggregateService
     /// <returns></returns>
     public async Task<T?> GetAggregateAsync<T, TContents>(Guid aggregateId, int? toVersion = null) where T : TransferableAggregateBase<TContents>
         where TContents : IAggregateContents, new() =>
-        await GetAggregateAsync<T, AggregateDto<TContents>, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion);
+        await _singleProjection.GetAggregateAsync<T, AggregateDto<TContents>, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion);
     /// <summary>
     ///     スナップショット、メモリキャッシュを使用する通常版
     ///     こちらはデフォルトプロジェクトション（集約のデフォルトステータス）
@@ -104,65 +80,12 @@ public class SingleAggregateService : ISingleAggregateService
     public async Task<AggregateDto<TContents>?> GetAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
         where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new()
     {
-        var aggregate = await GetAggregateAsync<T, AggregateDto<TContents>, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion);
+        var aggregate = await _singleProjection.GetAggregateAsync<T, AggregateDto<TContents>, DefaultSingleAggregateProjector<T>>(
+            aggregateId,
+            toVersion);
         return aggregate?.ToDto();
     }
 
-    /// <summary>
-    ///     スナップショット、メモリキャッシュを使用する通常版
-    /// </summary>
-    /// <param name="aggregateId"></param>
-    /// <param name="toVersion"></param>
-    /// <typeparam name="T"></typeparam>
-    /// <typeparam name="Q"></typeparam>
-    /// <typeparam name="P"></typeparam>
-    /// <returns></returns>
-    private async Task<T?> GetAggregateAsync<T, Q, P>(Guid aggregateId, int? toVersion = null)
-        where T : ISingleAggregate, ISingleAggregateProjection, ISingleAggregateProjectionDtoConvertible<Q>
-        where Q : ISingleAggregate
-        where P : ISingleAggregateProjector<T>, new()
-    {
-        var projector = new P();
-        var aggregate = projector.CreateInitialAggregate(aggregateId);
-
-        var snapshotDocument = await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(T));
-        var dto = snapshotDocument is null ? default : snapshotDocument.ToDto<Q>();
-        if (dto is not null)
-        {
-            aggregate.ApplySnapshot(dto);
-        }
-        if (toVersion.HasValue && aggregate.Version >= toVersion.Value)
-        {
-            return await GetAggregateFromInitialAsync<T, P>(aggregateId, toVersion.Value);
-        }
-        await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
-            aggregateId,
-            projector.OriginalAggregateType(),
-            PartitionKeyGenerator.ForAggregateEvent(aggregateId, projector.OriginalAggregateType()),
-            dto?.LastSortableUniqueId,
-            events =>
-            {
-                foreach (var e in events)
-                {
-                    if (!string.IsNullOrWhiteSpace(dto?.LastSortableUniqueId) &&
-                        string.CompareOrdinal(dto?.LastSortableUniqueId, e.SortableUniqueId) > 0)
-                    {
-                        throw new SekibanAggregateEventDuplicateException();
-                    }
-                    aggregate.ApplyEvent(e);
-                    if (toVersion.HasValue && aggregate.Version == toVersion.Value)
-                    {
-                        break;
-                    }
-                }
-            });
-        if (aggregate.Version == 0) { return default; }
-        if (toVersion.HasValue && aggregate.Version < toVersion.Value)
-        {
-            throw new SekibanVersionNotReachToSpecificVersion();
-        }
-        return aggregate;
-    }
     /// <summary>
     ///     スナップショット、メモリキャッシュを使用する通常版
     /// </summary>
@@ -177,7 +100,7 @@ public class SingleAggregateService : ISingleAggregateService
         where Q : ISingleAggregate
         where P : ISingleAggregateProjector<T>, new()
     {
-        var aggregate = await GetAggregateAsync<T, Q, P>(aggregateId, toVersion);
+        var aggregate = await _singleProjection.GetAggregateAsync<T, Q, P>(aggregateId, toVersion);
         return aggregate is null ? default : aggregate.ToDto();
     }
 }

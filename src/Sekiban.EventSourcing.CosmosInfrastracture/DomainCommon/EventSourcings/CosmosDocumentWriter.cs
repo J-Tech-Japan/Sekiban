@@ -30,7 +30,6 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
                 aggregateContainerGroup,
                 async container =>
                 {
-                    Console.WriteLine(document.ToString());
                     await container.CreateItemAsync(document, new PartitionKey(document.PartitionKey));
                 });
         }
