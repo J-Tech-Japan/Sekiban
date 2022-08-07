@@ -27,7 +27,7 @@ public class SekibanApiListController<T> : ControllerBase
 
     [HttpGet]
     [Route("aggregates", Name = "SekibanAggregates")]
-    public async Task<ActionResult<List<SekibanAggregateInfo>>> AggregateInfoAsync()
+    public virtual async Task<ActionResult<List<SekibanAggregateInfo>>> AggregateInfoAsync()
     {
         await Task.CompletedTask;
         var list = new List<SekibanAggregateInfo>();
@@ -99,7 +99,7 @@ public class SekibanApiListController<T> : ControllerBase
     }
     [HttpGet]
     [Route("events/{aggregateName}/{id}", Name = "SekibanEvents")]
-    public async Task<ActionResult<IEnumerable<dynamic>>> EventsAsync(string aggregateName, Guid id)
+    public virtual async Task<ActionResult<IEnumerable<dynamic>>> EventsAsync(string aggregateName, Guid id)
     {
         foreach (var aggregateType in _sekibanControllerItems.SekibanAggregates)
         {
@@ -120,7 +120,7 @@ public class SekibanApiListController<T> : ControllerBase
     }
     [HttpGet]
     [Route("commands/{aggregateName}/{id}", Name = "SekibanCommands")]
-    public async Task<ActionResult<IEnumerable<dynamic>>> CommandsAsync(string aggregateName, Guid id)
+    public virtual async Task<ActionResult<IEnumerable<dynamic>>> CommandsAsync(string aggregateName, Guid id)
     {
         foreach (var aggregateType in _sekibanControllerItems.SekibanAggregates)
         {
