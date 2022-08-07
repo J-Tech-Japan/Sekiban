@@ -12,6 +12,6 @@ public class BaseQueryListController<TAggregate, TAggregateContents> : Controlle
 
     [HttpGet]
     [Route("")]
-    public async Task<ActionResult<IEnumerable<AggregateDto<TAggregateContents>>>> ListAsync() =>
+    public virtual async Task<ActionResult<IEnumerable<AggregateDto<TAggregateContents>>>> ListAsync() =>
         Ok(await _multipleAggregateProjectionService.GetAggregateList<TAggregate, TAggregateContents>());
 }
