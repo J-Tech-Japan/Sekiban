@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Sekiban.EventSourcing.AggregateCommands.UserInformations;
 using Sekiban.EventSourcing.PubSubs;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.MultipleAggregates.MultipleProjection;
@@ -12,6 +13,11 @@ namespace Sekiban.EventSourcing;
 
 public static class ServiceCollectionExtensions
 {
+    public enum HttpContextType
+    {
+        Local = 1,
+        Azure = 2
+    }
     public enum MultipleProjectionType
     {
         Simple = 1,
@@ -99,11 +105,19 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    public static IServiceCollection AddSekibanHTTPUser(this IServiceCollection services)
+    public static IServiceCollection AddSekibanHTTPUser(this IServiceCollection services, HttpContextType contextType = HttpContextType.Local)
     {
         // ユーザー情報
         services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
-        services.AddTransient<IUserInformationFactory, HttpContextUserInformationFactory>();
+        switch (contextType)
+        {
+            case HttpContextType.Local:
+                services.AddTransient<IUserInformationFactory, HttpContextUserInformationFactory>();
+                break;
+            case HttpContextType.Azure:
+                services.AddTransient<IUserInformationFactory, AzureAdUserInformationFactory>();
+                break;
+        }
         return services;
     }
     public static IServiceCollection AddSekibanSettingsFromAppSettings(this IServiceCollection services)

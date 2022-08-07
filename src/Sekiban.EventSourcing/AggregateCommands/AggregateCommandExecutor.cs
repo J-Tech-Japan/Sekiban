@@ -1,3 +1,4 @@
+using Sekiban.EventSourcing.AggregateCommands.UserInformations;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Shared;
 namespace Sekiban.EventSourcing.AggregateCommands;
