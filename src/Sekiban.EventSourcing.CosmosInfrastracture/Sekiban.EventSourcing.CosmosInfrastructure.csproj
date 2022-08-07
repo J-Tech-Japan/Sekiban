@@ -6,13 +6,13 @@
         <Nullable>enable</Nullable>
         <RootNamespace>CosmosInfrastructure</RootNamespace>
         <PackageId>JJ_Sekiban.EventSourcing.CosmosInfrastructure</PackageId>
-        <Version>0.4.16</Version>
+        <Version>0.4.17</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework CosmosInfrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.4.16</PackageVersion>
-        <Description>WebHelperの機能追加、オーバーライド可能にする</Description>
+        <PackageVersion>0.4.17</PackageVersion>
+        <Description>コマンドの機能追加、Azure AD のユーザーコンテキストに対応</Description>
     </PropertyGroup>
 
     <ItemGroup>

@@ -1,4 +1,4 @@
-namespace Sekiban.EventSourcing.AggregateCommands;
+namespace Sekiban.EventSourcing.AggregateCommands.UserInformations;
 
 public interface IUserInformationFactory
 {
