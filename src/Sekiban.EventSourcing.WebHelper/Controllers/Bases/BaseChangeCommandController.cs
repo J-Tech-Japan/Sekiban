@@ -4,7 +4,7 @@ using Sekiban.EventSourcing.Aggregates;
 namespace Sekiban.EventSourcing.WebHelper.Controllers.Bases;
 
 [ApiController]
-public class BaseChangeCommandController<TAggregate, TAggregateContents, TAggregateCommand>
+public class BaseChangeCommandController<TAggregate, TAggregateContents, TAggregateCommand> : ControllerBase
     where TAggregate : TransferableAggregateBase<TAggregateContents>, new()
     where TAggregateContents : IAggregateContents, new()
     where TAggregateCommand : ChangeAggregateCommandBase<TAggregate>
