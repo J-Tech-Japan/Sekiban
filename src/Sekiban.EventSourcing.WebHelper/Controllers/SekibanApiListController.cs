@@ -13,27 +13,24 @@ namespace Sekiban.EventSourcing.WebHelper.Controllers;
 [ApiController]
 public class SekibanApiListController<T> : ControllerBase
 {
-    private readonly IAuthorizeDefinitionCollection _authorizeDefinitionCollection;
     private readonly IDocumentRepository _documentRepository;
     private readonly ISekibanControllerItems _sekibanControllerItems;
     private readonly SekibanControllerOptions _sekibanControllerOptions;
     public SekibanApiListController(
         SekibanControllerOptions sekibanControllerOptions,
         ISekibanControllerItems sekibanControllerItems,
-        IDocumentRepository documentRepository,
-        IAuthorizeDefinitionCollection authorizeDefinitionCollection)
+        IDocumentRepository documentRepository)
     {
         _sekibanControllerOptions = sekibanControllerOptions;
         _sekibanControllerItems = sekibanControllerItems;
         _documentRepository = documentRepository;
-        _authorizeDefinitionCollection = authorizeDefinitionCollection;
     }
 
     [HttpGet]
     [Route("aggregates", Name = "SekibanAggregates")]
     public virtual async Task<ActionResult<List<SekibanAggregateInfo>>> AggregateInfoAsync()
     {
-        if (_authorizeDefinitionCollection.CheckAuthorization(
+        if (_sekibanControllerOptions.AuthorizeDefinitionCollection.CheckAuthorization(
                 AuthorizeMethodType.AggregateInfo,
                 this,
                 typeof(T),
@@ -117,7 +114,7 @@ public class SekibanApiListController<T> : ControllerBase
         foreach (var aggregateType in _sekibanControllerItems.SekibanAggregates)
         {
             if (!string.Equals(aggregateName, aggregateType.Name, StringComparison.CurrentCultureIgnoreCase)) { continue; }
-            if (_authorizeDefinitionCollection.CheckAuthorization(
+            if (_sekibanControllerOptions.AuthorizeDefinitionCollection.CheckAuthorization(
                     AuthorizeMethodType.EventHistory,
                     this,
                     aggregateType,
@@ -146,7 +143,7 @@ public class SekibanApiListController<T> : ControllerBase
         foreach (var aggregateType in _sekibanControllerItems.SekibanAggregates)
         {
             if (!string.Equals(aggregateName, aggregateType.Name, StringComparison.CurrentCultureIgnoreCase)) { continue; }
-            if (_authorizeDefinitionCollection.CheckAuthorization(
+            if (_sekibanControllerOptions.AuthorizeDefinitionCollection.CheckAuthorization(
                     AuthorizeMethodType.CommandHistory,
                     this,
                     aggregateType,
