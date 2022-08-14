@@ -91,7 +91,8 @@ public class AuthorizeDefinitionCollection : IAuthorizeDefinitionCollection
         Type aggregateType,
         Type? commandType,
         IAggregateCommand? command,
-        HttpContext httpContext)
+        HttpContext httpContext,
+        IServiceProvider serviceProvider)
     {
         foreach (var definition in Collection)
         {
@@ -108,7 +109,8 @@ public class AuthorizeDefinitionCollection : IAuthorizeDefinitionCollection
                     }
                     return isInRole;
                 },
-                httpContext);
+                httpContext,
+                serviceProvider);
             if (result == AuthorizeResultType.Allowed || result == AuthorizeResultType.Denied)
             {
                 return result;

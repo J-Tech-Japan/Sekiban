@@ -13,5 +13,6 @@ public interface IAuthorizeDefinitionCollection
         Type aggregateType,
         Type? commandType,
         IAggregateCommand? command,
-        HttpContext httpContext);
+        HttpContext httpContext,
+        IServiceProvider serviceProvider);
 }

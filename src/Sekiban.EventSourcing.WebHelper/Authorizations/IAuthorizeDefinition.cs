@@ -8,5 +8,6 @@ public interface IAuthorizeDefinition
         Type aggregateType,
         Type? commandType,
         Func<IEnumerable<string>, bool> checkRoles,
-        HttpContext httpContext);
+        HttpContext httpContext,
+        IServiceProvider serviceProvider);
 }

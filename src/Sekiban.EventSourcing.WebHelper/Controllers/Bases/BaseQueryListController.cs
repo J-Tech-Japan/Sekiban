@@ -11,12 +11,15 @@ public class BaseQueryListController<TAggregate, TAggregateContents> : Controlle
 {
     private readonly IMultipleAggregateProjectionService _multipleAggregateProjectionService;
     private readonly SekibanControllerOptions _sekibanControllerOptions;
+    private readonly IServiceProvider _serviceProvider;
     public BaseQueryListController(
         IMultipleAggregateProjectionService multipleAggregateProjectionService,
-        SekibanControllerOptions sekibanControllerOptions)
+        SekibanControllerOptions sekibanControllerOptions,
+        IServiceProvider serviceProvider)
     {
         _multipleAggregateProjectionService = multipleAggregateProjectionService;
         _sekibanControllerOptions = sekibanControllerOptions;
+        _serviceProvider = serviceProvider;
     }
 
     [HttpGet]
@@ -29,7 +32,8 @@ public class BaseQueryListController<TAggregate, TAggregateContents> : Controlle
                 typeof(TAggregate),
                 null,
                 null,
-                HttpContext) ==
+                HttpContext,
+                _serviceProvider) ==
             AuthorizeResultType.Denied) { return Unauthorized(); }
 
         return Ok(await _multipleAggregateProjectionService.GetAggregateList<TAggregate, TAggregateContents>());

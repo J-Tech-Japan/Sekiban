@@ -7,13 +7,13 @@
         <OutputType>Library</OutputType>
         <RootNamespace>Sekiban.EventSourcing.WebHelper</RootNamespace>
         <PackageId>JJ_Sekiban.EventSourcing.WebHelper</PackageId>
-        <Version>0.4.19</Version>
+        <Version>0.4.20</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework WebHelper</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.4.19</PackageVersion>
-        <Description>WebHelperに認証を宣言的に設定できる機能を追加</Description>
+        <PackageVersion>0.4.20</PackageVersion>
+        <Description>WebHelper認証機構の改善</Description>
     </PropertyGroup>
 
     <ItemGroup>
