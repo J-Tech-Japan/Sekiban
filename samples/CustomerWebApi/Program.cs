@@ -1,5 +1,6 @@
 using CustomerDomainContext.Shared;
-using CustomerWebApi.Controllers.Bases;
+using Sekiban.EventSourcing.WebHelper.Authorizations;
+using Sekiban.EventSourcing.WebHelper.Authorizations.Definitions;
 using Sekiban.EventSourcing.WebHelper.Common;
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,7 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 var controllerItems = new SekibanControllerItems(Dependency.GetAggregateTypes().ToList(), Dependency.GetDependencies().ToList());
 builder.Services.AddSingleton<ISekibanControllerItems>(controllerItems);
-var controllerOptions = new SekibanControllerOptions { BaseCreateControllerType = typeof(CustomerCreateBaseController<,,>) };
+var controllerOptions = new SekibanControllerOptions();
 builder.Services.AddSingleton(controllerOptions);
 #if true
 builder.Services.AddControllers(options => options.Conventions.Add(new SekibanControllerRouteConvention(controllerOptions)))
@@ -16,6 +17,9 @@ builder.Services.AddControllers(options => options.Conventions.Add(new SekibanCo
 #else
 builder.Services.AddControllers();
 #endif
+// 全てのメソッドを許可する、Authorize不要
+builder.Services.AddSingleton<IAuthorizeDefinitionCollection>(new AuthorizeDefinitionCollection(new Allow<AllMethod>()));
+
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

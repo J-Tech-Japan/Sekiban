@@ -4,31 +4,44 @@ using Sekiban.EventSourcing.Aggregates;
 using Sekiban.EventSourcing.Documents;
 using Sekiban.EventSourcing.Partitions;
 using Sekiban.EventSourcing.Shared;
+using Sekiban.EventSourcing.WebHelper.Authorizations;
 using Sekiban.EventSourcing.WebHelper.Common;
 using System.Reflection;
 namespace Sekiban.EventSourcing.WebHelper.Controllers;
 
+[Produces("application/json")]
 [ApiController]
 public class SekibanApiListController<T> : ControllerBase
 {
+    private readonly IAuthorizeDefinitionCollection _authorizeDefinitionCollection;
     private readonly IDocumentRepository _documentRepository;
     private readonly ISekibanControllerItems _sekibanControllerItems;
     private readonly SekibanControllerOptions _sekibanControllerOptions;
-
     public SekibanApiListController(
         SekibanControllerOptions sekibanControllerOptions,
         ISekibanControllerItems sekibanControllerItems,
-        IDocumentRepository documentRepository)
+        IDocumentRepository documentRepository,
+        IAuthorizeDefinitionCollection authorizeDefinitionCollection)
     {
         _sekibanControllerOptions = sekibanControllerOptions;
         _sekibanControllerItems = sekibanControllerItems;
         _documentRepository = documentRepository;
+        _authorizeDefinitionCollection = authorizeDefinitionCollection;
     }
 
     [HttpGet]
     [Route("aggregates", Name = "SekibanAggregates")]
     public virtual async Task<ActionResult<List<SekibanAggregateInfo>>> AggregateInfoAsync()
     {
+        if (_authorizeDefinitionCollection.CheckAuthorization(
+                AuthorizeMethodType.AggregateInfo,
+                this,
+                typeof(T),
+                null,
+                null,
+                HttpContext) ==
+            AuthorizeResultType.Denied) { return Unauthorized(); }
+
         await Task.CompletedTask;
         var list = new List<SekibanAggregateInfo>();
         foreach (var aggregateType in _sekibanControllerItems.SekibanAggregates)
@@ -104,6 +117,14 @@ public class SekibanApiListController<T> : ControllerBase
         foreach (var aggregateType in _sekibanControllerItems.SekibanAggregates)
         {
             if (!string.Equals(aggregateName, aggregateType.Name, StringComparison.CurrentCultureIgnoreCase)) { continue; }
+            if (_authorizeDefinitionCollection.CheckAuthorization(
+                    AuthorizeMethodType.EventHistory,
+                    this,
+                    aggregateType,
+                    null,
+                    null,
+                    HttpContext) ==
+                AuthorizeResultType.Denied) { return Unauthorized(); }
             var events = new List<dynamic>();
             await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
                 id,
@@ -125,6 +146,14 @@ public class SekibanApiListController<T> : ControllerBase
         foreach (var aggregateType in _sekibanControllerItems.SekibanAggregates)
         {
             if (!string.Equals(aggregateName, aggregateType.Name, StringComparison.CurrentCultureIgnoreCase)) { continue; }
+            if (_authorizeDefinitionCollection.CheckAuthorization(
+                    AuthorizeMethodType.CommandHistory,
+                    this,
+                    aggregateType,
+                    null,
+                    null,
+                    HttpContext) ==
+                AuthorizeResultType.Denied) { return Unauthorized(); }
             var events = new List<dynamic>();
             await _documentRepository.GetAllAggregateCommandStringsForAggregateIdAsync(
                 id,
