@@ -1,3 +1,5 @@
+using Sekiban.EventSourcing.WebHelper.Authorizations;
+using Sekiban.EventSourcing.WebHelper.Authorizations.Definitions;
 using Sekiban.EventSourcing.WebHelper.Controllers;
 using Sekiban.EventSourcing.WebHelper.Controllers.Bases;
 namespace Sekiban.EventSourcing.WebHelper.Common;
@@ -14,4 +16,5 @@ public class SekibanControllerOptions
     public string ChangeCommandPrefix { get; set; } = "api/command";
     public string QueryPrefix { get; set; } = "api/query";
     public string InfoPrefix { get; set; } = "api/info";
+    public IAuthorizeDefinitionCollection AuthorizeDefinitionCollection { get; set; } = new AuthorizeDefinitionCollection(new Allow<AllMethod>());
 }

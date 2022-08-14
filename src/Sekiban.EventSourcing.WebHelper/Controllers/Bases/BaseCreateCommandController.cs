@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Sekiban.EventSourcing.AggregateCommands;
 using Sekiban.EventSourcing.Aggregates;
 using Sekiban.EventSourcing.WebHelper.Authorizations;
+using Sekiban.EventSourcing.WebHelper.Common;
 namespace Sekiban.EventSourcing.WebHelper.Controllers.Bases;
 
 [ApiController]
@@ -11,12 +12,12 @@ public class BaseCreateCommandController<TAggregate, TAggregateContents, TAggreg
     where TAggregateContents : IAggregateContents, new()
     where TAggregateCommand : ICreateAggregateCommand<TAggregate>
 {
-    private readonly IAuthorizeDefinitionCollection _authorizeDefinitionCollection;
     private readonly IAggregateCommandExecutor _executor;
-    public BaseCreateCommandController(IAggregateCommandExecutor executor, IAuthorizeDefinitionCollection authorizeDefinitionCollection)
+    private readonly SekibanControllerOptions _sekibanControllerOptions;
+    public BaseCreateCommandController(IAggregateCommandExecutor executor, SekibanControllerOptions sekibanControllerOptions)
     {
         _executor = executor;
-        _authorizeDefinitionCollection = authorizeDefinitionCollection;
+        _sekibanControllerOptions = sekibanControllerOptions;
     }
 
     [HttpPost]
@@ -24,7 +25,7 @@ public class BaseCreateCommandController<TAggregate, TAggregateContents, TAggreg
     public virtual async Task<ActionResult<AggregateCommandExecutorResponse<TAggregateContents, TAggregateCommand>>> Execute(
         [FromBody] TAggregateCommand command)
     {
-        if (_authorizeDefinitionCollection.CheckAuthorization(
+        if (_sekibanControllerOptions.AuthorizeDefinitionCollection.CheckAuthorization(
                 AuthorizeMethodType.CreateCommand,
                 this,
                 typeof(TAggregate),
