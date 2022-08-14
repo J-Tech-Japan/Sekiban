@@ -10,7 +10,8 @@ public class Deny<TDefinitionType> : IAuthorizeDefinition where TDefinitionType 
         Type aggregateType,
         Type? commandType,
         Func<IEnumerable<string>, bool> checkRoles,
-        HttpContext httpContext)
+        HttpContext httpContext,
+        IServiceProvider serviceProvider)
     {
         if (new TDefinitionType().IsMatches(authorizeMethodType, aggregateType, commandType))
         {

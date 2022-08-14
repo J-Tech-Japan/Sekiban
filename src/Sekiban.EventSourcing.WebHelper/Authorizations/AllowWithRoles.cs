@@ -21,7 +21,8 @@ public class AllowWithRoles<TDefinitionType, TRoleEnum> : IAuthorizeDefinition w
         Type aggregateType,
         Type? commandType,
         Func<IEnumerable<string>, bool> checkRoles,
-        HttpContext httpContext)
+        HttpContext httpContext,
+        IServiceProvider serviceProvider)
     {
         if (new TDefinitionType().IsMatches(authorizeMethodType, aggregateType, commandType))
         {

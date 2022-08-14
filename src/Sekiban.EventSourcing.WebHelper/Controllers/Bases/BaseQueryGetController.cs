@@ -11,11 +11,16 @@ public class BaseQueryGetController<TAggregate, TAggregateContents> : Controller
     where TAggregate : TransferableAggregateBase<TAggregateContents>, new() where TAggregateContents : IAggregateContents, new()
 {
     private readonly SekibanControllerOptions _sekibanControllerOptions;
+    private readonly IServiceProvider _serviceProvider;
     private readonly ISingleAggregateService _singleAggregateService;
-    public BaseQueryGetController(ISingleAggregateService singleAggregateService, SekibanControllerOptions sekibanControllerOptions)
+    public BaseQueryGetController(
+        ISingleAggregateService singleAggregateService,
+        SekibanControllerOptions sekibanControllerOptions,
+        IServiceProvider serviceProvider)
     {
         _singleAggregateService = singleAggregateService;
         _sekibanControllerOptions = sekibanControllerOptions;
+        _serviceProvider = serviceProvider;
     }
 
     [HttpGet]
@@ -28,7 +33,8 @@ public class BaseQueryGetController<TAggregate, TAggregateContents> : Controller
                 typeof(TAggregate),
                 null,
                 null,
-                HttpContext) ==
+                HttpContext,
+                _serviceProvider) ==
             AuthorizeResultType.Denied) { return Unauthorized(); }
         return Ok(await _singleAggregateService.GetAggregateDtoAsync<TAggregate, TAggregateContents>(id, toVersion));
     }

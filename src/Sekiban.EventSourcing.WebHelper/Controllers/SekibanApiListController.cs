@@ -16,14 +16,17 @@ public class SekibanApiListController<T> : ControllerBase
     private readonly IDocumentRepository _documentRepository;
     private readonly ISekibanControllerItems _sekibanControllerItems;
     private readonly SekibanControllerOptions _sekibanControllerOptions;
+    private readonly IServiceProvider _serviceProvider;
     public SekibanApiListController(
         SekibanControllerOptions sekibanControllerOptions,
         ISekibanControllerItems sekibanControllerItems,
-        IDocumentRepository documentRepository)
+        IDocumentRepository documentRepository,
+        IServiceProvider serviceProvider)
     {
         _sekibanControllerOptions = sekibanControllerOptions;
         _sekibanControllerItems = sekibanControllerItems;
         _documentRepository = documentRepository;
+        _serviceProvider = serviceProvider;
     }
 
     [HttpGet]
@@ -36,7 +39,8 @@ public class SekibanApiListController<T> : ControllerBase
                 typeof(T),
                 null,
                 null,
-                HttpContext) ==
+                HttpContext,
+                _serviceProvider) ==
             AuthorizeResultType.Denied) { return Unauthorized(); }
 
         await Task.CompletedTask;
@@ -120,7 +124,8 @@ public class SekibanApiListController<T> : ControllerBase
                     aggregateType,
                     null,
                     null,
-                    HttpContext) ==
+                    HttpContext,
+                    _serviceProvider) ==
                 AuthorizeResultType.Denied) { return Unauthorized(); }
             var events = new List<dynamic>();
             await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
@@ -149,7 +154,8 @@ public class SekibanApiListController<T> : ControllerBase
                     aggregateType,
                     null,
                     null,
-                    HttpContext) ==
+                    HttpContext,
+                    _serviceProvider) ==
                 AuthorizeResultType.Denied) { return Unauthorized(); }
             var events = new List<dynamic>();
             await _documentRepository.GetAllAggregateCommandStringsForAggregateIdAsync(

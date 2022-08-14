@@ -14,10 +14,15 @@ public class BaseChangeCommandController<TAggregate, TAggregateContents, TAggreg
 {
     private readonly IAggregateCommandExecutor _executor;
     private readonly SekibanControllerOptions _sekibanControllerOptions;
-    public BaseChangeCommandController(IAggregateCommandExecutor executor, SekibanControllerOptions sekibanControllerOptions)
+    private readonly IServiceProvider _serviceProvider;
+    public BaseChangeCommandController(
+        IAggregateCommandExecutor executor,
+        SekibanControllerOptions sekibanControllerOptions,
+        IServiceProvider serviceProvider)
     {
         _executor = executor;
         _sekibanControllerOptions = sekibanControllerOptions;
+        _serviceProvider = serviceProvider;
     }
 
     [HttpPatch]
@@ -31,7 +36,8 @@ public class BaseChangeCommandController<TAggregate, TAggregateContents, TAggreg
                 typeof(TAggregate),
                 typeof(TAggregateCommand),
                 command,
-                HttpContext) ==
+                HttpContext,
+                _serviceProvider) ==
             AuthorizeResultType.Denied) { return Unauthorized(); }
         return new ActionResult<AggregateCommandExecutorResponse<TAggregateContents, TAggregateCommand>>(
             await _executor.ExecChangeCommandAsync<TAggregate, TAggregateContents, TAggregateCommand>(command));
