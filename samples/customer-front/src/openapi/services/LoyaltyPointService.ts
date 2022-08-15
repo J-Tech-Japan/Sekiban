@@ -95,7 +95,7 @@ export class LoyaltyPointService {
     }): Promise<LoyaltyPointContentsAggregateDto> {
         const result = await __request({
             method: 'GET',
-            path: `/api/query/loyaltypoint`,
+            path: `/api/query/loyaltypoint/get`,
             query: {
                 'id': id,
                 'toVersion': toVersion,

@@ -17,12 +17,12 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.2.3"/>
+        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.2.3" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Sekiban.EventSourcing.CosmosInfrastracture\Sekiban.EventSourcing.CosmosInfrastructure.csproj"/>
-        <ProjectReference Include="..\Sekiban.EventSourcing\Sekiban.EventSourcing.csproj"/>
+        <ProjectReference Include="..\Sekiban.EventSourcing.CosmosInfrastracture\Sekiban.EventSourcing.CosmosInfrastructure.csproj" />
+        <ProjectReference Include="..\Sekiban.EventSourcing\Sekiban.EventSourcing.csproj" />
     </ItemGroup>
 
 </Project>

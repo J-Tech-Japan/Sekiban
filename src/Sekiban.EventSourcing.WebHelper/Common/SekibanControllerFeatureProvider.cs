@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Sekiban.EventSourcing.AggregateCommands;
+using Sekiban.EventSourcing.Queries.SingleAggregates;
 using System.Reflection;
 namespace Sekiban.EventSourcing.WebHelper.Common;
 
@@ -49,6 +50,18 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
                 _sekibanControllerOptions.BaseQueryGetControllerType.MakeGenericType(aggregateType, aggregateContentsType).GetTypeInfo());
             feature.Controllers.Add(
                 _sekibanControllerOptions.BaseQueryListControllerType.MakeGenericType(aggregateType, aggregateContentsType).GetTypeInfo());
+        }
+        foreach (var projectionType in _sekibanControllerItems.SingleAggregateProjections)
+        {
+            var baseType = projectionType?.BaseType?.GetGenericTypeDefinition();
+            if (baseType != typeof(SingleAggregateProjectionBase<>)) { continue; }
+            var projection = (dynamic?)Activator.CreateInstance(projectionType!);
+            if (projection == null) { continue; }
+
+            var aggregateType = projection.OriginalAggregateType();
+            feature.Controllers.Add(
+                _sekibanControllerOptions.BaseSingleAggregateProjectionControllerType.MakeGenericType((Type)aggregateType, projectionType!)
+                    .GetTypeInfo());
         }
         feature.Controllers.Add(_sekibanControllerOptions.BaseIndexControllerType.MakeGenericType(typeof(object)).GetTypeInfo());
     }

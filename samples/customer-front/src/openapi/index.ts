@@ -21,6 +21,8 @@ export type { ClientContentsAggregateDto } from './models/ClientContentsAggregat
 export type { ClientContentsChangeClientNameAggregateCommandExecutorResponse } from './models/ClientContentsChangeClientNameAggregateCommandExecutorResponse';
 export type { ClientContentsCreateClientAggregateCommandExecutorResponse } from './models/ClientContentsCreateClientAggregateCommandExecutorResponse';
 export type { ClientContentsDeleteClientAggregateCommandExecutorResponse } from './models/ClientContentsDeleteClientAggregateCommandExecutorResponse';
+export type { ClientNameHistoryProjection } from './models/ClientNameHistoryProjection';
+export type { ClientNameHistoryProjectionRecord } from './models/ClientNameHistoryProjectionRecord';
 export type { CreateBranch } from './models/CreateBranch';
 export type { CreateBranchAggregateCommandDocument } from './models/CreateBranchAggregateCommandDocument';
 export type { CreateClient } from './models/CreateClient';
@@ -78,6 +80,8 @@ export { $ClientContentsAggregateDto } from './schemas/$ClientContentsAggregateD
 export { $ClientContentsChangeClientNameAggregateCommandExecutorResponse } from './schemas/$ClientContentsChangeClientNameAggregateCommandExecutorResponse';
 export { $ClientContentsCreateClientAggregateCommandExecutorResponse } from './schemas/$ClientContentsCreateClientAggregateCommandExecutorResponse';
 export { $ClientContentsDeleteClientAggregateCommandExecutorResponse } from './schemas/$ClientContentsDeleteClientAggregateCommandExecutorResponse';
+export { $ClientNameHistoryProjection } from './schemas/$ClientNameHistoryProjection';
+export { $ClientNameHistoryProjectionRecord } from './schemas/$ClientNameHistoryProjectionRecord';
 export { $CreateBranch } from './schemas/$CreateBranch';
 export { $CreateBranchAggregateCommandDocument } from './schemas/$CreateBranchAggregateCommandDocument';
 export { $CreateClient } from './schemas/$CreateClient';

@@ -62,6 +62,23 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                 });
         }
         if (controller.ControllerType.IsGenericType &&
+            new List<string> { _sekibanControllerOptions.BaseSingleAggregateProjectionControllerType.Name }.Contains(controller.ControllerType.Name))
+        {
+            var aggregateType = controller.ControllerType.GenericTypeArguments[0];
+            var projectionType = controller.ControllerType.GenericTypeArguments[1];
+            controller.ControllerName = aggregateType.Name;
+            controller.Selectors.Add(
+                new SelectorModel
+                {
+                    AttributeRouteModel = new AttributeRouteModel(
+                        new RouteAttribute(
+                            $"{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name.ToLower()}/{projectionType.Name.ToLower()}"))
+                    {
+                        Name = aggregateType.Name + projectionType.Name
+                    }
+                });
+        }
+        if (controller.ControllerType.IsGenericType &&
             new List<string> { _sekibanControllerOptions.BaseQueryListControllerType.Name }.Contains(controller.ControllerType.Name))
         {
             var aggregateType = controller.ControllerType.GenericTypeArguments[0];
