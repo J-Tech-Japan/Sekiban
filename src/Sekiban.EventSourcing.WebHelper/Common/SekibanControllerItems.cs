@@ -4,4 +4,5 @@ public record SekibanControllerItems(
     IReadOnlyCollection<Type> SekibanAggregates,
     IReadOnlyCollection<(Type serviceType, Type? implementationType)> SekibanCommands,
     IReadOnlyCollection<Type> SingleAggregateProjections,
-    IReadOnlyCollection<Type> MultipleAggregatesProjections) : ISekibanControllerItems { }
+    IReadOnlyCollection<Type> MultipleAggregatesProjections,
+    IReadOnlyCollection<Type> MultipleAggregatesListProjections) : ISekibanControllerItems { }

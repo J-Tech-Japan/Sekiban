@@ -11,6 +11,13 @@ public class MemoryMultipleAggregateProjectionService : IMultipleAggregateProjec
         await Task.CompletedTask;
         return Objects.FirstOrDefault(m => m is P) ?? throw new SekibanProjectionNotExistsException();
     }
+    public async Task<TProjection> GetListProjectionAsync<TProjection, TRecord>()
+        where TProjection : MultipleAggregateListProjectionBase<TProjection, TRecord>, new() where TRecord : new()
+    {
+        await Task.CompletedTask;
+        return Objects.FirstOrDefault(m => m is MultipleAggregateListProjectionBase<TProjection, TRecord>) ??
+            throw new SekibanProjectionNotExistsException();
+    }
     public async Task<SingleAggregateProjectionDto<AggregateDto<TContents>>> GetAggregateListObject<T, TContents>()
         where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new()
     {

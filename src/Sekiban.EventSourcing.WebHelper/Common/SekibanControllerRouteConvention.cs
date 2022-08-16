@@ -93,6 +93,54 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                     }
                 });
         }
+        if (controller.ControllerType.IsGenericType &&
+            new List<string> { _sekibanControllerOptions.BaseMultipleAggregateProjectionControllerType.Name }
+                .Contains(controller.ControllerType.Name))
+        {
+            var aggregateType = controller.ControllerType.GenericTypeArguments[0];
+            controller.ControllerName = aggregateType.Name;
+            controller.Selectors.Add(
+                new SelectorModel
+                {
+                    AttributeRouteModel = new AttributeRouteModel(
+                        new RouteAttribute($"{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name.ToLower()}/get"))
+                    {
+                        Name = aggregateType.Name
+                    }
+                });
+        }
+        if (controller.ControllerType.IsGenericType &&
+            new List<string> { _sekibanControllerOptions.BaseMultipleAggregateListProjectionControllerType.Name }.Contains(
+                controller.ControllerType.Name))
+        {
+            var aggregateType = controller.ControllerType.GenericTypeArguments[0];
+            controller.ControllerName = aggregateType.Name;
+            controller.Selectors.Add(
+                new SelectorModel
+                {
+                    AttributeRouteModel = new AttributeRouteModel(
+                        new RouteAttribute($"{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name.ToLower()}/get"))
+                    {
+                        Name = aggregateType.Name + "Get"
+                    }
+                });
+        }
+        if (controller.ControllerType.IsGenericType &&
+            new List<string> { _sekibanControllerOptions.BaseMultipleAggregateListOnlyProjectionControllerType.Name }.Contains(
+                controller.ControllerType.Name))
+        {
+            var aggregateType = controller.ControllerType.GenericTypeArguments[0];
+            controller.ControllerName = aggregateType.Name;
+            controller.Selectors.Add(
+                new SelectorModel
+                {
+                    AttributeRouteModel = new AttributeRouteModel(
+                        new RouteAttribute($"{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name.ToLower()}/list"))
+                    {
+                        Name = aggregateType.Name + "ListOnly"
+                    }
+                });
+        }
         if (controller.ControllerType.Name == _sekibanControllerOptions.BaseIndexControllerType.Name)
         {
             controller.ControllerName = "SekibanInfo";

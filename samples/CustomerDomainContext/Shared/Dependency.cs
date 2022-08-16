@@ -35,6 +35,10 @@ public static class Dependency
     {
         yield return typeof(ClientLoyaltyPointMultipleProjection);
     }
+    public static IEnumerable<Type> GetMultipleAggregatesListProjectionTypes()
+    {
+        yield return typeof(ClientLoyaltyPointListProjection);
+    }
     public static IEnumerable<(Type serviceType, Type? implementationType)> GetDependencies()
     {
         // Aggregate Event Subscribers
