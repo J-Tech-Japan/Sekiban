@@ -4,12 +4,14 @@ using CustomerDomainContext.Aggregates.Branches.Commands;
 using CustomerDomainContext.Aggregates.Clients;
 using CustomerDomainContext.Aggregates.Clients.Commands;
 using CustomerDomainContext.Aggregates.Clients.Events;
+using CustomerDomainContext.Aggregates.Clients.Projections;
 using CustomerDomainContext.Aggregates.LoyaltyPoints;
 using CustomerDomainContext.Aggregates.LoyaltyPoints.Commands;
 using CustomerDomainContext.Aggregates.RecentActivities;
 using CustomerDomainContext.Aggregates.RecentActivities.Commands;
 using CustomerDomainContext.Aggregates.RecentInMemoryActivities;
 using CustomerDomainContext.Aggregates.RecentInMemoryActivities.Commands;
+using CustomerDomainContext.Projections;
 using System.Reflection;
 namespace CustomerDomainContext.Shared;
 
@@ -24,6 +26,18 @@ public static class Dependency
         yield return typeof(LoyaltyPoint);
         yield return typeof(RecentActivity);
         yield return typeof(RecentInMemoryActivity);
+    }
+    public static IEnumerable<Type> GetSingleAggregateProjectionTypes()
+    {
+        yield return typeof(ClientNameHistoryProjection);
+    }
+    public static IEnumerable<Type> GetMultipleAggregatesProjectionTypes()
+    {
+        yield return typeof(ClientLoyaltyPointMultipleProjection);
+    }
+    public static IEnumerable<Type> GetMultipleAggregatesListProjectionTypes()
+    {
+        yield return typeof(ClientLoyaltyPointListProjection);
     }
     public static IEnumerable<(Type serviceType, Type? implementationType)> GetDependencies()
     {

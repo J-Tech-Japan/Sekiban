@@ -38,7 +38,7 @@ export class BranchService {
     }): Promise<BranchContentsAggregateDto> {
         const result = await __request({
             method: 'GET',
-            path: `/api/query/branch`,
+            path: `/api/query/branch/get`,
             query: {
                 'id': id,
                 'toVersion': toVersion,

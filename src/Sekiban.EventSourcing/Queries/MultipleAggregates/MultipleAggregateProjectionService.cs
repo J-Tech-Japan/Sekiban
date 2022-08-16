@@ -10,6 +10,9 @@ public class MultipleAggregateProjectionService : IMultipleAggregateProjectionSe
         _multipleProjection = multipleProjection;
     public Task<P> GetProjectionAsync<P>() where P : MultipleAggregateProjectionBase<P>, IMultipleAggregateProjectionDto, new() =>
         _multipleProjection.GetMultipleProjectionAsync<P, P>();
+    public Task<TProjection> GetListProjectionAsync<TProjection, TRecord>()
+        where TProjection : MultipleAggregateListProjectionBase<TProjection, TRecord>, new() where TRecord : new() =>
+        _multipleProjection.GetMultipleProjectionAsync<TProjection, TProjection>();
 
     public Task<SingleAggregateProjectionDto<AggregateDto<TContents>>> GetAggregateListObject<T, TContents>()
         where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new() =>

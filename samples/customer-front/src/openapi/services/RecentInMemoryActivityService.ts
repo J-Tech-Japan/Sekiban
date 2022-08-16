@@ -57,7 +57,7 @@ export class RecentInMemoryActivityService {
     }): Promise<RecentInMemoryActivityContentsAggregateDto> {
         const result = await __request({
             method: 'GET',
-            path: `/api/query/recentinmemoryactivity`,
+            path: `/api/query/recentinmemoryactivity/get`,
             query: {
                 'id': id,
                 'toVersion': toVersion,

@@ -57,7 +57,7 @@ export class RecentActivityService {
     }): Promise<RecentActivityContentsAggregateDto> {
         const result = await __request({
             method: 'GET',
-            path: `/api/query/recentactivity`,
+            path: `/api/query/recentactivity/get`,
             query: {
                 'id': id,
                 'toVersion': toVersion,

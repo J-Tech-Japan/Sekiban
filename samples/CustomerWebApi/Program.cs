@@ -5,7 +5,12 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 
 // Add services to the container.
-var controllerItems = new SekibanControllerItems(Dependency.GetAggregateTypes().ToList(), Dependency.GetDependencies().ToList());
+var controllerItems = new SekibanControllerItems(
+    Dependency.GetAggregateTypes().ToList(),
+    Dependency.GetDependencies().ToList(),
+    Dependency.GetSingleAggregateProjectionTypes().ToList(),
+    Dependency.GetMultipleAggregatesProjectionTypes().ToList(),
+    Dependency.GetMultipleAggregatesListProjectionTypes().ToList());
 builder.Services.AddSingleton<ISekibanControllerItems>(controllerItems);
 var controllerOptions = new SekibanControllerOptions();
 builder.Services.AddSingleton(controllerOptions);

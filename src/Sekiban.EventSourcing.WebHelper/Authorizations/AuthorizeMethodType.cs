@@ -8,5 +8,8 @@ public enum AuthorizeMethodType
     List,
     AggregateInfo,
     EventHistory,
-    CommandHistory
+    CommandHistory,
+    SingleAggregateProjection,
+    MultipleAggregateProjection,
+    MultipleAggregateListProjection
 }
