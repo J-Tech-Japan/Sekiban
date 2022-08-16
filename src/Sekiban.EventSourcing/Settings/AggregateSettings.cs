@@ -13,4 +13,6 @@ public class AggregateSettings : IAggregateSettings
         Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == originalType.Name)?.SnapshotFrequency ?? Helper.SnapshotFrequencyDefault;
     public int SnapshotOffsetForType(Type originalType) =>
         Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == originalType.Name)?.SnapshotOffset ?? Helper.SnapshotOffsetDefault;
+    public bool UseUpdateMarkerForType(string originalType) =>
+        Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == originalType)?.UseUpdateMarker ?? Helper.UseUpdateMarker;
 }

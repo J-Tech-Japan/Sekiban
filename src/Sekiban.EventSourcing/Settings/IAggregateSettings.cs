@@ -13,4 +13,5 @@ public interface IAggregateSettings
     public bool CanUseHybrid(Type originalType);
     public int SnapshotFrequencyForType(Type originalType);
     public int SnapshotOffsetForType(Type originalType);
+    public bool UseUpdateMarkerForType(string originalType);
 }

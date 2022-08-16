@@ -1,18 +1,25 @@
 using Microsoft.Extensions.Caching.Memory;
 using Sekiban.EventSourcing.Documents.ValueObjects;
 using Sekiban.EventSourcing.Queries.UpdateNotices;
+using Sekiban.EventSourcing.Settings;
 namespace Sekiban.EventSourcing.Queries.SingleAggregates.SingleProjection;
 
 public class MemoryCacheSingleProjection : ISingleProjection
 {
+    private readonly IAggregateSettings _aggregateSettings;
     private readonly IDocumentRepository _documentRepository;
     private readonly IMemoryCache _memoryCache;
     private readonly IUpdateNotice _updateNotice;
-    public MemoryCacheSingleProjection(IDocumentRepository documentRepository, IMemoryCache memoryCache, IUpdateNotice updateNotice)
+    public MemoryCacheSingleProjection(
+        IDocumentRepository documentRepository,
+        IMemoryCache memoryCache,
+        IUpdateNotice updateNotice,
+        IAggregateSettings aggregateSettings)
     {
         _documentRepository = documentRepository;
         _memoryCache = memoryCache;
         _updateNotice = updateNotice;
+        _aggregateSettings = aggregateSettings;
     }
     public async Task<T?> GetAggregateAsync<T, Q, P>(Guid aggregateId, int? toVersion = null)
         where T : ISingleAggregate, ISingleAggregateProjection, ISingleAggregateProjectionDtoConvertible<Q>
@@ -32,10 +39,13 @@ public class MemoryCacheSingleProjection : ISingleProjection
         var aggregate = projector.CreateInitialAggregate(aggregateId);
         aggregate.ApplySnapshot(savedContainer.SafeDto!);
 
-        var (updated, type) = _updateNotice.HasUpdateAfter(typeof(T).Name, aggregateId, savedContainer.LastSortableUniqueId!);
-        if (!updated)
+        if (_aggregateSettings.UseUpdateMarkerForType(typeof(T).Name))
         {
-            return aggregate;
+            var (updated, type) = _updateNotice.HasUpdateAfter(typeof(T).Name, aggregateId, savedContainer.SafeSortableUniqueId!);
+            if (!updated)
+            {
+                return aggregate;
+            }
         }
         var container = new SingleMemoryCacheProjectionContainer<T, Q>(aggregateId);
         await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
@@ -59,6 +69,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
                         container.SafeSortableUniqueId = container.SafeDto.LastSortableUniqueId;
                     }
                     aggregate.ApplyEvent(e);
+                    container.LastSortableUniqueId = e.SortableUniqueId;
                     if (e.GetSortableUniqueId().LaterThan(targetSafeId))
                     {
                         container.UnsafeEvents.Add(e);
@@ -131,6 +142,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
                         container.SafeSortableUniqueId = container.SafeDto.LastSortableUniqueId;
                     }
                     aggregate.ApplyEvent(e);
+                    container.LastSortableUniqueId = e.GetSortableUniqueId();
                     if (e.GetSortableUniqueId().LaterThan(targetSafeId))
                     {
                         container.UnsafeEvents.Add(e);

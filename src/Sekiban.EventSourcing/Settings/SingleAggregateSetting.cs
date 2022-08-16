@@ -7,12 +7,14 @@ public class SingleAggregateSetting
     public bool? UseHybrid { get; init; }
     public int? SnapshotFrequency { get; init; }
     public int? SnapshotOffset { get; init; }
+    public bool? UseUpdateMarker { get; set; }
     public SingleAggregateSetting() { }
 
     public SingleAggregateSetting(
         string aggregateClassName,
         bool? makeSnapshots,
         bool? useHybrid,
+        bool? useUpdateMarker = null,
         int? snapshotFrequency = null,
         int? snapshotOffset = null)
     {
@@ -21,5 +23,6 @@ public class SingleAggregateSetting
         MakeSnapshots = makeSnapshots;
         SnapshotFrequency = snapshotFrequency;
         SnapshotOffset = snapshotOffset;
+        UseUpdateMarker = useUpdateMarker;
     }
 }

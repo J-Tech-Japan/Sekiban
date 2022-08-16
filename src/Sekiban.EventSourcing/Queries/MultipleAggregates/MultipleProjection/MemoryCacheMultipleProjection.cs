@@ -7,6 +7,7 @@ namespace Sekiban.EventSourcing.Queries.MultipleAggregates.MultipleProjection;
 
 public class MemoryCacheMultipleProjection : IMultipleProjection
 {
+    private readonly IAggregateSettings _aggregateSettings;
     private readonly IDocumentRepository _documentRepository;
     private readonly IMemoryCache _memoryCache;
     private readonly IServiceProvider _serviceProvider;
@@ -15,12 +16,14 @@ public class MemoryCacheMultipleProjection : IMultipleProjection
         IMemoryCache memoryCache,
         IDocumentRepository documentRepository,
         IServiceProvider serviceProvider,
-        IUpdateNotice updateNotice)
+        IUpdateNotice updateNotice,
+        IAggregateSettings aggregateSettings)
     {
         _memoryCache = memoryCache;
         _documentRepository = documentRepository;
         _serviceProvider = serviceProvider;
         _updateNotice = updateNotice;
+        _aggregateSettings = aggregateSettings;
     }
     public async Task<Q> GetMultipleProjectionAsync<P, Q>() where P : IMultipleAggregateProjector<Q>, new()
         where Q : IMultipleAggregateProjectionDto, new()
@@ -38,13 +41,21 @@ public class MemoryCacheMultipleProjection : IMultipleProjection
         }
         projector.ApplySnapshot(savedContainer.SafeDto!);
 
-        if (projector.TargetAggregateNames().Count == 1)
+        bool? canUseCache = null;
+        foreach (var targetAggregateName in projector.TargetAggregateNames())
         {
-            var (updated, type) = _updateNotice.HasUpdateAfter(projector.TargetAggregateNames().First(), savedContainer.LastSortableUniqueId!);
-            if (!updated)
+            if (canUseCache == false) { continue; }
+            if (!_aggregateSettings.UseUpdateMarkerForType(targetAggregateName))
             {
-                return savedContainer.Dto!;
+                canUseCache = false;
+                continue;
             }
+            var (updated, type) = _updateNotice.HasUpdateAfter(targetAggregateName, savedContainer.SafeSortableUniqueId!);
+            canUseCache = !updated;
+        }
+        if (canUseCache == true)
+        {
+            return savedContainer.Dto!;
         }
 
         var container = new MultipleMemoryProjectionContainer<P, Q>();

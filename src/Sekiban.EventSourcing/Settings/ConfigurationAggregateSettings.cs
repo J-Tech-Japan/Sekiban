@@ -14,11 +14,18 @@ public class ConfigurationAggregateSettings : AggregateSettings
             section = section?.GetSection(sekibanContext.SettingGroupIdentifier);
         }
         section = section?.GetSection(AggregatesSection);
-        var useHybridDefault = section?.GetValue<bool?>("useHybridDefault") ?? false;
-        var takeSnapshotDefault = section?.GetValue<bool?>("takeSnapshotDefault") ?? false;
-        var snapshotFrequencyDefault = section?.GetValue<int?>("snapshotFrequencyDefault") ?? 80;
-        var snapshotOffsetDefault = section?.GetValue<int?>("snapshotOffsetDefault") ?? 15;
+        var useHybridDefault = section?.GetValue<bool?>("UseHybridDefault") ?? false;
+        var takeSnapshotDefault = section?.GetValue<bool?>("TakeSnapshotDefault") ?? false;
+        var snapshotFrequencyDefault = section?.GetValue<int?>("SnapshotFrequencyDefault") ?? 80;
+        var snapshotOffsetDefault = section?.GetValue<int?>("SnapshotOffsetDefault") ?? 15;
+        var useUpdateMarker = section?.GetValue<bool?>("UseUpdateMarker") ?? false;
         var exceptions = section?.GetSection("SingleAggregateExceptions").Get<List<SingleAggregateSetting>>() ?? new List<SingleAggregateSetting>();
-        Helper = new AggregateSettingHelper(takeSnapshotDefault, useHybridDefault, snapshotFrequencyDefault, snapshotOffsetDefault, exceptions);
+        Helper = new AggregateSettingHelper(
+            takeSnapshotDefault,
+            useHybridDefault,
+            snapshotFrequencyDefault,
+            snapshotOffsetDefault,
+            useUpdateMarker,
+            exceptions);
     }
 }
