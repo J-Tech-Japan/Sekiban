@@ -52,4 +52,4 @@ export const $IAggregateEvent = {
             isNullable: true,
         },
     },
-};
+} as const;

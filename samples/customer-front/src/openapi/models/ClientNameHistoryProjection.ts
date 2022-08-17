@@ -14,4 +14,5 @@ export type ClientNameHistoryProjection = {
     branchId?: string;
     clientNames?: Array<ClientNameHistoryProjectionRecord> | null;
     clientEmail?: string | null;
-}
+};
+

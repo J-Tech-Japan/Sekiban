@@ -10,4 +10,5 @@ export type BranchContentsCreateBranchAggregateCommandExecutorResponse = {
     aggregateDto?: BranchContentsAggregateDto;
     command?: CreateBranchAggregateCommandDocument;
     events?: Array<IAggregateEvent> | null;
-}
+};
+

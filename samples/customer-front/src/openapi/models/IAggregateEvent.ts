@@ -17,4 +17,5 @@ export type IAggregateEvent = {
     documentTypeName?: string | null;
     timeStamp?: string;
     sortableUniqueId?: string | null;
-}
+};
+

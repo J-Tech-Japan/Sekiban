@@ -4,4 +4,4 @@
 export const $CreateRecentInMemoryActivity = {
     properties: {
     },
-};
+} as const;

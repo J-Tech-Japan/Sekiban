@@ -16,4 +16,4 @@ export const $CreateClient = {
             isNullable: true,
         },
     },
-};
+} as const;

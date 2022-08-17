@@ -18,4 +18,4 @@ export const $SekibanAggregateInfo = {
             isNullable: true,
         },
     },
-};
+} as const;

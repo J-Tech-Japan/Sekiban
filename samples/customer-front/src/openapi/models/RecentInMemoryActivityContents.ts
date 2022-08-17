@@ -6,4 +6,5 @@ import type { RecentInMemoryActivityRecord } from './RecentInMemoryActivityRecor
 
 export type RecentInMemoryActivityContents = {
     latestActivities?: Array<RecentInMemoryActivityRecord> | null;
-}
+};
+

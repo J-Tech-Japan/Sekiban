@@ -5,4 +5,5 @@
 export type CreateLoyaltyPoint = {
     clientId?: string;
     initialPoint?: number;
-}
+};
+

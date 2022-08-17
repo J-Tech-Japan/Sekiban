@@ -10,6 +10,9 @@ import type { LoyaltyPointContentsCreateLoyaltyPointAggregateCommandExecutorResp
 import type { LoyaltyPointContentsDeleteLoyaltyPointAggregateCommandExecutorResponse } from '../models/LoyaltyPointContentsDeleteLoyaltyPointAggregateCommandExecutorResponse';
 import type { LoyaltyPointContentsUseLoyaltyPointAggregateCommandExecutorResponse } from '../models/LoyaltyPointContentsUseLoyaltyPointAggregateCommandExecutorResponse';
 import type { UseLoyaltyPoint } from '../models/UseLoyaltyPoint';
+
+import type { CancelablePromise } from '../core/CancelablePromise';
+import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 
 export class LoyaltyPointService {
@@ -18,102 +21,120 @@ export class LoyaltyPointService {
      * @returns LoyaltyPointContentsCreateLoyaltyPointAggregateCommandExecutorResponse Success
      * @throws ApiError
      */
-    public static async createLoyaltyPoint({
+    public static createLoyaltyPoint({
         requestBody,
     }: {
         requestBody?: CreateLoyaltyPoint,
-    }): Promise<LoyaltyPointContentsCreateLoyaltyPointAggregateCommandExecutorResponse> {
-        const result = await __request({
+    }): CancelablePromise<LoyaltyPointContentsCreateLoyaltyPointAggregateCommandExecutorResponse> {
+        return __request(OpenAPI, {
             method: 'POST',
-            path: `/api/command/loyaltypoint/createloyaltypoint`,
+            url: '/api/command/loyaltypoint/createloyaltypoint',
             body: requestBody,
+            mediaType: 'application/json',
         });
-        return result.body;
     }
 
     /**
      * @returns LoyaltyPointContentsAddLoyaltyPointAggregateCommandExecutorResponse Success
      * @throws ApiError
      */
-    public static async addLoyaltyPoint({
+    public static addLoyaltyPoint({
         requestBody,
     }: {
         requestBody?: AddLoyaltyPoint,
-    }): Promise<LoyaltyPointContentsAddLoyaltyPointAggregateCommandExecutorResponse> {
-        const result = await __request({
+    }): CancelablePromise<LoyaltyPointContentsAddLoyaltyPointAggregateCommandExecutorResponse> {
+        return __request(OpenAPI, {
             method: 'PATCH',
-            path: `/api/command/loyaltypoint/addloyaltypoint`,
+            url: '/api/command/loyaltypoint/addloyaltypoint',
             body: requestBody,
+            mediaType: 'application/json',
         });
-        return result.body;
     }
 
     /**
      * @returns LoyaltyPointContentsUseLoyaltyPointAggregateCommandExecutorResponse Success
      * @throws ApiError
      */
-    public static async useLoyaltyPoint({
+    public static useLoyaltyPoint({
         requestBody,
     }: {
         requestBody?: UseLoyaltyPoint,
-    }): Promise<LoyaltyPointContentsUseLoyaltyPointAggregateCommandExecutorResponse> {
-        const result = await __request({
+    }): CancelablePromise<LoyaltyPointContentsUseLoyaltyPointAggregateCommandExecutorResponse> {
+        return __request(OpenAPI, {
             method: 'PATCH',
-            path: `/api/command/loyaltypoint/useloyaltypoint`,
+            url: '/api/command/loyaltypoint/useloyaltypoint',
             body: requestBody,
+            mediaType: 'application/json',
         });
-        return result.body;
     }
 
     /**
      * @returns LoyaltyPointContentsDeleteLoyaltyPointAggregateCommandExecutorResponse Success
      * @throws ApiError
      */
-    public static async deleteLoyaltyPoint({
+    public static deleteLoyaltyPoint({
         requestBody,
     }: {
         requestBody?: DeleteLoyaltyPoint,
-    }): Promise<LoyaltyPointContentsDeleteLoyaltyPointAggregateCommandExecutorResponse> {
-        const result = await __request({
+    }): CancelablePromise<LoyaltyPointContentsDeleteLoyaltyPointAggregateCommandExecutorResponse> {
+        return __request(OpenAPI, {
             method: 'PATCH',
-            path: `/api/command/loyaltypoint/deleteloyaltypoint`,
+            url: '/api/command/loyaltypoint/deleteloyaltypoint',
             body: requestBody,
+            mediaType: 'application/json',
         });
-        return result.body;
     }
 
     /**
      * @returns LoyaltyPointContentsAggregateDto Success
      * @throws ApiError
      */
-    public static async loyaltyPointGet({
+    public static getApiQueryLoyaltypointGet({
         id,
         toVersion,
     }: {
-        id?: string,
+        id: string,
         toVersion?: number,
-    }): Promise<LoyaltyPointContentsAggregateDto> {
-        const result = await __request({
+    }): CancelablePromise<LoyaltyPointContentsAggregateDto> {
+        return __request(OpenAPI, {
             method: 'GET',
-            path: `/api/query/loyaltypoint/get`,
-            query: {
+            url: '/api/query/loyaltypoint/get/{id}',
+            path: {
                 'id': id,
+            },
+            query: {
                 'toVersion': toVersion,
             },
         });
-        return result.body;
     }
 
     /**
      * @returns LoyaltyPointContentsAggregateDto Success
      * @throws ApiError
      */
-    public static async loyaltyPointList(): Promise<Array<LoyaltyPointContentsAggregateDto>> {
-        const result = await __request({
+    public static getApiQueryLoyaltypointGetids({
+        ids,
+    }: {
+        ids?: Array<string>,
+    }): CancelablePromise<Array<LoyaltyPointContentsAggregateDto>> {
+        return __request(OpenAPI, {
             method: 'GET',
-            path: `/api/query/loyaltypoint/list`,
+            url: '/api/query/loyaltypoint/getids',
+            query: {
+                'ids': ids,
+            },
         });
-        return result.body;
+    }
+
+    /**
+     * @returns LoyaltyPointContentsAggregateDto Success
+     * @throws ApiError
+     */
+    public static getApiQueryLoyaltypointList(): CancelablePromise<Array<LoyaltyPointContentsAggregateDto>> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/query/loyaltypoint/list',
+        });
     }
 
 }

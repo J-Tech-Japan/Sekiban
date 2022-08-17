@@ -4,6 +4,9 @@
 import type { BranchContentsAggregateDto } from '../models/BranchContentsAggregateDto';
 import type { BranchContentsCreateBranchAggregateCommandExecutorResponse } from '../models/BranchContentsCreateBranchAggregateCommandExecutorResponse';
 import type { CreateBranch } from '../models/CreateBranch';
+
+import type { CancelablePromise } from '../core/CancelablePromise';
+import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 
 export class BranchService {
@@ -12,51 +15,69 @@ export class BranchService {
      * @returns BranchContentsCreateBranchAggregateCommandExecutorResponse Success
      * @throws ApiError
      */
-    public static async createBranch({
+    public static createBranch({
         requestBody,
     }: {
         requestBody?: CreateBranch,
-    }): Promise<BranchContentsCreateBranchAggregateCommandExecutorResponse> {
-        const result = await __request({
+    }): CancelablePromise<BranchContentsCreateBranchAggregateCommandExecutorResponse> {
+        return __request(OpenAPI, {
             method: 'POST',
-            path: `/api/command/branch/createbranch`,
+            url: '/api/command/branch/createbranch',
             body: requestBody,
+            mediaType: 'application/json',
         });
-        return result.body;
     }
 
     /**
      * @returns BranchContentsAggregateDto Success
      * @throws ApiError
      */
-    public static async branchGet({
+    public static getApiQueryBranchGet({
         id,
         toVersion,
     }: {
-        id?: string,
+        id: string,
         toVersion?: number,
-    }): Promise<BranchContentsAggregateDto> {
-        const result = await __request({
+    }): CancelablePromise<BranchContentsAggregateDto> {
+        return __request(OpenAPI, {
             method: 'GET',
-            path: `/api/query/branch/get`,
-            query: {
+            url: '/api/query/branch/get/{id}',
+            path: {
                 'id': id,
+            },
+            query: {
                 'toVersion': toVersion,
             },
         });
-        return result.body;
     }
 
     /**
      * @returns BranchContentsAggregateDto Success
      * @throws ApiError
      */
-    public static async branchList(): Promise<Array<BranchContentsAggregateDto>> {
-        const result = await __request({
+    public static getApiQueryBranchGetids({
+        ids,
+    }: {
+        ids?: Array<string>,
+    }): CancelablePromise<Array<BranchContentsAggregateDto>> {
+        return __request(OpenAPI, {
             method: 'GET',
-            path: `/api/query/branch/list`,
+            url: '/api/query/branch/getids',
+            query: {
+                'ids': ids,
+            },
         });
-        return result.body;
+    }
+
+    /**
+     * @returns BranchContentsAggregateDto Success
+     * @throws ApiError
+     */
+    public static getApiQueryBranchList(): CancelablePromise<Array<BranchContentsAggregateDto>> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/query/branch/list',
+        });
     }
 
 }

@@ -3,4 +3,4 @@
 /* eslint-disable */
 export const $DocumentType = {
     type: 'Enum',
-};
+} as const;

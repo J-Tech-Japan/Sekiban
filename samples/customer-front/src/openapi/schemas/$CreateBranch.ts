@@ -8,4 +8,4 @@ export const $CreateBranch = {
             isNullable: true,
         },
     },
-};
+} as const;

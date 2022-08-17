@@ -28,4 +28,4 @@ export const $UseLoyaltyPoint = {
             isNullable: true,
         },
     },
-};
+} as const;

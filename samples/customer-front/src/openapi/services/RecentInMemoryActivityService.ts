@@ -6,6 +6,9 @@ import type { CreateRecentInMemoryActivity } from '../models/CreateRecentInMemor
 import type { RecentInMemoryActivityContentsAddRecentInMemoryActivityAggregateCommandExecutorResponse } from '../models/RecentInMemoryActivityContentsAddRecentInMemoryActivityAggregateCommandExecutorResponse';
 import type { RecentInMemoryActivityContentsAggregateDto } from '../models/RecentInMemoryActivityContentsAggregateDto';
 import type { RecentInMemoryActivityContentsCreateRecentInMemoryActivityAggregateCommandExecutorResponse } from '../models/RecentInMemoryActivityContentsCreateRecentInMemoryActivityAggregateCommandExecutorResponse';
+
+import type { CancelablePromise } from '../core/CancelablePromise';
+import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 
 export class RecentInMemoryActivityService {
@@ -14,68 +17,86 @@ export class RecentInMemoryActivityService {
      * @returns RecentInMemoryActivityContentsCreateRecentInMemoryActivityAggregateCommandExecutorResponse Success
      * @throws ApiError
      */
-    public static async createRecentInMemoryActivity({
+    public static createRecentInMemoryActivity({
         requestBody,
     }: {
         requestBody?: CreateRecentInMemoryActivity,
-    }): Promise<RecentInMemoryActivityContentsCreateRecentInMemoryActivityAggregateCommandExecutorResponse> {
-        const result = await __request({
+    }): CancelablePromise<RecentInMemoryActivityContentsCreateRecentInMemoryActivityAggregateCommandExecutorResponse> {
+        return __request(OpenAPI, {
             method: 'POST',
-            path: `/api/command/recentinmemoryactivity/createrecentinmemoryactivity`,
+            url: '/api/command/recentinmemoryactivity/createrecentinmemoryactivity',
             body: requestBody,
+            mediaType: 'application/json',
         });
-        return result.body;
     }
 
     /**
      * @returns RecentInMemoryActivityContentsAddRecentInMemoryActivityAggregateCommandExecutorResponse Success
      * @throws ApiError
      */
-    public static async addRecentInMemoryActivity({
+    public static addRecentInMemoryActivity({
         requestBody,
     }: {
         requestBody?: AddRecentInMemoryActivity,
-    }): Promise<RecentInMemoryActivityContentsAddRecentInMemoryActivityAggregateCommandExecutorResponse> {
-        const result = await __request({
+    }): CancelablePromise<RecentInMemoryActivityContentsAddRecentInMemoryActivityAggregateCommandExecutorResponse> {
+        return __request(OpenAPI, {
             method: 'PATCH',
-            path: `/api/command/recentinmemoryactivity/addrecentinmemoryactivity`,
+            url: '/api/command/recentinmemoryactivity/addrecentinmemoryactivity',
             body: requestBody,
+            mediaType: 'application/json',
         });
-        return result.body;
     }
 
     /**
      * @returns RecentInMemoryActivityContentsAggregateDto Success
      * @throws ApiError
      */
-    public static async recentInMemoryActivityGet({
+    public static getApiQueryRecentinmemoryactivityGet({
         id,
         toVersion,
     }: {
-        id?: string,
+        id: string,
         toVersion?: number,
-    }): Promise<RecentInMemoryActivityContentsAggregateDto> {
-        const result = await __request({
+    }): CancelablePromise<RecentInMemoryActivityContentsAggregateDto> {
+        return __request(OpenAPI, {
             method: 'GET',
-            path: `/api/query/recentinmemoryactivity/get`,
-            query: {
+            url: '/api/query/recentinmemoryactivity/get/{id}',
+            path: {
                 'id': id,
+            },
+            query: {
                 'toVersion': toVersion,
             },
         });
-        return result.body;
     }
 
     /**
      * @returns RecentInMemoryActivityContentsAggregateDto Success
      * @throws ApiError
      */
-    public static async recentInMemoryActivityList(): Promise<Array<RecentInMemoryActivityContentsAggregateDto>> {
-        const result = await __request({
+    public static getApiQueryRecentinmemoryactivityGetids({
+        ids,
+    }: {
+        ids?: Array<string>,
+    }): CancelablePromise<Array<RecentInMemoryActivityContentsAggregateDto>> {
+        return __request(OpenAPI, {
             method: 'GET',
-            path: `/api/query/recentinmemoryactivity/list`,
+            url: '/api/query/recentinmemoryactivity/getids',
+            query: {
+                'ids': ids,
+            },
         });
-        return result.body;
+    }
+
+    /**
+     * @returns RecentInMemoryActivityContentsAggregateDto Success
+     * @throws ApiError
+     */
+    public static getApiQueryRecentinmemoryactivityList(): CancelablePromise<Array<RecentInMemoryActivityContentsAggregateDto>> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/query/recentinmemoryactivity/list',
+        });
     }
 
 }

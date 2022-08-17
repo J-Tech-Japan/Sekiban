@@ -10,4 +10,5 @@ export type RecentInMemoryActivityContentsAddRecentInMemoryActivityAggregateComm
     aggregateDto?: RecentInMemoryActivityContentsAggregateDto;
     command?: AddRecentInMemoryActivityAggregateCommandDocument;
     events?: Array<IAggregateEvent> | null;
-}
+};
+

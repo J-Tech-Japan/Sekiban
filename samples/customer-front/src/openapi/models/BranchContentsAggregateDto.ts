@@ -12,4 +12,5 @@ export type BranchContentsAggregateDto = {
     lastEventId: string;
     appliedSnapshotVersion: number;
     lastSortableUniqueId: string;
-}
+};
+

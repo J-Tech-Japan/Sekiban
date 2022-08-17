@@ -3,4 +3,5 @@
 /* eslint-disable */
 
 export type CreateRecentActivity = {
-}
+};
+

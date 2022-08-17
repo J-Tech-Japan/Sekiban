@@ -17,4 +17,4 @@ export const $AddRecentActivity = {
             isNullable: true,
         },
     },
-};
+} as const;

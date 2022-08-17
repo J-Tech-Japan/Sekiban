@@ -13,4 +13,4 @@ export const $DeleteLoyaltyPoint = {
             format: 'uuid',
         },
     },
-};
+} as const;

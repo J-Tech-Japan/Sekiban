@@ -12,4 +12,4 @@ export const $ClientNameHistoryProjectionRecord = {
             format: 'date-time',
         },
     },
-};
+} as const;

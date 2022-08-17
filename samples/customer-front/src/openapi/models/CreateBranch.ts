@@ -4,4 +4,5 @@
 
 export type CreateBranch = {
     name?: string | null;
-}
+};
+

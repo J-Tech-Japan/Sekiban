@@ -17,4 +17,4 @@ export const $ClientContentsDeleteClientAggregateCommandExecutorResponse = {
             isNullable: true,
         },
     },
-};
+} as const;

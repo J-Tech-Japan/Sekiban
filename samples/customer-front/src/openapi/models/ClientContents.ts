@@ -6,4 +6,5 @@ export type ClientContents = {
     branchId?: string;
     clientName?: string | null;
     clientEmail?: string | null;
-}
+};
+

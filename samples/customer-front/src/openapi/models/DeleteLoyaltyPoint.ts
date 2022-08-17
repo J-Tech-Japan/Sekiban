@@ -5,4 +5,5 @@
 export type DeleteLoyaltyPoint = {
     referenceVersion: number;
     clientId?: string;
-}
+};
+

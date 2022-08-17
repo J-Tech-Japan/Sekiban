@@ -29,4 +29,4 @@ export const $SekibanQueryInfo = {
             isNullable: true,
         },
     },
-};
+} as const;

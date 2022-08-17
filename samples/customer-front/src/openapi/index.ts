@@ -2,7 +2,9 @@
 /* tslint:disable */
 /* eslint-disable */
 export { ApiError } from './core/ApiError';
+export { CancelablePromise, CancelError } from './core/CancelablePromise';
 export { OpenAPI } from './core/OpenAPI';
+export type { OpenAPIConfig } from './core/OpenAPI';
 
 export type { AddLoyaltyPoint } from './models/AddLoyaltyPoint';
 export type { AddLoyaltyPointAggregateCommandDocument } from './models/AddLoyaltyPointAggregateCommandDocument';
@@ -21,6 +23,9 @@ export type { ClientContentsAggregateDto } from './models/ClientContentsAggregat
 export type { ClientContentsChangeClientNameAggregateCommandExecutorResponse } from './models/ClientContentsChangeClientNameAggregateCommandExecutorResponse';
 export type { ClientContentsCreateClientAggregateCommandExecutorResponse } from './models/ClientContentsCreateClientAggregateCommandExecutorResponse';
 export type { ClientContentsDeleteClientAggregateCommandExecutorResponse } from './models/ClientContentsDeleteClientAggregateCommandExecutorResponse';
+export type { ClientLoyaltyPointListProjection } from './models/ClientLoyaltyPointListProjection';
+export type { ClientLoyaltyPointListRecord } from './models/ClientLoyaltyPointListRecord';
+export type { ClientLoyaltyPointMultipleProjection } from './models/ClientLoyaltyPointMultipleProjection';
 export type { ClientNameHistoryProjection } from './models/ClientNameHistoryProjection';
 export type { ClientNameHistoryProjectionRecord } from './models/ClientNameHistoryProjectionRecord';
 export type { CreateBranch } from './models/CreateBranch';
@@ -37,7 +42,7 @@ export type { DeleteClient } from './models/DeleteClient';
 export type { DeleteClientAggregateCommandDocument } from './models/DeleteClientAggregateCommandDocument';
 export type { DeleteLoyaltyPoint } from './models/DeleteLoyaltyPoint';
 export type { DeleteLoyaltyPointAggregateCommandDocument } from './models/DeleteLoyaltyPointAggregateCommandDocument';
-export { DocumentType } from './models/DocumentType';
+export type { DocumentType } from './models/DocumentType';
 export type { IAggregateEvent } from './models/IAggregateEvent';
 export type { LoyaltyPointContents } from './models/LoyaltyPointContents';
 export type { LoyaltyPointContentsAddLoyaltyPointAggregateCommandExecutorResponse } from './models/LoyaltyPointContentsAddLoyaltyPointAggregateCommandExecutorResponse';
@@ -45,8 +50,11 @@ export type { LoyaltyPointContentsAggregateDto } from './models/LoyaltyPointCont
 export type { LoyaltyPointContentsCreateLoyaltyPointAggregateCommandExecutorResponse } from './models/LoyaltyPointContentsCreateLoyaltyPointAggregateCommandExecutorResponse';
 export type { LoyaltyPointContentsDeleteLoyaltyPointAggregateCommandExecutorResponse } from './models/LoyaltyPointContentsDeleteLoyaltyPointAggregateCommandExecutorResponse';
 export type { LoyaltyPointContentsUseLoyaltyPointAggregateCommandExecutorResponse } from './models/LoyaltyPointContentsUseLoyaltyPointAggregateCommandExecutorResponse';
-export { LoyaltyPointReceiveTypeKeys } from './models/LoyaltyPointReceiveTypeKeys';
-export { LoyaltyPointUsageTypeKeys } from './models/LoyaltyPointUsageTypeKeys';
+export type { LoyaltyPointReceiveTypeKeys } from './models/LoyaltyPointReceiveTypeKeys';
+export type { LoyaltyPointUsageTypeKeys } from './models/LoyaltyPointUsageTypeKeys';
+export type { ProjectedBranch } from './models/ProjectedBranch';
+export type { ProjectedBranchInternal } from './models/ProjectedBranchInternal';
+export type { ProjectedRecord } from './models/ProjectedRecord';
 export type { RecentActivityContents } from './models/RecentActivityContents';
 export type { RecentActivityContentsAddRecentActivityAggregateCommandExecutorResponse } from './models/RecentActivityContentsAddRecentActivityAggregateCommandExecutorResponse';
 export type { RecentActivityContentsAggregateDto } from './models/RecentActivityContentsAggregateDto';
@@ -60,6 +68,7 @@ export type { RecentInMemoryActivityRecord } from './models/RecentInMemoryActivi
 export type { SekibanAggregateInfo } from './models/SekibanAggregateInfo';
 export type { SekibanCommandInfo } from './models/SekibanCommandInfo';
 export type { SekibanQueryInfo } from './models/SekibanQueryInfo';
+export type { UpdatedLocationType } from './models/UpdatedLocationType';
 export type { UseLoyaltyPoint } from './models/UseLoyaltyPoint';
 export type { UseLoyaltyPointAggregateCommandDocument } from './models/UseLoyaltyPointAggregateCommandDocument';
 
@@ -80,6 +89,9 @@ export { $ClientContentsAggregateDto } from './schemas/$ClientContentsAggregateD
 export { $ClientContentsChangeClientNameAggregateCommandExecutorResponse } from './schemas/$ClientContentsChangeClientNameAggregateCommandExecutorResponse';
 export { $ClientContentsCreateClientAggregateCommandExecutorResponse } from './schemas/$ClientContentsCreateClientAggregateCommandExecutorResponse';
 export { $ClientContentsDeleteClientAggregateCommandExecutorResponse } from './schemas/$ClientContentsDeleteClientAggregateCommandExecutorResponse';
+export { $ClientLoyaltyPointListProjection } from './schemas/$ClientLoyaltyPointListProjection';
+export { $ClientLoyaltyPointListRecord } from './schemas/$ClientLoyaltyPointListRecord';
+export { $ClientLoyaltyPointMultipleProjection } from './schemas/$ClientLoyaltyPointMultipleProjection';
 export { $ClientNameHistoryProjection } from './schemas/$ClientNameHistoryProjection';
 export { $ClientNameHistoryProjectionRecord } from './schemas/$ClientNameHistoryProjectionRecord';
 export { $CreateBranch } from './schemas/$CreateBranch';
@@ -106,6 +118,9 @@ export { $LoyaltyPointContentsDeleteLoyaltyPointAggregateCommandExecutorResponse
 export { $LoyaltyPointContentsUseLoyaltyPointAggregateCommandExecutorResponse } from './schemas/$LoyaltyPointContentsUseLoyaltyPointAggregateCommandExecutorResponse';
 export { $LoyaltyPointReceiveTypeKeys } from './schemas/$LoyaltyPointReceiveTypeKeys';
 export { $LoyaltyPointUsageTypeKeys } from './schemas/$LoyaltyPointUsageTypeKeys';
+export { $ProjectedBranch } from './schemas/$ProjectedBranch';
+export { $ProjectedBranchInternal } from './schemas/$ProjectedBranchInternal';
+export { $ProjectedRecord } from './schemas/$ProjectedRecord';
 export { $RecentActivityContents } from './schemas/$RecentActivityContents';
 export { $RecentActivityContentsAddRecentActivityAggregateCommandExecutorResponse } from './schemas/$RecentActivityContentsAddRecentActivityAggregateCommandExecutorResponse';
 export { $RecentActivityContentsAggregateDto } from './schemas/$RecentActivityContentsAggregateDto';
@@ -119,11 +134,14 @@ export { $RecentInMemoryActivityRecord } from './schemas/$RecentInMemoryActivity
 export { $SekibanAggregateInfo } from './schemas/$SekibanAggregateInfo';
 export { $SekibanCommandInfo } from './schemas/$SekibanCommandInfo';
 export { $SekibanQueryInfo } from './schemas/$SekibanQueryInfo';
+export { $UpdatedLocationType } from './schemas/$UpdatedLocationType';
 export { $UseLoyaltyPoint } from './schemas/$UseLoyaltyPoint';
 export { $UseLoyaltyPointAggregateCommandDocument } from './schemas/$UseLoyaltyPointAggregateCommandDocument';
 
 export { BranchService } from './services/BranchService';
 export { ClientService } from './services/ClientService';
+export { ClientLoyaltyPointListProjectionService } from './services/ClientLoyaltyPointListProjectionService';
+export { ClientLoyaltyPointMultipleProjectionService } from './services/ClientLoyaltyPointMultipleProjectionService';
 export { LoyaltyPointService } from './services/LoyaltyPointService';
 export { RecentActivityService } from './services/RecentActivityService';
 export { RecentInMemoryActivityService } from './services/RecentInMemoryActivityService';

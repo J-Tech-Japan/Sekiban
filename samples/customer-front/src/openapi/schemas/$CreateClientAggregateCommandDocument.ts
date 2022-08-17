@@ -49,4 +49,4 @@ export const $CreateClientAggregateCommandDocument = {
             isNullable: true,
         },
     },
-};
+} as const;

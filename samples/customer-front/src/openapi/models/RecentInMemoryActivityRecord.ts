@@ -5,4 +5,5 @@
 export type RecentInMemoryActivityRecord = {
     activity?: string | null;
     occuredAt?: string;
-}
+};
+

@@ -12,4 +12,4 @@ export const $CreateLoyaltyPoint = {
             format: 'int32',
         },
     },
-};
+} as const;

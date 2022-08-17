@@ -5,4 +5,5 @@
 export type RecentActivityRecord = {
     activity?: string | null;
     occuredAt?: string;
-}
+};
+

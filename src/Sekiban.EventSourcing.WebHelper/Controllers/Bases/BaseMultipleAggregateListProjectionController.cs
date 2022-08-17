@@ -22,8 +22,8 @@ public class BaseMultipleAggregateListProjectionController<TProjection, TRecord>
     }
 
     [HttpGet]
-    [Route("")]
-    public virtual async Task<ActionResult<TProjection>> GetMultipleProjectionAsync()
+    [Route("get")]
+    public virtual async Task<ActionResult<TProjection>> GetAsync()
     {
         if (_sekibanControllerOptions.AuthorizeDefinitionCollection.CheckAuthorization(
                 AuthorizeMethodType.MultipleAggregateListProjection,
@@ -36,5 +36,22 @@ public class BaseMultipleAggregateListProjectionController<TProjection, TRecord>
             AuthorizeResultType.Denied) { return Unauthorized(); }
 
         return Ok(await _multipleAggregateProjectionService.GetListProjectionAsync<TProjection, TRecord>());
+    }
+
+    [HttpGet]
+    [Route("list")]
+    public virtual async Task<ActionResult<IEnumerable<TRecord>>> ListAsync()
+    {
+        if (_sekibanControllerOptions.AuthorizeDefinitionCollection.CheckAuthorization(
+                AuthorizeMethodType.MultipleAggregateListProjection,
+                this,
+                typeof(TProjection),
+                null,
+                null,
+                HttpContext,
+                _serviceProvider) ==
+            AuthorizeResultType.Denied) { return Unauthorized(); }
+        var result = await _multipleAggregateProjectionService.GetListProjectionAsync<TProjection, TRecord>();
+        return Ok(result.Records);
     }
 }

@@ -10,12 +10,10 @@ public class SekibanControllerOptions
 
     public Type BaseCreateControllerType { get; set; } = typeof(BaseCreateCommandController<,,>);
     public Type BaseIndexControllerType { get; set; } = typeof(SekibanApiListController<>);
-    public Type BaseQueryGetControllerType { get; set; } = typeof(BaseQueryGetController<,>);
+    public Type BaseAggregateQueryControllerType { get; set; } = typeof(BaseAggregateQueryController<,>);
     public Type BaseSingleAggregateProjectionControllerType { get; set; } = typeof(BaseSingleAggregateProjectionController<,>);
     public Type BaseMultipleAggregateProjectionControllerType { get; set; } = typeof(BaseMultipleAggregateProjectionController<>);
     public Type BaseMultipleAggregateListProjectionControllerType { get; set; } = typeof(BaseMultipleAggregateListProjectionController<,>);
-    public Type BaseMultipleAggregateListOnlyProjectionControllerType { get; set; } = typeof(BaseMultipleAggregateListOnlyProjectionController<,>);
-    public Type BaseQueryListControllerType { get; set; } = typeof(BaseQueryListController<,>);
     public string CreateCommandPrefix { get; set; } = "api/command";
     public string ChangeCommandPrefix { get; set; } = "api/command";
     public string QueryPrefix { get; set; } = "api/query";

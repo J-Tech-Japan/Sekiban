@@ -17,4 +17,4 @@ export const $LoyaltyPointContentsAddLoyaltyPointAggregateCommandExecutorRespons
             isNullable: true,
         },
     },
-};
+} as const;

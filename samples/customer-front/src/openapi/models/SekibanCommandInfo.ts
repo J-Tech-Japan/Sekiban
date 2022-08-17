@@ -9,4 +9,5 @@ export type SekibanCommandInfo = {
     sampleBodyObject?: any;
     sampleResponseObject?: any;
     isCreateEvent?: boolean;
-}
+};
+

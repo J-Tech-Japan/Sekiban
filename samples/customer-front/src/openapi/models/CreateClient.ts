@@ -6,4 +6,5 @@ export type CreateClient = {
     branchId?: string;
     clientName?: string | null;
     clientEmail?: string | null;
-}
+};
+

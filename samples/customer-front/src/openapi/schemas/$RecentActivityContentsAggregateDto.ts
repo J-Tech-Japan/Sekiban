@@ -35,4 +35,4 @@ export const $RecentActivityContentsAggregateDto = {
             isRequired: true,
         },
     },
-};
+} as const;

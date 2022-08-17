@@ -11,4 +11,5 @@ export type UseLoyaltyPoint = {
     reason?: LoyaltyPointUsageTypeKeys;
     pointAmount?: number;
     note?: string | null;
-}
+};
+
