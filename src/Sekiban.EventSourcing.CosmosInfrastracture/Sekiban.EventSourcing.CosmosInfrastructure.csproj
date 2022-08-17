@@ -6,15 +6,13 @@
         <Nullable>enable</Nullable>
         <RootNamespace>CosmosInfrastructure</RootNamespace>
         <PackageId>JJ_Sekiban.EventSourcing.CosmosInfrastructure</PackageId>
-        <Version>0.4.21</Version>
+        <Version>0.4.22</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework CosmosInfrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.4.21</PackageVersion>
-        <Description>WebHelperにMultipleAggregateProjection,
-            SingleAggregateProjectionの追加
-        </Description>
+        <PackageVersion>0.4.22</PackageVersion>
+        <Description>WebHelperの機能改善、UpdateMarkerを外部から行う方法に対応</Description>
     </PropertyGroup>
 
     <ItemGroup>
