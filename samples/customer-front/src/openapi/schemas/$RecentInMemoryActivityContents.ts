@@ -11,4 +11,4 @@ export const $RecentInMemoryActivityContents = {
             isNullable: true,
         },
     },
-};
+} as const;

@@ -17,4 +17,4 @@ export const $ClientContentsCreateClientAggregateCommandExecutorResponse = {
             isNullable: true,
         },
     },
-};
+} as const;

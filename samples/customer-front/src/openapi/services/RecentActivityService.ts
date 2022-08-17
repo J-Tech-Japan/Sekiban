@@ -6,6 +6,9 @@ import type { CreateRecentActivity } from '../models/CreateRecentActivity';
 import type { RecentActivityContentsAddRecentActivityAggregateCommandExecutorResponse } from '../models/RecentActivityContentsAddRecentActivityAggregateCommandExecutorResponse';
 import type { RecentActivityContentsAggregateDto } from '../models/RecentActivityContentsAggregateDto';
 import type { RecentActivityContentsCreateRecentActivityAggregateCommandExecutorResponse } from '../models/RecentActivityContentsCreateRecentActivityAggregateCommandExecutorResponse';
+
+import type { CancelablePromise } from '../core/CancelablePromise';
+import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 
 export class RecentActivityService {
@@ -14,68 +17,86 @@ export class RecentActivityService {
      * @returns RecentActivityContentsCreateRecentActivityAggregateCommandExecutorResponse Success
      * @throws ApiError
      */
-    public static async createRecentActivity({
+    public static createRecentActivity({
         requestBody,
     }: {
         requestBody?: CreateRecentActivity,
-    }): Promise<RecentActivityContentsCreateRecentActivityAggregateCommandExecutorResponse> {
-        const result = await __request({
+    }): CancelablePromise<RecentActivityContentsCreateRecentActivityAggregateCommandExecutorResponse> {
+        return __request(OpenAPI, {
             method: 'POST',
-            path: `/api/command/recentactivity/createrecentactivity`,
+            url: '/api/command/recentactivity/createrecentactivity',
             body: requestBody,
+            mediaType: 'application/json',
         });
-        return result.body;
     }
 
     /**
      * @returns RecentActivityContentsAddRecentActivityAggregateCommandExecutorResponse Success
      * @throws ApiError
      */
-    public static async addRecentActivity({
+    public static addRecentActivity({
         requestBody,
     }: {
         requestBody?: AddRecentActivity,
-    }): Promise<RecentActivityContentsAddRecentActivityAggregateCommandExecutorResponse> {
-        const result = await __request({
+    }): CancelablePromise<RecentActivityContentsAddRecentActivityAggregateCommandExecutorResponse> {
+        return __request(OpenAPI, {
             method: 'PATCH',
-            path: `/api/command/recentactivity/addrecentactivity`,
+            url: '/api/command/recentactivity/addrecentactivity',
             body: requestBody,
+            mediaType: 'application/json',
         });
-        return result.body;
     }
 
     /**
      * @returns RecentActivityContentsAggregateDto Success
      * @throws ApiError
      */
-    public static async recentActivityGet({
+    public static getApiQueryRecentactivityGet({
         id,
         toVersion,
     }: {
-        id?: string,
+        id: string,
         toVersion?: number,
-    }): Promise<RecentActivityContentsAggregateDto> {
-        const result = await __request({
+    }): CancelablePromise<RecentActivityContentsAggregateDto> {
+        return __request(OpenAPI, {
             method: 'GET',
-            path: `/api/query/recentactivity/get`,
-            query: {
+            url: '/api/query/recentactivity/get/{id}',
+            path: {
                 'id': id,
+            },
+            query: {
                 'toVersion': toVersion,
             },
         });
-        return result.body;
     }
 
     /**
      * @returns RecentActivityContentsAggregateDto Success
      * @throws ApiError
      */
-    public static async recentActivityList(): Promise<Array<RecentActivityContentsAggregateDto>> {
-        const result = await __request({
+    public static getApiQueryRecentactivityGetids({
+        ids,
+    }: {
+        ids?: Array<string>,
+    }): CancelablePromise<Array<RecentActivityContentsAggregateDto>> {
+        return __request(OpenAPI, {
             method: 'GET',
-            path: `/api/query/recentactivity/list`,
+            url: '/api/query/recentactivity/getids',
+            query: {
+                'ids': ids,
+            },
         });
-        return result.body;
+    }
+
+    /**
+     * @returns RecentActivityContentsAggregateDto Success
+     * @throws ApiError
+     */
+    public static getApiQueryRecentactivityList(): CancelablePromise<Array<RecentActivityContentsAggregateDto>> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/query/recentactivity/list',
+        });
     }
 
 }

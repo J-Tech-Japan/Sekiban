@@ -49,4 +49,4 @@ export const $AddRecentInMemoryActivityAggregateCommandDocument = {
             isNullable: true,
         },
     },
-};
+} as const;

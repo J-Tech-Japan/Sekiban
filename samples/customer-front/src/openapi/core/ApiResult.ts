@@ -7,4 +7,4 @@ export type ApiResult = {
     readonly status: number;
     readonly statusText: string;
     readonly body: any;
-}
+};

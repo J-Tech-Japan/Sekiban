@@ -48,9 +48,7 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
             var aggregateContentsType = aggregateType?.BaseType?.GenericTypeArguments[0];
             if (aggregateType is null || aggregateContentsType is null) { continue; }
             feature.Controllers.Add(
-                _sekibanControllerOptions.BaseQueryGetControllerType.MakeGenericType(aggregateType, aggregateContentsType).GetTypeInfo());
-            feature.Controllers.Add(
-                _sekibanControllerOptions.BaseQueryListControllerType.MakeGenericType(aggregateType, aggregateContentsType).GetTypeInfo());
+                _sekibanControllerOptions.BaseAggregateQueryControllerType.MakeGenericType(aggregateType, aggregateContentsType).GetTypeInfo());
         }
         foreach (var projectionType in _sekibanControllerItems.SingleAggregateProjections)
         {
@@ -79,9 +77,6 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
             if (recordType == null) { continue; }
             feature.Controllers.Add(
                 _sekibanControllerOptions.BaseMultipleAggregateListProjectionControllerType.MakeGenericType(projectionType!, recordType)
-                    .GetTypeInfo());
-            feature.Controllers.Add(
-                _sekibanControllerOptions.BaseMultipleAggregateListOnlyProjectionControllerType.MakeGenericType(projectionType!, recordType)
                     .GetTypeInfo());
         }
         feature.Controllers.Add(_sekibanControllerOptions.BaseIndexControllerType.MakeGenericType(typeof(object)).GetTypeInfo());

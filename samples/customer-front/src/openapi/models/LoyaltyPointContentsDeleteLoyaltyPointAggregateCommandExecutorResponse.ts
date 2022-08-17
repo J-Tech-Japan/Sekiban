@@ -10,4 +10,5 @@ export type LoyaltyPointContentsDeleteLoyaltyPointAggregateCommandExecutorRespon
     aggregateDto?: LoyaltyPointContentsAggregateDto;
     command?: DeleteLoyaltyPointAggregateCommandDocument;
     events?: Array<IAggregateEvent> | null;
-}
+};
+

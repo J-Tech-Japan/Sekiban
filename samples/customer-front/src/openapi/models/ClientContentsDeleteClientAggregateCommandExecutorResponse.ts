@@ -10,4 +10,5 @@ export type ClientContentsDeleteClientAggregateCommandExecutorResponse = {
     aggregateDto?: ClientContentsAggregateDto;
     command?: DeleteClientAggregateCommandDocument;
     events?: Array<IAggregateEvent> | null;
-}
+};
+

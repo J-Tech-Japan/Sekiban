@@ -18,13 +18,19 @@ public class SekibanUpdateNoticeManager : IUpdateNotice
     public (bool, UpdatedLocationType?) HasUpdateAfter(string aggregateName, Guid aggregateId, SortableUniqueIdValue? sortableUniqueId)
     {
         var current = UpdateDictionary.GetValueOrDefault(GetKeyForAggregate(aggregateName, aggregateId));
-        if (current is null || sortableUniqueId is null) { return (true, null); }
-        return (!current.SortableUniqueId.Value?.Equals(sortableUniqueId) ?? true, current?.LocationType);
+        if (current is null || string.IsNullOrEmpty(current.SortableUniqueId))
+        {
+            return (false, null);
+        }
+        return (!current.SortableUniqueId.Value?.Equals(sortableUniqueId?.Value ?? string.Empty) ?? true, current?.LocationType);
     }
     public (bool, UpdatedLocationType?) HasUpdateAfter(string aggregateName, SortableUniqueIdValue? sortableUniqueId)
     {
         var current = UpdateDictionary.GetValueOrDefault(GetKeyForType(aggregateName));
-        if (current is null || sortableUniqueId == null) { return (true, null); }
+        if (current is null || string.IsNullOrEmpty(current.SortableUniqueId))
+        {
+            return (false, null);
+        }
         return (!current.SortableUniqueId.Value?.Equals(sortableUniqueId) ?? true, current?.LocationType);
     }
 

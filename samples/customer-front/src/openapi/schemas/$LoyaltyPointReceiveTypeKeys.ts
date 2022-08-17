@@ -3,4 +3,4 @@
 /* eslint-disable */
 export const $LoyaltyPointReceiveTypeKeys = {
     type: 'Enum',
-};
+} as const;

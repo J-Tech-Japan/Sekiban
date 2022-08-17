@@ -18,4 +18,5 @@ export type DeleteLoyaltyPointAggregateCommandDocument = {
     executedUser?: string | null;
     exception?: string | null;
     callHistories?: Array<CallHistory> | null;
-}
+};
+

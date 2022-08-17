@@ -6,4 +6,5 @@ export type ChangeClientName = {
     referenceVersion: number;
     clientId?: string;
     clientName?: string | null;
-}
+};
+

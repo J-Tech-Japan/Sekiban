@@ -12,4 +12,5 @@ export type LoyaltyPointContentsAggregateDto = {
     lastEventId: string;
     appliedSnapshotVersion: number;
     lastSortableUniqueId: string;
-}
+};
+

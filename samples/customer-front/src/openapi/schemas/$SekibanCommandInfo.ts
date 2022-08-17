@@ -29,4 +29,4 @@ export const $SekibanCommandInfo = {
             type: 'boolean',
         },
     },
-};
+} as const;

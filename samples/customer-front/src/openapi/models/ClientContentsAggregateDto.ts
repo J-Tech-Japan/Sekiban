@@ -12,4 +12,5 @@ export type ClientContentsAggregateDto = {
     lastEventId: string;
     appliedSnapshotVersion: number;
     lastSortableUniqueId: string;
-}
+};
+

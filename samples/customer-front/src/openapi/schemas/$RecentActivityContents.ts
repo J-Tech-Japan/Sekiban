@@ -11,4 +11,4 @@ export const $RecentActivityContents = {
             isNullable: true,
         },
     },
-};
+} as const;

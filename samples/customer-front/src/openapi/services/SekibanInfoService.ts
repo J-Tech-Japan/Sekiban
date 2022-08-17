@@ -2,6 +2,10 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { SekibanAggregateInfo } from '../models/SekibanAggregateInfo';
+import type { UpdatedLocationType } from '../models/UpdatedLocationType';
+
+import type { CancelablePromise } from '../core/CancelablePromise';
+import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 
 export class SekibanInfoService {
@@ -10,48 +14,82 @@ export class SekibanInfoService {
      * @returns SekibanAggregateInfo Success
      * @throws ApiError
      */
-    public static async sekibanAggregates(): Promise<Array<SekibanAggregateInfo>> {
-        const result = await __request({
+    public static sekibanAggregates(): CancelablePromise<Array<SekibanAggregateInfo>> {
+        return __request(OpenAPI, {
             method: 'GET',
-            path: `/api/info/aggregates`,
+            url: '/api/info/aggregates',
         });
-        return result.body;
     }
 
     /**
      * @returns any Success
      * @throws ApiError
      */
-    public static async sekibanEvents({
+    public static sekibanEvents({
         aggregateName,
         id,
     }: {
         aggregateName: string,
         id: string,
-    }): Promise<Array<any>> {
-        const result = await __request({
+    }): CancelablePromise<Array<any>> {
+        return __request(OpenAPI, {
             method: 'GET',
-            path: `/api/info/events/${aggregateName}/${id}`,
+            url: '/api/info/events/{aggregateName}/{id}',
+            path: {
+                'aggregateName': aggregateName,
+                'id': id,
+            },
         });
-        return result.body;
     }
 
     /**
      * @returns any Success
      * @throws ApiError
      */
-    public static async sekibanCommands({
+    public static sekibanCommands({
         aggregateName,
         id,
     }: {
         aggregateName: string,
         id: string,
-    }): Promise<Array<any>> {
-        const result = await __request({
+    }): CancelablePromise<Array<any>> {
+        return __request(OpenAPI, {
             method: 'GET',
-            path: `/api/info/commands/${aggregateName}/${id}`,
+            url: '/api/info/commands/{aggregateName}/{id}',
+            path: {
+                'aggregateName': aggregateName,
+                'id': id,
+            },
         });
-        return result.body;
+    }
+
+    /**
+     * @returns any Success
+     * @throws ApiError
+     */
+    public static updateAggregateId({
+        aggregateName,
+        id,
+        sortableUniqueId,
+        locationType,
+    }: {
+        aggregateName: string,
+        id: string,
+        sortableUniqueId?: string,
+        locationType?: UpdatedLocationType,
+    }): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/info/updatemarker/{aggregateName}/{id}',
+            path: {
+                'aggregateName': aggregateName,
+                'id': id,
+            },
+            query: {
+                'sortableUniqueId': sortableUniqueId,
+                'locationType': locationType,
+            },
+        });
     }
 
 }

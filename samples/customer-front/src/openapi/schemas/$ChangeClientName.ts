@@ -17,4 +17,4 @@ export const $ChangeClientName = {
             isNullable: true,
         },
     },
-};
+} as const;

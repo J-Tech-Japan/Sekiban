@@ -49,4 +49,4 @@ export const $DeleteClientAggregateCommandDocument = {
             isNullable: true,
         },
     },
-};
+} as const;

@@ -16,4 +16,4 @@ export const $CallHistory = {
             isNullable: true,
         },
     },
-};
+} as const;

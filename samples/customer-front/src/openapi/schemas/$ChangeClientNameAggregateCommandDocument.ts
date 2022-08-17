@@ -49,4 +49,4 @@ export const $ChangeClientNameAggregateCommandDocument = {
             isNullable: true,
         },
     },
-};
+} as const;

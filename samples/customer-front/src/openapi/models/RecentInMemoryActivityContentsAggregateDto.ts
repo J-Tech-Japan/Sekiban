@@ -12,4 +12,5 @@ export type RecentInMemoryActivityContentsAggregateDto = {
     lastEventId: string;
     appliedSnapshotVersion: number;
     lastSortableUniqueId: string;
-}
+};
+

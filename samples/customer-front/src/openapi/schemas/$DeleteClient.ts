@@ -13,4 +13,4 @@ export const $DeleteClient = {
             format: 'uuid',
         },
     },
-};
+} as const;

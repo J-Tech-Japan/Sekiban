@@ -3,6 +3,7 @@ using Sekiban.EventSourcing.AggregateCommands;
 using Sekiban.EventSourcing.Aggregates;
 using Sekiban.EventSourcing.Documents;
 using Sekiban.EventSourcing.Partitions;
+using Sekiban.EventSourcing.Queries.UpdateNotices;
 using Sekiban.EventSourcing.Shared;
 using Sekiban.EventSourcing.WebHelper.Authorizations;
 using Sekiban.EventSourcing.WebHelper.Common;
@@ -17,16 +18,19 @@ public class SekibanApiListController<T> : ControllerBase
     private readonly ISekibanControllerItems _sekibanControllerItems;
     private readonly SekibanControllerOptions _sekibanControllerOptions;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IUpdateNotice _updateNotice;
     public SekibanApiListController(
         SekibanControllerOptions sekibanControllerOptions,
         ISekibanControllerItems sekibanControllerItems,
         IDocumentRepository documentRepository,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        IUpdateNotice updateNotice)
     {
         _sekibanControllerOptions = sekibanControllerOptions;
         _sekibanControllerItems = sekibanControllerItems;
         _documentRepository = documentRepository;
         _serviceProvider = serviceProvider;
+        _updateNotice = updateNotice;
     }
 
     [HttpGet]
@@ -167,6 +171,31 @@ public class SekibanApiListController<T> : ControllerBase
                     events.AddRange(eventObjects.Select(m => SekibanJsonHelper.Deserialize(m, typeof(object))!));
                 });
             return Ok(events);
+        }
+        return Problem("Aggregate name not exists");
+    }
+    [HttpPost]
+    [Route("updatemarker/{aggregateName}/{id}", Name = "UpdateAggregateId")]
+    public virtual async Task<IActionResult> UpdateMakerAsync(
+        string aggregateName,
+        Guid id,
+        string sortableUniqueId,
+        UpdatedLocationType locationType = UpdatedLocationType.ExternalFunction)
+    {
+        foreach (var aggregateType in _sekibanControllerItems.SekibanAggregates)
+        {
+            if (!string.Equals(aggregateName, aggregateType.Name, StringComparison.CurrentCultureIgnoreCase)) { continue; }
+            if (_sekibanControllerOptions.AuthorizeDefinitionCollection.CheckAuthorization(
+                    AuthorizeMethodType.SendUpdateMarker,
+                    this,
+                    aggregateType,
+                    null,
+                    null,
+                    HttpContext,
+                    _serviceProvider) ==
+                AuthorizeResultType.Denied) { return Unauthorized(); }
+            _updateNotice.SendUpdate(aggregateName, id, sortableUniqueId, locationType);
+            return Ok(sortableUniqueId);
         }
         return Problem("Aggregate name not exists");
     }

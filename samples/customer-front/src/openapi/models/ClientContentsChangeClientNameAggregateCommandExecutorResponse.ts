@@ -10,4 +10,5 @@ export type ClientContentsChangeClientNameAggregateCommandExecutorResponse = {
     aggregateDto?: ClientContentsAggregateDto;
     command?: ChangeClientNameAggregateCommandDocument;
     events?: Array<IAggregateEvent> | null;
-}
+};
+

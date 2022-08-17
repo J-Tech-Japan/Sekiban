@@ -9,6 +9,9 @@ import type { ClientContentsDeleteClientAggregateCommandExecutorResponse } from 
 import type { ClientNameHistoryProjection } from '../models/ClientNameHistoryProjection';
 import type { CreateClient } from '../models/CreateClient';
 import type { DeleteClient } from '../models/DeleteClient';
+
+import type { CancelablePromise } from '../core/CancelablePromise';
+import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 
 export class ClientService {
@@ -17,107 +20,124 @@ export class ClientService {
      * @returns ClientContentsCreateClientAggregateCommandExecutorResponse Success
      * @throws ApiError
      */
-    public static async createClient({
+    public static createClient({
         requestBody,
     }: {
         requestBody?: CreateClient,
-    }): Promise<ClientContentsCreateClientAggregateCommandExecutorResponse> {
-        const result = await __request({
+    }): CancelablePromise<ClientContentsCreateClientAggregateCommandExecutorResponse> {
+        return __request(OpenAPI, {
             method: 'POST',
-            path: `/api/command/client/createclient`,
+            url: '/api/command/client/createclient',
             body: requestBody,
+            mediaType: 'application/json',
         });
-        return result.body;
     }
 
     /**
      * @returns ClientContentsChangeClientNameAggregateCommandExecutorResponse Success
      * @throws ApiError
      */
-    public static async changeClientName({
+    public static changeClientName({
         requestBody,
     }: {
         requestBody?: ChangeClientName,
-    }): Promise<ClientContentsChangeClientNameAggregateCommandExecutorResponse> {
-        const result = await __request({
+    }): CancelablePromise<ClientContentsChangeClientNameAggregateCommandExecutorResponse> {
+        return __request(OpenAPI, {
             method: 'PATCH',
-            path: `/api/command/client/changeclientname`,
+            url: '/api/command/client/changeclientname',
             body: requestBody,
+            mediaType: 'application/json',
         });
-        return result.body;
     }
 
     /**
      * @returns ClientContentsDeleteClientAggregateCommandExecutorResponse Success
      * @throws ApiError
      */
-    public static async deleteClient({
+    public static deleteClient({
         requestBody,
     }: {
         requestBody?: DeleteClient,
-    }): Promise<ClientContentsDeleteClientAggregateCommandExecutorResponse> {
-        const result = await __request({
+    }): CancelablePromise<ClientContentsDeleteClientAggregateCommandExecutorResponse> {
+        return __request(OpenAPI, {
             method: 'PATCH',
-            path: `/api/command/client/deleteclient`,
+            url: '/api/command/client/deleteclient',
             body: requestBody,
+            mediaType: 'application/json',
         });
-        return result.body;
     }
 
     /**
      * @returns ClientContentsAggregateDto Success
      * @throws ApiError
      */
-    public static async clientGet({
+    public static getApiQueryClientGet({
         id,
         toVersion,
     }: {
-        id?: string,
+        id: string,
         toVersion?: number,
-    }): Promise<ClientContentsAggregateDto> {
-        const result = await __request({
+    }): CancelablePromise<ClientContentsAggregateDto> {
+        return __request(OpenAPI, {
             method: 'GET',
-            path: `/api/query/client/get`,
-            query: {
+            url: '/api/query/client/get/{id}',
+            path: {
                 'id': id,
+            },
+            query: {
                 'toVersion': toVersion,
             },
         });
-        return result.body;
     }
 
     /**
      * @returns ClientContentsAggregateDto Success
      * @throws ApiError
      */
-    public static async clientList(): Promise<Array<ClientContentsAggregateDto>> {
-        const result = await __request({
+    public static getApiQueryClientGetids({
+        ids,
+    }: {
+        ids?: Array<string>,
+    }): CancelablePromise<Array<ClientContentsAggregateDto>> {
+        return __request(OpenAPI, {
             method: 'GET',
-            path: `/api/query/client/list`,
+            url: '/api/query/client/getids',
+            query: {
+                'ids': ids,
+            },
         });
-        return result.body;
+    }
+
+    /**
+     * @returns ClientContentsAggregateDto Success
+     * @throws ApiError
+     */
+    public static getApiQueryClientList(): CancelablePromise<Array<ClientContentsAggregateDto>> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/query/client/list',
+        });
     }
 
     /**
      * @returns ClientNameHistoryProjection Success
      * @throws ApiError
      */
-    public static async clientClientNameHistoryProjection({
+    public static clientClientNameHistoryProjection({
         id,
         toVersion,
     }: {
         id?: string,
         toVersion?: number,
-    }): Promise<ClientNameHistoryProjection> {
-        const result = await __request({
+    }): CancelablePromise<ClientNameHistoryProjection> {
+        return __request(OpenAPI, {
             method: 'GET',
-            path: `/api/query/client/clientnamehistoryprojection`,
+            url: '/api/query/client/clientnamehistoryprojection',
             query: {
                 'id': id,
                 'toVersion': toVersion,
             },
         });
-        return result.body;
     }
 
 }

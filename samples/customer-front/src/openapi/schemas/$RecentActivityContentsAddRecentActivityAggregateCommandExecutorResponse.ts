@@ -17,4 +17,4 @@ export const $RecentActivityContentsAddRecentActivityAggregateCommandExecutorRes
             isNullable: true,
         },
     },
-};
+} as const;

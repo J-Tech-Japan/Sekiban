@@ -42,4 +42,4 @@ export const $ClientNameHistoryProjection = {
             isNullable: true,
         },
     },
-};
+} as const;

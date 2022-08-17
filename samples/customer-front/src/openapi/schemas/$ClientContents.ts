@@ -16,4 +16,4 @@ export const $ClientContents = {
             isNullable: true,
         },
     },
-};
+} as const;

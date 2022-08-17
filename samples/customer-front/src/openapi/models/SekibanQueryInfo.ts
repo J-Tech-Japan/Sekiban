@@ -9,4 +9,5 @@ export type SekibanQueryInfo = {
     getEventsUrl?: string | null;
     getCommandsUrl?: string | null;
     sampleResponseObject?: any;
-}
+};
+

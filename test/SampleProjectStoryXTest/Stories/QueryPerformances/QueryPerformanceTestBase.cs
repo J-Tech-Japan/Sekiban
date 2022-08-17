@@ -103,6 +103,7 @@ public abstract class QueryPerformanceTestBase : TestBase
                 {
                     _testOutputHelper.WriteLine($"client change name {k + 1}");
                     var aggregate = await _aggregateService.GetAggregateDtoAsync<Client, ClientContents>(clientCreateResult.Command.AggregateId);
+                    _testOutputHelper.WriteLine($"aggregate.version = {aggregate?.Version}");
                     await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientContents, ChangeClientName>(
                         new ChangeClientName(clientCreateResult.Command.AggregateId, $"change{i}-{j}-{k}")
                         {

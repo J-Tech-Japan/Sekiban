@@ -35,4 +35,4 @@ export const $ClientContentsAggregateDto = {
             isRequired: true,
         },
     },
-};
+} as const;

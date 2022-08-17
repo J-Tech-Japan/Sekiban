@@ -11,5 +11,6 @@ public enum AuthorizeMethodType
     CommandHistory,
     SingleAggregateProjection,
     MultipleAggregateProjection,
-    MultipleAggregateListProjection
+    MultipleAggregateListProjection,
+    SendUpdateMarker
 }

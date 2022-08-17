@@ -35,4 +35,4 @@ export const $BranchContentsAggregateDto = {
             isRequired: true,
         },
     },
-};
+} as const;

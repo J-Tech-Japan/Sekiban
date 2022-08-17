@@ -35,4 +35,4 @@ export const $LoyaltyPointContentsAggregateDto = {
             isRequired: true,
         },
     },
-};
+} as const;

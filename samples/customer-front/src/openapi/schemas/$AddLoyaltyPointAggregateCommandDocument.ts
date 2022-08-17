@@ -49,4 +49,4 @@ export const $AddLoyaltyPointAggregateCommandDocument = {
             isNullable: true,
         },
     },
-};
+} as const;

@@ -5,4 +5,5 @@
 export type ClientNameHistoryProjectionRecord = {
     name?: string | null;
     dateChanged?: string;
-}
+};
+

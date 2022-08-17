@@ -12,4 +12,4 @@ export const $RecentInMemoryActivityRecord = {
             format: 'date-time',
         },
     },
-};
+} as const;

@@ -13,4 +13,4 @@ export const $LoyaltyPointContents = {
             format: 'int32',
         },
     },
-};
+} as const;

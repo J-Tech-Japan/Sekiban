@@ -10,4 +10,5 @@ export type ClientContentsCreateClientAggregateCommandExecutorResponse = {
     aggregateDto?: ClientContentsAggregateDto;
     command?: CreateClientAggregateCommandDocument;
     events?: Array<IAggregateEvent> | null;
-}
+};
+

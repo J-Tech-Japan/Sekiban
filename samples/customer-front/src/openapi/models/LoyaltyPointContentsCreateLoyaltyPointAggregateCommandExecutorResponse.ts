@@ -10,4 +10,5 @@ export type LoyaltyPointContentsCreateLoyaltyPointAggregateCommandExecutorRespon
     aggregateDto?: LoyaltyPointContentsAggregateDto;
     command?: CreateLoyaltyPointAggregateCommandDocument;
     events?: Array<IAggregateEvent> | null;
-}
+};
+

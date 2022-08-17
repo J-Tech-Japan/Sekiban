@@ -49,4 +49,4 @@ export const $CreateBranchAggregateCommandDocument = {
             isNullable: true,
         },
     },
-};
+} as const;

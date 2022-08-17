@@ -4,4 +4,4 @@
 export const $CreateRecentActivity = {
     properties: {
     },
-};
+} as const;

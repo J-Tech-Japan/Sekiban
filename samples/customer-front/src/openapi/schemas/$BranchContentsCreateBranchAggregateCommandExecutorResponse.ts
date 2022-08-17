@@ -17,4 +17,4 @@ export const $BranchContentsCreateBranchAggregateCommandExecutorResponse = {
             isNullable: true,
         },
     },
-};
+} as const;

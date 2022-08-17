@@ -4,4 +4,5 @@
 
 export type BranchContents = {
     name?: string | null;
-}
+};
+

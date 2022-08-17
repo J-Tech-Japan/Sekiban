@@ -12,4 +12,4 @@ export const $RecentActivityRecord = {
             format: 'date-time',
         },
     },
-};
+} as const;

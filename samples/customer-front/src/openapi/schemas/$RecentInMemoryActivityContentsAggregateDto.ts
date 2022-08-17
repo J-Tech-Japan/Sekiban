@@ -35,4 +35,4 @@ export const $RecentInMemoryActivityContentsAggregateDto = {
             isRequired: true,
         },
     },
-};
+} as const;

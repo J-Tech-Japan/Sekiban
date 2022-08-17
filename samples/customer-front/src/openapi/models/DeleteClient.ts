@@ -5,4 +5,5 @@
 export type DeleteClient = {
     referenceVersion: number;
     clientId?: string;
-}
+};
+

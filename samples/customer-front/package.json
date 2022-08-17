@@ -10,12 +10,12 @@
   },
   "dependencies": {
     "core-js": "^3.8.3",
+    "openapi-typescript-codegen": "^0.23.0",
     "vue": "^3.2.13"
   },
   "devDependencies": {
     "@babel/core": "^7.12.16",
     "@babel/eslint-parser": "^7.12.16",
-    "@j-tech-japan/openapi-typescript-codegen": "^0.11.0",
     "@vue/cli-plugin-babel": "~5.0.0",
     "@vue/cli-plugin-eslint": "~5.0.0",
     "@vue/cli-service": "~5.0.0",

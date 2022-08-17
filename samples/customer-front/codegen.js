@@ -1,7 +1,7 @@
 /* eslint-disable no-undef */
 /* eslint-disable @typescript-eslint/no-var-requires */
 process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = 0;
-const OpenAPI = require("@j-tech-japan/openapi-typescript-codegen");
+const OpenAPI = require("openapi-typescript-codegen");
 
 OpenAPI.generate({
   input: "http://localhost:5224/swagger/v1/swagger.json",

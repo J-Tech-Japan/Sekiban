@@ -18,4 +18,5 @@ export type ChangeClientNameAggregateCommandDocument = {
     executedUser?: string | null;
     exception?: string | null;
     callHistories?: Array<CallHistory> | null;
-}
+};
+

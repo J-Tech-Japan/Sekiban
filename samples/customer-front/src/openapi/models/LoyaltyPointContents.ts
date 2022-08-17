@@ -5,4 +5,5 @@
 export type LoyaltyPointContents = {
     lastOccuredTime?: string | null;
     currentPoint?: number;
-}
+};
+

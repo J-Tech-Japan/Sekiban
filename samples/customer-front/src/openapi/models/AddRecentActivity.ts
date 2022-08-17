@@ -6,4 +6,5 @@ export type AddRecentActivity = {
     referenceVersion: number;
     recentActivityId?: string;
     activity?: string | null;
-}
+};
+

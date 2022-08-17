@@ -9,4 +9,5 @@ export type SekibanAggregateInfo = {
     aggregateName?: string | null;
     queryInfo?: SekibanQueryInfo;
     commands?: Array<SekibanCommandInfo> | null;
-}
+};
+

@@ -17,4 +17,4 @@ export const $RecentInMemoryActivityContentsCreateRecentInMemoryActivityAggregat
             isNullable: true,
         },
     },
-};
+} as const;
