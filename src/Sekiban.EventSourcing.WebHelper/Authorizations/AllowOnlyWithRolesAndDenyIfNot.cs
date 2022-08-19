@@ -10,12 +10,10 @@ public class AllowOnlyWithRolesAndDenyIfNot<TDefinitionType, TRoleEnum> : IAutho
     {
         Roles = roles.Select(s => Enum.GetName(s)!.ToLower());
     }
-    public AllowOnlyWithRolesAndDenyIfNot(TRoleEnum role) =>
-        Roles = new List<string> { Enum.GetName(role)!.ToLower() };
-    public AllowOnlyWithRolesAndDenyIfNot(TRoleEnum role1, TRoleEnum role2) =>
-        Roles = new List<string> { Enum.GetName(role1)!.ToLower(), Enum.GetName(role2)!.ToLower() };
-    public AllowOnlyWithRolesAndDenyIfNot(TRoleEnum role1, TRoleEnum role2, TRoleEnum role3) =>
-        Roles = new List<string> { Enum.GetName(role1)!.ToLower(), Enum.GetName(role2)!.ToLower(), Enum.GetName(role3)!.ToLower() };
+    public AllowOnlyWithRolesAndDenyIfNot(params TRoleEnum[] roles)
+    {
+        Roles = roles.Select(m => Enum.GetName(m)!.ToLower());
+    }
 
     public AuthorizeResultType Check(
         AuthorizeMethodType authorizeMethodType,

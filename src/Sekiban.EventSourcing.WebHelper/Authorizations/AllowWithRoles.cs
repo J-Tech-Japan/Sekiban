@@ -10,12 +10,8 @@ public class AllowWithRoles<TDefinitionType, TRoleEnum> : IAuthorizeDefinition w
     {
         Roles = roles.Select(s => Enum.GetName(s)!.ToLower());
     }
-    public AllowWithRoles(TRoleEnum role) =>
-        Roles = new List<string> { Enum.GetName(role)!.ToLower() };
-    public AllowWithRoles(TRoleEnum role1, TRoleEnum role2) =>
-        Roles = new List<string> { Enum.GetName(role1)!.ToLower(), Enum.GetName(role2)!.ToLower() };
-    public AllowWithRoles(TRoleEnum role1, TRoleEnum role2, TRoleEnum role3) =>
-        Roles = new List<string> { Enum.GetName(role1)!.ToLower(), Enum.GetName(role2)!.ToLower(), Enum.GetName(role3)!.ToLower() };
+    public AllowWithRoles(params TRoleEnum[] roles) =>
+        Roles = roles.Select(role => Enum.GetName(role)!.ToLower());
     public AuthorizeResultType Check(
         AuthorizeMethodType authorizeMethodType,
         Type aggregateType,

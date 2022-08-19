@@ -7,80 +7,8 @@ public class AuthorizeDefinitionCollection : IAuthorizeDefinitionCollection
 {
     public AuthorizeDefinitionCollection(IEnumerable<IAuthorizeDefinition> collection) =>
         Collection = collection;
-    public AuthorizeDefinitionCollection(IAuthorizeDefinition definition)
-    {
-        Collection = new[] { definition };
-    }
-    public AuthorizeDefinitionCollection(IAuthorizeDefinition definition1, IAuthorizeDefinition definition2)
-    {
-        Collection = new[] { definition1, definition2 };
-    }
-    public AuthorizeDefinitionCollection(IAuthorizeDefinition definition1, IAuthorizeDefinition definition2, IAuthorizeDefinition definition3)
-    {
-        Collection = new[] { definition1, definition2, definition3 };
-    }
-    public AuthorizeDefinitionCollection(
-        IAuthorizeDefinition definition1,
-        IAuthorizeDefinition definition2,
-        IAuthorizeDefinition definition3,
-        IAuthorizeDefinition definition4)
-    {
-        Collection = new[] { definition1, definition2, definition3, definition4 };
-    }
-    public AuthorizeDefinitionCollection(
-        IAuthorizeDefinition definition1,
-        IAuthorizeDefinition definition2,
-        IAuthorizeDefinition definition3,
-        IAuthorizeDefinition definition4,
-        IAuthorizeDefinition definition5)
-    {
-        Collection = new[]
-        {
-            definition1,
-            definition2,
-            definition3,
-            definition4,
-            definition5
-        };
-    }
-    public AuthorizeDefinitionCollection(
-        IAuthorizeDefinition definition1,
-        IAuthorizeDefinition definition2,
-        IAuthorizeDefinition definition3,
-        IAuthorizeDefinition definition4,
-        IAuthorizeDefinition definition5,
-        IAuthorizeDefinition definition6)
-    {
-        Collection = new[]
-        {
-            definition1,
-            definition2,
-            definition3,
-            definition4,
-            definition5,
-            definition6
-        };
-    }
-    public AuthorizeDefinitionCollection(
-        IAuthorizeDefinition definition1,
-        IAuthorizeDefinition definition2,
-        IAuthorizeDefinition definition3,
-        IAuthorizeDefinition definition4,
-        IAuthorizeDefinition definition5,
-        IAuthorizeDefinition definition6,
-        IAuthorizeDefinition definition7)
-    {
-        Collection = new[]
-        {
-            definition1,
-            definition2,
-            definition3,
-            definition4,
-            definition5,
-            definition6,
-            definition7
-        };
-    }
+    public AuthorizeDefinitionCollection(params IAuthorizeDefinition[] definitions) =>
+        Collection = definitions;
     public IEnumerable<IAuthorizeDefinition> Collection
     {
         get;
