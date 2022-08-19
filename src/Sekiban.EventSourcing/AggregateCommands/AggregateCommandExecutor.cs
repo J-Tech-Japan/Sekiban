@@ -67,6 +67,10 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
                 events.AddRange(result.Aggregate.Events);
                 foreach (var ev in result.Aggregate.Events)
                 {
+                    if (ev.IsAggregateInitialEvent)
+                    {
+                        throw new SekibanChangeCommandShouldNotSaveCreateEventException();
+                    }
                     await _documentWriter.SaveAndPublishAggregateEvent(ev, typeof(T));
                 }
             }

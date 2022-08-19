@@ -140,6 +140,10 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         }
         CheckCommandJSONSupports(commandDocument);
         _latestEvents = _aggregate.Events.ToList();
+        foreach (var ev in _latestEvents)
+        {
+            if (ev.IsAggregateInitialEvent) { throw new SekibanChangeCommandShouldNotSaveCreateEventException(); }
+        }
         _aggregate.ResetEventsAndSnapshots();
         CheckStateJSONSupports();
         return this;

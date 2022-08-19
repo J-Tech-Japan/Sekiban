@@ -12,6 +12,10 @@ using CustomerDomainContext.Aggregates.RecentActivities.Commands;
 using CustomerDomainContext.Aggregates.RecentInMemoryActivities;
 using CustomerDomainContext.Aggregates.RecentInMemoryActivities.Commands;
 using CustomerDomainContext.Projections;
+using Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanMembers;
+using Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanMembers.Commands;
+using Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanTenants;
+using Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanTenants.Commands;
 using System.Reflection;
 namespace CustomerDomainContext.Shared;
 
@@ -75,5 +79,9 @@ public static class Dependency
 
         yield return (typeof(IChangeAggregateCommandHandler<RecentInMemoryActivity, AddRecentInMemoryActivity>),
             typeof(AddRecentInMemoryActivityHandler));
+
+        // SekibanTenantAddition
+        yield return (typeof(ICreateAggregateCommandHandler<SekibanTenant, CreateSekibanTenant>), typeof(CreateSekibanTenantHandler));
+        yield return (typeof(ICreateAggregateCommandHandler<SekibanMember, CreateSekibanMember>), typeof(CreateSekibanMemberHandler));
     }
 }
