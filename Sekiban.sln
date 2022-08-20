@@ -27,7 +27,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SampleProjectStoryXTest", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.EventSourcing.WebHelper", "src\Sekiban.EventSourcing.WebHelper\Sekiban.EventSourcing.WebHelper.csproj", "{8BD77123-2671-45D8-989B-B176F09665A7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.EventSourcing.Addon.Tenant", "Sekiban.EventSourcing.Addon.Tenant\Sekiban.EventSourcing.Addon.Tenant.csproj", "{D04427BB-9950-4CFF-9135-ED570179A7A8}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.EventSourcing.Addon.Tenant", "src\Sekiban.EventSourcing.Addon.Tenant\Sekiban.EventSourcing.Addon.Tenant.csproj", "{E7D00F8D-7535-4318-B8EC-BF4BDC0AF64D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -71,10 +71,10 @@ Global
 		{8BD77123-2671-45D8-989B-B176F09665A7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8BD77123-2671-45D8-989B-B176F09665A7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8BD77123-2671-45D8-989B-B176F09665A7}.Release|Any CPU.Build.0 = Release|Any CPU
-		{D04427BB-9950-4CFF-9135-ED570179A7A8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{D04427BB-9950-4CFF-9135-ED570179A7A8}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{D04427BB-9950-4CFF-9135-ED570179A7A8}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{D04427BB-9950-4CFF-9135-ED570179A7A8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E7D00F8D-7535-4318-B8EC-BF4BDC0AF64D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E7D00F8D-7535-4318-B8EC-BF4BDC0AF64D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E7D00F8D-7535-4318-B8EC-BF4BDC0AF64D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E7D00F8D-7535-4318-B8EC-BF4BDC0AF64D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -89,7 +89,7 @@ Global
 		{5ED1D505-37C6-4025-B991-8D0A7E1FD75F} = {B85F80AE-6A27-402C-93FA-352D938EDA8D}
 		{36525982-9318-4E08-BE0E-2731A9AD8E42} = {4C34F748-F223-44DD-899D-029F9CEF7780}
 		{8BD77123-2671-45D8-989B-B176F09665A7} = {76D7B2DA-2E6B-4078-AC01-B29BCA83411A}
-		{D04427BB-9950-4CFF-9135-ED570179A7A8} = {76D7B2DA-2E6B-4078-AC01-B29BCA83411A}
+		{E7D00F8D-7535-4318-B8EC-BF4BDC0AF64D} = {76D7B2DA-2E6B-4078-AC01-B29BCA83411A}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {2DFBE53E-69A7-453A-8D20-72271AE32016}
