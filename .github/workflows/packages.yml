@@ -44,4 +44,4 @@ jobs:
       run: |
         pushd ./src/Sekiban.EventSourcing.Addon.Tenant
         dotnet pack --configuration Release
-        dotnet nuget push "bin/Release/JJ_Sekiban.EventSourcing.Tenant.Addon.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
+        dotnet nuget push "bin/Release/JJ_Sekiban.EventSourcing.Addon.Tenant.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
