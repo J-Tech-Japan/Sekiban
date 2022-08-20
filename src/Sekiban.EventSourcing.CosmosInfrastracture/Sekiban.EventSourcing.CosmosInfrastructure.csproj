@@ -6,13 +6,13 @@
         <Nullable>enable</Nullable>
         <RootNamespace>CosmosInfrastructure</RootNamespace>
         <PackageId>JJ_Sekiban.EventSourcing.CosmosInfrastructure</PackageId>
-        <Version>0.4.26</Version>
+        <Version>0.4.27</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework CosmosInfrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.4.26</PackageVersion>
-        <Description>Change Command can not produce Create Commands</Description>
+        <PackageVersion>0.4.27</PackageVersion>
+        <Description>テストの際に変更コマンドで生成イベントを作成したらエラーにする</Description>
     </PropertyGroup>
 
     <ItemGroup>
