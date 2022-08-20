@@ -1,18 +1,20 @@
 using Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanMembers.Events;
+using Sekiban.EventSourcing.Addon.Tenant.ValueObjects.Strings;
 using Sekiban.EventSourcing.AggregateEvents;
 using Sekiban.EventSourcing.Aggregates;
-namespace Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanMembers;
-
-public class SekibanMember : TransferableAggregateBase<SekibanMemberContents>
+namespace Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanMembers
 {
-    public void Create(string name, string email, string uniqueId)
+    public class SekibanMember : TransferableAggregateBase<SekibanMemberContents>
     {
-        AddAndApplyEvent(new SekibanMemberCreated(name, email, uniqueId));
-    }
-    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload) =>
-        payload switch
+        public void Create(NameString name, EmailString email, AsciiString uniqueId)
         {
-            SekibanMemberCreated created => () => Contents = new SekibanMemberContents(created.Name, created.Email, created.UniqueId),
-            _ => null
-        };
+            AddAndApplyEvent(new SekibanMemberCreated(name, email, uniqueId));
+        }
+        protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload) =>
+            payload switch
+            {
+                SekibanMemberCreated created => () => Contents = new SekibanMemberContents(created.Name, created.Email, created.UniqueId),
+                _ => null
+            };
+    }
 }

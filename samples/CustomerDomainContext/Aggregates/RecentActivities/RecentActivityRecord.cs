@@ -1,6 +1,7 @@
-namespace CustomerDomainContext.Aggregates.RecentActivities;
-
-public record RecentActivityRecord(string Activity, DateTime OccuredAt)
+namespace CustomerDomainContext.Aggregates.RecentActivities
 {
-    public RecentActivityRecord() : this(string.Empty, DateTime.MinValue) { }
+    public record RecentActivityRecord(string Activity, DateTime OccuredAt)
+    {
+        public RecentActivityRecord() : this(string.Empty, DateTime.MinValue) { }
+    }
 }

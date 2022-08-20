@@ -1,6 +1,7 @@
-namespace CustomerDomainContext.Aggregates.Branches;
-
-public record BranchContents : IAggregateContents
+namespace CustomerDomainContext.Aggregates.Branches
 {
-    public string Name { get; init; } = string.Empty;
+    public record BranchContents : IAggregateContents
+    {
+        public string Name { get; init; } = string.Empty;
+    }
 }

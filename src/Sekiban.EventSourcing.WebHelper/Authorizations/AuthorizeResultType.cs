@@ -1,8 +1,9 @@
-﻿namespace Sekiban.EventSourcing.WebHelper.Authorizations;
-
-public enum AuthorizeResultType
+﻿namespace Sekiban.EventSourcing.WebHelper.Authorizations
 {
-    Allowed,
-    Denied,
-    Passed
+    public enum AuthorizeResultType
+    {
+        Allowed,
+        Denied,
+        Passed
+    }
 }

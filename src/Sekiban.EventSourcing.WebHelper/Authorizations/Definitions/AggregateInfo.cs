@@ -1,7 +1,8 @@
-namespace Sekiban.EventSourcing.WebHelper.Authorizations.Definitions;
-
-public class AggregateInfo : IAuthorizationDefinitionType
+namespace Sekiban.EventSourcing.WebHelper.Authorizations.Definitions
 {
-    public bool IsMatches(AuthorizeMethodType authorizeMethodType, Type aggregateType, Type? commandType) =>
-        authorizeMethodType == AuthorizeMethodType.AggregateInfo;
+    public class AggregateInfo : IAuthorizationDefinitionType
+    {
+        public bool IsMatches(AuthorizeMethodType authorizeMethodType, Type aggregateType, Type? commandType) =>
+            authorizeMethodType == AuthorizeMethodType.AggregateInfo;
+    }
 }

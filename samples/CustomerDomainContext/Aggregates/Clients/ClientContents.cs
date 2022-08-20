@@ -1,18 +1,19 @@
-namespace CustomerDomainContext.Aggregates.Clients;
-
-public record ClientContents : IAggregateContents
+namespace CustomerDomainContext.Aggregates.Clients
 {
-    public Guid BranchId { get; init; }
-    public string ClientName { get; init; } = default!;
-    public string ClientEmail { get; init; } = default!;
-
-    public ClientContents()
-    { }
-    
-    public ClientContents(Guid branchId, string clientName, string clientEmail)
+    public record ClientContents : IAggregateContents
     {
-        BranchId = branchId;
-        ClientName = clientName;
-        ClientEmail = clientEmail;
+        public Guid BranchId { get; init; }
+        public string ClientName { get; init; } = default!;
+        public string ClientEmail { get; init; } = default!;
+
+        public ClientContents()
+        { }
+    
+        public ClientContents(Guid branchId, string clientName, string clientEmail)
+        {
+            BranchId = branchId;
+            ClientName = clientName;
+            ClientEmail = clientEmail;
+        }
     }
 }

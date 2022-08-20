@@ -1,16 +1,17 @@
 using Sekiban.EventSourcing.AggregateCommands.UserInformations;
-namespace Sekiban.EventSourcing.AggregateCommands;
-
-/// <summary>
-///     こちらは定数をユーザー名、ユーザーIDとして返します。
-///     WebApiのプロジェクトでは、
-/// </summary>
-public class ConstUserInformationFactory : IUserInformationFactory
+namespace Sekiban.EventSourcing.AggregateCommands
 {
-    private readonly string _userInfo;
-    public ConstUserInformationFactory(string userInfo) =>
-        _userInfo = userInfo;
+    /// <summary>
+    ///     こちらは定数をユーザー名、ユーザーIDとして返します。
+    ///     WebApiのプロジェクトでは、
+    /// </summary>
+    public class ConstUserInformationFactory : IUserInformationFactory
+    {
+        private readonly string _userInfo;
+        public ConstUserInformationFactory(string userInfo) =>
+            _userInfo = userInfo;
 
-    public string GetCurrentUserInformation() =>
-        _userInfo ?? string.Empty;
+        public string GetCurrentUserInformation() =>
+            _userInfo ?? string.Empty;
+    }
 }

@@ -1,3 +1,4 @@
-namespace CustomerDomainContext.Shared.Exceptions;
-
-public class SekibanLoyaltyPointNotEnoughException : Exception, ISekibanException { }
+namespace CustomerDomainContext.Shared.Exceptions
+{
+    public class SekibanLoyaltyPointNotEnoughException : Exception, ISekibanException { }
+}

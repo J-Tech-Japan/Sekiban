@@ -1,17 +1,18 @@
-﻿namespace CustomerDomainContext.Aggregates.LoyaltyPoints.Commands;
-
-public record CreateLoyaltyPoint(Guid ClientId, int InitialPoint) : ICreateAggregateCommand<LoyaltyPoint>
+﻿namespace CustomerDomainContext.Aggregates.LoyaltyPoints.Commands
 {
-    public CreateLoyaltyPoint() : this(Guid.Empty, 0) { }
-}
-public class CreateLoyaltyPointHandler : CreateAggregateCommandHandlerBase<LoyaltyPoint, CreateLoyaltyPoint>
-{
-
-    public override Guid GenerateAggregateId(CreateLoyaltyPoint command) =>
-        command.ClientId;
-    protected override async Task ExecCreateCommandAsync(LoyaltyPoint aggregate, CreateLoyaltyPoint command)
+    public record CreateLoyaltyPoint(Guid ClientId, int InitialPoint) : ICreateAggregateCommand<LoyaltyPoint>
     {
-        await Task.CompletedTask;
-        aggregate.CreateLoyaltyPoint(command.InitialPoint);
+        public CreateLoyaltyPoint() : this(Guid.Empty, 0) { }
+    }
+    public class CreateLoyaltyPointHandler : CreateAggregateCommandHandlerBase<LoyaltyPoint, CreateLoyaltyPoint>
+    {
+
+        public override Guid GenerateAggregateId(CreateLoyaltyPoint command) =>
+            command.ClientId;
+        protected override async Task ExecCreateCommandAsync(LoyaltyPoint aggregate, CreateLoyaltyPoint command)
+        {
+            await Task.CompletedTask;
+            aggregate.CreateLoyaltyPoint(command.InitialPoint);
+        }
     }
 }

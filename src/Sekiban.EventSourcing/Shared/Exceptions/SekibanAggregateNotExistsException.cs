@@ -1,13 +1,14 @@
-namespace Sekiban.EventSourcing.Shared.Exceptions;
-
-public class SekibanAggregateNotExistsException : Exception, ISekibanException
+namespace Sekiban.EventSourcing.Shared.Exceptions
 {
-    public Guid AggregateId { get; set; }
-    public string AggregateTypeName { get; set; }
-
-    public SekibanAggregateNotExistsException(Guid aggregateId, string aggregateTypeName)
+    public class SekibanAggregateNotExistsException : Exception, ISekibanException
     {
-        AggregateId = aggregateId;
-        AggregateTypeName = aggregateTypeName;
+        public Guid AggregateId { get; set; }
+        public string AggregateTypeName { get; set; }
+
+        public SekibanAggregateNotExistsException(Guid aggregateId, string aggregateTypeName)
+        {
+            AggregateId = aggregateId;
+            AggregateTypeName = aggregateTypeName;
+        }
     }
 }

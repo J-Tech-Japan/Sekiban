@@ -1,67 +1,68 @@
 using Sekiban.EventSourcing.Queries.SingleAggregates;
-namespace Sekiban.EventSourcing.Queries.MultipleAggregates;
-
-public class SingleAggregateListProjector<T, Q, P> : IMultipleAggregateProjector<SingleAggregateProjectionDto<Q>>
-    where T : ISingleAggregate, ISingleAggregateProjection, ISingleAggregateProjectionDtoConvertible<Q>
-    where Q : ISingleAggregate
-    where P : ISingleAggregateProjector<T>, new()
+namespace Sekiban.EventSourcing.Queries.MultipleAggregates
 {
-    private T _eventChecker;
-    private P _projector = new();
-    public List<T> List { get; private set; } = new();
-    public SingleAggregateListProjector() =>
-        _eventChecker = _projector.CreateInitialAggregate(Guid.Empty);
-    public void ApplyEvent(IAggregateEvent ev)
+    public class SingleAggregateListProjector<T, Q, P> : IMultipleAggregateProjector<SingleAggregateProjectionDto<Q>>
+        where T : ISingleAggregate, ISingleAggregateProjection, ISingleAggregateProjectionDtoConvertible<Q>
+        where Q : ISingleAggregate
+        where P : ISingleAggregateProjector<T>, new()
     {
-        if (_eventChecker.CanApplyEvent(ev))
+        private T _eventChecker;
+        private P _projector = new();
+        public List<T> List { get; private set; } = new();
+        public SingleAggregateListProjector() =>
+            _eventChecker = _projector.CreateInitialAggregate(Guid.Empty);
+        public void ApplyEvent(IAggregateEvent ev)
         {
-            if (ev.IsAggregateInitialEvent)
+            if (_eventChecker.CanApplyEvent(ev))
             {
-                var aggregate = _projector.CreateInitialAggregate(ev.AggregateId);
-                aggregate.ApplyEvent(ev);
-                List.Add(aggregate);
-            } else
-            {
-                var targetAggregate = List.FirstOrDefault(m => m.AggregateId == ev.AggregateId);
-                if (targetAggregate is not null)
+                if (ev.IsAggregateInitialEvent)
                 {
-                    targetAggregate.ApplyEvent(ev);
+                    var aggregate = _projector.CreateInitialAggregate(ev.AggregateId);
+                    aggregate.ApplyEvent(ev);
+                    List.Add(aggregate);
+                } else
+                {
+                    var targetAggregate = List.FirstOrDefault(m => m.AggregateId == ev.AggregateId);
+                    if (targetAggregate is not null)
+                    {
+                        targetAggregate.ApplyEvent(ev);
+                    }
                 }
             }
+            Version++;
+            LastEventId = ev.Id;
+            LastSortableUniqueId = ev.SortableUniqueId;
         }
-        Version++;
-        LastEventId = ev.Id;
-        LastSortableUniqueId = ev.SortableUniqueId;
+        public SingleAggregateProjectionDto<Q> ToDto()
+        {
+            var dto = new SingleAggregateProjectionDto<Q>(
+                List.Select(m => m.ToDto()).ToList(),
+                LastEventId,
+                LastSortableUniqueId,
+                AppliedSnapshotVersion,
+                Version);
+            return dto;
+        }
+        public void ApplySnapshot(SingleAggregateProjectionDto<Q> snapshot)
+        {
+            List = snapshot.List.Select(
+                    m =>
+                    {
+                        var aggregate = _projector.CreateInitialAggregate(m.AggregateId);
+                        aggregate.ApplySnapshot(m);
+                        return aggregate;
+                    })
+                .ToList();
+            LastEventId = snapshot.LastEventId;
+            LastSortableUniqueId = snapshot.LastSortableUniqueId;
+            AppliedSnapshotVersion = snapshot.AppliedSnapshotVersion;
+            Version = snapshot.Version;
+        }
+        public IList<string> TargetAggregateNames() =>
+            new List<string> { _projector.OriginalAggregateType().Name };
+        public Guid LastEventId { get; private set; } = Guid.Empty;
+        public string LastSortableUniqueId { get; private set; } = string.Empty;
+        public int AppliedSnapshotVersion { get; private set; }
+        public int Version { get; private set; }
     }
-    public SingleAggregateProjectionDto<Q> ToDto()
-    {
-        var dto = new SingleAggregateProjectionDto<Q>(
-            List.Select(m => m.ToDto()).ToList(),
-            LastEventId,
-            LastSortableUniqueId,
-            AppliedSnapshotVersion,
-            Version);
-        return dto;
-    }
-    public void ApplySnapshot(SingleAggregateProjectionDto<Q> snapshot)
-    {
-        List = snapshot.List.Select(
-                m =>
-                {
-                    var aggregate = _projector.CreateInitialAggregate(m.AggregateId);
-                    aggregate.ApplySnapshot(m);
-                    return aggregate;
-                })
-            .ToList();
-        LastEventId = snapshot.LastEventId;
-        LastSortableUniqueId = snapshot.LastSortableUniqueId;
-        AppliedSnapshotVersion = snapshot.AppliedSnapshotVersion;
-        Version = snapshot.Version;
-    }
-    public IList<string> TargetAggregateNames() =>
-        new List<string> { _projector.OriginalAggregateType().Name };
-    public Guid LastEventId { get; private set; } = Guid.Empty;
-    public string LastSortableUniqueId { get; private set; } = string.Empty;
-    public int AppliedSnapshotVersion { get; private set; }
-    public int Version { get; private set; }
 }

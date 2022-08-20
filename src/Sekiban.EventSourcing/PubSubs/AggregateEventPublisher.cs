@@ -1,15 +1,16 @@
 using MediatR;
-namespace Sekiban.EventSourcing.PubSubs;
-
-public class AggregateEventPublisher
+namespace Sekiban.EventSourcing.PubSubs
 {
-    private readonly IMediator _mediator;
-
-    public AggregateEventPublisher(IMediator mediator) =>
-        _mediator = mediator;
-
-    public async Task PublishAsync<TEvent>(TEvent ev) where TEvent : IAggregateEvent
+    public class AggregateEventPublisher
     {
-        await _mediator.Publish(ev, CancellationToken.None);
+        private readonly IMediator _mediator;
+
+        public AggregateEventPublisher(IMediator mediator) =>
+            _mediator = mediator;
+
+        public async Task PublishAsync<TEvent>(TEvent ev) where TEvent : IAggregateEvent
+        {
+            await _mediator.Publish(ev, CancellationToken.None);
+        }
     }
 }

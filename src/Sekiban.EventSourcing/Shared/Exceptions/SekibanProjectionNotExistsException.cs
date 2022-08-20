@@ -1,3 +1,4 @@
-namespace Sekiban.EventSourcing.Shared.Exceptions;
-
-public class SekibanProjectionNotExistsException : Exception, ISekibanException { }
+namespace Sekiban.EventSourcing.Shared.Exceptions
+{
+    public class SekibanProjectionNotExistsException : Exception, ISekibanException { }
+}

@@ -1,51 +1,52 @@
-namespace CosmosInfrastructure.DomainCommon.EventSourcings;
-
-public class CosmosDocumentWriter : IDocumentPersistentWriter
+namespace CosmosInfrastructure.DomainCommon.EventSourcings
 {
-    private readonly CosmosDbFactory _cosmosDbFactory;
-    private readonly AggregateEventPublisher _eventPublisher;
-
-    public CosmosDocumentWriter(CosmosDbFactory cosmosDbFactory, AggregateEventPublisher eventPublisher)
+    public class CosmosDocumentWriter : IDocumentPersistentWriter
     {
-        _cosmosDbFactory = cosmosDbFactory;
-        _eventPublisher = eventPublisher;
-    }
+        private readonly CosmosDbFactory _cosmosDbFactory;
+        private readonly AggregateEventPublisher _eventPublisher;
 
-    public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType) where TDocument : IDocument
-    {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
-        if (document.DocumentType == DocumentType.AggregateEvent)
+        public CosmosDocumentWriter(CosmosDbFactory cosmosDbFactory, AggregateEventPublisher eventPublisher)
         {
-            await _cosmosDbFactory.CosmosActionAsync(
-                document.DocumentType,
-                aggregateContainerGroup,
-                async container =>
-                {
-                    await container.CreateItemAsync(document, new PartitionKey(document.PartitionKey));
-                });
-        } else
-        {
-            await _cosmosDbFactory.CosmosActionAsync(
-                document.DocumentType,
-                aggregateContainerGroup,
-                async container =>
-                {
-                    await container.CreateItemAsync(document, new PartitionKey(document.PartitionKey));
-                });
+            _cosmosDbFactory = cosmosDbFactory;
+            _eventPublisher = eventPublisher;
         }
-    }
 
-    public async Task SaveAndPublishAggregateEvent<TAggregateEvent>(TAggregateEvent aggregateEvent, Type aggregateType)
-        where TAggregateEvent : IAggregateEvent
-    {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
-        await _cosmosDbFactory.CosmosActionAsync(
-            DocumentType.AggregateEvent,
-            aggregateContainerGroup,
-            async container =>
+        public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType) where TDocument : IDocument
+        {
+            var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
+            if (document.DocumentType == DocumentType.AggregateEvent)
             {
-                await container.UpsertItemAsync<dynamic>(aggregateEvent, new PartitionKey(aggregateEvent.PartitionKey));
-            });
-        await _eventPublisher.PublishAsync(aggregateEvent);
+                await _cosmosDbFactory.CosmosActionAsync(
+                    document.DocumentType,
+                    aggregateContainerGroup,
+                    async container =>
+                    {
+                        await container.CreateItemAsync(document, new PartitionKey(document.PartitionKey));
+                    });
+            } else
+            {
+                await _cosmosDbFactory.CosmosActionAsync(
+                    document.DocumentType,
+                    aggregateContainerGroup,
+                    async container =>
+                    {
+                        await container.CreateItemAsync(document, new PartitionKey(document.PartitionKey));
+                    });
+            }
+        }
+
+        public async Task SaveAndPublishAggregateEvent<TAggregateEvent>(TAggregateEvent aggregateEvent, Type aggregateType)
+            where TAggregateEvent : IAggregateEvent
+        {
+            var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
+            await _cosmosDbFactory.CosmosActionAsync(
+                DocumentType.AggregateEvent,
+                aggregateContainerGroup,
+                async container =>
+                {
+                    await container.UpsertItemAsync<dynamic>(aggregateEvent, new PartitionKey(aggregateEvent.PartitionKey));
+                });
+            await _eventPublisher.PublishAsync(aggregateEvent);
+        }
     }
 }

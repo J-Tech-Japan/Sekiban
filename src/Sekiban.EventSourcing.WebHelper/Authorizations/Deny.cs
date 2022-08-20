@@ -1,22 +1,23 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Sekiban.EventSourcing.WebHelper.Authorizations.Definitions;
-namespace Sekiban.EventSourcing.WebHelper.Authorizations;
-
-public class Deny<TDefinitionType> : IAuthorizeDefinition where TDefinitionType : IAuthorizationDefinitionType, new()
+namespace Sekiban.EventSourcing.WebHelper.Authorizations
 {
-
-    public AuthorizeResultType Check(
-        AuthorizeMethodType authorizeMethodType,
-        Type aggregateType,
-        Type? commandType,
-        Func<IEnumerable<string>, bool> checkRoles,
-        HttpContext httpContext,
-        IServiceProvider serviceProvider)
+    public class Deny<TDefinitionType> : IAuthorizeDefinition where TDefinitionType : IAuthorizationDefinitionType, new()
     {
-        if (new TDefinitionType().IsMatches(authorizeMethodType, aggregateType, commandType))
+
+        public AuthorizeResultType Check(
+            AuthorizeMethodType authorizeMethodType,
+            Type aggregateType,
+            Type? commandType,
+            Func<IEnumerable<string>, bool> checkRoles,
+            HttpContext httpContext,
+            IServiceProvider serviceProvider)
         {
-            return AuthorizeResultType.Denied;
+            if (new TDefinitionType().IsMatches(authorizeMethodType, aggregateType, commandType))
+            {
+                return AuthorizeResultType.Denied;
+            }
+            return AuthorizeResultType.Passed;
         }
-        return AuthorizeResultType.Passed;
     }
 }

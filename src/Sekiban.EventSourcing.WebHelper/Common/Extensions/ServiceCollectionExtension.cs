@@ -1,18 +1,19 @@
 using Microsoft.Extensions.DependencyInjection;
-namespace Sekiban.EventSourcing.WebHelper.Common.Extensions;
-
-public static class ServiceCollectionExtension
+namespace Sekiban.EventSourcing.WebHelper.Common.Extensions
 {
-    public static void AddTransient(this IServiceCollection services, IEnumerable<(Type serviceType, Type? implementationType)> dependencies)
+    public static class ServiceCollectionExtension
     {
-        foreach (var (serviceType, implementationType) in dependencies)
+        public static void AddTransient(this IServiceCollection services, IEnumerable<(Type serviceType, Type? implementationType)> dependencies)
         {
-            if (implementationType is null)
+            foreach (var (serviceType, implementationType) in dependencies)
             {
-                services.AddTransient(serviceType);
-            } else
-            {
-                services.AddTransient(serviceType, implementationType);
+                if (implementationType is null)
+                {
+                    services.AddTransient(serviceType);
+                } else
+                {
+                    services.AddTransient(serviceType, implementationType);
+                }
             }
         }
     }

@@ -1,13 +1,14 @@
-namespace CustomerDomainContext.Aggregates.LoyaltyPoints;
-
-public record LoyaltyPointContents : IAggregateContents
+namespace CustomerDomainContext.Aggregates.LoyaltyPoints
 {
-    public DateTime? LastOccuredTime { get; init; }
-    public int CurrentPoint { get; init; }
-    public LoyaltyPointContents(int currentPoint, DateTime? lastOccuredTime)
+    public record LoyaltyPointContents : IAggregateContents
     {
-        CurrentPoint = currentPoint;
-        LastOccuredTime = lastOccuredTime;
+        public DateTime? LastOccuredTime { get; init; }
+        public int CurrentPoint { get; init; }
+        public LoyaltyPointContents(int currentPoint, DateTime? lastOccuredTime)
+        {
+            CurrentPoint = currentPoint;
+            LastOccuredTime = lastOccuredTime;
+        }
+        public LoyaltyPointContents() { }
     }
-    public LoyaltyPointContents() { }
 }

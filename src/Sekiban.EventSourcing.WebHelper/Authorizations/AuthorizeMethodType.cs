@@ -1,16 +1,17 @@
-﻿namespace Sekiban.EventSourcing.WebHelper.Authorizations;
-
-public enum AuthorizeMethodType
+﻿namespace Sekiban.EventSourcing.WebHelper.Authorizations
 {
-    CreateCommand,
-    ChangeCommand,
-    Get,
-    List,
-    AggregateInfo,
-    EventHistory,
-    CommandHistory,
-    SingleAggregateProjection,
-    MultipleAggregateProjection,
-    MultipleAggregateListProjection,
-    SendUpdateMarker
+    public enum AuthorizeMethodType
+    {
+        CreateCommand,
+        ChangeCommand,
+        Get,
+        List,
+        AggregateInfo,
+        EventHistory,
+        CommandHistory,
+        SingleAggregateProjection,
+        MultipleAggregateProjection,
+        MultipleAggregateListProjection,
+        SendUpdateMarker
+    }
 }

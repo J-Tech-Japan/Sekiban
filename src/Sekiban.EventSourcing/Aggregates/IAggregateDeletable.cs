@@ -1,6 +1,7 @@
-namespace Sekiban.EventSourcing.Aggregates;
-
-public interface IAggregateDeletable
+namespace Sekiban.EventSourcing.Aggregates
 {
-    void DeleteAggregate();
+    public interface IAggregateDeletable
+    {
+        void DeleteAggregate();
+    }
 }

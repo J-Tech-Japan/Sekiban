@@ -1,16 +1,17 @@
-namespace CustomerDomainContext.Aggregates.Branches.Commands;
-
-public record CreateBranch(string Name) : ICreateAggregateCommand<Branch>
+namespace CustomerDomainContext.Aggregates.Branches.Commands
 {
-    public CreateBranch() : this(string.Empty) { }
-}
-public class CreateBranchHandler : CreateAggregateCommandHandlerBase<Branch, CreateBranch>
-{
-    public override Guid GenerateAggregateId(CreateBranch command) =>
-        Guid.NewGuid();
-    protected override async Task ExecCreateCommandAsync(Branch aggregate, CreateBranch command)
+    public record CreateBranch(string Name) : ICreateAggregateCommand<Branch>
     {
-        await Task.CompletedTask;
-        aggregate.Created(command.Name);
+        public CreateBranch() : this(string.Empty) { }
+    }
+    public class CreateBranchHandler : CreateAggregateCommandHandlerBase<Branch, CreateBranch>
+    {
+        public override Guid GenerateAggregateId(CreateBranch command) =>
+            Guid.NewGuid();
+        protected override async Task ExecCreateCommandAsync(Branch aggregate, CreateBranch command)
+        {
+            await Task.CompletedTask;
+            aggregate.Created(command.Name);
+        }
     }
 }

@@ -1,6 +1,7 @@
-﻿namespace Sekiban.EventSourcing.WebHelper.Authorizations.Definitions;
-
-public interface IAuthorizationDefinitionType
+﻿namespace Sekiban.EventSourcing.WebHelper.Authorizations.Definitions
 {
-    public bool IsMatches(AuthorizeMethodType authorizeMethodType, Type aggregateType, Type? commandType);
+    public interface IAuthorizationDefinitionType
+    {
+        public bool IsMatches(AuthorizeMethodType authorizeMethodType, Type aggregateType, Type? commandType);
+    }
 }

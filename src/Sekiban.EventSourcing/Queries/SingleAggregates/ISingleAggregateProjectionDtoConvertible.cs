@@ -1,7 +1,8 @@
-namespace Sekiban.EventSourcing.Queries.SingleAggregates;
-
-public interface ISingleAggregateProjectionDtoConvertible<TDto> where TDto : ISingleAggregate
+namespace Sekiban.EventSourcing.Queries.SingleAggregates
 {
-    TDto ToDto();
-    void ApplySnapshot(TDto snapshot);
+    public interface ISingleAggregateProjectionDtoConvertible<TDto> where TDto : ISingleAggregate
+    {
+        TDto ToDto();
+        void ApplySnapshot(TDto snapshot);
+    }
 }

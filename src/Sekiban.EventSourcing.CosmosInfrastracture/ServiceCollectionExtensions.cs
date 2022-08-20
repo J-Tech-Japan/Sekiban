@@ -1,17 +1,18 @@
 using CosmosInfrastructure.DomainCommon.EventSourcings;
 using Microsoft.Extensions.DependencyInjection;
-namespace CosmosInfrastructure;
-
-public static class ServiceCollectionExtensions
+namespace CosmosInfrastructure
 {
-    public static IServiceCollection AddSekibanCosmosDB(this IServiceCollection services)
+    public static class ServiceCollectionExtensions
     {
-        // データストア
-        services.AddTransient<CosmosDbFactory>();
+        public static IServiceCollection AddSekibanCosmosDB(this IServiceCollection services)
+        {
+            // データストア
+            services.AddTransient<CosmosDbFactory>();
 
-        services.AddTransient<IDocumentPersistentWriter, CosmosDocumentWriter>();
-        services.AddTransient<IDocumentPersistentRepository, CosmosDocumentRepository>();
+            services.AddTransient<IDocumentPersistentWriter, CosmosDocumentWriter>();
+            services.AddTransient<IDocumentPersistentRepository, CosmosDocumentRepository>();
 
-        return services;
+            return services;
+        }
     }
 }

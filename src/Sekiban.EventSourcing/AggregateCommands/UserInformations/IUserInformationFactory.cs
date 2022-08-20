@@ -1,6 +1,7 @@
-namespace Sekiban.EventSourcing.AggregateCommands.UserInformations;
-
-public interface IUserInformationFactory
+namespace Sekiban.EventSourcing.AggregateCommands.UserInformations
 {
-    string GetCurrentUserInformation();
+    public interface IUserInformationFactory
+    {
+        string GetCurrentUserInformation();
+    }
 }

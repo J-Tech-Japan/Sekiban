@@ -1,22 +1,23 @@
 ﻿using System.Text.RegularExpressions;
-namespace ESSampleProjectLib.ValueObjects;
-
-public record EmailString : IValueObject<string>
+namespace ESSampleProjectLib.ValueObjects
 {
-
-    public EmailString(string email)
+    public record EmailString : IValueObject<string>
     {
-        if (!Regex.IsMatch(email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.IgnoreCase))
+
+        public EmailString(string email)
         {
-            throw new InvalidValueException("Eメールアドレスが正しくありません。");
+            if (!Regex.IsMatch(email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.IgnoreCase))
+            {
+                throw new InvalidValueException("Eメールアドレスが正しくありません。");
+            }
+
+            Value = email;
         }
+        public string Value { get; } = null!;
 
-        Value = email;
+        public static implicit operator string(EmailString vo) =>
+            vo.Value;
+        public static implicit operator EmailString(string v) =>
+            new(v);
     }
-    public string Value { get; } = null!;
-
-    public static implicit operator string(EmailString vo) =>
-        vo.Value;
-    public static implicit operator EmailString(string v) =>
-        new(v);
 }

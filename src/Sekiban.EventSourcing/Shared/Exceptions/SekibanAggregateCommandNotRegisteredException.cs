@@ -1,9 +1,10 @@
-namespace Sekiban.EventSourcing.Shared.Exceptions;
-
-public class SekibanAggregateCommandNotRegisteredException : Exception, ISekibanException
+namespace Sekiban.EventSourcing.Shared.Exceptions
 {
-    public string CommandName { get; set; }
+    public class SekibanAggregateCommandNotRegisteredException : Exception, ISekibanException
+    {
+        public string CommandName { get; set; }
 
-    public SekibanAggregateCommandNotRegisteredException(string commandName) =>
-        CommandName = commandName;
+        public SekibanAggregateCommandNotRegisteredException(string commandName) =>
+            CommandName = commandName;
+    }
 }

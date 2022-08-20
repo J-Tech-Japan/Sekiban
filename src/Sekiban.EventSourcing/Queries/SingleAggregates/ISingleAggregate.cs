@@ -1,7 +1,8 @@
-namespace Sekiban.EventSourcing.Queries.SingleAggregates;
-
-public interface ISingleAggregate : IProjection
+namespace Sekiban.EventSourcing.Queries.SingleAggregates
 {
-    bool IsDeleted { get; }
-    Guid AggregateId { get; }
+    public interface ISingleAggregate : IProjection
+    {
+        bool IsDeleted { get; }
+        Guid AggregateId { get; }
+    }
 }
