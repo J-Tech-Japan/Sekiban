@@ -1,12 +1,13 @@
-namespace CustomerDomainContext.Aggregates.LoyaltyPoints.Consts;
-
-public enum LoyaltyPointUsageTypeKeys
+namespace CustomerDomainContext.Aggregates.LoyaltyPoints.Consts
 {
-    FlightDomestic = 10,
-    FlightInternational = 11,
-    FlightUpgrade = 12,
-    TravelHotel = 21,
-    TravelCarRental = 22,
-    PointExchange = 30,
-    RestaurantCoupon = 40
+    public enum LoyaltyPointUsageTypeKeys
+    {
+        FlightDomestic = 10,
+        FlightInternational = 11,
+        FlightUpgrade = 12,
+        TravelHotel = 21,
+        TravelCarRental = 22,
+        PointExchange = 30,
+        RestaurantCoupon = 40
+    }
 }

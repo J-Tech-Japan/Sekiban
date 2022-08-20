@@ -1,3 +1,4 @@
-namespace Sekiban.EventSourcing.Queries.MultipleAggregates;
-
-public interface IMultipleAggregateProjectionDto : IProjection { }
+namespace Sekiban.EventSourcing.Queries.MultipleAggregates
+{
+    public interface IMultipleAggregateProjectionDto : IProjection { }
+}

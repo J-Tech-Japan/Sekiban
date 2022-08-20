@@ -1,40 +1,41 @@
 using System.Collections.Concurrent;
-namespace Sekiban.EventSourcing.Documents;
-
-public class HybridStoreManager
+namespace Sekiban.EventSourcing.Documents
 {
-    private ConcurrentDictionary<string, string> HybridPartitionKeys
+    public class HybridStoreManager
     {
-        get;
-    } = new();
-    public bool Enabled { get; set; }
-    public HybridStoreManager(bool elanbled) =>
-        Enabled = elanbled;
-    public bool HasPartition(string partitionKey) =>
-        Enabled && HybridPartitionKeys.Keys.Contains(partitionKey);
-    public void ClearHybridPartitions()
-    {
-        HybridPartitionKeys.Clear();
-    }
-    public bool AddPartitionKey(string partitionKey, string sortableUniqueId)
-    {
-        if (!Enabled)
+        private ConcurrentDictionary<string, string> HybridPartitionKeys
         {
-            return false;
+            get;
+        } = new();
+        public bool Enabled { get; set; }
+        public HybridStoreManager(bool elanbled) =>
+            Enabled = elanbled;
+        public bool HasPartition(string partitionKey) =>
+            Enabled && HybridPartitionKeys.Keys.Contains(partitionKey);
+        public void ClearHybridPartitions()
+        {
+            HybridPartitionKeys.Clear();
         }
-        HybridPartitionKeys[partitionKey] = sortableUniqueId;
-        return true;
-    }
-    public string? SortableUniqueIdForPartitionKey(string partitionKey)
-    {
-        if (!Enabled)
+        public bool AddPartitionKey(string partitionKey, string sortableUniqueId)
         {
+            if (!Enabled)
+            {
+                return false;
+            }
+            HybridPartitionKeys[partitionKey] = sortableUniqueId;
+            return true;
+        }
+        public string? SortableUniqueIdForPartitionKey(string partitionKey)
+        {
+            if (!Enabled)
+            {
+                return null;
+            }
+            if (HybridPartitionKeys.Keys.Contains(partitionKey))
+            {
+                return HybridPartitionKeys[partitionKey];
+            }
             return null;
         }
-        if (HybridPartitionKeys.Keys.Contains(partitionKey))
-        {
-            return HybridPartitionKeys[partitionKey];
-        }
-        return null;
     }
 }

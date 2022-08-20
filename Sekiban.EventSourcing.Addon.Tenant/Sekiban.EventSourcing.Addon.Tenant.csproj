@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net6.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <LangVersion>preview</LangVersion>
+        <PackageId>JJ_Sekiban.EventSourcing.Addon.Tenant</PackageId>
+        <Version>0.4.24</Version>
+        <Authors>J-Tech Group</Authors>
+        <Company>J-Tech-Japan</Company>
+        <PackageDescription>Sekiban - Event Sourcing Framework Tenant Addon</PackageDescription>
+        <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
+        <PackageVersion>0.4.24</PackageVersion>
+        <Description>Change Command can not produce Create Commands</Description>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Folder Include="Aggregates\SekibanTenantMembers\Commands"/>
+        <Folder Include="Aggregates\SekibanTenantMembers\Events"/>
+        <Folder Include="ValueObjects"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\src\Sekiban.EventSourcing\Sekiban.EventSourcing.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="System.Configuration.ConfigurationManager" Version="4.7.0"/>
+    </ItemGroup>
+
+</Project>

@@ -1,3 +1,4 @@
-﻿namespace Sekiban.EventSourcing.AggregateCommands;
-
-public interface INoValidateCommand { }
+﻿namespace Sekiban.EventSourcing.AggregateCommands
+{
+    public interface INoValidateCommand { }
+}

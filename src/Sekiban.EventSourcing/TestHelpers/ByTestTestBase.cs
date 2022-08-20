@@ -1,23 +1,24 @@
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
-namespace Sekiban.EventSourcing.TestHelpers;
-
-[Collection("Sequential")]
-public abstract class ByTestTestBase : IDisposable
+namespace Sekiban.EventSourcing.TestHelpers
 {
-    protected readonly IServiceProvider _serviceProvider;
-    public ByTestTestBase(bool inMemory) =>
-        // ReSharper disable once VirtualMemberCallInConstructor
-        _serviceProvider = SetupService(inMemory);
-    public void Dispose() { }
-    public abstract IServiceProvider SetupService(bool inMemory);
-    public T GetService<T>()
+    [Collection("Sequential")]
+    public abstract class ByTestTestBase : IDisposable
     {
-        var toreturn = _serviceProvider.GetService<T>();
-        if (toreturn is null)
+        protected readonly IServiceProvider _serviceProvider;
+        public ByTestTestBase(bool inMemory) =>
+            // ReSharper disable once VirtualMemberCallInConstructor
+            _serviceProvider = SetupService(inMemory);
+        public void Dispose() { }
+        public abstract IServiceProvider SetupService(bool inMemory);
+        public T GetService<T>()
         {
-            throw new Exception("オブジェクトが登録されていません。" + typeof(T));
+            var toreturn = _serviceProvider.GetService<T>();
+            if (toreturn is null)
+            {
+                throw new Exception("オブジェクトが登録されていません。" + typeof(T));
+            }
+            return toreturn;
         }
-        return toreturn;
     }
 }

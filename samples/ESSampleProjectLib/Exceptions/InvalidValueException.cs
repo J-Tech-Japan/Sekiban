@@ -1,6 +1,7 @@
-﻿namespace ESSampleProjectLib.Exceptions;
-
-public class InvalidValueException : ApplicationException, IValidationNotice
+﻿namespace ESSampleProjectLib.Exceptions
 {
-    public InvalidValueException(string message) : base(message) { }
+    public class InvalidValueException : ApplicationException, IValidationNotice
+    {
+        public InvalidValueException(string message) : base(message) { }
+    }
 }

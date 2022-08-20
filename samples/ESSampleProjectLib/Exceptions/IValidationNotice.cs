@@ -1,3 +1,4 @@
-﻿namespace ESSampleProjectLib.Exceptions;
-
-public interface IValidationNotice { }
+﻿namespace ESSampleProjectLib.Exceptions
+{
+    public interface IValidationNotice { }
+}

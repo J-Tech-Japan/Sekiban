@@ -12,68 +12,77 @@ using CustomerDomainContext.Aggregates.RecentActivities.Commands;
 using CustomerDomainContext.Aggregates.RecentInMemoryActivities;
 using CustomerDomainContext.Aggregates.RecentInMemoryActivities.Commands;
 using CustomerDomainContext.Projections;
+using Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanMembers;
+using Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanMembers.Commands;
+using Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanTenants;
+using Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanTenants.Commands;
 using System.Reflection;
-namespace CustomerDomainContext.Shared;
-
-public static class Dependency
+namespace CustomerDomainContext.Shared
 {
-    public static Assembly GetAssembly() =>
-        Assembly.GetExecutingAssembly();
-    public static IEnumerable<Type> GetAggregateTypes()
+    public static class Dependency
     {
-        yield return typeof(Branch);
-        yield return typeof(Client);
-        yield return typeof(LoyaltyPoint);
-        yield return typeof(RecentActivity);
-        yield return typeof(RecentInMemoryActivity);
-    }
-    public static IEnumerable<Type> GetSingleAggregateProjectionTypes()
-    {
-        yield return typeof(ClientNameHistoryProjection);
-    }
-    public static IEnumerable<Type> GetMultipleAggregatesProjectionTypes()
-    {
-        yield return typeof(ClientLoyaltyPointMultipleProjection);
-    }
-    public static IEnumerable<Type> GetMultipleAggregatesListProjectionTypes()
-    {
-        yield return typeof(ClientLoyaltyPointListProjection);
-    }
-    public static IEnumerable<(Type serviceType, Type? implementationType)> GetDependencies()
-    {
-        // Aggregate Event Subscribers
-        yield return (typeof(INotificationHandler<AggregateEvent<ClientCreated>>), typeof(ClientCreatedSubscriber));
+        public static Assembly GetAssembly() =>
+            Assembly.GetExecutingAssembly();
+        public static IEnumerable<Type> GetAggregateTypes()
+        {
+            yield return typeof(Branch);
+            yield return typeof(Client);
+            yield return typeof(LoyaltyPoint);
+            yield return typeof(RecentActivity);
+            yield return typeof(RecentInMemoryActivity);
+        }
+        public static IEnumerable<Type> GetSingleAggregateProjectionTypes()
+        {
+            yield return typeof(ClientNameHistoryProjection);
+        }
+        public static IEnumerable<Type> GetMultipleAggregatesProjectionTypes()
+        {
+            yield return typeof(ClientLoyaltyPointMultipleProjection);
+        }
+        public static IEnumerable<Type> GetMultipleAggregatesListProjectionTypes()
+        {
+            yield return typeof(ClientLoyaltyPointListProjection);
+        }
+        public static IEnumerable<(Type serviceType, Type? implementationType)> GetDependencies()
+        {
+            // Aggregate Event Subscribers
+            yield return (typeof(INotificationHandler<AggregateEvent<ClientCreated>>), typeof(ClientCreatedSubscriber));
 
-        yield return (typeof(INotificationHandler<AggregateEvent<ClientDeleted>>), typeof(ClientDeletedSubscriber));
+            yield return (typeof(INotificationHandler<AggregateEvent<ClientDeleted>>), typeof(ClientDeletedSubscriber));
 
-        // Aggregate: Branch
-        yield return (typeof(ICreateAggregateCommandHandler<Branch, CreateBranch>), typeof(CreateBranchHandler));
+            // Aggregate: Branch
+            yield return (typeof(ICreateAggregateCommandHandler<Branch, CreateBranch>), typeof(CreateBranchHandler));
 
-        // Aggregate: Client
-        yield return (typeof(ICreateAggregateCommandHandler<Client, CreateClient>), typeof(CreateClientHandler));
+            // Aggregate: Client
+            yield return (typeof(ICreateAggregateCommandHandler<Client, CreateClient>), typeof(CreateClientHandler));
 
-        yield return (typeof(IChangeAggregateCommandHandler<Client, ChangeClientName>), typeof(ChangeClientNameHandler));
+            yield return (typeof(IChangeAggregateCommandHandler<Client, ChangeClientName>), typeof(ChangeClientNameHandler));
 
-        yield return (typeof(IChangeAggregateCommandHandler<Client, DeleteClient>), typeof(DeleteClientHandler));
+            yield return (typeof(IChangeAggregateCommandHandler<Client, DeleteClient>), typeof(DeleteClientHandler));
 
-        // Aggregate: LoyaltyPoint
-        yield return (typeof(ICreateAggregateCommandHandler<LoyaltyPoint, CreateLoyaltyPoint>), typeof(CreateLoyaltyPointHandler));
+            // Aggregate: LoyaltyPoint
+            yield return (typeof(ICreateAggregateCommandHandler<LoyaltyPoint, CreateLoyaltyPoint>), typeof(CreateLoyaltyPointHandler));
 
-        yield return (typeof(IChangeAggregateCommandHandler<LoyaltyPoint, AddLoyaltyPoint>), typeof(AddLoyaltyPointHandler));
+            yield return (typeof(IChangeAggregateCommandHandler<LoyaltyPoint, AddLoyaltyPoint>), typeof(AddLoyaltyPointHandler));
 
-        yield return (typeof(IChangeAggregateCommandHandler<LoyaltyPoint, UseLoyaltyPoint>), typeof(UseLoyaltyPointHandler));
+            yield return (typeof(IChangeAggregateCommandHandler<LoyaltyPoint, UseLoyaltyPoint>), typeof(UseLoyaltyPointHandler));
 
-        yield return (typeof(IChangeAggregateCommandHandler<LoyaltyPoint, DeleteLoyaltyPoint>), typeof(DeleteLoyaltyPointHandler));
+            yield return (typeof(IChangeAggregateCommandHandler<LoyaltyPoint, DeleteLoyaltyPoint>), typeof(DeleteLoyaltyPointHandler));
 
-        // Aggregate: RecentActivity
-        yield return (typeof(ICreateAggregateCommandHandler<RecentActivity, CreateRecentActivity>), typeof(CreateRecentActivityHandler));
+            // Aggregate: RecentActivity
+            yield return (typeof(ICreateAggregateCommandHandler<RecentActivity, CreateRecentActivity>), typeof(CreateRecentActivityHandler));
 
-        yield return (typeof(IChangeAggregateCommandHandler<RecentActivity, AddRecentActivity>), typeof(AddRecentActivityHandler));
-        // Aggregate: RecentInMemoryActivity
-        yield return (typeof(ICreateAggregateCommandHandler<RecentInMemoryActivity, CreateRecentInMemoryActivity>),
-            typeof(CreateRecentInMemoryActivityHandler));
+            yield return (typeof(IChangeAggregateCommandHandler<RecentActivity, AddRecentActivity>), typeof(AddRecentActivityHandler));
+            // Aggregate: RecentInMemoryActivity
+            yield return (typeof(ICreateAggregateCommandHandler<RecentInMemoryActivity, CreateRecentInMemoryActivity>),
+                typeof(CreateRecentInMemoryActivityHandler));
 
-        yield return (typeof(IChangeAggregateCommandHandler<RecentInMemoryActivity, AddRecentInMemoryActivity>),
-            typeof(AddRecentInMemoryActivityHandler));
+            yield return (typeof(IChangeAggregateCommandHandler<RecentInMemoryActivity, AddRecentInMemoryActivity>),
+                typeof(AddRecentInMemoryActivityHandler));
+
+            // SekibanTenantAddition
+            yield return (typeof(ICreateAggregateCommandHandler<SekibanTenant, CreateSekibanTenant>), typeof(CreateSekibanTenantHandler));
+            yield return (typeof(ICreateAggregateCommandHandler<SekibanMember, CreateSekibanMember>), typeof(CreateSekibanMemberHandler));
+        }
     }
 }

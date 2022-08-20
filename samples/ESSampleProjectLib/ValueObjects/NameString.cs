@@ -1,21 +1,22 @@
-﻿namespace ESSampleProjectLib.ValueObjects;
-
-public record NameString : IValueObject<string>
+﻿namespace ESSampleProjectLib.ValueObjects
 {
-
-    public NameString(string name)
+    public record NameString : IValueObject<string>
     {
-        if (string.IsNullOrWhiteSpace(name))
+
+        public NameString(string name)
         {
-            throw new InvalidValueException("名前を空白にすることはできません。");
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                throw new InvalidValueException("名前を空白にすることはできません。");
+            }
+
+            Value = name;
         }
+        public string Value { get; }
 
-        Value = name;
+        public static implicit operator string(NameString vo) =>
+            vo.Value;
+        public static implicit operator NameString(string v) =>
+            new(v);
     }
-    public string Value { get; }
-
-    public static implicit operator string(NameString vo) =>
-        vo.Value;
-    public static implicit operator NameString(string v) =>
-        new(v);
 }

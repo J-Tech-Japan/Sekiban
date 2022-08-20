@@ -1,6 +1,7 @@
-namespace Sekiban.EventSourcing.Aggregates;
-
-public interface IAggregateContents
+namespace Sekiban.EventSourcing.Aggregates
 {
+    public interface IAggregateContents
+    {
     
+    }
 }

@@ -1,5 +1,6 @@
-namespace Sekiban.EventSourcing.Shared.Exceptions;
-
-public class SekibanCreateHasToMakeEventException : Exception, ISekibanException
+namespace Sekiban.EventSourcing.Shared.Exceptions
 {
+    public class SekibanCreateHasToMakeEventException : Exception, ISekibanException
+    {
+    }
 }

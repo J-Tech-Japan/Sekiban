@@ -1,24 +1,25 @@
 using System.Reflection;
-namespace Sekiban.EventSourcing.AggregateEvents;
-
-[AttributeUsage(AttributeTargets.Class)]
-public class SekibanEventTypeAttribute : Attribute { }
-public class RegisteredEventTypes
+namespace Sekiban.EventSourcing.AggregateEvents
 {
-    private readonly List<Type> _registeredTypes = new();
-    public ReadOnlyCollection<Type> RegisteredTypes { get; }
-
-    public RegisteredEventTypes(params Assembly[] assemblies)
+    [AttributeUsage(AttributeTargets.Class)]
+    public class SekibanEventTypeAttribute : Attribute { }
+    public class RegisteredEventTypes
     {
-        var attributeType = typeof(SekibanEventTypeAttribute);
-        foreach (var assembly in assemblies)
+        private readonly List<Type> _registeredTypes = new();
+        public ReadOnlyCollection<Type> RegisteredTypes { get; }
+
+        public RegisteredEventTypes(params Assembly[] assemblies)
         {
-            var decoratedTypes = assembly.DefinedTypes.Where(x => x.IsClass && x.ImplementedInterfaces.Contains(typeof(IEventPayload)));
-            foreach (var type in decoratedTypes)
+            var attributeType = typeof(SekibanEventTypeAttribute);
+            foreach (var assembly in assemblies)
             {
-                _registeredTypes.Add(type);
+                var decoratedTypes = assembly.DefinedTypes.Where(x => x.IsClass && x.ImplementedInterfaces.Contains(typeof(IEventPayload)));
+                foreach (var type in decoratedTypes)
+                {
+                    _registeredTypes.Add(type);
+                }
             }
+            RegisteredTypes = _registeredTypes.AsReadOnly();
         }
-        RegisteredTypes = _registeredTypes.AsReadOnly();
     }
 }

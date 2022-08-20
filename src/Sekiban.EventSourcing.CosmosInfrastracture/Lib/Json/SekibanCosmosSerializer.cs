@@ -1,34 +1,35 @@
 ﻿using Azure.Core.Serialization;
 using System.Text.Json;
 
-namespace CosmosInfrastructure.Lib.Json;
-
-public class SekibanCosmosSerializer : CosmosSerializer
+namespace CosmosInfrastructure.Lib.Json
 {
-    private readonly JsonObjectSerializer _jsonObjectSerializer;
-
-    public SekibanCosmosSerializer(JsonSerializerOptions? jsonSerializerOptions = null)
+    public class SekibanCosmosSerializer : CosmosSerializer
     {
-        _jsonObjectSerializer = new JsonObjectSerializer(jsonSerializerOptions
-            ?? Sekiban.EventSourcing.Shared.SekibanJsonHelper.GetDefaultJsonSerializerOptions());
-    }
+        private readonly JsonObjectSerializer _jsonObjectSerializer;
 
-    public override T FromStream<T>(Stream stream)
-    {
-        if (typeof(Stream).IsAssignableFrom(typeof(T)))
+        public SekibanCosmosSerializer(JsonSerializerOptions? jsonSerializerOptions = null)
         {
-            return (T)(object)stream;
+            _jsonObjectSerializer = new JsonObjectSerializer(jsonSerializerOptions
+                ?? Sekiban.EventSourcing.Shared.SekibanJsonHelper.GetDefaultJsonSerializerOptions());
         }
 
-        using (stream)
-            return (T)_jsonObjectSerializer.Deserialize(stream, typeof(T), default)!;
-    }
+        public override T FromStream<T>(Stream stream)
+        {
+            if (typeof(Stream).IsAssignableFrom(typeof(T)))
+            {
+                return (T)(object)stream;
+            }
 
-    public override Stream ToStream<T>(T input)
-    {
-        var streamPayload = new MemoryStream();
-        _jsonObjectSerializer.Serialize(streamPayload, input, typeof(T), default);
-        streamPayload.Position = 0;
-        return streamPayload;
+            using (stream)
+                return (T)_jsonObjectSerializer.Deserialize(stream, typeof(T), default)!;
+        }
+
+        public override Stream ToStream<T>(T input)
+        {
+            var streamPayload = new MemoryStream();
+            _jsonObjectSerializer.Serialize(streamPayload, input, typeof(T), default);
+            streamPayload.Position = 0;
+            return streamPayload;
+        }
     }
 }

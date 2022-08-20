@@ -1,8 +1,9 @@
-namespace Sekiban.EventSourcing.Queries;
-
-public enum QueryListType
+namespace Sekiban.EventSourcing.Queries
 {
-    ActiveOnly = 1,
-    DeletedOnly = 2,
-    ActiveAndDeleted = 3
+    public enum QueryListType
+    {
+        ActiveOnly = 1,
+        DeletedOnly = 2,
+        ActiveAndDeleted = 3
+    }
 }

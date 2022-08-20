@@ -1,3 +1,4 @@
-﻿namespace CustomerDomainContext.Aggregates.Clients.Events;
-
-public record ClientDeleted : IChangedEventPayload;
+﻿namespace CustomerDomainContext.Aggregates.Clients.Events
+{
+    public record ClientDeleted : IChangedEventPayload;
+}

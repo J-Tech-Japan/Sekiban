@@ -1,46 +1,47 @@
-namespace Sekiban.EventSourcing.Queries.SingleAggregates;
-
-public abstract class SingleAggregateProjectionBase<T> : ISingleAggregateProjection, ISingleAggregateProjectionDtoConvertible<T>, ISingleAggregate,
-    ISingleAggregateProjector<T> where T : ISingleAggregate, ISingleAggregateProjection
+namespace Sekiban.EventSourcing.Queries.SingleAggregates
 {
-    public Guid LastEventId { get; set; }
-    public string LastSortableUniqueId { get; set; } = string.Empty;
-    public int AppliedSnapshotVersion { get; set; }
-    public int Version { get; set; }
-    public bool IsDeleted { get; set; }
-    public Guid AggregateId { get; set; }
-    public void ApplyEvent(IAggregateEvent ev)
+    public abstract class SingleAggregateProjectionBase<T> : ISingleAggregateProjection, ISingleAggregateProjectionDtoConvertible<T>, ISingleAggregate,
+        ISingleAggregateProjector<T> where T : ISingleAggregate, ISingleAggregateProjection
     {
-        // IsAggregateInitialEvent は V0 の時のみ
-        // IsAggregateInitialEvent == false は V0以外
-        if (ev.IsAggregateInitialEvent != (Version == 0))
+        public Guid LastEventId { get; set; }
+        public string LastSortableUniqueId { get; set; } = string.Empty;
+        public int AppliedSnapshotVersion { get; set; }
+        public int Version { get; set; }
+        public bool IsDeleted { get; set; }
+        public Guid AggregateId { get; set; }
+        public void ApplyEvent(IAggregateEvent ev)
         {
-            throw new SekibanInvalidEventException();
+            // IsAggregateInitialEvent は V0 の時のみ
+            // IsAggregateInitialEvent == false は V0以外
+            if (ev.IsAggregateInitialEvent != (Version == 0))
+            {
+                throw new SekibanInvalidEventException();
+            }
+            if (ev.Id == LastEventId) { return; }
+            var action = GetApplyEventAction(ev);
+            if (action is null) { return; }
+            action();
+
+            LastEventId = ev.Id;
+            LastSortableUniqueId = ev.SortableUniqueId;
+            Version++;
         }
-        if (ev.Id == LastEventId) { return; }
-        var action = GetApplyEventAction(ev);
-        if (action is null) { return; }
-        action();
+        public bool CanApplyEvent(IAggregateEvent ev) =>
+            GetApplyEventAction(ev) is not null;
+        public abstract T ToDto();
+        public void ApplySnapshot(T snapshot)
+        {
+            Version = snapshot.Version;
+            LastEventId = snapshot.LastEventId;
+            LastSortableUniqueId = snapshot.LastSortableUniqueId;
+            AppliedSnapshotVersion = snapshot.Version;
+            IsDeleted = snapshot.IsDeleted;
+            CopyPropertiesFromSnapshot(snapshot);
+        }
 
-        LastEventId = ev.Id;
-        LastSortableUniqueId = ev.SortableUniqueId;
-        Version++;
+        public abstract Type OriginalAggregateType();
+        public abstract T CreateInitialAggregate(Guid aggregateId);
+        protected abstract void CopyPropertiesFromSnapshot(T snapshot);
+        protected abstract Action? GetApplyEventAction(IAggregateEvent ev);
     }
-    public bool CanApplyEvent(IAggregateEvent ev) =>
-        GetApplyEventAction(ev) is not null;
-    public abstract T ToDto();
-    public void ApplySnapshot(T snapshot)
-    {
-        Version = snapshot.Version;
-        LastEventId = snapshot.LastEventId;
-        LastSortableUniqueId = snapshot.LastSortableUniqueId;
-        AppliedSnapshotVersion = snapshot.Version;
-        IsDeleted = snapshot.IsDeleted;
-        CopyPropertiesFromSnapshot(snapshot);
-    }
-
-    public abstract Type OriginalAggregateType();
-    public abstract T CreateInitialAggregate(Guid aggregateId);
-    protected abstract void CopyPropertiesFromSnapshot(T snapshot);
-    protected abstract Action? GetApplyEventAction(IAggregateEvent ev);
 }

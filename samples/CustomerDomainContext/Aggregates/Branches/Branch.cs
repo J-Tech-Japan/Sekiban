@@ -1,20 +1,21 @@
 using CustomerDomainContext.Aggregates.Branches.Events;
-namespace CustomerDomainContext.Aggregates.Branches;
-
-public class Branch : TransferableAggregateBase<BranchContents>
+namespace CustomerDomainContext.Aggregates.Branches
 {
-    public void Created(NameString name)
+    public class Branch : TransferableAggregateBase<BranchContents>
     {
-        AddAndApplyEvent(new BranchCreated(name));
-    }
-
-    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload) =>
-        payload switch
+        public void Created(NameString name)
         {
-            BranchCreated branchCreated => () =>
+            AddAndApplyEvent(new BranchCreated(name));
+        }
+
+        protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload) =>
+            payload switch
             {
-                Contents = new BranchContents { Name = branchCreated.Name };
-            },
-            _ => null
-        };
+                BranchCreated branchCreated => () =>
+                {
+                    Contents = new BranchContents { Name = branchCreated.Name };
+                },
+                _ => null
+            };
+    }
 }

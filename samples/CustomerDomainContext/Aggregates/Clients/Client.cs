@@ -1,35 +1,36 @@
 using CustomerDomainContext.Aggregates.Clients.Events;
-namespace CustomerDomainContext.Aggregates.Clients;
-
-public class Client : TransferableAggregateBase<ClientContents>
+namespace CustomerDomainContext.Aggregates.Clients
 {
-    public void CreateClient(Guid branchId, NameString clientName, EmailString clientEmail)
+    public class Client : TransferableAggregateBase<ClientContents>
     {
-        AddAndApplyEvent(new ClientCreated(branchId, clientName, clientEmail));
-    }
-
-    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload) =>
-        payload switch
+        public void CreateClient(Guid branchId, NameString clientName, EmailString clientEmail)
         {
-            ClientCreated clientChanged => () =>
+            AddAndApplyEvent(new ClientCreated(branchId, clientName, clientEmail));
+        }
+
+        protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload) =>
+            payload switch
             {
-                Contents = new ClientContents(clientChanged.BranchId, clientChanged.ClientName, clientChanged.ClientEmail);
-            },
+                ClientCreated clientChanged => () =>
+                {
+                    Contents = new ClientContents(clientChanged.BranchId, clientChanged.ClientName, clientChanged.ClientEmail);
+                },
 
-            ClientNameChanged clientNameChanged => () => Contents = Contents with { ClientName = clientNameChanged.ClientName },
+                ClientNameChanged clientNameChanged => () => Contents = Contents with { ClientName = clientNameChanged.ClientName },
 
-            ClientDeleted => () => IsDeleted = true,
+                ClientDeleted => () => IsDeleted = true,
 
-            _ => null
-        };
+                _ => null
+            };
 
-    public void ChangeClientName(NameString clientName)
-    {
-        var ev = new ClientNameChanged(clientName);
-        // ValueObjectへの代入では行えない集約内の検証をここに記述する。
-        AddAndApplyEvent(ev);
+        public void ChangeClientName(NameString clientName)
+        {
+            var ev = new ClientNameChanged(clientName);
+            // ValueObjectへの代入では行えない集約内の検証をここに記述する。
+            AddAndApplyEvent(ev);
+        }
+
+        public void Delete() =>
+            AddAndApplyEvent(new ClientDeleted());
     }
-
-    public void Delete() =>
-        AddAndApplyEvent(new ClientDeleted());
 }

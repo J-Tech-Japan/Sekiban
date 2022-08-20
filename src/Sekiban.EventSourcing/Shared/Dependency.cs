@@ -1,18 +1,19 @@
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
 using System.Reflection;
-namespace Sekiban.EventSourcing.Shared;
-
-public static class Dependency
+namespace Sekiban.EventSourcing.Shared
 {
-    public static Assembly GetAssembly() =>
-        Assembly.GetExecutingAssembly();
-
-    public static IEnumerable<(Type serviceType, Type? implementationType)> GetDependencies()
+    public static class Dependency
     {
-        // Aggregate: RecentInMemoryActivity
-        yield return (typeof(ICreateAggregateCommandHandler<SnapshotManager, CreateSnapshotManager>), typeof(CreateSnapshotManagerHandler));
-        yield return (typeof(IChangeAggregateCommandHandler<SnapshotManager, ReportAggregateVersionToSnapshotManger>),
-            typeof(ReportAggregateVersionToSnapshotMangerHandler));
+        public static Assembly GetAssembly() =>
+            Assembly.GetExecutingAssembly();
+
+        public static IEnumerable<(Type serviceType, Type? implementationType)> GetDependencies()
+        {
+            // Aggregate: RecentInMemoryActivity
+            yield return (typeof(ICreateAggregateCommandHandler<SnapshotManager, CreateSnapshotManager>), typeof(CreateSnapshotManagerHandler));
+            yield return (typeof(IChangeAggregateCommandHandler<SnapshotManager, ReportAggregateVersionToSnapshotManger>),
+                typeof(ReportAggregateVersionToSnapshotMangerHandler));
+        }
     }
 }

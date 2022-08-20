@@ -2,40 +2,41 @@
 using CustomerDomainContext.Shared.Exceptions;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
-namespace CustomerDomainContext.Aggregates.Clients.Commands;
-
-public record CreateClient(Guid BranchId, string ClientName, string ClientEmail) : ICreateAggregateCommand<Client>
+namespace CustomerDomainContext.Aggregates.Clients.Commands
 {
-    public CreateClient() : this(Guid.Empty, string.Empty, string.Empty) { }
-}
-public class CreateClientHandler : CreateAggregateCommandHandlerBase<Client, CreateClient>
-{
-    private readonly IMultipleAggregateProjectionService _multipleAggregateProjectionService;
-    private readonly ISingleAggregateService _singleAggregateService;
-    public CreateClientHandler(ISingleAggregateService singleAggregateService, IMultipleAggregateProjectionService multipleAggregateProjectionService)
+    public record CreateClient(Guid BranchId, string ClientName, string ClientEmail) : ICreateAggregateCommand<Client>
     {
-        _singleAggregateService = singleAggregateService;
-        _multipleAggregateProjectionService = multipleAggregateProjectionService;
+        public CreateClient() : this(Guid.Empty, string.Empty, string.Empty) { }
     }
-
-    public override Guid GenerateAggregateId(CreateClient command) =>
-        Guid.NewGuid();
-    protected override async Task ExecCreateCommandAsync(Client aggregate, CreateClient command)
+    public class CreateClientHandler : CreateAggregateCommandHandlerBase<Client, CreateClient>
     {
-        // Check if branch exists
-        var branchDto = await _singleAggregateService.GetAggregateDtoAsync<Branch, BranchContents>(command.BranchId);
-        if (branchDto is null)
+        private readonly IMultipleAggregateProjectionService _multipleAggregateProjectionService;
+        private readonly ISingleAggregateService _singleAggregateService;
+        public CreateClientHandler(ISingleAggregateService singleAggregateService, IMultipleAggregateProjectionService multipleAggregateProjectionService)
         {
-            throw new SekibanAggregateNotExistsException(command.BranchId, nameof(Branch));
+            _singleAggregateService = singleAggregateService;
+            _multipleAggregateProjectionService = multipleAggregateProjectionService;
         }
 
-        // Check no email duplicates
-        var list = await _multipleAggregateProjectionService.GetAggregateList<Client, ClientContents>();
-        if (list.Any(a => a.Contents.ClientEmail == command.ClientEmail))
+        public override Guid GenerateAggregateId(CreateClient command) =>
+            Guid.NewGuid();
+        protected override async Task ExecCreateCommandAsync(Client aggregate, CreateClient command)
         {
-            throw new SekibanEmailAlreadyRegistered();
-        }
+            // Check if branch exists
+            var branchDto = await _singleAggregateService.GetAggregateDtoAsync<Branch, BranchContents>(command.BranchId);
+            if (branchDto is null)
+            {
+                throw new SekibanAggregateNotExistsException(command.BranchId, nameof(Branch));
+            }
 
-        aggregate.CreateClient(command.BranchId, command.ClientName, command.ClientEmail);
+            // Check no email duplicates
+            var list = await _multipleAggregateProjectionService.GetAggregateList<Client, ClientContents>();
+            if (list.Any(a => a.Contents.ClientEmail == command.ClientEmail))
+            {
+                throw new SekibanEmailAlreadyRegistered();
+            }
+
+            aggregate.CreateClient(command.BranchId, command.ClientName, command.ClientEmail);
+        }
     }
 }

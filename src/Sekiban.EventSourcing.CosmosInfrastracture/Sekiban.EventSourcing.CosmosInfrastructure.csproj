@@ -6,13 +6,13 @@
         <Nullable>enable</Nullable>
         <RootNamespace>CosmosInfrastructure</RootNamespace>
         <PackageId>JJ_Sekiban.EventSourcing.CosmosInfrastructure</PackageId>
-        <Version>0.4.23</Version>
+        <Version>0.4.24</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework CosmosInfrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.4.23</PackageVersion>
-        <Description>WebHelperの機能改善、UpdateMarkerを外部から行う方法に対応</Description>
+        <PackageVersion>0.4.24</PackageVersion>
+        <Description>Change Command can not produce Create Commands</Description>
     </PropertyGroup>
 
     <ItemGroup>
