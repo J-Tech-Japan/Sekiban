@@ -39,6 +39,7 @@
     <ItemGroup>
         <ProjectReference Include="..\..\samples\ESSampleProjectDependency\ESSampleProjectDependency.csproj" />
         <ProjectReference Include="..\..\Sekiban.EventSourcing.Addon.Tenant\Sekiban.EventSourcing.Addon.Tenant.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.EventSourcing.Addon.Tenant\Sekiban.EventSourcing.Addon.Tenant.csproj" />
     </ItemGroup>
 
     <ItemGroup>
