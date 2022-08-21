@@ -113,7 +113,8 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         {
             throw new SekibanCreateHasToMakeEventException();
         }
-        if (!_latestEvents.First().IsAggregateInitialEvent)
+        if (_latestEvents.Any(
+            ev => (ev == _latestEvents.First() && !ev.IsAggregateInitialEvent) || (ev != _latestEvents.First() && ev.IsAggregateInitialEvent)))
         {
             throw new SekibanCreateCommandShouldSaveCreateEventFirstException();
         }

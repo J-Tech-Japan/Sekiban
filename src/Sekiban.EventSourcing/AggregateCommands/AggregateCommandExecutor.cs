@@ -134,7 +134,9 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
             aggregateDto = result.Aggregate.ToDto();
             if (result.Aggregate.Events.Any())
             {
-                if (!result.Aggregate.Events.First().IsAggregateInitialEvent)
+                if (result.Aggregate.Events.Any(
+                    ev => (ev == result.Aggregate.Events.First() && !ev.IsAggregateInitialEvent) ||
+                        (ev != result.Aggregate.Events.First() && ev.IsAggregateInitialEvent)))
                 {
                     throw new SekibanCreateCommandShouldSaveCreateEventFirstException();
                 }
