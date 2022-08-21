@@ -113,6 +113,11 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         {
             throw new SekibanCreateHasToMakeEventException();
         }
+        if (_latestEvents.Any(
+            ev => (ev == _latestEvents.First() && !ev.IsAggregateInitialEvent) || (ev != _latestEvents.First() && ev.IsAggregateInitialEvent)))
+        {
+            throw new SekibanCreateCommandShouldSaveCreateEventFirstException();
+        }
         CheckCommandJSONSupports(commandDocument);
         _aggregate.ResetEventsAndSnapshots();
         CheckStateJSONSupports();
