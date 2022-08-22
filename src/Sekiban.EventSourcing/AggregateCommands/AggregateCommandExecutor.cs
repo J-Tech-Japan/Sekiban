@@ -1,6 +1,7 @@
 using Sekiban.EventSourcing.AggregateCommands.UserInformations;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Shared;
+using Sekiban.EventSourcing.Validations;
 namespace Sekiban.EventSourcing.AggregateCommands;
 
 public class AggregateCommandExecutor : IAggregateCommandExecutor
@@ -23,6 +24,19 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         _userInformationFactory = userInformationFactory;
     }
     public async Task<AggregateCommandExecutorResponse<TContents, C>> ExecChangeCommandAsync<T, TContents, C>(
+        C command,
+        List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>
+        where TContents : IAggregateContents, new()
+        where C : ChangeAggregateCommandBase<T>
+    {
+        var validationResult = command.TryValidateProperties()?.ToList();
+        if (validationResult?.Any() == true)
+        {
+            return new AggregateCommandExecutorResponse<TContents, C> { ValidationResults = validationResult };
+        }
+        return await ExecChangeCommandWithoutValidationAsync<T, TContents, C>(command, callHistories);
+    }
+    public async Task<AggregateCommandExecutorResponse<TContents, C>> ExecChangeCommandWithoutValidationAsync<T, TContents, C>(
         C command,
         List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>
         where TContents : IAggregateContents, new()
@@ -97,6 +111,19 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
     }
 
     public async Task<AggregateCommandExecutorResponse<TContents, C>> ExecCreateCommandAsync<T, TContents, C>(
+        C command,
+        List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>, new()
+        where TContents : IAggregateContents, new()
+        where C : ICreateAggregateCommand<T>
+    {
+        var validationResult = command.TryValidateProperties()?.ToList();
+        if (validationResult?.Any() == true)
+        {
+            return new AggregateCommandExecutorResponse<TContents, C> { ValidationResults = validationResult };
+        }
+        return await ExecCreateCommandAsync<T, TContents, C>(command, callHistories);
+    }
+    public async Task<AggregateCommandExecutorResponse<TContents, C>> ExecCreateCommandWithoutValidationAsync<T, TContents, C>(
         C command,
         List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>, new()
         where TContents : IAggregateContents, new()
