@@ -41,14 +41,14 @@ public class BaseCreateCommandController<TAggregate, TAggregateContents, TAggreg
             AuthorizeResultType.Denied) { return Unauthorized(); }
 
         var response = await _executor.ExecCreateCommandAsync<TAggregate, TAggregateContents, TAggregateCommand>(command);
-        if (response.ValidationResults.Any())
+        if (!response.ValidationResults.Any())
         {
-            foreach (var validationResult in response.ValidationResults)
-            {
-                ModelState.AddModelError(validationResult.MemberNames.First(), validationResult.ErrorMessage);
-            }
-            return BadRequest(ModelState);
+            return new ActionResult<AggregateCommandExecutorResponse<TAggregateContents, TAggregateCommand>>(response);
         }
-        return new ActionResult<AggregateCommandExecutorResponse<TAggregateContents, TAggregateCommand>>(response);
+        foreach (var validationResult in response.ValidationResults)
+        {
+            ModelState.AddModelError(validationResult.MemberNames.First(), validationResult.ErrorMessage);
+        }
+        return BadRequest(ModelState);
     }
 }

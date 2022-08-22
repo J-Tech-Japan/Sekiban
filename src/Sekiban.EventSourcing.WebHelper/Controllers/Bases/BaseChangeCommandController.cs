@@ -40,7 +40,14 @@ public class BaseChangeCommandController<TAggregate, TAggregateContents, TAggreg
                 _serviceProvider) ==
             AuthorizeResultType.Denied) { return Unauthorized(); }
         var response = await _executor.ExecChangeCommandAsync<TAggregate, TAggregateContents, TAggregateCommand>(command);
-        if (response.ValidationResults.Any()) { return BadRequest(response.ValidationResults); }
-        return new ActionResult<AggregateCommandExecutorResponse<TAggregateContents, TAggregateCommand>>(response);
+        if (!response.ValidationResults.Any())
+        {
+            return new ActionResult<AggregateCommandExecutorResponse<TAggregateContents, TAggregateCommand>>(response);
+        }
+        foreach (var validationResult in response.ValidationResults)
+        {
+            ModelState.AddModelError(validationResult.MemberNames.First(), validationResult.ErrorMessage);
+        }
+        return BadRequest(ModelState);
     }
 }
