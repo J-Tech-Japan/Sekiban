@@ -6,12 +6,12 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>JJ_Sekiban.EventSourcing.Addon.Tenant</PackageId>
-        <Version>0.4.29</Version>
+        <Version>0.5.0</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Tenant Addon</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.4.29</PackageVersion>
+        <PackageVersion>0.5.0</PackageVersion>
         <Description>コマンドの属性検証に対応する</Description>
     </PropertyGroup>
 
