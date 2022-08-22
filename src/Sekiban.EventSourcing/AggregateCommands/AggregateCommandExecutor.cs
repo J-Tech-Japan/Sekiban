@@ -121,7 +121,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         {
             return new AggregateCommandExecutorResponse<TContents, C> { ValidationResults = validationResult };
         }
-        return await ExecCreateCommandAsync<T, TContents, C>(command, callHistories);
+        return await ExecCreateCommandWithoutValidationAsync<T, TContents, C>(command, callHistories);
     }
     public async Task<AggregateCommandExecutorResponse<TContents, C>> ExecCreateCommandWithoutValidationAsync<T, TContents, C>(
         C command,
