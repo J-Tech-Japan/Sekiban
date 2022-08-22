@@ -15,7 +15,12 @@ builder.Services.AddSingleton<ISekibanControllerItems>(controllerItems);
 var controllerOptions = new SekibanControllerOptions();
 builder.Services.AddSingleton(controllerOptions);
 #if true
-builder.Services.AddControllers(options => options.Conventions.Add(new SekibanControllerRouteConvention(controllerOptions)))
+builder.Services.AddControllers(
+        options =>
+        {
+            options.Conventions.Add(new SekibanControllerRouteConvention(controllerOptions));
+            //options.ModelValidatorProviders.Clear();
+        })
     .ConfigureApplicationPartManager(m => m.FeatureProviders.Add(new SekibanControllerFeatureProvider(controllerItems, controllerOptions)));
 #else
 builder.Services.AddControllers();
