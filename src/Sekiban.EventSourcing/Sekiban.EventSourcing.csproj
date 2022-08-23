@@ -5,13 +5,13 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>JJ_Sekiban.EventSourcing</PackageId>
-        <Version>0.5.1</Version>
+        <Version>0.5.2</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Core</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.5.1</PackageVersion>
-        <Description>コマンドの属性検証に対応する</Description>
+        <PackageVersion>0.5.2</PackageVersion>
+        <Description>コマンドの検証エラー時にSekibanValidationParameterErrorをThrowする</Description>
 
     </PropertyGroup>
 
