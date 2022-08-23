@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Shared;
+using Sekiban.EventSourcing.Validations;
 using Xunit;
 namespace Sekiban.EventSourcing.TestHelpers;
 
@@ -12,6 +13,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
     private TAggregate _aggregate { get; set; }
     private Exception? _latestException { get; set; }
     private List<IAggregateEvent> _latestEvents { get; set; } = new();
+    private List<SekibanValidationParameterError> _latestValidationErrors { get; set; } = new();
     private DefaultSingleAggregateProjector<TAggregate> _projector
     {
         get;
@@ -89,6 +91,13 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
     public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregate>
     {
         ResetBeforeCommand();
+
+        var validationResults = createCommand.TryValidateProperties().ToList();
+        if (validationResults.Any())
+        {
+            _latestValidationErrors = SekibanValidationParameterError.CreateFromValidationResults(validationResults).ToList();
+            return this;
+        }
         var handler
             = _serviceProvider.GetService(typeof(ICreateAggregateCommandHandler<TAggregate, C>)) as ICreateAggregateCommandHandler<TAggregate, C>;
         if (handler is null)
@@ -127,6 +136,12 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
     public IAggregateTestHelper<TAggregate, TContents> WhenChange<C>(C changeCommand) where C : ChangeAggregateCommandBase<TAggregate>
     {
         ResetBeforeCommand();
+        var validationResults = changeCommand.TryValidateProperties().ToList();
+        if (validationResults.Any())
+        {
+            _latestValidationErrors = SekibanValidationParameterError.CreateFromValidationResults(validationResults).ToList();
+            return this;
+        }
         var handler
             = _serviceProvider.GetService(typeof(IChangeAggregateCommandHandler<TAggregate, C>)) as IChangeAggregateCommandHandler<TAggregate, C>;
         if (handler is null)
@@ -163,6 +178,12 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
             throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
         }
         var command = commandFunc(_aggregate);
+        var validationResults = command.TryValidateProperties().ToList();
+        if (validationResults.Any())
+        {
+            _latestValidationErrors = SekibanValidationParameterError.CreateFromValidationResults(validationResults).ToList();
+            return this;
+        }
         var commandDocument = new AggregateCommandDocument<C>(_aggregate.AggregateId, command, typeof(TAggregate));
         try
         {
@@ -314,6 +335,22 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
     {
         var exception = _latestException is AggregateException aggregateException ? aggregateException.InnerExceptions.First() : _latestException;
         Assert.Null(exception);
+
+        Assert.Empty(_latestValidationErrors);
+        return this;
+    }
+    public IAggregateTestHelper<TAggregate, TContents> ThenHasValidationErrors(IEnumerable<SekibanValidationParameterError> validationParameterErrors)
+    {
+        var actual = _latestValidationErrors;
+        var expected = validationParameterErrors;
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(actualJson, expectedJson);
+        return this;
+    }
+    public IAggregateTestHelper<TAggregate, TContents> ThenHasValidationErrors()
+    {
+        Assert.NotEmpty(_latestValidationErrors);
         return this;
     }
     public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDto(ISingleAggregate dto) =>
@@ -377,6 +414,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
 
     private void ResetBeforeCommand()
     {
+        _latestValidationErrors = new List<SekibanValidationParameterError>();
         _latestEvents = new List<IAggregateEvent>();
         _latestException = null;
     }

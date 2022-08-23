@@ -1,3 +1,4 @@
+using Sekiban.EventSourcing.Validations;
 using System.ComponentModel.DataAnnotations;
 namespace Sekiban.EventSourcing.WebHelper.Exceptions;
 
