@@ -19,7 +19,7 @@ builder.Services.AddControllers(
         options =>
         {
             options.Conventions.Add(new SekibanControllerRouteConvention(controllerOptions));
-            //options.ModelValidatorProviders.Clear();
+            options.ModelValidatorProviders.Clear();
         })
     .ConfigureApplicationPartManager(m => m.FeatureProviders.Add(new SekibanControllerFeatureProvider(controllerItems, controllerOptions)));
 #else

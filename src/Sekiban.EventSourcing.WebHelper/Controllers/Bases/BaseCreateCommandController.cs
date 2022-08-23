@@ -47,7 +47,7 @@ public class BaseCreateCommandController<TAggregate, TAggregateContents, TAggreg
         }
         foreach (var validationResult in response.ValidationResults)
         {
-            ModelState.AddModelError(validationResult.MemberNames.First(), validationResult.ErrorMessage);
+            ModelState.AddModelError(validationResult.MemberNames.FirstOrDefault() ?? "", validationResult.ErrorMessage);
         }
         return BadRequest(ModelState);
     }
