@@ -75,6 +75,7 @@ public static class ValidationExtensions
                 Type t when t.IsEnum => false,
                 Type t when t.IsGenericType && t.GetGenericTypeDefinition() == typeof(Nullable<>) => false,
                 Type t when t == typeof(string) => false,
+                Type t when t == typeof(DateTime) => false,
                 _ => true
             };
 
@@ -82,6 +83,11 @@ public static class ValidationExtensions
         foreach (var pi in targetClass.GetType().GetProperties())
         {
             if (!isReferenceType(pi.PropertyType))
+            {
+                continue;
+            }
+
+            if (pi.PropertyType == typeof(Type))
             {
                 continue;
             }
