@@ -3,6 +3,7 @@ using Sekiban.EventSourcing.AggregateCommands;
 using Sekiban.EventSourcing.Aggregates;
 using Sekiban.EventSourcing.WebHelper.Authorizations;
 using Sekiban.EventSourcing.WebHelper.Common;
+using Sekiban.EventSourcing.WebHelper.Exceptions;
 namespace Sekiban.EventSourcing.WebHelper.Controllers.Bases;
 
 [ApiController]
@@ -45,10 +46,6 @@ public class BaseCreateCommandController<TAggregate, TAggregateContents, TAggreg
         {
             return new ActionResult<AggregateCommandExecutorResponse<TAggregateContents, TAggregateCommand>>(response);
         }
-        foreach (var validationResult in response.ValidationResults)
-        {
-            ModelState.AddModelError(validationResult.MemberNames.FirstOrDefault() ?? "", validationResult.ErrorMessage);
-        }
-        return BadRequest(ModelState);
+        throw new SekibanValidationErrorsException(response.ValidationResults);
     }
 }
