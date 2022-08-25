@@ -15,7 +15,6 @@
         <ProjectReference Include="..\..\src\Sekiban.EventSourcing.CosmosInfrastracture\Sekiban.EventSourcing.CosmosInfrastructure.csproj" />
         <ProjectReference Include="..\..\src\Sekiban.EventSourcing.WebHelper\Sekiban.EventSourcing.WebHelper.csproj" />
         <ProjectReference Include="..\CustomerWithTenantAddonDomainContext\CustomerWithTenantAddonDomainContext.csproj" />
-        <ProjectReference Include="..\ESSampleProjectDependency\ESSampleProjectDependency.csproj" />
     </ItemGroup>
 
     <ItemGroup>
