@@ -1,0 +1,3 @@
+namespace CustomerWithTenantAddonDomainContext.Aggregates.RecentInMemoryActivities.Events;
+
+public record RecentInMemoryActivityCreated(RecentInMemoryActivityRecord Activity) : ICreatedEventPayload;

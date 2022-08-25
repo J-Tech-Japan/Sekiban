@@ -7,14 +7,13 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="6.0.0"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="6.0.0" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Sekiban.EventSourcing.CosmosInfrastracture\Sekiban.EventSourcing.CosmosInfrastructure.csproj"/>
-        <ProjectReference Include="..\CustomerDomainContext\CustomerDomainContext.csproj"/>
-        <ProjectReference Include="..\..\src\Sekiban.EventSourcing\Sekiban.EventSourcing.csproj"/>
-        <ProjectReference Include="..\DomainIntegration\DomainIntegration.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.EventSourcing.CosmosInfrastracture\Sekiban.EventSourcing.CosmosInfrastructure.csproj" />
+        <ProjectReference Include="..\CustomerDomainContext\CustomerDomainContext.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.EventSourcing\Sekiban.EventSourcing.csproj" />
     </ItemGroup>
 
     <ItemGroup>
