@@ -1,4 +1,6 @@
+using CosmosInfrastructure;
 using CustomerDomainContext.Shared;
+using Sekiban.EventSourcing.Shared;
 using Sekiban.EventSourcing.WebHelper.Common;
 var builder = WebApplication.CreateBuilder(args);
 
@@ -6,11 +8,11 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 var controllerItems = new SekibanControllerItems(
-    Dependency.GetAggregateTypes().ToList(),
-    Dependency.GetDependencies().ToList(),
-    Dependency.GetSingleAggregateProjectionTypes().ToList(),
-    Dependency.GetMultipleAggregatesProjectionTypes().ToList(),
-    Dependency.GetMultipleAggregatesListProjectionTypes().ToList());
+    CustomerDependency.GetControllerAggregateTypes().ToList(),
+    CustomerDependency.GetTransientDependencies().ToList(),
+    CustomerDependency.GetSingleAggregateProjectionTypes().ToList(),
+    CustomerDependency.GetMultipleAggregatesProjectionTypes().ToList(),
+    CustomerDependency.GetMultipleAggregatesListProjectionTypes().ToList());
 builder.Services.AddSingleton<ISekibanControllerItems>(controllerItems);
 var controllerOptions = new SekibanControllerOptions();
 builder.Services.AddSingleton(controllerOptions);
@@ -31,7 +33,8 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // プロジェクトの依存
-ESSampleProjectDependency.Dependency.Register(builder.Services);
+SekibanEventSourcingDependency.Register(builder.Services, CustomerDependency.GetOptions());
+builder.Services.AddSekibanCosmosDB();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

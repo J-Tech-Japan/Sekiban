@@ -19,6 +19,7 @@
         <Folder Include="Aggregates\SekibanTenantMembers\Commands" />
         <Folder Include="Aggregates\SekibanTenantMembers\Events" />
         <Folder Include="ValueObjects" />
+        <Folder Include="ValueObjects\Strings" />
     </ItemGroup>
 
     <ItemGroup>

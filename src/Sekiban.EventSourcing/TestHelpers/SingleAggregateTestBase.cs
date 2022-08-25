@@ -1,5 +1,7 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
+using Sekiban.EventSourcing.Shared;
 using Sekiban.EventSourcing.Validations;
 namespace Sekiban.EventSourcing.TestHelpers;
 
@@ -8,10 +10,13 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposab
 {
     private readonly IAggregateTestHelper<TAggregate, TContents> _helper;
     protected readonly IServiceProvider _serviceProvider;
-    public SingleAggregateTestBase()
+    public SingleAggregateTestBase(SekibanDependencyOptions dependencyOptions)
     {
-        // ReSharper disable once VirtualMemberCallInConstructor
-        _serviceProvider = SetupService();
+        var testFixture = new TestFixture();
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(testFixture.Configuration);
+        SekibanEventSourcingDependency.RegisterForAggregateTest(services, dependencyOptions);
+        _serviceProvider = services.BuildServiceProvider();
         _helper = new AggregateTestHelper<TAggregate, TContents>(_serviceProvider);
     }
     public IAggregateTestHelper<TAggregate, TContents> GivenScenario(Action initialAction) =>
@@ -94,7 +99,6 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposab
     public IAggregateTestHelper<TAggregate, TContents> ThenHasValidationErrors() =>
         _helper.ThenHasValidationErrors();
     public void Dispose() { }
-    public abstract IServiceProvider SetupService();
     public T GetService<T>()
     {
         var toreturn = _serviceProvider.GetService<T>();
