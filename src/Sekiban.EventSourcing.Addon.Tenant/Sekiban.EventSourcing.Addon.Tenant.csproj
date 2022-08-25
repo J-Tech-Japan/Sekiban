@@ -16,17 +16,17 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Folder Include="Aggregates\SekibanTenantMembers\Commands"/>
-        <Folder Include="Aggregates\SekibanTenantMembers\Events"/>
-        <Folder Include="ValueObjects"/>
+        <Folder Include="Aggregates\SekibanTenantMembers\Commands" />
+        <Folder Include="Aggregates\SekibanTenantMembers\Events" />
+        <Folder Include="ValueObjects" />
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="System.Configuration.ConfigurationManager" Version="4.7.0"/>
+        <PackageReference Include="System.Configuration.ConfigurationManager" Version="4.7.0" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Sekiban.EventSourcing\Sekiban.EventSourcing.csproj"/>
+        <ProjectReference Include="..\Sekiban.EventSourcing\Sekiban.EventSourcing.csproj" />
     </ItemGroup>
 
 </Project>
