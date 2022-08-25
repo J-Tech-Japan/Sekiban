@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Shared;
@@ -12,9 +11,7 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposab
     protected readonly IServiceProvider _serviceProvider;
     public SingleAggregateTestBase(SekibanDependencyOptions dependencyOptions)
     {
-        var testFixture = new TestFixture();
         var services = new ServiceCollection();
-        services.AddSingleton<IConfiguration>(testFixture.Configuration);
         SekibanEventSourcingDependency.RegisterForAggregateTest(services, dependencyOptions);
         _serviceProvider = services.BuildServiceProvider();
         _helper = new AggregateTestHelper<TAggregate, TContents>(_serviceProvider);

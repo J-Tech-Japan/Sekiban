@@ -48,4 +48,8 @@
         </None>
     </ItemGroup>
 
+    <ItemGroup>
+      <Folder Include="SingleAggregates" />
+    </ItemGroup>
+
 </Project>
