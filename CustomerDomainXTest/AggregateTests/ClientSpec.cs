@@ -4,6 +4,7 @@ using CustomerDomainContext.Aggregates.Clients.Commands;
 using CustomerDomainContext.Aggregates.Clients.Events;
 using CustomerDomainContext.Shared;
 using CustomerDomainContext.Shared.Exceptions;
+using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.AggregateEvents;
 using Sekiban.EventSourcing.Aggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
@@ -22,7 +23,10 @@ public class ClientSpec : SingleAggregateTestBase<Client, ClientContents>
     private const string testClientChangedNameV3 = "TestName3";
     private static readonly Guid clientId = Guid.NewGuid();
     public ClientSpec() : base(CustomerDependency.GetOptions()) { }
-
+    protected override void SetupDependency(IServiceCollection serviceCollection)
+    {
+        base.SetupDependency(serviceCollection);
+    }
     [Fact(DisplayName = "集約コマンドを実行してテストする")]
     public void ClientCreateSpec()
     {

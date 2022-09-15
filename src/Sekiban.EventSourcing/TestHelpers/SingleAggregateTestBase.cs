@@ -9,9 +9,10 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposab
 {
     private readonly IAggregateTestHelper<TAggregate, TContents> _helper;
     protected readonly IServiceProvider _serviceProvider;
-    public SingleAggregateTestBase(SekibanDependencyOptions dependencyOptions)
+    protected SingleAggregateTestBase(SekibanDependencyOptions dependencyOptions)
     {
         var services = new ServiceCollection();
+        // ReSharper disable once VirtualMemberCallInConstructor
         SetupDependency(services);
         SekibanEventSourcingDependency.RegisterForAggregateTest(services, dependencyOptions);
         _serviceProvider = services.BuildServiceProvider();
@@ -166,7 +167,7 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposab
     }
     public void Dispose() { }
 
-    protected void SetupDependency(IServiceCollection serviceCollection)
+    protected virtual void SetupDependency(IServiceCollection serviceCollection)
     {
 
     }
