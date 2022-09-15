@@ -6,13 +6,13 @@
         <Nullable>enable</Nullable>
         <RootNamespace>CosmosInfrastructure</RootNamespace>
         <PackageId>JJ_Sekiban.EventSourcing.CosmosInfrastructure</PackageId>
-        <Version>0.5.4</Version>
+        <Version>0.5.5</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework CosmosInfrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.5.4</PackageVersion>
-        <Description>Dependency機能の調整</Description>
+        <PackageVersion>0.5.5</PackageVersion>
+        <Description>TestでDIの設定可能にする</Description>
     </PropertyGroup>
 
     <ItemGroup>
