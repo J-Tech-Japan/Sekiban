@@ -1,17 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net6.0</TargetFramework>
+        <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <LangVersion>preview</LangVersion>
         <PackageId>JJ_Sekiban.EventSourcing</PackageId>
-        <Version>0.5.5</Version>
+        <Version>0.6.0</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Core</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.5.5</PackageVersion>
-        <Description>TestでDIの設定可能にする</Description>
+        <PackageVersion>0.6.0</PackageVersion>
+        <Description>dotnet 6, 7のダブルバイナリ、両方のプロジェクトで動くかの検証中</Description>
 
     </PropertyGroup>
 

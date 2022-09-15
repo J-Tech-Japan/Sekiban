@@ -1,10 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net6.0</TargetFramework>
         <Nullable>enable</Nullable>
 
         <IsPackable>false</IsPackable>
+
+        <LangVersion>preview</LangVersion>
+        <OpenApiGenerateDocuments>false</OpenApiGenerateDocuments>
+        <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
     </PropertyGroup>
 
     <ItemGroup>
@@ -37,9 +40,11 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\samples\ESSampleProjectDependency\ESSampleProjectDependency.csproj" />
+        <ProjectReference Include="..\..\samples\CustomerDomainContext\CustomerDomainContext.csproj" />
+        <ProjectReference Include="..\..\samples\ESSampleProjectLib\ESSampleProjectLib.csproj" />
         <ProjectReference Include="..\..\src\Sekiban.EventSourcing.Addon.Tenant\Sekiban.EventSourcing.Addon.Tenant.csproj" />
         <ProjectReference Include="..\..\src\Sekiban.EventSourcing.Addon.Tenant\Sekiban.EventSourcing.Addon.Tenant.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.EventSourcing.CosmosInfrastracture\Sekiban.EventSourcing.CosmosInfrastructure.csproj" />
     </ItemGroup>
 
     <ItemGroup>
@@ -49,7 +54,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="SingleAggregates" />
+        <Folder Include="SingleAggregates" />
     </ItemGroup>
 
 </Project>

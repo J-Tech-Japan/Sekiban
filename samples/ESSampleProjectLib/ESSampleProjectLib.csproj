@@ -1,13 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net6.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Sekiban.EventSourcing\Sekiban.EventSourcing.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.EventSourcing\Sekiban.EventSourcing.csproj" />
     </ItemGroup>
 
 </Project>
