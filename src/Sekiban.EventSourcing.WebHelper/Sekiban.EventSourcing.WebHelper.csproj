@@ -15,6 +15,7 @@
         <Description>TestでDIの設定可能にする</Description>
         <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
         <LangVersion>11</LangVersion>
+        <OpenApiGenerateDocuments>false</OpenApiGenerateDocuments>
     </PropertyGroup>
 
     <ItemGroup>
