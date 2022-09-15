@@ -25,6 +25,10 @@ jobs:
       uses: actions/setup-dotnet@v1
       with:
         dotnet-version: 6.0.x
+    - name: Setup .NET 7
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 7.0.x
     - name: Package settings
       run: |
         dotnet nuget add source --username USERNAME --password ${{secrets.TOMOHISA_PAT}} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/J-Tech-Japan/index.json"
