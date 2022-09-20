@@ -26,4 +26,13 @@
       <ProjectReference Include="..\src\Sekiban.EventSourcing\Sekiban.EventSourcing.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <None Update="TestData1.json">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="TestData1Result.json">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+    </ItemGroup>
+
 </Project>

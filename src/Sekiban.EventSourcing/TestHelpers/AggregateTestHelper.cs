@@ -45,8 +45,10 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
     public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtoContents<DAggregate, DAggregateContents>(
         Guid aggregateId,
         DAggregateContents contents) where DAggregate : TransferableAggregateBase<DAggregateContents>, new()
-        where DAggregateContents : IAggregateContents, new() =>
-        GivenEnvironmentDto(new AggregateDto<DAggregateContents>(new DAggregate { AggregateId = aggregateId }, contents) { Version = 1 });
+        where DAggregateContents : IAggregateContents, new()
+    {
+        return GivenEnvironmentDto(new AggregateDto<DAggregateContents>(new DAggregate { AggregateId = aggregateId }, contents) { Version = 1 });
+    }
     public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot)
     {
         _aggregate.ApplySnapshot(snapshot);
@@ -83,10 +85,14 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         }
         return this;
     }
-    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IAggregateEvent ev) =>
-        Given(snapshot).Given(ev);
-    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IEnumerable<IAggregateEvent> ev) =>
-        Given(snapshot).Given(ev);
+    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IAggregateEvent ev)
+    {
+        return Given(snapshot).Given(ev);
+    }
+    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IEnumerable<IAggregateEvent> ev)
+    {
+        return Given(snapshot).Given(ev);
+    }
 
     public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregate>
     {
@@ -239,7 +245,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
 
         var actualJson = SekibanJsonHelper.Serialize(_latestEvents.First().GetPayload());
         var expectedJson = SekibanJsonHelper.Serialize(payload);
-        Assert.Equal(actualJson, expectedJson);
+        Assert.Equal(expectedJson, actualJson);
         return this;
     }
     public IAggregateTestHelper<TAggregate, TContents> ThenSingleEventPayload<T>(Func<TAggregate, T> constructExpectedEvent) where T : IEventPayload
@@ -282,7 +288,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         expected = constructExpectedEvent(_aggregate).GetComparableObject(actual, expected.Version == 0);
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
-        Assert.Equal(actualJson, expectedJson);
+        Assert.Equal(expectedJson, actualJson);
         return this;
     }
     public IAggregateTestHelper<TAggregate, TContents> ThenState(Func<TAggregate, AggregateDto<TContents>> constructExpectedDto)
@@ -291,7 +297,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         var expected = constructExpectedDto(_aggregate).GetComparableObject(actual);
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
-        Assert.Equal(actualJson, expectedJson);
+        Assert.Equal(expectedJson, actualJson);
         return this;
     }
     public IAggregateTestHelper<TAggregate, TContents> ThenContents(TContents contents)
@@ -300,7 +306,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         var expected = contents;
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
-        Assert.Equal(actualJson, expectedJson);
+        Assert.Equal(expectedJson, actualJson);
         return this;
     }
     public IAggregateTestHelper<TAggregate, TContents> ThenContents(Func<TAggregate, TContents> constructExpectedDto)
@@ -309,7 +315,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         var expected = constructExpectedDto(_aggregate);
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
-        Assert.Equal(actualJson, expectedJson);
+        Assert.Equal(expectedJson, actualJson);
         return this;
     }
 
@@ -345,7 +351,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         var expected = validationParameterErrors;
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
-        Assert.Equal(actualJson, expectedJson);
+        Assert.Equal(expectedJson, actualJson);
         return this;
     }
     public IAggregateTestHelper<TAggregate, TContents> ThenHasValidationErrors()
@@ -353,8 +359,10 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         Assert.NotEmpty(_latestValidationErrors);
         return this;
     }
-    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDto(ISingleAggregate dto) =>
-        GivenEnvironmentDtos(new List<ISingleAggregate> { dto });
+    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDto(ISingleAggregate dto)
+    {
+        return GivenEnvironmentDtos(new List<ISingleAggregate> { dto });
+    }
     public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(Guid aggregateId, TEventPayload payload)
         where TEventPayload : ICreatedEventPayload
     {
@@ -371,7 +379,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         var dtoFromSnapshot = fromDto.ToDto().GetComparableObject(dto);
         var actualJson = SekibanJsonHelper.Serialize(dto);
         var expectedJson = SekibanJsonHelper.Serialize(dtoFromSnapshot);
-        Assert.Equal(actualJson, expectedJson);
+        Assert.Equal(expectedJson, actualJson);
         var json = SekibanJsonHelper.Serialize(dto);
         var dtoFromJson = SekibanJsonHelper.Deserialize<AggregateDto<TContents>>(json);
         var dtoFromJsonJson = SekibanJsonHelper.Serialize(dtoFromJson);

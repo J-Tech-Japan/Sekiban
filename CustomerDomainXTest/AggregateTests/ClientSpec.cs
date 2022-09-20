@@ -12,7 +12,7 @@ using Sekiban.EventSourcing.TestHelpers;
 using System;
 using System.Collections.Generic;
 using Xunit;
-namespace SampleProjectStoryXTest.SingleAggregates;
+namespace CustomerDomainXTest.AggregateTests;
 
 public class ClientSpec : SingleAggregateTestBase<Client, ClientContents>
 {

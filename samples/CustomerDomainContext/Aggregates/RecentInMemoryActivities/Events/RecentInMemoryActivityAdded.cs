@@ -1,4 +1,3 @@
-namespace CustomerDomainContext.Aggregates.RecentInMemoryActivities.Events
-{
-    public record RecentInMemoryActivityAdded(RecentInMemoryActivityRecord Record) : IChangedEventPayload;
-}
+namespace CustomerDomainContext.Aggregates.RecentInMemoryActivities.Events;
+
+public record RecentInMemoryActivityAdded(RecentInMemoryActivityRecord Record) : IChangedAggregateEventPayload<RecentInMemoryActivity>;
