@@ -1,4 +1,3 @@
-﻿namespace CustomerDomainContext.Aggregates.LoyaltyPoints.Events
-{
-    public record LoyaltyPointDeleted : IChangedEventPayload;
-}
+﻿namespace CustomerDomainContext.Aggregates.LoyaltyPoints.Events;
+
+public record LoyaltyPointDeleted : IChangedAggregateEventPayload<LoyaltyPoint>;

@@ -28,10 +28,25 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection> : IDisposabl
         Events.AddRange(events);
         return this;
     }
-    public IMultipleAggregateProjector<TProjection> GivenEvents(params IAggregateEvent[] events)
+    public IMultipleAggregateProjectionTestHelper<TProjection> GivenEvents(params IAggregateEvent[] events)
     {
         // ReSharper disable once TailRecursiveCall
         return GivenEvents(events);
+    }
+    public IMultipleAggregateProjectionTestHelper<TProjection> GivenEvents(string jsonEvents)
+    {
+        var list = JsonSerializer.Deserialize<List<JsonElement>>(jsonEvents);
+        if (list is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        AddEventsFromList(list);
+        return this;
+    }
+    public async Task<IMultipleAggregateProjectionTestHelper<TProjection>> GivenEventsFromFileAsync(string filename)
+    {
+        await using var openStream = File.OpenRead(filename);
+        var list = await JsonSerializer.DeserializeAsync<List<JsonElement>>(openStream);
+        if (list is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        AddEventsFromList(list);
+        return this;
     }
     public IMultipleAggregateProjectionTestHelper<TProjection> WhenProjection()
     {
@@ -68,6 +83,47 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection> : IDisposabl
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
+
+    public async Task<IMultipleAggregateProjectionTestHelper<TProjection>> ThenDtoFileAsync(string filename)
+    {
+        await using var openStream = File.OpenRead(filename);
+        var projection = await JsonSerializer.DeserializeAsync<TProjection>(openStream);
+        if (projection is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        return ThenDto(projection);
+    }
+
+    public async Task<IMultipleAggregateProjectionTestHelper<TProjection>> WriteProjectionToFileAsync(string filename)
+    {
+        var json = SekibanJsonHelper.Serialize(Projection);
+        await File.WriteAllTextAsync(filename, json);
+        return this;
+    }
+
+    private void AddEventsFromList(List<JsonElement> list)
+    {
+        var registeredEventTypes = _serviceProvider.GetService<RegisteredEventTypes>();
+        if (registeredEventTypes is null) { throw new InvalidOperationException("RegisteredEventTypes が登録されていません。"); }
+        foreach (var json in list)
+        {
+            var documentTypeName = json.GetProperty("DocumentTypeName").ToString();
+            var eventPayloadType = registeredEventTypes.RegisteredTypes.FirstOrDefault(e => e.Name == documentTypeName);
+            if (eventPayloadType is null)
+            {
+                throw new InvalidDataException($"イベントタイプ {documentTypeName} は登録されていません。");
+            }
+            var eventType = typeof(AggregateEvent<>).MakeGenericType(eventPayloadType);
+            if (eventType is null)
+            {
+                throw new InvalidDataException($"イベント {documentTypeName} の生成に失敗しました。");
+            }
+            var eventInstance = JsonSerializer.Deserialize(json.ToString(), eventType);
+            if (eventInstance is null)
+            {
+                throw new InvalidDataException($"イベント {documentTypeName} のデシリアライズに失敗しました。");
+            }
+            Events.Add((IAggregateEvent)eventInstance);
+        }
+    }
     public IMultipleAggregateProjectionTestHelper<TProjection> GivenEvents(
         params (Guid aggregateId, Type aggregateType, IEventPayload payload)[] eventTouples)
     {
@@ -75,6 +131,26 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection> : IDisposabl
         {
             var type = payload.GetType();
             var isCreateEvent = payload is ICreatedEventPayload;
+            var eventType = typeof(AggregateEvent<>);
+            var genericType = eventType.MakeGenericType(type);
+            var ev = Activator.CreateInstance(genericType, aggregateId, aggregateType, payload, isCreateEvent) as IAggregateEvent;
+            if (ev == null) { throw new InvalidDataException("イベントの生成に失敗しました。" + payload); }
+            Events.Add(ev);
+        }
+        return this;
+    }
+    public IMultipleAggregateProjectionTestHelper<TProjection> GivenEvents(params (Guid aggregateId, IEventPayload payload)[] eventTouples)
+    {
+        foreach (var (aggregateId, payload) in eventTouples)
+        {
+            var type = payload.GetType();
+            var isCreateEvent = payload is ICreatedEventPayload;
+            var interfaces = payload.GetType().GetInterfaces();
+            var interfaceType = payload.GetType()
+                .GetInterfaces()
+                ?.FirstOrDefault(m => m.IsGenericType && m.GetGenericTypeDefinition() == typeof(IAggregatePointerEvent<>));
+            var aggregateType = interfaceType?.GenericTypeArguments?.FirstOrDefault();
+            if (aggregateType is null) { throw new InvalidDataException("イベントの生成に失敗しました。" + payload); }
             var eventType = typeof(AggregateEvent<>);
             var genericType = eventType.MakeGenericType(type);
             var ev = Activator.CreateInstance(genericType, aggregateId, aggregateType, payload, isCreateEvent) as IAggregateEvent;
