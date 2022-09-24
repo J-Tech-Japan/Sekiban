@@ -1,121 +1,106 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ApplicationModels;
-namespace Sekiban.EventSourcing.WebHelper.Common
+namespace Sekiban.EventSourcing.WebHelper.Common;
+
+public class SekibanControllerRouteConvention : IControllerModelConvention
 {
-    public class SekibanControllerRouteConvention : IControllerModelConvention
+    private readonly SekibanControllerOptions _sekibanControllerOptions;
+
+    public SekibanControllerRouteConvention(SekibanControllerOptions sekibanControllerOptions)
     {
-        private readonly SekibanControllerOptions _sekibanControllerOptions;
+        _sekibanControllerOptions = sekibanControllerOptions;
+    }
 
-        public SekibanControllerRouteConvention(SekibanControllerOptions sekibanControllerOptions) =>
-            _sekibanControllerOptions = sekibanControllerOptions;
-
-        [ApiExplorerSettings]
-        public void Apply(ControllerModel controller)
+    [ApiExplorerSettings]
+    public void Apply(ControllerModel controller)
+    {
+        if (controller.ControllerType.IsGenericType &&
+            new List<string> { _sekibanControllerOptions.BaseChangeControllerType.Name }.Contains(controller.ControllerType.Name))
         {
-            if (controller.ControllerType.IsGenericType &&
-                new List<string> { _sekibanControllerOptions.BaseChangeControllerType.Name }.Contains(controller.ControllerType.Name))
-            {
-                var aggregateType = controller.ControllerType.GenericTypeArguments[0];
-                var commandType = controller.ControllerType.GenericTypeArguments[2];
-                controller.ControllerName = aggregateType.Name;
-                controller.Selectors.Add(
-                    new SelectorModel
-                    {
-                        AttributeRouteModel = new AttributeRouteModel(
-                            new RouteAttribute(
-                                $"{_sekibanControllerOptions.ChangeCommandPrefix}/{aggregateType.Name.ToLower()}/{commandType.Name.ToLower()}")
-                            {
-                                Name = commandType.Name
-                            })
-                    });
-            }
-            if (controller.ControllerType.IsGenericType &&
-                new List<string> { _sekibanControllerOptions.BaseCreateControllerType.Name }.Contains(controller.ControllerType.Name))
-            {
-                var aggregateType = controller.ControllerType.GenericTypeArguments[0];
-                var commandType = controller.ControllerType.GenericTypeArguments[2];
-                controller.ControllerName = aggregateType.Name;
-                controller.Selectors.Add(
-                    new SelectorModel
-                    {
-                        AttributeRouteModel = new AttributeRouteModel(
-                            new RouteAttribute(
-                                $"{_sekibanControllerOptions.CreateCommandPrefix}/{aggregateType.Name.ToLower()}/{commandType.Name.ToLower()}"))
+            var aggregateType = controller.ControllerType.GenericTypeArguments[0];
+            var commandType = controller.ControllerType.GenericTypeArguments[2];
+            controller.ControllerName = aggregateType.Name;
+            controller.Selectors.Add(
+                new SelectorModel
+                {
+                    AttributeRouteModel = new AttributeRouteModel(
+                        new RouteAttribute(
+                            $"{_sekibanControllerOptions.ChangeCommandPrefix}/{aggregateType.Name.ToLower()}/{commandType.Name.ToLower()}")
                         {
                             Name = commandType.Name
-                        }
-                    });
-            }
-            if (controller.ControllerType.IsGenericType &&
-                new List<string> { _sekibanControllerOptions.BaseAggregateQueryControllerType.Name }.Contains(controller.ControllerType.Name))
-            {
-                var aggregateType = controller.ControllerType.GenericTypeArguments[0];
-                controller.ControllerName = aggregateType.Name;
-                controller.Selectors.Add(
-                    new SelectorModel
+                        })
+                });
+        }
+        if (controller.ControllerType.IsGenericType &&
+            new List<string> { _sekibanControllerOptions.BaseCreateControllerType.Name }.Contains(controller.ControllerType.Name))
+        {
+            var aggregateType = controller.ControllerType.GenericTypeArguments[0];
+            var commandType = controller.ControllerType.GenericTypeArguments[2];
+            controller.ControllerName = aggregateType.Name;
+            controller.Selectors.Add(
+                new SelectorModel
+                {
+                    AttributeRouteModel = new AttributeRouteModel(
+                        new RouteAttribute(
+                            $"{_sekibanControllerOptions.CreateCommandPrefix}/{aggregateType.Name.ToLower()}/{commandType.Name.ToLower()}"))
                     {
-                        AttributeRouteModel = new AttributeRouteModel(
-                            new RouteAttribute($"{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name.ToLower()}")
-                            {
-                                Name = aggregateType.Name + "Query"
-                            })
-                    });
-            }
-            if (controller.ControllerType.IsGenericType &&
-                new List<string> { _sekibanControllerOptions.BaseSingleAggregateProjectionControllerType.Name }.Contains(controller.ControllerType.Name))
-            {
-                var aggregateType = controller.ControllerType.GenericTypeArguments[0];
-                var projectionType = controller.ControllerType.GenericTypeArguments[1];
-                controller.ControllerName = aggregateType.Name;
-                controller.Selectors.Add(
-                    new SelectorModel
-                    {
-                        AttributeRouteModel = new AttributeRouteModel(
-                            new RouteAttribute(
-                                $"{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name.ToLower()}/{projectionType.Name.ToLower()}"))
+                        Name = commandType.Name
+                    }
+                });
+        }
+        if (controller.ControllerType.IsGenericType &&
+            new List<string> { _sekibanControllerOptions.BaseAggregateQueryControllerType.Name }.Contains(controller.ControllerType.Name))
+        {
+            var aggregateType = controller.ControllerType.GenericTypeArguments[0];
+            controller.ControllerName = aggregateType.Name;
+            controller.Selectors.Add(
+                new SelectorModel
+                {
+                    AttributeRouteModel = new AttributeRouteModel(
+                        new RouteAttribute($"{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name.ToLower()}")
                         {
-                            Name = aggregateType.Name + projectionType.Name
-                        }
-                    });
-            }
-            if (controller.ControllerType.IsGenericType &&
-                new List<string> { _sekibanControllerOptions.BaseMultipleAggregateProjectionControllerType.Name }
-                    .Contains(controller.ControllerType.Name))
-            {
-                var aggregateType = controller.ControllerType.GenericTypeArguments[0];
-                controller.ControllerName = aggregateType.Name;
-                controller.Selectors.Add(
-                    new SelectorModel
+                            Name = aggregateType.Name + "Query"
+                        })
+                });
+        }
+        if (controller.ControllerType.IsGenericType &&
+            new List<string> { _sekibanControllerOptions.BaseSingleAggregateProjectionControllerType.Name }.Contains(controller.ControllerType.Name))
+        {
+            var aggregateType = controller.ControllerType.GenericTypeArguments[0];
+            var projectionType = controller.ControllerType.GenericTypeArguments[1];
+            controller.ControllerName = aggregateType.Name;
+            controller.Selectors.Add(
+                new SelectorModel
+                {
+                    AttributeRouteModel = new AttributeRouteModel(
+                        new RouteAttribute(
+                            $"{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name.ToLower()}/{projectionType.Name.ToLower()}"))
                     {
-                        AttributeRouteModel = new AttributeRouteModel(
-                            new RouteAttribute($"{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name.ToLower()}/get"))
-                        {
-                            Name = aggregateType.Name
-                        }
-                    });
-            }
-            if (controller.ControllerType.IsGenericType &&
-                new List<string> { _sekibanControllerOptions.BaseMultipleAggregateListProjectionControllerType.Name }.Contains(
-                    controller.ControllerType.Name))
-            {
-                var aggregateType = controller.ControllerType.GenericTypeArguments[0];
-                controller.ControllerName = aggregateType.Name;
-                controller.Selectors.Add(
-                    new SelectorModel
+                        Name = aggregateType.Name + projectionType.Name
+                    }
+                });
+        }
+        if (controller.ControllerType.IsGenericType &&
+            new List<string> { _sekibanControllerOptions.BaseMultipleAggregateProjectionControllerType.Name }
+                .Contains(controller.ControllerType.Name))
+        {
+            var aggregateType = controller.ControllerType.GenericTypeArguments[0];
+            controller.ControllerName = aggregateType.Name;
+            controller.Selectors.Add(
+                new SelectorModel
+                {
+                    AttributeRouteModel = new AttributeRouteModel(
+                        new RouteAttribute($"{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name.ToLower()}/get"))
                     {
-                        AttributeRouteModel = new AttributeRouteModel(
-                            new RouteAttribute($"{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name.ToLower()}"))
-                        {
-                            Name = aggregateType.Name
-                        }
-                    });
-            }
-            if (controller.ControllerType.Name == _sekibanControllerOptions.BaseIndexControllerType.Name)
-            {
-                controller.ControllerName = "SekibanInfo";
-                controller.Selectors.Add(
-                    new SelectorModel { AttributeRouteModel = new AttributeRouteModel(new RouteAttribute(_sekibanControllerOptions.InfoPrefix)) });
-            }
+                        Name = aggregateType.Name
+                    }
+                });
+        }
+        if (controller.ControllerType.Name == _sekibanControllerOptions.BaseIndexControllerType.Name)
+        {
+            controller.ControllerName = "SekibanInfo";
+            controller.Selectors.Add(
+                new SelectorModel { AttributeRouteModel = new AttributeRouteModel(new RouteAttribute(_sekibanControllerOptions.InfoPrefix)) });
         }
     }
 }

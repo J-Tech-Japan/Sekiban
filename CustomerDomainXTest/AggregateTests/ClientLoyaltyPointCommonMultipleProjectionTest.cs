@@ -1,5 +1,5 @@
 using CustomerDomainContext.Aggregates.Branches.Events;
-using CustomerDomainContext.Projections;
+using CustomerDomainContext.Projections.ClientLoyaltyPointMultiples;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;

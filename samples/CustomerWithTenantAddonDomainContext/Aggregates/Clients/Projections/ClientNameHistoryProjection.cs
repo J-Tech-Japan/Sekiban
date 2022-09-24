@@ -9,24 +9,27 @@ namespace CustomerWithTenantAddonDomainContext.Aggregates.Clients.Projections;
 ///     プロジェクションに関しては、高速化のために、データとDTOを共通かしている。
 ///     分割することも可能
 /// </summary>
-public class ClientNameHistoryProjection : SingleAggregateProjectionBase<ClientNameHistoryProjection>
+public class ClientNameHistoryProjection : SingleAggregateProjectionBase<Client, ClientNameHistoryProjection>
 {
     public Guid BranchId { get; set; } = Guid.Empty;
     public List<ClientNameHistoryProjectionRecord> ClientNames { get; init; } = new();
     public string ClientEmail { get; set; } = null!;
-    public ClientNameHistoryProjection(Guid aggregateId) =>
+    public ClientNameHistoryProjection(Guid aggregateId)
+    {
         AggregateId = aggregateId;
+    }
 
     public ClientNameHistoryProjection() { }
 
-    public override ClientNameHistoryProjection ToDto() =>
-        this;
+    public override ClientNameHistoryProjection ToDto()
+    {
+        return this;
+    }
 
-    public override Type OriginalAggregateType() =>
-        typeof(Client);
-
-    public override ClientNameHistoryProjection CreateInitialAggregate(Guid aggregateId) =>
-        new(aggregateId);
+    public override ClientNameHistoryProjection CreateInitialAggregate(Guid aggregateId)
+    {
+        return new(aggregateId);
+    }
     protected override void CopyPropertiesFromSnapshot(ClientNameHistoryProjection snapshot)
     {
         BranchId = snapshot.BranchId;
@@ -34,8 +37,9 @@ public class ClientNameHistoryProjection : SingleAggregateProjectionBase<ClientN
         ClientEmail = snapshot.ClientEmail;
     }
 
-    protected override Action? GetApplyEventAction(IAggregateEvent ev) =>
-        ev.GetPayload() switch
+    protected override Action? GetApplyEventAction(IAggregateEvent ev)
+    {
+        return ev.GetPayload() switch
         {
             ClientCreated clientCreated => () =>
             {
@@ -51,6 +55,7 @@ public class ClientNameHistoryProjection : SingleAggregateProjectionBase<ClientN
 
             _ => null
         };
+    }
 
     public record ClientNameHistoryProjectionRecord(string Name, DateTime DateChanged);
 }

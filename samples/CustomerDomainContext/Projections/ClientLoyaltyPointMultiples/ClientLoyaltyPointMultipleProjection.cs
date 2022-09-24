@@ -1,25 +1,18 @@
-using CustomerWithTenantAddonDomainContext.Aggregates.Branches;
-using CustomerWithTenantAddonDomainContext.Aggregates.Branches.Events;
-using CustomerWithTenantAddonDomainContext.Aggregates.Clients;
-using CustomerWithTenantAddonDomainContext.Aggregates.Clients.Events;
-using CustomerWithTenantAddonDomainContext.Aggregates.LoyaltyPoints;
-using CustomerWithTenantAddonDomainContext.Aggregates.LoyaltyPoints.Events;
+using CustomerDomainContext.Aggregates.Branches;
+using CustomerDomainContext.Aggregates.Branches.Events;
+using CustomerDomainContext.Aggregates.Clients;
+using CustomerDomainContext.Aggregates.Clients.Events;
+using CustomerDomainContext.Aggregates.LoyaltyPoints;
+using CustomerDomainContext.Aggregates.LoyaltyPoints.Events;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
-namespace CustomerWithTenantAddonDomainContext.Projections;
+namespace CustomerDomainContext.Projections.ClientLoyaltyPointMultiples;
 
-public class ClientLoyaltyPointListRecord
+public class ClientLoyaltyPointMultipleProjection : MultipleAggregateProjectionBase<ClientLoyaltyPointMultipleProjection>
 {
-    public Guid BranchId { get; set; }
-    public string BranchName { get; set; } = string.Empty;
-    public Guid ClientId { get; set; }
-    public string ClientName { get; set; } = string.Empty;
-    public int Point { get; set; }
-}
-public class ClientLoyaltyPointListProjection : MultipleAggregateProjectionBase<ClientLoyaltyPointListProjection>
-{
-    public List<ClientLoyaltyPointListRecord> Records { get; set; } = new();
-    public List<ProjectedBranchInternal> Branches { get; set; } = new();
-    public override ClientLoyaltyPointListProjection ToDto()
+    public List<ProjectedBranch> Branches { get; set; } = new();
+    public List<ProjectedRecord> Records { get; set; } = new();
+
+    public override ClientLoyaltyPointMultipleProjection ToDto()
     {
         return this;
     }
@@ -29,12 +22,12 @@ public class ClientLoyaltyPointListProjection : MultipleAggregateProjectionBase<
         {
             BranchCreated branchCreated => () =>
             {
-                Branches.Add(new ProjectedBranchInternal { BranchId = ev.AggregateId, BranchName = branchCreated.Name });
+                Branches.Add(new ProjectedBranch { BranchId = ev.AggregateId, BranchName = branchCreated.Name });
             },
             ClientCreated clientCreated => () =>
             {
                 Records.Add(
-                    new ClientLoyaltyPointListRecord
+                    new ProjectedRecord
                     {
                         BranchId = clientCreated.BranchId,
                         BranchName = Branches.First(m => m.BranchId == clientCreated.BranchId).BranchName,
@@ -71,18 +64,26 @@ public class ClientLoyaltyPointListProjection : MultipleAggregateProjectionBase<
             _ => null
         };
     }
-    protected override void CopyPropertiesFromSnapshot(ClientLoyaltyPointListProjection snapshot)
-    {
-        Records = snapshot.Records.ToList();
-        Branches = snapshot.Branches.ToList();
-    }
     public override IList<string> TargetAggregateNames()
     {
         return new List<string> { nameof(Branch), nameof(Client), nameof(LoyaltyPoint) };
     }
-    public class ProjectedBranchInternal
+    protected override void CopyPropertiesFromSnapshot(ClientLoyaltyPointMultipleProjection snapshot)
+    {
+        Branches = snapshot.Branches;
+        Records = snapshot.Records;
+    }
+    public class ProjectedBranch
     {
         public Guid BranchId { get; set; }
         public string BranchName { get; set; } = string.Empty;
+    }
+    public class ProjectedRecord
+    {
+        public Guid BranchId { get; set; }
+        public string BranchName { get; set; } = string.Empty;
+        public Guid ClientId { get; set; }
+        public string ClientName { get; set; } = string.Empty;
+        public int Point { get; set; }
     }
 }

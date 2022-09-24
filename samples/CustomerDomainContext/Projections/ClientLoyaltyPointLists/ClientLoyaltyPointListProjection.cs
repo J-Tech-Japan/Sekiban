@@ -1,11 +1,11 @@
-using CustomerWithTenantAddonDomainContext.Aggregates.Branches;
-using CustomerWithTenantAddonDomainContext.Aggregates.Branches.Events;
-using CustomerWithTenantAddonDomainContext.Aggregates.Clients;
-using CustomerWithTenantAddonDomainContext.Aggregates.Clients.Events;
-using CustomerWithTenantAddonDomainContext.Aggregates.LoyaltyPoints;
-using CustomerWithTenantAddonDomainContext.Aggregates.LoyaltyPoints.Events;
+using CustomerDomainContext.Aggregates.Branches;
+using CustomerDomainContext.Aggregates.Branches.Events;
+using CustomerDomainContext.Aggregates.Clients;
+using CustomerDomainContext.Aggregates.Clients.Events;
+using CustomerDomainContext.Aggregates.LoyaltyPoints;
+using CustomerDomainContext.Aggregates.LoyaltyPoints.Events;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
-namespace CustomerWithTenantAddonDomainContext.Projections;
+namespace CustomerDomainContext.Projections.ClientLoyaltyPointLists;
 
 public class ClientLoyaltyPointListRecord
 {

@@ -11,7 +11,8 @@ using CustomerDomainContext.Aggregates.RecentActivities;
 using CustomerDomainContext.Aggregates.RecentActivities.Commands;
 using CustomerDomainContext.Aggregates.RecentInMemoryActivities;
 using CustomerDomainContext.Aggregates.RecentInMemoryActivities.Commands;
-using CustomerDomainContext.Projections;
+using CustomerDomainContext.Projections.ClientLoyaltyPointLists;
+using CustomerDomainContext.Projections.ClientLoyaltyPointMultiples;
 using Sekiban.EventSourcing.Shared;
 using Sekiban.EventSourcing.TestHelpers;
 using System.Reflection;
@@ -19,14 +20,20 @@ namespace CustomerDomainContext.Shared;
 
 public static class CustomerDependency
 {
-    public static Assembly GetAssembly() =>
-        Assembly.GetExecutingAssembly();
+    public static Assembly GetAssembly()
+    {
+        return Assembly.GetExecutingAssembly();
+    }
 
-    public static RegisteredEventTypes GetEventTypes() =>
-        new(GetAssembly(), GetAssembly());
+    public static RegisteredEventTypes GetEventTypes()
+    {
+        return new(GetAssembly(), GetAssembly());
+    }
 
-    public static SekibanAggregateTypes GetAggregateTypes() =>
-        new(GetAssembly(), SekibanEventSourcingDependency.GetAssembly());
+    public static SekibanAggregateTypes GetAggregateTypes()
+    {
+        return new(GetAssembly(), SekibanEventSourcingDependency.GetAssembly());
+    }
     public static IEnumerable<Type> GetControllerAggregateTypes()
     {
         yield return typeof(Branch);
@@ -84,6 +91,8 @@ public static class CustomerDependency
         yield return (typeof(IChangeAggregateCommandHandler<RecentInMemoryActivity, AddRecentInMemoryActivity>),
             typeof(AddRecentInMemoryActivityHandler));
     }
-    public static SekibanDependencyOptions GetOptions() =>
-        new(GetEventTypes(), GetAggregateTypes(), GetTransientDependencies());
+    public static SekibanDependencyOptions GetOptions()
+    {
+        return new(GetEventTypes(), GetAggregateTypes(), GetTransientDependencies());
+    }
 }
