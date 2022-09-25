@@ -12,7 +12,10 @@ public record ClientLoyaltyPointQueryFilterParameter(
     Guid? ClientId,
     int? PageSize,
     int? PageNumber,
-    Dictionary<ClientLoyaltyPointQueryFilterSortKey, bool>? Sort) : IQueryFilterParameter<ClientLoyaltyPointQueryFilterSortKey>;
+    ClientLoyaltyPointQueryFilterSortKey? SortKey1,
+    ClientLoyaltyPointQueryFilterSortKey? SortKey2,
+    bool? SortKey1Asc,
+    bool? SortKey2Asc) : IQueryFilterParameter;
 public class ClientLoyaltyPointQueryFilterFilter : IProjectionListQueryFilterDefinition<ClientLoyaltyPointListProjection,
     ClientLoyaltyPointQueryFilterParameter, ClientLoyaltyPointListRecord>
 {
@@ -35,12 +38,15 @@ public class ClientLoyaltyPointQueryFilterFilter : IProjectionListQueryFilterDef
         ClientLoyaltyPointQueryFilterParameter queryParam,
         IEnumerable<ClientLoyaltyPointListRecord> projections)
     {
-        if (queryParam.Sort == null)
+        var sort = new Dictionary<ClientLoyaltyPointQueryFilterSortKey, bool>();
+        if (queryParam.SortKey1 != null) { sort.Add(queryParam.SortKey1.Value, queryParam.SortKey1Asc ?? true); }
+        if (queryParam.SortKey2 != null) { sort.Add(queryParam.SortKey2.Value, queryParam.SortKey2Asc ?? true); }
+        if (sort.Count == 0)
         {
             return projections.OrderBy(m => m.BranchName).ThenBy(m => m.ClientName);
         }
         var result = projections;
-        foreach (var (sortKey, index) in queryParam.Sort.Select((item, index) => (item, index)))
+        foreach (var (sortKey, index) in sort.Select((item, index) => (item, index)))
         {
             if (index == 0)
             {

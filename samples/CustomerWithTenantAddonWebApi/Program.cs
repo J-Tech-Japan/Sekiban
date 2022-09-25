@@ -12,7 +12,10 @@ var controllerItems = new SekibanControllerItems(
     CustomerWithTenantAddonDependency.GetTransientDependencies().ToList(),
     CustomerWithTenantAddonDependency.GetSingleAggregateProjectionTypes().ToList(),
     CustomerWithTenantAddonDependency.GetMultipleAggregatesProjectionTypes().ToList(),
-    CustomerWithTenantAddonDependency.GetMultipleAggregatesListProjectionTypes().ToList());
+    CustomerWithTenantAddonDependency.GetAggregateListQueryFilterTypes().ToList(),
+    CustomerWithTenantAddonDependency.GetSingleAggregateProjectionQueryFilterTypes().ToList(),
+    CustomerWithTenantAddonDependency.GetProjectionQueryFilterTypes().ToList(),
+    CustomerWithTenantAddonDependency.GetProjectionListQueryFilterTypes().ToList());
 builder.Services.AddSingleton<ISekibanControllerItems>(controllerItems);
 var controllerOptions = new SekibanControllerOptions();
 builder.Services.AddSingleton(controllerOptions);

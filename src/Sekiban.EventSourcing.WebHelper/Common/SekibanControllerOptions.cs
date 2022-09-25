@@ -13,6 +13,7 @@ public class SekibanControllerOptions
     public Type BaseAggregateQueryControllerType { get; set; } = typeof(BaseAggregateQueryController<,>);
     public Type BaseSingleAggregateProjectionControllerType { get; set; } = typeof(BaseSingleAggregateProjectionController<,>);
     public Type BaseMultipleAggregateProjectionControllerType { get; set; } = typeof(BaseMultipleAggregateProjectionController<>);
+    public Type BaseAggregateListQueryFilterControllerType { get; set; } = typeof(BaseAggregateListQueryFilterController<,,,,>);
     public string CreateCommandPrefix { get; set; } = "api/command";
     public string ChangeCommandPrefix { get; set; } = "api/command";
     public string QueryPrefix { get; set; } = "api/query";

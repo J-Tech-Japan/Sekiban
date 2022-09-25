@@ -20,14 +20,20 @@ namespace CustomerWithTenantAddonDomainContext.Shared;
 
 public static class CustomerWithTenantAddonDependency
 {
-    public static Assembly GetAssembly() =>
-        Assembly.GetExecutingAssembly();
+    public static Assembly GetAssembly()
+    {
+        return Assembly.GetExecutingAssembly();
+    }
 
-    public static RegisteredEventTypes GetEventTypes() =>
-        new(GetAssembly(), TenantAddonDependency.GetAssembly(), SekibanEventSourcingDependency.GetAssembly());
+    public static RegisteredEventTypes GetEventTypes()
+    {
+        return new RegisteredEventTypes(GetAssembly(), TenantAddonDependency.GetAssembly(), SekibanEventSourcingDependency.GetAssembly());
+    }
 
-    public static SekibanAggregateTypes GetAggregateTypes() =>
-        new(GetAssembly(), SekibanEventSourcingDependency.GetAssembly(), TenantAddonDependency.GetAssembly());
+    public static SekibanAggregateTypes GetAggregateTypes()
+    {
+        return new SekibanAggregateTypes(GetAssembly(), SekibanEventSourcingDependency.GetAssembly(), TenantAddonDependency.GetAssembly());
+    }
     public static IEnumerable<Type> GetControllerAggregateTypes()
     {
         yield return typeof(Branch);
@@ -47,10 +53,23 @@ public static class CustomerWithTenantAddonDependency
     public static IEnumerable<Type> GetMultipleAggregatesProjectionTypes()
     {
         yield return typeof(ClientLoyaltyPointMultipleProjection);
-    }
-    public static IEnumerable<Type> GetMultipleAggregatesListProjectionTypes()
-    {
         yield return typeof(ClientLoyaltyPointListProjection);
+    }
+    public static IEnumerable<Type> GetAggregateListQueryFilterTypes()
+    {
+        return new List<Type>();
+    }
+    public static IEnumerable<Type> GetSingleAggregateProjectionQueryFilterTypes()
+    {
+        return new List<Type>();
+    }
+    public static IEnumerable<Type> GetProjectionQueryFilterTypes()
+    {
+        return new List<Type>();
+    }
+    public static IEnumerable<Type> GetProjectionListQueryFilterTypes()
+    {
+        return new List<Type>();
     }
     public static IEnumerable<(Type serviceType, Type? implementationType)> GetTransientDependencies()
     {
@@ -95,6 +114,8 @@ public static class CustomerWithTenantAddonDependency
             yield return dependency;
         }
     }
-    public static SekibanDependencyOptions GetOptions() =>
-        new(GetEventTypes(), GetAggregateTypes(), GetTransientDependencies());
+    public static SekibanDependencyOptions GetOptions()
+    {
+        return new SekibanDependencyOptions(GetEventTypes(), GetAggregateTypes(), GetTransientDependencies());
+    }
 }

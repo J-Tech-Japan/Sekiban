@@ -5,6 +5,7 @@ using CustomerDomainContext.Aggregates.Clients;
 using CustomerDomainContext.Aggregates.Clients.Commands;
 using CustomerDomainContext.Aggregates.Clients.Events;
 using CustomerDomainContext.Aggregates.Clients.Projections;
+using CustomerDomainContext.Aggregates.Clients.QueryFilters.BasicClientFilters;
 using CustomerDomainContext.Aggregates.LoyaltyPoints;
 using CustomerDomainContext.Aggregates.LoyaltyPoints.Commands;
 using CustomerDomainContext.Aggregates.RecentActivities;
@@ -27,12 +28,12 @@ public static class CustomerDependency
 
     public static RegisteredEventTypes GetEventTypes()
     {
-        return new(GetAssembly(), GetAssembly());
+        return new RegisteredEventTypes(GetAssembly(), GetAssembly());
     }
 
     public static SekibanAggregateTypes GetAggregateTypes()
     {
-        return new(GetAssembly(), SekibanEventSourcingDependency.GetAssembly());
+        return new SekibanAggregateTypes(GetAssembly(), SekibanEventSourcingDependency.GetAssembly());
     }
     public static IEnumerable<Type> GetControllerAggregateTypes()
     {
@@ -49,10 +50,23 @@ public static class CustomerDependency
     public static IEnumerable<Type> GetMultipleAggregatesProjectionTypes()
     {
         yield return typeof(ClientLoyaltyPointMultipleProjection);
-    }
-    public static IEnumerable<Type> GetMultipleAggregatesListProjectionTypes()
-    {
         yield return typeof(ClientLoyaltyPointListProjection);
+    }
+    public static IEnumerable<Type> GetAggregateListQueryFilterTypes()
+    {
+        yield return typeof(BasicClientQueryFilter);
+    }
+    public static IEnumerable<Type> GetSingleAggregateProjectionListQueryFilterTypes()
+    {
+        return new List<Type>();
+    }
+    public static IEnumerable<Type> GetProjectionQueryFilterTypes()
+    {
+        return new List<Type>();
+    }
+    public static IEnumerable<Type> GetProjectionListQueryFilterTypes()
+    {
+        return new List<Type>();
     }
     public static IEnumerable<(Type serviceType, Type? implementationType)> GetTransientDependencies()
     {
@@ -93,6 +107,6 @@ public static class CustomerDependency
     }
     public static SekibanDependencyOptions GetOptions()
     {
-        return new(GetEventTypes(), GetAggregateTypes(), GetTransientDependencies());
+        return new SekibanDependencyOptions(GetEventTypes(), GetAggregateTypes(), GetTransientDependencies());
     }
 }
