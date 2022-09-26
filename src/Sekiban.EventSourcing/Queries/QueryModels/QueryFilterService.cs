@@ -15,20 +15,18 @@ public class QueryFilterService : IQueryFilterService
         GetProjectionQueryFilterAsync<TProjection, TQueryFilter, TQueryFilterParam, TQueryFilterResponse>(TQueryFilterParam param)
         where TProjection : MultipleAggregateProjectionBase<TProjection>, IMultipleAggregateProjectionDto, new()
         where TQueryFilter : IProjectionQueryFilterDefinition<TProjection, TQueryFilterParam, TQueryFilterResponse>, new()
-        where TQueryFilterParam : IQueryParameter, new()
-        where TQueryFilterResponse : new()
+        where TQueryFilterParam : IQueryParameter
     {
         var allProjection = await _multipleAggregateProjectionService.GetProjectionAsync<TProjection>();
         var queryFilter = new TQueryFilter();
         var filtered = queryFilter.HandleFilter(param, allProjection);
-        return queryFilter.HandleSort(param, filtered);
+        return queryFilter.HandleSortAndPagingIfNeeded(param, filtered);
     }
     public async Task<IEnumerable<TQueryFilterResponse>>
-        GetProjectionListQueryFilterAsync<TProjection, TQueryFilter, TQueryFilterParam, TQueryFilterResponse>(TQueryFilterParam param)
+        GetProjectionListQueryFilterAsync<TProjection, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(TQueryFilterParameter param)
         where TProjection : MultipleAggregateProjectionBase<TProjection>, IMultipleAggregateProjectionDto, new()
-        where TQueryFilter : IProjectionListQueryFilterDefinition<TProjection, TQueryFilterParam, TQueryFilterResponse>, new()
-        where TQueryFilterParam : IQueryParameter, new()
-        where TQueryFilterResponse : new()
+        where TQueryFilter : IProjectionListQueryFilterDefinition<TProjection, TQueryFilterParameter, TQueryFilterResponse>, new()
+        where TQueryFilterParameter : IQueryParameter
     {
         var allProjection = await _multipleAggregateProjectionService.GetProjectionAsync<TProjection>();
         var queryFilter = new TQueryFilter();
@@ -60,8 +58,7 @@ public class QueryFilterService : IQueryFilterService
         where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection>, new()
         where TQueryFilter : ISingleAggregateProjectionListQueryFilterDefinition<TAggregate, TSingleAggregateProjection, TQueryFilterParameter,
             TQueryFilterResponse>, new()
-        where TQueryFilterParameter : IQueryParameter, new()
-        where TQueryFilterResponse : new()
+        where TQueryFilterParameter : IQueryParameter
     {
         var allProjection = await _multipleAggregateProjectionService.GetSingleAggregateProjectionList<TAggregate, TSingleAggregateProjection>();
         var queryFilter = new TQueryFilter();

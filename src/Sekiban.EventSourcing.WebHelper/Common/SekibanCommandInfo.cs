@@ -1,12 +1,11 @@
-namespace Sekiban.EventSourcing.WebHelper.Common
+namespace Sekiban.EventSourcing.WebHelper.Common;
+
+public record SekibanCommandInfo
 {
-    public record SekibanCommandInfo
-    {
-        public string Method { get; set; }
-        public string Url { get; init; }
-        public string JsonBodyType { get; init; }
-        public dynamic SampleBodyObject { get; set; }
-        public dynamic SampleResponseObject { get; set; }
-        public bool IsCreateEvent { get; set; }
-    }
+    public string Method { get; set; } = string.Empty;
+    public string Url { get; init; } = string.Empty;
+    public string JsonBodyType { get; init; } = string.Empty;
+    public dynamic SampleBodyObject { get; init; } = string.Empty;
+    public dynamic SampleResponseObject { get; init; } = string.Empty;
+    public bool IsCreateEvent { get; init; } = false;
 }

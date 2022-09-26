@@ -49,7 +49,7 @@ public class InMemoryStoryTestBasic : ProjectByTestTestBase
         var branchList = await _multipleAggregateProjectionService.GetAggregateList<Branch, BranchContents>();
         Assert.Empty(branchList);
         var branchResult = await _aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchContents, CreateBranch>(new CreateBranch("Japan"));
-        var branchId = branchResult.Command.AggregateId;
+        var branchId = branchResult.Command!.AggregateId;
         Assert.NotNull(branchResult);
         Assert.NotNull(branchResult.AggregateDto);
         branchList = await _multipleAggregateProjectionService.GetAggregateList<Branch, BranchContents>();
@@ -76,7 +76,7 @@ public class InMemoryStoryTestBasic : ProjectByTestTestBase
         var originalName = "Tanaka Taro";
         var createClientResult = await _aggregateCommandExecutor.ExecCreateCommandAsync<Client, ClientContents, CreateClient>(
             new CreateClient(branchId, originalName, "tanaka@example.com"));
-        var clientId = createClientResult.Command.AggregateId;
+        var clientId = createClientResult.Command!.AggregateId;
         Assert.NotNull(createClientResult);
         Assert.NotNull(createClientResult.AggregateDto);
         clientList = await _multipleAggregateProjectionService.GetAggregateList<Client, ClientContents>();
@@ -201,7 +201,7 @@ public class InMemoryStoryTestBasic : ProjectByTestTestBase
         var createRecentActivityResult
             = await _aggregateCommandExecutor.ExecCreateCommandAsync<RecentActivity, RecentActivityContents, CreateRecentActivity>(
                 new CreateRecentActivity());
-        var recentActivityId = createRecentActivityResult.Command.AggregateId;
+        var recentActivityId = createRecentActivityResult.Command!.AggregateId;
 
         var recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentActivity, RecentActivityContents>();
         Assert.Single(recentActivityList);

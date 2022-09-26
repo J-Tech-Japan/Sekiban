@@ -6,5 +6,5 @@ public interface IProjectionQueryFilterDefinition<in TProjection, in TQueryParam
     where TProjection : MultipleAggregateProjectionBase<TProjection>, IMultipleAggregateProjectionDto where TQueryParam : IQueryParameter
 {
     public TResponseQueryModel HandleFilter(TQueryParam queryParam, TProjection projection);
-    public TResponseQueryModel HandleSort(TQueryParam queryParam, TResponseQueryModel response);
+    public TResponseQueryModel HandleSortAndPagingIfNeeded(TQueryParam queryParam, TResponseQueryModel response);
 }

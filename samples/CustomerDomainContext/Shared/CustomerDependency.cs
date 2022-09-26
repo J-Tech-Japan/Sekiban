@@ -58,15 +58,15 @@ public static class CustomerDependency
     }
     public static IEnumerable<Type> GetSingleAggregateProjectionListQueryFilterTypes()
     {
-        return new List<Type>();
+        yield return typeof(ClientNameHistoryProjectionQueryFilter);
     }
     public static IEnumerable<Type> GetProjectionQueryFilterTypes()
     {
-        return new List<Type>();
+        yield return typeof(ClientLoyaltyPointMultipleProjectionQueryFilter);
     }
     public static IEnumerable<Type> GetProjectionListQueryFilterTypes()
     {
-        return new List<Type>();
+        yield return typeof(ClientLoyaltyPointQueryFilterFilter);
     }
     public static IEnumerable<(Type serviceType, Type? implementationType)> GetTransientDependencies()
     {

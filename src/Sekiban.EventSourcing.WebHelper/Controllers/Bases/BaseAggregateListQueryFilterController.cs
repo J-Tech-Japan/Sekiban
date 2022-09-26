@@ -6,11 +6,12 @@ namespace Sekiban.EventSourcing.WebHelper.Controllers.Bases;
 
 [ApiController]
 [Produces("application/json")]
-public class BaseAggregateListQueryFilterController<TAggregate, TAggregateContents, TQueryFilter, TQueryParam, TResponseQueryModel> : ControllerBase
+public class
+    BaseAggregateListQueryFilterController<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TQueryFilterResponse> : ControllerBase
     where TAggregate : TransferableAggregateBase<TAggregateContents>
     where TAggregateContents : IAggregateContents, new()
-    where TQueryFilter : IAggregateListQueryFilterDefinition<TAggregate, TAggregateContents, TQueryParam, TResponseQueryModel>, new()
-    where TQueryParam : IQueryParameter
+    where TQueryFilter : IAggregateListQueryFilterDefinition<TAggregate, TAggregateContents, TQueryParameter, TQueryFilterResponse>, new()
+    where TQueryParameter : IQueryParameter
 {
     protected readonly IQueryFilterService _queryFilterService;
     public BaseAggregateListQueryFilterController(IQueryFilterService queryFilterService)
@@ -19,10 +20,10 @@ public class BaseAggregateListQueryFilterController<TAggregate, TAggregateConten
     }
     [HttpGet]
     [Route("")]
-    public async Task<ActionResult<IEnumerable<TResponseQueryModel>>> GetQueryResult([FromQuery] TQueryParam queryParam)
+    public async Task<ActionResult<IEnumerable<TQueryFilterResponse>>> GetQueryResult([FromQuery] TQueryParameter queryParam)
     {
         var result = await _queryFilterService
-            .GetAggregateListQueryFilterAsync<TAggregate, TAggregateContents, TQueryFilter, TQueryParam, TResponseQueryModel>(queryParam);
+            .GetAggregateListQueryFilterAsync<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TQueryFilterResponse>(queryParam);
         return Ok(result);
     }
 }

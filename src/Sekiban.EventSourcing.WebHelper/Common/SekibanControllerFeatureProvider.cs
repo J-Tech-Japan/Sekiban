@@ -88,6 +88,55 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
                         tQueryResult)
                     .GetTypeInfo());
         }
+        foreach (var queryFilterType in _sekibanControllerItems.SingleAggregateProjectionListQueryFilters)
+        {
+            var baseType = queryFilterType.GetInterfaces()
+                ?.FirstOrDefault(m => m.Name.Contains(typeof(ISingleAggregateProjectionListQueryFilterDefinition<,,,>).Name));
+            if (baseType is null) { continue; }
+            var tAggregate = baseType.GenericTypeArguments[0];
+            var tProjectionType = baseType.GenericTypeArguments[1];
+            var tQueryParam = baseType.GenericTypeArguments[2];
+            var tQueryResult = baseType.GenericTypeArguments[3];
+            feature.Controllers.Add(
+                _sekibanControllerOptions.BaseSingleAggregateProjectionListQueryFilterControllerType.MakeGenericType(
+                        tAggregate,
+                        tProjectionType,
+                        queryFilterType!,
+                        tQueryParam,
+                        tQueryResult)
+                    .GetTypeInfo());
+        }
+        foreach (var queryFilterType in _sekibanControllerItems.ProjectionListQueryFilters)
+        {
+            var baseType = queryFilterType.GetInterfaces()
+                ?.FirstOrDefault(m => m.Name.Contains(typeof(IProjectionListQueryFilterDefinition<,,>).Name));
+            if (baseType is null) { continue; }
+            var tProjectionType = baseType.GenericTypeArguments[0];
+            var tQueryParam = baseType.GenericTypeArguments[1];
+            var tQueryResult = baseType.GenericTypeArguments[2];
+            feature.Controllers.Add(
+                _sekibanControllerOptions.BaseProjectionListQueryFilterControllerType.MakeGenericType(
+                        tProjectionType,
+                        queryFilterType!,
+                        tQueryParam,
+                        tQueryResult)
+                    .GetTypeInfo());
+        }
+        foreach (var queryFilterType in _sekibanControllerItems.ProjectionQueryFilters)
+        {
+            var baseType = queryFilterType.GetInterfaces()?.FirstOrDefault(m => m.Name.Contains(typeof(IProjectionQueryFilterDefinition<,,>).Name));
+            if (baseType is null) { continue; }
+            var tProjectionType = baseType.GenericTypeArguments[0];
+            var tQueryParam = baseType.GenericTypeArguments[1];
+            var tQueryResult = baseType.GenericTypeArguments[2];
+            feature.Controllers.Add(
+                _sekibanControllerOptions.BaseProjectionQueryFilterControllerType.MakeGenericType(
+                        tProjectionType,
+                        queryFilterType!,
+                        tQueryParam,
+                        tQueryResult)
+                    .GetTypeInfo());
+        }
         feature.Controllers.Add(_sekibanControllerOptions.BaseIndexControllerType.MakeGenericType(typeof(object)).GetTypeInfo());
     }
 }

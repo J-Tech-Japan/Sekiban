@@ -68,7 +68,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
         {
             var aggregateType = controller.ControllerType.GenericTypeArguments[0];
             var projectionType = controller.ControllerType.GenericTypeArguments[1];
-            controller.ControllerName = aggregateType.Name;
+            controller.ControllerName = projectionType.Name;
             controller.Selectors.Add(
                 new SelectorModel
                 {
@@ -107,9 +107,60 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                 {
                     AttributeRouteModel = new AttributeRouteModel(
                         new RouteAttribute(
-                            $"{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name.ToLower()}/{queryFilterType.Name.ToLower()}/get"))
+                            $"{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name.ToLower()}/{queryFilterType.Name.ToLower()}"))
                     {
                         Name = aggregateType.Name
+                    }
+                });
+        }
+        if (controller.ControllerType.IsGenericType &&
+            new List<string> { _sekibanControllerOptions.BaseSingleAggregateProjectionListQueryFilterControllerType.Name }.Contains(
+                controller.ControllerType.Name))
+        {
+            var aggregateType = controller.ControllerType.GenericTypeArguments[0];
+            var projectionType = controller.ControllerType.GenericTypeArguments[1];
+            var queryFilterType = controller.ControllerType.GenericTypeArguments[2];
+            controller.ControllerName = projectionType.Name;
+            controller.Selectors.Add(
+                new SelectorModel
+                {
+                    AttributeRouteModel = new AttributeRouteModel(
+                        new RouteAttribute(
+                            $"{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name.ToLower()}/{projectionType.Name.ToLower()}/{queryFilterType.Name.ToLower()}"))
+                    {
+                        Name = queryFilterType.Name
+                    }
+                });
+        }
+        if (controller.ControllerType.IsGenericType &&
+            new List<string> { _sekibanControllerOptions.BaseProjectionListQueryFilterControllerType.Name }.Contains(controller.ControllerType.Name))
+        {
+            var projectionType = controller.ControllerType.GenericTypeArguments[0];
+            var queryFilterType = controller.ControllerType.GenericTypeArguments[1];
+            controller.ControllerName = projectionType.Name;
+            controller.Selectors.Add(
+                new SelectorModel
+                {
+                    AttributeRouteModel = new AttributeRouteModel(
+                        new RouteAttribute($"{_sekibanControllerOptions.QueryPrefix}/{projectionType.Name.ToLower()}/{queryFilterType.Name}"))
+                    {
+                        Name = queryFilterType.Name
+                    }
+                });
+        }
+        if (controller.ControllerType.IsGenericType &&
+            new List<string> { _sekibanControllerOptions.BaseProjectionQueryFilterControllerType.Name }.Contains(controller.ControllerType.Name))
+        {
+            var projectionType = controller.ControllerType.GenericTypeArguments[0];
+            var queryFilterType = controller.ControllerType.GenericTypeArguments[1];
+            controller.ControllerName = projectionType.Name;
+            controller.Selectors.Add(
+                new SelectorModel
+                {
+                    AttributeRouteModel = new AttributeRouteModel(
+                        new RouteAttribute($"{_sekibanControllerOptions.QueryPrefix}/{projectionType.Name.ToLower()}/{queryFilterType.Name}"))
+                    {
+                        Name = queryFilterType.Name
                     }
                 });
         }

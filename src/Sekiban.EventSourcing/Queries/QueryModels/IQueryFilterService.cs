@@ -9,14 +9,12 @@ public interface IQueryFilterService
         GetProjectionQueryFilterAsync<TProjection, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(TQueryFilterParameter param)
         where TProjection : MultipleAggregateProjectionBase<TProjection>, IMultipleAggregateProjectionDto, new()
         where TQueryFilter : IProjectionQueryFilterDefinition<TProjection, TQueryFilterParameter, TQueryFilterResponse>, new()
-        where TQueryFilterParameter : IQueryParameter, new()
-        where TQueryFilterResponse : new();
+        where TQueryFilterParameter : IQueryParameter;
     public Task<IEnumerable<TQueryFilterResponse>>
         GetProjectionListQueryFilterAsync<TProjection, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(TQueryFilterParameter param)
         where TProjection : MultipleAggregateProjectionBase<TProjection>, IMultipleAggregateProjectionDto, new()
         where TQueryFilter : IProjectionListQueryFilterDefinition<TProjection, TQueryFilterParameter, TQueryFilterResponse>, new()
-        where TQueryFilterParameter : IQueryParameter, new()
-        where TQueryFilterResponse : new();
+        where TQueryFilterParameter : IQueryParameter;
     public Task<IEnumerable<TQueryFilterResponse>>
         GetAggregateListQueryFilterAsync<TAggregate, TAggregateContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
             TQueryFilterParameter param) where TAggregate : TransferableAggregateBase<TAggregateContents>
@@ -29,6 +27,5 @@ public interface IQueryFilterService
         where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection>, new()
         where TQueryFilter : ISingleAggregateProjectionListQueryFilterDefinition<TAggregate, TSingleAggregateProjection, TQueryFilterParameter,
             TQueryFilterResponse>, new()
-        where TQueryFilterParameter : IQueryParameter, new()
-        where TQueryFilterResponse : new();
+        where TQueryFilterParameter : IQueryParameter;
 }

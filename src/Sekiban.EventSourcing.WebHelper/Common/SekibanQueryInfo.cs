@@ -1,12 +1,11 @@
-namespace Sekiban.EventSourcing.WebHelper.Common
+namespace Sekiban.EventSourcing.WebHelper.Common;
+
+public record SekibanQueryInfo
 {
-    public record SekibanQueryInfo
-    {
-        public string Method { get; set; }
-        public string GetUrl { get; init; }
-        public string ListUrl { get; init; }
-        public string GetEventsUrl { get; init; }
-        public string GetCommandsUrl { get; init; }
-        public dynamic SampleResponseObject { get; set; }
-    }
+    public string Method { get; init; } = string.Empty;
+    public string GetUrl { get; init; } = string.Empty;
+    public string ListUrl { get; init; } = string.Empty;
+    public string GetEventsUrl { get; init; } = string.Empty;
+    public string GetCommandsUrl { get; init; } = string.Empty;
+    public dynamic SampleResponseObject { get; init; } = string.Empty;
 }
