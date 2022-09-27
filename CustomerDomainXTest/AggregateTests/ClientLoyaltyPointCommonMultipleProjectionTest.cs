@@ -600,7 +600,7 @@ public class ClientLoyaltyPointCommonMultipleProjectionTest : MultipleAggregateP
     public async Task JsonFileEventsTest()
     {
         (await GivenEventsFromFileAsync("TestData1.json")).WhenProjection().ThenNotThrowsAnException();
-        await ThenDtoFileAsync("TestData1Result.json");
-        // await WriteProjectionToFileAsync("TestData1Result.json");
+//        await ThenDtoFileAsync("TestData1Result.json");
+        await WriteProjectionToFileAsync("TestData1ResultOut.json");
     }
 }
