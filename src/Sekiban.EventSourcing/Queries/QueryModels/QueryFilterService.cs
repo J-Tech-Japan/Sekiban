@@ -10,25 +10,27 @@ public class QueryFilterService : IQueryFilterService
     {
         _multipleAggregateProjectionService = multipleAggregateProjectionService;
     }
-
     public async Task<TQueryFilterResponse>
-        GetProjectionQueryFilterAsync<TProjection, TQueryFilter, TQueryFilterParam, TQueryFilterResponse>(TQueryFilterParam param)
-        where TProjection : MultipleAggregateProjectionBase<TProjection>, IMultipleAggregateProjectionDto, new()
-        where TQueryFilter : IProjectionQueryFilterDefinition<TProjection, TQueryFilterParam, TQueryFilterResponse>, new()
-        where TQueryFilterParam : IQueryParameter
+        GetProjectionQueryFilterAsync<TProjection, TProjectionContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
+            TQueryFilterParameter param) where TProjection : MultipleAggregateProjectionBase<TProjectionContents>, new()
+        where TProjectionContents : IMultipleAggregateProjectionContents, new()
+        where TQueryFilter : IProjectionQueryFilterDefinition<TProjection, TProjectionContents, TQueryFilterParameter, TQueryFilterResponse>, new()
+        where TQueryFilterParameter : IQueryParameter
     {
-        var allProjection = await _multipleAggregateProjectionService.GetProjectionAsync<TProjection>();
+        var allProjection = await _multipleAggregateProjectionService.GetProjectionAsync<TProjection, TProjectionContents>();
         var queryFilter = new TQueryFilter();
         var filtered = queryFilter.HandleFilter(param, allProjection);
         return queryFilter.HandleSortAndPagingIfNeeded(param, filtered);
     }
     public async Task<IEnumerable<TQueryFilterResponse>>
-        GetProjectionListQueryFilterAsync<TProjection, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(TQueryFilterParameter param)
-        where TProjection : MultipleAggregateProjectionBase<TProjection>, IMultipleAggregateProjectionDto, new()
-        where TQueryFilter : IProjectionListQueryFilterDefinition<TProjection, TQueryFilterParameter, TQueryFilterResponse>, new()
+        GetProjectionListQueryFilterAsync<TProjection, TProjectionContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
+            TQueryFilterParameter param) where TProjection : MultipleAggregateProjectionBase<TProjectionContents>, new()
+        where TProjectionContents : IMultipleAggregateProjectionContents, new()
+        where TQueryFilter : IProjectionListQueryFilterDefinition<TProjection, TProjectionContents, TQueryFilterParameter, TQueryFilterResponse>, new
+        ()
         where TQueryFilterParameter : IQueryParameter
     {
-        var allProjection = await _multipleAggregateProjectionService.GetProjectionAsync<TProjection>();
+        var allProjection = await _multipleAggregateProjectionService.GetProjectionAsync<TProjection, TProjectionContents>();
         var queryFilter = new TQueryFilter();
         var filtered = queryFilter.HandleFilter(param, allProjection);
         if (param is IQueryPagingParameter { PageNumber: { }, PageSize: { } } pagingParam)

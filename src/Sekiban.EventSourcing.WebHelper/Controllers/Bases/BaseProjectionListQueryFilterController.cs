@@ -6,9 +6,11 @@ namespace Sekiban.EventSourcing.WebHelper.Controllers.Bases;
 
 [ApiController]
 [Produces("application/json")]
-public class BaseProjectionListQueryFilterController<TProjection, TQueryFilter, TQueryParameter, TQueryFilterResponse> : ControllerBase
-    where TProjection : MultipleAggregateProjectionBase<TProjection>, IMultipleAggregateProjectionDto, new()
-    where TQueryFilter : IProjectionListQueryFilterDefinition<TProjection, TQueryParameter, TQueryFilterResponse>, new()
+public class
+    BaseProjectionListQueryFilterController<TProjection, TProjectionContents, TQueryFilter, TQueryParameter, TQueryFilterResponse> : ControllerBase
+    where TProjection : MultipleAggregateProjectionBase<TProjectionContents>, new()
+    where TProjectionContents : IMultipleAggregateProjectionContents, new()
+    where TQueryFilter : IProjectionListQueryFilterDefinition<TProjection, TProjectionContents, TQueryParameter, TQueryFilterResponse>, new()
     where TQueryParameter : IQueryParameter
 {
     protected readonly IQueryFilterService _queryFilterService;
@@ -21,7 +23,7 @@ public class BaseProjectionListQueryFilterController<TProjection, TQueryFilter, 
     public async Task<ActionResult<IEnumerable<TQueryFilterResponse>>> GetQueryResult([FromQuery] TQueryParameter queryParam)
     {
         var result = await _queryFilterService
-            .GetProjectionListQueryFilterAsync<TProjection, TQueryFilter, TQueryParameter, TQueryFilterResponse>(queryParam);
+            .GetProjectionListQueryFilterAsync<TProjection, TProjectionContents, TQueryFilter, TQueryParameter, TQueryFilterResponse>(queryParam);
         return Ok(result);
     }
 }

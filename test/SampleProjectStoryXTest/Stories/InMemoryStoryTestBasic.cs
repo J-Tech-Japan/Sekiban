@@ -172,10 +172,11 @@ public class InMemoryStoryTestBasic : ProjectByTestTestBase
         Assert.NotNull(loyaltyPoint);
         Assert.Equal(800, loyaltyPoint!.Contents.CurrentPoint);
 
-        var p = await _multipleAggregateProjectionService.GetProjectionAsync<ClientLoyaltyPointMultipleProjection>();
+        var p = await _multipleAggregateProjectionService
+            .GetProjectionAsync<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.ContentsDefinition>();
         Assert.NotNull(p);
-        Assert.Equal(2, p.Branches.Count);
-        Assert.Single(p.Records);
+        Assert.Equal(2, p.Contents.Branches.Count);
+        Assert.Single(p.Contents.Records);
 
         // delete client
         var deleteClientResult = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientContents, DeleteClient>(
@@ -220,10 +221,11 @@ public class InMemoryStoryTestBasic : ProjectByTestTestBase
         Assert.Single(recentActivityList);
         Assert.Equal(count + 1, version);
 
-        p = await _multipleAggregateProjectionService.GetProjectionAsync<ClientLoyaltyPointMultipleProjection>();
+        p = await _multipleAggregateProjectionService
+            .GetProjectionAsync<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.ContentsDefinition>();
         Assert.NotNull(p);
-        Assert.Equal(2, p.Branches.Count);
-        Assert.Empty(p.Records);
+        Assert.Equal(2, p.Contents.Branches.Count);
+        Assert.Empty(p.Contents.Records);
         var snapshotManager
             = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<SnapshotManager, SnapshotManagerContents>(
                 SnapshotManager.SharedId);

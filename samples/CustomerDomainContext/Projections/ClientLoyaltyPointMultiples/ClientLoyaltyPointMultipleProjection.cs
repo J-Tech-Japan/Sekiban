@@ -7,59 +7,68 @@ using CustomerDomainContext.Aggregates.LoyaltyPoints.Events;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 namespace CustomerDomainContext.Projections.ClientLoyaltyPointMultiples;
 
-public class ClientLoyaltyPointMultipleProjection : MultipleAggregateProjectionBase<ClientLoyaltyPointMultipleProjection>
+public class ClientLoyaltyPointMultipleProjection : MultipleAggregateProjectionBase<ClientLoyaltyPointMultipleProjection.ContentsDefinition>
 {
-    public List<ProjectedBranch> Branches { get; set; } = new();
-    public List<ProjectedRecord> Records { get; set; } = new();
-
-    public override ClientLoyaltyPointMultipleProjection ToDto()
-    {
-        return this;
-    }
     protected override Action? GetApplyEventAction(IAggregateEvent ev)
     {
         return ev.GetPayload() switch
         {
             BranchCreated branchCreated => () =>
             {
-                Branches.Add(new ProjectedBranch { BranchId = ev.AggregateId, BranchName = branchCreated.Name });
+                var list = Contents.Branches.ToList();
+                list.Add(new ProjectedBranch(ev.AggregateId, branchCreated.Name));
+                Contents = Contents with { Branches = list };
             },
             ClientCreated clientCreated => () =>
             {
-                Records.Add(
-                    new ProjectedRecord
-                    {
-                        BranchId = clientCreated.BranchId,
-                        BranchName = Branches.First(m => m.BranchId == clientCreated.BranchId).BranchName,
-                        ClientId = ev.AggregateId,
-                        ClientName = clientCreated.ClientName,
-                        Point = 0
-                    });
+                var list = Contents.Records.ToList();
+                list.Add(
+                    new ProjectedRecord(
+                        clientCreated.BranchId,
+                        Contents.Branches.First(m => m.BranchId == clientCreated.BranchId).BranchName,
+                        ev.AggregateId,
+                        clientCreated.ClientName,
+                        0));
+                Contents = Contents with { Records = list };
             },
             ClientNameChanged clientNameChanged => () =>
             {
-                var record = Records.First(m => m.ClientId == ev.AggregateId);
-                record.ClientName = clientNameChanged.ClientName;
+                Contents = Contents with
+                {
+                    Records = Contents.Records
+                        .Select(m => m.ClientId == ev.AggregateId ? m with { ClientName = clientNameChanged.ClientName } : m)
+                        .ToList()
+                };
             },
             ClientDeleted clientDeleted => () =>
             {
-                var record = Records.First(m => m.ClientId == ev.AggregateId);
-                Records.Remove(record);
+                Contents = Contents with { Records = Contents.Records.Where(m => m.ClientId != ev.AggregateId).ToList() };
             },
             LoyaltyPointCreated loyaltyPointCreated => () =>
             {
-                var record = Records.First(m => m.ClientId == ev.AggregateId);
-                record.Point = loyaltyPointCreated.InitialPoint;
+                Contents = Contents with
+                {
+                    Records = Contents.Records.Select(m => m.ClientId == ev.AggregateId ? m with { Point = loyaltyPointCreated.InitialPoint } : m)
+                        .ToList()
+                };
             },
             LoyaltyPointAdded loyaltyPointAdded => () =>
             {
-                var record = Records.First(m => m.ClientId == ev.AggregateId);
-                record.Point += loyaltyPointAdded.PointAmount;
+                Contents = Contents with
+                {
+                    Records = Contents.Records.Select(
+                            m => m.ClientId == ev.AggregateId ? m with { Point = m.Point + loyaltyPointAdded.PointAmount } : m)
+                        .ToList()
+                };
             },
             LoyaltyPointUsed loyaltyPointUsed => () =>
             {
-                var record = Records.First(m => m.ClientId == ev.AggregateId);
-                record.Point -= loyaltyPointUsed.PointAmount;
+                Contents = Contents with
+                {
+                    Records = Contents.Records.Select(
+                            m => m.ClientId == ev.AggregateId ? m with { Point = m.Point - loyaltyPointUsed.PointAmount } : m)
+                        .ToList()
+                };
             },
             _ => null
         };
@@ -68,22 +77,12 @@ public class ClientLoyaltyPointMultipleProjection : MultipleAggregateProjectionB
     {
         return new List<string> { nameof(Branch), nameof(Client), nameof(LoyaltyPoint) };
     }
-    protected override void CopyPropertiesFromSnapshot(ClientLoyaltyPointMultipleProjection snapshot)
+    public record ContentsDefinition
+        (IReadOnlyCollection<ProjectedBranch> Branches, IReadOnlyCollection<ProjectedRecord> Records) : IMultipleAggregateProjectionContents
     {
-        Branches = snapshot.Branches;
-        Records = snapshot.Records;
+        public ContentsDefinition() : this(new List<ProjectedBranch>(), new List<ProjectedRecord>()) { }
     }
-    public class ProjectedBranch
-    {
-        public Guid BranchId { get; set; }
-        public string BranchName { get; set; } = string.Empty;
-    }
-    public class ProjectedRecord
-    {
-        public Guid BranchId { get; set; }
-        public string BranchName { get; set; } = string.Empty;
-        public Guid ClientId { get; set; }
-        public string ClientName { get; set; } = string.Empty;
-        public int Point { get; set; }
-    }
+    public record ProjectedBranch(Guid BranchId, string BranchName);
+
+    public record ProjectedRecord(Guid BranchId, string BranchName, Guid ClientId, string ClientName, int Point);
 }

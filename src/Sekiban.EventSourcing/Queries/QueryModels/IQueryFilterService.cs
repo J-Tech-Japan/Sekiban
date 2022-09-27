@@ -6,14 +6,17 @@ namespace Sekiban.EventSourcing.Queries.QueryModels;
 public interface IQueryFilterService
 {
     public Task<TQueryFilterResponse>
-        GetProjectionQueryFilterAsync<TProjection, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(TQueryFilterParameter param)
-        where TProjection : MultipleAggregateProjectionBase<TProjection>, IMultipleAggregateProjectionDto, new()
-        where TQueryFilter : IProjectionQueryFilterDefinition<TProjection, TQueryFilterParameter, TQueryFilterResponse>, new()
+        GetProjectionQueryFilterAsync<TProjection, TProjectionContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
+            TQueryFilterParameter param) where TProjection : MultipleAggregateProjectionBase<TProjectionContents>, new()
+        where TProjectionContents : IMultipleAggregateProjectionContents, new()
+        where TQueryFilter : IProjectionQueryFilterDefinition<TProjection, TProjectionContents, TQueryFilterParameter, TQueryFilterResponse>, new()
         where TQueryFilterParameter : IQueryParameter;
     public Task<IEnumerable<TQueryFilterResponse>>
-        GetProjectionListQueryFilterAsync<TProjection, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(TQueryFilterParameter param)
-        where TProjection : MultipleAggregateProjectionBase<TProjection>, IMultipleAggregateProjectionDto, new()
-        where TQueryFilter : IProjectionListQueryFilterDefinition<TProjection, TQueryFilterParameter, TQueryFilterResponse>, new()
+        GetProjectionListQueryFilterAsync<TProjection, TProjectionContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
+            TQueryFilterParameter param) where TProjection : MultipleAggregateProjectionBase<TProjectionContents>, new()
+        where TProjectionContents : IMultipleAggregateProjectionContents, new()
+        where TQueryFilter : IProjectionListQueryFilterDefinition<TProjection, TProjectionContents, TQueryFilterParameter, TQueryFilterResponse>, new
+        ()
         where TQueryFilterParameter : IQueryParameter;
     public Task<IEnumerable<TQueryFilterResponse>>
         GetAggregateListQueryFilterAsync<TAggregate, TAggregateContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(

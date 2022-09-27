@@ -109,14 +109,16 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
         foreach (var queryFilterType in _sekibanControllerItems.ProjectionListQueryFilters)
         {
             var baseType = queryFilterType.GetInterfaces()
-                ?.FirstOrDefault(m => m.Name.Contains(typeof(IProjectionListQueryFilterDefinition<,,>).Name));
+                ?.FirstOrDefault(m => m.Name.Contains(typeof(IProjectionListQueryFilterDefinition<,,,>).Name));
             if (baseType is null) { continue; }
             var tProjectionType = baseType.GenericTypeArguments[0];
-            var tQueryParam = baseType.GenericTypeArguments[1];
-            var tQueryResult = baseType.GenericTypeArguments[2];
+            var tProjectionContentsType = baseType.GenericTypeArguments[1];
+            var tQueryParam = baseType.GenericTypeArguments[2];
+            var tQueryResult = baseType.GenericTypeArguments[3];
             feature.Controllers.Add(
                 _sekibanControllerOptions.BaseProjectionListQueryFilterControllerType.MakeGenericType(
                         tProjectionType,
+                        tProjectionContentsType,
                         queryFilterType!,
                         tQueryParam,
                         tQueryResult)
@@ -124,14 +126,16 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
         }
         foreach (var queryFilterType in _sekibanControllerItems.ProjectionQueryFilters)
         {
-            var baseType = queryFilterType.GetInterfaces()?.FirstOrDefault(m => m.Name.Contains(typeof(IProjectionQueryFilterDefinition<,,>).Name));
+            var baseType = queryFilterType.GetInterfaces()?.FirstOrDefault(m => m.Name.Contains(typeof(IProjectionQueryFilterDefinition<,,,>).Name));
             if (baseType is null) { continue; }
             var tProjectionType = baseType.GenericTypeArguments[0];
-            var tQueryParam = baseType.GenericTypeArguments[1];
-            var tQueryResult = baseType.GenericTypeArguments[2];
+            var tProjectionContentsType = baseType.GenericTypeArguments[1];
+            var tQueryParam = baseType.GenericTypeArguments[2];
+            var tQueryResult = baseType.GenericTypeArguments[3];
             feature.Controllers.Add(
                 _sekibanControllerOptions.BaseProjectionQueryFilterControllerType.MakeGenericType(
                         tProjectionType,
+                        tProjectionContentsType,
                         queryFilterType!,
                         tQueryParam,
                         tQueryResult)

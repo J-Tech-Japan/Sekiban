@@ -136,7 +136,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
             new List<string> { _sekibanControllerOptions.BaseProjectionListQueryFilterControllerType.Name }.Contains(controller.ControllerType.Name))
         {
             var projectionType = controller.ControllerType.GenericTypeArguments[0];
-            var queryFilterType = controller.ControllerType.GenericTypeArguments[1];
+            var queryFilterType = controller.ControllerType.GenericTypeArguments[2];
             controller.ControllerName = projectionType.Name;
             controller.Selectors.Add(
                 new SelectorModel
@@ -152,7 +152,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
             new List<string> { _sekibanControllerOptions.BaseProjectionQueryFilterControllerType.Name }.Contains(controller.ControllerType.Name))
         {
             var projectionType = controller.ControllerType.GenericTypeArguments[0];
-            var queryFilterType = controller.ControllerType.GenericTypeArguments[1];
+            var queryFilterType = controller.ControllerType.GenericTypeArguments[2];
             controller.ControllerName = projectionType.Name;
             controller.Selectors.Add(
                 new SelectorModel

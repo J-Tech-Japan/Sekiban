@@ -1,12 +1,14 @@
 using CustomerDomainContext.Aggregates.Branches.Events;
 using CustomerDomainContext.Projections.ClientLoyaltyPointMultiples;
+using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Xunit;
 namespace CustomerDomainXTest.AggregateTests;
 
-public class ClientLoyaltyPointCommonMultipleProjectionTest : MultipleAggregateProjectionTestBase<ClientLoyaltyPointMultipleProjection>
+public class ClientLoyaltyPointCommonMultipleProjectionTest : MultipleAggregateProjectionTestBase<ClientLoyaltyPointMultipleProjection,
+    ClientLoyaltyPointMultipleProjection.ContentsDefinition>
 {
     private static readonly Guid branchId = Guid.NewGuid();
     private static readonly string branchName = "Test Branch";
@@ -18,13 +20,14 @@ public class ClientLoyaltyPointCommonMultipleProjectionTest : MultipleAggregateP
             .WhenProjection()
             .ThenNotThrowsAnException()
             .ThenDto(
-                new ClientLoyaltyPointMultipleProjection
-                {
-                    Branches = new List<ClientLoyaltyPointMultipleProjection.ProjectedBranch>
-                    {
-                        new() { BranchId = branchId, BranchName = branchName }
-                    }
-                });
+                new MultipleAggregateProjectionContentsDto<ClientLoyaltyPointMultipleProjection.ContentsDefinition>(
+                    new ClientLoyaltyPointMultipleProjection.ContentsDefinition(
+                        new List<ClientLoyaltyPointMultipleProjection.ProjectedBranch> { new(branchId, branchName) },
+                        new List<ClientLoyaltyPointMultipleProjection.ProjectedRecord>()),
+                    Guid.Empty,
+                    string.Empty,
+                    0,
+                    0));
     }
 
     [Fact]

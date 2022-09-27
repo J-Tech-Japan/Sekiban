@@ -1,3 +1,4 @@
+using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.QueryModels;
 using Sekiban.EventSourcing.Queries.QueryModels.Parameters;
 namespace CustomerDomainContext.Projections.ClientLoyaltyPointLists;
@@ -17,13 +18,14 @@ public record ClientLoyaltyPointQueryFilterParameter(
     bool? SortKey1Asc,
     bool? SortKey2Asc) : IQueryFilterParameter;
 public class ClientLoyaltyPointQueryFilterFilter : IProjectionListQueryFilterDefinition<ClientLoyaltyPointListProjection,
-    ClientLoyaltyPointQueryFilterParameter, ClientLoyaltyPointListRecord>
+    ClientLoyaltyPointListProjection.ClientLoyaltyPointListProjectionContents, ClientLoyaltyPointQueryFilterParameter,
+    ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>
 {
-    public IEnumerable<ClientLoyaltyPointListRecord> HandleFilter(
+    public IEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> HandleFilter(
         ClientLoyaltyPointQueryFilterParameter queryParam,
-        ClientLoyaltyPointListProjection projection)
+        MultipleAggregateProjectionContentsDto<ClientLoyaltyPointListProjection.ClientLoyaltyPointListProjectionContents> projection)
     {
-        var result = projection.Records;
+        var result = projection.Contents.Records;
         if (queryParam.BranchId.HasValue)
         {
             result = result.Where(x => x.BranchId == queryParam.BranchId.Value).ToList();
@@ -34,9 +36,9 @@ public class ClientLoyaltyPointQueryFilterFilter : IProjectionListQueryFilterDef
         }
         return result;
     }
-    public IEnumerable<ClientLoyaltyPointListRecord> HandleSort(
+    public IEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> HandleSort(
         ClientLoyaltyPointQueryFilterParameter queryParam,
-        IEnumerable<ClientLoyaltyPointListRecord> projections)
+        IEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> projections)
     {
         var sort = new Dictionary<ClientLoyaltyPointQueryFilterSortKey, bool>();
         if (queryParam.SortKey1 != null) { sort.Add(queryParam.SortKey1.Value, queryParam.SortKey1Asc ?? true); }
@@ -68,14 +70,16 @@ public class ClientLoyaltyPointQueryFilterFilter : IProjectionListQueryFilterDef
             } else
             {
                 result = sortKey.Value
-                    ? (result as IOrderedEnumerable<ClientLoyaltyPointListRecord> ?? throw new InvalidCastException()).ThenBy(
+                    ? (result as IOrderedEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> ??
+                        throw new InvalidCastException()).ThenBy(
                         m => sortKey.Key switch
                         {
                             ClientLoyaltyPointQueryFilterSortKey.BranchName => m.BranchName,
                             ClientLoyaltyPointQueryFilterSortKey.ClientName => m.ClientName,
                             _ => throw new ArgumentOutOfRangeException()
                         })
-                    : (result as IOrderedEnumerable<ClientLoyaltyPointListRecord> ?? throw new InvalidCastException()).ThenByDescending(
+                    : (result as IOrderedEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> ??
+                        throw new InvalidCastException()).ThenByDescending(
                         m => sortKey.Key switch
                         {
                             ClientLoyaltyPointQueryFilterSortKey.BranchName => m.BranchName,
