@@ -11,14 +11,14 @@ public class MemoryMultipleAggregateProjectionService : IMultipleAggregateProjec
         await Task.CompletedTask;
         return Objects.FirstOrDefault(m => m is MultipleAggregateProjectionContentsDto<TContents>) ?? throw new SekibanProjectionNotExistsException();
     }
-    public async Task<MultipleAggregateProjectionContentsDto<SingleAggregateProjectionDto<AggregateDto<TContents>>>>
+    public async Task<MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<AggregateDto<TContents>>>>
         GetAggregateListObject<TAggregate, TContents>() where TAggregate : TransferableAggregateBase<TContents>
         where TContents : IAggregateContents, new()
     {
         var aggregates = Objects.Where(m => m.Contents.GetType().Name == typeof(TContents).Name).Select(m => (AggregateDto<TContents>)m).ToList();
         await Task.CompletedTask;
-        return new MultipleAggregateProjectionContentsDto<SingleAggregateProjectionDto<AggregateDto<TContents>>>(
-            new SingleAggregateProjectionDto<AggregateDto<TContents>> { List = aggregates },
+        return new MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<AggregateDto<TContents>>>(
+            new SingleAggregateListProjectionDto<AggregateDto<TContents>> { List = aggregates },
             Guid.Empty,
             string.Empty,
             0,
@@ -32,25 +32,38 @@ public class MemoryMultipleAggregateProjectionService : IMultipleAggregateProjec
         await Task.CompletedTask;
         return aggregates;
     }
-    public async Task<MultipleAggregateProjectionContentsDto<SingleAggregateProjectionDto<TSingleAggregateProjection>>>
-        GetSingleAggregateProjectionListObject<TAggregate, TSingleAggregateProjection>() where TAggregate : AggregateBase, new()
-        where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection>, new()
+    public async
+        Task<MultipleAggregateProjectionContentsDto<
+            SingleAggregateListProjectionDto<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>>>>
+        GetSingleAggregateProjectionListObject<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>()
+        where TAggregate : AggregateBase, new()
+        where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
+        new()
+        where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
     {
         var aggregates = Objects.Where(m => m.GetType().Name == typeof(TSingleAggregateProjection).Name)
-            .Select(m => (TSingleAggregateProjection)m)
+            .Select(m => (SingleAggregateProjectionDto<TSingleAggregateProjectionContents>)m)
             .ToList();
         await Task.CompletedTask;
-        return new MultipleAggregateProjectionContentsDto<SingleAggregateProjectionDto<TSingleAggregateProjection>>(
-            new SingleAggregateProjectionDto<TSingleAggregateProjection> { List = aggregates },
-            Guid.Empty,
-            string.Empty,
-            0,
-            aggregates.Count);
+        return new
+            MultipleAggregateProjectionContentsDto<
+                SingleAggregateListProjectionDto<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>>>(
+                new SingleAggregateListProjectionDto<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>> { List = aggregates },
+                Guid.Empty,
+                string.Empty,
+                0,
+                aggregates.Count);
     }
-    public async Task<List<T>> GetSingleAggregateProjectionList<TAggregate, T>(QueryListType queryListType = QueryListType.ActiveOnly)
-        where TAggregate : AggregateBase, new() where T : SingleAggregateProjectionBase<TAggregate, T>, new()
+    public async Task<List<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>>>
+        GetSingleAggregateProjectionList<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>(
+            QueryListType queryListType = QueryListType.ActiveOnly) where TAggregate : AggregateBase, new()
+        where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
+        new()
+        where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
     {
-        var aggregates = Objects.Where(m => m.GetType().Name == typeof(T).Name).Select(m => (T)m).ToList();
+        var aggregates = Objects.Where(m => m.GetType().Name == typeof(SingleAggregateProjectionDto<TSingleAggregateProjectionContents>).Name)
+            .Select(m => (SingleAggregateProjectionDto<TSingleAggregateProjectionContents>)m)
+            .ToList();
         await Task.CompletedTask;
         return aggregates;
     }

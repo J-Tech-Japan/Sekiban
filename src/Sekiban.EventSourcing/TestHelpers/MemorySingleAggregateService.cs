@@ -21,13 +21,16 @@ public class MemorySingleAggregateService : ISingleAggregateService
     {
         return GetAggregateDtoAsync<T, TContents>(aggregateId, toVersion);
     }
-    public async Task<TSingleAggregateProjection?> GetProjectionAsync<TAggregate, TSingleAggregateProjection>(Guid aggregateId, int? toVersion = null)
+    public async Task<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>?>
+        GetProjectionAsync<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>(Guid aggregateId, int? toVersion = null)
         where TAggregate : AggregateBase, new()
-        where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection>, new()
+        where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
+        new()
+        where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
     {
         var aggregate = Aggregates.FirstOrDefault(m => m.GetType().Name == typeof(TSingleAggregateProjection).Name && m.AggregateId == aggregateId);
         await Task.CompletedTask;
-        return (TSingleAggregateProjection?)aggregate;
+        return (SingleAggregateProjectionDto<TSingleAggregateProjectionContents>?)aggregate;
     }
     public async Task<T?> GetAggregateAsync<T, TContents>(Guid aggregateId, int? toVersion = null) where T : TransferableAggregateBase<TContents>
         where TContents : IAggregateContents, new()

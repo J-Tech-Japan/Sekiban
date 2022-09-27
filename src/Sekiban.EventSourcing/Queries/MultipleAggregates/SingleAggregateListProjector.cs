@@ -1,14 +1,14 @@
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace Sekiban.EventSourcing.Queries.MultipleAggregates;
 
-public class SingleAggregateListProjector<T, Q, P> : IMultipleAggregateProjector<SingleAggregateProjectionDto<Q>>
+public class SingleAggregateListProjector<T, Q, P> : IMultipleAggregateProjector<SingleAggregateListProjectionDto<Q>>
     where T : ISingleAggregate, ISingleAggregateProjection, ISingleAggregateProjectionDtoConvertible<Q>
     where Q : ISingleAggregate
     where P : ISingleAggregateProjector<T>, new()
 {
     private T _eventChecker;
     private P _projector = new();
-    private SingleAggregateProjectionDto<Q> Contents { get; set; }
+    private SingleAggregateListProjectionDto<Q> Contents { get; set; }
     public List<T> List
     {
         get;
@@ -40,17 +40,17 @@ public class SingleAggregateListProjector<T, Q, P> : IMultipleAggregateProjector
         LastEventId = ev.Id;
         LastSortableUniqueId = ev.SortableUniqueId;
     }
-    public MultipleAggregateProjectionContentsDto<SingleAggregateProjectionDto<Q>> ToDto()
+    public MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<Q>> ToDto()
     {
-        Contents = new SingleAggregateProjectionDto<Q> { List = List.Select(m => m.ToDto()).ToList() };
-        return new MultipleAggregateProjectionContentsDto<SingleAggregateProjectionDto<Q>>(
+        Contents = new SingleAggregateListProjectionDto<Q> { List = List.Select(m => m.ToDto()).ToList() };
+        return new MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<Q>>(
             Contents,
             LastEventId,
             LastSortableUniqueId,
             AppliedSnapshotVersion,
             Version);
     }
-    public void ApplySnapshot(MultipleAggregateProjectionContentsDto<SingleAggregateProjectionDto<Q>> snapshot)
+    public void ApplySnapshot(MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<Q>> snapshot)
     {
         Version = snapshot.Version;
         LastEventId = snapshot.LastEventId;

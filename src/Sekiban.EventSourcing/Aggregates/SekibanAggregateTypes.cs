@@ -25,7 +25,7 @@ public class SekibanAggregateTypes
                 var p = baseProjector.MakeGenericType(type);
                 _registeredTypes.Add(new DefaultAggregateType(type, dto, p));
             }
-            var projectorBase = typeof(SingleAggregateProjectionBase<,>);
+            var projectorBase = typeof(SingleAggregateProjectionBase<,,>);
             var customProjectors = assembly.DefinedTypes.Where(
                 x => x.IsClass && x.BaseType?.Name == projectorBase.Name && x.BaseType?.Namespace == projectorBase.Namespace);
             foreach (var type in customProjectors)

@@ -55,14 +55,17 @@ public class QueryFilterService : IQueryFilterService
         return queryFilter.HandleSort(param, filtered);
     }
     public async Task<IEnumerable<TQueryFilterResponse>>
-        GetSingleAggregateProjectionListQueryFilterAsync<TAggregate, TSingleAggregateProjection, TQueryFilter, TQueryFilterParameter,
-            TQueryFilterResponse>(TQueryFilterParameter param) where TAggregate : AggregateBase, new()
-        where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection>, new()
-        where TQueryFilter : ISingleAggregateProjectionListQueryFilterDefinition<TAggregate, TSingleAggregateProjection, TQueryFilterParameter,
-            TQueryFilterResponse>, new()
+        GetSingleAggregateProjectionListQueryFilterAsync<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents, TQueryFilter,
+            TQueryFilterParameter, TQueryFilterResponse>(TQueryFilterParameter param) where TAggregate : AggregateBase, new()
+        where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
+        new()
+        where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents, new()
+        where TQueryFilter : ISingleAggregateProjectionListQueryFilterDefinition<TAggregate, TSingleAggregateProjection,
+            TSingleAggregateProjectionContents, TQueryFilterParameter, TQueryFilterResponse>, new()
         where TQueryFilterParameter : IQueryParameter
     {
-        var allProjection = await _multipleAggregateProjectionService.GetSingleAggregateProjectionList<TAggregate, TSingleAggregateProjection>();
+        var allProjection = await _multipleAggregateProjectionService
+            .GetSingleAggregateProjectionList<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>();
         var queryFilter = new TQueryFilter();
         var filtered = queryFilter.HandleFilter(param, allProjection);
         if (param is IQueryPagingParameter { PageNumber: { }, PageSize: { } } pagingParam)

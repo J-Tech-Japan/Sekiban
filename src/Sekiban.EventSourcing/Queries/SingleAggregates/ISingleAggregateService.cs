@@ -45,11 +45,17 @@ public interface ISingleAggregateService
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <param name="toVersion"></param>
-    /// <typeparam name="T"></typeparam>
+    /// <typeparam name="TAggregate"></typeparam>
+    /// <typeparam name="TSingleAggregateProjection"></typeparam>
+    /// <typeparam name="TSingleAggregateProjectionContents"></typeparam>
     /// <returns></returns>
-    public Task<TSingleAggregateProjection?> GetProjectionAsync<TAggregate, TSingleAggregateProjection>(Guid aggregateId, int? toVersion = null)
+    public Task<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>?>
+        GetProjectionAsync<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>(Guid aggregateId, int? toVersion = null)
         where TAggregate : AggregateBase, new()
-        where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection>, new();
+        where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
+        new()
+        where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents;
+
 
     /// <summary>
     ///     スナップショット、メモリキャッシュを使用する通常版

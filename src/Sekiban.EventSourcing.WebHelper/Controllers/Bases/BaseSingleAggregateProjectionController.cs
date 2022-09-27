@@ -7,9 +7,11 @@ namespace Sekiban.EventSourcing.WebHelper.Controllers.Bases;
 
 [ApiController]
 [Produces("application/json")]
-public class BaseSingleAggregateProjectionController<TAggregate, TSingleAggregateProjection> : ControllerBase
-    where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection>, new()
+public class BaseSingleAggregateProjectionController<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents> : ControllerBase
     where TAggregate : AggregateBase, new()
+    where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>, new
+    ()
+    where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents, new()
 {
     private readonly SekibanControllerOptions _sekibanControllerOptions;
     private readonly IServiceProvider _serviceProvider;
@@ -26,7 +28,9 @@ public class BaseSingleAggregateProjectionController<TAggregate, TSingleAggregat
 
     [HttpGet]
     [Route("")]
-    public virtual async Task<ActionResult<TSingleAggregateProjection>> GetAsync(Guid id, int? toVersion = null)
+    public virtual async Task<ActionResult<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>?>> GetAsync(
+        Guid id,
+        int? toVersion = null)
     {
         if (_sekibanControllerOptions.AuthorizeDefinitionCollection.CheckAuthorization(
                 AuthorizeMethodType.SingleAggregateProjection,
@@ -37,6 +41,9 @@ public class BaseSingleAggregateProjectionController<TAggregate, TSingleAggregat
                 HttpContext,
                 _serviceProvider) ==
             AuthorizeResultType.Denied) { return Unauthorized(); }
-        return Ok(await _singleAggregateService.GetProjectionAsync<TAggregate, TSingleAggregateProjection>(id, toVersion));
+        var result = await _singleAggregateService.GetProjectionAsync<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>(
+            id,
+            toVersion);
+        return Ok(result);
     }
 }

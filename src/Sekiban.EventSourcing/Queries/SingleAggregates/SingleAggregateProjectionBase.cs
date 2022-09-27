@@ -1,8 +1,12 @@
 namespace Sekiban.EventSourcing.Queries.SingleAggregates;
 
-public abstract class SingleAggregateProjectionBase<TAggregate, T> : ISingleAggregateProjection, ISingleAggregateProjectionDtoConvertible<T>,
-    ISingleAggregate, ISingleAggregateProjector<T> where T : ISingleAggregate, ISingleAggregateProjection where TAggregate : AggregateBase, new()
+public abstract class SingleAggregateProjectionBase<TAggregate, TProjection, TSingleAggregateContents> : ISingleAggregateProjection,
+    ISingleAggregateProjectionDtoConvertible<SingleAggregateProjectionDto<TSingleAggregateContents>>, ISingleAggregate,
+    ISingleAggregateProjector<TProjection> where TProjection : SingleAggregateProjectionBase<TAggregate, TProjection, TSingleAggregateContents>
+    where TSingleAggregateContents : ISingleAggregateProjectionContents
+    where TAggregate : AggregateBase, new()
 {
+    public TSingleAggregateContents Contents { get; set; } = default!;
     public Guid LastEventId { get; set; }
     public string LastSortableUniqueId { get; set; } = string.Empty;
     public int AppliedSnapshotVersion { get; set; }
@@ -30,22 +34,31 @@ public abstract class SingleAggregateProjectionBase<TAggregate, T> : ISingleAggr
     {
         return GetApplyEventAction(ev) is not null;
     }
-    public abstract T ToDto();
-    public void ApplySnapshot(T snapshot)
+    public void ApplySnapshot(SingleAggregateProjectionDto<TSingleAggregateContents> snapshot)
     {
         Version = snapshot.Version;
         LastEventId = snapshot.LastEventId;
         LastSortableUniqueId = snapshot.LastSortableUniqueId;
         AppliedSnapshotVersion = snapshot.Version;
         IsDeleted = snapshot.IsDeleted;
-        CopyPropertiesFromSnapshot(snapshot);
+        Contents = snapshot.Contents;
     }
+    public SingleAggregateProjectionDto<TSingleAggregateContents> ToDto()
+    {
+        return new SingleAggregateProjectionDto<TSingleAggregateContents>(
+            Contents,
+            AggregateId,
+            IsDeleted,
+            LastEventId,
+            LastSortableUniqueId,
+            AppliedSnapshotVersion,
+            Version);
+    }
+    public abstract TProjection CreateInitialAggregate(Guid aggregateId);
 
     public Type OriginalAggregateType()
     {
         return typeof(TAggregate);
     }
-    public abstract T CreateInitialAggregate(Guid aggregateId);
-    protected abstract void CopyPropertiesFromSnapshot(T snapshot);
     protected abstract Action? GetApplyEventAction(IAggregateEvent ev);
 }

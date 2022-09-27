@@ -58,13 +58,16 @@ public class SingleAggregateService : ISingleAggregateService
     {
         return (await GetAggregateFromInitialAsync<T, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion))?.ToDto();
     }
-    public async Task<TSingleAggregateProjection?> GetProjectionAsync<TAggregate, TSingleAggregateProjection>(Guid aggregateId, int? toVersion = null)
+    public async Task<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>?>
+        GetProjectionAsync<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>(Guid aggregateId, int? toVersion = null)
         where TAggregate : AggregateBase, new()
-        where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection>, new()
+        where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
+        new()
+        where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
     {
-        var aggregate = await _singleProjection.GetAggregateAsync<TSingleAggregateProjection, TSingleAggregateProjection, TSingleAggregateProjection>(
-            aggregateId,
-            toVersion);
+        var aggregate = await _singleProjection
+            .GetAggregateAsync<TSingleAggregateProjection, SingleAggregateProjectionDto<TSingleAggregateProjectionContents>,
+                TSingleAggregateProjection>(aggregateId, toVersion);
         return aggregate?.ToDto();
     }
 

@@ -1,5 +1,6 @@
 using Sekiban.EventSourcing.Queries.QueryModels;
 using Sekiban.EventSourcing.Queries.QueryModels.Parameters;
+using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace CustomerDomainContext.Aggregates.Clients.Projections;
 
 public enum ClientNameHistoryProjectionQueryFilterSortKeys
@@ -19,20 +20,20 @@ public record ClientNameHistoryProjectionParameter(
     bool SortIsAsc = true) : IQueryFilterParameter;
 public record ClientNameHistoryProjectionQueryResponse(Guid BranchId, Guid ClientId, string ClientName, string ClientEmail, DateTime NameSetAt);
 public class ClientNameHistoryProjectionQueryFilter : ISingleAggregateProjectionListQueryFilterDefinition<Client, ClientNameHistoryProjection,
-    ClientNameHistoryProjectionParameter, ClientNameHistoryProjectionQueryResponse>
+    ClientNameHistoryProjection.ContentsDefinition, ClientNameHistoryProjectionParameter, ClientNameHistoryProjectionQueryResponse>
 {
 
     public IEnumerable<ClientNameHistoryProjectionQueryResponse> HandleFilter(
         ClientNameHistoryProjectionParameter queryParam,
-        IEnumerable<ClientNameHistoryProjection> list)
+        IEnumerable<SingleAggregateProjectionDto<ClientNameHistoryProjection.ContentsDefinition>> list)
     {
         return (from projection in list
-                from name in projection.ClientNames
+                from name in projection.Contents.ClientNames
                 select new ClientNameHistoryProjectionQueryResponse(
-                    projection.BranchId,
+                    projection.Contents.BranchId,
                     projection.AggregateId,
                     name.Name,
-                    projection.ClientEmail,
+                    projection.Contents.ClientEmail,
                     name.DateChanged)).Where(
             m => (queryParam.BranchId == null || m.BranchId == queryParam.BranchId) &&
                 (queryParam.ClientId == null || m.ClientId == queryParam.ClientId));
