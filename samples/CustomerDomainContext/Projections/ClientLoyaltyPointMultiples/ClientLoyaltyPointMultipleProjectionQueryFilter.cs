@@ -3,53 +3,49 @@ using Sekiban.EventSourcing.Queries.QueryModels;
 using Sekiban.EventSourcing.Queries.QueryModels.Parameters;
 namespace CustomerDomainContext.Projections.ClientLoyaltyPointMultiples;
 
-public enum ClientLoyaltyPointMultipleProjectionQuerySortKeys
-{
-    ClientName,
-    Points
-}
-public record ClientLoyaltyPointMultipleProjectionQueryParameter(
-    Guid? BranchId,
-    ClientLoyaltyPointMultipleProjectionQuerySortKeys SortKey,
-    bool SortIsAsc = true) : IQueryParameter;
 public class ClientLoyaltyPointMultipleProjectionQueryFilter : IProjectionQueryFilterDefinition<ClientLoyaltyPointMultipleProjection,
-    ClientLoyaltyPointMultipleProjection.ContentsDefinition, ClientLoyaltyPointMultipleProjectionQueryParameter,
+    ClientLoyaltyPointMultipleProjection.ContentsDefinition, ClientLoyaltyPointMultipleProjectionQueryFilter.QueryFilterParameter,
     ClientLoyaltyPointMultipleProjection.ContentsDefinition>
 {
-
+    public enum QuerySortKeys
+    {
+        ClientName,
+        Points
+    }
     public ClientLoyaltyPointMultipleProjection.ContentsDefinition HandleFilter(
-        ClientLoyaltyPointMultipleProjectionQueryParameter queryParam,
+        QueryFilterParameter queryFilterParam,
         MultipleAggregateProjectionContentsDto<ClientLoyaltyPointMultipleProjection.ContentsDefinition> projection)
     {
-        if (queryParam.BranchId is null) { return projection.Contents; }
+        if (queryFilterParam.BranchId is null) { return projection.Contents; }
         return new ClientLoyaltyPointMultipleProjection.ContentsDefinition
         {
-            Branches = projection.Contents.Branches.Where(x => x.BranchId == queryParam.BranchId).ToList(),
-            Records = projection.Contents.Records.Where(m => m.BranchId == queryParam.BranchId).ToList()
+            Branches = projection.Contents.Branches.Where(x => x.BranchId == queryFilterParam.BranchId).ToList(),
+            Records = projection.Contents.Records.Where(m => m.BranchId == queryFilterParam.BranchId).ToList()
         };
     }
     public ClientLoyaltyPointMultipleProjection.ContentsDefinition HandleSortAndPagingIfNeeded(
-        ClientLoyaltyPointMultipleProjectionQueryParameter queryParam,
+        QueryFilterParameter queryFilterParam,
         ClientLoyaltyPointMultipleProjection.ContentsDefinition response)
     {
-        if (queryParam.SortKey == ClientLoyaltyPointMultipleProjectionQuerySortKeys.ClientName)
+        if (queryFilterParam.SortKey == QuerySortKeys.ClientName)
         {
             return response with
             {
-                Records = queryParam.SortIsAsc
+                Records = queryFilterParam.SortIsAsc
                     ? response.Records.OrderBy(x => x.ClientName).ToList()
                     : response.Records.OrderByDescending(x => x.ClientName).ToList()
             };
         }
-        if (queryParam.SortKey == ClientLoyaltyPointMultipleProjectionQuerySortKeys.Points)
+        if (queryFilterParam.SortKey == QuerySortKeys.Points)
         {
             return response with
             {
-                Records = queryParam.SortIsAsc
+                Records = queryFilterParam.SortIsAsc
                     ? response.Records.OrderBy(x => x.Point).ToList()
                     : response.Records.OrderByDescending(x => x.Point).ToList()
             };
         }
         return response with { Records = response.Records.OrderBy(x => x.ClientName).ToList() };
     }
+    public record QueryFilterParameter(Guid? BranchId, QuerySortKeys SortKey, bool SortIsAsc = true) : IQueryParameter;
 }

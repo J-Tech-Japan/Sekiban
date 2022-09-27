@@ -7,7 +7,7 @@ using CustomerWithTenantAddonDomainContext.Aggregates.LoyaltyPoints.Events;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 namespace CustomerWithTenantAddonDomainContext.Projections;
 
-public class ClientLoyaltyPointListProjection : MultipleAggregateProjectionBase<ClientLoyaltyPointListProjection.ProjectionContents>
+public class ClientLoyaltyPointListProjection : MultipleAggregateProjectionBase<ClientLoyaltyPointListProjection.ContentsDefinition>
 {
 
     protected override Action? GetApplyEventAction(IAggregateEvent ev)
@@ -17,14 +17,14 @@ public class ClientLoyaltyPointListProjection : MultipleAggregateProjectionBase<
             BranchCreated branchCreated => () =>
             {
                 var list = Contents.Branches.ToList();
-                list.Add(new ClientLoyaltyPointListBranchRecord(ev.AggregateId, branchCreated.Name));
+                list.Add(new BranchRecord(ev.AggregateId, branchCreated.Name));
                 Contents = Contents with { Branches = list };
             },
             ClientCreated clientCreated => () =>
             {
                 var list = Contents.Records.ToList();
                 list.Add(
-                    new ClientLoyaltyPointListRecord(
+                    new PointListRecord(
                         clientCreated.BranchId,
                         Contents.Branches.First(m => m.BranchId == clientCreated.BranchId).BranchName,
                         ev.AggregateId,
@@ -78,13 +78,13 @@ public class ClientLoyaltyPointListProjection : MultipleAggregateProjectionBase<
     {
         return new List<string> { nameof(Branch), nameof(Client), nameof(LoyaltyPoint) };
     }
-    public record ClientLoyaltyPointListRecord(Guid BranchId, string BranchName, Guid ClientId, string ClientName, int Point);
-    public record ClientLoyaltyPointListBranchRecord(Guid BranchId, string BranchName);
-    public record ProjectionContents(
-        IReadOnlyCollection<ClientLoyaltyPointListRecord> Records,
-        IReadOnlyCollection<ClientLoyaltyPointListBranchRecord> Branches) : IMultipleAggregateProjectionContents
+    public record PointListRecord(Guid BranchId, string BranchName, Guid ClientId, string ClientName, int Point);
+    public record BranchRecord(Guid BranchId, string BranchName);
+    public record ContentsDefinition(
+        IReadOnlyCollection<PointListRecord> Records,
+        IReadOnlyCollection<BranchRecord> Branches) : IMultipleAggregateProjectionContents
     {
-        public ProjectionContents() : this(new List<ClientLoyaltyPointListRecord>(), new List<ClientLoyaltyPointListBranchRecord>())
+        public ContentsDefinition() : this(new List<PointListRecord>(), new List<BranchRecord>())
         {
         }
     }

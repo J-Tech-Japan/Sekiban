@@ -7,8 +7,7 @@ using CustomerDomainContext.Aggregates.LoyaltyPoints.Events;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 namespace CustomerDomainContext.Projections.ClientLoyaltyPointLists;
 
-public class ClientLoyaltyPointListProjection : MultipleAggregateProjectionBase<
-    ClientLoyaltyPointListProjection.ClientLoyaltyPointListProjectionContents>
+public class ClientLoyaltyPointListProjection : MultipleAggregateProjectionBase<ClientLoyaltyPointListProjection.ContentsDefinition>
 {
     protected override Action? GetApplyEventAction(IAggregateEvent ev)
     {
@@ -88,11 +87,11 @@ public class ClientLoyaltyPointListProjection : MultipleAggregateProjectionBase<
         public string ClientName { get; set; } = string.Empty;
         public int Point { get; set; }
     }
-    public record ClientLoyaltyPointListProjectionContents(
+    public record ContentsDefinition(
         IReadOnlyCollection<ClientLoyaltyPointListRecord> Records,
         IReadOnlyCollection<ProjectedBranchInternal> Branches) : IMultipleAggregateProjectionContents
     {
-        public ClientLoyaltyPointListProjectionContents() : this(new List<ClientLoyaltyPointListRecord>(), new List<ProjectedBranchInternal>())
+        public ContentsDefinition() : this(new List<ClientLoyaltyPointListRecord>(), new List<ProjectedBranchInternal>())
         {
         }
     }

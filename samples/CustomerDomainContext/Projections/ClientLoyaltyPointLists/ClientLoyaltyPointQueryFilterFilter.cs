@@ -3,27 +3,19 @@ using Sekiban.EventSourcing.Queries.QueryModels;
 using Sekiban.EventSourcing.Queries.QueryModels.Parameters;
 namespace CustomerDomainContext.Projections.ClientLoyaltyPointLists;
 
-public enum ClientLoyaltyPointQueryFilterSortKey
-{
-    BranchName,
-    ClientName
-}
-public record ClientLoyaltyPointQueryFilterParameter(
-    Guid? BranchId,
-    Guid? ClientId,
-    int? PageSize,
-    int? PageNumber,
-    ClientLoyaltyPointQueryFilterSortKey? SortKey1,
-    ClientLoyaltyPointQueryFilterSortKey? SortKey2,
-    bool? SortKey1Asc,
-    bool? SortKey2Asc) : IQueryFilterParameter;
 public class ClientLoyaltyPointQueryFilterFilter : IProjectionListQueryFilterDefinition<ClientLoyaltyPointListProjection,
-    ClientLoyaltyPointListProjection.ClientLoyaltyPointListProjectionContents, ClientLoyaltyPointQueryFilterParameter,
+    ClientLoyaltyPointListProjection.ContentsDefinition, ClientLoyaltyPointQueryFilterFilter.QueryFilterParameter,
     ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>
 {
+    public enum FilterSortKey
+    {
+        BranchName,
+        ClientName
+    }
+
     public IEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> HandleFilter(
-        ClientLoyaltyPointQueryFilterParameter queryParam,
-        MultipleAggregateProjectionContentsDto<ClientLoyaltyPointListProjection.ClientLoyaltyPointListProjectionContents> projection)
+        QueryFilterParameter queryParam,
+        MultipleAggregateProjectionContentsDto<ClientLoyaltyPointListProjection.ContentsDefinition> projection)
     {
         var result = projection.Contents.Records;
         if (queryParam.BranchId.HasValue)
@@ -37,10 +29,10 @@ public class ClientLoyaltyPointQueryFilterFilter : IProjectionListQueryFilterDef
         return result;
     }
     public IEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> HandleSort(
-        ClientLoyaltyPointQueryFilterParameter queryParam,
+        QueryFilterParameter queryParam,
         IEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> projections)
     {
-        var sort = new Dictionary<ClientLoyaltyPointQueryFilterSortKey, bool>();
+        var sort = new Dictionary<FilterSortKey, bool>();
         if (queryParam.SortKey1 != null) { sort.Add(queryParam.SortKey1.Value, queryParam.SortKey1Asc ?? true); }
         if (queryParam.SortKey2 != null) { sort.Add(queryParam.SortKey2.Value, queryParam.SortKey2Asc ?? true); }
         if (sort.Count == 0)
@@ -56,15 +48,15 @@ public class ClientLoyaltyPointQueryFilterFilter : IProjectionListQueryFilterDef
                     ? result.OrderBy(
                         m => sortKey.Key switch
                         {
-                            ClientLoyaltyPointQueryFilterSortKey.BranchName => m.BranchName,
-                            ClientLoyaltyPointQueryFilterSortKey.ClientName => m.ClientName,
+                            FilterSortKey.BranchName => m.BranchName,
+                            FilterSortKey.ClientName => m.ClientName,
                             _ => throw new ArgumentOutOfRangeException()
                         })
                     : result.OrderByDescending(
                         m => sortKey.Key switch
                         {
-                            ClientLoyaltyPointQueryFilterSortKey.BranchName => m.BranchName,
-                            ClientLoyaltyPointQueryFilterSortKey.ClientName => m.ClientName,
+                            FilterSortKey.BranchName => m.BranchName,
+                            FilterSortKey.ClientName => m.ClientName,
                             _ => throw new ArgumentOutOfRangeException()
                         });
             } else
@@ -74,20 +66,29 @@ public class ClientLoyaltyPointQueryFilterFilter : IProjectionListQueryFilterDef
                         throw new InvalidCastException()).ThenBy(
                         m => sortKey.Key switch
                         {
-                            ClientLoyaltyPointQueryFilterSortKey.BranchName => m.BranchName,
-                            ClientLoyaltyPointQueryFilterSortKey.ClientName => m.ClientName,
+                            FilterSortKey.BranchName => m.BranchName,
+                            FilterSortKey.ClientName => m.ClientName,
                             _ => throw new ArgumentOutOfRangeException()
                         })
                     : (result as IOrderedEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> ??
                         throw new InvalidCastException()).ThenByDescending(
                         m => sortKey.Key switch
                         {
-                            ClientLoyaltyPointQueryFilterSortKey.BranchName => m.BranchName,
-                            ClientLoyaltyPointQueryFilterSortKey.ClientName => m.ClientName,
+                            FilterSortKey.BranchName => m.BranchName,
+                            FilterSortKey.ClientName => m.ClientName,
                             _ => throw new ArgumentOutOfRangeException()
                         });
             }
         }
         return result;
     }
+    public record QueryFilterParameter(
+        Guid? BranchId,
+        Guid? ClientId,
+        int? PageSize,
+        int? PageNumber,
+        FilterSortKey? SortKey1,
+        FilterSortKey? SortKey2,
+        bool? SortKey1Asc,
+        bool? SortKey2Asc) : IQueryFilterParameter;
 }
