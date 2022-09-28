@@ -68,10 +68,12 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
         }
         foreach (var projectionType in _sekibanControllerItems.MultipleAggregatesProjections)
         {
-            var baseType = projectionType?.BaseType?.GetGenericTypeDefinition();
-            if (baseType != typeof(MultipleAggregateProjectionBase<>)) { continue; }
+            var baseType = projectionType?.BaseType;
+            if (baseType?.GetGenericTypeDefinition() != typeof(MultipleAggregateProjectionBase<>)) { continue; }
+            var tAggregateContents = baseType.GenericTypeArguments[0];
             feature.Controllers.Add(
-                _sekibanControllerOptions.BaseMultipleAggregateProjectionControllerType.MakeGenericType(projectionType!).GetTypeInfo());
+                _sekibanControllerOptions.BaseMultipleAggregateProjectionControllerType.MakeGenericType(projectionType!, tAggregateContents)
+                    .GetTypeInfo());
         }
         foreach (var projectionType in _sekibanControllerItems.AggregateListQueryFilters)
         {

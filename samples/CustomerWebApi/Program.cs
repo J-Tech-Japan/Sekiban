@@ -2,6 +2,7 @@ using CosmosInfrastructure;
 using CustomerDomainContext.Shared;
 using Sekiban.EventSourcing.Shared;
 using Sekiban.EventSourcing.WebHelper.Common;
+using Sekiban.EventSourcing.WebHelper.SwashbuckleHelpers;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -33,7 +34,12 @@ builder.Services.AddControllers();
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(
+    config =>
+    {
+        config.CustomSchemaIds(x => x.FullName);
+        config.SchemaFilter<NamespaceSchemaFilter>();
+    });
 
 // プロジェクトの依存
 SekibanEventSourcingDependency.Register(builder.Services, CustomerDependency.GetOptions());

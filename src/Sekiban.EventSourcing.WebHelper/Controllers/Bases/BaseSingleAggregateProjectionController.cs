@@ -11,7 +11,7 @@ public class BaseSingleAggregateProjectionController<TAggregate, TSingleAggregat
     where TAggregate : AggregateBase, new()
     where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>, new
     ()
-    where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents, new()
+    where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
 {
     private readonly SekibanControllerOptions _sekibanControllerOptions;
     private readonly IServiceProvider _serviceProvider;

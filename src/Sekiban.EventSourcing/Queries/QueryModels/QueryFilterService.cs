@@ -59,7 +59,7 @@ public class QueryFilterService : IQueryFilterService
             TQueryFilterParameter, TQueryFilterResponse>(TQueryFilterParameter param) where TAggregate : AggregateBase, new()
         where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
         new()
-        where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents, new()
+        where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
         where TQueryFilter : ISingleAggregateProjectionListQueryFilterDefinition<TAggregate, TSingleAggregateProjection,
             TSingleAggregateProjectionContents, TQueryFilterParameter, TQueryFilterResponse>, new()
         where TQueryFilterParameter : IQueryParameter
