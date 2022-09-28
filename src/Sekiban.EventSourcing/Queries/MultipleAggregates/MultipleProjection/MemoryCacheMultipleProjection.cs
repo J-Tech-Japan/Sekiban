@@ -3,151 +3,154 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Documents.ValueObjects;
 using Sekiban.EventSourcing.Queries.UpdateNotices;
 using Sekiban.EventSourcing.Settings;
-namespace Sekiban.EventSourcing.Queries.MultipleAggregates.MultipleProjection
+namespace Sekiban.EventSourcing.Queries.MultipleAggregates.MultipleProjection;
+
+public class MemoryCacheMultipleProjection : IMultipleProjection
 {
-    public class MemoryCacheMultipleProjection : IMultipleProjection
+    private readonly IAggregateSettings _aggregateSettings;
+    private readonly IDocumentRepository _documentRepository;
+    private readonly IMemoryCache _memoryCache;
+    private readonly IServiceProvider _serviceProvider;
+    private readonly IUpdateNotice _updateNotice;
+    public MemoryCacheMultipleProjection(
+        IMemoryCache memoryCache,
+        IDocumentRepository documentRepository,
+        IServiceProvider serviceProvider,
+        IUpdateNotice updateNotice,
+        IAggregateSettings aggregateSettings)
     {
-        private readonly IAggregateSettings _aggregateSettings;
-        private readonly IDocumentRepository _documentRepository;
-        private readonly IMemoryCache _memoryCache;
-        private readonly IServiceProvider _serviceProvider;
-        private readonly IUpdateNotice _updateNotice;
-        public MemoryCacheMultipleProjection(
-            IMemoryCache memoryCache,
-            IDocumentRepository documentRepository,
-            IServiceProvider serviceProvider,
-            IUpdateNotice updateNotice,
-            IAggregateSettings aggregateSettings)
+        _memoryCache = memoryCache;
+        _documentRepository = documentRepository;
+        _serviceProvider = serviceProvider;
+        _updateNotice = updateNotice;
+        _aggregateSettings = aggregateSettings;
+    }
+    public async Task<MultipleAggregateProjectionContentsDto<TProjectionContents>> GetMultipleProjectionAsync<TProjection, TProjectionContents>()
+        where TProjection : IMultipleAggregateProjector<TProjectionContents>, new()
+        where TProjectionContents : IMultipleAggregateProjectionContents, new()
+    {
+        var savedContainer
+            = _memoryCache.Get<MultipleMemoryProjectionContainer<TProjection, TProjectionContents>>(
+                GetInMemoryKey<TProjection, TProjectionContents>());
+        if (savedContainer == null)
         {
-            _memoryCache = memoryCache;
-            _documentRepository = documentRepository;
-            _serviceProvider = serviceProvider;
-            _updateNotice = updateNotice;
-            _aggregateSettings = aggregateSettings;
+            return await GetInitialProjection<TProjection, TProjectionContents>();
         }
-        public async Task<Q> GetMultipleProjectionAsync<P, Q>() where P : IMultipleAggregateProjector<Q>, new()
-            where Q : IMultipleAggregateProjectionDto, new()
+
+        var projector = new TProjection();
+        if (savedContainer.SafeDto is null && savedContainer?.SafeSortableUniqueId?.Value is null)
         {
-            var savedContainer = _memoryCache.Get<MultipleMemoryProjectionContainer<P, Q>>(GetInMemoryKey<P, Q>());
-            if (savedContainer == null)
-            {
-                return await GetInitialProjection<P, Q>();
-            }
+            return await GetInitialProjection<TProjection, TProjectionContents>();
+        }
+        projector.ApplySnapshot(savedContainer.SafeDto!);
 
-            var projector = new P();
-            if (savedContainer.SafeDto is null && savedContainer?.SafeSortableUniqueId?.Value is null)
+        bool? canUseCache = null;
+        foreach (var targetAggregateName in projector.TargetAggregateNames())
+        {
+            if (canUseCache == false) { continue; }
+            if (!_aggregateSettings.UseUpdateMarkerForType(targetAggregateName))
             {
-                return await GetInitialProjection<P, Q>();
+                canUseCache = false;
+                continue;
             }
-            projector.ApplySnapshot(savedContainer.SafeDto!);
+            var (updated, type) = _updateNotice.HasUpdateAfter(targetAggregateName, savedContainer.SafeSortableUniqueId!);
+            canUseCache = !updated;
+        }
+        if (canUseCache == true)
+        {
+            return savedContainer.Dto!;
+        }
 
-            bool? canUseCache = null;
-            foreach (var targetAggregateName in projector.TargetAggregateNames())
+        var container = new MultipleMemoryProjectionContainer<TProjection, TProjectionContents>();
+        await _documentRepository.GetAllAggregateEventsAsync(
+            typeof(TProjection),
+            projector.TargetAggregateNames(),
+            savedContainer.SafeSortableUniqueId?.Value,
+            events =>
             {
-                if (canUseCache == false) { continue; }
-                if (!_aggregateSettings.UseUpdateMarkerForType(targetAggregateName))
+                var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
+                foreach (var ev in events)
                 {
-                    canUseCache = false;
-                    continue;
-                }
-                var (updated, type) = _updateNotice.HasUpdateAfter(targetAggregateName, savedContainer.SafeSortableUniqueId!);
-                canUseCache = !updated;
-            }
-            if (canUseCache == true)
-            {
-                return savedContainer.Dto!;
-            }
-
-            var container = new MultipleMemoryProjectionContainer<P, Q>();
-            await _documentRepository.GetAllAggregateEventsAsync(
-                typeof(P),
-                projector.TargetAggregateNames(),
-                savedContainer.SafeSortableUniqueId?.Value,
-                events =>
-                {
-                    var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
-                    foreach (var ev in events)
+                    if (container.LastSortableUniqueId == null && ev.GetSortableUniqueId().EarlierThan(targetSafeId) && projector.Version > 0)
                     {
-                        if (container.LastSortableUniqueId == null && ev.GetSortableUniqueId().EarlierThan(targetSafeId) && projector.Version > 0)
-                        {
-                            container.SafeDto = projector.ToDto();
-                            container.SafeSortableUniqueId = container.SafeDto.LastSortableUniqueId;
-                        }
-                        if (ev.GetSortableUniqueId().LaterThan(savedContainer.SafeSortableUniqueId!))
-                        {
-                            projector.ApplyEvent(ev);
-                            container.LastSortableUniqueId = ev.GetSortableUniqueId();
-                        }
-                        if (ev.GetSortableUniqueId().LaterThan(targetSafeId))
-                        {
-                            container.UnsafeEvents.Add(ev);
-                        }
+                        container.SafeDto = projector.ToDto();
+                        container.SafeSortableUniqueId = container.SafeDto.LastSortableUniqueId;
                     }
-                });
-            container.Dto = projector.ToDto();
-            if (container.LastSortableUniqueId != null && container.SafeSortableUniqueId == null)
-            {
-                container.SafeDto = container.Dto;
-                container.SafeSortableUniqueId = container.LastSortableUniqueId;
-            }
-            if (container.SafeDto is not null && container.SafeSortableUniqueId != savedContainer?.SafeSortableUniqueId)
-            {
-                _memoryCache.Set(GetInMemoryKey<P, Q>(), container, GetMemoryCacheOptions());
-            }
-            return container.Dto;
-        }
-
-        private async Task<Q> GetInitialProjection<P, Q>() where P : IMultipleAggregateProjector<Q>, new()
-            where Q : IMultipleAggregateProjectionDto, new()
-        {
-            var projector = new P();
-            var container = new MultipleMemoryProjectionContainer<P, Q>();
-            await _documentRepository.GetAllAggregateEventsAsync(
-                typeof(P),
-                projector.TargetAggregateNames(),
-                null,
-                events =>
-                {
-                    var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
-                    foreach (var ev in events)
+                    if (ev.GetSortableUniqueId().LaterThan(savedContainer.SafeSortableUniqueId!))
                     {
-                        if (container.LastSortableUniqueId == null && ev.GetSortableUniqueId().EarlierThan(targetSafeId) && projector.Version > 0)
-                        {
-                            container.SafeDto = projector.ToDto();
-                            container.SafeSortableUniqueId = container.SafeDto.LastSortableUniqueId;
-                        }
                         projector.ApplyEvent(ev);
                         container.LastSortableUniqueId = ev.GetSortableUniqueId();
-                        if (ev.GetSortableUniqueId().LaterThan(targetSafeId))
-                        {
-                            container.UnsafeEvents.Add(ev);
-                        }
                     }
-                });
-            container.Dto = projector.ToDto();
-            if (container.LastSortableUniqueId != null &&
-                container.SafeSortableUniqueId == null &&
-                container.LastSortableUniqueId?.EarlierThan(SortableUniqueIdValue.GetSafeIdFromUtc()) == true)
-            {
-                container.SafeDto = container.Dto;
-                container.SafeSortableUniqueId = container.LastSortableUniqueId;
-            }
-            if (container.SafeDto is not null)
-            {
-                _memoryCache.Set(GetInMemoryKey<P, Q>(), container, GetMemoryCacheOptions());
-            }
-            return container.Dto;
-        }
-        private static MemoryCacheEntryOptions GetMemoryCacheOptions() =>
-            new()
-            {
-                AbsoluteExpiration = DateTimeOffset.UtcNow.AddHours(2), SlidingExpiration = TimeSpan.FromMinutes(15)
-                // 5分読まれなかったら削除するが、2時間経ったらどちらにしても削除する
-            };
-        private string GetInMemoryKey<P, Q>() where P : IMultipleAggregateProjector<Q>, new() where Q : IMultipleAggregateProjectionDto, new()
+                    if (ev.GetSortableUniqueId().LaterThan(targetSafeId))
+                    {
+                        container.UnsafeEvents.Add(ev);
+                    }
+                }
+            });
+        container.Dto = projector.ToDto();
+        if (container.LastSortableUniqueId != null && container.SafeSortableUniqueId == null)
         {
-            var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
-            return "MultipleProjection-" + sekibanContext?.SettingGroupIdentifier + "-" + typeof(P).FullName;
+            container.SafeDto = container.Dto;
+            container.SafeSortableUniqueId = container.LastSortableUniqueId;
         }
+        if (container.SafeDto is not null && container.SafeSortableUniqueId != savedContainer?.SafeSortableUniqueId)
+        {
+            _memoryCache.Set(GetInMemoryKey<TProjection, TProjectionContents>(), container, GetMemoryCacheOptions());
+        }
+        return container.Dto;
+    }
+    private async Task<MultipleAggregateProjectionContentsDto<TContents>> GetInitialProjection<TProjection, TContents>()
+        where TProjection : IMultipleAggregateProjector<TContents>, new() where TContents : IMultipleAggregateProjectionContents, new()
+    {
+        var projector = new TProjection();
+        var container = new MultipleMemoryProjectionContainer<TProjection, TContents>();
+        await _documentRepository.GetAllAggregateEventsAsync(
+            typeof(TProjection),
+            projector.TargetAggregateNames(),
+            null,
+            events =>
+            {
+                var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
+                foreach (var ev in events)
+                {
+                    if (container.LastSortableUniqueId == null && ev.GetSortableUniqueId().EarlierThan(targetSafeId) && projector.Version > 0)
+                    {
+                        container.SafeDto = projector.ToDto();
+                        container.SafeSortableUniqueId = container.SafeDto.LastSortableUniqueId;
+                    }
+                    projector.ApplyEvent(ev);
+                    container.LastSortableUniqueId = ev.GetSortableUniqueId();
+                    if (ev.GetSortableUniqueId().LaterThan(targetSafeId))
+                    {
+                        container.UnsafeEvents.Add(ev);
+                    }
+                }
+            });
+        container.Dto = projector.ToDto();
+        if (container.LastSortableUniqueId != null &&
+            container.SafeSortableUniqueId == null &&
+            container.LastSortableUniqueId?.EarlierThan(SortableUniqueIdValue.GetSafeIdFromUtc()) == true)
+        {
+            container.SafeDto = container.Dto;
+            container.SafeSortableUniqueId = container.LastSortableUniqueId;
+        }
+        if (container.SafeDto is not null)
+        {
+            _memoryCache.Set(GetInMemoryKey<TProjection, TContents>(), container, GetMemoryCacheOptions());
+        }
+        return container.Dto;
+    }
+    private static MemoryCacheEntryOptions GetMemoryCacheOptions()
+    {
+        return new MemoryCacheEntryOptions
+        {
+            AbsoluteExpiration = DateTimeOffset.UtcNow.AddHours(2), SlidingExpiration = TimeSpan.FromMinutes(15)
+            // 5分読まれなかったら削除するが、2時間経ったらどちらにしても削除する
+        };
+    }
+    private string GetInMemoryKey<P, Q>() where P : IMultipleAggregateProjector<Q>, new() where Q : IMultipleAggregateProjectionContents, new()
+    {
+        var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
+        return "MultipleProjection-" + sekibanContext?.SettingGroupIdentifier + "-" + typeof(P).FullName;
     }
 }

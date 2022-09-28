@@ -1,52 +1,71 @@
 using Sekiban.EventSourcing.Queries.MultipleAggregates.MultipleProjection;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
-namespace Sekiban.EventSourcing.Queries.MultipleAggregates
+namespace Sekiban.EventSourcing.Queries.MultipleAggregates;
+
+public class MultipleAggregateProjectionService : IMultipleAggregateProjectionService
 {
-    public class MultipleAggregateProjectionService : IMultipleAggregateProjectionService
+    private readonly IMultipleProjection _multipleProjection;
+
+    public MultipleAggregateProjectionService(IMultipleProjection multipleProjection)
     {
-        private readonly IMultipleProjection _multipleProjection;
+        _multipleProjection = multipleProjection;
+    }
 
-        public MultipleAggregateProjectionService(IMultipleProjection multipleProjection) =>
-            _multipleProjection = multipleProjection;
-        public Task<P> GetProjectionAsync<P>() where P : MultipleAggregateProjectionBase<P>, IMultipleAggregateProjectionDto, new() =>
-            _multipleProjection.GetMultipleProjectionAsync<P, P>();
-        public Task<TProjection> GetListProjectionAsync<TProjection, TRecord>()
-            where TProjection : MultipleAggregateListProjectionBase<TProjection, TRecord>, new() where TRecord : new() =>
-            _multipleProjection.GetMultipleProjectionAsync<TProjection, TProjection>();
-
-        public Task<SingleAggregateProjectionDto<AggregateDto<TContents>>> GetAggregateListObject<T, TContents>()
-            where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new() =>
-            _multipleProjection
-                .GetMultipleProjectionAsync<SingleAggregateListProjector<T, AggregateDto<TContents>, DefaultSingleAggregateProjector<T>>,
-                    SingleAggregateProjectionDto<AggregateDto<TContents>>>();
-        public async Task<List<AggregateDto<TContents>>> GetAggregateList<T, TContents>(QueryListType queryListType = QueryListType.ActiveOnly)
-            where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new()
+    public Task<MultipleAggregateProjectionContentsDto<TContents>> GetProjectionAsync<TProjection, TContents>()
+        where TProjection : MultipleAggregateProjectionBase<TContents>, new() where TContents : IMultipleAggregateProjectionContents, new()
+    {
+        return _multipleProjection.GetMultipleProjectionAsync<TProjection, TContents>();
+    }
+    public async Task<List<AggregateDto<TContents>>> GetAggregateList<TAggregate, TContents>(QueryListType queryListType = QueryListType.ActiveOnly)
+        where TAggregate : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new()
+    {
+        var projection = await GetAggregateListObject<TAggregate, TContents>();
+        return queryListType switch
         {
-            var list = (await _multipleProjection
-                .GetMultipleProjectionAsync<SingleAggregateListProjector<T, AggregateDto<TContents>, DefaultSingleAggregateProjector<T>>,
-                    SingleAggregateProjectionDto<AggregateDto<TContents>>>()).List;
-            return queryListType switch
-            {
-                QueryListType.ActiveAndDeleted => list,
-                QueryListType.ActiveOnly => list.Where(m => m.IsDeleted == false).ToList(),
-                QueryListType.DeletedOnly => list.Where(m => m.IsDeleted).ToList(),
-                _ => list.Where(m => m.IsDeleted == false).ToList()
-            };
-        }
-        public Task<SingleAggregateProjectionDto<T>> GetSingleAggregateProjectionListObject<T>() where T : SingleAggregateProjectionBase<T>, new() =>
-            _multipleProjection.GetMultipleProjectionAsync<SingleAggregateListProjector<T, T, T>, SingleAggregateProjectionDto<T>>();
-        public async Task<List<T>> GetSingleAggregateProjectionList<T>(QueryListType queryListType = QueryListType.ActiveOnly)
-            where T : SingleAggregateProjectionBase<T>, new()
+            QueryListType.ActiveAndDeleted => projection.Contents.List.ToList(),
+            QueryListType.ActiveOnly => projection.Contents.List.Where(m => m.IsDeleted == false).ToList(),
+            QueryListType.DeletedOnly => projection.Contents.List.Where(m => m.IsDeleted).ToList(),
+            _ => projection.Contents.List.Where(m => m.IsDeleted == false).ToList()
+        };
+    }
+    public
+        Task<MultipleAggregateProjectionContentsDto<
+            SingleAggregateListProjectionDto<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>>>>
+        GetSingleAggregateProjectionListObject<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>()
+        where TAggregate : AggregateBase, new()
+        where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
+        new()
+        where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
+    {
+        return _multipleProjection
+            .GetMultipleProjectionAsync<
+                SingleAggregateListProjector<TSingleAggregateProjection, SingleAggregateProjectionDto<TSingleAggregateProjectionContents>,
+                    TSingleAggregateProjection>,
+                SingleAggregateListProjectionDto<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>>>();
+    }
+    public async Task<List<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>>>
+        GetSingleAggregateProjectionList<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>(
+            QueryListType queryListType = QueryListType.ActiveOnly) where TAggregate : AggregateBase, new()
+        where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
+        new()
+        where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
+    {
+        var projection = await GetSingleAggregateProjectionListObject<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>();
+        return queryListType switch
         {
-            var list = (await _multipleProjection.GetMultipleProjectionAsync<SingleAggregateListProjector<T, T, T>, SingleAggregateProjectionDto<T>>())
-                .List;
-            return queryListType switch
-            {
-                QueryListType.ActiveAndDeleted => list,
-                QueryListType.ActiveOnly => list.Where(m => m.IsDeleted == false).ToList(),
-                QueryListType.DeletedOnly => list.Where(m => m.IsDeleted).ToList(),
-                _ => list.Where(m => m.IsDeleted == false).ToList()
-            };
-        }
+            QueryListType.ActiveAndDeleted => projection.Contents.List.ToList(),
+            QueryListType.ActiveOnly => projection.Contents.List.Where(m => m.IsDeleted == false).ToList(),
+            QueryListType.DeletedOnly => projection.Contents.List.Where(m => m.IsDeleted).ToList(),
+            _ => projection.Contents.List.Where(m => m.IsDeleted == false).ToList()
+        };
+    }
+    public async Task<MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<AggregateDto<TContents>>>>
+        GetAggregateListObject<TAggregate, TContents>() where TAggregate : TransferableAggregateBase<TContents>
+        where TContents : IAggregateContents, new()
+    {
+        var list = await _multipleProjection
+            .GetMultipleProjectionAsync<SingleAggregateListProjector<TAggregate, AggregateDto<TContents>, DefaultSingleAggregateProjector<TAggregate>>
+                , SingleAggregateListProjectionDto<AggregateDto<TContents>>>();
+        return list;
     }
 }

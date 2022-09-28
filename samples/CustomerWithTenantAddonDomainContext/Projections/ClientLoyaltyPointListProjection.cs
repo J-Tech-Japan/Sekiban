@@ -7,75 +7,85 @@ using CustomerWithTenantAddonDomainContext.Aggregates.LoyaltyPoints.Events;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 namespace CustomerWithTenantAddonDomainContext.Projections;
 
-public class ClientLoyaltyPointListRecord
+public class ClientLoyaltyPointListProjection : MultipleAggregateProjectionBase<ClientLoyaltyPointListProjection.ContentsDefinition>
 {
-    public Guid BranchId { get; set; }
-    public string BranchName { get; set; } = string.Empty;
-    public Guid ClientId { get; set; }
-    public string ClientName { get; set; } = string.Empty;
-    public int Point { get; set; }
-}
-public class ClientLoyaltyPointListProjection : MultipleAggregateListProjectionBase<ClientLoyaltyPointListProjection, ClientLoyaltyPointListRecord>
-{
-    public List<ProjectedBranchInternal> Branches { get; set; } = new();
-    public override ClientLoyaltyPointListProjection ToDto() =>
-        this;
-    protected override Action? GetApplyEventAction(IAggregateEvent ev) =>
-        ev.GetPayload() switch
+
+    protected override Action? GetApplyEventAction(IAggregateEvent ev)
+    {
+        return ev.GetPayload() switch
         {
             BranchCreated branchCreated => () =>
             {
-                Branches.Add(new ProjectedBranchInternal { BranchId = ev.AggregateId, BranchName = branchCreated.Name });
+                var list = Contents.Branches.ToList();
+                list.Add(new BranchRecord(ev.AggregateId, branchCreated.Name));
+                Contents = Contents with { Branches = list };
             },
             ClientCreated clientCreated => () =>
             {
-                Records.Add(
-                    new ClientLoyaltyPointListRecord
-                    {
-                        BranchId = clientCreated.BranchId,
-                        BranchName = Branches.First(m => m.BranchId == clientCreated.BranchId).BranchName,
-                        ClientId = ev.AggregateId,
-                        ClientName = clientCreated.ClientName,
-                        Point = 0
-                    });
+                var list = Contents.Records.ToList();
+                list.Add(
+                    new PointListRecord(
+                        clientCreated.BranchId,
+                        Contents.Branches.First(m => m.BranchId == clientCreated.BranchId).BranchName,
+                        ev.AggregateId,
+                        clientCreated.ClientName,
+                        0));
+                Contents = Contents with { Records = list };
             },
             ClientNameChanged clientNameChanged => () =>
             {
-                var record = Records.First(m => m.ClientId == ev.AggregateId);
-                record.ClientName = clientNameChanged.ClientName;
+                Contents = Contents with
+                {
+                    Records = Contents.Records
+                        .Select(m => m.ClientId == ev.AggregateId ? m with { ClientName = clientNameChanged.ClientName } : m)
+                        .ToList()
+                };
             },
             ClientDeleted clientDeleted => () =>
             {
-                var record = Records.First(m => m.ClientId == ev.AggregateId);
-                Records.Remove(record);
+                Contents = Contents with { Records = Contents.Records.Where(m => m.ClientId != ev.AggregateId).ToList() };
             },
             LoyaltyPointCreated loyaltyPointCreated => () =>
             {
-                var record = Records.First(m => m.ClientId == ev.AggregateId);
-                record.Point = loyaltyPointCreated.InitialPoint;
+                Contents = Contents with
+                {
+                    Records = Contents.Records.Select(m => m.ClientId == ev.AggregateId ? m with { Point = loyaltyPointCreated.InitialPoint } : m)
+                        .ToList()
+                };
             },
             LoyaltyPointAdded loyaltyPointAdded => () =>
             {
-                var record = Records.First(m => m.ClientId == ev.AggregateId);
-                record.Point += loyaltyPointAdded.PointAmount;
+                Contents = Contents with
+                {
+                    Records = Contents.Records.Select(
+                            m => m.ClientId == ev.AggregateId ? m with { Point = m.Point + loyaltyPointAdded.PointAmount } : m)
+                        .ToList()
+                };
             },
             LoyaltyPointUsed loyaltyPointUsed => () =>
             {
-                var record = Records.First(m => m.ClientId == ev.AggregateId);
-                record.Point -= loyaltyPointUsed.PointAmount;
+                Contents = Contents with
+                {
+                    Records = Contents.Records.Select(
+                            m => m.ClientId == ev.AggregateId ? m with { Point = m.Point - loyaltyPointUsed.PointAmount } : m)
+                        .ToList()
+                };
             },
             _ => null
         };
-    protected override void CopyPropertiesFromSnapshot(ClientLoyaltyPointListProjection snapshot)
-    {
-        Records = snapshot.Records.ToList();
-        Branches = snapshot.Branches.ToList();
     }
-    public override IList<string> TargetAggregateNames() =>
-        new List<string> { nameof(Branch), nameof(Client), nameof(LoyaltyPoint) };
-    public class ProjectedBranchInternal
+    public override IList<string> TargetAggregateNames()
     {
-        public Guid BranchId { get; set; }
-        public string BranchName { get; set; } = string.Empty;
+        return new List<string> { nameof(Branch), nameof(Client), nameof(LoyaltyPoint) };
+    }
+    public record PointListRecord(Guid BranchId, string BranchName, Guid ClientId, string ClientName, int Point);
+    public record BranchRecord(Guid BranchId, string BranchName);
+    public record ContentsDefinition(
+        IReadOnlyCollection<PointListRecord> Records,
+        IReadOnlyCollection<BranchRecord> Branches) : IMultipleAggregateProjectionContents
+    {
+        public ContentsDefinition() : this(new List<PointListRecord>(), new List<BranchRecord>())
+        {
+        }
     }
 }

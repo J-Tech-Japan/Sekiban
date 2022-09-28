@@ -5,13 +5,15 @@ using CustomerDomainContext.Aggregates.Clients;
 using CustomerDomainContext.Aggregates.Clients.Commands;
 using CustomerDomainContext.Aggregates.Clients.Events;
 using CustomerDomainContext.Aggregates.Clients.Projections;
+using CustomerDomainContext.Aggregates.Clients.QueryFilters.BasicClientFilters;
 using CustomerDomainContext.Aggregates.LoyaltyPoints;
 using CustomerDomainContext.Aggregates.LoyaltyPoints.Commands;
 using CustomerDomainContext.Aggregates.RecentActivities;
 using CustomerDomainContext.Aggregates.RecentActivities.Commands;
 using CustomerDomainContext.Aggregates.RecentInMemoryActivities;
 using CustomerDomainContext.Aggregates.RecentInMemoryActivities.Commands;
-using CustomerDomainContext.Projections;
+using CustomerDomainContext.Projections.ClientLoyaltyPointLists;
+using CustomerDomainContext.Projections.ClientLoyaltyPointMultiples;
 using Sekiban.EventSourcing.Shared;
 using Sekiban.EventSourcing.TestHelpers;
 using System.Reflection;
@@ -19,14 +21,20 @@ namespace CustomerDomainContext.Shared;
 
 public static class CustomerDependency
 {
-    public static Assembly GetAssembly() =>
-        Assembly.GetExecutingAssembly();
+    public static Assembly GetAssembly()
+    {
+        return Assembly.GetExecutingAssembly();
+    }
 
-    public static RegisteredEventTypes GetEventTypes() =>
-        new(GetAssembly(), GetAssembly());
+    public static RegisteredEventTypes GetEventTypes()
+    {
+        return new RegisteredEventTypes(GetAssembly(), GetAssembly());
+    }
 
-    public static SekibanAggregateTypes GetAggregateTypes() =>
-        new(GetAssembly(), SekibanEventSourcingDependency.GetAssembly());
+    public static SekibanAggregateTypes GetAggregateTypes()
+    {
+        return new SekibanAggregateTypes(GetAssembly(), SekibanEventSourcingDependency.GetAssembly());
+    }
     public static IEnumerable<Type> GetControllerAggregateTypes()
     {
         yield return typeof(Branch);
@@ -42,10 +50,23 @@ public static class CustomerDependency
     public static IEnumerable<Type> GetMultipleAggregatesProjectionTypes()
     {
         yield return typeof(ClientLoyaltyPointMultipleProjection);
-    }
-    public static IEnumerable<Type> GetMultipleAggregatesListProjectionTypes()
-    {
         yield return typeof(ClientLoyaltyPointListProjection);
+    }
+    public static IEnumerable<Type> GetAggregateListQueryFilterTypes()
+    {
+        yield return typeof(BasicClientQueryFilter);
+    }
+    public static IEnumerable<Type> GetSingleAggregateProjectionListQueryFilterTypes()
+    {
+        yield return typeof(ClientNameHistoryProjectionQueryFilter);
+    }
+    public static IEnumerable<Type> GetProjectionQueryFilterTypes()
+    {
+        yield return typeof(ClientLoyaltyPointMultipleProjectionQueryFilter);
+    }
+    public static IEnumerable<Type> GetProjectionListQueryFilterTypes()
+    {
+        yield return typeof(ClientLoyaltyPointQueryFilterFilter);
     }
     public static IEnumerable<(Type serviceType, Type? implementationType)> GetTransientDependencies()
     {
@@ -84,6 +105,8 @@ public static class CustomerDependency
         yield return (typeof(IChangeAggregateCommandHandler<RecentInMemoryActivity, AddRecentInMemoryActivity>),
             typeof(AddRecentInMemoryActivityHandler));
     }
-    public static SekibanDependencyOptions GetOptions() =>
-        new(GetEventTypes(), GetAggregateTypes(), GetTransientDependencies());
+    public static SekibanDependencyOptions GetOptions()
+    {
+        return new SekibanDependencyOptions(GetEventTypes(), GetAggregateTypes(), GetTransientDependencies());
+    }
 }

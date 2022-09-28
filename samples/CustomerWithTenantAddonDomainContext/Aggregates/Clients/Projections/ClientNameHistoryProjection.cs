@@ -9,48 +9,45 @@ namespace CustomerWithTenantAddonDomainContext.Aggregates.Clients.Projections;
 ///     プロジェクションに関しては、高速化のために、データとDTOを共通かしている。
 ///     分割することも可能
 /// </summary>
-public class ClientNameHistoryProjection : SingleAggregateProjectionBase<ClientNameHistoryProjection>
+public class ClientNameHistoryProjection : SingleAggregateProjectionBase<Client, ClientNameHistoryProjection,
+    ClientNameHistoryProjection.ContentsDefinition>
 {
-    public Guid BranchId { get; set; } = Guid.Empty;
-    public List<ClientNameHistoryProjectionRecord> ClientNames { get; init; } = new();
-    public string ClientEmail { get; set; } = null!;
-    public ClientNameHistoryProjection(Guid aggregateId) =>
+    public ClientNameHistoryProjection(Guid aggregateId)
+    {
         AggregateId = aggregateId;
-
+    }
     public ClientNameHistoryProjection() { }
 
-    public override ClientNameHistoryProjection ToDto() =>
-        this;
-
-    public override Type OriginalAggregateType() =>
-        typeof(Client);
-
-    public override ClientNameHistoryProjection CreateInitialAggregate(Guid aggregateId) =>
-        new(aggregateId);
-    protected override void CopyPropertiesFromSnapshot(ClientNameHistoryProjection snapshot)
+    public override ClientNameHistoryProjection CreateInitialAggregate(Guid aggregateId)
     {
-        BranchId = snapshot.BranchId;
-        ClientNames.AddRange(snapshot.ClientNames);
-        ClientEmail = snapshot.ClientEmail;
+        return new ClientNameHistoryProjection(aggregateId);
     }
-
-    protected override Action? GetApplyEventAction(IAggregateEvent ev) =>
-        ev.GetPayload() switch
+    protected override Action? GetApplyEventAction(IAggregateEvent ev)
+    {
+        return ev.GetPayload() switch
         {
             ClientCreated clientCreated => () =>
             {
-                BranchId = clientCreated.BranchId;
-                ClientNames.Add(new ClientNameHistoryProjectionRecord(clientCreated.ClientName, ev.TimeStamp));
-                ClientEmail = clientCreated.ClientEmail;
+                Contents = new ContentsDefinition(
+                    clientCreated.BranchId,
+                    new List<ClientNameHistoryProjectionRecord> { new(clientCreated.ClientName, ev.TimeStamp) },
+                    clientCreated.ClientEmail);
             },
 
             ClientNameChanged clientNameChanged => () =>
-                ClientNames.Add(new ClientNameHistoryProjectionRecord(clientNameChanged.ClientName, ev.TimeStamp)),
-
+            {
+                var list = Contents.ClientNames.ToList();
+                list.Add(new ClientNameHistoryProjectionRecord(clientNameChanged.ClientName, ev.TimeStamp));
+                Contents = Contents with { ClientNames = list };
+            },
             ClientDeleted => () => IsDeleted = true,
-
             _ => null
         };
+    }
+    public record ContentsDefinition(
+        Guid BranchId,
+        IReadOnlyCollection<ClientNameHistoryProjectionRecord> ClientNames,
+        string ClientEmail) : ISingleAggregateProjectionContents;
 
     public record ClientNameHistoryProjectionRecord(string Name, DateTime DateChanged);
 }

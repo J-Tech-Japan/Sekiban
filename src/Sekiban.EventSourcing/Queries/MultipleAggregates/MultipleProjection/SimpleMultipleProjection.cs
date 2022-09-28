@@ -1,28 +1,30 @@
-namespace Sekiban.EventSourcing.Queries.MultipleAggregates.MultipleProjection
+namespace Sekiban.EventSourcing.Queries.MultipleAggregates.MultipleProjection;
+
+public class SimpleMultipleProjection : IMultipleProjection
 {
-    public class SimpleMultipleProjection : IMultipleProjection
+    private readonly IDocumentRepository _documentRepository;
+
+    public SimpleMultipleProjection(IDocumentRepository documentRepository)
     {
-        private readonly IDocumentRepository _documentRepository;
+        _documentRepository = documentRepository;
+    }
 
-        public SimpleMultipleProjection(IDocumentRepository documentRepository) =>
-            _documentRepository = documentRepository;
-
-        public async Task<Q> GetMultipleProjectionAsync<P, Q>() where P : IMultipleAggregateProjector<Q>, new()
-            where Q : IMultipleAggregateProjectionDto, new()
-        {
-            var projector = new P();
-            await _documentRepository.GetAllAggregateEventsAsync(
-                typeof(P),
-                projector.TargetAggregateNames(),
-                null,
-                events =>
+    public async Task<MultipleAggregateProjectionContentsDto<TProjectionContents>> GetMultipleProjectionAsync<TProjection, TProjectionContents>()
+        where TProjection : IMultipleAggregateProjector<TProjectionContents>, new()
+        where TProjectionContents : IMultipleAggregateProjectionContents, new()
+    {
+        var projector = new TProjection();
+        await _documentRepository.GetAllAggregateEventsAsync(
+            typeof(TProjection),
+            projector.TargetAggregateNames(),
+            null,
+            events =>
+            {
+                foreach (var ev in events)
                 {
-                    foreach (var ev in events)
-                    {
-                        projector.ApplyEvent(ev);
-                    }
-                });
-            return projector.ToDto();
-        }
+                    projector.ApplyEvent(ev);
+                }
+            });
+        return projector.ToDto();
     }
 }

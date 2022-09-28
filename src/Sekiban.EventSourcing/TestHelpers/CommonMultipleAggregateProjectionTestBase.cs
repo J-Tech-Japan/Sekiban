@@ -4,8 +4,10 @@ using Sekiban.EventSourcing.Shared;
 using Xunit;
 namespace Sekiban.EventSourcing.TestHelpers;
 
-public class CommonMultipleAggregateProjectionTestBase<TProjection> : IDisposable, IMultipleAggregateProjectionTestHelper<TProjection>
-    where TProjection : MultipleAggregateProjectionBase<TProjection>, IMultipleAggregateProjectionDto, new()
+public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionContents> : IDisposable,
+    IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents>
+    where TProjection : MultipleAggregateProjectionBase<TProjectionContents>, new()
+    where TProjectionContents : IMultipleAggregateProjectionContents, new()
 {
     protected readonly IServiceProvider _serviceProvider;
     protected List<IAggregateEvent> Events { get; } = new();
@@ -23,24 +25,24 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection> : IDisposabl
     public void Dispose()
     {
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection> GivenEvents(IEnumerable<IAggregateEvent> events)
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenEvents(IEnumerable<IAggregateEvent> events)
     {
         Events.AddRange(events);
         return this;
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection> GivenEvents(params IAggregateEvent[] events)
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenEvents(params IAggregateEvent[] events)
     {
         // ReSharper disable once TailRecursiveCall
         return GivenEvents(events);
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection> GivenEvents(string jsonEvents)
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenEvents(string jsonEvents)
     {
         var list = JsonSerializer.Deserialize<List<JsonElement>>(jsonEvents);
         if (list is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         AddEventsFromList(list);
         return this;
     }
-    public async Task<IMultipleAggregateProjectionTestHelper<TProjection>> GivenEventsFromFileAsync(string filename)
+    public async Task<IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents>> GivenEventsFromFileAsync(string filename)
     {
         await using var openStream = File.OpenRead(filename);
         var list = await JsonSerializer.DeserializeAsync<List<JsonElement>>(openStream);
@@ -48,7 +50,7 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection> : IDisposabl
         AddEventsFromList(list);
         return this;
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection> WhenProjection()
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> WhenProjection()
     {
         ResetBeforeCommand();
         try
@@ -65,37 +67,35 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection> : IDisposabl
         }
         return this;
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection> ThenNotThrowsAnException()
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenNotThrowsAnException()
     {
         var exception = _latestException is AggregateException aggregateException ? aggregateException.InnerExceptions.First() : _latestException;
         Assert.Null(exception);
         return this;
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection> ThenDto(TProjection dto)
-    {
-        var actual = Projection;
-        var expected = dto;
-        expected.LastEventId = actual.LastEventId;
-        expected.LastSortableUniqueId = actual.LastSortableUniqueId;
-        expected.Version = actual.Version;
-        var actualJson = SekibanJsonHelper.Serialize(actual);
-        var expectedJson = SekibanJsonHelper.Serialize(expected);
-        Assert.Equal(expectedJson, actualJson);
-        return this;
-    }
 
-    public async Task<IMultipleAggregateProjectionTestHelper<TProjection>> ThenDtoFileAsync(string filename)
+    public async Task<IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents>> ThenDtoFileAsync(string filename)
     {
         await using var openStream = File.OpenRead(filename);
-        var projection = await JsonSerializer.DeserializeAsync<TProjection>(openStream);
+        var projection = await JsonSerializer.DeserializeAsync<MultipleAggregateProjectionContentsDto<TProjectionContents>>(openStream);
         if (projection is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         return ThenDto(projection);
     }
 
-    public async Task<IMultipleAggregateProjectionTestHelper<TProjection>> WriteProjectionToFileAsync(string filename)
+    public async Task<IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents>> WriteProjectionToFileAsync(string filename)
     {
         var json = SekibanJsonHelper.Serialize(Projection);
         await File.WriteAllTextAsync(filename, json);
+        return this;
+    }
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenDto(
+        MultipleAggregateProjectionContentsDto<TProjectionContents> dto)
+    {
+        var actual = Projection;
+        var expected = dto with { LastEventId = actual.LastEventId, LastSortableUniqueId = actual.LastSortableUniqueId, Version = actual.Version };
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(expectedJson, actualJson);
         return this;
     }
 
@@ -124,7 +124,7 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection> : IDisposabl
             Events.Add((IAggregateEvent)eventInstance);
         }
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection> GivenEvents(
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenEvents(
         params (Guid aggregateId, Type aggregateType, IEventPayload payload)[] eventTouples)
     {
         foreach (var (aggregateId, aggregateType, payload) in eventTouples)
@@ -139,7 +139,8 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection> : IDisposabl
         }
         return this;
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection> GivenEvents(params (Guid aggregateId, IEventPayload payload)[] eventTouples)
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenEvents(
+        params (Guid aggregateId, IEventPayload payload)[] eventTouples)
     {
         foreach (var (aggregateId, payload) in eventTouples)
         {

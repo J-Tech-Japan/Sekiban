@@ -1,9 +1,13 @@
-namespace Sekiban.EventSourcing.WebHelper.Common
+namespace Sekiban.EventSourcing.WebHelper.Common;
+
+public record SekibanControllerItems(
+    IReadOnlyCollection<Type> SekibanAggregates,
+    IReadOnlyCollection<(Type serviceType, Type? implementationType)> SekibanCommands,
+    IReadOnlyCollection<Type> SingleAggregateProjections,
+    IReadOnlyCollection<Type> MultipleAggregatesProjections,
+    IReadOnlyCollection<Type> AggregateListQueryFilters,
+    IReadOnlyCollection<Type> SingleAggregateProjectionListQueryFilters,
+    IReadOnlyCollection<Type> ProjectionQueryFilters,
+    IReadOnlyCollection<Type> ProjectionListQueryFilters) : ISekibanControllerItems
 {
-    public record SekibanControllerItems(
-        IReadOnlyCollection<Type> SekibanAggregates,
-        IReadOnlyCollection<(Type serviceType, Type? implementationType)> SekibanCommands,
-        IReadOnlyCollection<Type> SingleAggregateProjections,
-        IReadOnlyCollection<Type> MultipleAggregatesProjections,
-        IReadOnlyCollection<Type> MultipleAggregatesListProjections) : ISekibanControllerItems { }
 }
