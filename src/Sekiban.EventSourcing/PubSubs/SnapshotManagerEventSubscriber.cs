@@ -134,7 +134,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                     }
                     dynamic? awaitable = _singleAggregateService.GetType()
                         ?.GetMethod(nameof(_singleAggregateService.GetProjectionAsync))
-                        ?.MakeGenericMethod(projection.OriginalType, projection.Projection)
+                        ?.MakeGenericMethod(projection.OriginalType, projection.Projection, projection.Dto)
                         .Invoke(_singleAggregateService, new object[] { notification.AggregateId, taken.Payload.NextSnapshotVersion });
                     if (awaitable is null) { continue; }
                     var aggregateToSnapshot = await awaitable;

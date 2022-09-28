@@ -30,18 +30,21 @@ public class SekibanAggregateTypes
                 x => x.IsClass && x.BaseType?.Name == projectorBase.Name && x.BaseType?.Namespace == projectorBase.Namespace);
             foreach (var type in customProjectors)
             {
+                var baseType = type.BaseType;
+                if (baseType is null) { continue; }
+                var tProjectionContents = baseType.GenericTypeArguments[2];
                 var instance = (dynamic?)Activator.CreateInstance(type);
                 var original = instance?.OriginalAggregateType();
                 if (original is null) { continue; }
-                _registeredCustomProjectorTypes.Add(new ProjectionAggregateType(type, type, type, original));
+                _registeredCustomProjectorTypes.Add(new ProjectionAggregateType(type, tProjectionContents, type, original));
             }
         }
         AggregateTypes = _registeredTypes.AsReadOnly();
         ProjectionAggregateTypes = _registeredCustomProjectorTypes.AsReadOnly();
     }
     public record DefaultAggregateType(Type Aggregate, Type Dto, Type Projection);
-    public record ProjectionAggregateType(Type Aggregate, Type Dto, Type Projection, Type OriginalType) : DefaultAggregateType(
+    public record ProjectionAggregateType(Type Aggregate, Type DtoContents, Type Projection, Type OriginalType) : DefaultAggregateType(
         Aggregate,
-        Dto,
+        DtoContents,
         Projection);
 }
