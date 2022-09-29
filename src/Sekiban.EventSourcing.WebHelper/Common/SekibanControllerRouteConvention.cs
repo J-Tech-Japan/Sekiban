@@ -84,15 +84,15 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
             new List<string> { _sekibanControllerOptions.BaseMultipleAggregateProjectionControllerType.Name }
                 .Contains(controller.ControllerType.Name))
         {
-            var aggregateType = controller.ControllerType.GenericTypeArguments[0];
-            controller.ControllerName = aggregateType.Name;
+            var projectionType = controller.ControllerType.GenericTypeArguments[0];
+            controller.ControllerName = projectionType.Name;
             controller.Selectors.Add(
                 new SelectorModel
                 {
                     AttributeRouteModel = new AttributeRouteModel(
-                        new RouteAttribute($"{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name.ToLower()}/get"))
+                        new RouteAttribute($"{_sekibanControllerOptions.QueryPrefix}/{projectionType.Name.ToLower()}/get"))
                     {
-                        Name = aggregateType.Name
+                        Name = projectionType.Name
                     }
                 });
         }
@@ -109,7 +109,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                         new RouteAttribute(
                             $"{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name.ToLower()}/{queryFilterType.Name.ToLower()}"))
                     {
-                        Name = aggregateType.Name
+                        Name = aggregateType.Name + queryFilterType.Name
                     }
                 });
         }
@@ -128,7 +128,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                         new RouteAttribute(
                             $"{_sekibanControllerOptions.QueryPrefix}/{aggregateType.Name.ToLower()}/{projectionType.Name.ToLower()}/{queryFilterType.Name.ToLower()}"))
                     {
-                        Name = queryFilterType.Name
+                        Name = aggregateType.Name + projectionType.Name + queryFilterType.Name
                     }
                 });
         }
@@ -144,7 +144,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                     AttributeRouteModel = new AttributeRouteModel(
                         new RouteAttribute($"{_sekibanControllerOptions.QueryPrefix}/{projectionType.Name.ToLower()}/{queryFilterType.Name}"))
                     {
-                        Name = queryFilterType.Name
+                        Name = projectionType.Name + queryFilterType.Name
                     }
                 });
         }
@@ -160,7 +160,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                     AttributeRouteModel = new AttributeRouteModel(
                         new RouteAttribute($"{_sekibanControllerOptions.QueryPrefix}/{projectionType.Name.ToLower()}/{queryFilterType.Name}"))
                     {
-                        Name = queryFilterType.Name
+                        Name = projectionType.Name + queryFilterType.Name
                     }
                 });
         }
