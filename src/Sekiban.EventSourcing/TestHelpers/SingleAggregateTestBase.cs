@@ -19,6 +19,10 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposab
         _helper = new AggregateTestHelper<TAggregate, TContents>(_serviceProvider);
     }
 
+    public IAggregateTestHelper<TAggregate, TContents> GivenEventSubscriber(ITestHelperEventSubscriber eventSubscriber)
+    {
+        return _helper.GivenEventSubscriber(eventSubscriber);
+    }
     public IAggregateTestHelper<TAggregate, TContents> GivenScenario(Action initialAction)
     {
         return _helper.GivenScenario(initialAction);
@@ -74,6 +78,10 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposab
     public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IEnumerable<IAggregateEvent> ev)
     {
         return _helper.Given(snapshot, ev);
+    }
+    public IAggregateTestHelper<TAggregate, TContents> GivenEventsFromFile(string filename)
+    {
+        return _helper.GivenEventsFromFile(filename);
     }
     public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregate>
     {
@@ -136,9 +144,45 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposab
     {
         return _helper.ThenContents(contents);
     }
+    public IAggregateTestHelper<TAggregate, TContents> WriteDtoToFile(string filename)
+    {
+        return _helper.WriteDtoToFile(filename);
+    }
+    public IAggregateTestHelper<TAggregate, TContents> WriteContentsToFile(string filename)
+    {
+        return _helper.WriteDtoToFile(filename);
+    }
+    public IAggregateTestHelper<TAggregate, TContents> ThenStateFromJson(string dtoJson)
+    {
+        return _helper.ThenStateFromJson(dtoJson);
+    }
+    public IAggregateTestHelper<TAggregate, TContents> ThenStateFromFile(string dtoFileName)
+    {
+        return _helper.ThenStateFromFile(dtoFileName);
+    }
+    public IAggregateTestHelper<TAggregate, TContents> ThenContentsFromJson(string contentsJson)
+    {
+        return _helper.ThenContentsFromJson(contentsJson);
+    }
+    public IAggregateTestHelper<TAggregate, TContents> ThenContentsFromFile(string contentsFileName)
+    {
+        return _helper.ThenContentsFromFile(contentsFileName);
+    }
     public IAggregateTestHelper<TAggregate, TContents> ThenContents(Func<TAggregate, TContents> constructExpectedDto)
     {
         return _helper.ThenContents(constructExpectedDto);
+    }
+    public Guid GetAggregateId()
+    {
+        return _helper.GetAggregateId();
+    }
+    public int GetCurrentVersion()
+    {
+        return _helper.GetCurrentVersion();
+    }
+    public TAggregate GetAggregate()
+    {
+        return _helper.GetAggregate();
     }
 
     public IAggregateTestHelper<TAggregate, TContents> ThenThrows<T>() where T : Exception
@@ -165,6 +209,7 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposab
     {
         return _helper.ThenHasValidationErrors();
     }
+
     public void Dispose() { }
 
     protected virtual void SetupDependency(IServiceCollection serviceCollection)

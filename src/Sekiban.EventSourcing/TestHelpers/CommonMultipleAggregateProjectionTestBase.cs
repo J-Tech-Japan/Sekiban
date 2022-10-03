@@ -6,15 +6,16 @@ namespace Sekiban.EventSourcing.TestHelpers;
 
 public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionContents> : IDisposable,
     IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents>
-    where TProjection : MultipleAggregateProjectionBase<TProjectionContents>, new()
+    where TProjection :  IMultipleAggregateProjector<TProjectionContents>, new()
     where TProjectionContents : IMultipleAggregateProjectionContents, new()
 {
+    private readonly List<IQueryFilterChecker<MultipleAggregateProjectionContentsDto<TProjectionContents>>> _queryFilterCheckers = new();
     protected readonly IServiceProvider _serviceProvider;
     protected List<IAggregateEvent> Events { get; } = new();
     protected TProjection Projection { get; } = new();
     protected Exception? _latestException { get; set; }
 
-    protected CommonMultipleAggregateProjectionTestBase(SekibanDependencyOptions dependencyOptions)
+    public CommonMultipleAggregateProjectionTestBase(SekibanDependencyOptions dependencyOptions)
     {
         var services = new ServiceCollection();
         // ReSharper disable once VirtualMemberCallInConstructor
@@ -32,8 +33,7 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionC
     }
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenEvents(params IAggregateEvent[] events)
     {
-        // ReSharper disable once TailRecursiveCall
-        return GivenEvents(events);
+        return GivenEvents(events.AsEnumerable());
     }
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenEvents(string jsonEvents)
     {
@@ -65,6 +65,11 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionC
             _latestException = ex;
             return this;
         }
+        var dto = Projection.ToDto();
+        foreach (var checker in _queryFilterCheckers)
+        {
+            checker.RegisterDto(dto);
+        }
         return this;
     }
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenNotThrowsAnException()
@@ -91,38 +96,40 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionC
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenDto(
         MultipleAggregateProjectionContentsDto<TProjectionContents> dto)
     {
-        var actual = Projection;
+        var actual = Projection.ToDto();
         var expected = dto with { LastEventId = actual.LastEventId, LastSortableUniqueId = actual.LastSortableUniqueId, Version = actual.Version };
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-
-    private void AddEventsFromList(List<JsonElement> list)
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenDtoFile(string filename)
     {
-        var registeredEventTypes = _serviceProvider.GetService<RegisteredEventTypes>();
-        if (registeredEventTypes is null) { throw new InvalidOperationException("RegisteredEventTypes が登録されていません。"); }
-        foreach (var json in list)
-        {
-            var documentTypeName = json.GetProperty("DocumentTypeName").ToString();
-            var eventPayloadType = registeredEventTypes.RegisteredTypes.FirstOrDefault(e => e.Name == documentTypeName);
-            if (eventPayloadType is null)
-            {
-                throw new InvalidDataException($"イベントタイプ {documentTypeName} は登録されていません。");
-            }
-            var eventType = typeof(AggregateEvent<>).MakeGenericType(eventPayloadType);
-            if (eventType is null)
-            {
-                throw new InvalidDataException($"イベント {documentTypeName} の生成に失敗しました。");
-            }
-            var eventInstance = JsonSerializer.Deserialize(json.ToString(), eventType);
-            if (eventInstance is null)
-            {
-                throw new InvalidDataException($"イベント {documentTypeName} のデシリアライズに失敗しました。");
-            }
-            Events.Add((IAggregateEvent)eventInstance);
-        }
+        using var openStream = File.OpenRead(filename);
+        var projection = JsonSerializer.Deserialize<MultipleAggregateProjectionContentsDto<TProjectionContents>>(openStream);
+        if (projection is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        return ThenDto(projection);
+    }
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> WriteProjectionToFile(string filename)
+    {
+        var json = SekibanJsonHelper.Serialize(Projection);
+        File.WriteAllTextAsync(filename, json);
+        return this;
+    }
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenEventsFromFile(string filename)
+    {
+        using var openStream = File.OpenRead(filename);
+        var list = JsonSerializer.Deserialize<List<JsonElement>>(openStream);
+        if (list is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        AddEventsFromList(list);
+        return this;
+    }
+
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenQueryFilterChecker(
+        IQueryFilterChecker<MultipleAggregateProjectionContentsDto<TProjectionContents>> checker)
+    {
+        _queryFilterCheckers.Add(checker);
+        return this;
     }
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenEvents(
         params (Guid aggregateId, Type aggregateType, IEventPayload payload)[] eventTouples)
@@ -159,6 +166,38 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionC
             Events.Add(ev);
         }
         return this;
+    }
+
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenScenario(Action initialAction)
+    {
+        initialAction();
+        return this;
+    }
+
+    private void AddEventsFromList(List<JsonElement> list)
+    {
+        var registeredEventTypes = _serviceProvider.GetService<RegisteredEventTypes>();
+        if (registeredEventTypes is null) { throw new InvalidOperationException("RegisteredEventTypes が登録されていません。"); }
+        foreach (var json in list)
+        {
+            var documentTypeName = json.GetProperty("DocumentTypeName").ToString();
+            var eventPayloadType = registeredEventTypes.RegisteredTypes.FirstOrDefault(e => e.Name == documentTypeName);
+            if (eventPayloadType is null)
+            {
+                throw new InvalidDataException($"イベントタイプ {documentTypeName} は登録されていません。");
+            }
+            var eventType = typeof(AggregateEvent<>).MakeGenericType(eventPayloadType);
+            if (eventType is null)
+            {
+                throw new InvalidDataException($"イベント {documentTypeName} の生成に失敗しました。");
+            }
+            var eventInstance = JsonSerializer.Deserialize(json.ToString(), eventType);
+            if (eventInstance is null)
+            {
+                throw new InvalidDataException($"イベント {documentTypeName} のデシリアライズに失敗しました。");
+            }
+            Events.Add((IAggregateEvent)eventInstance);
+        }
     }
     protected virtual void SetupDependency(IServiceCollection serviceCollection)
     {

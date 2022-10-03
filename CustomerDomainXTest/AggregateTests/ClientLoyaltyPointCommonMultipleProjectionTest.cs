@@ -1,17 +1,21 @@
 using CustomerDomainContext.Aggregates.Branches.Events;
 using CustomerDomainContext.Projections.ClientLoyaltyPointMultiples;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
+using Sekiban.EventSourcing.TestHelpers;
 using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using Xunit;
 namespace CustomerDomainXTest.AggregateTests;
 
 public class ClientLoyaltyPointCommonMultipleProjectionTest : MultipleAggregateProjectionTestBase<ClientLoyaltyPointMultipleProjection,
     ClientLoyaltyPointMultipleProjection.ContentsDefinition>
 {
-    private static readonly Guid branchId = Guid.NewGuid();
+    private static readonly Guid branchId = Guid.Parse("b4a3c2e3-78ca-473b-8afb-f534e5d6d66b");
     private static readonly string branchName = "Test Branch";
+
+    private readonly ProjectionQueryFilterTestChecker<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.ContentsDefinition,
+        ClientLoyaltyPointMultipleProjectionQueryFilter, ClientLoyaltyPointMultipleProjectionQueryFilter.QueryFilterParameter,
+        ClientLoyaltyPointMultipleProjection.ContentsDefinition> _projectionQueryFilterTestChecker = new();
 
     [Fact]
     public void ProjectionTest()
@@ -597,10 +601,26 @@ public class ClientLoyaltyPointCommonMultipleProjectionTest : MultipleAggregateP
     }
 
     [Fact]
-    public async Task JsonFileEventsTest()
+    public void JsonFileEventsTest()
     {
-        (await GivenEventsFromFileAsync("TestData1.json")).WhenProjection().ThenNotThrowsAnException();
+        GivenQueryFilterChecker(_projectionQueryFilterTestChecker)
+            .GivenEventsFromFile("TestData1.json")
+            .WhenProjection()
+            .ThenNotThrowsAnException()
 //        await ThenDtoFileAsync("TestData1Result.json");
-        await WriteProjectionToFileAsync("TestData1ResultOut.json");
+            .WriteProjectionToFileAsync("TestData1ResultOut.json");
+
+    }
+    [Fact]
+    public void QueryFilterTest()
+    {
+        GivenScenario(JsonFileEventsTest);
+        _projectionQueryFilterTestChecker.WhenParam(
+                new ClientLoyaltyPointMultipleProjectionQueryFilter.QueryFilterParameter(
+                    branchId,
+                    ClientLoyaltyPointMultipleProjectionQueryFilter.QuerySortKeys.ClientName))
+            // .WriteResponse("QueryResponseOut.json")
+            .ThenResponseFromFile("ClientLoyaltyPointProjectionQueryResponse01.json");
+
     }
 }

@@ -24,8 +24,8 @@ public class GuidRequiredAttribute : ValidationAttribute
     {
         if (IsValid(value))
         {
-            return ValidationResult.Success;
+            return ValidationResult.Success!;
         }
-        return new ValidationResult($"{validationContext.MemberName} is empty.", new[] { validationContext.MemberName });
+        return new ValidationResult($"{validationContext.MemberName} is empty.", new[] { validationContext?.MemberName ?? string.Empty });
     }
 }

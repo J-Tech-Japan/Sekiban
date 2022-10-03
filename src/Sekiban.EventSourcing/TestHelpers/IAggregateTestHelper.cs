@@ -5,6 +5,7 @@ namespace Sekiban.EventSourcing.TestHelpers;
 public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : TransferableAggregateBase<TContents>
     where TContents : IAggregateContents, new()
 {
+    public IAggregateTestHelper<TAggregate, TContents> GivenEventSubscriber(ITestHelperEventSubscriber eventSubscriber);
     public IAggregateTestHelper<TAggregate, TContents> GivenScenario(Action initialAction);
     public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtos(List<ISingleAggregate> dtos);
     public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtoContents<DAggregate, DAggregateContents>(
@@ -22,6 +23,7 @@ public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : 
     public IAggregateTestHelper<TAggregate, TContents> Given(IEnumerable<IAggregateEvent> events);
     public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IAggregateEvent ev);
     public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IEnumerable<IAggregateEvent> ev);
+    public IAggregateTestHelper<TAggregate, TContents> GivenEventsFromFile(string filename);
     public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregate>;
     public IAggregateTestHelper<TAggregate, TContents> WhenChange<C>(C changeCommand) where C : ChangeAggregateCommandBase<TAggregate>;
     public IAggregateTestHelper<TAggregate, TContents> WhenChange<C>(Func<TAggregate, C> commandFunc)
@@ -39,7 +41,16 @@ public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : 
     public IAggregateTestHelper<TAggregate, TContents> ThenState(Action<AggregateDto<TContents>> checkDtoAction);
     public IAggregateTestHelper<TAggregate, TContents> ThenState(Func<TAggregate, AggregateDto<TContents>> constructExpectedDto);
     public IAggregateTestHelper<TAggregate, TContents> ThenContents(TContents contents);
+    public IAggregateTestHelper<TAggregate, TContents> WriteDtoToFile(string filename);
+    public IAggregateTestHelper<TAggregate, TContents> WriteContentsToFile(string filename);
+    public IAggregateTestHelper<TAggregate, TContents> ThenStateFromJson(string dtoJson);
+    public IAggregateTestHelper<TAggregate, TContents> ThenStateFromFile(string dtoFileName);
+    public IAggregateTestHelper<TAggregate, TContents> ThenContentsFromJson(string contentsJson);
+    public IAggregateTestHelper<TAggregate, TContents> ThenContentsFromFile(string contentsFileName);
     public IAggregateTestHelper<TAggregate, TContents> ThenContents(Func<TAggregate, TContents> constructExpectedDto);
+    public Guid GetAggregateId();
+    public int GetCurrentVersion();
+    public TAggregate GetAggregate();
 
     public IAggregateTestHelper<TAggregate, TContents> ThenThrows<T>() where T : Exception;
     public IAggregateTestHelper<TAggregate, TContents> ThenThrows<T>(Action<T> checkException) where T : Exception;

@@ -18,9 +18,10 @@ public class QueryFilterService : IQueryFilterService
         where TQueryFilterParameter : IQueryParameter
     {
         var allProjection = await _multipleAggregateProjectionService.GetProjectionAsync<TProjection, TProjectionContents>();
-        var queryFilter = new TQueryFilter();
-        var filtered = queryFilter.HandleFilter(param, allProjection);
-        return queryFilter.HandleSortAndPagingIfNeeded(param, filtered);
+        return QueryFilterHandler
+            .GetProjectionQueryFilter<TProjection, TProjectionContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
+                param,
+                allProjection);
     }
     public async Task<IEnumerable<TQueryFilterResponse>>
         GetProjectionListQueryFilterAsync<TProjection, TProjectionContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
@@ -31,14 +32,10 @@ public class QueryFilterService : IQueryFilterService
         where TQueryFilterParameter : IQueryParameter
     {
         var allProjection = await _multipleAggregateProjectionService.GetProjectionAsync<TProjection, TProjectionContents>();
-        var queryFilter = new TQueryFilter();
-        var filtered = queryFilter.HandleFilter(param, allProjection);
-        var sorted = queryFilter.HandleSort(param, filtered);
-        if (param is IQueryPagingParameter { PageNumber: { }, PageSize: { } } pagingParam)
-        {
-            return sorted.Skip((pagingParam.PageNumber.Value - 1) * pagingParam.PageSize.Value).Take(pagingParam.PageSize.Value);
-        }
-        return sorted;
+        return QueryFilterHandler
+            .GetProjectionListQueryFilter<TProjection, TProjectionContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
+                param,
+                allProjection);
     }
     public async Task<IEnumerable<TQueryFilterResponse>> GetAggregateListQueryFilterAsync<TAggregate, TAggregateContents, TQueryFilter,
         TQueryFilterParameter, TQueryFilterResponse>(TQueryFilterParameter param) where TAggregate : TransferableAggregateBase<TAggregateContents>
