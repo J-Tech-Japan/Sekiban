@@ -6,7 +6,7 @@ namespace Sekiban.EventSourcing.TestHelpers;
 
 public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionContents> : IDisposable,
     IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents>
-    where TProjection :  IMultipleAggregateProjector<TProjectionContents>, new()
+    where TProjection : IMultipleAggregateProjector<TProjectionContents>, new()
     where TProjectionContents : IMultipleAggregateProjectionContents, new()
 {
     private readonly List<IQueryFilterChecker<MultipleAggregateProjectionContentsDto<TProjectionContents>>> _queryFilterCheckers = new();
@@ -23,6 +23,7 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionC
         SekibanEventSourcingDependency.RegisterForAggregateTest(services, dependencyOptions);
         _serviceProvider = services.BuildServiceProvider();
     }
+
     public void Dispose()
     {
     }
@@ -172,6 +173,11 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionC
     {
         initialAction();
         return this;
+    }
+
+    public T GetService<T>() where T : notnull
+    {
+        return _serviceProvider.GetRequiredService<T>() ?? throw new Exception($"Service {typeof(T)} not found");
     }
 
     private void AddEventsFromList(List<JsonElement> list)
