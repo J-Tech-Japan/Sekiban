@@ -1,0 +1,79 @@
+using Sekiban.EventSourcing.Queries.MultipleAggregates;
+using Sekiban.EventSourcing.Queries.QueryModels;
+using Sekiban.EventSourcing.Queries.QueryModels.Parameters;
+using Sekiban.EventSourcing.Shared;
+using Xunit;
+namespace Sekiban.EventSourcing.TestHelpers;
+
+public class
+    ProjectionQueryListFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse> :
+        IQueryFilterChecker<MultipleAggregateProjectionContentsDto<TProjectionContents>>
+    where TProjection : MultipleAggregateProjectionBase<TProjectionContents>, new()
+    where TProjectionContents : IMultipleAggregateProjectionContents, new()
+    where TQueryFilterParameter : IQueryParameter
+    where TProjectionQueryFilter : IProjectionListQueryFilterDefinition<TProjection, TProjectionContents, TQueryFilterParameter, TQueryFilterResponse>
+    , new()
+{
+    private MultipleAggregateProjectionContentsDto<TProjectionContents>? _dto;
+    private IEnumerable<TQueryFilterResponse>? _response;
+    public void RegisterDto(MultipleAggregateProjectionContentsDto<TProjectionContents> dto)
+    {
+        _dto = dto;
+    }
+
+    public ProjectionQueryListFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
+        WhenParam(TQueryFilterParameter param)
+    {
+        if (_dto == null)
+        {
+            throw new InvalidDataException("Projection is null");
+        }
+        _response = QueryFilterHandler
+            .GetProjectionListQueryFilter<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
+                param,
+                _dto);
+        return this;
+    }
+    public ProjectionQueryListFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
+        WriteResponse(string filename)
+    {
+        if (_response == null)
+        {
+            throw new InvalidDataException("Response is null");
+        }
+        var json = SekibanJsonHelper.Serialize(_response);
+        if (string.IsNullOrEmpty(json))
+        {
+            throw new InvalidDataException("Json is null or empty");
+        }
+        File.WriteAllTextAsync(filename, json);
+        return this;
+    }
+    public ProjectionQueryListFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
+        ThenResponse(IEnumerable<TQueryFilterResponse> expectedResponse)
+    {
+        var actual = _response;
+        var expected = expectedResponse;
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(expectedJson, actualJson);
+        return this;
+    }
+    public ProjectionQueryListFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
+        ThenResponseFromJson(string responseJson)
+    {
+        var response = JsonSerializer.Deserialize<IEnumerable<TQueryFilterResponse>>(responseJson);
+        if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        ThenResponse(response);
+        return this;
+    }
+    public ProjectionQueryListFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
+        ThenResponseFromFile(string responseFilename)
+    {
+        using var openStream = File.OpenRead(responseFilename);
+        var response = JsonSerializer.Deserialize<IEnumerable<TQueryFilterResponse>>(openStream);
+        if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        ThenResponse(response);
+        return this;
+    }
+}

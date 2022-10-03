@@ -19,6 +19,11 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         get;
     }
 
+    private List<ITestHelperEventSubscriber> EventSubscribers
+    {
+        get;
+    } = new();
+
     public AggregateTestHelper(IServiceProvider serviceProvider)
     {
         _serviceProvider = serviceProvider;
@@ -31,6 +36,13 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         initialAction();
         return this;
     }
+
+    public IAggregateTestHelper<TAggregate, TContents> GivenEventSubscriber(ITestHelperEventSubscriber eventSubscriber)
+    {
+        EventSubscribers.Add(eventSubscriber);
+        return this;
+    }
+
     public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtos(List<ISingleAggregate> dtos)
     {
         var singleAggregateService = _serviceProvider.GetService<ISingleAggregateService>();
@@ -57,6 +69,10 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
     public IAggregateTestHelper<TAggregate, TContents> Given(IAggregateEvent ev)
     {
         if (_aggregate.CanApplyEvent(ev)) { _aggregate.ApplyEvent(ev); }
+        foreach (var eventSubscriber in EventSubscribers)
+        {
+            eventSubscriber.OnEvent(ev);
+        }
         return this;
     }
     public IAggregateTestHelper<TAggregate, TContents> Given(Guid aggregateId, TContents contents)
@@ -133,6 +149,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         {
             throw new SekibanCreateCommandShouldSaveCreateEventFirstException();
         }
+        DeliverEventsToSubscribers();
         CheckCommandJSONSupports(commandDocument);
         _aggregate.ResetEventsAndSnapshots();
         CheckStateJSONSupports();
@@ -170,6 +187,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         {
             if (ev.IsAggregateInitialEvent) { throw new SekibanChangeCommandShouldNotSaveCreateEventException(); }
         }
+        DeliverEventsToSubscribers();
         _aggregate.ResetEventsAndSnapshots();
         CheckStateJSONSupports();
         return this;
@@ -206,6 +224,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         {
             if (ev.IsAggregateInitialEvent) { throw new SekibanChangeCommandShouldNotSaveCreateEventException(); }
         }
+        DeliverEventsToSubscribers();
         _aggregate.ResetEventsAndSnapshots();
         CheckStateJSONSupports();
         return this;
@@ -224,6 +243,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
             return this;
         }
         _latestEvents = _aggregate.Events.ToList();
+        DeliverEventsToSubscribers();
         _aggregate.ResetEventsAndSnapshots();
         CheckStateJSONSupports();
         return this;
@@ -309,6 +329,13 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
+    public IAggregateTestHelper<TAggregate, TContents> WriteDtoToFile(string filename)
+    {
+        var actual = _aggregate.ToDto();
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        File.WriteAllText(filename, actualJson);
+        return this;
+    }
     public IAggregateTestHelper<TAggregate, TContents> ThenContents(Func<TAggregate, TContents> constructExpectedDto)
     {
         var actual = _aggregate.ToDto().Contents;
@@ -318,6 +345,20 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
+    public Guid GetAggregateId()
+    {
+        return _aggregate.AggregateId;
+    }
+    public int GetCurrentVersion()
+    {
+        return _aggregate.Version;
+    }
+    public TAggregate GetAggregate()
+    {
+        return _aggregate;
+    }
+
+
 
     public IAggregateTestHelper<TAggregate, TContents> ThenThrows<T>() where T : Exception
     {
@@ -325,6 +366,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         Assert.IsType<T>(exception);
         return this;
     }
+
     public IAggregateTestHelper<TAggregate, TContents> ThenThrows<T>(Action<T> checkException) where T : Exception
     {
         var exception = _latestException is AggregateException aggregateException ? aggregateException.InnerExceptions.First() : _latestException;
@@ -332,11 +374,13 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         checkException((exception as T)!);
         return this;
     }
+
     public IAggregateTestHelper<TAggregate, TContents> ThenAggregateCheck(Action<TAggregate> checkAction)
     {
         checkAction(_aggregate);
         return this;
     }
+
     public IAggregateTestHelper<TAggregate, TContents> ThenNotThrowsAnException()
     {
         var exception = _latestException is AggregateException aggregateException ? aggregateException.InnerExceptions.First() : _latestException;
@@ -345,6 +389,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         Assert.Empty(_latestValidationErrors);
         return this;
     }
+
     public IAggregateTestHelper<TAggregate, TContents> ThenHasValidationErrors(IEnumerable<SekibanValidationParameterError> validationParameterErrors)
     {
         var actual = _latestValidationErrors;
@@ -354,21 +399,128 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
+
     public IAggregateTestHelper<TAggregate, TContents> ThenHasValidationErrors()
     {
         Assert.NotEmpty(_latestValidationErrors);
         return this;
     }
+
     public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDto(ISingleAggregate dto)
     {
         return GivenEnvironmentDtos(new List<ISingleAggregate> { dto });
     }
+
     public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(Guid aggregateId, TEventPayload payload)
         where TEventPayload : ICreatedEventPayload
     {
         var ev = AggregateEvent<TEventPayload>.CreatedEvent(aggregateId, typeof(TAggregate), payload);
         if (_aggregate.CanApplyEvent(ev)) { _aggregate.ApplyEvent(ev); }
         return this;
+    }
+
+    public IAggregateTestHelper<TAggregate, TContents> WriteContentsToFile(string filename)
+    {
+        var actual = _aggregate.ToDto().Contents;
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        File.WriteAllText(filename, actualJson);
+        return this;
+    }
+
+    public IAggregateTestHelper<TAggregate, TContents> ThenStateFromJson(string dtoJson)
+    {
+        var dto = JsonSerializer.Deserialize<AggregateDto<TContents>>(dtoJson);
+        if (dto is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        var actual = _aggregate.ToDto();
+        var expected = dto.GetComparableObject(actual);
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(expectedJson, actualJson);
+        return this;
+    }
+
+    public IAggregateTestHelper<TAggregate, TContents> ThenStateFromFile(string dtoFileName)
+    {
+        using var openStream = File.OpenRead(dtoFileName);
+        var dto = JsonSerializer.Deserialize<AggregateDto<TContents>>(openStream);
+        if (dto is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        var actual = _aggregate.ToDto();
+        var expected = dto.GetComparableObject(actual);
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(expectedJson, actualJson);
+        return this;
+    }
+
+    public IAggregateTestHelper<TAggregate, TContents> ThenContentsFromJson(string contentsJson)
+    {
+        var contents = JsonSerializer.Deserialize<TContents>(contentsJson);
+        if (contents is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        var actual = _aggregate.ToDto().Contents;
+        var expected = contents;
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(expectedJson, actualJson);
+        return this;
+    }
+
+    public IAggregateTestHelper<TAggregate, TContents> ThenContentsFromFile(string contentsFileName)
+    {
+        using var openStream = File.OpenRead(contentsFileName);
+        var contents = JsonSerializer.Deserialize<TContents>(openStream);
+        if (contents is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        var actual = _aggregate.ToDto().Contents;
+        var expected = contents;
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(expectedJson, actualJson);
+        return this;
+    }
+
+    public IAggregateTestHelper<TAggregate, TContents> GivenEventsFromFile(string filename)
+    {
+        using var openStream = File.OpenRead(filename);
+        var list = JsonSerializer.Deserialize<List<JsonElement>>(openStream);
+        if (list is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        AddEventsFromList(list);
+        return this;
+    }
+
+    private void DeliverEventsToSubscribers()
+    {
+        foreach (var ev in _latestEvents)
+        {
+            foreach (var eventSubscriber in EventSubscribers)
+            {
+                eventSubscriber.OnEvent(ev);
+            }
+        }
+    }
+
+    private void AddEventsFromList(List<JsonElement> list)
+    {
+        var registeredEventTypes = _serviceProvider.GetService<RegisteredEventTypes>();
+        if (registeredEventTypes is null) { throw new InvalidOperationException("RegisteredEventTypes が登録されていません。"); }
+        foreach (var json in list)
+        {
+            var documentTypeName = json.GetProperty("DocumentTypeName").ToString();
+            var eventPayloadType = registeredEventTypes.RegisteredTypes.FirstOrDefault(e => e.Name == documentTypeName);
+            if (eventPayloadType is null)
+            {
+                throw new InvalidDataException($"イベントタイプ {documentTypeName} は登録されていません。");
+            }
+            var eventType = typeof(AggregateEvent<>).MakeGenericType(eventPayloadType);
+            if (eventType is null)
+            {
+                throw new InvalidDataException($"イベント {documentTypeName} の生成に失敗しました。");
+            }
+            var eventInstance = JsonSerializer.Deserialize(json.ToString(), eventType);
+            if (eventInstance is null)
+            {
+                throw new InvalidDataException($"イベント {documentTypeName} のデシリアライズに失敗しました。");
+            }
+            Given((AggregateEvent<IEventPayload>)eventInstance);
+        }
     }
 
     private void CheckStateJSONSupports()
@@ -386,6 +538,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         Assert.Equal(json, dtoFromJsonJson);
         CheckEventJsonCompatibility();
     }
+
     private void CheckCommandJSONSupports(IDocument command)
     {
         var type = command.GetType();
@@ -406,6 +559,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
             Assert.Equal(json, json2);
         }
     }
+
     public AggregateTestHelper<TAggregate, TContents> ThenSingleEvent(Action<IAggregateEvent, TAggregate> checkEventAction)
     {
         if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }

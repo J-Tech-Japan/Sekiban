@@ -1,0 +1,13 @@
+{
+  "Contents": {
+    "BranchId": "cdb93f86-8d2f-442c-9f62-b9e791401f5f",
+    "ClientName": "Test Client Changed",
+    "ClientEmail": "client@example.com"
+  },
+  "IsDeleted": false,
+  "AggregateId": "7ed96b5d-2933-44f6-9896-0db3f769ca2e",
+  "Version": 2,
+  "LastEventId": "7b2817c0-7dc5-4c93-91a0-dc88ee32bef7",
+  "AppliedSnapshotVersion": 0,
+  "LastSortableUniqueId": "638002618823780950001222244474"
+}

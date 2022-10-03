@@ -52,6 +52,7 @@ public class ClientSpec : SingleAggregateTestBase<Client, ClientContents>
             });
         // 名前変更コマンドを実行する
         WhenChange(client => new ChangeClientName(client.AggregateId, testClientChangedName) { ReferenceVersion = client.Version });
+        WriteDtoToFile("ClientCreateSpec.json");
         // コマンドによって生成されたイベントを検証する
         ThenSingleEventPayload(new ClientNameChanged(testClientChangedName));
         // 現在の集約のステータスを検証する

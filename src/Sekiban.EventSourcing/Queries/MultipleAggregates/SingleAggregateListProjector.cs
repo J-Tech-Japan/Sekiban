@@ -17,6 +17,7 @@ public class SingleAggregateListProjector<T, Q, P> : IMultipleAggregateProjector
     public SingleAggregateListProjector()
     {
         _eventChecker = _projector.CreateInitialAggregate(Guid.Empty);
+        Contents = new SingleAggregateListProjectionDto<Q> { List = List.Select(m => m.ToDto()).ToList() };
     }
     public void ApplyEvent(IAggregateEvent ev)
     {
