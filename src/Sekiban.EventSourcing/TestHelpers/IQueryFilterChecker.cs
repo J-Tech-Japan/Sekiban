@@ -1,6 +1,8 @@
+using Sekiban.EventSourcing.Queries.QueryModels;
 namespace Sekiban.EventSourcing.TestHelpers;
 
 public interface IQueryFilterChecker<TProjectionDto>
 {
+    public QueryFilterHandler? QueryFilterHandler { get; set; }
     public void RegisterDto(TProjectionDto dto);
 }

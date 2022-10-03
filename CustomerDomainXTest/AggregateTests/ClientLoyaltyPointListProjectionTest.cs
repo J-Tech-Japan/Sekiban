@@ -8,14 +8,7 @@ public class ClientLoyaltyPointListProjectionTest : MultipleAggregateProjectionT
 {
     public ProjectionQueryListFilterTestChecker<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.ContentsDefinition,
         ClientLoyaltyPointQueryFilter, ClientLoyaltyPointQueryFilter.QueryFilterParameter,
-        ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> _queryListFilterTestChecker;
-    public ClientLoyaltyPointListProjectionTest()
-    {
-        _queryListFilterTestChecker
-            = GetService<ProjectionQueryListFilterTestChecker<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.ContentsDefinition,
-                ClientLoyaltyPointQueryFilter, ClientLoyaltyPointQueryFilter.QueryFilterParameter,
-                ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>>();
-    }
+        ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> _queryListFilterTestChecker = new();
 
     [Fact]
     public void RegularProjection()

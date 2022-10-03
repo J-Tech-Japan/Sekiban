@@ -15,15 +15,7 @@ public class ClientLoyaltyPointCommonMultipleProjectionTest : MultipleAggregateP
 
     private readonly ProjectionQueryFilterTestChecker<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.ContentsDefinition,
         ClientLoyaltyPointMultipleProjectionQueryFilter, ClientLoyaltyPointMultipleProjectionQueryFilter.QueryFilterParameter,
-        ClientLoyaltyPointMultipleProjection.ContentsDefinition> _projectionQueryFilterTestChecker;
-
-    public ClientLoyaltyPointCommonMultipleProjectionTest()
-    {
-        _projectionQueryFilterTestChecker
-            = GetService<ProjectionQueryFilterTestChecker<ClientLoyaltyPointMultipleProjection,
-                ClientLoyaltyPointMultipleProjection.ContentsDefinition, ClientLoyaltyPointMultipleProjectionQueryFilter,
-                ClientLoyaltyPointMultipleProjectionQueryFilter.QueryFilterParameter, ClientLoyaltyPointMultipleProjection.ContentsDefinition>>();
-    }
+        ClientLoyaltyPointMultipleProjection.ContentsDefinition> _projectionQueryFilterTestChecker = new();
 
     [Fact]
     public void ProjectionTest()
