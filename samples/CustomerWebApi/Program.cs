@@ -2,6 +2,7 @@ using CosmosInfrastructure;
 using CustomerDomainContext.Shared;
 using Sekiban.EventSourcing.Shared;
 using Sekiban.EventSourcing.WebHelper.Common;
+using Sekiban.EventSourcing.WebHelper.DependencyInjections;
 using Sekiban.EventSourcing.WebHelper.SwashbuckleHelpers;
 var builder = WebApplication.CreateBuilder(args);
 
@@ -43,6 +44,10 @@ builder.Services.AddSwaggerGen(
 
 // プロジェクトの依存
 SekibanEventSourcingDependency.Register(builder.Services, CustomerDependency.GetOptions());
+
+// クエリフィルタの登録 グループ化可能
+builder.Services.AddQueryFilterFromSekibanControllerItems(controllerItems);
+
 builder.Services.AddSekibanCosmosDB();
 var app = builder.Build();
 

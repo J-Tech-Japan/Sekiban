@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
+using Sekiban.EventSourcing.Queries.QueryModels;
 using Sekiban.EventSourcing.Shared;
 using Xunit;
 namespace Sekiban.EventSourcing.TestHelpers;
@@ -129,6 +130,7 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionC
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenQueryFilterChecker(
         IQueryFilterChecker<MultipleAggregateProjectionContentsDto<TProjectionContents>> checker)
     {
+        checker.QueryFilterHandler = _serviceProvider.GetService<QueryFilterHandler>();
         _queryFilterCheckers.Add(checker);
         return this;
     }
