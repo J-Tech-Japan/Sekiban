@@ -1,16 +1,21 @@
 using CustomerDomainContext.Projections.ClientLoyaltyPointLists;
-using CustomerDomainContext.Shared;
 using Sekiban.EventSourcing.TestHelpers;
 using Xunit;
 namespace CustomerDomainXTest.AggregateTests;
 
-public class ClientLoyaltyPointListProjectionTest : CommonMultipleAggregateProjectionTestBase<ClientLoyaltyPointListProjection,
+public class ClientLoyaltyPointListProjectionTest : MultipleAggregateProjectionTestBase<ClientLoyaltyPointListProjection,
     ClientLoyaltyPointListProjection.ContentsDefinition>
 {
     public ProjectionQueryListFilterTestChecker<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.ContentsDefinition,
-        ClientLoyaltyPointQueryFilterFilter, ClientLoyaltyPointQueryFilterFilter.QueryFilterParameter,
-        ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> _queryListFilterTestChecker = new();
-    public ClientLoyaltyPointListProjectionTest() : base(CustomerDependency.GetOptions()) { }
+        ClientLoyaltyPointQueryFilter, ClientLoyaltyPointQueryFilter.QueryFilterParameter,
+        ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> _queryListFilterTestChecker;
+    public ClientLoyaltyPointListProjectionTest()
+    {
+        _queryListFilterTestChecker
+            = GetService<ProjectionQueryListFilterTestChecker<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.ContentsDefinition,
+                ClientLoyaltyPointQueryFilter, ClientLoyaltyPointQueryFilter.QueryFilterParameter,
+                ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>>();
+    }
 
     [Fact]
     public void RegularProjection()
@@ -29,7 +34,7 @@ public class ClientLoyaltyPointListProjectionTest : CommonMultipleAggregateProje
         GivenScenario(RegularProjection);
 
         _queryListFilterTestChecker.WhenParam(
-                new ClientLoyaltyPointQueryFilterFilter.QueryFilterParameter(
+                new ClientLoyaltyPointQueryFilter.QueryFilterParameter(
                     null,
                     null,
                     null,
@@ -38,6 +43,6 @@ public class ClientLoyaltyPointListProjectionTest : CommonMultipleAggregateProje
                     null,
                     null,
                     null))
-            .WriteResponse("ClientLoyaltyPointQueryFilterFilter.json");
+            .WriteResponse("ClientLoyaltyPointQueryFilter.json");
     }
 }

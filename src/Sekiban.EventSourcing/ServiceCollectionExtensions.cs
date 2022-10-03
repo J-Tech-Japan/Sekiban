@@ -57,6 +57,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(new HybridStoreManager(true));
         services.AddScoped<ISekibanContext, SekibanContext>();
         services.AddTransient<IQueryFilterService, QueryFilterService>();
+        services.AddTransient<QueryFilterHandler>();
         return services;
     }
     public static IServiceCollection AddSekibanCoreInMemory(this IServiceCollection services)
@@ -82,6 +83,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IDocumentPersistentRepository, InMemoryDocumentRepository>();
         services.AddTransient<IDocumentTemporaryWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentPersistentWriter, InMemoryDocumentWriter>();
+        services.AddTransient<QueryFilterHandler>();
         return services;
     }
     public static IServiceCollection AddSekibanCoreInAggregateTest(this IServiceCollection services)
@@ -104,6 +106,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IDocumentPersistentRepository, InMemoryDocumentRepository>();
         services.AddTransient<IDocumentTemporaryWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentPersistentWriter, InMemoryDocumentWriter>();
+        services.AddTransient<QueryFilterHandler>();
         return services;
     }
 

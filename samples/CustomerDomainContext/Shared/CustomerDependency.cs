@@ -66,7 +66,7 @@ public static class CustomerDependency
     }
     public static IEnumerable<Type> GetProjectionListQueryFilterTypes()
     {
-        yield return typeof(ClientLoyaltyPointQueryFilterFilter);
+        yield return typeof(ClientLoyaltyPointQueryFilter);
     }
     public static IEnumerable<(Type serviceType, Type? implementationType)> GetTransientDependencies()
     {

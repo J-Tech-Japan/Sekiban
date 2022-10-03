@@ -14,8 +14,15 @@ public class
     where TProjectionQueryFilter : IProjectionListQueryFilterDefinition<TProjection, TProjectionContents, TQueryFilterParameter, TQueryFilterResponse>
     , new()
 {
+    private readonly QueryFilterHandler _queryFilterHandler;
+
+
     private MultipleAggregateProjectionContentsDto<TProjectionContents>? _dto;
     private IEnumerable<TQueryFilterResponse>? _response;
+    public ProjectionQueryListFilterTestChecker(QueryFilterHandler queryFilterHandler)
+    {
+        _queryFilterHandler = queryFilterHandler;
+    }
     public void RegisterDto(MultipleAggregateProjectionContentsDto<TProjectionContents> dto)
     {
         _dto = dto;
@@ -28,7 +35,7 @@ public class
         {
             throw new InvalidDataException("Projection is null");
         }
-        _response = QueryFilterHandler
+        _response = _queryFilterHandler
             .GetProjectionListQueryFilter<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
                 param,
                 _dto);

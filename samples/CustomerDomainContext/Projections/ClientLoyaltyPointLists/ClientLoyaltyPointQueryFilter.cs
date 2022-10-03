@@ -3,8 +3,8 @@ using Sekiban.EventSourcing.Queries.QueryModels;
 using Sekiban.EventSourcing.Queries.QueryModels.Parameters;
 namespace CustomerDomainContext.Projections.ClientLoyaltyPointLists;
 
-public class ClientLoyaltyPointQueryFilterFilter : IProjectionListQueryFilterDefinition<ClientLoyaltyPointListProjection,
-    ClientLoyaltyPointListProjection.ContentsDefinition, ClientLoyaltyPointQueryFilterFilter.QueryFilterParameter,
+public class ClientLoyaltyPointQueryFilter : IProjectionListQueryFilterDefinition<ClientLoyaltyPointListProjection,
+    ClientLoyaltyPointListProjection.ContentsDefinition, ClientLoyaltyPointQueryFilter.QueryFilterParameter,
     ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>
 {
     public enum FilterSortKey
