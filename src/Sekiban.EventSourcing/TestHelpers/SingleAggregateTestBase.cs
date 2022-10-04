@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Shared;
 using Sekiban.EventSourcing.Validations;
 namespace Sekiban.EventSourcing.TestHelpers;
@@ -27,21 +26,10 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposab
     {
         return _helper.GivenScenario(initialAction);
     }
-    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtos(List<ISingleAggregate> dtos)
-    {
-        return _helper.GivenEnvironmentDtos(dtos);
-    }
-    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtoContents<DAggregate, DAggregateContents>(
-        Guid aggregateId,
-        DAggregateContents contents) where DAggregateContents : IAggregateContents, new()
-        where DAggregate : TransferableAggregateBase<DAggregateContents>, new()
-    {
-        return _helper.GivenEnvironmentDtoContents<DAggregate, DAggregateContents>(aggregateId, contents);
-    }
-    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDto(ISingleAggregate dto)
-    {
-        return _helper.GivenEnvironmentDto(dto);
-    }
+    // public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDto(ISingleAggregate dto)
+    // {
+    //     return _helper.GivenEnvironmentDto(dto);
+    // }
     public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot)
     {
         return _helper.Given(snapshot);
@@ -95,10 +83,10 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposab
     {
         return _helper.WhenChange(commandFunc);
     }
-    public IAggregateTestHelper<TAggregate, TContents> WhenMethod(Action<TAggregate> action)
-    {
-        return _helper.WhenMethod(action);
-    }
+    // public IAggregateTestHelper<TAggregate, TContents> WhenMethod(Action<TAggregate> action)
+    // {
+    //     return _helper.WhenMethod(action);
+    // }
     public IAggregateTestHelper<TAggregate, TContents> ThenEvents(Action<List<IAggregateEvent>, TAggregate> checkEventsAction)
     {
         return _helper.ThenEvents(checkEventsAction);
@@ -211,6 +199,17 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposab
     }
 
     public void Dispose() { }
+    // public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtos(List<ISingleAggregate> dtos)
+    // {
+    //     return _helper.GivenEnvironmentDtos(dtos);
+    // }
+    // public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtoContents<DAggregate, DAggregateContents>(
+    //     Guid aggregateId,
+    //     DAggregateContents contents) where DAggregateContents : IAggregateContents, new()
+    //     where DAggregate : TransferableAggregateBase<DAggregateContents>, new()
+    // {
+    //     return _helper.GivenEnvironmentDtoContents<DAggregate, DAggregateContents>(aggregateId, contents);
+    // }
 
     protected virtual void SetupDependency(IServiceCollection serviceCollection)
     {

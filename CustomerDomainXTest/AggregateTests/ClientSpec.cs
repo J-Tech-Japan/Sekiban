@@ -7,10 +7,8 @@ using CustomerDomainContext.Shared.Exceptions;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.AggregateEvents;
 using Sekiban.EventSourcing.Aggregates;
-using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.TestHelpers;
 using System;
-using System.Collections.Generic;
 using Xunit;
 namespace CustomerDomainXTest.AggregateTests;
 
@@ -35,7 +33,7 @@ public class ClientSpec : SingleAggregateTestBase<Client, ClientContents>
             AggregateId = Guid.NewGuid(), Contents = new BranchContents { Name = "TEST" }, Version = 1
         };
         // CreateコマンドでBranchを参照するため、BranchDtoオブジェクトを参照用に渡す
-        GivenEnvironmentDtos(new List<ISingleAggregate> { branchDto });
+        //GivenEnvironmentDtos(new List<ISingleAggregate> { branchDto });
         // CreateClient コマンドを実行する
         WhenCreate(new CreateClient(branchDto.AggregateId, testClientName, testEmail));
         // エラーとならない
@@ -75,10 +73,10 @@ public class ClientSpec : SingleAggregateTestBase<Client, ClientContents>
         {
             AggregateId = Guid.NewGuid(), Version = 1, Contents = new ClientContents(Guid.NewGuid(), "NOT DUPLICATED NAME", testEmail)
         };
-        GivenEnvironmentDtoContents<Branch, BranchContents>(Guid.NewGuid(), new BranchContents { Name = "TEST" });
-        GivenEnvironmentDtoContents<Client, ClientContents>(Guid.NewGuid(), new ClientContents(Guid.NewGuid(), "NOT DUPLICATED NAME", testEmail));
+        // GivenEnvironmentDtoContents<Branch, BranchContents>(Guid.NewGuid(), new BranchContents { Name = "TEST" });
+        // GivenEnvironmentDtoContents<Client, ClientContents>(Guid.NewGuid(), new ClientContents(Guid.NewGuid(), "NOT DUPLICATED NAME", testEmail));
         // CreateコマンドでBranchを参照するため、BranchDtoオブジェクトを参照用に渡す
-        GivenEnvironmentDtos(new List<ISingleAggregate> { branchDto, clientDto });
+        // GivenEnvironmentDtos(new List<ISingleAggregate> { branchDto, clientDto });
         // CreateClient コマンドを実行する エラーになるはず
         WhenCreate(new CreateClient(branchDto.AggregateId, testClientName, testEmail)).ThenThrows<SekibanEmailAlreadyRegistered>();
     }
@@ -90,7 +88,8 @@ public class ClientSpec : SingleAggregateTestBase<Client, ClientContents>
         var clientId = Guid.NewGuid();
         Given(AggregateEvent<ClientCreated>.CreatedEvent(clientId, typeof(Client), new ClientCreated(branchId, testClientName, testEmail)))
             .Given(new ClientNameChanged(testClientChangedName))
-            .WhenMethod(client => client.ChangeClientName(testClientChangedNameV3))
+            // when method は廃止
+//            .WhenMethod(client => client.ChangeClientName(testClientChangedNameV3))
             // コマンドによって生成されたイベントを検証する
             .ThenSingleEventPayload(new ClientNameChanged(testClientChangedNameV3))
             // 現在の集約のステータスを検証する
@@ -109,7 +108,8 @@ public class ClientSpec : SingleAggregateTestBase<Client, ClientContents>
         var clientId = Guid.NewGuid();
 
         Given(clientId, new ClientContents(branchId, testClientName, testEmail))
-            .WhenMethod(client => client.ChangeClientName(testClientChangedName))
+            // when method は廃止
+            // .WhenMethod(client => client.ChangeClientName(testClientChangedName))
             // コマンドによって生成されたイベントを検証する
             .ThenSingleEventPayload(new ClientNameChanged(testClientChangedName))
             // 現在の集約のステータスを検証する

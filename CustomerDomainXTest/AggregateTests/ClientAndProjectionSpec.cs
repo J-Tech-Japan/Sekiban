@@ -1,4 +1,3 @@
-using CustomerDomainContext.Aggregates.Branches;
 using CustomerDomainContext.Aggregates.Clients;
 using CustomerDomainContext.Aggregates.Clients.Commands;
 using CustomerDomainContext.Aggregates.Clients.Events;
@@ -33,7 +32,7 @@ public class ClientAndProjectionSpec : SingleAggregateTestBase<Client, ClientCon
     public void CreateTest()
     {
         GivenEventSubscriber(ProjectionSubscriber)
-            .GivenEnvironmentDtoContents<Branch, BranchContents>(branchId, new BranchContents { Name = branchName })
+//            .GivenEnvironmentDtoContents<Branch, BranchContents>(branchId, new BranchContents { Name = branchName })
             .WhenCreate(new CreateClient(branchId, clientName, clientEmail))
             .ThenEvents(
                 events =>

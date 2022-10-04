@@ -42,25 +42,6 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         EventSubscribers.Add(eventSubscriber);
         return this;
     }
-
-    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtos(List<ISingleAggregate> dtos)
-    {
-        var singleAggregateService = _serviceProvider.GetService<ISingleAggregateService>();
-        var memorySingleAggregateService = singleAggregateService as MemorySingleAggregateService;
-        memorySingleAggregateService?.Aggregates.AddRange(dtos);
-
-        var multipleAggregateService = _serviceProvider.GetService<IMultipleAggregateProjectionService>() as MemoryMultipleAggregateProjectionService;
-        multipleAggregateService?.Objects.AddRange(dtos);
-
-        return this;
-    }
-    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtoContents<DAggregate, DAggregateContents>(
-        Guid aggregateId,
-        DAggregateContents contents) where DAggregate : TransferableAggregateBase<DAggregateContents>, new()
-        where DAggregateContents : IAggregateContents, new()
-    {
-        return GivenEnvironmentDto(new AggregateDto<DAggregateContents>(new DAggregate { AggregateId = aggregateId }, contents) { Version = 1 });
-    }
     public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot)
     {
         _aggregate.ApplySnapshot(snapshot);
@@ -158,39 +139,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
 
     public IAggregateTestHelper<TAggregate, TContents> WhenChange<C>(C changeCommand) where C : ChangeAggregateCommandBase<TAggregate>
     {
-        ResetBeforeCommand();
-        var validationResults = changeCommand.TryValidateProperties().ToList();
-        if (validationResults.Any())
-        {
-            _latestValidationErrors = SekibanValidationParameterError.CreateFromValidationResults(validationResults).ToList();
-            return this;
-        }
-        var handler
-            = _serviceProvider.GetService(typeof(IChangeAggregateCommandHandler<TAggregate, C>)) as IChangeAggregateCommandHandler<TAggregate, C>;
-        if (handler is null)
-        {
-            throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
-        }
-        var commandDocument = new AggregateCommandDocument<C>(_aggregate.AggregateId, changeCommand, typeof(TAggregate));
-        try
-        {
-            handler.HandleAsync(commandDocument, _aggregate).Wait();
-        }
-        catch (Exception ex)
-        {
-            _latestException = ex;
-            return this;
-        }
-        CheckCommandJSONSupports(commandDocument);
-        _latestEvents = _aggregate.Events.ToList();
-        foreach (var ev in _latestEvents)
-        {
-            if (ev.IsAggregateInitialEvent) { throw new SekibanChangeCommandShouldNotSaveCreateEventException(); }
-        }
-        DeliverEventsToSubscribers();
-        _aggregate.ResetEventsAndSnapshots();
-        CheckStateJSONSupports();
-        return this;
+        return WhenChange(_ => changeCommand);
     }
     public IAggregateTestHelper<TAggregate, TContents> WhenChange<C>(Func<TAggregate, C> commandFunc) where C : ChangeAggregateCommandBase<TAggregate>
     {
@@ -406,11 +355,6 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         return this;
     }
 
-    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDto(ISingleAggregate dto)
-    {
-        return GivenEnvironmentDtos(new List<ISingleAggregate> { dto });
-    }
-
     public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(Guid aggregateId, TEventPayload payload)
         where TEventPayload : ICreatedEventPayload
     {
@@ -484,6 +428,30 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         if (list is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         AddEventsFromList(list);
         return this;
+    }
+
+    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtos(List<ISingleAggregate> dtos)
+    {
+        var singleAggregateService = _serviceProvider.GetService<ISingleAggregateService>();
+        var memorySingleAggregateService = singleAggregateService as MemorySingleAggregateService;
+        memorySingleAggregateService?.Aggregates.AddRange(dtos);
+
+        var multipleAggregateService = _serviceProvider.GetService<IMultipleAggregateProjectionService>() as MemoryMultipleAggregateProjectionService;
+        multipleAggregateService?.Objects.AddRange(dtos);
+
+        return this;
+    }
+    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtoContents<DAggregate, DAggregateContents>(
+        Guid aggregateId,
+        DAggregateContents contents) where DAggregate : TransferableAggregateBase<DAggregateContents>, new()
+        where DAggregateContents : IAggregateContents, new()
+    {
+        return GivenEnvironmentDto(new AggregateDto<DAggregateContents>(new DAggregate { AggregateId = aggregateId }, contents) { Version = 1 });
+    }
+
+    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDto(ISingleAggregate dto)
+    {
+        return GivenEnvironmentDtos(new List<ISingleAggregate> { dto });
     }
 
     private void DeliverEventsToSubscribers()

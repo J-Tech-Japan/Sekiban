@@ -6,12 +6,12 @@ using Xunit;
 namespace Sekiban.EventSourcing.TestHelpers;
 
 public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionContents> : IDisposable,
-    IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents>
+    IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents>, ITestHelperEventSubscriber
     where TProjection : IMultipleAggregateProjector<TProjectionContents>, new()
     where TProjectionContents : IMultipleAggregateProjectionContents, new()
 {
     private readonly List<IQueryFilterChecker<MultipleAggregateProjectionContentsDto<TProjectionContents>>> _queryFilterCheckers = new();
-    protected readonly IServiceProvider _serviceProvider;
+    protected IServiceProvider? _serviceProvider;
     protected List<IAggregateEvent> Events { get; } = new();
     protected TProjection Projection { get; } = new();
     protected Exception? _latestException { get; set; }
@@ -23,6 +23,14 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionC
         SetupDependency(services);
         SekibanEventSourcingDependency.RegisterForAggregateTest(services, dependencyOptions);
         _serviceProvider = services.BuildServiceProvider();
+    }
+    public CommonMultipleAggregateProjectionTestBase(IServiceProvider serviceProvider)
+    {
+        _serviceProvider = serviceProvider;
+    }
+    public CommonMultipleAggregateProjectionTestBase()
+    {
+        _serviceProvider = null;
     }
 
     public void Dispose()
@@ -105,6 +113,15 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionC
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenContents(TProjectionContents contents)
+    {
+        var actual = Projection.ToDto().Contents;
+        var expected = contents;
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(expectedJson, actualJson);
+        return this;
+    }
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenDtoFile(string filename)
     {
         using var openStream = File.OpenRead(filename);
@@ -130,6 +147,7 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionC
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenQueryFilterChecker(
         IQueryFilterChecker<MultipleAggregateProjectionContentsDto<TProjectionContents>> checker)
     {
+        if (_serviceProvider is null) { throw new Exception("Service provider is null. Please setup service provider."); }
         checker.QueryFilterHandler = _serviceProvider.GetService<QueryFilterHandler>();
         _queryFilterCheckers.Add(checker);
         return this;
@@ -176,14 +194,17 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionC
         initialAction();
         return this;
     }
+    public Action<IAggregateEvent> OnEvent => e => GivenEvents(new List<IAggregateEvent> { e });
 
     public T GetService<T>() where T : notnull
     {
+        if (_serviceProvider is null) { throw new Exception("Service provider is null. Please setup service provider."); }
         return _serviceProvider.GetRequiredService<T>() ?? throw new Exception($"Service {typeof(T)} not found");
     }
 
     private void AddEventsFromList(List<JsonElement> list)
     {
+        if (_serviceProvider is null) { throw new Exception("Service provider is null. Please setup service provider."); }
         var registeredEventTypes = _serviceProvider.GetService<RegisteredEventTypes>();
         if (registeredEventTypes is null) { throw new InvalidOperationException("RegisteredEventTypes が登録されていません。"); }
         foreach (var json in list)
