@@ -1,5 +1,6 @@
 using CustomerDomainContext.Aggregates.Branches.Commands;
 using CustomerDomainContext.Aggregates.Clients.Commands;
+using CustomerDomainContext.Projections.ClientLoyaltyPointLists;
 using CustomerDomainContext.Projections.ClientLoyaltyPointMultiples;
 using CustomerDomainContext.Shared;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,6 +16,12 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase
     private readonly
         CommonMultipleAggregateProjectionTestBase<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.ContentsDefinition>
         _clientLoyaltyProjectionTest;
+
+    private readonly CommonMultipleAggregateProjectionTestBase<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.ContentsDefinition>
+        _listProjectionTest;
+    private readonly ProjectionListQueryFilterTestChecker<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.ContentsDefinition,
+        ClientLoyaltyPointQueryFilter, ClientLoyaltyPointQueryFilter.QueryFilterParameter,
+        ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> _listQueryFilter;
 
     private readonly ProjectionQueryFilterTestChecker<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.ContentsDefinition,
         ClientLoyaltyPointMultipleProjectionQueryFilter, ClientLoyaltyPointMultipleProjectionQueryFilter.QueryFilterParameter,
@@ -33,6 +40,11 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase
             = SetupMultipleAggregateProjectionTest<CommonMultipleAggregateProjectionTestBase<ClientLoyaltyPointMultipleProjection,
                 ClientLoyaltyPointMultipleProjection.ContentsDefinition>>();
         _clientLoyaltyProjectionTest.GivenQueryFilterChecker(_projectionQueryFilterTestChecker);
+
+        _listProjectionTest
+            = SetupMultipleAggregateProjectionTest<CommonMultipleAggregateProjectionTestBase<ClientLoyaltyPointListProjection,
+                ClientLoyaltyPointListProjection.ContentsDefinition>>();
+
     }
     protected override void SetupDependency(IServiceCollection serviceCollection)
     {
@@ -48,15 +60,13 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase
     {
         _branchId = RunCreateCommand(new CreateBranch(branchName));
         _clientId = RunCreateCommand(new CreateClient(_branchId, clientName, clientEmail));
-        RunChangeCommand(new ChangeClientName(_clientId, clientName2));
-        
-        
+
         _clientLoyaltyProjectionTest.WhenProjection()
             .ThenNotThrowsAnException()
             .ThenContents(
                 new ClientLoyaltyPointMultipleProjection.ContentsDefinition(
                     new List<ClientLoyaltyPointMultipleProjection.ProjectedBranch> { new(_branchId, branchName) },
-                    new List<ClientLoyaltyPointMultipleProjection.ProjectedRecord>()));
+                    new List<ClientLoyaltyPointMultipleProjection.ProjectedRecord> { new(_branchId, branchName, _clientId, clientName, 0) }));
         _projectionQueryFilterTestChecker
             .WhenParam(
                 new ClientLoyaltyPointMultipleProjectionQueryFilter.QueryFilterParameter(
@@ -65,50 +75,22 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase
             .ThenResponse(
                 new ClientLoyaltyPointMultipleProjection.ContentsDefinition(
                     new List<ClientLoyaltyPointMultipleProjection.ProjectedBranch> { new(_branchId, branchName) },
-                    new List<ClientLoyaltyPointMultipleProjection.ProjectedRecord>()));
-        
-        _projectionQueryFilterTestChecker
-            .WhenParam(
-                new ClientLoyaltyPointMultipleProjectionQueryFilter.QueryFilterParameter(
-                    null,
-                    ClientLoyaltyPointMultipleProjectionQueryFilter.QuerySortKeys.Points))
-            .ThenResponse(
-                new ClientLoyaltyPointMultipleProjection.ContentsDefinition(
-                    new List<ClientLoyaltyPointMultipleProjection.ProjectedBranch> { new(_branchId, branchName) },
-                    new List<ClientLoyaltyPointMultipleProjection.ProjectedRecord>()));
-        
+                    new List<ClientLoyaltyPointMultipleProjection.ProjectedRecord> { new(_branchId, branchName, _clientId, clientName, 0) }));
+    }
+
+    public void WhenChangeName()
+    {
+        GivenScenario(Test);
         RunChangeCommand(new ChangeClientName(_clientId, clientName2));
-
-
-    }
-
-    public void WhenSecondTest()
-    {
-        GivenScenario(Test);
-        
+        _clientLoyaltyProjectionTest.WhenProjection();
         _projectionQueryFilterTestChecker
             .WhenParam(
                 new ClientLoyaltyPointMultipleProjectionQueryFilter.QueryFilterParameter(
                     null,
-                    ClientLoyaltyPointMultipleProjectionQueryFilter.QuerySortKeys.Points))
+                    ClientLoyaltyPointMultipleProjectionQueryFilter.QuerySortKeys.ClientName))
             .ThenResponse(
                 new ClientLoyaltyPointMultipleProjection.ContentsDefinition(
                     new List<ClientLoyaltyPointMultipleProjection.ProjectedBranch> { new(_branchId, branchName) },
-                    new List<ClientLoyaltyPointMultipleProjection.ProjectedRecord>()));
+                    new List<ClientLoyaltyPointMultipleProjection.ProjectedRecord> { new(_branchId, branchName, _clientId, clientName2, 0) }));
     }
-    public void WhenThirdTest()
-    {
-        GivenScenario(Test);
-        
-        _projectionQueryFilterTestChecker
-            .WhenParam(
-                new ClientLoyaltyPointMultipleProjectionQueryFilter.QueryFilterParameter(
-                    null,
-                    ClientLoyaltyPointMultipleProjectionQueryFilter.QuerySortKeys.Points))
-            .ThenResponse(
-                new ClientLoyaltyPointMultipleProjection.ContentsDefinition(
-                    new List<ClientLoyaltyPointMultipleProjection.ProjectedBranch> { new(_branchId, branchName) },
-                    new List<ClientLoyaltyPointMultipleProjection.ProjectedRecord>()));
-    }
-
 }

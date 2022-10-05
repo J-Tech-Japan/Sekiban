@@ -6,6 +6,17 @@ public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : 
 {
     public IAggregateTestHelper<TAggregate, TContents> GivenEventSubscriber(ITestHelperEventSubscriber eventSubscriber);
     public IAggregateTestHelper<TAggregate, TContents> GivenScenario(Action initialAction);
+
+    // Given Environment Events
+    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentEvent(IAggregateEvent ev);
+    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentEvents(IEnumerable<IAggregateEvent> events);
+    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentEventsFile(string filename);
+
+    public Guid RunEnvironmentCreateCommand<TEnvironmentAggregate>(
+        ICreateAggregateCommand<TEnvironmentAggregate> command,
+        Guid? injectingAggregateId = null) where TEnvironmentAggregate : AggregateBase, new();
+    public void RunEnvironmentChangeCommand<TEnvironmentAggregate>(ChangeAggregateCommandBase<TEnvironmentAggregate> command)
+        where TEnvironmentAggregate : AggregateBase, new();
     // TODO : remove this methods
     // public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtos(List<ISingleAggregate> dtos);
     // public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtoContents<DAggregate, DAggregateContents>(
@@ -13,17 +24,17 @@ public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : 
     //     DAggregateContents contents) where DAggregateContents : IAggregateContents, new()
     //     where DAggregate : TransferableAggregateBase<DAggregateContents>, new();
     // public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDto(ISingleAggregate dto);
-    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot);
-    public IAggregateTestHelper<TAggregate, TContents> Given(IAggregateEvent ev);
-    public IAggregateTestHelper<TAggregate, TContents> Given(Guid aggregateId, TContents contents);
-    public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(Guid aggregateId, TEventPayload payload)
-        where TEventPayload : ICreatedEventPayload;
-    public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(TEventPayload payload) where TEventPayload : IChangedEventPayload;
-    public IAggregateTestHelper<TAggregate, TContents> Given(Func<TAggregate, IAggregateEvent> evFunc);
-    public IAggregateTestHelper<TAggregate, TContents> Given(IEnumerable<IAggregateEvent> events);
-    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IAggregateEvent ev);
-    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IEnumerable<IAggregateEvent> ev);
-    public IAggregateTestHelper<TAggregate, TContents> GivenEventsFromFile(string filename);
+    // public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot);
+    //public IAggregateTestHelper<TAggregate, TContents> Given(IAggregateEvent ev);
+    // public IAggregateTestHelper<TAggregate, TContents> Given(Guid aggregateId, TContents contents);
+    // public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(Guid aggregateId, TEventPayload payload)
+    //     where TEventPayload : ICreatedEventPayload;
+    // public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(TEventPayload payload) where TEventPayload : IChangedEventPayload;
+    // public IAggregateTestHelper<TAggregate, TContents> Given(Func<TAggregate, IAggregateEvent> evFunc);
+    //    public IAggregateTestHelper<TAggregate, TContents> Given(IEnumerable<IAggregateEvent> events);
+    // public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IAggregateEvent ev);
+    // public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IEnumerable<IAggregateEvent> ev);
+    // public IAggregateTestHelper<TAggregate, TContents> GivenEventsFromFile(string filename);
     public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregate>;
     public IAggregateTestHelper<TAggregate, TContents> WhenChange<C>(C changeCommand) where C : ChangeAggregateCommandBase<TAggregate>;
     public IAggregateTestHelper<TAggregate, TContents> WhenChange<C>(Func<TAggregate, C> commandFunc)

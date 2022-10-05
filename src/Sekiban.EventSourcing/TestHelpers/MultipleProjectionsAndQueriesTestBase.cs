@@ -31,9 +31,10 @@ public abstract class MultipleProjectionsAndQueriesTestBase
     }
 
 
-    public Guid RunCreateCommand<TAggregate>(ICreateAggregateCommand<TAggregate> command) where TAggregate : AggregateBase, new()
+    public Guid RunCreateCommand<TAggregate>(ICreateAggregateCommand<TAggregate> command, Guid? injectingAggregateId = null)
+        where TAggregate : AggregateBase, new()
     {
-        var (events, aggregateId) = _commandExecutor.ExecuteCreateCommand(command);
+        var (events, aggregateId) = _commandExecutor.ExecuteCreateCommand(command, injectingAggregateId);
         var aggregateEvents = events?.ToList() ?? new List<IAggregateEvent>();
         foreach (var subscriber in subscribers)
         {

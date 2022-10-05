@@ -6,15 +6,15 @@ namespace CustomerDomainXTest.AggregateTests;
 public class ClientLoyaltyPointListProjectionTest : MultipleAggregateProjectionTestBase<ClientLoyaltyPointListProjection,
     ClientLoyaltyPointListProjection.ContentsDefinition>
 {
-    public ProjectionQueryListFilterTestChecker<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.ContentsDefinition,
+    public ProjectionListQueryFilterTestChecker<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.ContentsDefinition,
         ClientLoyaltyPointQueryFilter, ClientLoyaltyPointQueryFilter.QueryFilterParameter,
-        ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> _queryListFilterTestChecker = new();
+        ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> ListQueryFilterTestChecker = new();
 
     [Fact]
     public void RegularProjection()
     {
 
-        GivenQueryFilterChecker(_queryListFilterTestChecker)
+        GivenQueryFilterChecker(ListQueryFilterTestChecker)
             .GivenEventsFromFile("TestData1.json")
             .WhenProjection()
             .ThenNotThrowsAnException()
@@ -26,7 +26,7 @@ public class ClientLoyaltyPointListProjectionTest : MultipleAggregateProjectionT
     {
         GivenScenario(RegularProjection);
 
-        _queryListFilterTestChecker.WhenParam(
+        ListQueryFilterTestChecker.WhenParam(
                 new ClientLoyaltyPointQueryFilter.QueryFilterParameter(
                     null,
                     null,

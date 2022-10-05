@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
+using Sekiban.EventSourcing.Settings;
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
 using Sekiban.EventSourcing.TestHelpers;
@@ -8,8 +9,10 @@ namespace Sekiban.EventSourcing.Shared;
 
 public static class SekibanEventSourcingDependency
 {
-    public static Assembly GetAssembly() =>
-        Assembly.GetExecutingAssembly();
+    public static Assembly GetAssembly()
+    {
+        return Assembly.GetExecutingAssembly();
+    }
 
     public static IEnumerable<(Type serviceType, Type? implementationType)> GetDependencies()
     {
@@ -70,7 +73,7 @@ public static class SekibanEventSourcingDependency
 
         services.AddSekibanHTTPUser();
 
-        services.AddSekibanSettingsFromAppSettings();
+        services.AddSekibanAppSettingsFromObject(new AggregateSettings());
 
         // 各ドメインコンテキスト
         services.AddSingleton(dependencyOptions.RegisteredEventTypes);

@@ -26,51 +26,74 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposab
     {
         return _helper.GivenScenario(initialAction);
     }
+    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentEvent(IAggregateEvent ev)
+    {
+        return _helper.GivenEnvironmentEvent(ev);
+    }
+    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentEvents(IEnumerable<IAggregateEvent> events)
+    {
+        return _helper.GivenEnvironmentEvents(events);
+    }
+    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentEventsFile(string filename)
+    {
+        return _helper.GivenEnvironmentEventsFile(filename);
+    }
+    public Guid RunEnvironmentCreateCommand<TEnvironmentAggregate>(
+        ICreateAggregateCommand<TEnvironmentAggregate> command,
+        Guid? injectingAggregateId = null) where TEnvironmentAggregate : AggregateBase, new()
+    {
+        return _helper.RunEnvironmentCreateCommand(command, injectingAggregateId);
+    }
+    public void RunEnvironmentChangeCommand<TEnvironmentAggregate>(ChangeAggregateCommandBase<TEnvironmentAggregate> command)
+        where TEnvironmentAggregate : AggregateBase, new()
+    {
+        _helper.RunEnvironmentChangeCommand(command);
+    }
     // public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDto(ISingleAggregate dto)
     // {
     //     return _helper.GivenEnvironmentDto(dto);
     // }
-    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot)
-    {
-        return _helper.Given(snapshot);
-    }
-    public IAggregateTestHelper<TAggregate, TContents> Given(IAggregateEvent ev)
-    {
-        return _helper.Given(ev);
-    }
-    public IAggregateTestHelper<TAggregate, TContents> Given(Guid aggregateId, TContents contents)
-    {
-        return _helper.Given(aggregateId, contents);
-    }
-    public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(Guid aggregateId, TEventPayload payload)
-        where TEventPayload : ICreatedEventPayload
-    {
-        return _helper.Given(aggregateId, payload);
-    }
-    public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(TEventPayload payload) where TEventPayload : IChangedEventPayload
-    {
-        return _helper.Given(payload);
-    }
-    public IAggregateTestHelper<TAggregate, TContents> Given(Func<TAggregate, IAggregateEvent> evFunc)
-    {
-        return _helper.Given(evFunc);
-    }
-    public IAggregateTestHelper<TAggregate, TContents> Given(IEnumerable<IAggregateEvent> events)
-    {
-        return _helper.Given(events);
-    }
-    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IAggregateEvent ev)
-    {
-        return _helper.Given(snapshot, ev);
-    }
-    public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IEnumerable<IAggregateEvent> ev)
-    {
-        return _helper.Given(snapshot, ev);
-    }
-    public IAggregateTestHelper<TAggregate, TContents> GivenEventsFromFile(string filename)
-    {
-        return _helper.GivenEventsFromFile(filename);
-    }
+    // public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot)
+    // {
+    //     return _helper.Given(snapshot);
+    // }
+    // public IAggregateTestHelper<TAggregate, TContents> Given(IAggregateEvent ev)
+    // {
+    //     return _helper.Given(ev);
+    // }
+    // public IAggregateTestHelper<TAggregate, TContents> Given(Guid aggregateId, TContents contents)
+    // {
+    //     return _helper.Given(aggregateId, contents);
+    // }
+    // public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(Guid aggregateId, TEventPayload payload)
+    //     where TEventPayload : ICreatedEventPayload
+    // {
+    //     return _helper.Given(aggregateId, payload);
+    // }
+    // public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(TEventPayload payload) where TEventPayload : IChangedEventPayload
+    // {
+    //     return _helper.Given(payload);
+    // }
+    // public IAggregateTestHelper<TAggregate, TContents> Given(Func<TAggregate, IAggregateEvent> evFunc)
+    // {
+    //     return _helper.Given(evFunc);
+    // }
+    // public IAggregateTestHelper<TAggregate, TContents> Given(IEnumerable<IAggregateEvent> events)
+    // {
+    //     return _helper.Given(events);
+    // }
+    // public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IAggregateEvent ev)
+    // {
+    //     return _helper.Given(snapshot, ev);
+    // }
+    // public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IEnumerable<IAggregateEvent> ev)
+    // {
+    //     return _helper.Given(snapshot, ev);
+    // }
+    // public IAggregateTestHelper<TAggregate, TContents> GivenEventsFromFile(string filename)
+    // {
+    //     return _helper.GivenEventsFromFile(filename);
+    // }
     public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregate>
     {
         return _helper.WhenCreate(createCommand);

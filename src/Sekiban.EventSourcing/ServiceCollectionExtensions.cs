@@ -9,7 +9,6 @@ using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates.SingleProjection;
 using Sekiban.EventSourcing.Queries.UpdateNotices;
 using Sekiban.EventSourcing.Settings;
-using Sekiban.EventSourcing.TestHelpers;
 namespace Sekiban.EventSourcing;
 
 public static class ServiceCollectionExtensions
@@ -90,12 +89,16 @@ public static class ServiceCollectionExtensions
     {
         services.AddMemoryCache();
 
+
         services.AddTransient<AggregateEventPublisher>();
 
         services.AddTransient<IAggregateCommandExecutor, AggregateCommandExecutor>();
-        services.AddSingleton<ISingleAggregateService>(new MemorySingleAggregateService());
-        services.AddSingleton<IMultipleAggregateProjectionService>(new MemoryMultipleAggregateProjectionService());
-
+        services.AddTransient<ISingleAggregateService, SingleAggregateService>();
+        services.AddTransient<IMultipleAggregateProjectionService, MultipleAggregateProjectionService>();
+        services.AddTransient<IMultipleProjection, MemoryCacheMultipleProjection>();
+        services.AddTransient<ISingleProjection, SimpleProjectionWithSnapshot>();
+        services.AddSingleton<IUpdateNotice>(new SekibanUpdateNoticeManager());
+        services.AddTransient<ISingleAggregateFromInitial, SimpleSingleAggregateFromInitial>();
         services.AddSingleton(new InMemoryDocumentStore());
         services.AddTransient<IDocumentWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentRepository, InMemoryDocumentRepository>();
