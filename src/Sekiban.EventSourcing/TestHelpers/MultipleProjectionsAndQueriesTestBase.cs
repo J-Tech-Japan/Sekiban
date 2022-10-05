@@ -7,8 +7,6 @@ public abstract class MultipleProjectionsAndQueriesTestBase
     private readonly AggregateTestCommandExecutor _commandExecutor;
     protected readonly IServiceProvider _serviceProvider;
 
-    private readonly List<ITestHelperEventSubscriber> subscribers = new();
-
     // ReSharper disable once PublicConstructorInAbstractClass
     public MultipleProjectionsAndQueriesTestBase(SekibanDependencyOptions dependencyOptions)
     {
@@ -26,10 +24,8 @@ public abstract class MultipleProjectionsAndQueriesTestBase
     {
         var test = Activator.CreateInstance(typeof(TMultipleProjectionTest), _serviceProvider) as TMultipleProjectionTest;
         if (test is null) { throw new InvalidOperationException("Could not create test"); }
-        subscribers.Add(test);
         return test;
     }
-
 
     public Guid RunCreateCommand<TAggregate>(ICreateAggregateCommand<TAggregate> command, Guid? injectingAggregateId = null)
         where TAggregate : AggregateBase, new()
@@ -42,8 +38,9 @@ public abstract class MultipleProjectionsAndQueriesTestBase
         var events = _commandExecutor.ExecuteChangeCommand(command);
 
     }
-    public MultipleProjectionsAndQueriesTestBase GivenScenario(Action test)
+    public MultipleProjectionsAndQueriesTestBase GivenScenario(Action initialAction)
     {
+        initialAction();
         return this;
     }
 }

@@ -10,8 +10,9 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
     where TProjection : IMultipleAggregateProjector<TProjectionContents>, new()
     where TProjectionContents : IMultipleAggregateProjectionContents, new()
 {
+    private readonly AggregateTestCommandExecutor _commandExecutor;
     protected readonly List<IQueryFilterChecker<MultipleAggregateProjectionContentsDto<TProjectionContents>>> _queryFilterCheckers = new();
-    protected IServiceProvider? _serviceProvider;
+    protected IServiceProvider _serviceProvider;
     public MultipleAggregateProjectionContentsDto<TProjectionContents> Dto { get; protected set; }
         = new(new TProjectionContents(), Guid.Empty, string.Empty, 0, 0);
     protected Exception? _latestException { get; set; }
@@ -24,25 +25,30 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
         SetupDependency(services);
         SekibanEventSourcingDependency.RegisterForAggregateTest(services, dependencyOptions);
         _serviceProvider = services.BuildServiceProvider();
+        _commandExecutor = new AggregateTestCommandExecutor(_serviceProvider);
     }
     public CommonMultipleAggregateProjectionTestBase(IServiceProvider serviceProvider)
     {
         _serviceProvider = serviceProvider;
-    }
-    public CommonMultipleAggregateProjectionTestBase()
-    {
-        _serviceProvider = null;
+        _commandExecutor = new AggregateTestCommandExecutor(_serviceProvider);
     }
 
     public void Dispose()
     {
     }
+    public Guid RunCreateCommand<TAggregate>(ICreateAggregateCommand<TAggregate> command, Guid? injectingAggregateId = null)
+        where TAggregate : AggregateBase, new()
+    {
+        var (events, aggregateId) = _commandExecutor.ExecuteCreateCommand(command, injectingAggregateId);
+        return aggregateId;
+    }
+    public void RunChangeCommand<TAggregate>(ChangeAggregateCommandBase<TAggregate> command) where TAggregate : AggregateBase, new()
+    {
+        var events = _commandExecutor.ExecuteChangeCommand(command);
+
+    }
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenEvents(IEnumerable<IAggregateEvent> events)
     {
-        if (_serviceProvider == null)
-        {
-            throw new InvalidOperationException("Service provider not set");
-        }
         var documentWriter = _serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter;
         if (documentWriter is null) { throw new Exception("Failed to get document writer"); }
         var sekibanAggregateTypes = _serviceProvider.GetService<SekibanAggregateTypes>() ?? throw new Exception("Failed to get aggregate types");
