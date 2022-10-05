@@ -17,10 +17,10 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposab
         _serviceProvider = services.BuildServiceProvider();
         _helper = new AggregateTestHelper<TAggregate, TContents>(_serviceProvider);
     }
-
-    public IAggregateTestHelper<TAggregate, TContents> GivenEventSubscriber(ITestHelperEventSubscriber eventSubscriber)
+    public TSingleAggregateProjection SetupSingleAggregateProjection<TSingleAggregateProjection>()
+        where TSingleAggregateProjection : SingleAggregateTestBase
     {
-        return _helper.GivenEventSubscriber(eventSubscriber);
+        return _helper.SetupSingleAggregateProjection<TSingleAggregateProjection>();
     }
     public IAggregateTestHelper<TAggregate, TContents> GivenScenario(Action initialAction)
     {
@@ -49,51 +49,6 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposab
     {
         _helper.RunEnvironmentChangeCommand(command);
     }
-    // public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDto(ISingleAggregate dto)
-    // {
-    //     return _helper.GivenEnvironmentDto(dto);
-    // }
-    // public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot)
-    // {
-    //     return _helper.Given(snapshot);
-    // }
-    // public IAggregateTestHelper<TAggregate, TContents> Given(IAggregateEvent ev)
-    // {
-    //     return _helper.Given(ev);
-    // }
-    // public IAggregateTestHelper<TAggregate, TContents> Given(Guid aggregateId, TContents contents)
-    // {
-    //     return _helper.Given(aggregateId, contents);
-    // }
-    // public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(Guid aggregateId, TEventPayload payload)
-    //     where TEventPayload : ICreatedEventPayload
-    // {
-    //     return _helper.Given(aggregateId, payload);
-    // }
-    // public IAggregateTestHelper<TAggregate, TContents> Given<TEventPayload>(TEventPayload payload) where TEventPayload : IChangedEventPayload
-    // {
-    //     return _helper.Given(payload);
-    // }
-    // public IAggregateTestHelper<TAggregate, TContents> Given(Func<TAggregate, IAggregateEvent> evFunc)
-    // {
-    //     return _helper.Given(evFunc);
-    // }
-    // public IAggregateTestHelper<TAggregate, TContents> Given(IEnumerable<IAggregateEvent> events)
-    // {
-    //     return _helper.Given(events);
-    // }
-    // public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IAggregateEvent ev)
-    // {
-    //     return _helper.Given(snapshot, ev);
-    // }
-    // public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot, IEnumerable<IAggregateEvent> ev)
-    // {
-    //     return _helper.Given(snapshot, ev);
-    // }
-    // public IAggregateTestHelper<TAggregate, TContents> GivenEventsFromFile(string filename)
-    // {
-    //     return _helper.GivenEventsFromFile(filename);
-    // }
     public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregate>
     {
         return _helper.WhenCreate(createCommand);
@@ -106,10 +61,7 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposab
     {
         return _helper.WhenChange(commandFunc);
     }
-    // public IAggregateTestHelper<TAggregate, TContents> WhenMethod(Action<TAggregate> action)
-    // {
-    //     return _helper.WhenMethod(action);
-    // }
+
     public IAggregateTestHelper<TAggregate, TContents> ThenEvents(Action<List<IAggregateEvent>, TAggregate> checkEventsAction)
     {
         return _helper.ThenEvents(checkEventsAction);
@@ -222,17 +174,7 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposab
     }
 
     public void Dispose() { }
-    // public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtos(List<ISingleAggregate> dtos)
-    // {
-    //     return _helper.GivenEnvironmentDtos(dtos);
-    // }
-    // public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtoContents<DAggregate, DAggregateContents>(
-    //     Guid aggregateId,
-    //     DAggregateContents contents) where DAggregateContents : IAggregateContents, new()
-    //     where DAggregate : TransferableAggregateBase<DAggregateContents>, new()
-    // {
-    //     return _helper.GivenEnvironmentDtoContents<DAggregate, DAggregateContents>(aggregateId, contents);
-    // }
+
 
     protected virtual void SetupDependency(IServiceCollection serviceCollection)
     {

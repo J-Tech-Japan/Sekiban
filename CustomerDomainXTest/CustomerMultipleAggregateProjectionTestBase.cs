@@ -6,14 +6,15 @@ using Sekiban.EventSourcing.TestHelpers;
 namespace CustomerDomainXTest;
 
 public class
-    MultipleAggregateProjectionTestBase<TProjection, TProjectionContents> : CommonMultipleAggregateProjectionTestBase<TProjection,
+    CustomerMultipleAggregateProjectionTestBase<TProjection, TProjectionContents> : MultipleAggregateProjectionTestBase<TProjection,
         TProjectionContents> where TProjection : MultipleAggregateProjectionBase<TProjectionContents>, new()
     where TProjectionContents : IMultipleAggregateProjectionContents, new()
 
 {
-    protected MultipleAggregateProjectionTestBase() : base(CustomerDependency.GetOptions())
+    protected CustomerMultipleAggregateProjectionTestBase() : base(CustomerDependency.GetOptions())
     {
     }
+
 
     protected override void SetupDependency(IServiceCollection serviceCollection)
     {

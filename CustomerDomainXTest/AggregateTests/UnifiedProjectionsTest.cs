@@ -17,7 +17,7 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase
         CommonMultipleAggregateProjectionTestBase<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.ContentsDefinition>
         _clientLoyaltyProjectionTest;
 
-    private readonly CommonMultipleAggregateProjectionTestBase<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.ContentsDefinition>
+    private readonly MultipleAggregateProjectionTestBase<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.ContentsDefinition>
         _listProjectionTest;
     private readonly ProjectionListQueryFilterTestChecker<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.ContentsDefinition,
         ClientLoyaltyPointQueryFilter, ClientLoyaltyPointQueryFilter.QueryFilterParameter,
@@ -37,12 +37,12 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase
     public UnifiedProjectionsTest() : base(CustomerDependency.GetOptions())
     {
         _clientLoyaltyProjectionTest
-            = SetupMultipleAggregateProjectionTest<CommonMultipleAggregateProjectionTestBase<ClientLoyaltyPointMultipleProjection,
+            = SetupMultipleAggregateProjectionTest<MultipleAggregateProjectionTestBase<ClientLoyaltyPointMultipleProjection,
                 ClientLoyaltyPointMultipleProjection.ContentsDefinition>>();
         _clientLoyaltyProjectionTest.GivenQueryFilterChecker(_projectionQueryFilterTestChecker);
 
         _listProjectionTest
-            = SetupMultipleAggregateProjectionTest<CommonMultipleAggregateProjectionTestBase<ClientLoyaltyPointListProjection,
+            = SetupMultipleAggregateProjectionTest<MultipleAggregateProjectionTestBase<ClientLoyaltyPointListProjection,
                 ClientLoyaltyPointListProjection.ContentsDefinition>>();
 
     }

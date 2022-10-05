@@ -35,27 +35,12 @@ public abstract class MultipleProjectionsAndQueriesTestBase
         where TAggregate : AggregateBase, new()
     {
         var (events, aggregateId) = _commandExecutor.ExecuteCreateCommand(command, injectingAggregateId);
-        var aggregateEvents = events?.ToList() ?? new List<IAggregateEvent>();
-        foreach (var subscriber in subscribers)
-        {
-            foreach (var e in aggregateEvents)
-            {
-                subscriber.OnEvent(e);
-            }
-        }
         return aggregateId;
     }
     public void RunChangeCommand<TAggregate>(ChangeAggregateCommandBase<TAggregate> command) where TAggregate : AggregateBase, new()
     {
         var events = _commandExecutor.ExecuteChangeCommand(command);
-        var aggregateEvents = events?.ToList() ?? new List<IAggregateEvent>();
-        foreach (var subscriber in subscribers)
-        {
-            foreach (var e in aggregateEvents)
-            {
-                subscriber.OnEvent(e);
-            }
-        }
+
     }
     public MultipleProjectionsAndQueriesTestBase GivenScenario(Action test)
     {

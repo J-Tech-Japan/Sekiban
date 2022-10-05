@@ -3,7 +3,7 @@ using Sekiban.EventSourcing.TestHelpers;
 using Xunit;
 namespace CustomerDomainXTest.AggregateTests;
 
-public class ClientLoyaltyPointListProjectionTest : MultipleAggregateProjectionTestBase<ClientLoyaltyPointListProjection,
+public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregateProjectionTestBase<ClientLoyaltyPointListProjection,
     ClientLoyaltyPointListProjection.ContentsDefinition>
 {
     public ProjectionListQueryFilterTestChecker<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.ContentsDefinition,

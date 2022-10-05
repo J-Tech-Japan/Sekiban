@@ -4,7 +4,8 @@ namespace Sekiban.EventSourcing.TestHelpers;
 public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : TransferableAggregateBase<TContents>
     where TContents : IAggregateContents, new()
 {
-    public IAggregateTestHelper<TAggregate, TContents> GivenEventSubscriber(ITestHelperEventSubscriber eventSubscriber);
+    public TSingleAggregateProjection SetupSingleAggregateProjection<TSingleAggregateProjection>()
+        where TSingleAggregateProjection : SingleAggregateTestBase;
     public IAggregateTestHelper<TAggregate, TContents> GivenScenario(Action initialAction);
 
     // Given Environment Events

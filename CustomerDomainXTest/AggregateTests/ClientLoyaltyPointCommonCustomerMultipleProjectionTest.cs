@@ -7,8 +7,8 @@ using System.Collections.Generic;
 using Xunit;
 namespace CustomerDomainXTest.AggregateTests;
 
-public class ClientLoyaltyPointCommonMultipleProjectionTest : MultipleAggregateProjectionTestBase<ClientLoyaltyPointMultipleProjection,
-    ClientLoyaltyPointMultipleProjection.ContentsDefinition>
+public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMultipleAggregateProjectionTestBase<ClientLoyaltyPointMultipleProjection
+    , ClientLoyaltyPointMultipleProjection.ContentsDefinition>
 {
     private static readonly Guid branchId = Guid.Parse("b4a3c2e3-78ca-473b-8afb-f534e5d6d66b");
     private static readonly string branchName = "Test Branch";

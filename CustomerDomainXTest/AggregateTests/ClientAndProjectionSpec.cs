@@ -20,19 +20,21 @@ public class ClientAndProjectionSpec : SingleAggregateTestBase<Client, ClientCon
     public Guid branchId = Guid.Parse("cdb93f86-8d2f-442c-9f62-b9e791401f5f");
     public DateTime FirstEventDatetime { get; set; } = DateTime.Now;
     public DateTime ChangedEventDatetime { get; set; } = DateTime.Now;
-    public SingleProjectionTestEventSubscriber<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.ContentsDefinition>
+    public SingleProjectionTestBaseEventSubscriber<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.ContentsDefinition>
         ProjectionSubscriber
     {
         get;
-    } = new();
+    }
     public ClientAndProjectionSpec() : base(CustomerDependency.GetOptions())
     {
+        ProjectionSubscriber
+            = SetupSingleAggregateProjection<SingleProjectionTestBaseEventSubscriber<Client, ClientNameHistoryProjection,
+                ClientNameHistoryProjection.ContentsDefinition>>();
     }
 
     [Fact]
     public void CreateTest()
     {
-        GivenEventSubscriber(ProjectionSubscriber);
         RunEnvironmentCreateCommand(new CreateBranch(branchName), branchId);
 
         WhenCreate(new CreateClient(branchId, clientName, clientEmail))

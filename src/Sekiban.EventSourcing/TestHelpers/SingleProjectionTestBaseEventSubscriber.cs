@@ -1,32 +1,29 @@
+using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Shared;
 using Xunit;
 namespace Sekiban.EventSourcing.TestHelpers;
 
-public class SingleProjectionTestEventSubscriber<TAggregate, TProjection, TProjectionContents> : ITestHelperEventSubscriber
+public class SingleProjectionTestBaseEventSubscriber<TAggregate, TProjection, TProjectionContents> : SingleAggregateTestBase
     where TAggregate : AggregateBase, new()
     where TProjection : SingleAggregateProjectionBase<TAggregate, TProjection, TProjectionContents>, new()
     where TProjectionContents : ISingleAggregateProjectionContents
 {
     public TProjection Projection { get; } = new();
-    public SingleProjectionTestEventSubscriber()
+    public SingleProjectionTestBaseEventSubscriber(IServiceProvider serviceProvider) : base(serviceProvider)
     {
-        OnEvent = ev =>
-        {
-            Projection.ApplyEvent(ev);
-        };
-    }
-
-    public Action<IAggregateEvent> OnEvent
-    {
-        get;
     }
 
     public SingleAggregateProjectionDto<TProjectionContents> GetProjectionDto()
     {
-        return Projection.ToDto();
+        var singleAggregateService = _serviceProvider.GetService<ISingleAggregateService>();
+        if (singleAggregateService is null) { throw new Exception("ISingleAggregateService not found"); }
+        var projectionResult = singleAggregateService.GetProjectionAsync<TAggregate, TProjection, TProjectionContents>(AggregateId);
+        var projectionDto = projectionResult.Result;
+        if (projectionDto is null) { throw new Exception("Projection not found"); }
+        return projectionDto;
     }
-    public SingleProjectionTestEventSubscriber<TAggregate, TProjection, TProjectionContents> ThenDto(
+    public SingleProjectionTestBaseEventSubscriber<TAggregate, TProjection, TProjectionContents> ThenDto(
         SingleAggregateProjectionDto<TProjectionContents> dto)
     {
         var actual = GetProjectionDto();
@@ -42,7 +39,7 @@ public class SingleProjectionTestEventSubscriber<TAggregate, TProjection, TProje
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public SingleProjectionTestEventSubscriber<TAggregate, TProjection, TProjectionContents> ThenContents(TProjectionContents dtoContents)
+    public SingleProjectionTestBaseEventSubscriber<TAggregate, TProjection, TProjectionContents> ThenContents(TProjectionContents dtoContents)
     {
         var actual = GetProjectionDto().Contents;
         var expected = dtoContents;
@@ -51,7 +48,7 @@ public class SingleProjectionTestEventSubscriber<TAggregate, TProjection, TProje
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public SingleProjectionTestEventSubscriber<TAggregate, TProjection, TProjectionContents> ThenContentsFromJson(string dtoContentsJson)
+    public SingleProjectionTestBaseEventSubscriber<TAggregate, TProjection, TProjectionContents> ThenContentsFromJson(string dtoContentsJson)
     {
         var actual = GetProjectionDto().Contents;
         var contents = JsonSerializer.Deserialize<TProjectionContents>(dtoContentsJson);
@@ -62,7 +59,7 @@ public class SingleProjectionTestEventSubscriber<TAggregate, TProjection, TProje
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public SingleProjectionTestEventSubscriber<TAggregate, TProjection, TProjectionContents> ThenContentsFromFile(string dtoContentsFilename)
+    public SingleProjectionTestBaseEventSubscriber<TAggregate, TProjection, TProjectionContents> ThenContentsFromFile(string dtoContentsFilename)
     {
         using var openStream = File.OpenRead(dtoContentsFilename);
         var actual = GetProjectionDto().Contents;
@@ -74,7 +71,7 @@ public class SingleProjectionTestEventSubscriber<TAggregate, TProjection, TProje
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public SingleProjectionTestEventSubscriber<TAggregate, TProjection, TProjectionContents> WriteProjectionDto(string filename)
+    public SingleProjectionTestBaseEventSubscriber<TAggregate, TProjection, TProjectionContents> WriteProjectionDto(string filename)
     {
         var dto = GetProjectionDto();
         var json = SekibanJsonHelper.Serialize(dto);

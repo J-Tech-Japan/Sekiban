@@ -5,16 +5,17 @@ using Sekiban.EventSourcing.Shared;
 using Xunit;
 namespace Sekiban.EventSourcing.TestHelpers;
 
-public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionContents> : IDisposable,
+public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionContents> : IDisposable,
     IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents>, ITestHelperEventSubscriber
     where TProjection : IMultipleAggregateProjector<TProjectionContents>, new()
     where TProjectionContents : IMultipleAggregateProjectionContents, new()
 {
-    private readonly List<IQueryFilterChecker<MultipleAggregateProjectionContentsDto<TProjectionContents>>> _queryFilterCheckers = new();
+    protected readonly List<IQueryFilterChecker<MultipleAggregateProjectionContentsDto<TProjectionContents>>> _queryFilterCheckers = new();
     protected IServiceProvider? _serviceProvider;
-    protected List<IAggregateEvent> Events { get; } = new();
-    protected TProjection Projection { get; } = new();
+    public MultipleAggregateProjectionContentsDto<TProjectionContents> Dto { get; protected set; }
+        = new(new TProjectionContents(), Guid.Empty, string.Empty, 0, 0);
     protected Exception? _latestException { get; set; }
+    public Action<IAggregateEvent> OnEvent => e => GivenEvents(new List<IAggregateEvent> { e });
 
     public CommonMultipleAggregateProjectionTestBase(SekibanDependencyOptions dependencyOptions)
     {
@@ -38,7 +39,20 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionC
     }
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenEvents(IEnumerable<IAggregateEvent> events)
     {
-        Events.AddRange(events);
+        if (_serviceProvider == null)
+        {
+            throw new InvalidOperationException("Service provider not set");
+        }
+        var documentWriter = _serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter;
+        if (documentWriter is null) { throw new Exception("Failed to get document writer"); }
+        var sekibanAggregateTypes = _serviceProvider.GetService<SekibanAggregateTypes>() ?? throw new Exception("Failed to get aggregate types");
+
+        foreach (var e in events)
+        {
+            var aggregateType = sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == e.AggregateType);
+            if (aggregateType is null) { throw new Exception($"Failed to find aggregate type {e.AggregateType}"); }
+            documentWriter.SaveAsync(e, aggregateType.Aggregate).Wait();
+        }
         return this;
     }
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenEvents(params IAggregateEvent[] events)
@@ -60,28 +74,8 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionC
         AddEventsFromList(list);
         return this;
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> WhenProjection()
-    {
-        ResetBeforeCommand();
-        try
-        {
-            foreach (var ev in Events)
-            {
-                Projection.ApplyEvent(ev);
-            }
-        }
-        catch (Exception ex)
-        {
-            _latestException = ex;
-            return this;
-        }
-        var dto = Projection.ToDto();
-        foreach (var checker in _queryFilterCheckers)
-        {
-            checker.RegisterDto(dto);
-        }
-        return this;
-    }
+    public abstract IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> WhenProjection();
+
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenNotThrowsAnException()
     {
         var exception = _latestException is AggregateException aggregateException ? aggregateException.InnerExceptions.First() : _latestException;
@@ -99,14 +93,14 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionC
 
     public async Task<IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents>> WriteProjectionToFileAsync(string filename)
     {
-        var json = SekibanJsonHelper.Serialize(Projection);
+        var json = SekibanJsonHelper.Serialize(Dto);
         await File.WriteAllTextAsync(filename, json);
         return this;
     }
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenDto(
         MultipleAggregateProjectionContentsDto<TProjectionContents> dto)
     {
-        var actual = Projection.ToDto();
+        var actual = Dto;
         var expected = dto with { LastEventId = actual.LastEventId, LastSortableUniqueId = actual.LastSortableUniqueId, Version = actual.Version };
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
@@ -115,7 +109,7 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionC
     }
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenContents(TProjectionContents contents)
     {
-        var actual = Projection.ToDto().Contents;
+        var actual = Dto.Contents;
         var expected = contents;
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
@@ -131,7 +125,7 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionC
     }
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> WriteProjectionToFile(string filename)
     {
-        var json = SekibanJsonHelper.Serialize(Projection);
+        var json = SekibanJsonHelper.Serialize(Dto);
         File.WriteAllTextAsync(filename, json);
         return this;
     }
@@ -163,7 +157,7 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionC
             var genericType = eventType.MakeGenericType(type);
             var ev = Activator.CreateInstance(genericType, aggregateId, aggregateType, payload, isCreateEvent) as IAggregateEvent;
             if (ev == null) { throw new InvalidDataException("イベントの生成に失敗しました。" + payload); }
-            Events.Add(ev);
+            GivenEvents(ev);
         }
         return this;
     }
@@ -184,7 +178,7 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionC
             var genericType = eventType.MakeGenericType(type);
             var ev = Activator.CreateInstance(genericType, aggregateId, aggregateType, payload, isCreateEvent) as IAggregateEvent;
             if (ev == null) { throw new InvalidDataException("イベントの生成に失敗しました。" + payload); }
-            Events.Add(ev);
+            GivenEvents(ev);
         }
         return this;
     }
@@ -194,7 +188,6 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionC
         initialAction();
         return this;
     }
-    public Action<IAggregateEvent> OnEvent => e => GivenEvents(new List<IAggregateEvent> { e });
 
     public T GetService<T>() where T : notnull
     {
@@ -225,7 +218,9 @@ public class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionC
             {
                 throw new InvalidDataException($"イベント {documentTypeName} のデシリアライズに失敗しました。");
             }
-            Events.Add((IAggregateEvent)eventInstance);
+            var ev = eventInstance as IAggregateEvent;
+            if (ev is null) { throw new InvalidDataException($"イベント {documentTypeName} の生成に失敗しました。"); }
+            GivenEvents(ev);
         }
     }
     protected virtual void SetupDependency(IServiceCollection serviceCollection)
