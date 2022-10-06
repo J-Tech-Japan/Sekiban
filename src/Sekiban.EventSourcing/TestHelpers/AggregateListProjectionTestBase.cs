@@ -1,16 +1,16 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
+using Sekiban.EventSourcing.Shared;
 namespace Sekiban.EventSourcing.TestHelpers;
 
-public class AggregateListProjectionTestBase<TAggregate, TAggregateContents> : CommonMultipleAggregateProjectionTestBase<
+public class AggregateListProjectionTestBase<TAggregate, TAggregateContents, TDependencyDefinition> : CommonMultipleAggregateProjectionTestBase<
     SingleAggregateListProjector<TAggregate, AggregateDto<TAggregateContents>, DefaultSingleAggregateProjector<TAggregate>>,
-    SingleAggregateListProjectionDto<AggregateDto<TAggregateContents>>> where TAggregate : TransferableAggregateBase<TAggregateContents>
+    SingleAggregateListProjectionDto<AggregateDto<TAggregateContents>>, TDependencyDefinition>
+    where TAggregate : TransferableAggregateBase<TAggregateContents>
     where TAggregateContents : IAggregateContents, new()
+    where TDependencyDefinition : IDependencyDefinition, new()
 {
-    public AggregateListProjectionTestBase(SekibanDependencyOptions dependencyOptions) : base(dependencyOptions)
-    {
-    }
     public override
         IMultipleAggregateProjectionTestHelper<
             SingleAggregateListProjector<TAggregate, AggregateDto<TAggregateContents>, DefaultSingleAggregateProjector<TAggregate>>,

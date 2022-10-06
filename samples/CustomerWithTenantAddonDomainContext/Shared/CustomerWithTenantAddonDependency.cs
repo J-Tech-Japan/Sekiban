@@ -18,8 +18,40 @@ using Sekiban.EventSourcing.TestHelpers;
 using System.Reflection;
 namespace CustomerWithTenantAddonDomainContext.Shared;
 
-public static class CustomerWithTenantAddonDependency
+public class CustomerWithTenantAddonDependency : IDependencyDefinition
 {
+    public Assembly GetExecutingAssembly()
+    {
+        throw new NotImplementedException();
+    }
+    IEnumerable<Type> IDependencyDefinition.GetControllerAggregateTypes()
+    {
+        return GetControllerAggregateTypes();
+    }
+    IEnumerable<Type> IDependencyDefinition.GetSingleAggregateProjectionTypes()
+    {
+        return GetSingleAggregateProjectionTypes();
+    }
+    IEnumerable<Type> IDependencyDefinition.GetMultipleAggregatesProjectionTypes()
+    {
+        return GetMultipleAggregatesProjectionTypes();
+    }
+    IEnumerable<Type> IDependencyDefinition.GetAggregateListQueryFilterTypes()
+    {
+        return GetAggregateListQueryFilterTypes();
+    }
+    IEnumerable<Type> IDependencyDefinition.GetSingleAggregateProjectionQueryFilterTypes()
+    {
+        return GetSingleAggregateProjectionQueryFilterTypes();
+    }
+    IEnumerable<Type> IDependencyDefinition.GetProjectionQueryFilterTypes()
+    {
+        return GetProjectionQueryFilterTypes();
+    }
+    public IEnumerable<(Type serviceType, Type? implementationType)> GetCommandDependencies()
+    {
+        throw new NotImplementedException();
+    }
     public static Assembly GetAssembly()
     {
         return Assembly.GetExecutingAssembly();

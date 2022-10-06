@@ -1,13 +1,15 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
+using Sekiban.EventSourcing.Shared;
 namespace Sekiban.EventSourcing.TestHelpers;
 
 public class
-    MultipleAggregateProjectionTestBase<TProjection, TProjectionContents> : CommonMultipleAggregateProjectionTestBase<TProjection,
-        TProjectionContents> where TProjection : MultipleAggregateProjectionBase<TProjectionContents>, new()
+    MultipleAggregateProjectionTestBase<TProjection, TProjectionContents, TDependencyDefinition> : CommonMultipleAggregateProjectionTestBase<
+        TProjection, TProjectionContents, TDependencyDefinition> where TProjection : MultipleAggregateProjectionBase<TProjectionContents>, new()
     where TProjectionContents : IMultipleAggregateProjectionContents, new()
+    where TDependencyDefinition : IDependencyDefinition, new()
 {
-    public MultipleAggregateProjectionTestBase(SekibanDependencyOptions options) : base(options)
+    public MultipleAggregateProjectionTestBase()
     {
     }
     public MultipleAggregateProjectionTestBase(IServiceProvider serviceProvider) : base(serviceProvider)

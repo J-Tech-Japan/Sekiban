@@ -8,15 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 
 // Add services to the container.
-var controllerItems = new SekibanControllerItems(
-    CustomerWithTenantAddonDependency.GetControllerAggregateTypes().ToList(),
-    CustomerWithTenantAddonDependency.GetTransientDependencies().ToList(),
-    CustomerWithTenantAddonDependency.GetSingleAggregateProjectionTypes().ToList(),
-    CustomerWithTenantAddonDependency.GetMultipleAggregatesProjectionTypes().ToList(),
-    CustomerWithTenantAddonDependency.GetAggregateListQueryFilterTypes().ToList(),
-    CustomerWithTenantAddonDependency.GetSingleAggregateProjectionQueryFilterTypes().ToList(),
-    CustomerWithTenantAddonDependency.GetProjectionQueryFilterTypes().ToList(),
-    CustomerWithTenantAddonDependency.GetProjectionListQueryFilterTypes().ToList());
+var controllerItems = SekibanControllerItems.FromDependencies(new CustomerWithTenantAddonDependency());
 builder.Services.AddSingleton<ISekibanControllerItems>(controllerItems);
 var controllerOptions = new SekibanControllerOptions();
 builder.Services.AddSingleton(controllerOptions);
@@ -42,7 +34,7 @@ builder.Services.AddSwaggerGen(
     });
 
 // プロジェクトの依存
-SekibanEventSourcingDependency.Register(builder.Services, CustomerWithTenantAddonDependency.GetOptions());
+SekibanEventSourcingDependency.Register(builder.Services, new CustomerWithTenantAddonDependency());
 builder.Services.AddSekibanCosmosDB();
 var app = builder.Build();
 

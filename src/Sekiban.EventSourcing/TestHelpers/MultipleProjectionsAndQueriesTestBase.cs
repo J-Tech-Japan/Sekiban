@@ -2,18 +2,19 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Shared;
 namespace Sekiban.EventSourcing.TestHelpers;
 
-public abstract class MultipleProjectionsAndQueriesTestBase
+public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> where TDependencyDefinition : IDependencyDefinition, new()
 {
     private readonly AggregateTestCommandExecutor _commandExecutor;
     protected readonly IServiceProvider _serviceProvider;
 
     // ReSharper disable once PublicConstructorInAbstractClass
-    public MultipleProjectionsAndQueriesTestBase(SekibanDependencyOptions dependencyOptions)
+    public MultipleProjectionsAndQueriesTestBase()
     {
         var services = new ServiceCollection();
         // ReSharper disable once VirtualMemberCallInConstructor
         SetupDependency(services);
-        SekibanEventSourcingDependency.RegisterForAggregateTest(services, dependencyOptions);
+        services.AddQueryFiltersFromDependencyDefinition(new TDependencyDefinition());
+        SekibanEventSourcingDependency.RegisterForAggregateTest(services, new TDependencyDefinition());
         _serviceProvider = services.BuildServiceProvider();
         _commandExecutor = new AggregateTestCommandExecutor(_serviceProvider);
     }
@@ -38,7 +39,7 @@ public abstract class MultipleProjectionsAndQueriesTestBase
         var events = _commandExecutor.ExecuteChangeCommand(command);
 
     }
-    public MultipleProjectionsAndQueriesTestBase GivenScenario(Action initialAction)
+    public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GivenScenario(Action initialAction)
     {
         initialAction();
         return this;

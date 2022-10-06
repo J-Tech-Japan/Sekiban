@@ -11,7 +11,7 @@ using System;
 using Xunit;
 namespace CustomerDomainXTest.AggregateTests;
 
-public class ClientSpec : SingleAggregateTestBase<Client, ClientContents>
+public class ClientSpec : SingleAggregateTestBase<Client, ClientContents, CustomerDependency>
 {
 
     private const string testClientName = "TestName";
@@ -19,7 +19,6 @@ public class ClientSpec : SingleAggregateTestBase<Client, ClientContents>
     private const string testEmail = "test@example.com";
     private const string testClientChangedNameV3 = "TestName3";
     private static readonly Guid clientId = Guid.NewGuid();
-    public ClientSpec() : base(CustomerDependency.GetOptions()) { }
     protected override void SetupDependency(IServiceCollection serviceCollection)
     {
         base.SetupDependency(serviceCollection);

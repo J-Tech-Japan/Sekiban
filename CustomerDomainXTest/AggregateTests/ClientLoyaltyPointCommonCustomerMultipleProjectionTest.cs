@@ -1,5 +1,6 @@
 using CustomerDomainContext.Aggregates.Branches.Events;
 using CustomerDomainContext.Projections.ClientLoyaltyPointMultiples;
+using CustomerDomainContext.Shared;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.TestHelpers;
 using System;
@@ -8,7 +9,7 @@ using Xunit;
 namespace CustomerDomainXTest.AggregateTests;
 
 public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMultipleAggregateProjectionTestBase<ClientLoyaltyPointMultipleProjection
-    , ClientLoyaltyPointMultipleProjection.ContentsDefinition>
+    , ClientLoyaltyPointMultipleProjection.ContentsDefinition, CustomerDependency>
 {
     private static readonly Guid branchId = Guid.Parse("b4a3c2e3-78ca-473b-8afb-f534e5d6d66b");
     private static readonly string branchName = "Test Branch";

@@ -3,17 +3,20 @@ using Sekiban.EventSourcing.Shared;
 using Sekiban.EventSourcing.Validations;
 namespace Sekiban.EventSourcing.TestHelpers;
 
-public abstract class SingleAggregateTestBase<TAggregate, TContents> : IDisposable, IAggregateTestHelper<TAggregate, TContents>
-    where TAggregate : TransferableAggregateBase<TContents>, new() where TContents : IAggregateContents, new()
+public abstract class SingleAggregateTestBase<TAggregate, TContents, TDependencyDefinition> : IDisposable, IAggregateTestHelper<TAggregate, TContents>
+    where TAggregate : TransferableAggregateBase<TContents>, new()
+    where TContents : IAggregateContents, new()
+    where TDependencyDefinition : IDependencyDefinition, new()
 {
     private readonly IAggregateTestHelper<TAggregate, TContents> _helper;
     protected readonly IServiceProvider _serviceProvider;
-    protected SingleAggregateTestBase(SekibanDependencyOptions dependencyOptions)
+    protected SingleAggregateTestBase()
     {
         var services = new ServiceCollection();
         // ReSharper disable once VirtualMemberCallInConstructor
         SetupDependency(services);
-        SekibanEventSourcingDependency.RegisterForAggregateTest(services, dependencyOptions);
+        services.AddQueryFiltersFromDependencyDefinition(new TDependencyDefinition());
+        SekibanEventSourcingDependency.RegisterForAggregateTest(services, new TDependencyDefinition());
         _serviceProvider = services.BuildServiceProvider();
         _helper = new AggregateTestHelper<TAggregate, TContents>(_serviceProvider);
     }

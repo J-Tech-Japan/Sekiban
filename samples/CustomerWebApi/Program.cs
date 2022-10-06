@@ -9,15 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 
 // Add services to the container.
-var controllerItems = new SekibanControllerItems(
-    CustomerDependency.GetControllerAggregateTypes().ToList(),
-    CustomerDependency.GetTransientDependencies().ToList(),
-    CustomerDependency.GetSingleAggregateProjectionTypes().ToList(),
-    CustomerDependency.GetMultipleAggregatesProjectionTypes().ToList(),
-    CustomerDependency.GetAggregateListQueryFilterTypes().ToList(),
-    CustomerDependency.GetSingleAggregateProjectionListQueryFilterTypes().ToList(),
-    CustomerDependency.GetProjectionQueryFilterTypes().ToList(),
-    CustomerDependency.GetProjectionListQueryFilterTypes().ToList());
+var controllerItems = SekibanControllerItems.FromDependencies(new CustomerDependency());
 builder.Services.AddSingleton<ISekibanControllerItems>(controllerItems);
 var controllerOptions = new SekibanControllerOptions();
 builder.Services.AddSingleton(controllerOptions);
@@ -43,7 +35,7 @@ builder.Services.AddSwaggerGen(
     });
 
 // プロジェクトの依存
-SekibanEventSourcingDependency.Register(builder.Services, CustomerDependency.GetOptions());
+SekibanEventSourcingDependency.Register(builder.Services, new CustomerDependency());
 
 // クエリフィルタの登録 グループ化可能
 builder.Services.AddQueryFilterFromSekibanControllerItems(controllerItems);

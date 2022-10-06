@@ -5,10 +5,11 @@ using Sekiban.EventSourcing.Shared;
 using Xunit;
 namespace Sekiban.EventSourcing.TestHelpers;
 
-public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionContents> : IDisposable,
+public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionContents, TDependencyDefinition> : IDisposable,
     IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents>, ITestHelperEventSubscriber
     where TProjection : IMultipleAggregateProjector<TProjectionContents>, new()
     where TProjectionContents : IMultipleAggregateProjectionContents, new()
+    where TDependencyDefinition : IDependencyDefinition, new()
 {
     private readonly AggregateTestCommandExecutor _commandExecutor;
     protected readonly List<IQueryFilterChecker<MultipleAggregateProjectionContentsDto<TProjectionContents>>> _queryFilterCheckers = new();
@@ -18,12 +19,13 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
     protected Exception? _latestException { get; set; }
     public Action<IAggregateEvent> OnEvent => e => GivenEvents(new List<IAggregateEvent> { e });
 
-    public CommonMultipleAggregateProjectionTestBase(SekibanDependencyOptions dependencyOptions)
+    public CommonMultipleAggregateProjectionTestBase()
     {
         var services = new ServiceCollection();
         // ReSharper disable once VirtualMemberCallInConstructor
         SetupDependency(services);
-        SekibanEventSourcingDependency.RegisterForAggregateTest(services, dependencyOptions);
+        services.AddQueryFiltersFromDependencyDefinition(new TDependencyDefinition());
+        SekibanEventSourcingDependency.RegisterForAggregateTest(services, new TDependencyDefinition());
         _serviceProvider = services.BuildServiceProvider();
         _commandExecutor = new AggregateTestCommandExecutor(_serviceProvider);
     }

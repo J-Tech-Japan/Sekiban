@@ -92,17 +92,16 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
                         tQueryResult)
                     .GetTypeInfo());
         }
-        foreach (var projectionType in _sekibanControllerItems.AggregateListQueryFilters)
+        foreach (var projectionType in _sekibanControllerItems.AggregateQueryFilters)
         {
-            var baseType = projectionType.GetInterfaces()
-                ?.FirstOrDefault(m => m.Name.Contains(typeof(IAggregateListQueryFilterDefinition<,,,>).Name));
+            var baseType = projectionType.GetInterfaces()?.FirstOrDefault(m => m.Name.Contains(typeof(IAggregateQueryFilterDefinition<,,,>).Name));
             if (baseType is null) { continue; }
             var tAggregate = baseType.GenericTypeArguments[0];
             var tAggregateContents = baseType.GenericTypeArguments[1];
             var tQueryParam = baseType.GenericTypeArguments[2];
             var tQueryResult = baseType.GenericTypeArguments[3];
             feature.Controllers.Add(
-                _sekibanControllerOptions.BaseAggregateListQueryFilterControllerType.MakeGenericType(
+                _sekibanControllerOptions.BaseAggregateQueryFilterControllerType.MakeGenericType(
                         tAggregate,
                         tAggregateContents,
                         projectionType!,
@@ -122,6 +121,26 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
             var tQueryResult = baseType.GenericTypeArguments[4];
             feature.Controllers.Add(
                 _sekibanControllerOptions.BaseSingleAggregateProjectionListQueryFilterControllerType.MakeGenericType(
+                        tAggregate,
+                        tProjectionType,
+                        tProjectionContentsType,
+                        queryFilterType!,
+                        tQueryParam,
+                        tQueryResult)
+                    .GetTypeInfo());
+        }
+        foreach (var queryFilterType in _sekibanControllerItems.SingleAggregateProjectionQueryFilters)
+        {
+            var baseType = queryFilterType.GetInterfaces()
+                ?.FirstOrDefault(m => m.Name.Contains(typeof(ISingleAggregateProjectionQueryFilterDefinition<,,,,>).Name));
+            if (baseType is null) { continue; }
+            var tAggregate = baseType.GenericTypeArguments[0];
+            var tProjectionType = baseType.GenericTypeArguments[1];
+            var tProjectionContentsType = baseType.GenericTypeArguments[2];
+            var tQueryParam = baseType.GenericTypeArguments[3];
+            var tQueryResult = baseType.GenericTypeArguments[4];
+            feature.Controllers.Add(
+                _sekibanControllerOptions.BaseSingleAggregateProjectionQueryFilterControllerType.MakeGenericType(
                         tAggregate,
                         tProjectionType,
                         tProjectionContentsType,

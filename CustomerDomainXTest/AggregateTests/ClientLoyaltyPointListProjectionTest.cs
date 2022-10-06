@@ -1,10 +1,11 @@
 using CustomerDomainContext.Projections.ClientLoyaltyPointLists;
+using CustomerDomainContext.Shared;
 using Sekiban.EventSourcing.TestHelpers;
 using Xunit;
 namespace CustomerDomainXTest.AggregateTests;
 
 public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregateProjectionTestBase<ClientLoyaltyPointListProjection,
-    ClientLoyaltyPointListProjection.ContentsDefinition>
+    ClientLoyaltyPointListProjection.ContentsDefinition, CustomerDependency>
 {
     public ProjectionListQueryFilterTestChecker<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.ContentsDefinition,
         ClientLoyaltyPointQueryFilter, ClientLoyaltyPointQueryFilter.QueryFilterParameter,

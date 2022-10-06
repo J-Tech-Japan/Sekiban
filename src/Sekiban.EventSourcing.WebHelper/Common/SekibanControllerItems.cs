@@ -1,3 +1,4 @@
+using Sekiban.EventSourcing.Shared;
 namespace Sekiban.EventSourcing.WebHelper.Common;
 
 public record SekibanControllerItems(
@@ -11,4 +12,17 @@ public record SekibanControllerItems(
     IReadOnlyCollection<Type> ProjectionQueryFilters,
     IReadOnlyCollection<Type> ProjectionListQueryFilters) : ISekibanControllerItems
 {
+    public static SekibanControllerItems FromDependencies(params IDependencyDefinition[] dependencyDefinitions)
+    {
+        return new SekibanControllerItems(
+            dependencyDefinitions.SelectMany(s => s.GetControllerAggregateTypes()).ToArray(),
+            dependencyDefinitions.SelectMany(s => s.GetCommandDependencies()).ToArray(),
+            dependencyDefinitions.SelectMany(s => s.GetSingleAggregateProjectionTypes()).ToArray(),
+            dependencyDefinitions.SelectMany(s => s.GetAggregateListQueryFilterTypes()).ToArray(),
+            dependencyDefinitions.SelectMany(s => s.GetAggregateQueryFilterTypes()).ToArray(),
+            dependencyDefinitions.SelectMany(s => s.GetSingleAggregateProjectionListQueryFilterTypes()).ToArray(),
+            dependencyDefinitions.SelectMany(s => s.GetSingleAggregateProjectionQueryFilterTypes()).ToArray(),
+            dependencyDefinitions.SelectMany(s => s.GetProjectionQueryFilterTypes()).ToArray(),
+            dependencyDefinitions.SelectMany(s => s.GetProjectionListQueryFilterTypes()).ToArray());
+    }
 }

@@ -3,7 +3,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Settings;
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
-using Sekiban.EventSourcing.TestHelpers;
 using System.Reflection;
 namespace Sekiban.EventSourcing.Shared;
 
@@ -24,7 +23,7 @@ public static class SekibanEventSourcingDependency
 
     public static void Register(
         IServiceCollection services,
-        SekibanDependencyOptions dependencyOptions,
+        IDependencyDefinition dependencyDefinition,
         ServiceCollectionExtensions.MultipleProjectionType multipleProjectionType = ServiceCollectionExtensions.MultipleProjectionType.MemoryCache)
     {
         // MediatR
@@ -38,13 +37,13 @@ public static class SekibanEventSourcingDependency
         services.AddSekibanSettingsFromAppSettings();
 
         // 各ドメインコンテキスト
-        services.AddSingleton(dependencyOptions.RegisteredEventTypes);
-        services.AddSingleton(dependencyOptions.SekibanAggregateTypes);
-        services.AddTransient(dependencyOptions.TransientDependencies);
+        services.AddSingleton(dependencyDefinition.GetSekibanDependencyOptions().RegisteredEventTypes);
+        services.AddSingleton(dependencyDefinition.GetSekibanDependencyOptions().SekibanAggregateTypes);
+        services.AddTransient(dependencyDefinition.GetSekibanDependencyOptions().TransientDependencies);
         services.AddTransient(GetDependencies());
     }
 
-    public static void RegisterForInMemoryTest(IServiceCollection services, SekibanDependencyOptions dependencyOptions)
+    public static void RegisterForInMemoryTest(IServiceCollection services, IDependencyDefinition dependencyDefinition)
     {
         // MediatR
         services.AddMediatR(Assembly.GetExecutingAssembly(), GetAssembly());
@@ -57,13 +56,13 @@ public static class SekibanEventSourcingDependency
         services.AddSekibanSettingsFromAppSettings();
 
         // 各ドメインコンテキスト
-        services.AddSingleton(dependencyOptions.RegisteredEventTypes);
-        services.AddSingleton(dependencyOptions.SekibanAggregateTypes);
-        services.AddTransient(dependencyOptions.TransientDependencies);
+        services.AddSingleton(dependencyDefinition.GetSekibanDependencyOptions().RegisteredEventTypes);
+        services.AddSingleton(dependencyDefinition.GetSekibanDependencyOptions().SekibanAggregateTypes);
+        services.AddTransient(dependencyDefinition.GetSekibanDependencyOptions().TransientDependencies);
         services.AddTransient(GetDependencies());
     }
 
-    public static void RegisterForAggregateTest(IServiceCollection services, SekibanDependencyOptions dependencyOptions)
+    public static void RegisterForAggregateTest(IServiceCollection services, IDependencyDefinition dependencyDefinition)
     {
         // MediatR
         services.AddMediatR(Assembly.GetExecutingAssembly(), GetAssembly());
@@ -76,9 +75,9 @@ public static class SekibanEventSourcingDependency
         services.AddSekibanAppSettingsFromObject(new AggregateSettings());
 
         // 各ドメインコンテキスト
-        services.AddSingleton(dependencyOptions.RegisteredEventTypes);
-        services.AddSingleton(dependencyOptions.SekibanAggregateTypes);
-        services.AddTransient(dependencyOptions.TransientDependencies);
+        services.AddSingleton(dependencyDefinition.GetSekibanDependencyOptions().RegisteredEventTypes);
+        services.AddSingleton(dependencyDefinition.GetSekibanDependencyOptions().SekibanAggregateTypes);
+        services.AddTransient(dependencyDefinition.GetSekibanDependencyOptions().TransientDependencies);
         services.AddTransient(GetDependencies());
     }
 

@@ -11,7 +11,7 @@ using System.Linq;
 using Xunit;
 namespace CustomerDomainXTest.AggregateTests;
 
-public class ClientAndProjectionSpec : SingleAggregateTestBase<Client, ClientContents>
+public class ClientAndProjectionSpec : SingleAggregateTestBase<Client, ClientContents, CustomerDependency>
 {
     public readonly string branchName = "BranchName";
     public readonly string clientEmail = "client@example.com";
@@ -25,7 +25,7 @@ public class ClientAndProjectionSpec : SingleAggregateTestBase<Client, ClientCon
     {
         get;
     }
-    public ClientAndProjectionSpec() : base(CustomerDependency.GetOptions())
+    public ClientAndProjectionSpec()
     {
         ProjectionSubscriber
             = SetupSingleAggregateProjection<SingleProjectionTestBaseEventSubscriber<Client, ClientNameHistoryProjection,

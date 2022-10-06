@@ -11,13 +11,14 @@ using System.Collections.Generic;
 using Xunit;
 namespace CustomerDomainXTest.AggregateTests;
 
-public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase
+public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<CustomerDependency>
 {
     private readonly
-        CommonMultipleAggregateProjectionTestBase<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.ContentsDefinition>
-        _clientLoyaltyProjectionTest;
+        CommonMultipleAggregateProjectionTestBase<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.ContentsDefinition,
+            CustomerDependency> _clientLoyaltyProjectionTest;
 
-    private readonly MultipleAggregateProjectionTestBase<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.ContentsDefinition>
+    private readonly
+        MultipleAggregateProjectionTestBase<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.ContentsDefinition, CustomerDependency>
         _listProjectionTest;
     private readonly ProjectionListQueryFilterTestChecker<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.ContentsDefinition,
         ClientLoyaltyPointQueryFilter, ClientLoyaltyPointQueryFilter.QueryFilterParameter,
@@ -34,25 +35,20 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase
     private Guid _branchId = Guid.Empty;
     private Guid _clientId = Guid.Empty;
 
-    public UnifiedProjectionsTest() : base(CustomerDependency.GetOptions())
+    public UnifiedProjectionsTest()
     {
         _clientLoyaltyProjectionTest
             = SetupMultipleAggregateProjectionTest<MultipleAggregateProjectionTestBase<ClientLoyaltyPointMultipleProjection,
-                ClientLoyaltyPointMultipleProjection.ContentsDefinition>>();
+                ClientLoyaltyPointMultipleProjection.ContentsDefinition, CustomerDependency>>();
         _clientLoyaltyProjectionTest.GivenQueryFilterChecker(_projectionQueryFilterTestChecker);
 
         _listProjectionTest
             = SetupMultipleAggregateProjectionTest<MultipleAggregateProjectionTestBase<ClientLoyaltyPointListProjection,
-                ClientLoyaltyPointListProjection.ContentsDefinition>>();
+                ClientLoyaltyPointListProjection.ContentsDefinition, CustomerDependency>>();
 
     }
     protected override void SetupDependency(IServiceCollection serviceCollection)
     {
-        serviceCollection.AddQueryFilters(
-            CustomerDependency.GetProjectionQueryFilterTypes(),
-            CustomerDependency.GetProjectionListQueryFilterTypes(),
-            CustomerDependency.GetAggregateListQueryFilterTypes(),
-            CustomerDependency.GetSingleAggregateProjectionListQueryFilterTypes());
     }
 
     [Fact]

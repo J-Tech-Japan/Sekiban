@@ -15,27 +15,16 @@ using CustomerDomainContext.Aggregates.RecentInMemoryActivities.Commands;
 using CustomerDomainContext.Projections.ClientLoyaltyPointLists;
 using CustomerDomainContext.Projections.ClientLoyaltyPointMultiples;
 using Sekiban.EventSourcing.Shared;
-using Sekiban.EventSourcing.TestHelpers;
 using System.Reflection;
 namespace CustomerDomainContext.Shared;
 
-public static class CustomerDependency
+public class CustomerDependency : IDependencyDefinition
 {
-    public static Assembly GetAssembly()
+    public Assembly GetExecutingAssembly()
     {
         return Assembly.GetExecutingAssembly();
     }
-
-    public static RegisteredEventTypes GetEventTypes()
-    {
-        return new RegisteredEventTypes(GetAssembly(), GetAssembly());
-    }
-
-    public static SekibanAggregateTypes GetAggregateTypes()
-    {
-        return new SekibanAggregateTypes(GetAssembly(), SekibanEventSourcingDependency.GetAssembly());
-    }
-    public static IEnumerable<Type> GetControllerAggregateTypes()
+    public IEnumerable<Type> GetControllerAggregateTypes()
     {
         yield return typeof(Branch);
         yield return typeof(Client);
@@ -43,32 +32,39 @@ public static class CustomerDependency
         yield return typeof(RecentActivity);
         yield return typeof(RecentInMemoryActivity);
     }
-    public static IEnumerable<Type> GetSingleAggregateProjectionTypes()
+
+    public IEnumerable<Type> GetSingleAggregateProjectionTypes()
     {
         yield return typeof(ClientNameHistoryProjection);
     }
-    public static IEnumerable<Type> GetMultipleAggregatesProjectionTypes()
+    public IEnumerable<Type> GetMultipleAggregatesProjectionTypes()
     {
         yield return typeof(ClientLoyaltyPointMultipleProjection);
         yield return typeof(ClientLoyaltyPointListProjection);
     }
-    public static IEnumerable<Type> GetAggregateListQueryFilterTypes()
+
+
+    public IEnumerable<Type> GetAggregateListQueryFilterTypes()
     {
         yield return typeof(BasicClientQueryFilter);
     }
-    public static IEnumerable<Type> GetSingleAggregateProjectionListQueryFilterTypes()
+    public IEnumerable<Type> GetAggregateQueryFilterTypes()
+    {
+        return Enumerable.Empty<Type>();
+    }
+    public IEnumerable<Type> GetSingleAggregateProjectionListQueryFilterTypes()
     {
         yield return typeof(ClientNameHistoryProjectionQueryFilter);
     }
-    public static IEnumerable<Type> GetProjectionQueryFilterTypes()
+    public IEnumerable<Type> GetSingleAggregateProjectionQueryFilterTypes()
+    {
+        return Enumerable.Empty<Type>();
+    }
+    public IEnumerable<Type> GetProjectionQueryFilterTypes()
     {
         yield return typeof(ClientLoyaltyPointMultipleProjectionQueryFilter);
     }
-    public static IEnumerable<Type> GetProjectionListQueryFilterTypes()
-    {
-        yield return typeof(ClientLoyaltyPointQueryFilter);
-    }
-    public static IEnumerable<(Type serviceType, Type? implementationType)> GetTransientDependencies()
+    public IEnumerable<(Type serviceType, Type? implementationType)> GetCommandDependencies()
     {
         // Aggregate Event Subscribers
         yield return (typeof(INotificationHandler<AggregateEvent<ClientCreated>>), typeof(ClientCreatedSubscriber));
@@ -105,8 +101,8 @@ public static class CustomerDependency
         yield return (typeof(IChangeAggregateCommandHandler<RecentInMemoryActivity, AddRecentInMemoryActivity>),
             typeof(AddRecentInMemoryActivityHandler));
     }
-    public static SekibanDependencyOptions GetOptions()
+    public IEnumerable<Type> GetProjectionListQueryFilterTypes()
     {
-        return new SekibanDependencyOptions(GetEventTypes(), GetAggregateTypes(), GetTransientDependencies());
+        yield return typeof(ClientLoyaltyPointQueryFilter);
     }
 }
