@@ -46,9 +46,6 @@ public class CustomerWithTenantAddonDependency : IDependencyDefinition
         yield return typeof(ClientLoyaltyPointListProjection);
     }
 
-
-
-
     public IEnumerable<Type> GetAggregateListQueryFilterTypes()
     {
         return Enumerable.Empty<Type>();
@@ -73,7 +70,6 @@ public class CustomerWithTenantAddonDependency : IDependencyDefinition
     {
         return new List<Type>();
     }
-
 
     public IEnumerable<(Type serviceType, Type? implementationType)> GetCommandDependencies()
     {
@@ -117,10 +113,5 @@ public class CustomerWithTenantAddonDependency : IDependencyDefinition
         {
             yield return dependency;
         }
-    }
-
-    public Assembly GetAssembly()
-    {
-        return Assembly.GetExecutingAssembly();
     }
 }
