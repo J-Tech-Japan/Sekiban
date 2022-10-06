@@ -12,9 +12,12 @@ public class SekibanControllerOptions
     public Type BaseIndexControllerType { get; set; } = typeof(SekibanApiListController<>);
     public Type BaseAggregateQueryControllerType { get; set; } = typeof(BaseAggregateQueryController<,>);
     public Type BaseSingleAggregateProjectionControllerType { get; set; } = typeof(BaseSingleAggregateProjectionController<,,>);
-    public Type BaseMultipleAggregateProjectionControllerType { get; set; } = typeof(BaseMultipleAggregateProjectionController<,>);
+    // public Type BaseMultipleAggregateProjectionControllerType { get; set; } = typeof(BaseMultipleAggregateProjectionController<,>);
     public Type BaseAggregateListQueryFilterControllerType { get; set; } = typeof(BaseAggregateListQueryFilterController<,,,,>);
+    public Type BaseAggregateQueryFilterControllerType { get; set; } = typeof(BaseAggregateListQueryFilterController<,,,,>);
     public Type BaseSingleAggregateProjectionListQueryFilterControllerType { get; set; }
+        = typeof(BaseSingleAggregateProjectionListQueryFilterController<,,,,,>);
+    public Type BaseSingleAggregateProjectionQueryFilterControllerType { get; set; }
         = typeof(BaseSingleAggregateProjectionListQueryFilterController<,,,,,>);
     public Type BaseProjectionQueryFilterControllerType { get; set; } = typeof(BaseProjectionQueryFilterController<,,,,>);
     public Type BaseProjectionListQueryFilterControllerType { get; set; } = typeof(BaseProjectionListQueryFilterController<,,,,>);

@@ -59,20 +59,20 @@ public class BaseAggregateQueryController<TAggregate, TAggregateContents> : Cont
         var result = ids.Select(id => _singleAggregateService.GetAggregateDtoAsync<TAggregate, TAggregateContents>(id));
         return Ok(result);
     }
-    [HttpGet]
-    [Route("list")]
-    public virtual async Task<ActionResult<IEnumerable<AggregateDto<TAggregateContents>>>> ListAsync()
-    {
-        if (_sekibanControllerOptions.AuthorizeDefinitionCollection.CheckAuthorization(
-                AuthorizeMethodType.List,
-                this,
-                typeof(TAggregate),
-                null,
-                null,
-                HttpContext,
-                _serviceProvider) ==
-            AuthorizeResultType.Denied) { return Unauthorized(); }
-
-        return Ok(await _multipleAggregateProjectionService.GetAggregateList<TAggregate, TAggregateContents>());
-    }
+    // [HttpGet]
+    // [Route("list")]
+    // public virtual async Task<ActionResult<IEnumerable<AggregateDto<TAggregateContents>>>> ListAsync()
+    // {
+    //     if (_sekibanControllerOptions.AuthorizeDefinitionCollection.CheckAuthorization(
+    //             AuthorizeMethodType.List,
+    //             this,
+    //             typeof(TAggregate),
+    //             null,
+    //             null,
+    //             HttpContext,
+    //             _serviceProvider) ==
+    //         AuthorizeResultType.Denied) { return Unauthorized(); }
+    //
+    //     return Ok(await _multipleAggregateProjectionService.GetAggregateList<TAggregate, TAggregateContents>());
+    // }
 }
