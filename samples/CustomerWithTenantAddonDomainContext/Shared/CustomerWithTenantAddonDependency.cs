@@ -14,7 +14,6 @@ using CustomerWithTenantAddonDomainContext.Aggregates.RecentInMemoryActivities.C
 using CustomerWithTenantAddonDomainContext.Projections;
 using Sekiban.EventSourcing.Addon.Tenant.Shared;
 using Sekiban.EventSourcing.Shared;
-using Sekiban.EventSourcing.TestHelpers;
 using System.Reflection;
 namespace CustomerWithTenantAddonDomainContext.Shared;
 
@@ -22,51 +21,9 @@ public class CustomerWithTenantAddonDependency : IDependencyDefinition
 {
     public Assembly GetExecutingAssembly()
     {
-        throw new NotImplementedException();
-    }
-    IEnumerable<Type> IDependencyDefinition.GetControllerAggregateTypes()
-    {
-        return GetControllerAggregateTypes();
-    }
-    IEnumerable<Type> IDependencyDefinition.GetSingleAggregateProjectionTypes()
-    {
-        return GetSingleAggregateProjectionTypes();
-    }
-    IEnumerable<Type> IDependencyDefinition.GetMultipleAggregatesProjectionTypes()
-    {
-        return GetMultipleAggregatesProjectionTypes();
-    }
-    IEnumerable<Type> IDependencyDefinition.GetAggregateListQueryFilterTypes()
-    {
-        return GetAggregateListQueryFilterTypes();
-    }
-    IEnumerable<Type> IDependencyDefinition.GetSingleAggregateProjectionQueryFilterTypes()
-    {
-        return GetSingleAggregateProjectionQueryFilterTypes();
-    }
-    IEnumerable<Type> IDependencyDefinition.GetProjectionQueryFilterTypes()
-    {
-        return GetProjectionQueryFilterTypes();
-    }
-    public IEnumerable<(Type serviceType, Type? implementationType)> GetCommandDependencies()
-    {
-        throw new NotImplementedException();
-    }
-    public static Assembly GetAssembly()
-    {
         return Assembly.GetExecutingAssembly();
     }
-
-    public static RegisteredEventTypes GetEventTypes()
-    {
-        return new RegisteredEventTypes(GetAssembly(), TenantAddonDependency.GetAssembly(), SekibanEventSourcingDependency.GetAssembly());
-    }
-
-    public static SekibanAggregateTypes GetAggregateTypes()
-    {
-        return new SekibanAggregateTypes(GetAssembly(), SekibanEventSourcingDependency.GetAssembly(), TenantAddonDependency.GetAssembly());
-    }
-    public static IEnumerable<Type> GetControllerAggregateTypes()
+    IEnumerable<Type> IDependencyDefinition.GetControllerAggregateTypes()
     {
         yield return typeof(Branch);
         yield return typeof(Client);
@@ -78,32 +35,47 @@ public class CustomerWithTenantAddonDependency : IDependencyDefinition
             yield return aggregate;
         }
     }
-    public static IEnumerable<Type> GetSingleAggregateProjectionTypes()
+
+    public IEnumerable<Type> GetSingleAggregateProjectionTypes()
     {
         yield return typeof(ClientNameHistoryProjection);
     }
-    public static IEnumerable<Type> GetMultipleAggregatesProjectionTypes()
+    public IEnumerable<Type> GetMultipleAggregatesProjectionTypes()
     {
         yield return typeof(ClientLoyaltyPointMultipleProjection);
         yield return typeof(ClientLoyaltyPointListProjection);
     }
-    public static IEnumerable<Type> GetAggregateListQueryFilterTypes()
+
+
+
+
+    public IEnumerable<Type> GetAggregateListQueryFilterTypes()
+    {
+        return Enumerable.Empty<Type>();
+    }
+    public IEnumerable<Type> GetAggregateQueryFilterTypes()
+    {
+        return Enumerable.Empty<Type>();
+    }
+    public IEnumerable<Type> GetSingleAggregateProjectionQueryFilterTypes()
+    {
+        return Enumerable.Empty<Type>();
+    }
+    public IEnumerable<Type> GetSingleAggregateProjectionListQueryFilterTypes()
+    {
+        return Enumerable.Empty<Type>();
+    }
+    public IEnumerable<Type> GetProjectionQueryFilterTypes()
+    {
+        return Enumerable.Empty<Type>();
+    }
+    public IEnumerable<Type> GetProjectionListQueryFilterTypes()
     {
         return new List<Type>();
     }
-    public static IEnumerable<Type> GetSingleAggregateProjectionQueryFilterTypes()
-    {
-        return new List<Type>();
-    }
-    public static IEnumerable<Type> GetProjectionQueryFilterTypes()
-    {
-        return new List<Type>();
-    }
-    public static IEnumerable<Type> GetProjectionListQueryFilterTypes()
-    {
-        return new List<Type>();
-    }
-    public static IEnumerable<(Type serviceType, Type? implementationType)> GetTransientDependencies()
+
+
+    public IEnumerable<(Type serviceType, Type? implementationType)> GetCommandDependencies()
     {
         // Aggregate Event Subscribers
         yield return (typeof(INotificationHandler<AggregateEvent<ClientCreated>>), typeof(ClientCreatedSubscriber));
@@ -146,8 +118,9 @@ public class CustomerWithTenantAddonDependency : IDependencyDefinition
             yield return dependency;
         }
     }
-    public static SekibanDependencyOptions GetOptions()
+
+    public Assembly GetAssembly()
     {
-        return new SekibanDependencyOptions(GetEventTypes(), GetAggregateTypes(), GetTransientDependencies());
+        return Assembly.GetExecutingAssembly();
     }
 }
