@@ -15,4 +15,18 @@ public static class QueryFilterInjections
         }
         return services;
     }
+    public static IServiceCollection AddQueryFiltersFromDependencyDefinition(
+        this IServiceCollection services,
+        IDependencyDefinition dependencyDefinition)
+    {
+        AddQueryFilters(
+            services,
+            dependencyDefinition.GetAggregateQueryFilterTypes(),
+            dependencyDefinition.GetAggregateListQueryFilterTypes(),
+            dependencyDefinition.GetSingleAggregateProjectionQueryFilterTypes(),
+            dependencyDefinition.GetSingleAggregateProjectionListQueryFilterTypes(),
+            dependencyDefinition.GetProjectionQueryFilterTypes(),
+            dependencyDefinition.GetProjectionListQueryFilterTypes());
+        return services;
+    }
 }

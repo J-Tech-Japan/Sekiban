@@ -25,4 +25,8 @@ public interface IMultipleAggregateProjectionTestHelper<TProjection, TProjection
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenEvents(
         params (Guid aggregateId, IEventPayload payload)[] eventTouples);
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenScenario(Action initialAction);
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenContents(TProjectionContents contents);
+    public Guid RunCreateCommand<TAggregate>(ICreateAggregateCommand<TAggregate> command, Guid? injectingAggregateId = null)
+        where TAggregate : AggregateBase, new();
+    public void RunChangeCommand<TAggregate>(ChangeAggregateCommandBase<TAggregate> command) where TAggregate : AggregateBase, new();
 }

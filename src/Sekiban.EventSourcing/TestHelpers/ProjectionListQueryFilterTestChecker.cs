@@ -6,7 +6,7 @@ using Xunit;
 namespace Sekiban.EventSourcing.TestHelpers;
 
 public class
-    ProjectionQueryListFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse> :
+    ProjectionListQueryFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse> :
         IQueryFilterChecker<MultipleAggregateProjectionContentsDto<TProjectionContents>>
     where TProjection : MultipleAggregateProjectionBase<TProjectionContents>, new()
     where TProjectionContents : IMultipleAggregateProjectionContents, new()
@@ -25,7 +25,7 @@ public class
         _dto = dto;
     }
 
-    public ProjectionQueryListFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
+    public ProjectionListQueryFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
         WhenParam(TQueryFilterParameter param)
     {
         if (_dto == null)
@@ -39,7 +39,7 @@ public class
                 _dto);
         return this;
     }
-    public ProjectionQueryListFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
+    public ProjectionListQueryFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
         WriteResponse(string filename)
     {
         if (_response == null)
@@ -54,7 +54,7 @@ public class
         File.WriteAllTextAsync(filename, json);
         return this;
     }
-    public ProjectionQueryListFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
+    public ProjectionListQueryFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
         ThenResponse(IEnumerable<TQueryFilterResponse> expectedResponse)
     {
         var actual = _response;
@@ -64,7 +64,7 @@ public class
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public ProjectionQueryListFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
+    public ProjectionListQueryFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
         ThenResponseFromJson(string responseJson)
     {
         var response = JsonSerializer.Deserialize<IEnumerable<TQueryFilterResponse>>(responseJson);
@@ -72,7 +72,7 @@ public class
         ThenResponse(response);
         return this;
     }
-    public ProjectionQueryListFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
+    public ProjectionListQueryFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
         ThenResponseFromFile(string responseFilename)
     {
         using var openStream = File.OpenRead(responseFilename);

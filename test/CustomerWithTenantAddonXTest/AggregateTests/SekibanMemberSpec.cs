@@ -1,6 +1,6 @@
 using Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanMembers;
 using Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanMembers.Commands;
-using Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanTenants;
+using Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanTenants.Commands;
 using Sekiban.EventSourcing.Aggregates;
 using Sekiban.EventSourcing.Validations;
 using System;
@@ -17,20 +17,16 @@ public class SekibanMemberSpec : AggregateTestBase<SekibanMember, SekibanMemberC
     [Fact]
     public void CreateMember()
     {
-        GivenEnvironmentDtoContents<SekibanTenant, SekibanTenantContents>(
-                TenantSpec.TenantId,
-                new SekibanTenantContents(TenantSpec.TenantName, TenantSpec.TenantCode))
-            .WhenCreate(new CreateSekibanMember(TenantSpec.TenantId, MemberId, MemberName, MemberEmail, UniqueId))
+        RunEnvironmentCreateCommand(new CreateSekibanTenant(TenantSpec.TenantId, TenantSpec.TenantName, TenantSpec.TenantCode));
+        WhenCreate(new CreateSekibanMember(TenantSpec.TenantId, MemberId, MemberName, MemberEmail, UniqueId))
             .ThenNotThrowsAnException()
             .ThenState(member => new AggregateDto<SekibanMemberContents>(member, new SekibanMemberContents(MemberName, MemberEmail, UniqueId)));
     }
     [Fact]
     public void CreateMemberFailedWithGuid()
     {
-        GivenEnvironmentDtoContents<SekibanTenant, SekibanTenantContents>(
-                TenantSpec.TenantId,
-                new SekibanTenantContents(TenantSpec.TenantName, TenantSpec.TenantCode))
-            .WhenCreate(new CreateSekibanMember(TenantSpec.TenantId, Guid.Empty, MemberName, MemberEmail, UniqueId))
+        RunEnvironmentCreateCommand(new CreateSekibanTenant(TenantSpec.TenantId, TenantSpec.TenantName, TenantSpec.TenantCode));
+        WhenCreate(new CreateSekibanMember(TenantSpec.TenantId, Guid.Empty, MemberName, MemberEmail, UniqueId))
             .ThenHasValidationErrors(
                 new List<SekibanValidationParameterError>
                 {
@@ -40,10 +36,8 @@ public class SekibanMemberSpec : AggregateTestBase<SekibanMember, SekibanMemberC
     [Fact]
     public void CreateMemberFailedWithRegex()
     {
-        GivenEnvironmentDtoContents<SekibanTenant, SekibanTenantContents>(
-                TenantSpec.TenantId,
-                new SekibanTenantContents(TenantSpec.TenantName, TenantSpec.TenantCode))
-            .WhenCreate(new CreateSekibanMember(TenantSpec.TenantId, MemberId, MemberName, MemberEmail, "//''''"))
+        RunEnvironmentCreateCommand(new CreateSekibanTenant(TenantSpec.TenantId, TenantSpec.TenantName, TenantSpec.TenantCode));
+        WhenCreate(new CreateSekibanMember(TenantSpec.TenantId, MemberId, MemberName, MemberEmail, "//''''"))
             .ThenHasValidationErrors(
                 new List<SekibanValidationParameterError>
                 {

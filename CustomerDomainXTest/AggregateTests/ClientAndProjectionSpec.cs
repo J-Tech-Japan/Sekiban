@@ -1,4 +1,4 @@
-using CustomerDomainContext.Aggregates.Branches;
+using CustomerDomainContext.Aggregates.Branches.Commands;
 using CustomerDomainContext.Aggregates.Clients;
 using CustomerDomainContext.Aggregates.Clients.Commands;
 using CustomerDomainContext.Aggregates.Clients.Events;
@@ -11,7 +11,7 @@ using System.Linq;
 using Xunit;
 namespace CustomerDomainXTest.AggregateTests;
 
-public class ClientAndProjectionSpec : SingleAggregateTestBase<Client, ClientContents>
+public class ClientAndProjectionSpec : SingleAggregateTestBase<Client, ClientContents, CustomerDependency>
 {
     public readonly string branchName = "BranchName";
     public readonly string clientEmail = "client@example.com";
@@ -20,21 +20,25 @@ public class ClientAndProjectionSpec : SingleAggregateTestBase<Client, ClientCon
     public Guid branchId = Guid.Parse("cdb93f86-8d2f-442c-9f62-b9e791401f5f");
     public DateTime FirstEventDatetime { get; set; } = DateTime.Now;
     public DateTime ChangedEventDatetime { get; set; } = DateTime.Now;
-    public SingleProjectionTestEventSubscriber<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.ContentsDefinition>
+    public SingleProjectionTestBaseEventSubscriber<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.ContentsDefinition>
         ProjectionSubscriber
     {
         get;
-    } = new();
-    public ClientAndProjectionSpec() : base(CustomerDependency.GetOptions())
+    }
+    public ClientAndProjectionSpec()
     {
+        ProjectionSubscriber
+            = SetupSingleAggregateProjection<SingleProjectionTestBaseEventSubscriber<Client, ClientNameHistoryProjection,
+                ClientNameHistoryProjection.ContentsDefinition>>();
     }
 
     [Fact]
     public void CreateTest()
     {
-        GivenEventSubscriber(ProjectionSubscriber)
-            .GivenEnvironmentDtoContents<Branch, BranchContents>(branchId, new BranchContents { Name = branchName })
-            .WhenCreate(new CreateClient(branchId, clientName, clientEmail))
+        RunEnvironmentCreateCommand(new CreateBranch(branchName), branchId);
+
+        WhenCreate(new CreateClient(branchId, clientName, clientEmail))
+            .ThenNotThrowsAnException()
             .ThenEvents(
                 events =>
                 {

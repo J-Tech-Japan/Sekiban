@@ -6,13 +6,13 @@
         <OutputType>Library</OutputType>
         <RootNamespace>Sekiban.EventSourcing.WebHelper</RootNamespace>
         <PackageId>JJ_Sekiban.EventSourcing.WebHelper</PackageId>
-        <Version>0.6.6</Version>
+        <Version>0.7.0</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework WebHelper</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.6.6</PackageVersion>
-        <Description>QueryFilterのDI対応の効率化</Description>
+        <PackageVersion>0.7.0</PackageVersion>
+        <Description>テスト内でのスナップショット送信を禁止、QueryFilterでアクセスするのを推奨、DependencyDefinitionの導入</Description>
         <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
         <LangVersion>11</LangVersion>
         <OpenApiGenerateDocuments>false</OpenApiGenerateDocuments>

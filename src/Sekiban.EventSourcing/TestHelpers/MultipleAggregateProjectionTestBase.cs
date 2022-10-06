@@ -1,20 +1,22 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
-using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Shared;
 namespace Sekiban.EventSourcing.TestHelpers;
 
-public class AggregateListProjectionTestBase<TAggregate, TAggregateContents, TDependencyDefinition> : CommonMultipleAggregateProjectionTestBase<
-    SingleAggregateListProjector<TAggregate, AggregateDto<TAggregateContents>, DefaultSingleAggregateProjector<TAggregate>>,
-    SingleAggregateListProjectionDto<AggregateDto<TAggregateContents>>, TDependencyDefinition>
-    where TAggregate : TransferableAggregateBase<TAggregateContents>
-    where TAggregateContents : IAggregateContents, new()
+public class
+    MultipleAggregateProjectionTestBase<TProjection, TProjectionContents, TDependencyDefinition> : CommonMultipleAggregateProjectionTestBase<
+        TProjection, TProjectionContents, TDependencyDefinition> where TProjection : MultipleAggregateProjectionBase<TProjectionContents>, new()
+    where TProjectionContents : IMultipleAggregateProjectionContents, new()
     where TDependencyDefinition : IDependencyDefinition, new()
 {
-    public override
-        IMultipleAggregateProjectionTestHelper<
-            SingleAggregateListProjector<TAggregate, AggregateDto<TAggregateContents>, DefaultSingleAggregateProjector<TAggregate>>,
-            SingleAggregateListProjectionDto<AggregateDto<TAggregateContents>>> WhenProjection()
+    public MultipleAggregateProjectionTestBase()
+    {
+    }
+    public MultipleAggregateProjectionTestBase(IServiceProvider serviceProvider) : base(serviceProvider)
+    {
+    }
+
+    public sealed override IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> WhenProjection()
     {
         if (_serviceProvider == null)
         {
@@ -25,7 +27,7 @@ public class AggregateListProjectionTestBase<TAggregate, TAggregateContents, TDe
         if (multipleProjectionService is null) { throw new Exception("Failed to get multipleProjectionService "); }
         try
         {
-            Dto = multipleProjectionService.GetAggregateListObject<TAggregate, TAggregateContents>().Result;
+            Dto = multipleProjectionService.GetProjectionAsync<TProjection, TProjectionContents>().Result;
         }
         catch (Exception ex)
         {

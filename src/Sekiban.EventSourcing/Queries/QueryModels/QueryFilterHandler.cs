@@ -19,8 +19,7 @@ public class QueryFilterHandler
             MultipleAggregateProjectionContentsDto<TProjectionContents> projection)
         where TProjection : MultipleAggregateProjectionBase<TProjectionContents>, new()
         where TProjectionContents : IMultipleAggregateProjectionContents, new()
-        where TQueryFilter : IProjectionListQueryFilterDefinition<TProjection, TProjectionContents, TQueryFilterParameter, TQueryFilterResponse>, new
-        ()
+        where TQueryFilter : IProjectionListQueryFilterDefinition<TProjection, TProjectionContents, TQueryFilterParameter, TQueryFilterResponse>
         where TQueryFilterParameter : IQueryParameter
     {
         var queryFilter = _serviceProvider.GetService<TQueryFilter>();
@@ -39,7 +38,7 @@ public class QueryFilterHandler
         MultipleAggregateProjectionContentsDto<TProjectionContents> projection)
         where TProjection : MultipleAggregateProjectionBase<TProjectionContents>, new()
         where TProjectionContents : IMultipleAggregateProjectionContents, new()
-        where TQueryFilter : IProjectionQueryFilterDefinition<TProjection, TProjectionContents, TQueryFilterParameter, TQueryFilterResponse>, new()
+        where TQueryFilter : IProjectionQueryFilterDefinition<TProjection, TProjectionContents, TQueryFilterParameter, TQueryFilterResponse>
         where TQueryFilterParameter : IQueryParameter
     {
         var queryFilter = _serviceProvider.GetService<TQueryFilter>();
@@ -54,7 +53,7 @@ public class QueryFilterHandler
             TQueryFilterParameter param,
             IEnumerable<AggregateDto<TAggregateContents>> list) where TAggregate : TransferableAggregateBase<TAggregateContents>
         where TAggregateContents : IAggregateContents, new()
-        where TQueryFilter : IAggregateListQueryFilterDefinition<TAggregate, TAggregateContents, TQueryFilterParameter, TQueryFilterResponse>, new()
+        where TQueryFilter : IAggregateListQueryFilterDefinition<TAggregate, TAggregateContents, TQueryFilterParameter, TQueryFilterResponse>
         where TQueryFilterParameter : IQueryParameter
     {
         var queryFilter = _serviceProvider.GetService<TQueryFilter>();
@@ -67,6 +66,19 @@ public class QueryFilterHandler
         }
         return sorted;
     }
+    public TQueryFilterResponse GetAggregateQueryFilter<TAggregate, TAggregateContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
+        TQueryFilterParameter param,
+        IEnumerable<AggregateDto<TAggregateContents>> list) where TAggregate : TransferableAggregateBase<TAggregateContents>
+        where TAggregateContents : IAggregateContents, new()
+        where TQueryFilter : IAggregateQueryFilterDefinition<TAggregate, TAggregateContents, TQueryFilterParameter, TQueryFilterResponse>
+        where TQueryFilterParameter : IQueryParameter
+    {
+        var queryFilter = _serviceProvider.GetService<TQueryFilter>();
+        if (queryFilter is null) { throw new Exception($"QueryFilter {typeof(TQueryFilter).FullName} is not registered to dependency injection"); }
+        var filtered = queryFilter.HandleFilter(param, list);
+        return queryFilter.HandleSort(param, filtered);
+    }
+
     public IEnumerable<TQueryFilterResponse>
         GetSingleAggregateProjectionListQueryFilter<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents, TQueryFilter,
             TQueryFilterParameter, TQueryFilterResponse>(
@@ -76,7 +88,7 @@ public class QueryFilterHandler
         new()
         where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
         where TQueryFilter : ISingleAggregateProjectionListQueryFilterDefinition<TAggregate, TSingleAggregateProjection,
-            TSingleAggregateProjectionContents, TQueryFilterParameter, TQueryFilterResponse>, new()
+            TSingleAggregateProjectionContents, TQueryFilterParameter, TQueryFilterResponse>
         where TQueryFilterParameter : IQueryParameter
     {
         var queryFilter = _serviceProvider.GetService<TQueryFilter>();
@@ -89,5 +101,23 @@ public class QueryFilterHandler
             return sorted.Skip((pagingParam.PageNumber.Value - 1) * pagingParam.PageSize.Value).Take(pagingParam.PageSize.Value);
         }
         return sorted;
+    }
+
+    public TQueryFilterResponse
+        GetSingleAggregateProjectionQueryFilter<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents, TQueryFilter,
+            TQueryFilterParameter, TQueryFilterResponse>(
+            TQueryFilterParameter param,
+            IEnumerable<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>> projections) where TAggregate : AggregateBase, new()
+        where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
+        new()
+        where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
+        where TQueryFilter : ISingleAggregateProjectionQueryFilterDefinition<TAggregate, TSingleAggregateProjection,
+            TSingleAggregateProjectionContents, TQueryFilterParameter, TQueryFilterResponse>
+        where TQueryFilterParameter : IQueryParameter
+    {
+        var queryFilter = _serviceProvider.GetService<TQueryFilter>();
+        if (queryFilter is null) { throw new Exception($"QueryFilter {typeof(TQueryFilter).FullName} is not registered to dependency injection"); }
+        var filtered = queryFilter.HandleFilter(param, projections);
+        return queryFilter.HandleSort(param, filtered);
     }
 }
