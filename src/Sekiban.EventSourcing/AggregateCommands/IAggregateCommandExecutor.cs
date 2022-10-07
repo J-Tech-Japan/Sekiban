@@ -12,8 +12,11 @@ public interface IAggregateCommandExecutor
     /// <typeparam name="TContents">DTOクラス</typeparam>
     /// <typeparam name="C">コマンドクラス</typeparam>
     /// <returns></returns>
-    Task<AggregateCommandExecutorResponse<TContents, C>> ExecChangeCommandAsync<T, TContents, C>(C command, List<CallHistory>? callHistories = null)
-        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new() where C : ChangeAggregateCommandBase<T>;
+    Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecChangeCommandAsync<T, TContents, C>(
+        C command,
+        List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>
+        where TContents : IAggregateContents, new()
+        where C : ChangeAggregateCommandBase<T>;
 
     /// <summary>
     ///     集約コマンドを実行する
@@ -25,7 +28,7 @@ public interface IAggregateCommandExecutor
     /// <typeparam name="TContents">DTOクラス</typeparam>
     /// <typeparam name="C">コマンドクラス</typeparam>
     /// <returns></returns>
-    Task<AggregateCommandExecutorResponse<TContents, C>> ExecChangeCommandWithoutValidationAsync<T, TContents, C>(
+    Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecChangeCommandWithoutValidationAsync<T, TContents, C>(
         C command,
         List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>
         where TContents : IAggregateContents, new()
@@ -40,8 +43,11 @@ public interface IAggregateCommandExecutor
     /// <typeparam name="TContents">DTOクラス</typeparam>
     /// <typeparam name="C">コマンドクラス</typeparam>
     /// <returns></returns>
-    Task<AggregateCommandExecutorResponse<TContents, C>> ExecCreateCommandAsync<T, TContents, C>(C command, List<CallHistory>? callHistories = null)
-        where T : TransferableAggregateBase<TContents>, new() where TContents : IAggregateContents, new() where C : ICreateAggregateCommand<T>;
+    Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecCreateCommandAsync<T, TContents, C>(
+        C command,
+        List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>, new()
+        where TContents : IAggregateContents, new()
+        where C : ICreateAggregateCommand<T>;
     /// <summary>
     ///     集約コマンドを実行する
     ///     こちらのメソッドは集約の新規作成機能のメソッドとなります。
@@ -52,7 +58,7 @@ public interface IAggregateCommandExecutor
     /// <typeparam name="TContents">DTOクラス</typeparam>
     /// <typeparam name="C">コマンドクラス</typeparam>
     /// <returns></returns>
-    Task<AggregateCommandExecutorResponse<TContents, C>> ExecCreateCommandWithoutValidationAsync<T, TContents, C>(
+    Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecCreateCommandWithoutValidationAsync<T, TContents, C>(
         C command,
         List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>, new()
         where TContents : IAggregateContents, new()

@@ -23,7 +23,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         _singleAggregateService = singleAggregateService;
         _userInformationFactory = userInformationFactory;
     }
-    public async Task<AggregateCommandExecutorResponse<TContents, C>> ExecChangeCommandAsync<T, TContents, C>(
+    public async Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecChangeCommandAsync<T, TContents, C>(
         C command,
         List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>
         where TContents : IAggregateContents, new()
@@ -32,11 +32,11 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         var validationResult = command.TryValidateProperties()?.ToList();
         if (validationResult?.Any() == true)
         {
-            return new AggregateCommandExecutorResponse<TContents, C> { ValidationResults = validationResult };
+            return (new AggregateCommandExecutorResponse(null, null, 0, validationResult), new List<IAggregateEvent>());
         }
         return await ExecChangeCommandWithoutValidationAsync<T, TContents, C>(command, callHistories);
     }
-    public async Task<AggregateCommandExecutorResponse<TContents, C>> ExecChangeCommandWithoutValidationAsync<T, TContents, C>(
+    public async Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecChangeCommandWithoutValidationAsync<T, TContents, C>(
         C command,
         List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>
         where TContents : IAggregateContents, new()
@@ -107,10 +107,10 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
                 _semaphoreInMemory.Release();
             }
         }
-        return new AggregateCommandExecutorResponse<TContents, C>(commandDocument) { AggregateDto = aggregateDto, Events = events };
+        return (new AggregateCommandExecutorResponse(aggregateDto.AggregateId, commandDocument.Id, aggregateDto.Version, null), events);
     }
 
-    public async Task<AggregateCommandExecutorResponse<TContents, C>> ExecCreateCommandAsync<T, TContents, C>(
+    public async Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecCreateCommandAsync<T, TContents, C>(
         C command,
         List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>, new()
         where TContents : IAggregateContents, new()
@@ -119,11 +119,11 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         var validationResult = command.TryValidateProperties()?.ToList();
         if (validationResult?.Any() == true)
         {
-            return new AggregateCommandExecutorResponse<TContents, C> { ValidationResults = validationResult };
+            return (new AggregateCommandExecutorResponse(null, null, 0, validationResult), new List<IAggregateEvent>());
         }
         return await ExecCreateCommandWithoutValidationAsync<T, TContents, C>(command, callHistories);
     }
-    public async Task<AggregateCommandExecutorResponse<TContents, C>> ExecCreateCommandWithoutValidationAsync<T, TContents, C>(
+    public async Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecCreateCommandWithoutValidationAsync<T, TContents, C>(
         C command,
         List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>, new()
         where TContents : IAggregateContents, new()
@@ -196,6 +196,6 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
                 _semaphoreInMemory.Release();
             }
         }
-        return new AggregateCommandExecutorResponse<TContents, C>(commandDocument) { AggregateDto = aggregateDto, Events = events };
+        return (new AggregateCommandExecutorResponse(aggregateDto.AggregateId, commandDocument.Id, aggregateDto.Version, null), events);
     }
 }

@@ -75,9 +75,8 @@ public class SekibanApiListController<T> : ControllerBase
                 {
                     if (aggregateType?.Name != interfaceType?.GenericTypeArguments[0].Name) { continue; }
                     var commandType = interfaceType?.GenericTypeArguments[1];
-                    var responseType = typeof(AggregateCommandExecutorResponse<,>);
+                    var responseType = typeof(AggregateCommandExecutorResponse);
                     if (commandType == null) { continue; }
-                    var actualResponseType = responseType.MakeGenericType(aggregateContentsType, commandType).GetTypeInfo();
                     if (aggregateType is null) { continue; }
                     aggregateInfo.commands.Add(
                         new SekibanCommandInfo
@@ -86,7 +85,7 @@ public class SekibanApiListController<T> : ControllerBase
                             JsonBodyType = commandType.Name,
                             Method = "POST",
                             SampleBodyObject = Activator.CreateInstance(commandType)!,
-                            SampleResponseObject = Activator.CreateInstance(actualResponseType)!,
+                            SampleResponseObject = Activator.CreateInstance(responseType)!,
                             IsCreateEvent = true
                         });
                 }
@@ -98,10 +97,9 @@ public class SekibanApiListController<T> : ControllerBase
                 if (interfaceType?.Name != typeof(IChangeAggregateCommandHandler<,>).Name) { continue; }
                 if (aggregateType?.Name != interfaceType?.GenericTypeArguments[0].Name) { continue; }
                 var commandType = interfaceType?.GenericTypeArguments[1];
-                var responseType = typeof(AggregateCommandExecutorResponse<,>);
+                var responseType = typeof(AggregateCommandExecutorResponse);
                 if (commandType == null) { continue; }
                 if (aggregateContentsType == null) { continue; }
-                var actualResponseType = responseType.MakeGenericType(aggregateContentsType, commandType).GetTypeInfo();
                 if (aggregateType is null) { continue; }
                 aggregateInfo.commands.Add(
                     new SekibanCommandInfo
@@ -111,7 +109,7 @@ public class SekibanApiListController<T> : ControllerBase
                         Method = "PATCH",
                         IsCreateEvent = false,
                         SampleBodyObject = Activator.CreateInstance(commandType)!,
-                        SampleResponseObject = Activator.CreateInstance(actualResponseType)!
+                        SampleResponseObject = Activator.CreateInstance(responseType)!
                     });
             }
         }

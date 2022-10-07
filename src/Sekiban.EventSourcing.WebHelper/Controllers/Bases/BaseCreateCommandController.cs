@@ -28,8 +28,7 @@ public class BaseCreateCommandController<TAggregate, TAggregateContents, TAggreg
 
     [HttpPost]
     [Route("")]
-    public virtual async Task<ActionResult<AggregateCommandExecutorResponse<TAggregateContents, TAggregateCommand>>> Execute(
-        [FromBody] TAggregateCommand command)
+    public virtual async Task<ActionResult<AggregateCommandExecutorResponse>> Execute([FromBody] TAggregateCommand command)
     {
         if (_sekibanControllerOptions.AuthorizeDefinitionCollection.CheckAuthorization(
                 AuthorizeMethodType.CreateCommand,
@@ -41,10 +40,10 @@ public class BaseCreateCommandController<TAggregate, TAggregateContents, TAggreg
                 _serviceProvider) ==
             AuthorizeResultType.Denied) { return Unauthorized(); }
 
-        var response = await _executor.ExecCreateCommandAsync<TAggregate, TAggregateContents, TAggregateCommand>(command);
-        if (!response.ValidationResults.Any())
+        var (response, events) = await _executor.ExecCreateCommandAsync<TAggregate, TAggregateContents, TAggregateCommand>(command);
+        if (response.ValidationResults is null || !response.ValidationResults.Any())
         {
-            return new ActionResult<AggregateCommandExecutorResponse<TAggregateContents, TAggregateCommand>>(response);
+            return new ActionResult<AggregateCommandExecutorResponse>(response);
         }
         throw new SekibanValidationErrorsException(response.ValidationResults);
     }

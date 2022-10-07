@@ -28,8 +28,7 @@ public class BaseChangeCommandController<TAggregate, TAggregateContents, TAggreg
 
     [HttpPatch]
     [Route("")]
-    public virtual async Task<ActionResult<AggregateCommandExecutorResponse<TAggregateContents, TAggregateCommand>>> Execute(
-        [FromBody] TAggregateCommand command)
+    public virtual async Task<ActionResult<AggregateCommandExecutorResponse>> Execute([FromBody] TAggregateCommand command)
     {
         if (_sekibanControllerOptions.AuthorizeDefinitionCollection.CheckAuthorization(
                 AuthorizeMethodType.ChangeCommand,
@@ -40,11 +39,11 @@ public class BaseChangeCommandController<TAggregate, TAggregateContents, TAggreg
                 HttpContext,
                 _serviceProvider) ==
             AuthorizeResultType.Denied) { return Unauthorized(); }
-        var response = await _executor.ExecChangeCommandAsync<TAggregate, TAggregateContents, TAggregateCommand>(command);
-        if (!response.ValidationResults.Any())
+        var (response, events) = await _executor.ExecChangeCommandAsync<TAggregate, TAggregateContents, TAggregateCommand>(command);
+        if (response.ValidationResults is null || !response.ValidationResults.Any())
         {
-            return new ActionResult<AggregateCommandExecutorResponse<TAggregateContents, TAggregateCommand>>(response);
+            return new ActionResult<AggregateCommandExecutorResponse>(response);
         }
-        throw new SekibanValidationErrorsException(response.ValidationResults);
+        throw new SekibanValidationErrorsException(response.ValidationResults!);
     }
 }

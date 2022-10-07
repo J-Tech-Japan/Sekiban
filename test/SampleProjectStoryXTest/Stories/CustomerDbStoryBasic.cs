@@ -64,10 +64,10 @@ public class CustomerDbStoryBasic : TestBase
         // create list branch
         var branchList = await _multipleAggregateProjectionService.GetAggregateList<Branch, BranchContents>();
         Assert.Empty(branchList);
-        var branchResult = await _aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchContents, CreateBranch>(new CreateBranch("Japan"));
-        var branchId = branchResult!.Command!.AggregateId;
+        var (branchResult, _) = await _aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchContents, CreateBranch>(new CreateBranch("Japan"));
+        var branchId = branchResult.AggregateId!.Value;
         Assert.NotNull(branchResult);
-        Assert.NotNull(branchResult.AggregateDto);
+        Assert.NotNull(branchResult.AggregateId);
         branchList = await _multipleAggregateProjectionService.GetAggregateList<Branch, BranchContents>();
         Assert.Single(branchList);
         var branchFromList = branchList.First(m => m.AggregateId == branchId);
@@ -91,11 +91,11 @@ public class CustomerDbStoryBasic : TestBase
         var clientList = await _multipleAggregateProjectionService.GetAggregateList<Client, ClientContents>();
         Assert.Empty(clientList);
         var originalName = "Tanaka Taro";
-        var createClientResult = await _aggregateCommandExecutor.ExecCreateCommandAsync<Client, ClientContents, CreateClient>(
+        var (createClientResult, _) = await _aggregateCommandExecutor.ExecCreateCommandAsync<Client, ClientContents, CreateClient>(
             new CreateClient(branchId, originalName, "tanaka@example.com"));
-        var clientId = createClientResult.Command!.AggregateId;
+        var clientId = createClientResult.AggregateId!.Value;
         Assert.NotNull(createClientResult);
-        Assert.NotNull(createClientResult.AggregateDto);
+        Assert.NotNull(createClientResult.AggregateId);
         clientList = await _multipleAggregateProjectionService.GetAggregateList<Client, ClientContents>();
         Assert.Single(clientList);
 
@@ -125,8 +125,8 @@ public class CustomerDbStoryBasic : TestBase
                     new ChangeClientName(clientId, secondName));
             });
         // change name
-        var changeNameResult = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientContents, ChangeClientName>(
-            new ChangeClientName(clientId, secondName) { ReferenceVersion = createClientResult.AggregateDto!.Version });
+        var (changeNameResult, _) = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientContents, ChangeClientName>(
+            new ChangeClientName(clientId, secondName) { ReferenceVersion = createClientResult.Version });
 
         // change name projection
         clientNameList = await _multipleAggregateProjectionService.GetSingleAggregateProjectionList<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.ContentsDefinition>();
@@ -137,13 +137,13 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Equal(secondName, tanakaProjection.Contents.ClientNames.ToList()[1].Name);
 
         // test change name multiple time to create projection 
-        var versionCN = changeNameResult!.AggregateDto!.Version;
+        var versionCN = changeNameResult.Version;
         var countChangeName = 160;
         foreach (var i in Enumerable.Range(0, countChangeName))
         {
-            var changeNameResult2 = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientContents, ChangeClientName>(
+            var (changeNameResult2, _) = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientContents, ChangeClientName>(
                 new ChangeClientName(clientId, $"newname - {i + 1}") { ReferenceVersion = versionCN });
-            versionCN = changeNameResult2.AggregateDto!.Version;
+            versionCN = changeNameResult2.Version;
         }
 
         // get change name dto
@@ -159,13 +159,13 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Equal(0, loyaltyPoint!.Contents.CurrentPoint);
 
         var datetimeFirst = DateTime.Now;
-        var addPointResult = await _aggregateCommandExecutor.ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointContents, AddLoyaltyPoint>(
+        var (addPointResult, _) = await _aggregateCommandExecutor.ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointContents, AddLoyaltyPoint>(
             new AddLoyaltyPoint(clientId, datetimeFirst, LoyaltyPointReceiveTypeKeys.FlightDomestic, 1000, "")
             {
                 ReferenceVersion = loyaltyPoint.Version
             });
         Assert.NotNull(addPointResult);
-        Assert.NotNull(addPointResult.AggregateDto);
+        Assert.NotNull(addPointResult.AggregateId);
 
         loyaltyPoint = await _aggregateService.GetAggregateDtoAsync<LoyaltyPoint, LoyaltyPointContents>(clientId);
         Assert.NotNull(loyaltyPoint);
@@ -178,16 +178,16 @@ public class CustomerDbStoryBasic : TestBase
                 await _aggregateCommandExecutor.ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointContents, UseLoyaltyPoint>(
                     new UseLoyaltyPoint(clientId, datetimeFirst.AddSeconds(1), LoyaltyPointUsageTypeKeys.FlightUpgrade, 2000, "")
                     {
-                        ReferenceVersion = addPointResult!.AggregateDto!.Version
+                        ReferenceVersion = addPointResult.Version
                     });
             });
-        var usePointResult = await _aggregateCommandExecutor.ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointContents, UseLoyaltyPoint>(
+        var (usePointResult, _) = await _aggregateCommandExecutor.ExecChangeCommandAsync<LoyaltyPoint, LoyaltyPointContents, UseLoyaltyPoint>(
             new UseLoyaltyPoint(clientId, DateTime.Now, LoyaltyPointUsageTypeKeys.FlightUpgrade, 200, "")
             {
-                ReferenceVersion = addPointResult!.AggregateDto!.Version
+                ReferenceVersion = addPointResult.Version
             });
         Assert.NotNull(usePointResult);
-        Assert.NotNull(usePointResult.AggregateDto);
+        Assert.NotNull(usePointResult.AggregateId);
 
         loyaltyPoint = await _aggregateService.GetAggregateDtoAsync<LoyaltyPoint, LoyaltyPointContents>(clientId);
         Assert.NotNull(loyaltyPoint);
@@ -200,10 +200,10 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Single(p.Contents.Records);
 
         // delete client
-        var deleteClientResult = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientContents, DeleteClient>(
+        var (deleteClientResult,_) = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientContents, DeleteClient>(
             new DeleteClient(clientId) { ReferenceVersion = versionCN });
         Assert.NotNull(deleteClientResult);
-        Assert.NotNull(deleteClientResult.AggregateDto);
+        Assert.NotNull(deleteClientResult.AggregateId);
         // client deleted
         clientList = await _multipleAggregateProjectionService.GetAggregateList<Client, ClientContents>();
         Assert.Empty(clientList);
@@ -220,22 +220,22 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Single(loyaltyPointList);
 
         // create recent activity
-        var createRecentActivityResult
+        var (createRecentActivityResult,_)
             = await _aggregateCommandExecutor.ExecCreateCommandAsync<RecentActivity, RecentActivityContents, CreateRecentActivity>(
                 new CreateRecentActivity());
 
         var recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentActivity, RecentActivityContents>();
         Assert.Single(recentActivityList);
-        var version = createRecentActivityResult.AggregateDto!.Version;
+        var version = createRecentActivityResult.Version;
         var count = 160;
         foreach (var i in Enumerable.Range(0, count))
         {
-            var recentActivityAddedResult
+            var (recentActivityAddedResult,_)
                 = await _aggregateCommandExecutor.ExecChangeCommandAsync<RecentActivity, RecentActivityContents, AddRecentActivity>(
                     new AddRecentActivity(
-                        createRecentActivityResult!.AggregateDto!.AggregateId,
+                        createRecentActivityResult.AggregateId!.Value,
                         $"Message - {i + 1}") { ReferenceVersion = version });
-            version = recentActivityAddedResult.AggregateDto!.Version;
+            version = recentActivityAddedResult.Version;
         }
         recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentActivity, RecentActivityContents>();
         Assert.Single(recentActivityList);
@@ -282,14 +282,14 @@ public class CustomerDbStoryBasic : TestBase
         await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.AggregateCommand);
 
         // create recent activity
-        var createRecentActivityResult
+        var (createRecentActivityResult,_)
             = await _aggregateCommandExecutor.ExecCreateCommandAsync<RecentActivity, RecentActivityContents, CreateRecentActivity>(
                 new CreateRecentActivity());
-        var recentActivityId = createRecentActivityResult.Command!.AggregateId;
+        var recentActivityId = createRecentActivityResult.AggregateId;
 
         var recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentActivity, RecentActivityContents>();
         Assert.Single(recentActivityList);
-        var version = createRecentActivityResult.AggregateDto!.Version;
+        var version = createRecentActivityResult.Version;
         var tasks = new List<Task>();
         var count = 80;
         foreach (var i in Enumerable.Range(0, count))
@@ -298,13 +298,13 @@ public class CustomerDbStoryBasic : TestBase
                 Task.Run(
                     async () =>
                     {
-                        var recentActivityAddedResult
+                        var (recentActivityAddedResult,_)
                             = await _aggregateCommandExecutor.ExecChangeCommandAsync<RecentActivity, RecentActivityContents, AddRecentActivity>(
-                                new AddRecentActivity(createRecentActivityResult!.AggregateDto!.AggregateId, $"Message - {i + 1}")
+                                new AddRecentActivity(createRecentActivityResult.AggregateId!.Value, $"Message - {i + 1}")
                                 {
                                     ReferenceVersion = version
                                 });
-                        version = recentActivityAddedResult.AggregateDto!.Version;
+                        version = recentActivityAddedResult.Version;
                     }));
         }
         await Task.WhenAll(tasks);
@@ -313,10 +313,10 @@ public class CustomerDbStoryBasic : TestBase
         // this works
         var aggregateRecentActivity
             = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<RecentActivity, RecentActivityContents>(
-                createRecentActivityResult.AggregateDto.AggregateId);
+                createRecentActivityResult.AggregateId!.Value);
         var aggregateRecentActivity2
             = await _aggregateService.GetAggregateDtoAsync<RecentActivity, RecentActivityContents>(
-                createRecentActivityResult.AggregateDto.AggregateId);
+                createRecentActivityResult.AggregateId!.Value);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + 1, aggregateRecentActivity!.Version);
@@ -337,10 +337,10 @@ public class CustomerDbStoryBasic : TestBase
         }
 
         var snapshots = await _documentPersistentRepository.GetSnapshotsForAggregateAsync(
-            createRecentActivityResult.AggregateDto.AggregateId,
+            createRecentActivityResult.AggregateId!.Value,
             typeof(RecentActivity));
 
-        await CheckSnapshots<RecentActivity, RecentActivityContents>(snapshots, createRecentActivityResult.AggregateDto.AggregateId);
+        await CheckSnapshots<RecentActivity, RecentActivityContents>(snapshots, createRecentActivityResult.AggregateId!.Value);
 
         _inMemoryDocumentStore.ResetInMemoryStore();
         _hybridStoreManager.ClearHybridPartitions();
@@ -363,14 +363,14 @@ public class CustomerDbStoryBasic : TestBase
     public async Task AsynchronousInMemoryExecutionTestAsync()
     {
         // create recent activity
-        var createRecentActivityResult
+        var (createRecentActivityResult,_)
             = await _aggregateCommandExecutor
                 .ExecCreateCommandAsync<RecentInMemoryActivity, RecentInMemoryActivityContents, CreateRecentInMemoryActivity>(
                     new CreateRecentInMemoryActivity());
 
         var recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentInMemoryActivity, RecentInMemoryActivityContents>();
         Assert.Single(recentActivityList);
-        var version = createRecentActivityResult.AggregateDto!.Version;
+        var version = createRecentActivityResult.Version;
         var tasks = new List<Task>();
         var count = 140;
         foreach (var i in Enumerable.Range(0, count))
@@ -379,15 +379,15 @@ public class CustomerDbStoryBasic : TestBase
                 Task.Run(
                     async () =>
                     {
-                        var recentActivityAddedResult
+                        var (recentActivityAddedResult, _)
                             = await _aggregateCommandExecutor
                                 .ExecChangeCommandAsync<RecentInMemoryActivity, RecentInMemoryActivityContents, AddRecentInMemoryActivity>(
-                                    new AddRecentInMemoryActivity(createRecentActivityResult!.AggregateDto!.AggregateId, $"Message - {i + 1}")
+                                    new AddRecentInMemoryActivity(createRecentActivityResult.AggregateId!.Value, $"Message - {i + 1}")
                                     {
                                         ReferenceVersion = version
                                     });
-                        version = recentActivityAddedResult.AggregateDto!.Version;
-                        _testOutputHelper.WriteLine($"{i} - {recentActivityAddedResult.AggregateDto.Version.ToString()}");
+                        version = recentActivityAddedResult.Version;
+                        _testOutputHelper.WriteLine($"{i} - {recentActivityAddedResult.Version.ToString()}");
                     }));
         }
         await Task.WhenAll(tasks);
@@ -396,10 +396,10 @@ public class CustomerDbStoryBasic : TestBase
 
         var aggregateRecentActivity
             = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<RecentInMemoryActivity, RecentInMemoryActivityContents>(
-                createRecentActivityResult.AggregateDto.AggregateId);
+                createRecentActivityResult.AggregateId!.Value);
         var aggregateRecentActivity2
             = await _aggregateService.GetAggregateDtoAsync<RecentInMemoryActivity, RecentInMemoryActivityContents>(
-                createRecentActivityResult.AggregateDto.AggregateId);
+                createRecentActivityResult.AggregateId!.Value);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + 1, aggregateRecentActivity!.Version);
@@ -434,10 +434,10 @@ public class CustomerDbStoryBasic : TestBase
                 Task.Run(
                     async () =>
                     {
-                        var recentActivityAddedResult
+                        var (recentActivityAddedResult, _)
                             = await _aggregateCommandExecutor.ExecChangeCommandAsync<RecentActivity, RecentActivityContents, AddRecentActivity>(
                                 new AddRecentActivity(aggregateId, $"Message - {i + 1}") { ReferenceVersion = version });
-                        version = recentActivityAddedResult.AggregateDto!.Version;
+                        version = recentActivityAddedResult.Version;
                     }));
         }
         await Task.WhenAll(tasks);

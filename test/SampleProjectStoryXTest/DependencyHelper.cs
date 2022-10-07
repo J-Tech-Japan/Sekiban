@@ -24,6 +24,7 @@ public static class DependencyHelper
             SekibanEventSourcingDependency.Register(services, new CustomerDependency(), multipleProjectionType);
             services.AddSekibanCosmosDB();
         }
+        services.AddQueryFiltersFromDependencyDefinition(new CustomerDependency());
         return services.BuildServiceProvider();
     }
     public static class LoginType
