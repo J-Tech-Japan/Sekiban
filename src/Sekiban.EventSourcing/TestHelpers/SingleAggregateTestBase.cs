@@ -41,6 +41,13 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents, TDependency
     {
         return _helper.GivenEnvironmentEventsFile(filename);
     }
+    public AggregateDto<TEnvironmentAggregateContents>
+        GetEnvironmentAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid aggregateId)
+        where TEnvironmentAggregate : TransferableAggregateBase<TEnvironmentAggregateContents>, new()
+        where TEnvironmentAggregateContents : IAggregateContents, new()
+    {
+        return _helper.GetEnvironmentAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(aggregateId);
+    }
     public Guid RunEnvironmentCreateCommand<TEnvironmentAggregate>(
         ICreateAggregateCommand<TEnvironmentAggregate> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregate : AggregateBase, new()
@@ -51,6 +58,10 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents, TDependency
         where TEnvironmentAggregate : AggregateBase, new()
     {
         _helper.RunEnvironmentChangeCommand(command);
+    }
+    public IReadOnlyCollection<IAggregateEvent> GetLatestEnvironmentEvents()
+    {
+        return _helper.GetLatestEnvironmentEvents();
     }
     public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregate>
     {

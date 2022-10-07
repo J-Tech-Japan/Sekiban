@@ -6,13 +6,13 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>JJ_Sekiban.EventSourcing</PackageId>
-        <Version>0.7.1</Version>
+        <Version>0.7.2</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Core</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.7.1</PackageVersion>
-        <Description>SekibanControllerOptionsのバグを修正</Description>
+        <PackageVersion>0.7.2</PackageVersion>
+        <Description>GetEnvironmentAggregateDto および、GetLatestEventst をテストに追加</Description>
     </PropertyGroup>
 
     <ItemGroup>

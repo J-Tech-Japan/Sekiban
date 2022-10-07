@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Shared;
 namespace Sekiban.EventSourcing.TestHelpers;
 
@@ -43,5 +44,19 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
     {
         initialAction();
         return this;
+    }
+
+    public AggregateDto<TEnvironmentAggregateContents> GetAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid aggregateId)
+        where TEnvironmentAggregate : TransferableAggregateBase<TEnvironmentAggregateContents>, new()
+        where TEnvironmentAggregateContents : IAggregateContents, new()
+    {
+        var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleAggregateService)) as ISingleAggregateService;
+        if (singleAggregateService is null) { throw new Exception("Failed to get single aggregate service"); }
+        var aggregate = singleAggregateService.GetAggregateDtoAsync<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid.Empty).Result;
+        return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregate).Name);
+    }
+    public IReadOnlyCollection<IAggregateEvent> GetLatestEvents()
+    {
+        return _commandExecutor.LatestEvents;
     }
 }

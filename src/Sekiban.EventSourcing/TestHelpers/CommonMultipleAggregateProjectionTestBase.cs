@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.QueryModels;
+using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Shared;
 using Xunit;
 namespace Sekiban.EventSourcing.TestHelpers;
@@ -48,6 +49,19 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
     {
         var events = _commandExecutor.ExecuteChangeCommand(command);
 
+    }
+    public AggregateDto<TEnvironmentAggregateContents> GetAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid aggregateId)
+        where TEnvironmentAggregate : TransferableAggregateBase<TEnvironmentAggregateContents>, new()
+        where TEnvironmentAggregateContents : IAggregateContents, new()
+    {
+        var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleAggregateService)) as ISingleAggregateService;
+        if (singleAggregateService is null) { throw new Exception("Failed to get single aggregate service"); }
+        var aggregate = singleAggregateService.GetAggregateDtoAsync<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid.Empty).Result;
+        return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregate).Name);
+    }
+    public IReadOnlyCollection<IAggregateEvent> GetLatestEvents()
+    {
+        return _commandExecutor.LatestEvents;
     }
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenEvents(IEnumerable<IAggregateEvent> events)
     {

@@ -7,6 +7,7 @@ public class AggregateTestCommandExecutor
 {
     private readonly List<AggregateBase> _aggregates = new();
     private readonly IServiceProvider _serviceProvider;
+    public IReadOnlyCollection<IAggregateEvent> LatestEvents { get; set; } = new List<IAggregateEvent>();
     public AggregateTestCommandExecutor(IServiceProvider serviceProvider)
     {
         _serviceProvider = serviceProvider;
@@ -60,6 +61,7 @@ public class AggregateTestCommandExecutor
         {
             documentWriter.SaveAsync(e, typeof(TAggregate)).Wait();
         }
+        LatestEvents = latestEvents;
         return (latestEvents, aggregateId.Value);
     }
 
@@ -106,6 +108,7 @@ public class AggregateTestCommandExecutor
         {
             documentWriter.SaveAsync(e, typeof(TAggregate)).Wait();
         }
+        LatestEvents = latestEvents;
         return latestEvents;
     }
 }
