@@ -1,6 +1,8 @@
 ﻿using CustomerDomainContext.Aggregates.Branches;
+using CustomerDomainContext.Aggregates.Branches.QueryFilters;
+using CustomerDomainContext.Aggregates.Clients.QueryFilters;
 using CustomerDomainContext.Shared.Exceptions;
-using Sekiban.EventSourcing.Queries.MultipleAggregates;
+using Sekiban.EventSourcing.Queries.QueryModels;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 using System.ComponentModel.DataAnnotations;
 namespace CustomerDomainContext.Aggregates.Clients.Commands;
@@ -35,28 +37,36 @@ public record CreateClient : ICreateAggregateCommand<Client>
 }
 public class CreateClientHandler : CreateAggregateCommandHandlerBase<Client, CreateClient>
 {
-    private readonly IMultipleAggregateProjectionService _multipleAggregateProjectionService;
+    private readonly IQueryFilterService _queryFilterService;
     private readonly ISingleAggregateService _singleAggregateService;
-    public CreateClientHandler(ISingleAggregateService singleAggregateService, IMultipleAggregateProjectionService multipleAggregateProjectionService)
+    public CreateClientHandler(ISingleAggregateService singleAggregateService, IQueryFilterService queryFilterService)
     {
         _singleAggregateService = singleAggregateService;
-        _multipleAggregateProjectionService = multipleAggregateProjectionService;
+        _queryFilterService = queryFilterService;
     }
 
-    public override Guid GenerateAggregateId(CreateClient command) =>
-        Guid.NewGuid();
+    public override Guid GenerateAggregateId(CreateClient command)
+    {
+        return Guid.NewGuid();
+    }
     protected override async Task ExecCreateCommandAsync(Client aggregate, CreateClient command)
     {
         // Check if branch exists
-        var branchDto = await _singleAggregateService.GetAggregateDtoAsync<Branch, BranchContents>(command.BranchId);
-        if (branchDto is null)
+        var branchExists
+            = await _queryFilterService
+                .GetAggregateQueryFilterAsync<Branch, BranchContents, BranchExistsQueryFilter, BranchExistsQueryFilter.QueryParameter, bool>(
+                    new BranchExistsQueryFilter.QueryParameter(command.BranchId));
+        if (!branchExists)
         {
             throw new SekibanAggregateNotExistsException(command.BranchId, nameof(Branch));
         }
 
         // Check no email duplicates
-        var list = await _multipleAggregateProjectionService.GetAggregateList<Client, ClientContents>();
-        if (list.Any(a => a.Contents.ClientEmail == command.ClientEmail))
+        var emailExists
+            = await _queryFilterService
+                .GetAggregateQueryFilterAsync<Client, ClientContents, ClientEmailExistsQueryFilter, ClientEmailExistsQueryFilter.QueryParameter,
+                    bool>(new ClientEmailExistsQueryFilter.QueryParameter(command.ClientEmail));
+        if (emailExists)
         {
             throw new SekibanEmailAlreadyRegistered();
         }
