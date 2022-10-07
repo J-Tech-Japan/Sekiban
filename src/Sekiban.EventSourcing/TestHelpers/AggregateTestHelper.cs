@@ -68,6 +68,20 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         AddEventsFromList(list);
         return this;
     }
+    public AggregateDto<TEnvironmentAggregateContents>
+        GetEnvironmentAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid aggregateId)
+        where TEnvironmentAggregate : TransferableAggregateBase<TEnvironmentAggregateContents>, new()
+        where TEnvironmentAggregateContents : IAggregateContents, new()
+    {
+        var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleAggregateService)) as ISingleAggregateService;
+        if (singleAggregateService is null) { throw new Exception("Failed to get single aggregate service"); }
+        var aggregate = singleAggregateService.GetAggregateDtoAsync<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid.Empty).Result;
+        return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregate).Name);
+    }
+    public IReadOnlyCollection<IAggregateEvent> GetLatestEnvironmentEvents()
+    {
+        return _commandExecutor.LatestEvents;
+    }
 
     public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregate>
     {

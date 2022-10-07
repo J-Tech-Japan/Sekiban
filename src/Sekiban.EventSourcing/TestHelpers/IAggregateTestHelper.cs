@@ -12,12 +12,16 @@ public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : 
     public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentEvent(IAggregateEvent ev);
     public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentEvents(IEnumerable<IAggregateEvent> events);
     public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentEventsFile(string filename);
-
+    public AggregateDto<TEnvironmentAggregateContents>
+        GetEnvironmentAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid aggregateId)
+        where TEnvironmentAggregate : TransferableAggregateBase<TEnvironmentAggregateContents>, new()
+        where TEnvironmentAggregateContents : IAggregateContents, new();
     public Guid RunEnvironmentCreateCommand<TEnvironmentAggregate>(
         ICreateAggregateCommand<TEnvironmentAggregate> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregate : AggregateBase, new();
     public void RunEnvironmentChangeCommand<TEnvironmentAggregate>(ChangeAggregateCommandBase<TEnvironmentAggregate> command)
         where TEnvironmentAggregate : AggregateBase, new();
+    public IReadOnlyCollection<IAggregateEvent> GetLatestEnvironmentEvents();
     // TODO : remove this methods
     // public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtos(List<ISingleAggregate> dtos);
     // public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtoContents<DAggregate, DAggregateContents>(

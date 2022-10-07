@@ -29,4 +29,8 @@ public interface IMultipleAggregateProjectionTestHelper<TProjection, TProjection
     public Guid RunCreateCommand<TAggregate>(ICreateAggregateCommand<TAggregate> command, Guid? injectingAggregateId = null)
         where TAggregate : AggregateBase, new();
     public void RunChangeCommand<TAggregate>(ChangeAggregateCommandBase<TAggregate> command) where TAggregate : AggregateBase, new();
+    public AggregateDto<TEnvironmentAggregateContents> GetAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid aggregateId)
+        where TEnvironmentAggregate : TransferableAggregateBase<TEnvironmentAggregateContents>, new()
+        where TEnvironmentAggregateContents : IAggregateContents, new();
+    public IReadOnlyCollection<IAggregateEvent> GetLatestEvents();
 }
