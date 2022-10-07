@@ -1,3 +1,4 @@
+using CustomerDomainContext.Aggregates.Branches;
 using CustomerDomainContext.Aggregates.Branches.Commands;
 using CustomerDomainContext.Aggregates.Clients;
 using CustomerDomainContext.Aggregates.Clients.Commands;
@@ -36,6 +37,9 @@ public class ClientAndProjectionSpec : SingleAggregateTestBase<Client, ClientCon
     public void CreateTest()
     {
         RunEnvironmentCreateCommand(new CreateBranch(branchName), branchId);
+        // GetEnvironmentAggregateDtoのテスト
+        var branch = GetEnvironmentAggregateDto<Branch, BranchContents>(branchId);
+        Assert.Equal(branchName, branch.Contents.Name);
 
         WhenCreate(new CreateClient(branchId, clientName, clientEmail))
             .ThenNotThrowsAnException()
