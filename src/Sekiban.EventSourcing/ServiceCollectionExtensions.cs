@@ -82,6 +82,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IDocumentPersistentRepository, InMemoryDocumentRepository>();
         services.AddTransient<IDocumentTemporaryWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentPersistentWriter, InMemoryDocumentWriter>();
+        services.AddTransient<IQueryFilterService, QueryFilterService>();
         services.AddTransient<QueryFilterHandler>();
         return services;
     }
@@ -109,6 +110,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IDocumentPersistentRepository, InMemoryDocumentRepository>();
         services.AddTransient<IDocumentTemporaryWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentPersistentWriter, InMemoryDocumentWriter>();
+        services.AddTransient<IQueryFilterService, QueryFilterService>();
         services.AddTransient<QueryFilterHandler>();
         return services;
     }

@@ -1,10 +1,12 @@
 ﻿using CustomerDomainContext.AggregateEventSubscribers;
 using CustomerDomainContext.Aggregates.Branches;
 using CustomerDomainContext.Aggregates.Branches.Commands;
+using CustomerDomainContext.Aggregates.Branches.QueryFilters;
 using CustomerDomainContext.Aggregates.Clients;
 using CustomerDomainContext.Aggregates.Clients.Commands;
 using CustomerDomainContext.Aggregates.Clients.Events;
 using CustomerDomainContext.Aggregates.Clients.Projections;
+using CustomerDomainContext.Aggregates.Clients.QueryFilters;
 using CustomerDomainContext.Aggregates.Clients.QueryFilters.BasicClientFilters;
 using CustomerDomainContext.Aggregates.LoyaltyPoints;
 using CustomerDomainContext.Aggregates.LoyaltyPoints.Commands;
@@ -50,7 +52,8 @@ public class CustomerDependency : IDependencyDefinition
     }
     public IEnumerable<Type> GetAggregateQueryFilterTypes()
     {
-        return Enumerable.Empty<Type>();
+        yield return typeof(ClientEmailExistsQueryFilter);
+        yield return typeof(BranchExistsQueryFilter);
     }
     public IEnumerable<Type> GetSingleAggregateProjectionListQueryFilterTypes()
     {
