@@ -24,13 +24,13 @@ public static class SekibanEventSourcingDependency
     public static void Register(
         IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
+        ISekibanDateProducer? sekibanDateProducer = null,
         ServiceCollectionExtensions.MultipleProjectionType multipleProjectionType = ServiceCollectionExtensions.MultipleProjectionType.MemoryCache)
     {
         // MediatR
         services.AddMediatR(Assembly.GetExecutingAssembly(), GetAssembly());
-
         // Sekibanイベントソーシング
-        services.AddSekibanCore(multipleProjectionType);
+        services.AddSekibanCore(sekibanDateProducer ?? new SekibanDateProducer(), multipleProjectionType);
         // TODO : services.AddSekibanCosmosDB();
         services.AddSekibanHTTPUser();
 
@@ -43,13 +43,16 @@ public static class SekibanEventSourcingDependency
         services.AddTransient(GetDependencies());
     }
 
-    public static void RegisterForInMemoryTest(IServiceCollection services, IDependencyDefinition dependencyDefinition)
+    public static void RegisterForInMemoryTest(
+        IServiceCollection services,
+        IDependencyDefinition dependencyDefinition,
+        ISekibanDateProducer? sekibanDateProducer = null)
     {
         // MediatR
         services.AddMediatR(Assembly.GetExecutingAssembly(), GetAssembly());
 
         // Sekibanイベントソーシング
-        services.AddSekibanCoreInMemory();
+        services.AddSekibanCoreInMemory(sekibanDateProducer);
 
         services.AddSekibanHTTPUser();
 
@@ -62,13 +65,16 @@ public static class SekibanEventSourcingDependency
         services.AddTransient(GetDependencies());
     }
 
-    public static void RegisterForAggregateTest(IServiceCollection services, IDependencyDefinition dependencyDefinition)
+    public static void RegisterForAggregateTest(
+        IServiceCollection services,
+        IDependencyDefinition dependencyDefinition,
+        ISekibanDateProducer? sekibanDateProducer = null)
     {
         // MediatR
         services.AddMediatR(Assembly.GetExecutingAssembly(), GetAssembly());
 
         // Sekibanイベントソーシング
-        services.AddSekibanCoreInAggregateTest();
+        services.AddSekibanCoreInAggregateTest(sekibanDateProducer);
 
         services.AddSekibanHTTPUser();
 

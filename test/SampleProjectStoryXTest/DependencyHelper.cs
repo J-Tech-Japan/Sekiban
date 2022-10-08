@@ -12,6 +12,7 @@ public static class DependencyHelper
     public static ServiceProvider CreateDefaultProvider(
         TestFixture fixture,
         bool inMemory = false,
+        ISekibanDateProducer? sekibanDateProducer = null,
         ServiceCollectionExtensions.MultipleProjectionType multipleProjectionType = ServiceCollectionExtensions.MultipleProjectionType.MemoryCache)
     {
         IServiceCollection services = new ServiceCollection();
@@ -21,7 +22,7 @@ public static class DependencyHelper
             SekibanEventSourcingDependency.RegisterForInMemoryTest(services, new CustomerDependency());
         } else
         {
-            SekibanEventSourcingDependency.Register(services, new CustomerDependency(), multipleProjectionType);
+            SekibanEventSourcingDependency.Register(services, new CustomerDependency(), sekibanDateProducer, multipleProjectionType);
             services.AddSekibanCosmosDB();
         }
         services.AddQueryFiltersFromDependencyDefinition(new CustomerDependency());

@@ -9,6 +9,7 @@ using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates.SingleProjection;
 using Sekiban.EventSourcing.Queries.UpdateNotices;
 using Sekiban.EventSourcing.Settings;
+using Sekiban.EventSourcing.Shared;
 namespace Sekiban.EventSourcing;
 
 public static class ServiceCollectionExtensions
@@ -25,6 +26,7 @@ public static class ServiceCollectionExtensions
     }
     public static IServiceCollection AddSekibanCore(
         this IServiceCollection services,
+        ISekibanDateProducer? sekibanDateProducer = null,
         MultipleProjectionType multipleProjectionType = MultipleProjectionType.MemoryCache)
     {
         services.AddMemoryCache();
@@ -43,9 +45,10 @@ public static class ServiceCollectionExtensions
                 services.AddTransient<IMultipleProjection, MemoryCacheMultipleProjection>();
                 break;
         }
-
-        services.AddSingleton<IUpdateNotice>(new SekibanUpdateNoticeManager());
-
+        var sekibanDateProducer1 = sekibanDateProducer ?? new SekibanDateProducer();
+        services.AddSingleton(sekibanDateProducer1);
+        services.AddSingleton<IUpdateNotice>(new SekibanUpdateNoticeManager(sekibanDateProducer1));
+        SekibanDateProducer.Register(sekibanDateProducer1);
         services.AddTransient<ISingleProjection, MemoryCacheSingleProjection>();
         services.AddTransient<ISingleAggregateFromInitial, SimpleSingleAggregateFromInitial>();
         services.AddSingleton(new InMemoryDocumentStore());
@@ -59,7 +62,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<QueryFilterHandler>();
         return services;
     }
-    public static IServiceCollection AddSekibanCoreInMemory(this IServiceCollection services)
+    public static IServiceCollection AddSekibanCoreInMemory(this IServiceCollection services, ISekibanDateProducer? sekibanDateProducer = null)
     {
         services.AddMemoryCache();
 
@@ -70,7 +73,10 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IMultipleAggregateProjectionService, MultipleAggregateProjectionService>();
         services.AddTransient<IMultipleProjection, MemoryCacheMultipleProjection>();
         services.AddTransient<ISingleProjection, SimpleProjectionWithSnapshot>();
-        services.AddSingleton<IUpdateNotice>(new SekibanUpdateNoticeManager());
+        var sekibanDateProducer1 = sekibanDateProducer ?? new SekibanDateProducer();
+        services.AddSingleton(sekibanDateProducer1);
+        SekibanDateProducer.Register(sekibanDateProducer1);
+        services.AddSingleton<IUpdateNotice>(new SekibanUpdateNoticeManager(sekibanDateProducer1));
         services.AddTransient<ISingleAggregateFromInitial, SimpleSingleAggregateFromInitial>();
         services.AddSingleton(new InMemoryDocumentStore());
         services.AddTransient<IDocumentWriter, InMemoryDocumentWriter>();
@@ -86,7 +92,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<QueryFilterHandler>();
         return services;
     }
-    public static IServiceCollection AddSekibanCoreInAggregateTest(this IServiceCollection services)
+    public static IServiceCollection AddSekibanCoreInAggregateTest(this IServiceCollection services, ISekibanDateProducer? sekibanDateProducer = null)
     {
         services.AddMemoryCache();
 
@@ -98,7 +104,10 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IMultipleAggregateProjectionService, MultipleAggregateProjectionService>();
         services.AddTransient<IMultipleProjection, MemoryCacheMultipleProjection>();
         services.AddTransient<ISingleProjection, SimpleProjectionWithSnapshot>();
-        services.AddSingleton<IUpdateNotice>(new SekibanUpdateNoticeManager());
+        var sekibanDateProducer1 = sekibanDateProducer ?? new SekibanDateProducer();
+        services.AddSingleton(sekibanDateProducer1);
+        SekibanDateProducer.Register(sekibanDateProducer1);
+        services.AddSingleton<IUpdateNotice>(new SekibanUpdateNoticeManager(sekibanDateProducer1));
         services.AddTransient<ISingleAggregateFromInitial, SimpleSingleAggregateFromInitial>();
         services.AddSingleton(new InMemoryDocumentStore());
         services.AddTransient<IDocumentWriter, InMemoryDocumentWriter>();

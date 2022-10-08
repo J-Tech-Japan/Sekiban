@@ -1,4 +1,5 @@
 using Sekiban.EventSourcing.Documents.ValueObjects;
+using Sekiban.EventSourcing.Shared;
 namespace Sekiban.EventSourcing.Documents
 {
     public abstract record class DocumentBase : IDocument
@@ -13,7 +14,7 @@ namespace Sekiban.EventSourcing.Documents
             PartitionKey = partitionKey;
             DocumentType = documentType;
             DocumentTypeName = documentTypeName;
-            TimeStamp = DateTime.UtcNow;
+            TimeStamp = SekibanDateProducer.GetRegistered().UtcNow;
             SortableUniqueId = SortableUniqueIdValue.Generate(TimeStamp, Id);
         }
         [JsonPropertyName("id")]

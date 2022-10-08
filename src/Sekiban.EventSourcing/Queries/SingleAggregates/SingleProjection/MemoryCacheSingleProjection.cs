@@ -2,6 +2,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Sekiban.EventSourcing.Documents.ValueObjects;
 using Sekiban.EventSourcing.Queries.UpdateNotices;
 using Sekiban.EventSourcing.Settings;
+using Sekiban.EventSourcing.Shared;
 namespace Sekiban.EventSourcing.Queries.SingleAggregates.SingleProjection
 {
     public class MemoryCacheSingleProjection : ISingleProjection
@@ -127,7 +128,7 @@ namespace Sekiban.EventSourcing.Queries.SingleAggregates.SingleProjection
                 dto?.LastSortableUniqueId,
                 events =>
                 {
-                    var someSafeId = SortableUniqueIdValue.Generate(DateTime.UtcNow, Guid.Empty);
+                    var someSafeId = SortableUniqueIdValue.Generate(SekibanDateProducer.GetRegistered().UtcNow, Guid.Empty);
                     var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
                     foreach (var e in events)
                     {
@@ -194,7 +195,7 @@ namespace Sekiban.EventSourcing.Queries.SingleAggregates.SingleProjection
                         throw new SekibanAggregateEventDuplicateException();
                     }
                     if (addFinished) { return; }
-                    var someSafeId = SortableUniqueIdValue.Generate(DateTime.UtcNow, Guid.Empty);
+                    var someSafeId = SortableUniqueIdValue.Generate(SekibanDateProducer.GetRegistered().UtcNow, Guid.Empty);
                     var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
                     foreach (var e in events)
                     {

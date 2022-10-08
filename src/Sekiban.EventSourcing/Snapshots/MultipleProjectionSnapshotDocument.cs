@@ -1,5 +1,6 @@
 using Sekiban.EventSourcing.Documents.ValueObjects;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
+using Sekiban.EventSourcing.Shared;
 namespace Sekiban.EventSourcing.Snapshots
 {
     public record MultipleProjectionSnapshotDocument : IDocument
@@ -24,7 +25,7 @@ namespace Sekiban.EventSourcing.Snapshots
             Id = Guid.NewGuid();
             DocumentType = DocumentType.MultipleAggregateSnapshot;
             DocumentTypeName = aggregateTypeName ?? string.Empty;
-            TimeStamp = DateTime.UtcNow;
+            TimeStamp = SekibanDateProducer.GetRegistered().UtcNow;
             SortableUniqueId = SortableUniqueIdValue.Generate(TimeStamp, Id);
             PartitionKey = partitionKeyFactory.GetPartitionKey(DocumentType);
             // Snapshot = dtoToSnapshot;
