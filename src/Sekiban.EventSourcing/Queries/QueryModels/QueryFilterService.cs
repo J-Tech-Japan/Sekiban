@@ -25,7 +25,7 @@ public class QueryFilterService : IQueryFilterService
                 param,
                 allProjection);
     }
-    public async Task<IEnumerable<TQueryFilterResponse>>
+    public async Task<QueryFilterListResult<TQueryFilterResponse>>
         GetProjectionListQueryFilterAsync<TProjection, TProjectionContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
             TQueryFilterParameter param) where TProjection : MultipleAggregateProjectionBase<TProjectionContents>, new()
         where TProjectionContents : IMultipleAggregateProjectionContents, new()
@@ -38,7 +38,7 @@ public class QueryFilterService : IQueryFilterService
                 param,
                 allProjection);
     }
-    public async Task<IEnumerable<TQueryFilterResponse>> GetAggregateListQueryFilterAsync<TAggregate, TAggregateContents, TQueryFilter,
+    public async Task<QueryFilterListResult<TQueryFilterResponse>> GetAggregateListQueryFilterAsync<TAggregate, TAggregateContents, TQueryFilter,
         TQueryFilterParameter, TQueryFilterResponse>(TQueryFilterParameter param) where TAggregate : TransferableAggregateBase<TAggregateContents>
         where TAggregateContents : IAggregateContents, new()
         where TQueryFilter : IAggregateListQueryFilterDefinition<TAggregate, TAggregateContents, TQueryFilterParameter, TQueryFilterResponse>
@@ -50,7 +50,7 @@ public class QueryFilterService : IQueryFilterService
                 param,
                 allProjection);
     }
-    public async Task<IEnumerable<TQueryFilterResponse>>
+    public async Task<QueryFilterListResult<TQueryFilterResponse>>
         GetSingleAggregateProjectionListQueryFilterAsync<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents, TQueryFilter,
             TQueryFilterParameter, TQueryFilterResponse>(TQueryFilterParameter param) where TAggregate : AggregateBase, new()
         where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,

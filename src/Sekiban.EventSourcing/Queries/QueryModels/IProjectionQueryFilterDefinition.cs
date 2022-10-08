@@ -8,5 +8,4 @@ public interface IProjectionQueryFilterDefinition<in TProjection, TProjectionCon
     where TQueryParameter : IQueryParameter
 {
     public TResponseQueryModel HandleFilter(TQueryParameter queryParam, MultipleAggregateProjectionContentsDto<TProjectionContents> projection);
-    public TResponseQueryModel HandleSortAndPagingIfNeeded(TQueryParameter queryParam, TResponseQueryModel response);
 }

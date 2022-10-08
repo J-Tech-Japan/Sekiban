@@ -13,7 +13,7 @@ public class
     where TQueryFilter : IAggregateListQueryFilterDefinition<TAggregate, TAggregateContents, TQueryParameter, TResponseQueryModel>
     where TQueryParameter : IQueryParameter
 {
-    public IEnumerable<TResponseQueryModel>? Response { get; set; }
+    public QueryFilterListResult<TResponseQueryModel>? Response { get; set; }
     private MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<AggregateDto<TAggregateContents>>>? _dto { get; set; }
     public QueryFilterHandler? QueryFilterHandler
     {

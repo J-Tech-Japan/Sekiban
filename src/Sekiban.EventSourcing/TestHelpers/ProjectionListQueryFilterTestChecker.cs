@@ -18,7 +18,7 @@ public class
 
 
     private MultipleAggregateProjectionContentsDto<TProjectionContents>? _dto;
-    private IEnumerable<TQueryFilterResponse>? _response;
+    private QueryFilterListResult<TQueryFilterResponse>? _response;
     public QueryFilterHandler? QueryFilterHandler { get; set; } = null;
     public void RegisterDto(MultipleAggregateProjectionContentsDto<TProjectionContents> dto)
     {

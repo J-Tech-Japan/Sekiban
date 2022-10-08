@@ -11,13 +11,13 @@ public interface IQueryFilterService
         where TProjectionContents : IMultipleAggregateProjectionContents, new()
         where TQueryFilter : IProjectionQueryFilterDefinition<TProjection, TProjectionContents, TQueryFilterParameter, TQueryFilterResponse>
         where TQueryFilterParameter : IQueryParameter;
-    public Task<IEnumerable<TQueryFilterResponse>>
+    public Task<QueryFilterListResult<TQueryFilterResponse>>
         GetProjectionListQueryFilterAsync<TProjection, TProjectionContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
             TQueryFilterParameter param) where TProjection : MultipleAggregateProjectionBase<TProjectionContents>, new()
         where TProjectionContents : IMultipleAggregateProjectionContents, new()
         where TQueryFilter : IProjectionListQueryFilterDefinition<TProjection, TProjectionContents, TQueryFilterParameter, TQueryFilterResponse>
         where TQueryFilterParameter : IQueryParameter;
-    public Task<IEnumerable<TQueryFilterResponse>>
+    public Task<QueryFilterListResult<TQueryFilterResponse>>
         GetAggregateListQueryFilterAsync<TAggregate, TAggregateContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
             TQueryFilterParameter param) where TAggregate : TransferableAggregateBase<TAggregateContents>
         where TAggregateContents : IAggregateContents, new()
@@ -28,7 +28,7 @@ public interface IQueryFilterService
         where TAggregateContents : IAggregateContents, new()
         where TQueryFilter : IAggregateQueryFilterDefinition<TAggregate, TAggregateContents, TQueryFilterParameter, TQueryFilterResponse>
         where TQueryFilterParameter : IQueryParameter;
-    public Task<IEnumerable<TQueryFilterResponse>>
+    public Task<QueryFilterListResult<TQueryFilterResponse>>
         GetSingleAggregateProjectionListQueryFilterAsync<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents, TQueryFilter,
             TQueryFilterParameter, TQueryFilterResponse>(TQueryFilterParameter param) where TAggregate : AggregateBase, new()
         where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
