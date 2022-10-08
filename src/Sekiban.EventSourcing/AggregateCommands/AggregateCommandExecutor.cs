@@ -49,7 +49,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         };
 
         List<IAggregateEvent> events = new();
-
+        var commandToSave = command;
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(T));
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
         {
@@ -67,6 +67,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
             {
                 throw new SekibanInvalidArgumentException();
             }
+            commandToSave = (C)handler.CleanupCommandIfNeeded(commandToSave);
             aggregate.ResetEventsAndSnapshots();
             var result = await handler.HandleAsync(commandDocument, aggregate);
             commandDocument = commandDocument with { AggregateId = result.Aggregate.AggregateId };
@@ -101,7 +102,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         }
         finally
         {
-            await _documentWriter.SaveAsync(commandDocument, typeof(T));
+            await _documentWriter.SaveAsync(commandDocument with { Payload = commandToSave }, typeof(T));
             if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
             {
                 _semaphoreInMemory.Release();
@@ -136,6 +137,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
                 ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
             };
         List<IAggregateEvent> events = new();
+        var commandToSave = command;
 
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(T));
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
@@ -149,6 +151,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
             {
                 throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
             }
+            commandToSave = (C)handler.CleanupCommandIfNeeded(commandToSave);
             var aggregateId = handler.GenerateAggregateId(command);
             commandDocument
                 = new AggregateCommandDocument<C>(aggregateId, command, typeof(T), callHistories)
@@ -190,7 +193,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         }
         finally
         {
-            await _documentWriter.SaveAsync(commandDocument, typeof(T));
+            await _documentWriter.SaveAsync(commandDocument with { Payload = commandToSave }, typeof(T));
             if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
             {
                 _semaphoreInMemory.Release();

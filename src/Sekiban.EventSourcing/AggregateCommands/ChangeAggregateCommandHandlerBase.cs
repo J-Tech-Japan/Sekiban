@@ -23,6 +23,10 @@ public abstract class ChangeAggregateCommandHandlerBase<T, C> : IChangeAggregate
         await ExecCommandAsync(aggregate, command);
         return await Task.FromResult(new AggregateCommandResponse<T>(aggregate));
     }
+    public virtual C CleanupCommandIfNeeded(C command)
+    {
+        return command;
+    }
 
     protected abstract Task ExecCommandAsync(T aggregate, C command);
 }

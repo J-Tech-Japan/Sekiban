@@ -10,6 +10,10 @@ public abstract class CreateAggregateCommandHandlerBase<T, C> : ICreateAggregate
         return await Task.FromResult(new AggregateCommandResponse<T>(aggregate));
     }
     public abstract Guid GenerateAggregateId(C command);
+    public virtual C CleanupCommandIfNeeded(C command)
+    {
+        return command;
+    }
 
     protected abstract Task ExecCreateCommandAsync(T aggregate, C command);
 }
