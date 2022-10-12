@@ -42,13 +42,13 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         where TContents : IAggregateContents, new()
         where C : ChangeAggregateCommandBase<T>
     {
-        AggregateDto<TContents>? aggregateDto = null;
         var commandDocument = new AggregateCommandDocument<C>(command.GetAggregateId(), command, typeof(T), callHistories)
         {
             ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
         };
 
-        List<IAggregateEvent> events = new();
+        List<IAggregateEvent> events;
+        var version = 0;
         var commandToSave = command;
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(T));
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
@@ -62,37 +62,37 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
             {
                 throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
             }
-            var aggregate = await _singleAggregateService.GetAggregateAsync<T, TContents>(command.GetAggregateId());
-            if (aggregate is null)
+            if (command is not IOnlyPublishingCommand)
             {
-                throw new SekibanInvalidArgumentException();
-            }
-            commandToSave = (C)handler.CleanupCommandIfNeeded(commandToSave);
-            aggregate.ResetEventsAndSnapshots();
-            var result = await handler.HandleAsync(commandDocument, aggregate);
-            commandDocument = commandDocument with { AggregateId = result.Aggregate.AggregateId };
+                var aggregate = await _singleAggregateService.GetAggregateAsync<T, TContents>(command.GetAggregateId());
+                if (aggregate is null)
+                {
+                    throw new SekibanInvalidArgumentException();
+                }
+                commandToSave = handler.CleanupCommandIfNeeded(commandToSave);
+                aggregate.ResetEventsAndSnapshots();
+                var result = await handler.HandleAsync(commandDocument, aggregate);
+                version = result.Version;
+                commandDocument = commandDocument with { AggregateId = result.AggregateId };
 
-            aggregateDto = result.Aggregate.ToDto();
-            if (result.Aggregate.Events.Any())
-            {
-                foreach (var ev in result.Aggregate.Events)
+                events = await HandleEventsAsync<T, TContents, C>(result.Events, commandDocument);
+                aggregate.ResetEventsAndSnapshots();
+                if (result is null)
                 {
-                    ev.CallHistories.AddRange(commandDocument.GetCallHistoriesIncludesItself());
+                    throw new SekibanInvalidArgumentException();
                 }
-                events.AddRange(result.Aggregate.Events);
-                foreach (var ev in result.Aggregate.Events)
-                {
-                    if (ev.IsAggregateInitialEvent)
-                    {
-                        throw new SekibanChangeCommandShouldNotSaveCreateEventException();
-                    }
-                    await _documentWriter.SaveAndPublishAggregateEvent(ev, typeof(T));
-                }
-            }
-            aggregate.ResetEventsAndSnapshots();
-            if (result is null)
+            } else
             {
-                throw new SekibanInvalidArgumentException();
+                commandToSave = handler.CleanupCommandIfNeeded(commandToSave);
+                var result = await handler.HandleForOnlyPublishingCommandAsync(commandDocument, command.GetAggregateId());
+                version = result.Version;
+                commandDocument = commandDocument with { AggregateId = result.AggregateId };
+
+                events = await HandleEventsAsync<T, TContents, C>(result.Events, commandDocument);
+                if (result is null)
+                {
+                    throw new SekibanInvalidArgumentException();
+                }
             }
         }
         catch (Exception e)
@@ -108,7 +108,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
                 _semaphoreInMemory.Release();
             }
         }
-        return (new AggregateCommandExecutorResponse(aggregateDto.AggregateId, commandDocument.Id, aggregateDto.Version, null), events);
+        return (new AggregateCommandExecutorResponse(commandDocument.AggregateId, commandDocument.Id, version, null), events);
     }
 
     public async Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecCreateCommandAsync<T, TContents, C>(
@@ -130,7 +130,6 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         where TContents : IAggregateContents, new()
         where C : ICreateAggregateCommand<T>
     {
-        AggregateDto<TContents>? aggregateDto = null;
         var commandDocument
             = new AggregateCommandDocument<C>(Guid.Empty, command, typeof(T), callHistories)
             {
@@ -138,7 +137,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
             };
         List<IAggregateEvent> events = new();
         var commandToSave = command;
-
+        var version = 0;
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(T));
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
         {
@@ -151,7 +150,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
             {
                 throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
             }
-            commandToSave = (C)handler.CleanupCommandIfNeeded(commandToSave);
+            commandToSave = handler.CleanupCommandIfNeeded(commandToSave);
             var aggregateId = handler.GenerateAggregateId(command);
             commandDocument
                 = new AggregateCommandDocument<C>(aggregateId, command, typeof(T), callHistories)
@@ -161,26 +160,26 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
             var aggregate = new T { AggregateId = aggregateId };
 
             var result = await handler.HandleAsync(commandDocument, aggregate);
-            aggregateDto = result.Aggregate.ToDto();
-            if (result.Aggregate.Events.Any())
+            version = result.Version;
+            if (result.Events.Any())
             {
-                if (result.Aggregate.Events.Any(
-                    ev => (ev == result.Aggregate.Events.First() && !ev.IsAggregateInitialEvent) ||
-                        (ev != result.Aggregate.Events.First() && ev.IsAggregateInitialEvent)))
+                if (result.Events.Any(
+                    ev => (ev == result.Events.First() && !ev.IsAggregateInitialEvent) ||
+                        (ev != result.Events.First() && ev.IsAggregateInitialEvent)))
                 {
                     throw new SekibanCreateCommandShouldSaveCreateEventFirstException();
                 }
-                foreach (var ev in result.Aggregate.Events)
+                foreach (var ev in result.Events)
                 {
                     ev.CallHistories.AddRange(commandDocument.GetCallHistoriesIncludesItself());
                 }
-                events.AddRange(result.Aggregate.Events);
-                foreach (var ev in result.Aggregate.Events)
+                events.AddRange(result.Events);
+                foreach (var ev in result.Events)
                 {
                     await _documentWriter.SaveAndPublishAggregateEvent(ev, typeof(T));
                 }
             }
-            result.Aggregate.ResetEventsAndSnapshots();
+            aggregate.ResetEventsAndSnapshots();
             if (result is null)
             {
                 throw new SekibanInvalidArgumentException();
@@ -199,6 +198,32 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
                 _semaphoreInMemory.Release();
             }
         }
-        return (new AggregateCommandExecutorResponse(aggregateDto.AggregateId, commandDocument.Id, aggregateDto.Version, null), events);
+        return (new AggregateCommandExecutorResponse(commandDocument.AggregateId, commandDocument.Id, version, null), events);
+    }
+
+    private async Task<List<IAggregateEvent>> HandleEventsAsync<T, TContents, C>(
+        IReadOnlyCollection<IAggregateEvent> events,
+        AggregateCommandDocument<C> commandDocument) where T : TransferableAggregateBase<TContents>
+        where TContents : IAggregateContents, new()
+        where C : ChangeAggregateCommandBase<T>
+    {
+        var toReturnEvents = new List<IAggregateEvent>();
+        if (events.Any())
+        {
+            foreach (var ev in events)
+            {
+                ev.CallHistories.AddRange(commandDocument.GetCallHistoriesIncludesItself());
+            }
+            toReturnEvents.AddRange(events);
+            foreach (var ev in events)
+            {
+                if (ev.IsAggregateInitialEvent)
+                {
+                    throw new SekibanChangeCommandShouldNotSaveCreateEventException();
+                }
+                await _documentWriter.SaveAndPublishAggregateEvent(ev, typeof(T));
+            }
+        }
+        return toReturnEvents;
     }
 }

@@ -3,9 +3,14 @@
 public abstract class ChangeAggregateCommandHandlerBase<T, C> : IChangeAggregateCommandHandler<T, C>
     where T : IAggregate where C : ChangeAggregateCommandBase<T>, new()
 {
-    public async Task<AggregateCommandResponse<T>> HandleAsync(AggregateCommandDocument<C> aggregateCommandDocument, T aggregate)
+    public async Task<AggregateCommandResponse> HandleAsync(AggregateCommandDocument<C> aggregateCommandDocument, T aggregate)
     {
         var command = aggregateCommandDocument.Payload;
+
+        if (command is IOnlyPublishingCommand)
+        {
+            throw new SekibanCanNotExecuteOnlyPublishingEventCommand(typeof(C).Name);
+        }
 
         // Validate Aggregate is deleted
         if (command is not INoValidateCommand && aggregate.IsDeleted)
@@ -21,7 +26,11 @@ public abstract class ChangeAggregateCommandHandlerBase<T, C> : IChangeAggregate
 
         // Execute Command
         await ExecCommandAsync(aggregate, command);
-        return await Task.FromResult(new AggregateCommandResponse<T>(aggregate));
+        return await Task.FromResult(new AggregateCommandResponse(aggregate.AggregateId, aggregate.Events, aggregate.Version));
+    }
+    public Task<AggregateCommandResponse> HandleForOnlyPublishingCommandAsync(AggregateCommandDocument<C> aggregateCommandDocument, Guid aggregateId)
+    {
+        throw new SekibanCanNotExecuteOnlyPublishingEventCommand(typeof(C).Name);
     }
     public virtual C CleanupCommandIfNeeded(C command)
     {

@@ -97,6 +97,8 @@ public class CustomerDependency : IDependencyDefinition
         yield return (typeof(ICreateAggregateCommandHandler<RecentActivity, CreateRecentActivity>), typeof(CreateRecentActivityHandler));
 
         yield return (typeof(IChangeAggregateCommandHandler<RecentActivity, AddRecentActivity>), typeof(AddRecentActivityHandler));
+        yield return (typeof(IChangeAggregateCommandHandler<RecentActivity, OnlyPublishingAddRecentActivity>),
+            typeof(OnlyPublishingAddRecentActivityHandler));
         // Aggregate: RecentInMemoryActivity
         yield return (typeof(ICreateAggregateCommandHandler<RecentInMemoryActivity, CreateRecentInMemoryActivity>),
             typeof(CreateRecentInMemoryActivityHandler));

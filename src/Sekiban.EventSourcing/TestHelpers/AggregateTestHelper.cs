@@ -10,7 +10,11 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
 {
     private readonly AggregateTestCommandExecutor _commandExecutor;
     private readonly IServiceProvider _serviceProvider;
-    private TAggregate _aggregate { get; set; }
+    private TAggregate _aggregate
+    {
+        get;
+        set;
+    }
     private Exception? _latestException { get; set; }
     private List<IAggregateEvent> _latestEvents { get; set; } = new();
     private List<SekibanValidationParameterError> _latestValidationErrors { get; set; } = new();
@@ -103,16 +107,15 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         var commandDocument = new AggregateCommandDocument<C>(aggregateId, createCommand, typeof(TAggregate));
         try
         {
-            var aggregate = new TAggregate { AggregateId = aggregateId };
-            var result = handler.HandleAsync(commandDocument, aggregate).Result;
-            _aggregate = result.Aggregate;
+            _aggregate = new TAggregate { AggregateId = aggregateId };
+            var result = handler.HandleAsync(commandDocument, _aggregate).Result;
+            _latestEvents = result.Events.ToList();
         }
         catch (Exception ex)
         {
             _latestException = ex;
             return this;
         }
-        _latestEvents = _aggregate.Events.ToList();
         if (_latestEvents.Count == 0)
         {
             throw new SekibanCreateHasToMakeEventException();
@@ -151,17 +154,37 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
             return this;
         }
         var commandDocument = new AggregateCommandDocument<C>(_aggregate.AggregateId, command, typeof(TAggregate));
-        try
+        if (command is not IOnlyPublishingCommand)
         {
-            handler.HandleAsync(commandDocument, _aggregate).Wait();
-        }
-        catch (Exception ex)
+            try
+            {
+                handler.HandleAsync(commandDocument, _aggregate).Wait();
+            }
+            catch (Exception ex)
+            {
+                _latestException = ex;
+                return this;
+            }
+            CheckCommandJSONSupports(commandDocument);
+            _latestEvents = _aggregate.Events.ToList();
+        } else
         {
-            _latestException = ex;
-            return this;
+            try
+            {
+                var result = handler.HandleForOnlyPublishingCommandAsync(commandDocument, _aggregate.AggregateId).Result;
+                _latestEvents = result.Events.ToList();
+                foreach (var ev in _latestEvents)
+                {
+                    _aggregate.ApplyEvent(ev);
+                }
+            }
+            catch (Exception ex)
+            {
+                _latestException = ex;
+                return this;
+            }
+            CheckCommandJSONSupports(commandDocument);
         }
-        CheckCommandJSONSupports(commandDocument);
-        _latestEvents = _aggregate.Events.ToList();
         foreach (var ev in _latestEvents)
         {
             if (ev.IsAggregateInitialEvent) { throw new SekibanChangeCommandShouldNotSaveCreateEventException(); }
