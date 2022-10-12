@@ -1,15 +1,20 @@
 using Sekiban.EventSourcing.Documents.ValueObjects;
+using Sekiban.EventSourcing.Shared;
 using System.Collections.Concurrent;
 namespace Sekiban.EventSourcing.Queries.UpdateNotices;
 
 public class SekibanUpdateNoticeManager : IUpdateNotice
 {
+    private readonly ISekibanDateProducer _sekibanDateProducer;
     private ConcurrentDictionary<string, NoticeRecord> UpdateDictionary { get; } = new();
-
+    public SekibanUpdateNoticeManager(ISekibanDateProducer sekibanDateProducer)
+    {
+        _sekibanDateProducer = sekibanDateProducer;
+    }
     public void SendUpdate(string aggregateName, Guid aggregateId, string sortableUniqueId, UpdatedLocationType type)
     {
         var sortableUniqueIdValue = string.IsNullOrWhiteSpace(sortableUniqueId)
-            ? new SortableUniqueIdValue(SortableUniqueIdValue.Generate(DateTime.UtcNow, Guid.Empty))
+            ? new SortableUniqueIdValue(SortableUniqueIdValue.Generate(_sekibanDateProducer.UtcNow, Guid.Empty))
             : new SortableUniqueIdValue(sortableUniqueId);
         var toSave = new NoticeRecord(sortableUniqueIdValue, type);
         UpdateDictionary.AddOrUpdate(GetKeyForAggregate(aggregateName, aggregateId), s => toSave, (s, record) => toSave);

@@ -23,7 +23,7 @@ public class BaseSingleAggregateProjectionListQueryFilterController<TAggregate, 
     }
     [HttpGet]
     [Route("")]
-    public async Task<ActionResult<IEnumerable<TQueryFilterResponse>>> GetQueryResult([FromQuery] TQueryFilterParameter queryParam)
+    public async Task<ActionResult<QueryFilterListResult<TQueryFilterResponse>>> GetQueryResult([FromQuery] TQueryFilterParameter queryParam)
     {
         var result = await _queryFilterService
             .GetSingleAggregateProjectionListQueryFilterAsync<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents, TQueryFilter

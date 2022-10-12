@@ -1,3 +1,4 @@
+using Sekiban.EventSourcing.Shared;
 namespace Sekiban.EventSourcing.Documents.ValueObjects
 {
     public record SortableUniqueIdValue(string Value)
@@ -17,7 +18,7 @@ namespace Sekiban.EventSourcing.Documents.ValueObjects
         public static string Generate(DateTime timestamp, Guid id) =>
             timestamp.Ticks + (Math.Abs(id.GetHashCode()) % 1000000000000).ToString("000000000000");
         public static string GetSafeIdFromUtc() =>
-            DateTime.UtcNow.AddMilliseconds(-safeMilliseconds).Ticks + (Math.Abs(Guid.Empty.GetHashCode()) % 1000000000000).ToString("000000000000");
+            SekibanDateProducer.GetRegistered().UtcNow.AddMilliseconds(-safeMilliseconds).Ticks + (Math.Abs(Guid.Empty.GetHashCode()) % 1000000000000).ToString("000000000000");
         public string GetSafeId() =>
             GetTicks().AddSeconds(-safeMilliseconds).Ticks + (Math.Abs(Guid.Empty.GetHashCode()) % 1000000000000).ToString("000000000000");
 

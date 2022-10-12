@@ -20,7 +20,7 @@ public class
     }
     [HttpGet]
     [Route("")]
-    public async Task<ActionResult<IEnumerable<TQueryFilterResponse>>> GetQueryResult([FromQuery] TQueryParameter queryParam)
+    public async Task<ActionResult<QueryFilterListResult<TQueryFilterResponse>>> GetQueryResult([FromQuery] TQueryParameter queryParam)
     {
         var result = await _queryFilterService
             .GetAggregateListQueryFilterAsync<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TQueryFilterResponse>(queryParam);

@@ -13,7 +13,7 @@ public class QueryFilterHandler
         _serviceProvider = serviceProvider;
     }
 
-    public IEnumerable<TQueryFilterResponse>
+    public QueryFilterListResult<TQueryFilterResponse>
         GetProjectionListQueryFilter<TProjection, TProjectionContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
             TQueryFilterParameter param,
             MultipleAggregateProjectionContentsDto<TProjectionContents> projection)
@@ -26,11 +26,14 @@ public class QueryFilterHandler
         if (queryFilter is null) { throw new Exception($"QueryFilter {typeof(TQueryFilter).FullName} is not registered to dependency injection"); }
         var filtered = queryFilter.HandleFilter(param, projection);
         var sorted = queryFilter.HandleSort(param, filtered);
+        var queryFilterResponses = sorted.ToList();
         if (param is IQueryPagingParameter { PageNumber: { }, PageSize: { } } pagingParam)
         {
-            return sorted.Skip((pagingParam.PageNumber.Value - 1) * pagingParam.PageSize.Value).Take(pagingParam.PageSize.Value);
+            var total = queryFilterResponses.ToList().Count;
+            var totalPages = total / pagingParam.PageSize.Value;
+            return new QueryFilterListResult<TQueryFilterResponse>(total, totalPages, pagingParam.PageNumber, pagingParam.PageSize,  queryFilterResponses.Skip((pagingParam.PageNumber.Value - 1) * pagingParam.PageSize.Value).Take(pagingParam.PageSize.Value));
         }
-        return sorted;
+        return new QueryFilterListResult<TQueryFilterResponse>(queryFilterResponses.ToList().Count, null, null, null, queryFilterResponses);
     }
 
     public TQueryFilterResponse GetProjectionQueryFilter<TProjection, TProjectionContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
@@ -44,11 +47,11 @@ public class QueryFilterHandler
         var queryFilter = _serviceProvider.GetService<TQueryFilter>();
         if (queryFilter is null) { throw new Exception($"QueryFilter {typeof(TQueryFilter).FullName} is not registered to dependency injection"); }
         var filtered = queryFilter.HandleFilter(param, projection);
-        return queryFilter.HandleSortAndPagingIfNeeded(param, filtered);
+        return filtered;
     }
 
 
-    public IEnumerable<TQueryFilterResponse>
+    public QueryFilterListResult<TQueryFilterResponse>
         GetAggregateListQueryFilter<TAggregate, TAggregateContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
             TQueryFilterParameter param,
             IEnumerable<AggregateDto<TAggregateContents>> list) where TAggregate : TransferableAggregateBase<TAggregateContents>
@@ -60,11 +63,14 @@ public class QueryFilterHandler
         if (queryFilter is null) { throw new Exception($"QueryFilter {typeof(TQueryFilter).FullName} is not registered to dependency injection"); }
         var filtered = queryFilter.HandleFilter(param, list);
         var sorted = queryFilter.HandleSort(param, filtered);
+        var queryFilterResponses = sorted.ToList();
         if (param is IQueryPagingParameter { PageNumber: { }, PageSize: { } } pagingParam)
         {
-            return sorted.Skip((pagingParam.PageNumber.Value - 1) * pagingParam.PageSize.Value).Take(pagingParam.PageSize.Value);
+            var total = queryFilterResponses.ToList().Count;
+            var totalPages = total / pagingParam.PageSize.Value;
+            return new QueryFilterListResult<TQueryFilterResponse>(total, totalPages, pagingParam.PageNumber, pagingParam.PageSize,  queryFilterResponses.Skip((pagingParam.PageNumber.Value - 1) * pagingParam.PageSize.Value).Take(pagingParam.PageSize.Value));
         }
-        return sorted;
+        return new QueryFilterListResult<TQueryFilterResponse>(queryFilterResponses.ToList().Count, null, null, null, queryFilterResponses);
     }
     public TQueryFilterResponse GetAggregateQueryFilter<TAggregate, TAggregateContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
         TQueryFilterParameter param,
@@ -76,10 +82,10 @@ public class QueryFilterHandler
         var queryFilter = _serviceProvider.GetService<TQueryFilter>();
         if (queryFilter is null) { throw new Exception($"QueryFilter {typeof(TQueryFilter).FullName} is not registered to dependency injection"); }
         var filtered = queryFilter.HandleFilter(param, list);
-        return queryFilter.HandleSort(param, filtered);
+        return filtered;
     }
 
-    public IEnumerable<TQueryFilterResponse>
+    public QueryFilterListResult< TQueryFilterResponse>
         GetSingleAggregateProjectionListQueryFilter<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents, TQueryFilter,
             TQueryFilterParameter, TQueryFilterResponse>(
             TQueryFilterParameter param,
@@ -95,12 +101,14 @@ public class QueryFilterHandler
         if (queryFilter is null) { throw new Exception($"QueryFilter {typeof(TQueryFilter).FullName} is not registered to dependency injection"); }
         var filtered = queryFilter.HandleFilter(param, projections);
         var sorted = queryFilter.HandleSort(param, filtered);
-
+        var queryFilterResponses = sorted.ToList();
         if (param is IQueryPagingParameter { PageNumber: { }, PageSize: { } } pagingParam)
         {
-            return sorted.Skip((pagingParam.PageNumber.Value - 1) * pagingParam.PageSize.Value).Take(pagingParam.PageSize.Value);
+            var total = queryFilterResponses.ToList().Count;
+            var totalPages = total / pagingParam.PageSize.Value;
+            return new QueryFilterListResult<TQueryFilterResponse>(total, totalPages, pagingParam.PageNumber, pagingParam.PageSize,  queryFilterResponses.Skip((pagingParam.PageNumber.Value - 1) * pagingParam.PageSize.Value).Take(pagingParam.PageSize.Value));
         }
-        return sorted;
+        return new QueryFilterListResult<TQueryFilterResponse>(queryFilterResponses.ToList().Count, null, null, null, queryFilterResponses);
     }
 
     public TQueryFilterResponse
@@ -118,6 +126,6 @@ public class QueryFilterHandler
         var queryFilter = _serviceProvider.GetService<TQueryFilter>();
         if (queryFilter is null) { throw new Exception($"QueryFilter {typeof(TQueryFilter).FullName} is not registered to dependency injection"); }
         var filtered = queryFilter.HandleFilter(param, projections);
-        return queryFilter.HandleSort(param, filtered);
+        return filtered;
     }
 }

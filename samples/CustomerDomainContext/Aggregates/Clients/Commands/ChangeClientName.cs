@@ -3,8 +3,10 @@
 public record ChangeClientName(Guid ClientId, string ClientName) : ChangeAggregateCommandBase<Client>
 {
     public ChangeClientName() : this(Guid.Empty, string.Empty) { }
-    public override Guid GetAggregateId() =>
-        ClientId;
+    public override Guid GetAggregateId()
+    {
+        return ClientId;
+    }
 }
 public class ChangeClientNameHandler : ChangeAggregateCommandHandlerBase<Client, ChangeClientName>
 {
@@ -12,5 +14,9 @@ public class ChangeClientNameHandler : ChangeAggregateCommandHandlerBase<Client,
     {
         aggregate.ChangeClientName(command.ClientName);
         await Task.CompletedTask;
+    }
+    public override ChangeClientName CleanupCommandIfNeeded(ChangeClientName command)
+    {
+        return command with { ClientName = "stripped for security" };
     }
 }

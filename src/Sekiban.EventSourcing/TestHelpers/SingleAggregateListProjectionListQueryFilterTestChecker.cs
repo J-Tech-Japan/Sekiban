@@ -17,7 +17,7 @@ public class
         TSingleAggregateProjectionContents, TQueryParameter, TResponseQueryModel>
     where TQueryParameter : IQueryParameter
 {
-    public IEnumerable<TResponseQueryModel>? Response { get; set; }
+    public QueryFilterListResult<TResponseQueryModel>? Response { get; set; }
     private MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>>>
         ? _dto { get; set; }
     public QueryFilterHandler? QueryFilterHandler

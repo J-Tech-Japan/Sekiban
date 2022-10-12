@@ -12,5 +12,4 @@ public interface
     public TResponseQueryModel HandleFilter(
         TQueryParam queryParam,
         IEnumerable<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>> list);
-    public TResponseQueryModel HandleSort(TQueryParam queryParam, TResponseQueryModel projections);
 }

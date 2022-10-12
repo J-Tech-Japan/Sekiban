@@ -7,5 +7,4 @@ public interface IAggregateQueryFilterDefinition<TAggregate, TAggregateContents,
     where TQueryParameter : IQueryParameter
 {
     public TResponseQueryModel HandleFilter(TQueryParameter queryParam, IEnumerable<AggregateDto<TAggregateContents>> list);
-    public TResponseQueryModel HandleSort(TQueryParameter queryParam, TResponseQueryModel projections);
 }

@@ -79,16 +79,16 @@ public abstract class QueryPerformanceTestBase : TestBase
             _testOutputHelper.WriteLine($"create branch {branchList.Count}");
 
             var firstcount = branchList.Count;
-            var branchResult
+            var (branchResult, events)
                 = await _aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchContents, CreateBranch>(new CreateBranch($"Branch {i}"));
-            var aggregateCommandDocument = branchResult!.Command;
+            var aggregateCommandDocument = branchResult.CommandId;
             if (aggregateCommandDocument == null)
             {
                 continue;
             }
-            var branchId = aggregateCommandDocument.AggregateId;
+            var branchId = branchResult.AggregateId;
             Assert.NotNull(branchResult);
-            Assert.NotNull(branchResult.AggregateDto);
+            Assert.NotNull(branchResult.AggregateId);
             branchList = await _multipleAggregateProjectionService.GetAggregateList<Branch, BranchContents>();
             _testOutputHelper.WriteLine($"branch created {branchList.Count}");
             Assert.Equal(firstcount + 1, branchList.Count);
@@ -99,18 +99,18 @@ public abstract class QueryPerformanceTestBase : TestBase
                 var clientList = await _multipleAggregateProjectionService.GetAggregateList<Client, ClientContents>();
                 _testOutputHelper.WriteLine($"create client {clientList.Count}");
                 var firstClientCount = clientList.Count;
-                var clientCreateResult = await _aggregateCommandExecutor.ExecCreateCommandAsync<Client, ClientContents, CreateClient>(
-                    new CreateClient(branchId, $"clientname {i}-{j}", $"test{i}.{j}.{id}@example.com"));
+                var (clientCreateResult, events2) = await _aggregateCommandExecutor.ExecCreateCommandAsync<Client, ClientContents, CreateClient>(
+                    new CreateClient(branchId!.Value, $"clientname {i}-{j}", $"test{i}.{j}.{id}@example.com"));
                 clientList = await _multipleAggregateProjectionService.GetAggregateList<Client, ClientContents>();
                 _testOutputHelper.WriteLine($"client created {clientList.Count}");
                 Assert.Equal(firstClientCount + 1, clientList.Count);
                 for (var k = 0; k < changeNameCount; k++)
                 {
                     _testOutputHelper.WriteLine($"client change name {k + 1}");
-                    var aggregate = await _aggregateService.GetAggregateDtoAsync<Client, ClientContents>(clientCreateResult.Command!.AggregateId);
+                    var aggregate = await _aggregateService.GetAggregateDtoAsync<Client, ClientContents>(clientCreateResult.AggregateId!.Value);
                     _testOutputHelper.WriteLine($"aggregate.version = {aggregate?.Version}");
                     await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ClientContents, ChangeClientName>(
-                        new ChangeClientName(clientCreateResult.Command.AggregateId, $"change{i}-{j}-{k}")
+                        new ChangeClientName(clientCreateResult.AggregateId!.Value, $"change{i}-{j}-{k}")
                         {
                             ReferenceVersion = aggregate?.Version ?? 0
                         });
