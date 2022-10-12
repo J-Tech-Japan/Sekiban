@@ -6,13 +6,13 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>JJ_Sekiban.EventSourcing.Addon.Tenant</PackageId>
-        <Version>0.7.6</Version>
+        <Version>0.7.7</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Tenant Addon</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.7.6</PackageVersion>
-        <Description>プロジェクションテストにおいて、singleAggregateServiceのバグ修正</Description>
+        <PackageVersion>0.7.7</PackageVersion>
+        <Description>プロジェクションのリストのテストにおいて、QueryFilterListResultを使用する修正</Description>
     </PropertyGroup>
 
     <ItemGroup>
