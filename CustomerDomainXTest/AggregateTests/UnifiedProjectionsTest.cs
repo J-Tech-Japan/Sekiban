@@ -4,7 +4,6 @@ using CustomerDomainContext.Projections.ClientLoyaltyPointLists;
 using CustomerDomainContext.Projections.ClientLoyaltyPointMultiples;
 using CustomerDomainContext.Shared;
 using Microsoft.Extensions.DependencyInjection;
-using Sekiban.EventSourcing.Shared;
 using Sekiban.EventSourcing.TestHelpers;
 using System;
 using System.Collections.Generic;
@@ -73,7 +72,7 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
                     new List<ClientLoyaltyPointMultipleProjection.ProjectedBranch> { new(_branchId, branchName) },
                     new List<ClientLoyaltyPointMultipleProjection.ProjectedRecord> { new(_branchId, branchName, _clientId, clientName, 0) }));
     }
-
+    [Fact]
     public void WhenChangeName()
     {
         GivenScenario(Test);
