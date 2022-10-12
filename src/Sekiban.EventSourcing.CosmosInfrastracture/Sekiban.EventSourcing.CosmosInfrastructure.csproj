@@ -5,13 +5,13 @@
         <Nullable>enable</Nullable>
         <RootNamespace>CosmosInfrastructure</RootNamespace>
         <PackageId>JJ_Sekiban.EventSourcing.CosmosInfrastructure</PackageId>
-        <Version>0.7.4</Version>
+        <Version>0.7.5</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework CosmosInfrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.7.4</PackageVersion>
-        <Description>コマンド内でQueryFilterを実行できるようにする。</Description>
+        <PackageVersion>0.7.5</PackageVersion>
+        <Description>CommandExecuterの戻り値をシンプルにする、ISekibanDateProducer に対応、Query Filter のListの際にTotalCount, TotalPagesなどを付与する、イベント保存のみのコマンドを作成</Description>
         <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
         <LangVersion>11</LangVersion>
     </PropertyGroup>
