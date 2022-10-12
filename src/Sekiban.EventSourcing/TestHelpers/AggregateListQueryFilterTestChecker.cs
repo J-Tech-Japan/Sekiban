@@ -54,7 +54,7 @@ public class
         return this;
     }
     public AggregateListQueryFilterTestChecker<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenResponse(
-        IEnumerable<TResponseQueryModel> expectedResponse)
+        QueryFilterListResult<TResponseQueryModel> expectedResponse)
     {
         if (Response == null)
         {
@@ -67,19 +67,19 @@ public class
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public AggregateListQueryFilterTestChecker<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenResponseFromJson(
-        string responseJson)
+    public AggregateListQueryFilterTestChecker<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel>
+        ThenResponseFromJson(string responseJson)
     {
-        var response = JsonSerializer.Deserialize<IEnumerable<TResponseQueryModel>>(responseJson);
+        var response = JsonSerializer.Deserialize<QueryFilterListResult<TResponseQueryModel>>(responseJson);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         ThenResponse(response);
         return this;
     }
-    public AggregateListQueryFilterTestChecker<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenResponseFromFile(
-        string responseFilename)
+    public AggregateListQueryFilterTestChecker<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel>
+        ThenResponseFromFile(string responseFilename)
     {
         using var openStream = File.OpenRead(responseFilename);
-        var response = JsonSerializer.Deserialize<IEnumerable<TResponseQueryModel>>(openStream);
+        var response = JsonSerializer.Deserialize<QueryFilterListResult<TResponseQueryModel>>(openStream);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         ThenResponse(response);
         return this;

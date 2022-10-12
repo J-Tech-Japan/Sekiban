@@ -55,7 +55,7 @@ public class
         return this;
     }
     public ProjectionListQueryFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
-        ThenResponse(IEnumerable<TQueryFilterResponse> expectedResponse)
+        ThenResponse(QueryFilterListResult<TQueryFilterResponse> expectedResponse)
     {
         var actual = _response;
         var expected = expectedResponse;
@@ -67,7 +67,7 @@ public class
     public ProjectionListQueryFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
         ThenResponseFromJson(string responseJson)
     {
-        var response = JsonSerializer.Deserialize<IEnumerable<TQueryFilterResponse>>(responseJson);
+        var response = JsonSerializer.Deserialize<QueryFilterListResult<TQueryFilterResponse>>(responseJson);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         ThenResponse(response);
         return this;
@@ -76,7 +76,7 @@ public class
         ThenResponseFromFile(string responseFilename)
     {
         using var openStream = File.OpenRead(responseFilename);
-        var response = JsonSerializer.Deserialize<IEnumerable<TQueryFilterResponse>>(openStream);
+        var response = JsonSerializer.Deserialize<QueryFilterListResult<TQueryFilterResponse>>(openStream);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         ThenResponse(response);
         return this;
