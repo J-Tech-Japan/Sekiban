@@ -109,6 +109,10 @@ public class QueryFilterHandler
         IQueryPagingParameter pagingParam,
         List<TQueryFilterResponse> queryFilterResponses)
     {
+        if (pagingParam.PageNumber == null || pagingParam.PageSize == null)
+        {
+            throw new SekibanQueryFilterPagingError();
+        }
         var pageNumber = pagingParam.PageNumber.Value;
         var pageSize = pagingParam.PageSize.Value;
         var total = queryFilterResponses.ToList().Count;

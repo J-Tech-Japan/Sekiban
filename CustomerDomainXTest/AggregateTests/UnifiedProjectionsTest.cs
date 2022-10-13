@@ -21,7 +21,7 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
         _listProjectionTest;
     private readonly ProjectionListQueryFilterTestChecker<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.ContentsDefinition,
         ClientLoyaltyPointQueryFilter, ClientLoyaltyPointQueryFilter.QueryFilterParameter,
-        ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> _listQueryFilter;
+        ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> _listQueryFilter = new();
 
     private readonly ProjectionQueryFilterTestChecker<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.ContentsDefinition,
         ClientLoyaltyPointMultipleProjectionQueryFilter, ClientLoyaltyPointMultipleProjectionQueryFilter.QueryFilterParameter,
