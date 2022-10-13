@@ -4,8 +4,12 @@ namespace Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanTenants.ValueObje
 public record TenantNameString : SingleValueObjectNoValidationClassBase<string>
 {
     public TenantNameString(string value) : base(value) { }
-    public static implicit operator string(TenantNameString vo) =>
-        vo.Value;
-    public static implicit operator TenantNameString(string v) =>
-        new(v);
+    public static implicit operator string(TenantNameString vo)
+    {
+        return vo.Value;
+    }
+    public static implicit operator TenantNameString(string v)
+    {
+        return new(v);
+    }
 }

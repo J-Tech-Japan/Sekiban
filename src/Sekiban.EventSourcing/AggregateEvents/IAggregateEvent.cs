@@ -1,14 +1,13 @@
 ﻿using MediatR;
-namespace Sekiban.EventSourcing.AggregateEvents
+namespace Sekiban.EventSourcing.AggregateEvents;
+
+public interface IAggregateEvent : INotification, ICallHistories, IDocument, IEventPayloadHolder
 {
-    public interface IAggregateEvent : INotification, ICallHistories, IDocument, IEventPayloadHolder
-    {
-        public string AggregateType { get; }
+    public string AggregateType { get; }
 
-        public bool IsAggregateInitialEvent { get; }
+    public bool IsAggregateInitialEvent { get; }
 
-        public int Version { get; }
+    public int Version { get; }
 
-        public dynamic GetComparableObject(IAggregateEvent original, bool copyVersion = true);
-    }
+    public dynamic GetComparableObject(IAggregateEvent original, bool copyVersion = true);
 }

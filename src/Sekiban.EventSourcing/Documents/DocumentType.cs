@@ -1,10 +1,9 @@
-namespace Sekiban.EventSourcing.Documents
+namespace Sekiban.EventSourcing.Documents;
+
+public enum DocumentType
 {
-    public enum DocumentType
-    {
-        AggregateCommand = 1,
-        AggregateEvent = 2,
-        AggregateSnapshot = 3,
-        MultipleAggregateSnapshot = 4
-    }
+    AggregateCommand = 1,
+    AggregateEvent = 2,
+    AggregateSnapshot = 3,
+    MultipleAggregateSnapshot = 4
 }

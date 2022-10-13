@@ -1,3 +1,5 @@
 namespace CustomerWithTenantAddonDomainContext.Aggregates.Branches;
 
-public class BranchRepository { }
+public class BranchRepository
+{
+}

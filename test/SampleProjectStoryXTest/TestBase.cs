@@ -1,7 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
-using Sekiban.EventSourcing;
 using Sekiban.EventSourcing.Shared;
-using Sekiban.EventSourcing.TestHelpers;
 using Sekiban.EventSourcing.TestHelpers.StoryTests;
 using System;
 using Xunit;

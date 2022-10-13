@@ -1,7 +1,6 @@
-﻿namespace ESSampleProjectLib.ValueObjects
+﻿namespace ESSampleProjectLib.ValueObjects;
+
+public interface IValueObject<T>
 {
-    public interface IValueObject<T>
-    {
-        T Value { get; }
-    }
+    T Value { get; }
 }

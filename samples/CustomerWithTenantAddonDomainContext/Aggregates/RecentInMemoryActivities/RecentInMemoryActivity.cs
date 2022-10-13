@@ -10,8 +10,9 @@ public class RecentInMemoryActivity : TransferableAggregateBase<RecentInMemoryAc
         AddAndApplyEvent(new RecentInMemoryActivityCreated(new RecentInMemoryActivityRecord(firstActivity, DateTime.UtcNow)));
     }
 
-    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload) =>
-        payload switch
+    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload)
+    {
+        return payload switch
         {
             RecentInMemoryActivityCreated created => () =>
             {
@@ -29,6 +30,7 @@ public class RecentInMemoryActivity : TransferableAggregateBase<RecentInMemoryAc
             },
             _ => null
         };
+    }
     public void AddActivity(string activity)
     {
         var ev = new RecentInMemoryActivityAdded(new RecentInMemoryActivityRecord(activity, DateTime.UtcNow));

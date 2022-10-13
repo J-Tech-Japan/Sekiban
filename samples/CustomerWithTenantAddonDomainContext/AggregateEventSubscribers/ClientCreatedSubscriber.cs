@@ -7,8 +7,10 @@ public class ClientCreatedSubscriber : AggregateEventSubscriberBase<ClientCreate
 {
     private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
 
-    public ClientCreatedSubscriber(IAggregateCommandExecutor aggregateCommandExecutor) =>
+    public ClientCreatedSubscriber(IAggregateCommandExecutor aggregateCommandExecutor)
+    {
         _aggregateCommandExecutor = aggregateCommandExecutor;
+    }
 
     public override async Task SubscribeAggregateEventAsync(AggregateEvent<ClientCreated> ev)
     {

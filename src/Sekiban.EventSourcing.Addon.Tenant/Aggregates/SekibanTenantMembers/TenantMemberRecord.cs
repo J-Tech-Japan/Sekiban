@@ -1,4 +1,5 @@
-namespace Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanTenantMembers
+namespace Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanTenantMembers;
+
+public record TenantMemberRecord(Guid MemberId, string Code, string Name)
 {
-    public record TenantMemberRecord(Guid MemberId, string Code, string Name) { }
 }

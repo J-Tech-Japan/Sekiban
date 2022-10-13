@@ -6,5 +6,7 @@ namespace Sekiban.EventSourcing.Addon.Tenant.Exceptions.UnexpectedExceptions;
 public class ConfigurationNotExistsException : ConfigurationErrorsException, ISekibanAddonEventSourcingException
 {
     public ConfigurationNotExistsException(string configurationName) : base(
-        string.Format(ExceptionMessages.ConfigurationNotExistsException, configurationName)) { }
+        string.Format(ExceptionMessages.ConfigurationNotExistsException, configurationName))
+    {
+    }
 }

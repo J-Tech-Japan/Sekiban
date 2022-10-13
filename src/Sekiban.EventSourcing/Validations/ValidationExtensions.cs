@@ -68,8 +68,9 @@ public static class ValidationExtensions
                 validationResult.MemberNames.Select(m => string.IsNullOrEmpty(baseKeyPath) ? m : $"{baseKeyPath}.{m}").ToArray());
         }
 
-        static bool isReferenceType(Type type) =>
-            type switch
+        static bool isReferenceType(Type type)
+        {
+            return type switch
             {
                 Type t when t.IsPrimitive => false,
                 Type t when t.IsEnum => false,
@@ -78,6 +79,7 @@ public static class ValidationExtensions
                 Type t when t == typeof(DateTime) => false,
                 _ => true
             };
+        }
 
         // 参照型のプロパティがあるかどうかをチェックする
         foreach (var pi in targetClass.GetType().GetProperties())

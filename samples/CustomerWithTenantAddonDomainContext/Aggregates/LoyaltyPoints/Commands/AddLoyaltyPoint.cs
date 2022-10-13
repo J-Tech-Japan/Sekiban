@@ -9,8 +9,10 @@ public record AddLoyaltyPoint(
     string Note) : ChangeAggregateCommandBase<LoyaltyPoint>
 {
     public AddLoyaltyPoint() : this(Guid.Empty, DateTime.MinValue, LoyaltyPointReceiveTypeKeys.CreditcardUsage, 0, string.Empty) { }
-    public override Guid GetAggregateId() =>
-        ClientId;
+    public override Guid GetAggregateId()
+    {
+        return ClientId;
+    }
 }
 public class AddLoyaltyPointHandler : ChangeAggregateCommandHandlerBase<LoyaltyPoint, AddLoyaltyPoint>
 {

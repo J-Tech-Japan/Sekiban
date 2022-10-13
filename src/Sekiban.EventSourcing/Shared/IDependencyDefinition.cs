@@ -1,4 +1,3 @@
-using Sekiban.EventSourcing.TestHelpers;
 using System.Reflection;
 namespace Sekiban.EventSourcing.Shared;
 

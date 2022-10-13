@@ -7,8 +7,10 @@ public class ClientDeletedSubscriber : AggregateEventSubscriberBase<ClientDelete
 {
     private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
 
-    public ClientDeletedSubscriber(IAggregateCommandExecutor aggregateCommandExecutor) =>
+    public ClientDeletedSubscriber(IAggregateCommandExecutor aggregateCommandExecutor)
+    {
         _aggregateCommandExecutor = aggregateCommandExecutor;
+    }
 
     public override async Task SubscribeAggregateEventAsync(AggregateEvent<ClientDeleted> ev)
     {

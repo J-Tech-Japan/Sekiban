@@ -4,8 +4,10 @@ public record AddRecentInMemoryActivity(Guid RecentInMemoryActivityId, string Ac
     INoValidateCommand
 {
     public AddRecentInMemoryActivity() : this(Guid.Empty, string.Empty) { }
-    public override Guid GetAggregateId() =>
-        RecentInMemoryActivityId;
+    public override Guid GetAggregateId()
+    {
+        return RecentInMemoryActivityId;
+    }
 }
 public class AddRecentInMemoryActivityHandler : ChangeAggregateCommandHandlerBase<RecentInMemoryActivity, AddRecentInMemoryActivity>
 {

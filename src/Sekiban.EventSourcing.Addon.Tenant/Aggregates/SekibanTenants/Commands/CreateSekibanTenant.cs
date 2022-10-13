@@ -35,8 +35,10 @@ public record CreateSekibanTenant : ICreateAggregateCommand<SekibanTenant>
 }
 public class CreateSekibanTenantHandler : CreateAggregateCommandHandlerBase<SekibanTenant, CreateSekibanTenant>
 {
-    public override Guid GenerateAggregateId(CreateSekibanTenant command) =>
-        command.TenantId;
+    public override Guid GenerateAggregateId(CreateSekibanTenant command)
+    {
+        return command.TenantId;
+    }
     protected override async Task ExecCreateCommandAsync(SekibanTenant aggregate, CreateSekibanTenant command)
     {
         await Task.CompletedTask;

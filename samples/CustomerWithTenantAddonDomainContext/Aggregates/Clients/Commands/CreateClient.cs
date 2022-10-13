@@ -43,8 +43,10 @@ public class CreateClientHandler : CreateAggregateCommandHandlerBase<Client, Cre
         _multipleAggregateProjectionService = multipleAggregateProjectionService;
     }
 
-    public override Guid GenerateAggregateId(CreateClient command) =>
-        Guid.NewGuid();
+    public override Guid GenerateAggregateId(CreateClient command)
+    {
+        return Guid.NewGuid();
+    }
     protected override async Task ExecCreateCommandAsync(Client aggregate, CreateClient command)
     {
         // Check if branch exists

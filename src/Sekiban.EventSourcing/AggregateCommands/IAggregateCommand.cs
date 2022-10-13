@@ -1,4 +1,5 @@
-namespace Sekiban.EventSourcing.AggregateCommands
+namespace Sekiban.EventSourcing.AggregateCommands;
+
+public interface IAggregateCommand
 {
-    public interface IAggregateCommand { }
 }

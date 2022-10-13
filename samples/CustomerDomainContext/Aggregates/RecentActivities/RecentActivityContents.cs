@@ -1,24 +1,27 @@
-namespace CustomerDomainContext.Aggregates.RecentActivities
+namespace CustomerDomainContext.Aggregates.RecentActivities;
+
+public record RecentActivityContents : IAggregateContents
 {
-    public record RecentActivityContents : IAggregateContents
+    public IReadOnlyCollection<RecentActivityRecord> LatestActivities { get; set; } = new List<RecentActivityRecord> { new() };
+    public RecentActivityContents(IReadOnlyCollection<RecentActivityRecord> latestActivities)
     {
-        public IReadOnlyCollection<RecentActivityRecord> LatestActivities { get; set; } = new List<RecentActivityRecord>(){new RecentActivityRecord()};
-        public RecentActivityContents(IReadOnlyCollection<RecentActivityRecord> latestActivities) =>
-            LatestActivities = latestActivities;
-        public RecentActivityContents() { }
-        public virtual bool Equals(RecentActivityContents? other)
+        LatestActivities = latestActivities;
+    }
+    public RecentActivityContents() { }
+    public virtual bool Equals(RecentActivityContents? other)
+    {
+        if (ReferenceEquals(null, other))
         {
-            if (ReferenceEquals(null, other))
-            {
-                return false;
-            }
-            if (ReferenceEquals(this, other))
-            {
-                return true;
-            }
-            return LatestActivities.SequenceEqual(other.LatestActivities);
+            return false;
         }
-        public override int GetHashCode() =>
-            LatestActivities.GetHashCode();
+        if (ReferenceEquals(this, other))
+        {
+            return true;
+        }
+        return LatestActivities.SequenceEqual(other.LatestActivities);
+    }
+    public override int GetHashCode()
+    {
+        return LatestActivities.GetHashCode();
     }
 }

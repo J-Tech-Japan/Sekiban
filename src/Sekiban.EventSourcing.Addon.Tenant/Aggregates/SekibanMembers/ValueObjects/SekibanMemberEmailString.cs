@@ -5,8 +5,12 @@ public record SekibanMemberEmailString : SingleValueObjectNoValidationClassBase<
 {
 
     public SekibanMemberEmailString(string value) : base(value) { }
-    public static implicit operator string(SekibanMemberEmailString vo) =>
-        vo.Value;
-    public static implicit operator SekibanMemberEmailString(string v) =>
-        new(v);
+    public static implicit operator string(SekibanMemberEmailString vo)
+    {
+        return vo.Value;
+    }
+    public static implicit operator SekibanMemberEmailString(string v)
+    {
+        return new(v);
+    }
 }

@@ -1,8 +1,7 @@
-namespace Sekiban.EventSourcing.Queries.SingleAggregates
+namespace Sekiban.EventSourcing.Queries.SingleAggregates;
+
+public interface ISingleAggregateProjection
 {
-    public interface ISingleAggregateProjection
-    {
-        void ApplyEvent(IAggregateEvent ev);
-        public bool CanApplyEvent(IAggregateEvent ev);
-    }
+    void ApplyEvent(IAggregateEvent ev);
+    public bool CanApplyEvent(IAggregateEvent ev);
 }

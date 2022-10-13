@@ -2,9 +2,7 @@ using CosmosInfrastructure;
 using CustomerDomainContext.Shared;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Sekiban.EventSourcing;
 using Sekiban.EventSourcing.Shared;
-using Sekiban.EventSourcing.TestHelpers;
 using Sekiban.EventSourcing.TestHelpers.StoryTests;
 namespace SampleProjectStoryXTest;
 

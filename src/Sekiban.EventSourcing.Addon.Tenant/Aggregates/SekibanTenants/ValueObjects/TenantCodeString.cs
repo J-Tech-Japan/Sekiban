@@ -5,8 +5,12 @@ public record TenantCodeString : SingleValueObjectNoValidationClassBase<string>
 {
     public TenantCodeString(string value) : base(value) { }
 
-    public static implicit operator string(TenantCodeString vo) =>
-        vo.Value;
-    public static implicit operator TenantCodeString(string v) =>
-        new(v);
+    public static implicit operator string(TenantCodeString vo)
+    {
+        return vo.Value;
+    }
+    public static implicit operator TenantCodeString(string v)
+    {
+        return new(v);
+    }
 }

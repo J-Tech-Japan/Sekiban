@@ -1,7 +1,6 @@
 using CustomerDomainContext.Shared;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Shared;
-using Sekiban.EventSourcing.TestHelpers;
 using Sekiban.EventSourcing.TestHelpers.ProjectionTests;
 namespace CustomerDomainXTest;
 

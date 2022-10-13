@@ -1,4 +1,5 @@
-﻿namespace Sekiban.EventSourcing.Shared.Exceptions
+﻿namespace Sekiban.EventSourcing.Shared.Exceptions;
+
+public interface ISekibanException
 {
-    public interface ISekibanException { }
 }

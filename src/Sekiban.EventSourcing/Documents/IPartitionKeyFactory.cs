@@ -1,7 +1,6 @@
-namespace Sekiban.EventSourcing.Documents
+namespace Sekiban.EventSourcing.Documents;
+
+public interface IPartitionKeyFactory
 {
-    public interface IPartitionKeyFactory
-    {
-        string GetPartitionKey(DocumentType documentType);
-    }
+    string GetPartitionKey(DocumentType documentType);
 }

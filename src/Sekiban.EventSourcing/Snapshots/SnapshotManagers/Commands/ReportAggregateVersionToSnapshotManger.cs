@@ -1,37 +1,40 @@
 using Sekiban.EventSourcing.Settings;
-namespace Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands
+namespace Sekiban.EventSourcing.Snapshots.SnapshotManagers.Commands;
+
+public record ReportAggregateVersionToSnapshotManger(
+    Guid SnapshotManagerId,
+    Type AggregateType,
+    Guid TargetAggregateId,
+    int Version,
+    int? SnapshotVersion) : ChangeAggregateCommandBase<SnapshotManager>, INoValidateCommand
 {
-    public record ReportAggregateVersionToSnapshotManger(
-        Guid SnapshotManagerId,
-        Type AggregateType,
-        Guid TargetAggregateId,
-        int Version,
-        int? SnapshotVersion) : ChangeAggregateCommandBase<SnapshotManager>, INoValidateCommand
+    public ReportAggregateVersionToSnapshotManger() : this(Guid.Empty, typeof(object), Guid.Empty, 0, null) { }
+    public override Guid GetAggregateId()
     {
-        public ReportAggregateVersionToSnapshotManger() : this(Guid.Empty, typeof(object), Guid.Empty, 0, null) { }
-        public override Guid GetAggregateId() =>
-            SnapshotManagerId;
+        return SnapshotManagerId;
     }
-    public class ReportAggregateVersionToSnapshotMangerHandler : ChangeAggregateCommandHandlerBase<SnapshotManager,
-        ReportAggregateVersionToSnapshotManger>
+}
+public class ReportAggregateVersionToSnapshotMangerHandler : ChangeAggregateCommandHandlerBase<SnapshotManager,
+    ReportAggregateVersionToSnapshotManger>
+{
+    private readonly IAggregateSettings _aggregateSettings;
+    public ReportAggregateVersionToSnapshotMangerHandler(IAggregateSettings aggregateSettings)
     {
-        private readonly IAggregateSettings _aggregateSettings;
-        public ReportAggregateVersionToSnapshotMangerHandler(IAggregateSettings aggregateSettings) =>
-            _aggregateSettings = aggregateSettings;
+        _aggregateSettings = aggregateSettings;
+    }
 
-        protected override async Task ExecCommandAsync(SnapshotManager aggregate, ReportAggregateVersionToSnapshotManger command)
-        {
-            var snapshotFrequency = _aggregateSettings.SnapshotFrequencyForType(command.AggregateType);
-            var snapshotOffset = _aggregateSettings.SnapshotOffsetForType(command.AggregateType);
+    protected override async Task ExecCommandAsync(SnapshotManager aggregate, ReportAggregateVersionToSnapshotManger command)
+    {
+        var snapshotFrequency = _aggregateSettings.SnapshotFrequencyForType(command.AggregateType);
+        var snapshotOffset = _aggregateSettings.SnapshotOffsetForType(command.AggregateType);
 
-            aggregate.ReportAggregateVersion(
-                command.AggregateType,
-                command.TargetAggregateId,
-                command.Version,
-                command.SnapshotVersion,
-                snapshotFrequency,
-                snapshotOffset);
-            await Task.CompletedTask;
-        }
+        aggregate.ReportAggregateVersion(
+            command.AggregateType,
+            command.TargetAggregateId,
+            command.Version,
+            command.SnapshotVersion,
+            snapshotFrequency,
+            snapshotOffset);
+        await Task.CompletedTask;
     }
 }

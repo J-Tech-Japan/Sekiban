@@ -7,13 +7,17 @@ public record CreateBranch : ICreateAggregateCommand<Branch>
     [MaxLength(20)]
     public string Name { get; init; } = string.Empty;
     public CreateBranch() : this(string.Empty) { }
-    public CreateBranch(string name) =>
+    public CreateBranch(string name)
+    {
         Name = name;
+    }
 }
 public class CreateBranchHandler : CreateAggregateCommandHandlerBase<Branch, CreateBranch>
 {
-    public override Guid GenerateAggregateId(CreateBranch command) =>
-        Guid.NewGuid();
+    public override Guid GenerateAggregateId(CreateBranch command)
+    {
+        return Guid.NewGuid();
+    }
     protected override async Task ExecCreateCommandAsync(Branch aggregate, CreateBranch command)
     {
         await Task.CompletedTask;

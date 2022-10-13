@@ -22,7 +22,6 @@ using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Shared.Exceptions;
 using Sekiban.EventSourcing.Snapshots;
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
-using Sekiban.EventSourcing.TestHelpers;
 using Sekiban.EventSourcing.TestHelpers.StoryTests;
 using System;
 using System.Collections.Generic;

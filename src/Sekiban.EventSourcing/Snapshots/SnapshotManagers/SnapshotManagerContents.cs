@@ -1,10 +1,9 @@
 using Sekiban.EventSourcing.Shared;
-namespace Sekiban.EventSourcing.Snapshots.SnapshotManagers
+namespace Sekiban.EventSourcing.Snapshots.SnapshotManagers;
+
+public record SnapshotManagerContents : IAggregateContents
 {
-    public record SnapshotManagerContents : IAggregateContents
-    {
-        public IReadOnlyCollection<string> Requests { get; set; } = new List<string>();
-        public IReadOnlyCollection<string> RequestTakens { get; set; } = new List<string>();
-        public DateTime CreatedAt { get; set; } = SekibanDateProducer.GetRegistered().UtcNow;
-    }
+    public IReadOnlyCollection<string> Requests { get; set; } = new List<string>();
+    public IReadOnlyCollection<string> RequestTakens { get; set; } = new List<string>();
+    public DateTime CreatedAt { get; set; } = SekibanDateProducer.GetRegistered().UtcNow;
 }

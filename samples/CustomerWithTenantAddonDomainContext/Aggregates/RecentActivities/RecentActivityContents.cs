@@ -3,8 +3,10 @@ namespace CustomerWithTenantAddonDomainContext.Aggregates.RecentActivities;
 public record RecentActivityContents : IAggregateContents
 {
     public IReadOnlyCollection<RecentActivityRecord> LatestActivities { get; set; } = new List<RecentActivityRecord> { new() };
-    public RecentActivityContents(IReadOnlyCollection<RecentActivityRecord> latestActivities) =>
+    public RecentActivityContents(IReadOnlyCollection<RecentActivityRecord> latestActivities)
+    {
         LatestActivities = latestActivities;
+    }
     public RecentActivityContents() { }
     public virtual bool Equals(RecentActivityContents? other)
     {
@@ -18,6 +20,8 @@ public record RecentActivityContents : IAggregateContents
         }
         return LatestActivities.SequenceEqual(other.LatestActivities);
     }
-    public override int GetHashCode() =>
-        LatestActivities.GetHashCode();
+    public override int GetHashCode()
+    {
+        return LatestActivities.GetHashCode();
+    }
 }

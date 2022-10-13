@@ -1,16 +1,15 @@
-using Sekiban.EventSourcing;
 using Sekiban.EventSourcing.Shared;
-using Sekiban.EventSourcing.TestHelpers;
 using Sekiban.EventSourcing.TestHelpers.StoryTests;
 using Xunit.Abstractions;
-namespace SampleProjectStoryXTest.Stories.QueryPerformances
-{
-    public class MemoryCachePerformanceTest : QueryPerformanceTestBase
-    {
+namespace SampleProjectStoryXTest.Stories.QueryPerformances;
 
-        public MemoryCachePerformanceTest(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
-            sekibanTestFixture,
-            testOutputHelper,
-            ServiceCollectionExtensions.MultipleProjectionType.MemoryCache) { }
+public class MemoryCachePerformanceTest : QueryPerformanceTestBase
+{
+
+    public MemoryCachePerformanceTest(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
+        sekibanTestFixture,
+        testOutputHelper,
+        ServiceCollectionExtensions.MultipleProjectionType.MemoryCache)
+    {
     }
 }
