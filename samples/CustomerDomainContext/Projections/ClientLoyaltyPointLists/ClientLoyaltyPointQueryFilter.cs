@@ -13,21 +13,6 @@ public class ClientLoyaltyPointQueryFilter : IProjectionListQueryFilterDefinitio
         ClientName
     }
 
-    public IEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> HandleFilter(
-        QueryFilterParameter queryParam,
-        MultipleAggregateProjectionContentsDto<ClientLoyaltyPointListProjection.ContentsDefinition> projection)
-    {
-        var result = projection.Contents.Records;
-        if (queryParam.BranchId.HasValue)
-        {
-            result = result.Where(x => x.BranchId == queryParam.BranchId.Value).ToList();
-        }
-        if (queryParam.ClientId.HasValue)
-        {
-            result = result.Where(x => x.ClientId == queryParam.ClientId.Value).ToList();
-        }
-        return result;
-    }
     public IEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> HandleSort(
         QueryFilterParameter queryParam,
         IEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> projections)
@@ -79,6 +64,22 @@ public class ClientLoyaltyPointQueryFilter : IProjectionListQueryFilterDefinitio
                             _ => throw new ArgumentOutOfRangeException()
                         });
             }
+        }
+        return result;
+    }
+
+    public IEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> HandleFilter(
+        QueryFilterParameter queryParam,
+        MultipleAggregateProjectionContentsDto<ClientLoyaltyPointListProjection.ContentsDefinition> projection)
+    {
+        var result = projection.Contents.Records;
+        if (queryParam.BranchId.HasValue)
+        {
+            result = result.Where(x => x.BranchId == queryParam.BranchId.Value).ToList();
+        }
+        if (queryParam.ClientId.HasValue)
+        {
+            result = result.Where(x => x.ClientId == queryParam.ClientId.Value).ToList();
         }
         return result;
     }

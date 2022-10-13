@@ -23,14 +23,12 @@ public class ClientLoyaltyPointListProjection : MultipleAggregateProjectionBase<
             {
                 var list = Contents.Records.ToList();
                 list.Add(
-                    new ClientLoyaltyPointListRecord
-                    {
-                        BranchId = clientCreated.BranchId,
-                        BranchName = Contents.Branches.First(m => m.BranchId == clientCreated.BranchId).BranchName,
-                        ClientId = ev.AggregateId,
-                        ClientName = clientCreated.ClientName,
-                        Point = 0
-                    });
+                    new ClientLoyaltyPointListRecord(
+                        clientCreated.BranchId,
+                        Contents.Branches.First(m => m.BranchId == clientCreated.BranchId).BranchName,
+                        ev.AggregateId,
+                        clientCreated.ClientName,
+                        0));
                 Contents = Contents with { Records = list };
             },
             ClientNameChanged clientNameChanged => () =>
@@ -79,14 +77,8 @@ public class ClientLoyaltyPointListProjection : MultipleAggregateProjectionBase<
     {
         return new List<string> { nameof(Branch), nameof(Client), nameof(LoyaltyPoint) };
     }
-    public record ClientLoyaltyPointListRecord
-    {
-        public Guid BranchId { get; init; }
-        public string BranchName { get; init; } = string.Empty;
-        public Guid ClientId { get; init; }
-        public string ClientName { get; set; } = string.Empty;
-        public int Point { get; set; }
-    }
+    public record ClientLoyaltyPointListRecord(Guid BranchId, string BranchName, Guid ClientId, string ClientName, int Point);
+
     public record ContentsDefinition(
         IReadOnlyCollection<ClientLoyaltyPointListRecord> Records,
         IReadOnlyCollection<ProjectedBranchInternal> Branches) : IMultipleAggregateProjectionContents

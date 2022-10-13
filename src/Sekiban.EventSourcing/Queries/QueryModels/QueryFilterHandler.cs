@@ -29,9 +29,7 @@ public class QueryFilterHandler
         var queryFilterResponses = sorted.ToList();
         if (param is IQueryPagingParameter { PageNumber: { }, PageSize: { } } pagingParam)
         {
-            var total = queryFilterResponses.ToList().Count;
-            var totalPages = total / pagingParam.PageSize.Value;
-            return new QueryFilterListResult<TQueryFilterResponse>(total, totalPages, pagingParam.PageNumber, pagingParam.PageSize,  queryFilterResponses.Skip((pagingParam.PageNumber.Value - 1) * pagingParam.PageSize.Value).Take(pagingParam.PageSize.Value));
+            return makeQueryFilterListResult(pagingParam, queryFilterResponses);
         }
         return new QueryFilterListResult<TQueryFilterResponse>(queryFilterResponses.ToList().Count, null, null, null, queryFilterResponses);
     }
@@ -66,9 +64,7 @@ public class QueryFilterHandler
         var queryFilterResponses = sorted.ToList();
         if (param is IQueryPagingParameter { PageNumber: { }, PageSize: { } } pagingParam)
         {
-            var total = queryFilterResponses.ToList().Count;
-            var totalPages = total / pagingParam.PageSize.Value;
-            return new QueryFilterListResult<TQueryFilterResponse>(total, totalPages, pagingParam.PageNumber, pagingParam.PageSize,  queryFilterResponses.Skip((pagingParam.PageNumber.Value - 1) * pagingParam.PageSize.Value).Take(pagingParam.PageSize.Value));
+            return makeQueryFilterListResult(pagingParam, queryFilterResponses);
         }
         return new QueryFilterListResult<TQueryFilterResponse>(queryFilterResponses.ToList().Count, null, null, null, queryFilterResponses);
     }
@@ -85,7 +81,7 @@ public class QueryFilterHandler
         return filtered;
     }
 
-    public QueryFilterListResult< TQueryFilterResponse>
+    public QueryFilterListResult<TQueryFilterResponse>
         GetSingleAggregateProjectionListQueryFilter<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents, TQueryFilter,
             TQueryFilterParameter, TQueryFilterResponse>(
             TQueryFilterParameter param,
@@ -104,11 +100,29 @@ public class QueryFilterHandler
         var queryFilterResponses = sorted.ToList();
         if (param is IQueryPagingParameter { PageNumber: { }, PageSize: { } } pagingParam)
         {
-            var total = queryFilterResponses.ToList().Count;
-            var totalPages = total / pagingParam.PageSize.Value;
-            return new QueryFilterListResult<TQueryFilterResponse>(total, totalPages, pagingParam.PageNumber, pagingParam.PageSize,  queryFilterResponses.Skip((pagingParam.PageNumber.Value - 1) * pagingParam.PageSize.Value).Take(pagingParam.PageSize.Value));
+            return makeQueryFilterListResult(pagingParam, queryFilterResponses);
         }
         return new QueryFilterListResult<TQueryFilterResponse>(queryFilterResponses.ToList().Count, null, null, null, queryFilterResponses);
+    }
+
+    private static QueryFilterListResult<TQueryFilterResponse> makeQueryFilterListResult<TQueryFilterResponse>(
+        IQueryPagingParameter pagingParam,
+        List<TQueryFilterResponse> queryFilterResponses)
+    {
+        var pageNumber = pagingParam.PageNumber.Value;
+        var pageSize = pagingParam.PageSize.Value;
+        var total = queryFilterResponses.ToList().Count;
+        var totalPages = total / pagingParam.PageSize.Value + (total % pagingParam.PageSize.Value > 0 ? 1 : 0);
+        if (pageNumber < 1 || pageNumber > totalPages)
+        {
+            return new QueryFilterListResult<TQueryFilterResponse>(total, totalPages, pageNumber, pageSize, new List<TQueryFilterResponse>());
+        }
+        return new QueryFilterListResult<TQueryFilterResponse>(
+            total,
+            totalPages,
+            pageNumber,
+            pageSize,
+            queryFilterResponses.Skip((pageNumber - 1) * pagingParam.PageSize.Value).Take(pageSize));
     }
 
     public TQueryFilterResponse
