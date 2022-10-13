@@ -1,7 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Shared;
-namespace Sekiban.EventSourcing.TestHelpers;
+using Sekiban.EventSourcing.TestHelpers.Helpers;
+namespace Sekiban.EventSourcing.TestHelpers.ProjectionTests;
 
 public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> where TDependencyDefinition : IDependencyDefinition, new()
 {

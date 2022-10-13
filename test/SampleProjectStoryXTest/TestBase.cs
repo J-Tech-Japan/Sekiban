@@ -1,23 +1,25 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing;
+using Sekiban.EventSourcing.Shared;
 using Sekiban.EventSourcing.TestHelpers;
+using Sekiban.EventSourcing.TestHelpers.StoryTests;
 using System;
 using Xunit;
 namespace SampleProjectStoryXTest;
 
 [Collection("Sequential")]
-public class TestBase : IClassFixture<TestFixture>, IDisposable
+public class TestBase : IClassFixture<SekibanTestFixture>, IDisposable
 {
     protected readonly ServiceProvider _serviceProvider;
-    protected readonly TestFixture _testFixture;
+    protected readonly SekibanTestFixture SekibanTestFixture;
 
     public TestBase(
-        TestFixture testFixture,
+        SekibanTestFixture sekibanTestFixture,
         bool inMemory = false,
         ServiceCollectionExtensions.MultipleProjectionType multipleProjectionType = ServiceCollectionExtensions.MultipleProjectionType.MemoryCache)
     {
-        _testFixture = testFixture;
-        _serviceProvider = DependencyHelper.CreateDefaultProvider(testFixture, inMemory, null, multipleProjectionType);
+        SekibanTestFixture = sekibanTestFixture;
+        _serviceProvider = DependencyHelper.CreateDefaultProvider(sekibanTestFixture, inMemory, null, multipleProjectionType);
     }
     public void Dispose()
     {

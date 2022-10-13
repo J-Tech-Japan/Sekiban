@@ -5,12 +5,13 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing;
 using Sekiban.EventSourcing.Shared;
 using Sekiban.EventSourcing.TestHelpers;
+using Sekiban.EventSourcing.TestHelpers.StoryTests;
 namespace SampleProjectStoryXTest;
 
 public static class DependencyHelper
 {
     public static ServiceProvider CreateDefaultProvider(
-        TestFixture fixture,
+        SekibanTestFixture fixture,
         bool inMemory = false,
         ISekibanDateProducer? sekibanDateProducer = null,
         ServiceCollectionExtensions.MultipleProjectionType multipleProjectionType = ServiceCollectionExtensions.MultipleProjectionType.MemoryCache)

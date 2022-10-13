@@ -3,8 +3,8 @@ namespace SampleProjectStoryXTest.Stories.QueryPerformances;
 public class SimpleQueryPerformanceTest : QueryPerformanceTestBase
 {
 
-    public SimpleQueryPerformanceTest(TestFixture testFixture, ITestOutputHelper testOutputHelper) : base(
-        testFixture,
+    public SimpleQueryPerformanceTest(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
+        sekibanTestFixture,
         testOutputHelper,
         ServiceCollectionExtensions.MultipleProjectionType.Simple) { }
 }

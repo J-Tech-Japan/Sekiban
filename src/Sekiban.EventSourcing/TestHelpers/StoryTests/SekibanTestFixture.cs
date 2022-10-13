@@ -1,11 +1,11 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.PlatformAbstractions;
-namespace Sekiban.EventSourcing.TestHelpers
+namespace Sekiban.EventSourcing.TestHelpers.StoryTests
 {
-    public class TestFixture
+    public class SekibanTestFixture
     {
         public IConfigurationRoot Configuration { get; set; }
-        public TestFixture()
+        public SekibanTestFixture()
         {
             var builder = new ConfigurationBuilder().SetBasePath(PlatformServices.Default.Application.ApplicationBasePath)
                 .AddJsonFile("appsettings.json", false, false)

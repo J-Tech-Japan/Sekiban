@@ -1,5 +1,5 @@
 using Sekiban.EventSourcing.Queries.QueryModels;
-namespace Sekiban.EventSourcing.TestHelpers;
+namespace Sekiban.EventSourcing.TestHelpers.QueryFilters;
 
 public interface IQueryFilterChecker<TProjectionDto>
 {

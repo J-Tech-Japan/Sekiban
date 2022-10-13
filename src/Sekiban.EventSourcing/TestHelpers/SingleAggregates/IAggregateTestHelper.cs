@@ -1,5 +1,5 @@
 using Sekiban.EventSourcing.Validations;
-namespace Sekiban.EventSourcing.TestHelpers;
+namespace Sekiban.EventSourcing.TestHelpers.SingleAggregates;
 
 public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : TransferableAggregateBase<TContents>
     where TContents : IAggregateContents, new()

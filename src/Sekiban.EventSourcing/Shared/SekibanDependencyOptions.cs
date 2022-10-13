@@ -1,4 +1,4 @@
-namespace Sekiban.EventSourcing.TestHelpers;
+namespace Sekiban.EventSourcing.Shared;
 
 public record SekibanDependencyOptions
 {

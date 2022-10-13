@@ -4,6 +4,7 @@ using CustomerDomainContext.Projections.ClientLoyaltyPointLists;
 using CustomerDomainContext.Shared;
 using Sekiban.EventSourcing.Queries.QueryModels;
 using Sekiban.EventSourcing.TestHelpers;
+using Sekiban.EventSourcing.TestHelpers.QueryFilters;
 using System;
 using System.Collections.Generic;
 using Xunit;

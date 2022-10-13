@@ -2,7 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Validations;
 using System.ComponentModel.DataAnnotations;
-namespace Sekiban.EventSourcing.TestHelpers;
+namespace Sekiban.EventSourcing.TestHelpers.Helpers;
 
 public class AggregateTestCommandExecutor
 {

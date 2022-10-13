@@ -28,7 +28,7 @@ using Xunit;
 using Xunit.Abstractions;
 namespace SampleProjectStoryXTest.Stories;
 
-public class InMemoryStoryTestBasic : ProjectByTestTestBase
+public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
 {
     private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
     private readonly ISingleAggregateService _aggregateService;

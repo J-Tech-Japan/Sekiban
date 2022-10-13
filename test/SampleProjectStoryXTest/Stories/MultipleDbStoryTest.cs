@@ -7,6 +7,7 @@ using Sekiban.EventSourcing.Documents;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Settings;
 using Sekiban.EventSourcing.TestHelpers;
+using Sekiban.EventSourcing.TestHelpers.StoryTests;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
@@ -18,7 +19,7 @@ namespace SampleProjectStoryXTest.Stories
         private const string DefaultDb = "Default";
         private readonly ISekibanContext _sekibanContext;
 
-        public MultipleDbStoryTest(TestFixture testFixture, ITestOutputHelper testOutputHelper) : base(testFixture) =>
+        public MultipleDbStoryTest(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(sekibanTestFixture) =>
             _sekibanContext = GetService<ISekibanContext>();
 
         [Fact(DisplayName = "CosmosDb ストーリーテスト 複数データベースでの動作を検証する")]

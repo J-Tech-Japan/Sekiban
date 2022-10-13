@@ -23,6 +23,7 @@ using Sekiban.EventSourcing.Shared.Exceptions;
 using Sekiban.EventSourcing.Snapshots;
 using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
 using Sekiban.EventSourcing.TestHelpers;
+using Sekiban.EventSourcing.TestHelpers.StoryTests;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -41,7 +42,7 @@ public class CustomerDbStoryBasic : TestBase
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
     private readonly IMultipleAggregateProjectionService _multipleAggregateProjectionService;
     private readonly ITestOutputHelper _testOutputHelper;
-    public CustomerDbStoryBasic(TestFixture testFixture, ITestOutputHelper testOutputHelper) : base(testFixture)
+    public CustomerDbStoryBasic(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(sekibanTestFixture)
     {
         _testOutputHelper = testOutputHelper;
         _cosmosDbFactory = GetService<CosmosDbFactory>();

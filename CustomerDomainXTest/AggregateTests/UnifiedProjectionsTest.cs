@@ -5,6 +5,8 @@ using CustomerDomainContext.Projections.ClientLoyaltyPointMultiples;
 using CustomerDomainContext.Shared;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.TestHelpers;
+using Sekiban.EventSourcing.TestHelpers.ProjectionTests;
+using Sekiban.EventSourcing.TestHelpers.QueryFilters;
 using System;
 using System.Collections.Generic;
 using Xunit;

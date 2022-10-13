@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Shared;
+using Sekiban.EventSourcing.TestHelpers.SingleAggregates;
 using Sekiban.EventSourcing.Validations;
 namespace Sekiban.EventSourcing.TestHelpers;
 
