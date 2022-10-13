@@ -181,7 +181,7 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     }));
     }
     [Fact]
-    public void QueryFilterBasicPaging4()
+    public void QueryFilterBasicPagingRequestOverflowed()
     {
         GivenScenario(CommandTest1);
         ListQueryFilterTestChecker.WhenParam(
@@ -198,16 +198,12 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                 new QueryFilterListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     2,
-                    2,
                     3,
-                    new List<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>
-                    {
-                        new(_branchId, _branchName, _clientId4, _clientNameBase + "4", 0),
-                        new(_branchId, _branchName, _clientId5, _clientNameBase + "5", 0)
-                    }));
+                    3,
+                    new List<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>()));
     }
     [Fact]
-    public void QueryFilterBasicPaging5()
+    public void QueryFilterBasicPagingRequestZero()
     {
         GivenScenario(CommandTest1);
         ListQueryFilterTestChecker.WhenParam(
@@ -224,13 +220,8 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                 new QueryFilterListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     2,
-                    1,
+                    0,
                     3,
-                    new List<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>
-                    {
-                        new(_branchId, _branchName, _clientId1, _clientNameBase + "1", 0),
-                        new(_branchId, _branchName, _clientId2, _clientNameBase + "2", 0),
-                        new(_branchId, _branchName, _clientId3, _clientNameBase + "3", 0)
-                    }));
+                    new List<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>()));
     }
 }
