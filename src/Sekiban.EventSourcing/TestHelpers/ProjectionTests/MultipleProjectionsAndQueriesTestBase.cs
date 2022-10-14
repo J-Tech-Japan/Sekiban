@@ -20,7 +20,7 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         _serviceProvider = services.BuildServiceProvider();
         _commandExecutor = new AggregateTestCommandExecutor(_serviceProvider);
     }
-    protected abstract void SetupDependency(IServiceCollection serviceCollection);
+    protected virtual void SetupDependency(IServiceCollection serviceCollection) { }
 
     public TMultipleProjectionTest SetupMultipleAggregateProjectionTest<TMultipleProjectionTest>()
         where TMultipleProjectionTest : class, ITestHelperEventSubscriber

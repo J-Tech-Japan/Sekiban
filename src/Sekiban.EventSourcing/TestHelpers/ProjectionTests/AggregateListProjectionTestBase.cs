@@ -11,6 +11,12 @@ public class AggregateListProjectionTestBase<TAggregate, TAggregateContents, TDe
     where TAggregateContents : IAggregateContents, new()
     where TDependencyDefinition : IDependencyDefinition, new()
 {
+    public AggregateListProjectionTestBase()
+    {
+    }
+    public AggregateListProjectionTestBase(IServiceProvider serviceProvider) : base(serviceProvider)
+    {
+    }
     public override
         IMultipleAggregateProjectionTestHelper<
             SingleAggregateListProjector<TAggregate, AggregateDto<TAggregateContents>, DefaultSingleAggregateProjector<TAggregate>>,

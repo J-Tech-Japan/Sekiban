@@ -7,8 +7,8 @@ using Xunit;
 namespace Sekiban.EventSourcing.TestHelpers.QueryFilters;
 
 public class
-    SingleAggregateListProjectionListQueryFilterTestChecker<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents,
-        TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> : IQueryFilterChecker<MultipleAggregateProjectionContentsDto<
+    SingleAggregateListProjectionListQueryFilterTestChecker<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents, TQueryFilter,
+        TQueryParameter, TResponseQueryModel> : IQueryFilterChecker<MultipleAggregateProjectionContentsDto<
         SingleAggregateListProjectionDto<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>>>> where TAggregate : AggregateBase, new()
     where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>, new
     ()
@@ -33,7 +33,7 @@ public class
     }
 
     public SingleAggregateListProjectionListQueryFilterTestChecker<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents,
-        TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> WhenParam(TQueryParameter param)
+        TQueryFilter, TQueryParameter, TResponseQueryModel> WhenParam(TQueryParameter param)
     {
         if (_dto == null)
         {
@@ -46,7 +46,7 @@ public class
         return this;
     }
     public SingleAggregateListProjectionListQueryFilterTestChecker<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents,
-        TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> WriteResponse(string filename)
+        TQueryFilter, TQueryParameter, TResponseQueryModel> WriteResponse(string filename)
     {
         if (Response == null)
         {
@@ -61,8 +61,7 @@ public class
         return this;
     }
     public SingleAggregateListProjectionListQueryFilterTestChecker<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents,
-        TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenResponse(
-        QueryFilterListResult<TResponseQueryModel> expectedResponse)
+        TQueryFilter, TQueryParameter, TResponseQueryModel> ThenResponse(QueryFilterListResult<TResponseQueryModel> expectedResponse)
     {
         if (Response == null)
         {
@@ -76,7 +75,7 @@ public class
         return this;
     }
     public SingleAggregateListProjectionListQueryFilterTestChecker<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents,
-        TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenResponseFromJson(string responseJson)
+        TQueryFilter, TQueryParameter, TResponseQueryModel> ThenResponseFromJson(string responseJson)
     {
         var response = JsonSerializer.Deserialize<QueryFilterListResult<TResponseQueryModel>>(responseJson);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
@@ -84,7 +83,7 @@ public class
         return this;
     }
     public SingleAggregateListProjectionListQueryFilterTestChecker<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents,
-        TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenResponseFromFile(string responseFilename)
+        TQueryFilter, TQueryParameter, TResponseQueryModel> ThenResponseFromFile(string responseFilename)
     {
         using var openStream = File.OpenRead(responseFilename);
         var response = JsonSerializer.Deserialize<QueryFilterListResult<TResponseQueryModel>>(openStream);
