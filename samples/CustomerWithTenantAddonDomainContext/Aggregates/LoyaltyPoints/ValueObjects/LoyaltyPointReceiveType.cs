@@ -21,8 +21,12 @@ public record LoyaltyPointReceiveType : IValueObject<LoyaltyPointReceiveTypeKeys
     }
     public LoyaltyPointReceiveTypeKeys Value { get; }
 
-    public static implicit operator LoyaltyPointReceiveTypeKeys(LoyaltyPointReceiveType vo) =>
-        vo.Value;
-    public static implicit operator LoyaltyPointReceiveType(LoyaltyPointReceiveTypeKeys v) =>
-        new(v);
+    public static implicit operator LoyaltyPointReceiveTypeKeys(LoyaltyPointReceiveType vo)
+    {
+        return vo.Value;
+    }
+    public static implicit operator LoyaltyPointReceiveType(LoyaltyPointReceiveTypeKeys v)
+    {
+        return new(v);
+    }
 }

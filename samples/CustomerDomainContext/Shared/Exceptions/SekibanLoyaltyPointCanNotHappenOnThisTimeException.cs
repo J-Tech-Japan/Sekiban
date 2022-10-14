@@ -1,4 +1,5 @@
-namespace CustomerDomainContext.Shared.Exceptions
+namespace CustomerDomainContext.Shared.Exceptions;
+
+public class SekibanLoyaltyPointCanNotHappenOnThisTimeException : Exception, ISekibanException
 {
-    public class SekibanLoyaltyPointCanNotHappenOnThisTimeException : Exception, ISekibanException { }
 }

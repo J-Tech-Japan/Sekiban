@@ -3,7 +3,7 @@ using Sekiban.EventSourcing.Queries.QueryModels;
 using Sekiban.EventSourcing.Queries.QueryModels.Parameters;
 using Sekiban.EventSourcing.Shared;
 using Xunit;
-namespace Sekiban.EventSourcing.TestHelpers;
+namespace Sekiban.EventSourcing.TestHelpers.QueryFilters;
 
 public class
     ProjectionListQueryFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse> :

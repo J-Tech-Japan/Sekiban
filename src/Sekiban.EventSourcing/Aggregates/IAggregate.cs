@@ -1,8 +1,7 @@
 ﻿using Sekiban.EventSourcing.Queries.SingleAggregates;
-namespace Sekiban.EventSourcing.Aggregates
+namespace Sekiban.EventSourcing.Aggregates;
+
+public interface IAggregate : ISingleAggregate, ISingleAggregateProjection
 {
-    public interface IAggregate : ISingleAggregate, ISingleAggregateProjection
-    {
-        ReadOnlyCollection<IAggregateEvent> Events { get; }
-    }
+    ReadOnlyCollection<IAggregateEvent> Events { get; }
 }

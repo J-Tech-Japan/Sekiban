@@ -1,5 +1,6 @@
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
-namespace Sekiban.EventSourcing.TestHelpers;
+using Sekiban.EventSourcing.TestHelpers.QueryFilters;
+namespace Sekiban.EventSourcing.TestHelpers.ProjectionTests;
 
 public interface IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents>
     where TProjection : IMultipleAggregateProjector<TProjectionContents>, new()

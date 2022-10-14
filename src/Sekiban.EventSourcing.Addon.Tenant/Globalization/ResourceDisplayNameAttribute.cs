@@ -2,9 +2,9 @@
 
 public class ResourceDisplayNameAttribute : ResourceAttributeBase
 {
-    public ResourceDisplayNameAttribute(Type resourceClassType, string resourceKeyName)
-        : base(resourceClassType, resourceKeyName)
-    { }
 
     public string? DisplayName => ResourceManager?.GetString(ResourceKeyName);
+    public ResourceDisplayNameAttribute(Type resourceClassType, string resourceKeyName) : base(resourceClassType, resourceKeyName)
+    {
+    }
 }

@@ -3,8 +3,10 @@
 public record DeleteLoyaltyPoint(Guid ClientId) : ChangeAggregateCommandBase<LoyaltyPoint>, INoValidateCommand
 {
     public DeleteLoyaltyPoint() : this(Guid.Empty) { }
-    public override Guid GetAggregateId() =>
-        ClientId;
+    public override Guid GetAggregateId()
+    {
+        return ClientId;
+    }
 }
 public class DeleteLoyaltyPointHandler : ChangeAggregateCommandHandlerBase<LoyaltyPoint, DeleteLoyaltyPoint>
 {

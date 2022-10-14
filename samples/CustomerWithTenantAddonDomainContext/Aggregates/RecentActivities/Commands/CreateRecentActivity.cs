@@ -3,8 +3,10 @@ namespace CustomerWithTenantAddonDomainContext.Aggregates.RecentActivities.Comma
 public record CreateRecentActivity : ICreateAggregateCommand<RecentActivity>;
 public class CreateRecentActivityHandler : CreateAggregateCommandHandlerBase<RecentActivity, CreateRecentActivity>
 {
-    public override Guid GenerateAggregateId(CreateRecentActivity command) =>
-        Guid.NewGuid();
+    public override Guid GenerateAggregateId(CreateRecentActivity command)
+    {
+        return Guid.NewGuid();
+    }
     protected override async Task ExecCreateCommandAsync(RecentActivity aggregate, CreateRecentActivity command)
     {
         await Task.CompletedTask;

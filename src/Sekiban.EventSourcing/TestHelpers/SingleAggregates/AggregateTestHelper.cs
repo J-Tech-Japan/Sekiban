@@ -1,9 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Shared;
+using Sekiban.EventSourcing.TestHelpers.Helpers;
 using Sekiban.EventSourcing.Validations;
 using Xunit;
-namespace Sekiban.EventSourcing.TestHelpers;
+namespace Sekiban.EventSourcing.TestHelpers.SingleAggregates;
 
 public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<TAggregate, TContents>
     where TAggregate : TransferableAggregateBase<TContents>, new() where TContents : IAggregateContents, new()

@@ -8,8 +8,9 @@ public class Client : TransferableAggregateBase<ClientContents>
         AddAndApplyEvent(new ClientCreated(branchId, clientName, clientEmail));
     }
 
-    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload) =>
-        payload switch
+    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload)
+    {
+        return payload switch
         {
             ClientCreated clientChanged => () =>
             {
@@ -22,6 +23,7 @@ public class Client : TransferableAggregateBase<ClientContents>
 
             _ => null
         };
+    }
 
     public void ChangeClientName(NameString clientName)
     {
@@ -30,6 +32,8 @@ public class Client : TransferableAggregateBase<ClientContents>
         AddAndApplyEvent(ev);
     }
 
-    public void Delete() =>
+    public void Delete()
+    {
         AddAndApplyEvent(new ClientDeleted());
+    }
 }

@@ -3,8 +3,10 @@ namespace CustomerWithTenantAddonDomainContext.Aggregates.RecentInMemoryActiviti
 public record CreateRecentInMemoryActivity : ICreateAggregateCommand<RecentInMemoryActivity>;
 public class CreateRecentInMemoryActivityHandler : CreateAggregateCommandHandlerBase<RecentInMemoryActivity, CreateRecentInMemoryActivity>
 {
-    public override Guid GenerateAggregateId(CreateRecentInMemoryActivity command) =>
-        Guid.NewGuid();
+    public override Guid GenerateAggregateId(CreateRecentInMemoryActivity command)
+    {
+        return Guid.NewGuid();
+    }
     protected override async Task ExecCreateCommandAsync(RecentInMemoryActivity aggregate, CreateRecentInMemoryActivity command)
     {
         await Task.CompletedTask;

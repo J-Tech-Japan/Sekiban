@@ -6,13 +6,13 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>JJ_Sekiban.EventSourcing.Addon.Tenant</PackageId>
-        <Version>0.7.8</Version>
+        <Version>0.7.9</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Tenant Addon</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.7.8</PackageVersion>
-        <Description>QueryFilterListResultのページング処理の修正</Description>
+        <PackageVersion>0.7.9</PackageVersion>
+        <Description>リファクタリング、AggregateProjectionListTestBaseのバグ修正</Description>
     </PropertyGroup>
 
     <ItemGroup>

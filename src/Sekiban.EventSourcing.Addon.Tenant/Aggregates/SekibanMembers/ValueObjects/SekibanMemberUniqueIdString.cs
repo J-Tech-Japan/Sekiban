@@ -5,8 +5,12 @@ public record SekibanMemberUniqueIdString : SingleValueObjectNoValidationClassBa
 {
 
     public SekibanMemberUniqueIdString(string value) : base(value) { }
-    public static implicit operator string(SekibanMemberUniqueIdString vo) =>
-        vo.Value;
-    public static implicit operator SekibanMemberUniqueIdString(string v) =>
-        new(v);
+    public static implicit operator string(SekibanMemberUniqueIdString vo)
+    {
+        return vo.Value;
+    }
+    public static implicit operator SekibanMemberUniqueIdString(string v)
+    {
+        return new(v);
+    }
 }

@@ -10,8 +10,9 @@ public class RecentActivity : TransferableAggregateBase<RecentActivityContents>
         AddAndApplyEvent(new RecentActivityCreated(new RecentActivityRecord(firstActivity, DateTime.UtcNow)));
     }
 
-    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload) =>
-        payload switch
+    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload)
+    {
+        return payload switch
         {
             RecentActivityCreated created => () =>
             {
@@ -29,6 +30,7 @@ public class RecentActivity : TransferableAggregateBase<RecentActivityContents>
             },
             _ => null
         };
+    }
     public void AddActivity(string activity)
     {
         var ev = new RecentActivityAdded(new RecentActivityRecord(activity, DateTime.UtcNow));

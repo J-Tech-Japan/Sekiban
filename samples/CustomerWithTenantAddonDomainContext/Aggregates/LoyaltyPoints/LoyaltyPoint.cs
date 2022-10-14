@@ -11,8 +11,9 @@ public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointContents>
         AddAndApplyEvent(new LoyaltyPointCreated(initialPoint));
     }
 
-    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload) =>
-        payload switch
+    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload)
+    {
+        return payload switch
         {
             LoyaltyPointCreated created => () =>
             {
@@ -32,6 +33,7 @@ public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointContents>
             },
             _ => null
         };
+    }
 
     public void AddLoyaltyPoint(DateTime happenedDate, LoyaltyPointReceiveType reason, int pointAmount, string note)
     {
@@ -55,6 +57,8 @@ public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointContents>
         AddAndApplyEvent(new LoyaltyPointUsed(happenedDate, reason, pointAmount, note));
     }
 
-    public void Delete() =>
+    public void Delete()
+    {
         AddAndApplyEvent(new LoyaltyPointDeleted());
+    }
 }

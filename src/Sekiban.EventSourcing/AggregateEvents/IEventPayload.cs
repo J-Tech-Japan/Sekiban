@@ -1,4 +1,5 @@
-namespace Sekiban.EventSourcing.AggregateEvents
+namespace Sekiban.EventSourcing.AggregateEvents;
+
+public interface IEventPayload
 {
-    public interface IEventPayload { }
 }

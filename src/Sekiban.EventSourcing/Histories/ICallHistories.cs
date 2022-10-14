@@ -1,7 +1,6 @@
-﻿namespace Sekiban.EventSourcing.Histories
+﻿namespace Sekiban.EventSourcing.Histories;
+
+public interface ICallHistories
 {
-    public interface ICallHistories
-    {
-        List<CallHistory> CallHistories { get; init; }
-    }
+    List<CallHistory> CallHistories { get; init; }
 }

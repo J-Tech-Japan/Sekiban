@@ -28,7 +28,7 @@ using Xunit;
 using Xunit.Abstractions;
 namespace SampleProjectStoryXTest.Stories;
 
-public class InMemoryStoryTestBasic : ProjectByTestTestBase
+public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
 {
     private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
     private readonly ISingleAggregateService _aggregateService;
@@ -218,9 +218,7 @@ public class InMemoryStoryTestBasic : ProjectByTestTestBase
         {
             var (recentActivityAddedResult, events9)
                 = await _aggregateCommandExecutor.ExecChangeCommandAsync<RecentActivity, RecentActivityContents, AddRecentActivity>(
-                    new AddRecentActivity(
-                        createRecentActivityResult.AggregateId!.Value,
-                        $"Message - {i + 1}") { ReferenceVersion = version });
+                    new AddRecentActivity(createRecentActivityResult.AggregateId!.Value, $"Message - {i + 1}") { ReferenceVersion = version });
             version = recentActivityAddedResult.Version;
         }
         recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentActivity, RecentActivityContents>();
@@ -267,7 +265,7 @@ public class InMemoryStoryTestBasic : ProjectByTestTestBase
                 Task.Run(
                     async () =>
                     {
-                        var (recentActivityAddedResult,events2)
+                        var (recentActivityAddedResult, events2)
                             = await _aggregateCommandExecutor.ExecChangeCommandAsync<RecentActivity, RecentActivityContents, AddRecentActivity>(
                                 new AddRecentActivity(createRecentActivityResult.AggregateId!.Value, $"Message - {i + 1}")
                                 {
@@ -284,8 +282,7 @@ public class InMemoryStoryTestBasic : ProjectByTestTestBase
             = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<RecentActivity, RecentActivityContents>(
                 createRecentActivityResult.AggregateId!.Value);
         var aggregateRecentActivity2
-            = await _aggregateService.GetAggregateDtoAsync<RecentActivity, RecentActivityContents>(
-                createRecentActivityResult.AggregateId!.Value);
+            = await _aggregateService.GetAggregateDtoAsync<RecentActivity, RecentActivityContents>(createRecentActivityResult.AggregateId!.Value);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + 1, aggregateRecentActivity!.Version);

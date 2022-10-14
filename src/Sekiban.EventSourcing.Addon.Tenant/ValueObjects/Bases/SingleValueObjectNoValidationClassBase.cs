@@ -2,7 +2,9 @@
 
 public abstract record class SingleValueObjectNoValidationClassBase<T> : ISingleValueObject<T>
 {
-    public SingleValueObjectNoValidationClassBase(T value) =>
+    public SingleValueObjectNoValidationClassBase(T value)
+    {
         Value = value;
+    }
     public T Value { get; init; }
 }

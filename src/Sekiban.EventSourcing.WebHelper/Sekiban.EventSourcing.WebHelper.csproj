@@ -6,13 +6,13 @@
         <OutputType>Library</OutputType>
         <RootNamespace>Sekiban.EventSourcing.WebHelper</RootNamespace>
         <PackageId>JJ_Sekiban.EventSourcing.WebHelper</PackageId>
-        <Version>0.7.8</Version>
+        <Version>0.7.98</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework WebHelper</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.7.8</PackageVersion>
-        <Description>QueryFilterListResultのページング処理の修正</Description>
+        <PackageVersion>0.7.9</PackageVersion>
+        <Description>リファクタリング、AggregateProjectionListTestBaseのバグ修正</Description>
         <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
         <LangVersion>11</LangVersion>
         <OpenApiGenerateDocuments>false</OpenApiGenerateDocuments>

@@ -1,4 +1,5 @@
-namespace Sekiban.EventSourcing.Queries.UpdateNotices
+namespace Sekiban.EventSourcing.Queries.UpdateNotices;
+
+public class InMemoryUpdateNotice
 {
-    public class InMemoryUpdateNotice { }
 }

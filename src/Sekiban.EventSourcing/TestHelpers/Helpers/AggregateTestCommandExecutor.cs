@@ -2,7 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Validations;
 using System.ComponentModel.DataAnnotations;
-namespace Sekiban.EventSourcing.TestHelpers;
+namespace Sekiban.EventSourcing.TestHelpers.Helpers;
 
 public class AggregateTestCommandExecutor
 {
@@ -71,11 +71,13 @@ public class AggregateTestCommandExecutor
         var method = singleAggregateService.GetType().GetMethods().FirstOrDefault(m => m.Name == "GetAggregateAsync");
         if (method is null) { throw new Exception("Failed to get Aggregate Service"); }
         var aggregateBaseType = typeof(TAggregate).BaseType;
-        var genericType = aggregateBaseType?.GetGenericTypeDefinition();
+        if (aggregateBaseType is null) { throw new Exception("Failed to get Aggregate Service"); }
+        var genericType = aggregateBaseType.GetGenericTypeDefinition();
         if (genericType != typeof(TransferableAggregateBase<>)) { throw new Exception("Failed to get Aggregate Base Type"); }
         var contentsType = aggregateBaseType.GetGenericArguments()[0];
         var genericMethod = method.MakeGenericMethod(typeof(TAggregate), contentsType);
         var aggregateTask = genericMethod.Invoke(singleAggregateService, new object?[] { aggregateId, null }) as dynamic;
+        if (aggregateTask is null) { throw new Exception("Failed to get Aggregate Service"); }
         var aggregate = aggregateTask.Result;
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TAggregate).Name);
     }

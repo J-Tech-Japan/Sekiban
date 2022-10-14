@@ -34,10 +34,14 @@ public class CreateSekibanMemberHandler : CreateAggregateCommandHandlerBase<Seki
 {
     private readonly ISingleAggregateService _singleAggregateService;
 
-    public CreateSekibanMemberHandler(ISingleAggregateService singleAggregateService) =>
+    public CreateSekibanMemberHandler(ISingleAggregateService singleAggregateService)
+    {
         _singleAggregateService = singleAggregateService;
-    public override Guid GenerateAggregateId(CreateSekibanMember command) =>
-        command.SekibanMemberId;
+    }
+    public override Guid GenerateAggregateId(CreateSekibanMember command)
+    {
+        return command.SekibanMemberId;
+    }
     protected override async Task ExecCreateCommandAsync(SekibanMember aggregate, CreateSekibanMember command)
     {
         var tenant = await _singleAggregateService.GetAggregateDtoAsync<SekibanTenant, SekibanTenantContents>(command.SekibanTenantId);

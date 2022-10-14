@@ -1,7 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Shared;
-namespace Sekiban.EventSourcing.TestHelpers;
+using Sekiban.EventSourcing.TestHelpers.Helpers;
+namespace Sekiban.EventSourcing.TestHelpers.ProjectionTests;
 
 public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> where TDependencyDefinition : IDependencyDefinition, new()
 {
@@ -19,7 +20,7 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         _serviceProvider = services.BuildServiceProvider();
         _commandExecutor = new AggregateTestCommandExecutor(_serviceProvider);
     }
-    protected abstract void SetupDependency(IServiceCollection serviceCollection);
+    protected virtual void SetupDependency(IServiceCollection serviceCollection) { }
 
     public TMultipleProjectionTest SetupMultipleAggregateProjectionTest<TMultipleProjectionTest>()
         where TMultipleProjectionTest : class, ITestHelperEventSubscriber

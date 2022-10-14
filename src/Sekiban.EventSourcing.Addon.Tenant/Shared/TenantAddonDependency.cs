@@ -9,8 +9,10 @@ namespace Sekiban.EventSourcing.Addon.Tenant.Shared;
 public class TenantAddonDependency
 {
 
-    public static Assembly GetAssembly() =>
-        Assembly.GetExecutingAssembly();
+    public static Assembly GetAssembly()
+    {
+        return Assembly.GetExecutingAssembly();
+    }
 
     public static IEnumerable<Type> GetControllerAggregateTypes()
     {

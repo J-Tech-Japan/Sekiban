@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Shared;
-namespace Sekiban.EventSourcing.TestHelpers;
+namespace Sekiban.EventSourcing.TestHelpers.ProjectionTests;
 
 public class
     MultipleAggregateProjectionTestBase<TProjection, TProjectionContents, TDependencyDefinition> : CommonMultipleAggregateProjectionTestBase<

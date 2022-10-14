@@ -3,13 +3,13 @@ using CustomerDomainContext.Aggregates.Branches;
 using CustomerDomainContext.Aggregates.Branches.Commands;
 using CustomerDomainContext.Aggregates.Clients;
 using CustomerDomainContext.Aggregates.Clients.Commands;
-using Sekiban.EventSourcing;
 using Sekiban.EventSourcing.AggregateCommands;
 using Sekiban.EventSourcing.Aggregates;
 using Sekiban.EventSourcing.Documents;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
-using Sekiban.EventSourcing.TestHelpers;
+using Sekiban.EventSourcing.Shared;
+using Sekiban.EventSourcing.TestHelpers.StoryTests;
 using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
@@ -27,9 +27,9 @@ public abstract class QueryPerformanceTestBase : TestBase
     protected readonly IMultipleAggregateProjectionService _multipleAggregateProjectionService;
     protected readonly ITestOutputHelper _testOutputHelper;
     protected QueryPerformanceTestBase(
-        TestFixture testFixture,
+        SekibanTestFixture sekibanTestFixture,
         ITestOutputHelper testOutputHelper,
-        ServiceCollectionExtensions.MultipleProjectionType multipleProjectionType) : base(testFixture, false, multipleProjectionType)
+        ServiceCollectionExtensions.MultipleProjectionType multipleProjectionType) : base(sekibanTestFixture, false, multipleProjectionType)
     {
         _testOutputHelper = testOutputHelper;
         _cosmosDbFactory = GetService<CosmosDbFactory>();

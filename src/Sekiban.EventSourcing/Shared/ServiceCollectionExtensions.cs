@@ -9,8 +9,7 @@ using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Queries.SingleAggregates.SingleProjection;
 using Sekiban.EventSourcing.Queries.UpdateNotices;
 using Sekiban.EventSourcing.Settings;
-using Sekiban.EventSourcing.Shared;
-namespace Sekiban.EventSourcing;
+namespace Sekiban.EventSourcing.Shared;
 
 public static class ServiceCollectionExtensions
 {

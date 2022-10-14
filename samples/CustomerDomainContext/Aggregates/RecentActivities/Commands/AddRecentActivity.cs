@@ -1,17 +1,18 @@
-namespace CustomerDomainContext.Aggregates.RecentActivities.Commands
+namespace CustomerDomainContext.Aggregates.RecentActivities.Commands;
+
+public record AddRecentActivity(Guid RecentActivityId, string Activity) : ChangeAggregateCommandBase<RecentActivity>, INoValidateCommand
 {
-    public record AddRecentActivity(Guid RecentActivityId, string Activity) : ChangeAggregateCommandBase<RecentActivity>, INoValidateCommand
+    public AddRecentActivity() : this(Guid.Empty, string.Empty) { }
+    public override Guid GetAggregateId()
     {
-        public AddRecentActivity() : this(Guid.Empty, string.Empty) { }
-        public override Guid GetAggregateId() =>
-            RecentActivityId;
+        return RecentActivityId;
     }
-    public class AddRecentActivityHandler : ChangeAggregateCommandHandlerBase<RecentActivity, AddRecentActivity>
+}
+public class AddRecentActivityHandler : ChangeAggregateCommandHandlerBase<RecentActivity, AddRecentActivity>
+{
+    protected override async Task ExecCommandAsync(RecentActivity aggregate, AddRecentActivity command)
     {
-        protected override async Task ExecCommandAsync(RecentActivity aggregate, AddRecentActivity command)
-        {
-            aggregate.AddActivity(command.Activity);
-            await Task.CompletedTask;
-        }
+        aggregate.AddActivity(command.Activity);
+        await Task.CompletedTask;
     }
 }

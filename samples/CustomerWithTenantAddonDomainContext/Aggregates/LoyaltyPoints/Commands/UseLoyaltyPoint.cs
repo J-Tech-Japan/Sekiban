@@ -9,8 +9,10 @@ public record UseLoyaltyPoint(
     string Note) : ChangeAggregateCommandBase<LoyaltyPoint>
 {
     public UseLoyaltyPoint() : this(Guid.Empty, DateTime.MinValue, LoyaltyPointUsageTypeKeys.FlightDomestic, 0, string.Empty) { }
-    public override Guid GetAggregateId() =>
-        ClientId;
+    public override Guid GetAggregateId()
+    {
+        return ClientId;
+    }
 }
 public class UseLoyaltyPointHandler : ChangeAggregateCommandHandlerBase<LoyaltyPoint, UseLoyaltyPoint>
 {

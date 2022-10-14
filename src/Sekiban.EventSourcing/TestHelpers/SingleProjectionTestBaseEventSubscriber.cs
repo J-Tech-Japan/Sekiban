@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Shared;
+using Sekiban.EventSourcing.TestHelpers.SingleAggregates;
 using Xunit;
 namespace Sekiban.EventSourcing.TestHelpers;
 

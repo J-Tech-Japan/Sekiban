@@ -3,8 +3,10 @@ using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.QueryModels;
 using Sekiban.EventSourcing.Queries.SingleAggregates;
 using Sekiban.EventSourcing.Shared;
+using Sekiban.EventSourcing.TestHelpers.Helpers;
+using Sekiban.EventSourcing.TestHelpers.QueryFilters;
 using Xunit;
-namespace Sekiban.EventSourcing.TestHelpers;
+namespace Sekiban.EventSourcing.TestHelpers.ProjectionTests;
 
 public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionContents, TDependencyDefinition> : IDisposable,
     IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents>, ITestHelperEventSubscriber

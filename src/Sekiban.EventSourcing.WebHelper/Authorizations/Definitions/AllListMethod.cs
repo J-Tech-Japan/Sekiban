@@ -1,8 +1,9 @@
-﻿namespace Sekiban.EventSourcing.WebHelper.Authorizations.Definitions
+﻿namespace Sekiban.EventSourcing.WebHelper.Authorizations.Definitions;
+
+public class AllListMethod : IAuthorizationDefinitionType
 {
-    public class AllListMethod : IAuthorizationDefinitionType
+    public bool IsMatches(AuthorizeMethodType authorizeMethodType, Type aggregateType, Type? commandType)
     {
-        public bool IsMatches(AuthorizeMethodType authorizeMethodType, Type aggregateType, Type? commandType) =>
-            authorizeMethodType == AuthorizeMethodType.List;
+        return authorizeMethodType == AuthorizeMethodType.List;
     }
 }

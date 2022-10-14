@@ -3,7 +3,9 @@ namespace CustomerWithTenantAddonDomainContext.Aggregates.RecentInMemoryActiviti
 public record RecentInMemoryActivityContents : IAggregateContents
 {
     public List<RecentInMemoryActivityRecord> LatestActivities { get; set; } = new();
-    public RecentInMemoryActivityContents(List<RecentInMemoryActivityRecord> latestActivities) =>
+    public RecentInMemoryActivityContents(List<RecentInMemoryActivityRecord> latestActivities)
+    {
         LatestActivities = latestActivities;
+    }
     public RecentInMemoryActivityContents() { }
 }

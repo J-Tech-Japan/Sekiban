@@ -1,3 +1,5 @@
 namespace CustomerWithTenantAddonDomainContext.Shared.Exceptions;
 
-public class SekibanLoyaltyPointNotEnoughException : Exception, ISekibanException { }
+public class SekibanLoyaltyPointNotEnoughException : Exception, ISekibanException
+{
+}

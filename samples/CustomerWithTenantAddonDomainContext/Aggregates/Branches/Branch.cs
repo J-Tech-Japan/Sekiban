@@ -8,8 +8,9 @@ public class Branch : TransferableAggregateBase<BranchContents>
         AddAndApplyEvent(new BranchCreated(name));
     }
 
-    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload) =>
-        payload switch
+    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload)
+    {
+        return payload switch
         {
             BranchCreated branchCreated => () =>
             {
@@ -17,4 +18,5 @@ public class Branch : TransferableAggregateBase<BranchContents>
             },
             _ => null
         };
+    }
 }
