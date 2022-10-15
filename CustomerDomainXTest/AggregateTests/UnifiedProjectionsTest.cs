@@ -46,7 +46,7 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
 
     private readonly
         SingleAggregateListProjectionListQueryFilterTestChecker<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.ContentsDefinition,
-            ClientNameHistoryProjectionQueryFilter, ClientNameHistoryProjectionParameter, ClientNameHistoryProjectionQueryResponse>
+            ClientNameHistoryProjectionQueryFilter, ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionParameter, ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionQueryResponse>
         _singleAggregateProjectionListQueryFilterTestChecker = new();
 
 
@@ -126,14 +126,14 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
         _singleAggregateProjectionListProjectionTestBase.GivenQueryFilterChecker(_singleAggregateProjectionListQueryFilterTestChecker)
             .WhenProjection()
             .ThenNotThrowsAnException();
-        _singleAggregateProjectionListQueryFilterTestChecker.WhenParam(new ClientNameHistoryProjectionParameter(null, null, null, null, null))
+        _singleAggregateProjectionListQueryFilterTestChecker.WhenParam(new ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionParameter(null, null, null, null, null))
             .ThenResponse(
-                new QueryFilterListResult<ClientNameHistoryProjectionQueryResponse>(
+                new QueryFilterListResult<ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionQueryResponse>(
                     1,
                     null,
                     null,
                     null,
-                    new List<ClientNameHistoryProjectionQueryResponse> { new(_branchId, _clientId, clientName, clientEmail, dateNameSet) }));
+                    new List<ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionQueryResponse> { new(_branchId, _clientId, clientName, clientEmail, dateNameSet) }));
     }
 
 

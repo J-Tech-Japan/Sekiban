@@ -6,6 +6,7 @@ using CustomerDomainContext.Aggregates.Clients.Events;
 using CustomerDomainContext.Aggregates.Clients.Projections;
 using CustomerDomainContext.Shared;
 using Sekiban.EventSourcing.TestHelpers;
+using Sekiban.EventSourcing.TestHelpers.SingleAggregates;
 using System;
 using System.Collections.Generic;
 using System.Linq;

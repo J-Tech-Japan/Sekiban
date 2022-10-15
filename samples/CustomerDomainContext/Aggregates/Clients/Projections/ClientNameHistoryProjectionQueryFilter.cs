@@ -11,18 +11,10 @@ public enum ClientNameHistoryProjectionQueryFilterSortKeys
     ClientEmail
 }
 // ReSharper disable once ClassNeverInstantiated.Global
-public record ClientNameHistoryProjectionParameter(
-    int? PageSize,
-    int? PageNumber,
-    Guid? BranchId,
-    Guid? ClientId,
-    ClientNameHistoryProjectionQueryFilterSortKeys? SortKey,
-    bool SortIsAsc = true) : IQueryFilterParameter;
-public record ClientNameHistoryProjectionQueryResponse(Guid BranchId, Guid ClientId, string ClientName, string ClientEmail, DateTime NameSetAt);
 public class ClientNameHistoryProjectionQueryFilter : ISingleAggregateProjectionListQueryFilterDefinition<Client, ClientNameHistoryProjection,
-    ClientNameHistoryProjection.ContentsDefinition, ClientNameHistoryProjectionParameter, ClientNameHistoryProjectionQueryResponse>
+    ClientNameHistoryProjection.ContentsDefinition, ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionParameter,
+    ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionQueryResponse>
 {
-
     public IEnumerable<ClientNameHistoryProjectionQueryResponse> HandleFilter(
         ClientNameHistoryProjectionParameter queryParam,
         IEnumerable<SingleAggregateProjectionDto<ClientNameHistoryProjection.ContentsDefinition>> list)
@@ -60,4 +52,12 @@ public class ClientNameHistoryProjectionQueryFilter : ISingleAggregateProjection
         }
         return projections;
     }
+    public record ClientNameHistoryProjectionParameter(
+        int? PageSize,
+        int? PageNumber,
+        Guid? BranchId,
+        Guid? ClientId,
+        ClientNameHistoryProjectionQueryFilterSortKeys? SortKey,
+        bool SortIsAsc = true) : IQueryFilterParameter;
+    public record ClientNameHistoryProjectionQueryResponse(Guid BranchId, Guid ClientId, string ClientName, string ClientEmail, DateTime NameSetAt);
 }

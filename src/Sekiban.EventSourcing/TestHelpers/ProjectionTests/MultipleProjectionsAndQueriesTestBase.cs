@@ -41,6 +41,13 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         var events = _commandExecutor.ExecuteChangeCommand(command);
 
     }
+
+    public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GivenCommandExecutorAction(Action<AggregateTestCommandExecutor> action)
+    {
+        action(_commandExecutor);
+        return this;
+    }
+
     public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GivenScenario(Action initialAction)
     {
         initialAction();
