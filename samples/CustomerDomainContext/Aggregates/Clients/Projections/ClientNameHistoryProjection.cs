@@ -21,29 +21,53 @@ public class ClientNameHistoryProjection : SingleAggregateProjectionBase<Client,
     {
         return new ClientNameHistoryProjection(aggregateId);
     }
-
-    protected override Action? GetApplyEventAction(IAggregateEvent ev)
+    protected override Func<AggregateVariable<ContentsDefinition>, AggregateVariable<ContentsDefinition>>? GetApplyEventFunc(
+        IAggregateEvent ev,
+        IEventPayload payload)
     {
-        return ev.GetPayload() switch
+        return payload switch
         {
-            ClientCreated clientCreated => () =>
+            ClientCreated clientCreated => _ =>
             {
-                Contents = new ContentsDefinition(
-                    clientCreated.BranchId,
-                    new List<ClientNameHistoryProjectionRecord> { new(clientCreated.ClientName, ev.TimeStamp) },
-                    clientCreated.ClientEmail);
+                return new AggregateVariable<ContentsDefinition>(
+                    new ContentsDefinition(
+                        clientCreated.BranchId,
+                        new List<ClientNameHistoryProjectionRecord> { new(clientCreated.ClientName, ev.TimeStamp) },
+                        clientCreated.ClientEmail));
             },
 
-            ClientNameChanged clientNameChanged => () =>
+            ClientNameChanged clientNameChanged => variable =>
             {
                 var list = Contents.ClientNames.ToList();
                 list.Add(new ClientNameHistoryProjectionRecord(clientNameChanged.ClientName, ev.TimeStamp));
-                Contents = Contents with { ClientNames = list };
+                return variable with { Contents = Contents with { ClientNames = list } };
             },
-            ClientDeleted => () => IsDeleted = true,
+            ClientDeleted => variable => variable with { IsDeleted = true },
             _ => null
         };
     }
+    // protected override Action? GetApplyEventAction(IAggregateEvent ev)
+    // {
+    //     return ev.GetPayload() switch
+    //     {
+    //         ClientCreated clientCreated => () =>
+    //         {
+    //             Contents = new ContentsDefinition(
+    //                 clientCreated.BranchId,
+    //                 new List<ClientNameHistoryProjectionRecord> { new(clientCreated.ClientName, ev.TimeStamp) },
+    //                 clientCreated.ClientEmail);
+    //         },
+    //
+    //         ClientNameChanged clientNameChanged => () =>
+    //         {
+    //             var list = Contents.ClientNames.ToList();
+    //             list.Add(new ClientNameHistoryProjectionRecord(clientNameChanged.ClientName, ev.TimeStamp));
+    //             Contents = Contents with { ClientNames = list };
+    //         },
+    //         ClientDeleted => () => IsDeleted = true,
+    //         _ => null
+    //     };
+    // }
     public record ContentsDefinition(
         Guid BranchId,
         IReadOnlyCollection<ClientNameHistoryProjectionRecord> ClientNames,
