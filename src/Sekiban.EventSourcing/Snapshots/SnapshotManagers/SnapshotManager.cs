@@ -36,27 +36,51 @@ public class SnapshotManager : TransferableAggregateBase<SnapshotManagerContents
     {
         return $"{aggregateTypeName}_{targetAggregateId.ToString()}_{nextSnapshotVersion}";
     }
-    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload)
+    // protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload)
+    // {
+    //     return payload switch
+    //     {
+    //         SnapshotManagerCreated created => () =>
+    //         {
+    //             Contents = new SnapshotManagerContents();
+    //         },
+    //         SnapshotManagerRequestAdded requestAdded => () =>
+    //         {
+    //             var requests = Contents.Requests.ToList();
+    //             requests.Add(SnapshotKey(requestAdded.AggregateTypeName, requestAdded.TargetAggregateId, requestAdded.NextSnapshotVersion));
+    //             Contents = Contents with { Requests = requests };
+    //         },
+    //         SnapshotManagerSnapshotTaken requestAdded => () =>
+    //         {
+    //             var requests = Contents.Requests.ToList();
+    //             var requestTakens = Contents.RequestTakens.ToList();
+    //             requests.Remove(SnapshotKey(requestAdded.AggregateTypeName, requestAdded.TargetAggregateId, requestAdded.NextSnapshotVersion));
+    //             requestTakens.Add(SnapshotKey(requestAdded.AggregateTypeName, requestAdded.TargetAggregateId, requestAdded.NextSnapshotVersion));
+    //             Contents = Contents with { Requests = requests, RequestTakens = requestTakens };
+    //         },
+    //         _ => null
+    //     };
+    // }
+    protected override Func<AggregateVariable<SnapshotManagerContents>, AggregateVariable<SnapshotManagerContents>>? GetApplyEventFunc(
+        IAggregateEvent ev,
+        IEventPayload payload)
     {
         return payload switch
         {
-            SnapshotManagerCreated created => () =>
+            SnapshotManagerCreated created => variable => new AggregateVariable<SnapshotManagerContents>(new SnapshotManagerContents(), false),
+            SnapshotManagerRequestAdded requestAdded => variable =>
             {
-                Contents = new SnapshotManagerContents();
-            },
-            SnapshotManagerRequestAdded requestAdded => () =>
-            {
-                var requests = Contents.Requests.ToList();
+                var requests = variable.Contents.Requests.ToList();
                 requests.Add(SnapshotKey(requestAdded.AggregateTypeName, requestAdded.TargetAggregateId, requestAdded.NextSnapshotVersion));
-                Contents = Contents with { Requests = requests };
+                return variable with { Contents = Contents with { Requests = requests } };
             },
-            SnapshotManagerSnapshotTaken requestAdded => () =>
+            SnapshotManagerSnapshotTaken requestAdded => variable =>
             {
                 var requests = Contents.Requests.ToList();
                 var requestTakens = Contents.RequestTakens.ToList();
                 requests.Remove(SnapshotKey(requestAdded.AggregateTypeName, requestAdded.TargetAggregateId, requestAdded.NextSnapshotVersion));
                 requestTakens.Add(SnapshotKey(requestAdded.AggregateTypeName, requestAdded.TargetAggregateId, requestAdded.NextSnapshotVersion));
-                Contents = Contents with { Requests = requests, RequestTakens = requestTakens };
+                return variable with { Contents = Contents with { Requests = requests, RequestTakens = requestTakens } };
             },
             _ => null
         };
