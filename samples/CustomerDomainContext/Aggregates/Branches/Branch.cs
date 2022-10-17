@@ -7,18 +7,6 @@ public class Branch : TransferableAggregateBase<BranchContents>
     {
         AddAndApplyEvent(new BranchCreated(name));
     }
-
-    // protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload)
-    // {
-    //     return payload switch
-    //     {
-    //         BranchCreated branchCreated => () =>
-    //         {
-    //             Contents = new BranchContents { Name = branchCreated.Name };
-    //         },
-    //         _ => null
-    //     };
-    // }
     protected override Func<AggregateVariable<BranchContents>, AggregateVariable<BranchContents>>? GetApplyEventFunc(
         IAggregateEvent ev,
         IEventPayload payload)
