@@ -2,12 +2,6 @@ name: Run Backend Test
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
-    paths:
-      - "src/**"
-      - "test/**"
-      - "samples/**"
   pull_request:
     branches: [ main ]
     paths:
