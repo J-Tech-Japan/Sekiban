@@ -4,7 +4,7 @@ using CustomerDomainContext.Shared;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.TestHelpers.QueryFilters;
 using System;
-using System.Collections.Generic;
+using System.Collections.Immutable;
 using Xunit;
 namespace CustomerDomainXTest.AggregateTests;
 
@@ -27,8 +27,9 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMu
             .ThenDto(
                 new MultipleAggregateProjectionContentsDto<ClientLoyaltyPointMultipleProjection.ContentsDefinition>(
                     new ClientLoyaltyPointMultipleProjection.ContentsDefinition(
-                        new List<ClientLoyaltyPointMultipleProjection.ProjectedBranch> { new(branchId, branchName) },
-                        new List<ClientLoyaltyPointMultipleProjection.ProjectedRecord>()),
+                        ImmutableList<ClientLoyaltyPointMultipleProjection.ProjectedBranch>.Empty.Add(
+                            new ClientLoyaltyPointMultipleProjection.ProjectedBranch(branchId, branchName)),
+                        ImmutableList<ClientLoyaltyPointMultipleProjection.ProjectedRecord>.Empty),
                     Guid.Empty,
                     string.Empty,
                     0,

@@ -5,6 +5,7 @@ using CustomerDomainContext.Aggregates.Clients.Events;
 using CustomerDomainContext.Aggregates.LoyaltyPoints;
 using CustomerDomainContext.Aggregates.LoyaltyPoints.Events;
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
+using System.Collections.Immutable;
 namespace CustomerDomainContext.Projections.ClientLoyaltyPointMultiples;
 
 public class ClientLoyaltyPointMultipleProjection : MultipleAggregateProjectionBase<ClientLoyaltyPointMultipleProjection.ContentsDefinition>
@@ -17,54 +18,51 @@ public class ClientLoyaltyPointMultipleProjection : MultipleAggregateProjectionB
     {
         return payload switch
         {
-            BranchCreated branchCreated => contents =>
+            BranchCreated branchCreated => contents => contents with
             {
-                var list = contents.Branches.ToList();
-                list.Add(new ProjectedBranch(ev.AggregateId, branchCreated.Name));
-                return contents with { Branches = list };
+                Branches = contents.Branches.Append(new ProjectedBranch(ev.AggregateId, branchCreated.Name)).ToImmutableList()
             },
-            ClientCreated clientCreated => contents =>
+            ClientCreated clientCreated => contents => contents with
             {
-                var list = contents.Records.ToList();
-                list.Add(
-                    new ProjectedRecord(
-                        clientCreated.BranchId,
-                        contents.Branches.First(m => m.BranchId == clientCreated.BranchId).BranchName,
-                        ev.AggregateId,
-                        clientCreated.ClientName,
-                        0));
-                return contents with { Records = list };
+                Records = contents.Records.Append(
+                        new ProjectedRecord(
+                            clientCreated.BranchId,
+                            contents.Branches.First(m => m.BranchId == clientCreated.BranchId).BranchName,
+                            ev.AggregateId,
+                            clientCreated.ClientName,
+                            0))
+                    .ToImmutableList()
             },
             ClientNameChanged clientNameChanged => contents => contents with
             {
                 Records = contents.Records.Select(m => m.ClientId == ev.AggregateId ? m with { ClientName = clientNameChanged.ClientName } : m)
-                    .ToList()
+                    .ToImmutableList()
             },
-            ClientDeleted clientDeleted => contents => contents with { Records = contents.Records.Where(m => m.ClientId != ev.AggregateId).ToList() },
+            ClientDeleted => contents => contents with { Records = contents.Records.Where(m => m.ClientId != ev.AggregateId).ToImmutableList() },
             LoyaltyPointCreated loyaltyPointCreated => contents => contents with
             {
                 Records = contents.Records.Select(m => m.ClientId == ev.AggregateId ? m with { Point = loyaltyPointCreated.InitialPoint } : m)
-                    .ToList()
+                    .ToImmutableList()
             },
             LoyaltyPointAdded loyaltyPointAdded => contents => contents with
             {
                 Records = contents.Records.Select(
                         m => m.ClientId == ev.AggregateId ? m with { Point = m.Point + loyaltyPointAdded.PointAmount } : m)
-                    .ToList()
+                    .ToImmutableList()
             },
             LoyaltyPointUsed loyaltyPointUsed => contents => contents with
             {
                 Records = contents.Records.Select(
                         m => m.ClientId == ev.AggregateId ? m with { Point = m.Point - loyaltyPointUsed.PointAmount } : m)
-                    .ToList()
+                    .ToImmutableList()
             },
             _ => null
         };
     }
     public record ContentsDefinition
-        (IReadOnlyCollection<ProjectedBranch> Branches, IReadOnlyCollection<ProjectedRecord> Records) : IMultipleAggregateProjectionContents
+        (ImmutableList<ProjectedBranch> Branches, ImmutableList<ProjectedRecord> Records) : IMultipleAggregateProjectionContents
     {
-        public ContentsDefinition() : this(new List<ProjectedBranch>(), new List<ProjectedRecord>()) { }
+        public ContentsDefinition() : this(ImmutableList<ProjectedBranch>.Empty, ImmutableList<ProjectedRecord>.Empty) { }
     }
     public record ProjectedBranch(Guid BranchId, string BranchName);
 

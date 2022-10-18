@@ -14,6 +14,7 @@ using Sekiban.EventSourcing.TestHelpers.ProjectionTests;
 using Sekiban.EventSourcing.TestHelpers.QueryFilters;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using Xunit;
 namespace CustomerDomainXTest.AggregateTests;
@@ -44,10 +45,10 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
         SingleAggregateProjectionListProjectionTestBase<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.ContentsDefinition,
             CustomerDependency> _singleAggregateProjectionListProjectionTestBase;
 
-    private readonly
-        SingleAggregateListProjectionListQueryFilterTestChecker<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.ContentsDefinition,
-            ClientNameHistoryProjectionQueryFilter, ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionParameter, ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionQueryResponse>
-        _singleAggregateProjectionListQueryFilterTestChecker = new();
+    private readonly SingleAggregateListProjectionListQueryFilterTestChecker<Client, ClientNameHistoryProjection,
+        ClientNameHistoryProjection.ContentsDefinition, ClientNameHistoryProjectionQueryFilter,
+        ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionParameter,
+        ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionQueryResponse> _singleAggregateProjectionListQueryFilterTestChecker = new();
 
 
     private readonly string branchName = "BranchName";
@@ -97,8 +98,10 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
             .ThenNotThrowsAnException()
             .ThenContents(
                 new ClientLoyaltyPointMultipleProjection.ContentsDefinition(
-                    new List<ClientLoyaltyPointMultipleProjection.ProjectedBranch> { new(_branchId, branchName) },
-                    new List<ClientLoyaltyPointMultipleProjection.ProjectedRecord> { new(_branchId, branchName, _clientId, clientName, 0) }));
+                    ImmutableList<ClientLoyaltyPointMultipleProjection.ProjectedBranch>.Empty.Add(
+                        new ClientLoyaltyPointMultipleProjection.ProjectedBranch(_branchId, branchName)),
+                    ImmutableList<ClientLoyaltyPointMultipleProjection.ProjectedRecord>.Empty.Add(
+                        new ClientLoyaltyPointMultipleProjection.ProjectedRecord(_branchId, branchName, _clientId, clientName, 0))));
         _projectionQueryFilterTestChecker
             .WhenParam(
                 new ClientLoyaltyPointMultipleProjectionQueryFilter.QueryFilterParameter(
@@ -106,8 +109,10 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
                     ClientLoyaltyPointMultipleProjectionQueryFilter.QuerySortKeys.ClientName))
             .ThenResponse(
                 new ClientLoyaltyPointMultipleProjection.ContentsDefinition(
-                    new List<ClientLoyaltyPointMultipleProjection.ProjectedBranch> { new(_branchId, branchName) },
-                    new List<ClientLoyaltyPointMultipleProjection.ProjectedRecord> { new(_branchId, branchName, _clientId, clientName, 0) }));
+                    ImmutableList<ClientLoyaltyPointMultipleProjection.ProjectedBranch>.Empty.Add(
+                        new ClientLoyaltyPointMultipleProjection.ProjectedBranch(_branchId, branchName)),
+                    ImmutableList<ClientLoyaltyPointMultipleProjection.ProjectedRecord>.Empty.Add(
+                        new ClientLoyaltyPointMultipleProjection.ProjectedRecord(_branchId, branchName, _clientId, clientName, 0))));
     }
 
     [Fact]
@@ -126,14 +131,18 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
         _singleAggregateProjectionListProjectionTestBase.GivenQueryFilterChecker(_singleAggregateProjectionListQueryFilterTestChecker)
             .WhenProjection()
             .ThenNotThrowsAnException();
-        _singleAggregateProjectionListQueryFilterTestChecker.WhenParam(new ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionParameter(null, null, null, null, null))
+        _singleAggregateProjectionListQueryFilterTestChecker
+            .WhenParam(new ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionParameter(null, null, null, null, null))
             .ThenResponse(
                 new QueryFilterListResult<ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionQueryResponse>(
                     1,
                     null,
                     null,
                     null,
-                    new List<ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionQueryResponse> { new(_branchId, _clientId, clientName, clientEmail, dateNameSet) }));
+                    new List<ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionQueryResponse>
+                    {
+                        new(_branchId, _clientId, clientName, clientEmail, dateNameSet)
+                    }));
     }
 
 
@@ -150,7 +159,9 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
                     ClientLoyaltyPointMultipleProjectionQueryFilter.QuerySortKeys.ClientName))
             .ThenResponse(
                 new ClientLoyaltyPointMultipleProjection.ContentsDefinition(
-                    new List<ClientLoyaltyPointMultipleProjection.ProjectedBranch> { new(_branchId, branchName) },
-                    new List<ClientLoyaltyPointMultipleProjection.ProjectedRecord> { new(_branchId, branchName, _clientId, clientName2, 0) }));
+                    ImmutableList<ClientLoyaltyPointMultipleProjection.ProjectedBranch>.Empty.Add(
+                        new ClientLoyaltyPointMultipleProjection.ProjectedBranch(_branchId, branchName)),
+                    ImmutableList<ClientLoyaltyPointMultipleProjection.ProjectedRecord>.Empty.Add(
+                        new ClientLoyaltyPointMultipleProjection.ProjectedRecord(_branchId, branchName, _clientId, clientName2, 0))));
     }
 }

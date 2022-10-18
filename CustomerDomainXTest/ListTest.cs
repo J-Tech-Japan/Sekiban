@@ -31,6 +31,5 @@ public class ListTest
         Assert.Single(second);
 
     }
-
     public record Record(string Name, int Age);
 }

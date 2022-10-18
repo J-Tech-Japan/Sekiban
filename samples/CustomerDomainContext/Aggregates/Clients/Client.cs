@@ -13,15 +13,11 @@ public class Client : TransferableAggregateBase<ClientContents>
     {
         return payload switch
         {
-            ClientCreated clientChanged => variable => new AggregateVariable<ClientContents>(
-                new ClientContents(clientChanged.BranchId, clientChanged.ClientName, clientChanged.ClientEmail),
-                IsDeleted),
-
+            ClientCreated clientChanged => _ => new AggregateVariable<ClientContents>(
+                new ClientContents(clientChanged.BranchId, clientChanged.ClientName, clientChanged.ClientEmail)),
             ClientNameChanged clientNameChanged => variable =>
                 variable with { Contents = Contents with { ClientName = clientNameChanged.ClientName } },
-
             ClientDeleted => variable => variable with { IsDeleted = true },
-
             _ => null
         };
     }

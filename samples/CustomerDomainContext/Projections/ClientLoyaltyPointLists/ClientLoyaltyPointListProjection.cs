@@ -20,19 +20,17 @@ public class ClientLoyaltyPointListProjection : MultipleAggregateProjectionBase<
         {
             BranchCreated branchCreated => contents => contents with
             {
-                Branches = contents.Branches.Append(new ProjectedBranchInternal { BranchId = ev.AggregateId, BranchName = branchCreated.Name })
-                    .ToImmutableList()
+                Branches = contents.Branches.Add(new ProjectedBranchInternal { BranchId = ev.AggregateId, BranchName = branchCreated.Name })
             },
             ClientCreated clientCreated => contents => contents with
             {
-                Records = contents.Records.Append(
-                        new ClientLoyaltyPointListRecord(
-                            clientCreated.BranchId,
-                            contents.Branches.First(m => m.BranchId == clientCreated.BranchId).BranchName,
-                            ev.AggregateId,
-                            clientCreated.ClientName,
-                            0))
-                    .ToImmutableList()
+                Records = contents.Records.Add(
+                    new ClientLoyaltyPointListRecord(
+                        clientCreated.BranchId,
+                        contents.Branches.First(m => m.BranchId == clientCreated.BranchId).BranchName,
+                        ev.AggregateId,
+                        clientCreated.ClientName,
+                        0))
             },
             ClientNameChanged clientNameChanged => contents => contents with
             {
