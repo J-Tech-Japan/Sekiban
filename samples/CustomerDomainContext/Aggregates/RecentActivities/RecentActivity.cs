@@ -9,28 +9,6 @@ public class RecentActivity : TransferableAggregateBase<RecentActivityContents>
     {
         AddAndApplyEvent(new RecentActivityCreated(new RecentActivityRecord(firstActivity, DateTime.UtcNow)));
     }
-
-    // protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload)
-    // {
-    //     return payload switch
-    //     {
-    //         RecentActivityCreated created => () =>
-    //         {
-    //             Contents = new RecentActivityContents(new List<RecentActivityRecord> { created.Activity });
-    //         },
-    //         RecentActivityAdded added => () =>
-    //         {
-    //             var records = Contents.LatestActivities.ToList();
-    //             records.Insert(0, added.Record);
-    //             if (records.Count > 5)
-    //             {
-    //                 records.RemoveRange(5, records.Count - 5);
-    //             }
-    //             Contents = new RecentActivityContents(records);
-    //         },
-    //         _ => null
-    //     };
-    // }
     protected override Func<AggregateVariable<RecentActivityContents>, AggregateVariable<RecentActivityContents>>? GetApplyEventFunc(
         IAggregateEvent ev,
         IEventPayload payload)
@@ -39,15 +17,15 @@ public class RecentActivity : TransferableAggregateBase<RecentActivityContents>
         {
             RecentActivityCreated created => _ =>
                 new AggregateVariable<RecentActivityContents>(new RecentActivityContents(new List<RecentActivityRecord> { created.Activity })),
-            RecentActivityAdded added => variable =>
+            RecentActivityAdded added => variable => variable with
             {
-                var records = variable.Contents.LatestActivities.ToList();
-                records.Insert(0, added.Record);
-                if (records.Count > 5)
+                Contents = Contents with
                 {
-                    records.RemoveRange(5, records.Count - 5);
+                    LatestActivities = variable.Contents.LatestActivities.Append(added.Record)
+                        .OrderByDescending(m => m.OccuredAt)
+                        .Take(5)
+                        .ToList()
                 }
-                return variable with { Contents = new RecentActivityContents(records) };
             },
             _ => null
         };

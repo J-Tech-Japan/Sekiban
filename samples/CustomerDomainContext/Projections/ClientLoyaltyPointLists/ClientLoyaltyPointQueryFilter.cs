@@ -1,6 +1,7 @@
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.QueryModels;
 using Sekiban.EventSourcing.Queries.QueryModels.Parameters;
+using System.Collections.Immutable;
 namespace CustomerDomainContext.Projections.ClientLoyaltyPointLists;
 
 public class ClientLoyaltyPointQueryFilter : IProjectionListQueryFilterDefinition<ClientLoyaltyPointListProjection,
@@ -75,11 +76,11 @@ public class ClientLoyaltyPointQueryFilter : IProjectionListQueryFilterDefinitio
         var result = projection.Contents.Records;
         if (queryParam.BranchId.HasValue)
         {
-            result = result.Where(x => x.BranchId == queryParam.BranchId.Value).ToList();
+            result = result.Where(x => x.BranchId == queryParam.BranchId.Value).ToImmutableList();
         }
         if (queryParam.ClientId.HasValue)
         {
-            result = result.Where(x => x.ClientId == queryParam.ClientId.Value).ToList();
+            result = result.Where(x => x.ClientId == queryParam.ClientId.Value).ToImmutableList();
         }
         return result;
     }
