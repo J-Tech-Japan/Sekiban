@@ -22,6 +22,9 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\..\samples\CustomerDomainContext\CustomerDomainContext.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Core\Sekiban.Core.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Testing\Sekiban.Testing.csproj" />
         <ProjectReference Include="..\samples\CustomerDomainContext\CustomerDomainContext.csproj" />
         <ProjectReference Include="..\src\Sekiban.Core\Sekiban.Core.csproj" />
         <ProjectReference Include="..\src\Sekiban.Testing\Sekiban.Testing.csproj" />
