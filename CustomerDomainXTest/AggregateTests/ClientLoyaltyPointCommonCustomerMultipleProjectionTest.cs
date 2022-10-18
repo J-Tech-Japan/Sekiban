@@ -1,8 +1,8 @@
 using CustomerDomainContext.Aggregates.Branches.Events;
 using CustomerDomainContext.Projections.ClientLoyaltyPointMultiples;
 using CustomerDomainContext.Shared;
-using Sekiban.EventSourcing.Queries.MultipleAggregates;
-using Sekiban.EventSourcing.TestHelpers.QueryFilters;
+using Sekiban.Core.Query.MultipleAggregate;
+using Sekiban.Testing.QueryFilter;
 using System;
 using System.Collections.Immutable;
 using Xunit;

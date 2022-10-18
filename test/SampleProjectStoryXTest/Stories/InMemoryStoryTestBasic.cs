@@ -12,14 +12,14 @@ using CustomerDomainContext.Aggregates.RecentInMemoryActivities;
 using CustomerDomainContext.Aggregates.RecentInMemoryActivities.Commands;
 using CustomerDomainContext.Projections.ClientLoyaltyPointMultiples;
 using CustomerDomainContext.Shared.Exceptions;
-using Sekiban.EventSourcing.AggregateCommands;
-using Sekiban.EventSourcing.Aggregates;
-using Sekiban.EventSourcing.Queries;
-using Sekiban.EventSourcing.Queries.MultipleAggregates;
-using Sekiban.EventSourcing.Queries.SingleAggregates;
-using Sekiban.EventSourcing.Shared.Exceptions;
-using Sekiban.EventSourcing.Snapshots;
-using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
+using Sekiban.Core.Aggregate;
+using Sekiban.Core.Command;
+using Sekiban.Core.Exceptions;
+using Sekiban.Core.Query;
+using Sekiban.Core.Query.MultipleAggregate;
+using Sekiban.Core.Query.SingleAggregate;
+using Sekiban.Core.Snapshot;
+using Sekiban.Core.Snapshot.Aggregate;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -303,8 +303,8 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         }
     }
 
-    private async Task CheckSnapshots<T, TContents>(List<SnapshotDocument> snapshots, Guid aggregateId)
-        where T : AggregateBase<TContents>, new() where TContents : IAggregateContents, new()
+    private async Task CheckSnapshots<T, TContents>(List<SnapshotDocument> snapshots, Guid aggregateId) where T : AggregateBase<TContents>, new()
+        where TContents : IAggregateContents, new()
     {
         foreach (var dto in snapshots.Select(snapshot => snapshot.ToDto<AggregateDto<TContents>>()))
         {

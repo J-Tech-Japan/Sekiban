@@ -1,4 +1,6 @@
 using CustomerDomainContext.Aggregates.RecentActivities.Events;
+using Sekiban.Core.Aggregate;
+using Sekiban.Core.Event;
 namespace CustomerDomainContext.Aggregates.RecentActivities;
 
 [AggregateContainerGroup(AggregateContainerGroup.Dissolvable)]

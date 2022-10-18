@@ -1,4 +1,6 @@
 using CustomerDomainContext.Aggregates.Clients.Events;
+using Sekiban.Core.Aggregate;
+using Sekiban.Core.Event;
 namespace CustomerDomainContext.Aggregates.Clients;
 
 public class Client : AggregateBase<ClientContents>

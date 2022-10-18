@@ -1,6 +1,6 @@
 using CustomerDomainContext.Aggregates.Branches.Commands;
 using CustomerDomainContext.Aggregates.Clients.Commands;
-using Sekiban.EventSourcing.TestHelpers.Helpers;
+using Sekiban.Testing.Command;
 using System;
 namespace CustomerDomainXTest.AggregateTests.CommandsHelpers;
 

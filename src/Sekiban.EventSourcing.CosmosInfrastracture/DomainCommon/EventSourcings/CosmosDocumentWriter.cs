@@ -1,4 +1,8 @@
-namespace CosmosInfrastructure.DomainCommon.EventSourcings;
+using Sekiban.Core.Aggregate;
+using Sekiban.Core.Document;
+using Sekiban.Core.Event;
+using Sekiban.Core.PubSub;
+namespace Sekiban.Infrastructure.Cosmos.DomainCommon.EventSourcings;
 
 public class CosmosDocumentWriter : IDocumentPersistentWriter
 {

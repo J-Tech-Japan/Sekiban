@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
-using Sekiban.EventSourcing.Shared;
-using Sekiban.EventSourcing.TestHelpers.StoryTests;
+using Sekiban.Core.Dependency;
+using Sekiban.Testing.Story;
 using System;
 using Xunit;
 namespace SampleProjectStoryXTest;

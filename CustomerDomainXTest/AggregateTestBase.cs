@@ -1,6 +1,6 @@
 using CustomerDomainContext.Shared;
-using Sekiban.EventSourcing.Aggregates;
-using Sekiban.EventSourcing.TestHelpers.SingleAggregates;
+using Sekiban.Core.Aggregate;
+using Sekiban.Testing.SingleAggregate;
 namespace CustomerDomainXTest;
 
 public class AggregateTestBase<TAggregate, TContents> : SingleAggregateTestBase<TAggregate, TContents, CustomerDependency>

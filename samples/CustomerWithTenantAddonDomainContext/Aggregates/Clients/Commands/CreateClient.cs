@@ -1,7 +1,9 @@
 ﻿using CustomerWithTenantAddonDomainContext.Aggregates.Branches;
 using CustomerWithTenantAddonDomainContext.Shared.Exceptions;
-using Sekiban.EventSourcing.Queries.MultipleAggregates;
-using Sekiban.EventSourcing.Queries.SingleAggregates;
+using Sekiban.Core.Command;
+using Sekiban.Core.Exceptions;
+using Sekiban.Core.Query.MultipleAggregate;
+using Sekiban.Core.Query.SingleAggregate;
 using System.ComponentModel.DataAnnotations;
 namespace CustomerWithTenantAddonDomainContext.Aggregates.Clients.Commands;
 

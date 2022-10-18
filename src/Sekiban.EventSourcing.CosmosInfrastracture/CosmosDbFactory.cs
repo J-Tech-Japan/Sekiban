@@ -2,9 +2,13 @@ using Microsoft.Azure.Cosmos.Linq;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Sekiban.EventSourcing.Settings;
-using Sekiban.EventSourcing.Shared;
-namespace CosmosInfrastructure;
+using Sekiban.Core.Aggregate;
+using Sekiban.Core.Document;
+using Sekiban.Core.Event;
+using Sekiban.Core.Setting;
+using Sekiban.Core.Shared;
+using Sekiban.Infrastructure.Cosmos.Lib.Json;
+namespace Sekiban.Infrastructure.Cosmos;
 
 public class CosmosDbFactory
 {

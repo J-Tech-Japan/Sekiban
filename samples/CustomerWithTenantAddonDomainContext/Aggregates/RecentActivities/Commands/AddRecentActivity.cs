@@ -1,3 +1,4 @@
+using Sekiban.Core.Command;
 namespace CustomerWithTenantAddonDomainContext.Aggregates.RecentActivities.Commands;
 
 public record AddRecentActivity(Guid RecentActivityId, string Activity) : ChangeAggregateCommandBase<RecentActivity>, INoValidateCommand

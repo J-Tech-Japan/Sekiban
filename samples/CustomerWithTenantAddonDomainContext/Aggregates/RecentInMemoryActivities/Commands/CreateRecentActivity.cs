@@ -1,3 +1,4 @@
+using Sekiban.Core.Command;
 namespace CustomerWithTenantAddonDomainContext.Aggregates.RecentInMemoryActivities.Commands;
 
 public record CreateRecentInMemoryActivity : ICreateAggregateCommand<RecentInMemoryActivity>;

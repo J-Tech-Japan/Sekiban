@@ -1,4 +1,4 @@
-using Sekiban.EventSourcing.TestHelpers.StoryTests;
+using Sekiban.Testing.Story;
 using System;
 namespace SampleProjectStoryXTest;
 

@@ -1,9 +1,10 @@
-using CosmosInfrastructure;
 using CustomerDomainContext.Shared;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Sekiban.EventSourcing.Shared;
-using Sekiban.EventSourcing.TestHelpers.StoryTests;
+using Sekiban.Core.Dependency;
+using Sekiban.Core.Shared;
+using Sekiban.Infrastructure.Cosmos;
+using Sekiban.Testing.Story;
 namespace SampleProjectStoryXTest;
 
 public static class DependencyHelper

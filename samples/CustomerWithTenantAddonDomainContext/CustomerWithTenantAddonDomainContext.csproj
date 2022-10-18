@@ -9,9 +9,9 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Sekiban.EventSourcing.Addon.Tenant\Sekiban.EventSourcing.Addon.Tenant.csproj"/>
-        <ProjectReference Include="..\ESSampleProjectLib\ESSampleProjectLib.csproj"/>
-        <ProjectReference Include="..\..\src\Sekiban.EventSourcing\Sekiban.EventSourcing.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Addon.Tenant\Sekiban.Addon.Tenant.csproj" />
+        <ProjectReference Include="..\ESSampleProjectLib\ESSampleProjectLib.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Core\Sekiban.Core.csproj" />
     </ItemGroup>
 
 </Project>

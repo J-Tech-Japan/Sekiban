@@ -16,7 +16,9 @@ using CustomerDomainContext.Aggregates.RecentInMemoryActivities;
 using CustomerDomainContext.Aggregates.RecentInMemoryActivities.Commands;
 using CustomerDomainContext.Projections.ClientLoyaltyPointLists;
 using CustomerDomainContext.Projections.ClientLoyaltyPointMultiples;
-using Sekiban.EventSourcing.Shared;
+using Sekiban.Core.Command;
+using Sekiban.Core.Dependency;
+using Sekiban.Core.Event;
 using System.Reflection;
 namespace CustomerDomainContext.Shared;
 

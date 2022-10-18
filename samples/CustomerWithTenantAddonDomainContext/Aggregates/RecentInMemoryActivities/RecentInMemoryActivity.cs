@@ -1,4 +1,6 @@
 using CustomerWithTenantAddonDomainContext.Aggregates.RecentInMemoryActivities.Events;
+using Sekiban.Core.Aggregate;
+using Sekiban.Core.Event;
 namespace CustomerWithTenantAddonDomainContext.Aggregates.RecentInMemoryActivities;
 
 [AggregateContainerGroup(AggregateContainerGroup.InMemoryContainer)]

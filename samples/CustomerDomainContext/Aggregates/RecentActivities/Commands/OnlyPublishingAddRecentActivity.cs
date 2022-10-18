@@ -1,5 +1,6 @@
 using CustomerDomainContext.Aggregates.RecentActivities.Events;
-using Sekiban.EventSourcing.Shared;
+using Sekiban.Core.Command;
+using Sekiban.Core.Shared;
 namespace CustomerDomainContext.Aggregates.RecentActivities.Commands;
 
 public record OnlyPublishingAddRecentActivity(Guid RecentActivityId, string Activity) : ChangeAggregateCommandBase<RecentActivity>,

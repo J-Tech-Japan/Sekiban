@@ -1,5 +1,6 @@
-using Sekiban.EventSourcing.Queries.QueryModels;
-using Sekiban.EventSourcing.Queries.QueryModels.Parameters;
+using Sekiban.Core.Aggregate;
+using Sekiban.Core.Query.QueryModel;
+using Sekiban.Core.Query.QueryModel.Parameters;
 namespace CustomerDomainContext.Aggregates.Clients.QueryFilters.BasicClientFilters;
 
 public enum BasicClientQueryFilterSortKey

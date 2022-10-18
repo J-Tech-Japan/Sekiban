@@ -1,7 +1,7 @@
 ﻿using Azure.Core.Serialization;
-using Sekiban.EventSourcing.Shared;
+using Sekiban.Core.Shared;
 using System.Text.Json;
-namespace CosmosInfrastructure.Lib.Json;
+namespace Sekiban.Infrastructure.Cosmos.Lib.Json;
 
 public class SekibanCosmosSerializer : CosmosSerializer
 {

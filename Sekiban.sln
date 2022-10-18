@@ -3,11 +3,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.1.32328.378
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Sekiban.EventSourcing", "src\Sekiban.EventSourcing\Sekiban.EventSourcing.csproj", "{55BD846C-C1F0-4187-A0D7-2013EEEFDBCE}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Sekiban.Core", "src\Sekiban.Core\Sekiban.Core.csproj", "{55BD846C-C1F0-4187-A0D7-2013EEEFDBCE}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Lib", "Lib", "{76D7B2DA-2E6B-4078-AC01-B29BCA83411A}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Sekiban.EventSourcing.CosmosInfrastructure", "src\Sekiban.EventSourcing.CosmosInfrastracture\Sekiban.EventSourcing.CosmosInfrastructure.csproj", "{F6F5A43D-3E80-4B39-8A56-13F2A6B61EC7}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Sekiban.Infrastructure.Cosmos", "src\Sekiban.EventSourcing.CosmosInfrastracture\Sekiban.Infrastructure.Cosmos.csproj", "{F6F5A43D-3E80-4B39-8A56-13F2A6B61EC7}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Samples", "Samples", "{B85F80AE-6A27-402C-93FA-352D938EDA8D}"
 EndProject
@@ -21,9 +21,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{4C34F748
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SampleProjectStoryXTest", "test\SampleProjectStoryXTest\SampleProjectStoryXTest.csproj", "{36525982-9318-4E08-BE0E-2731A9AD8E42}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.EventSourcing.WebHelper", "src\Sekiban.EventSourcing.WebHelper\Sekiban.EventSourcing.WebHelper.csproj", "{8BD77123-2671-45D8-989B-B176F09665A7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Addon.Web", "src\Sekiban.Addon.Web\Sekiban.Addon.Web.csproj", "{8BD77123-2671-45D8-989B-B176F09665A7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.EventSourcing.Addon.Tenant", "src\Sekiban.EventSourcing.Addon.Tenant\Sekiban.EventSourcing.Addon.Tenant.csproj", "{E7D00F8D-7535-4318-B8EC-BF4BDC0AF64D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Addon.Tenant", "src\Sekiban.Addon.Tenant\Sekiban.Addon.Tenant.csproj", "{E7D00F8D-7535-4318-B8EC-BF4BDC0AF64D}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CustomerWithTenantAddonWebApi", "samples\CustomerWithTenantAddonWebApi\CustomerWithTenantAddonWebApi.csproj", "{7EF23AB5-8743-495B-940C-F82EFC0FF7C4}"
 EndProject
@@ -32,6 +32,10 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CustomerWithTenantAddonXTest", "test\CustomerWithTenantAddonXTest\CustomerWithTenantAddonXTest.csproj", "{507C9A1E-90CC-4139-80BE-DDCDB49620BB}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CustomerDomainXTest", "CustomerDomainXTest\CustomerDomainXTest.csproj", "{6C99DD76-6B5E-4B64-9DF2-CF4264952AB0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Testing", "src\Sekiban.Testing\Sekiban.Testing.csproj", "{F59AF613-4111-486E-8F76-C51F116FDDE6}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Addon", "Addon", "{92AB1CDB-7E0D-4F08-AAC9-D2FF59853545}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -87,6 +91,10 @@ Global
 		{6C99DD76-6B5E-4B64-9DF2-CF4264952AB0}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6C99DD76-6B5E-4B64-9DF2-CF4264952AB0}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6C99DD76-6B5E-4B64-9DF2-CF4264952AB0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F59AF613-4111-486E-8F76-C51F116FDDE6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F59AF613-4111-486E-8F76-C51F116FDDE6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F59AF613-4111-486E-8F76-C51F116FDDE6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F59AF613-4111-486E-8F76-C51F116FDDE6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -98,12 +106,13 @@ Global
 		{B29502DD-FDC4-4384-9639-B504E5A9E1CA} = {B85F80AE-6A27-402C-93FA-352D938EDA8D}
 		{5ED1D505-37C6-4025-B991-8D0A7E1FD75F} = {B85F80AE-6A27-402C-93FA-352D938EDA8D}
 		{36525982-9318-4E08-BE0E-2731A9AD8E42} = {4C34F748-F223-44DD-899D-029F9CEF7780}
-		{8BD77123-2671-45D8-989B-B176F09665A7} = {76D7B2DA-2E6B-4078-AC01-B29BCA83411A}
-		{E7D00F8D-7535-4318-B8EC-BF4BDC0AF64D} = {76D7B2DA-2E6B-4078-AC01-B29BCA83411A}
 		{7EF23AB5-8743-495B-940C-F82EFC0FF7C4} = {B85F80AE-6A27-402C-93FA-352D938EDA8D}
 		{4AD386EF-913C-484E-90F6-03E191FC93B9} = {B85F80AE-6A27-402C-93FA-352D938EDA8D}
 		{507C9A1E-90CC-4139-80BE-DDCDB49620BB} = {4C34F748-F223-44DD-899D-029F9CEF7780}
 		{6C99DD76-6B5E-4B64-9DF2-CF4264952AB0} = {4C34F748-F223-44DD-899D-029F9CEF7780}
+		{F59AF613-4111-486E-8F76-C51F116FDDE6} = {76D7B2DA-2E6B-4078-AC01-B29BCA83411A}
+		{E7D00F8D-7535-4318-B8EC-BF4BDC0AF64D} = {92AB1CDB-7E0D-4F08-AAC9-D2FF59853545}
+		{8BD77123-2671-45D8-989B-B176F09665A7} = {92AB1CDB-7E0D-4F08-AAC9-D2FF59853545}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {2DFBE53E-69A7-453A-8D20-72271AE32016}

@@ -1,6 +1,6 @@
-using Sekiban.EventSourcing.Queries.MultipleAggregates;
-using Sekiban.EventSourcing.Queries.QueryModels;
-using Sekiban.EventSourcing.Queries.QueryModels.Parameters;
+using Sekiban.Core.Query.MultipleAggregate;
+using Sekiban.Core.Query.QueryModel;
+using Sekiban.Core.Query.QueryModel.Parameters;
 using System.Collections.Immutable;
 namespace CustomerDomainContext.Projections.ClientLoyaltyPointLists;
 

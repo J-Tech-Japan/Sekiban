@@ -4,7 +4,8 @@ using CustomerWithTenantAddonDomainContext.Aggregates.Clients;
 using CustomerWithTenantAddonDomainContext.Aggregates.Clients.Events;
 using CustomerWithTenantAddonDomainContext.Aggregates.LoyaltyPoints;
 using CustomerWithTenantAddonDomainContext.Aggregates.LoyaltyPoints.Events;
-using Sekiban.EventSourcing.Queries.MultipleAggregates;
+using Sekiban.Core.Event;
+using Sekiban.Core.Query.MultipleAggregate;
 namespace CustomerWithTenantAddonDomainContext.Projections;
 
 public class ClientLoyaltyPointMultipleProjection : MultipleAggregateProjectionBase<ClientLoyaltyPointMultipleProjection.ContentsDefinition>

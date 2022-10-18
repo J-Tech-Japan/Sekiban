@@ -8,17 +8,17 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.2.3"/>
+        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.2.3" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Sekiban.EventSourcing.CosmosInfrastracture\Sekiban.EventSourcing.CosmosInfrastructure.csproj"/>
-        <ProjectReference Include="..\..\src\Sekiban.EventSourcing.WebHelper\Sekiban.EventSourcing.WebHelper.csproj"/>
-        <ProjectReference Include="..\CustomerWithTenantAddonDomainContext\CustomerWithTenantAddonDomainContext.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.EventSourcing.CosmosInfrastracture\Sekiban.Infrastructure.Cosmos.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Addon.Web\Sekiban.Addon.Web.csproj" />
+        <ProjectReference Include="..\CustomerWithTenantAddonDomainContext\CustomerWithTenantAddonDomainContext.csproj" />
     </ItemGroup>
 
     <ItemGroup>
-        <Folder Include="Controllers"/>
+        <Folder Include="Controllers" />
     </ItemGroup>
 
 </Project>

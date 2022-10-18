@@ -1,11 +1,4 @@
-﻿global using CosmosInfrastructure.Lib.Json;
-global using Microsoft.Azure.Cosmos;
-global using Sekiban.EventSourcing.AggregateEvents;
-global using Sekiban.EventSourcing.Aggregates;
-global using Sekiban.EventSourcing.Documents;
-global using Sekiban.EventSourcing.PubSubs;
-global using Sekiban.EventSourcing.Shared.Exceptions;
-global using Sekiban.EventSourcing.Snapshots;
+﻿global using Microsoft.Azure.Cosmos;
 global using System;
 global using System.Collections.Generic;
 global using System.Linq;

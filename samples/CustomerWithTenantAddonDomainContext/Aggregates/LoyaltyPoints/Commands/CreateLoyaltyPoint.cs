@@ -1,4 +1,5 @@
-﻿namespace CustomerWithTenantAddonDomainContext.Aggregates.LoyaltyPoints.Commands;
+﻿using Sekiban.Core.Command;
+namespace CustomerWithTenantAddonDomainContext.Aggregates.LoyaltyPoints.Commands;
 
 public record CreateLoyaltyPoint(Guid ClientId, int InitialPoint) : ICreateAggregateCommand<LoyaltyPoint>
 {

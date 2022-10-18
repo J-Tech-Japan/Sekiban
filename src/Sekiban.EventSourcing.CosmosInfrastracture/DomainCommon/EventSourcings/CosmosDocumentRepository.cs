@@ -1,9 +1,14 @@
 using Microsoft.Azure.Cosmos.Linq;
-using Sekiban.EventSourcing.Documents.ValueObjects;
-using Sekiban.EventSourcing.Partitions;
-using Sekiban.EventSourcing.Settings;
-using Sekiban.EventSourcing.Shared;
-namespace CosmosInfrastructure.DomainCommon.EventSourcings;
+using Sekiban.Core.Aggregate;
+using Sekiban.Core.Document;
+using Sekiban.Core.Document.ValueObjects;
+using Sekiban.Core.Event;
+using Sekiban.Core.Exceptions;
+using Sekiban.Core.Partition;
+using Sekiban.Core.Setting;
+using Sekiban.Core.Shared;
+using Sekiban.Core.Snapshot;
+namespace Sekiban.Infrastructure.Cosmos.DomainCommon.EventSourcings;
 
 public class CosmosDocumentRepository : IDocumentPersistentRepository
 {

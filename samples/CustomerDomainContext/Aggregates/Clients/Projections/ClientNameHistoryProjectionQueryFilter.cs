@@ -1,6 +1,6 @@
-using Sekiban.EventSourcing.Queries.QueryModels;
-using Sekiban.EventSourcing.Queries.QueryModels.Parameters;
-using Sekiban.EventSourcing.Queries.SingleAggregates;
+using Sekiban.Core.Query.QueryModel;
+using Sekiban.Core.Query.QueryModel.Parameters;
+using Sekiban.Core.Query.SingleAggregate;
 namespace CustomerDomainContext.Aggregates.Clients.Projections;
 
 public enum ClientNameHistoryProjectionQueryFilterSortKeys

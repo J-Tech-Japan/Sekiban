@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "Sekiban.Testing": {
+      "commandName": "Project",
+      "commandLineArgs": "--port 7072",
+      "launchBrowser": false
+    }
+  }
+}

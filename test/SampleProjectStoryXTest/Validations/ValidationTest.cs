@@ -1,4 +1,4 @@
-using Sekiban.EventSourcing.Validations;
+using Sekiban.Core.Validation;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;

@@ -1,6 +1,6 @@
 using CustomerWithTenantAddonDomainContext.Shared;
-using Sekiban.EventSourcing.Aggregates;
-using Sekiban.EventSourcing.TestHelpers.SingleAggregates;
+using Sekiban.Core.Aggregate;
+using Sekiban.Testing.SingleAggregate;
 namespace CustomerWithTenantAddonXTest;
 
 public class AggregateTestBase<TAggregate, TContents> : SingleAggregateTestBase<TAggregate, TContents, CustomerWithTenantAddonDependency>

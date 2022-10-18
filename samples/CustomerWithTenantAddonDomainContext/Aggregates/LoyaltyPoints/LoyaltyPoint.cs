@@ -1,6 +1,8 @@
 ﻿using CustomerWithTenantAddonDomainContext.Aggregates.LoyaltyPoints.Events;
 using CustomerWithTenantAddonDomainContext.Aggregates.LoyaltyPoints.ValueObjects;
 using CustomerWithTenantAddonDomainContext.Shared.Exceptions;
+using Sekiban.Core.Aggregate;
+using Sekiban.Core.Event;
 namespace CustomerWithTenantAddonDomainContext.Aggregates.LoyaltyPoints;
 
 public class LoyaltyPoint : AggregateBase<LoyaltyPointContents>

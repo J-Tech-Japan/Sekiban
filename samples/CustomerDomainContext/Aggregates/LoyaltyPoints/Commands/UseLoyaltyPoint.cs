@@ -1,4 +1,5 @@
 using CustomerDomainContext.Aggregates.LoyaltyPoints.Consts;
+using Sekiban.Core.Command;
 namespace CustomerDomainContext.Aggregates.LoyaltyPoints.Commands;
 
 public record UseLoyaltyPoint(

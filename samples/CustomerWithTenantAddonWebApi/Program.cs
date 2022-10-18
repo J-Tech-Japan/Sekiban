@@ -1,8 +1,8 @@
-using CosmosInfrastructure;
 using CustomerWithTenantAddonDomainContext.Shared;
-using Sekiban.EventSourcing.Shared;
-using Sekiban.EventSourcing.WebHelper.Common;
-using Sekiban.EventSourcing.WebHelper.SwashbuckleHelpers;
+using Sekiban.Addon.Web.Common;
+using Sekiban.Addon.Web.SwashbuckleHelpers;
+using Sekiban.Core.Dependency;
+using Sekiban.Infrastructure.Cosmos;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.

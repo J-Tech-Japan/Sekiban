@@ -1,8 +1,8 @@
-using Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanMembers;
-using Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanMembers.Commands;
-using Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanTenants.Commands;
-using Sekiban.EventSourcing.Aggregates;
-using Sekiban.EventSourcing.Validations;
+using Sekiban.Addon.Tenant.Aggregates.SekibanMembers;
+using Sekiban.Addon.Tenant.Aggregates.SekibanMembers.Commands;
+using Sekiban.Addon.Tenant.Aggregates.SekibanTenants.Commands;
+using Sekiban.Core.Aggregate;
+using Sekiban.Core.Validation;
 using System;
 using System.Collections.Generic;
 using Xunit;

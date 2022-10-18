@@ -12,8 +12,10 @@ using CustomerWithTenantAddonDomainContext.Aggregates.RecentActivities.Commands;
 using CustomerWithTenantAddonDomainContext.Aggregates.RecentInMemoryActivities;
 using CustomerWithTenantAddonDomainContext.Aggregates.RecentInMemoryActivities.Commands;
 using CustomerWithTenantAddonDomainContext.Projections;
-using Sekiban.EventSourcing.Addon.Tenant.Shared;
-using Sekiban.EventSourcing.Shared;
+using Sekiban.Addon.Tenant.Shared;
+using Sekiban.Core.Command;
+using Sekiban.Core.Dependency;
+using Sekiban.Core.Event;
 using System.Reflection;
 namespace CustomerWithTenantAddonDomainContext.Shared;
 
