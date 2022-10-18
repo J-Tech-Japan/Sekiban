@@ -44,7 +44,7 @@
         <ProjectReference Include="..\..\samples\ESSampleProjectLib\ESSampleProjectLib.csproj" />
         <ProjectReference Include="..\..\src\Sekiban.Addon.Tenant\Sekiban.Addon.Tenant.csproj" />
         <ProjectReference Include="..\..\src\Sekiban.Addon.Tenant\Sekiban.Addon.Tenant.csproj" />
-        <ProjectReference Include="..\..\src\Sekiban.EventSourcing.CosmosInfrastracture\Sekiban.Infrastructure.Cosmos.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj" />
         <ProjectReference Include="..\..\src\Sekiban.Testing\Sekiban.Testing.csproj" />
     </ItemGroup>
 
