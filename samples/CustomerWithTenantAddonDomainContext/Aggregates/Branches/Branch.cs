@@ -1,7 +1,9 @@
 using CustomerWithTenantAddonDomainContext.Aggregates.Branches.Events;
+using Sekiban.Core.Aggregate;
+using Sekiban.Core.Event;
 namespace CustomerWithTenantAddonDomainContext.Aggregates.Branches;
 
-public class Branch : TransferableAggregateBase<BranchContents>
+public class Branch : AggregateBase<BranchContents>
 {
     public void Created(NameString name)
     {

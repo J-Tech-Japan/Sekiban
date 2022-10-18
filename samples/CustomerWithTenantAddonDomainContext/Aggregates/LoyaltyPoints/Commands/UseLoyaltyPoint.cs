@@ -1,4 +1,5 @@
 using CustomerWithTenantAddonDomainContext.Aggregates.LoyaltyPoints.Consts;
+using Sekiban.Core.Command;
 namespace CustomerWithTenantAddonDomainContext.Aggregates.LoyaltyPoints.Commands;
 
 public record UseLoyaltyPoint(

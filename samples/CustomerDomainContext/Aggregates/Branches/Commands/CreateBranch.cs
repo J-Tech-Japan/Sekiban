@@ -1,3 +1,4 @@
+using Sekiban.Core.Command;
 using System.ComponentModel.DataAnnotations;
 namespace CustomerDomainContext.Aggregates.Branches.Commands;
 

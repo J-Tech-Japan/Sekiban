@@ -1,4 +1,5 @@
-﻿namespace CustomerWithTenantAddonDomainContext.Aggregates.Clients.Commands;
+﻿using Sekiban.Core.Command;
+namespace CustomerWithTenantAddonDomainContext.Aggregates.Clients.Commands;
 
 public record ChangeClientName(Guid ClientId, string ClientName) : ChangeAggregateCommandBase<Client>
 {

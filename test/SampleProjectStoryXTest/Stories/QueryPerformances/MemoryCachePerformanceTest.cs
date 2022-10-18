@@ -1,5 +1,5 @@
-using Sekiban.EventSourcing.Shared;
-using Sekiban.EventSourcing.TestHelpers.StoryTests;
+using Sekiban.Core.Dependency;
+using Sekiban.Testing.Story;
 using Xunit.Abstractions;
 namespace SampleProjectStoryXTest.Stories.QueryPerformances;
 

@@ -1,4 +1,3 @@
-using CosmosInfrastructure;
 using CustomerDomainContext.Aggregates.Branches;
 using CustomerDomainContext.Aggregates.Branches.Commands;
 using CustomerDomainContext.Aggregates.Clients;
@@ -13,16 +12,17 @@ using CustomerDomainContext.Aggregates.RecentInMemoryActivities;
 using CustomerDomainContext.Aggregates.RecentInMemoryActivities.Commands;
 using CustomerDomainContext.Projections.ClientLoyaltyPointMultiples;
 using CustomerDomainContext.Shared.Exceptions;
-using Sekiban.EventSourcing.AggregateCommands;
-using Sekiban.EventSourcing.Aggregates;
-using Sekiban.EventSourcing.Documents;
-using Sekiban.EventSourcing.Queries;
-using Sekiban.EventSourcing.Queries.MultipleAggregates;
-using Sekiban.EventSourcing.Queries.SingleAggregates;
-using Sekiban.EventSourcing.Shared.Exceptions;
-using Sekiban.EventSourcing.Snapshots;
-using Sekiban.EventSourcing.Snapshots.SnapshotManagers;
-using Sekiban.EventSourcing.TestHelpers.StoryTests;
+using Sekiban.Core.Aggregate;
+using Sekiban.Core.Command;
+using Sekiban.Core.Document;
+using Sekiban.Core.Exceptions;
+using Sekiban.Core.Query;
+using Sekiban.Core.Query.MultipleAggregate;
+using Sekiban.Core.Query.SingleAggregate;
+using Sekiban.Core.Snapshot;
+using Sekiban.Core.Snapshot.Aggregate;
+using Sekiban.Infrastructure.Cosmos;
+using Sekiban.Testing.Story;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -359,8 +359,8 @@ public class CustomerDbStoryBasic : TestBase
         await ContinuousExecutionTestAsync();
     }
 
-    private async Task CheckSnapshots<T, TContents>(List<SnapshotDocument> snapshots, Guid aggregateId)
-        where T : TransferableAggregateBase<TContents>, new() where TContents : IAggregateContents, new()
+    private async Task CheckSnapshots<T, TContents>(List<SnapshotDocument> snapshots, Guid aggregateId) where T : AggregateBase<TContents>, new()
+        where TContents : IAggregateContents, new()
     {
         foreach (var dto in snapshots.Select(snapshot => snapshot.ToDto<AggregateDto<TContents>>()))
         {

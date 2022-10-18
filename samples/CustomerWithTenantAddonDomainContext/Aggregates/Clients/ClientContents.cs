@@ -1,3 +1,4 @@
+using Sekiban.Core.Aggregate;
 namespace CustomerWithTenantAddonDomainContext.Aggregates.Clients;
 
 public record ClientContents : IAggregateContents

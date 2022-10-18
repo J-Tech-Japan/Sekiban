@@ -1,7 +1,9 @@
 using CustomerWithTenantAddonDomainContext.Aggregates.Clients.Events;
+using Sekiban.Core.Aggregate;
+using Sekiban.Core.Event;
 namespace CustomerWithTenantAddonDomainContext.Aggregates.Clients;
 
-public class Client : TransferableAggregateBase<ClientContents>
+public class Client : AggregateBase<ClientContents>
 {
     public void CreateClient(Guid branchId, NameString clientName, EmailString clientEmail)
     {

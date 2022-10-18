@@ -1,3 +1,4 @@
+using Sekiban.Core.Command;
 namespace CustomerDomainContext.Aggregates.RecentActivities.Commands;
 
 public record CreateRecentActivity : ICreateAggregateCommand<RecentActivity>;

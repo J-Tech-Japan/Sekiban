@@ -1,6 +1,9 @@
 ﻿using CustomerWithTenantAddonDomainContext.Aggregates.Clients.Events;
 using CustomerWithTenantAddonDomainContext.Aggregates.LoyaltyPoints;
 using CustomerWithTenantAddonDomainContext.Aggregates.LoyaltyPoints.Commands;
+using Sekiban.Core.Command;
+using Sekiban.Core.Event;
+using Sekiban.Core.PubSub;
 namespace CustomerWithTenantAddonDomainContext.AggregateEventSubscribers;
 
 public class ClientCreatedSubscriber : AggregateEventSubscriberBase<ClientCreated>

@@ -1,5 +1,5 @@
-using Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanTenants;
-using Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanTenants.Commands;
+using Sekiban.Addon.Tenant.Aggregates.SekibanTenants;
+using Sekiban.Addon.Tenant.Aggregates.SekibanTenants.Commands;
 using System;
 using Xunit;
 namespace CustomerWithTenantAddonXTest.AggregateTests;

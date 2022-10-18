@@ -1,4 +1,5 @@
-﻿namespace CustomerDomainContext.Aggregates.LoyaltyPoints.Commands;
+﻿using Sekiban.Core.Command;
+namespace CustomerDomainContext.Aggregates.LoyaltyPoints.Commands;
 
 public record DeleteLoyaltyPoint(Guid ClientId) : ChangeAggregateCommandBase<LoyaltyPoint>, INoValidateCommand
 {

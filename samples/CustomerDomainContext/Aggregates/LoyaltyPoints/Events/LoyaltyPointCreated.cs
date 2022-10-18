@@ -1,3 +1,4 @@
-﻿namespace CustomerDomainContext.Aggregates.LoyaltyPoints.Events;
+﻿using Sekiban.Core.Event;
+namespace CustomerDomainContext.Aggregates.LoyaltyPoints.Events;
 
 public record LoyaltyPointCreated(int InitialPoint) : ICreatedAggregateEventPayload<LoyaltyPoint>;

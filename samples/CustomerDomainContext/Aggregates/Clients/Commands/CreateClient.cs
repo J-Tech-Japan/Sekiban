@@ -2,8 +2,10 @@
 using CustomerDomainContext.Aggregates.Branches.QueryFilters;
 using CustomerDomainContext.Aggregates.Clients.QueryFilters;
 using CustomerDomainContext.Shared.Exceptions;
-using Sekiban.EventSourcing.Queries.QueryModels;
-using Sekiban.EventSourcing.Queries.SingleAggregates;
+using Sekiban.Core.Command;
+using Sekiban.Core.Exceptions;
+using Sekiban.Core.Query.QueryModel;
+using Sekiban.Core.Query.SingleAggregate;
 using System.ComponentModel.DataAnnotations;
 namespace CustomerDomainContext.Aggregates.Clients.Commands;
 

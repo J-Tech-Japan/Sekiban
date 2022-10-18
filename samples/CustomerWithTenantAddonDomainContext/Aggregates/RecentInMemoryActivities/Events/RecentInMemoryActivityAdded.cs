@@ -1,3 +1,4 @@
+using Sekiban.Core.Event;
 namespace CustomerWithTenantAddonDomainContext.Aggregates.RecentInMemoryActivities.Events;
 
 public record RecentInMemoryActivityAdded(RecentInMemoryActivityRecord Record) : IChangedEventPayload;

@@ -1,3 +1,4 @@
+using Sekiban.Core.Command;
 namespace CustomerDomainContext.Aggregates.RecentInMemoryActivities.Commands;
 
 public record AddRecentInMemoryActivity(Guid RecentInMemoryActivityId, string Activity) : ChangeAggregateCommandBase<RecentInMemoryActivity>,

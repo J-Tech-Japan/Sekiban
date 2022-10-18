@@ -1,3 +1,4 @@
+using Sekiban.Core.Aggregate;
 namespace CustomerDomainContext.Aggregates.RecentInMemoryActivities;
 
 public record RecentInMemoryActivityContents : IAggregateContents

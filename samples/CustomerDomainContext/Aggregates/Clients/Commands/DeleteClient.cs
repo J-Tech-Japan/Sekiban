@@ -1,4 +1,5 @@
-﻿namespace CustomerDomainContext.Aggregates.Clients.Commands;
+﻿using Sekiban.Core.Command;
+namespace CustomerDomainContext.Aggregates.Clients.Commands;
 
 public record DeleteClient(Guid ClientId) : ChangeAggregateCommandBase<Client>
 {

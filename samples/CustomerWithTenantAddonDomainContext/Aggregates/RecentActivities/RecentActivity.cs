@@ -1,8 +1,10 @@
 using CustomerWithTenantAddonDomainContext.Aggregates.RecentActivities.Events;
+using Sekiban.Core.Aggregate;
+using Sekiban.Core.Event;
 namespace CustomerWithTenantAddonDomainContext.Aggregates.RecentActivities;
 
 [AggregateContainerGroup(AggregateContainerGroup.Dissolvable)]
-public class RecentActivity : TransferableAggregateBase<RecentActivityContents>
+public class RecentActivity : AggregateBase<RecentActivityContents>
 {
 
     public void CreateRecentActivity(string firstActivity)

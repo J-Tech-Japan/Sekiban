@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <LangVersion>preview</LangVersion>
+        <PackageId>JJ_Sekiban.Testing</PackageId>
+        <Version>0.8.0</Version>
+        <Authors>J-Tech Group</Authors>
+        <Company>J-Tech-Japan</Company>
+        <PackageDescription>Sekiban - Event Sourcing Framework Testing</PackageDescription>
+        <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
+        <PackageVersion>0.8.0</PackageVersion>
+        <Description>リファクタリング、AggregateProjectionListTestBaseのバグ修正</Description>
+        <AssemblyName>Sekiban.Testing</AssemblyName>
+        <RootNamespace>Sekiban.Testing</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="xunit.assert" Version="2.4.1" />
+    </ItemGroup>
+    <ItemGroup>
+        <None Update="host.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="local.settings.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <CopyToPublishDirectory>Never</CopyToPublishDirectory>
+        </None>
+    </ItemGroup>
+    <ItemGroup>
+      <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj" />
+    </ItemGroup>
+</Project>

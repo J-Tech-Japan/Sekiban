@@ -1,9 +1,11 @@
 ﻿using CustomerDomainContext.Aggregates.LoyaltyPoints.Events;
 using CustomerDomainContext.Aggregates.LoyaltyPoints.ValueObjects;
 using CustomerDomainContext.Shared.Exceptions;
+using Sekiban.Core.Aggregate;
+using Sekiban.Core.Event;
 namespace CustomerDomainContext.Aggregates.LoyaltyPoints;
 
-public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointContents>
+public class LoyaltyPoint : AggregateBase<LoyaltyPointContents>
 {
 
     public void CreateLoyaltyPoint(int initialPoint)
