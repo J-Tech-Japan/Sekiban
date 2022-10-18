@@ -10,14 +10,6 @@ public class SekibanMember : TransferableAggregateBase<SekibanMemberContents>
     {
         AddAndApplyEvent(new SekibanMemberCreated(name, email, uniqueId));
     }
-    // protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload)
-    // {
-    //     return payload switch
-    //     {
-    //         SekibanMemberCreated created => () => Contents = new SekibanMemberContents(created.Name, created.Email, created.UniqueId),
-    //         _ => null
-    //     };
-    // }
     protected override Func<AggregateVariable<SekibanMemberContents>, AggregateVariable<SekibanMemberContents>>? GetApplyEventFunc(
         IAggregateEvent ev,
         IEventPayload payload)
@@ -25,8 +17,7 @@ public class SekibanMember : TransferableAggregateBase<SekibanMemberContents>
         return payload switch
         {
             SekibanMemberCreated created => variable => new AggregateVariable<SekibanMemberContents>(
-                new SekibanMemberContents(created.Name, created.Email, created.UniqueId),
-                false),
+                new SekibanMemberContents(created.Name, created.Email, created.UniqueId)),
             _ => null
         };
     }

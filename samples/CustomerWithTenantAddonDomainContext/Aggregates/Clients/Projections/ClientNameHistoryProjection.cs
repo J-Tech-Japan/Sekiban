@@ -43,28 +43,6 @@ public class ClientNameHistoryProjection : SingleAggregateProjectionBase<Client,
             _ => null
         };
     }
-    // protected override Action? GetApplyEventAction(IAggregateEvent ev)
-    // {
-    //     return ev.GetPayload() switch
-    //     {
-    //         ClientCreated clientCreated => () =>
-    //         {
-    //             Contents = new ContentsDefinition(
-    //                 clientCreated.BranchId,
-    //                 new List<ClientNameHistoryProjectionRecord> { new(clientCreated.ClientName, ev.TimeStamp) },
-    //                 clientCreated.ClientEmail);
-    //         },
-    //
-    //         ClientNameChanged clientNameChanged => () =>
-    //         {
-    //             var list = Contents.ClientNames.ToList();
-    //             list.Add(new ClientNameHistoryProjectionRecord(clientNameChanged.ClientName, ev.TimeStamp));
-    //             Contents = Contents with { ClientNames = list };
-    //         },
-    //         ClientDeleted => () => IsDeleted = true,
-    //         _ => null
-    //     };
-    // }
     public record ContentsDefinition(
         Guid BranchId,
         IReadOnlyCollection<ClientNameHistoryProjectionRecord> ClientNames,

@@ -10,30 +10,6 @@ public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointContents>
     {
         AddAndApplyEvent(new LoyaltyPointCreated(initialPoint));
     }
-
-    // protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload)
-    // {
-    //     return payload switch
-    //     {
-    //         LoyaltyPointCreated created => () =>
-    //         {
-    //             Contents = new LoyaltyPointContents(created.InitialPoint, null);
-    //         },
-    //         LoyaltyPointAdded added => () =>
-    //         {
-    //             Contents = new LoyaltyPointContents(Contents.CurrentPoint + added.PointAmount, added.HappenedDate);
-    //         },
-    //         LoyaltyPointUsed used => () =>
-    //         {
-    //             Contents = new LoyaltyPointContents(Contents.CurrentPoint - used.PointAmount, used.HappenedDate);
-    //         },
-    //         LoyaltyPointDeleted => () =>
-    //         {
-    //             IsDeleted = true;
-    //         },
-    //         _ => null
-    //     };
-    // }
     protected override Func<AggregateVariable<LoyaltyPointContents>, AggregateVariable<LoyaltyPointContents>>? GetApplyEventFunc(
         IAggregateEvent ev,
         IEventPayload payload)

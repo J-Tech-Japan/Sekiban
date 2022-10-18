@@ -9,27 +9,6 @@ public class RecentInMemoryActivity : TransferableAggregateBase<RecentInMemoryAc
     {
         AddAndApplyEvent(new RecentInMemoryActivityCreated(new RecentInMemoryActivityRecord(firstActivity, DateTime.UtcNow)));
     }
-    // protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload)
-    // {
-    //     return payload switch
-    //     {
-    //         RecentInMemoryActivityCreated created => () =>
-    //         {
-    //             Contents = new RecentInMemoryActivityContents(new List<RecentInMemoryActivityRecord> { created.Activity });
-    //         },
-    //         RecentInMemoryActivityAdded added => () =>
-    //         {
-    //             var records = Contents.LatestActivities.ToList();
-    //             records.Insert(0, added.Record);
-    //             if (records.Count > 5)
-    //             {
-    //                 records.RemoveRange(5, records.Count - 5);
-    //             }
-    //             Contents = new RecentInMemoryActivityContents(records);
-    //         },
-    //         _ => null
-    //     };
-    // }
     protected override Func<AggregateVariable<RecentInMemoryActivityContents>, AggregateVariable<RecentInMemoryActivityContents>>? GetApplyEventFunc(
         IAggregateEvent ev,
         IEventPayload payload)

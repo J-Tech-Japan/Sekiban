@@ -7,23 +7,6 @@ public class Client : TransferableAggregateBase<ClientContents>
     {
         AddAndApplyEvent(new ClientCreated(branchId, clientName, clientEmail));
     }
-
-    // protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload)
-    // {
-    //     return payload switch
-    //     {
-    //         ClientCreated clientChanged => () =>
-    //         {
-    //             Contents = new ClientContents(clientChanged.BranchId, clientChanged.ClientName, clientChanged.ClientEmail);
-    //         },
-    //
-    //         ClientNameChanged clientNameChanged => () => Contents = Contents with { ClientName = clientNameChanged.ClientName },
-    //
-    //         ClientDeleted => () => IsDeleted = true,
-    //
-    //         _ => null
-    //     };
-    // }
     protected override Func<AggregateVariable<ClientContents>, AggregateVariable<ClientContents>>? GetApplyEventFunc(
         IAggregateEvent ev,
         IEventPayload payload)
