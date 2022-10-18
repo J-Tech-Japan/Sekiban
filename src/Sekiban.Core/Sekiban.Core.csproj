@@ -11,8 +11,8 @@
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Core</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.7.9</PackageVersion>
-        <Description>リファクタリング、AggregateProjectionListTestBaseのバグ修正</Description>
+        <PackageVersion>0.8.0</PackageVersion>
+        <Description>フォルダ構成、プロジェクト構成のリファクタリング、ApplyEventの副作用削除</Description>
         <AssemblyName>Sekiban.Core</AssemblyName>
         <RootNamespace>Sekiban.Core</RootNamespace>
     </PropertyGroup>

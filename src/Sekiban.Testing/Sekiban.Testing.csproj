@@ -11,7 +11,7 @@
         <PackageDescription>Sekiban - Event Sourcing Framework Testing</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
         <PackageVersion>0.8.0</PackageVersion>
-        <Description>リファクタリング、AggregateProjectionListTestBaseのバグ修正</Description>
+        <Description>フォルダ構成、プロジェクト構成のリファクタリング、ApplyEventの副作用削除</Description>
         <AssemblyName>Sekiban.Testing</AssemblyName>
         <RootNamespace>Sekiban.Testing</RootNamespace>
     </PropertyGroup>
