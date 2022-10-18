@@ -2,7 +2,7 @@ using Sekiban.EventSourcing.Snapshots.SnapshotManagers.Events;
 namespace Sekiban.EventSourcing.Snapshots.SnapshotManagers;
 
 [AggregateContainerGroup(AggregateContainerGroup.InMemoryContainer)]
-public class SnapshotManager : TransferableAggregateBase<SnapshotManagerContents>
+public class SnapshotManager : AggregateBase<SnapshotManagerContents>
 {
     private const int SnapshotCount = 40;
     private const int SnapshotTakeOffset = 15;

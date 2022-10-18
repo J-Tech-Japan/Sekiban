@@ -7,7 +7,7 @@ using Xunit;
 namespace Sekiban.EventSourcing.TestHelpers.SingleAggregates;
 
 public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<TAggregate, TContents>
-    where TAggregate : TransferableAggregateBase<TContents>, new() where TContents : IAggregateContents, new()
+    where TAggregate : AggregateBase<TContents>, new() where TContents : IAggregateContents, new()
 {
     private readonly AggregateTestCommandExecutor _commandExecutor;
     private readonly IServiceProvider _serviceProvider;
@@ -75,7 +75,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
     }
     public AggregateDto<TEnvironmentAggregateContents>
         GetEnvironmentAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid aggregateId)
-        where TEnvironmentAggregate : TransferableAggregateBase<TEnvironmentAggregateContents>, new()
+        where TEnvironmentAggregate : AggregateBase<TEnvironmentAggregateContents>, new()
         where TEnvironmentAggregateContents : IAggregateContents, new()
     {
         var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleAggregateService)) as ISingleAggregateService;
@@ -409,14 +409,14 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
     }
     public Guid RunEnvironmentCreateCommand<TEnvironmentAggregate>(
         ICreateAggregateCommand<TEnvironmentAggregate> command,
-        Guid? injectingAggregateId = null) where TEnvironmentAggregate : AggregateBase, new()
+        Guid? injectingAggregateId = null) where TEnvironmentAggregate : AggregateCommonBase, new()
     {
         var (events, aggregateId) = _commandExecutor.ExecuteCreateCommand(command, injectingAggregateId);
         var aggregateEvents = events?.ToList() ?? new List<IAggregateEvent>();
         return aggregateId;
     }
     public void RunEnvironmentChangeCommand<TEnvironmentAggregate>(ChangeAggregateCommandBase<TEnvironmentAggregate> command)
-        where TEnvironmentAggregate : AggregateBase, new()
+        where TEnvironmentAggregate : AggregateCommonBase, new()
     {
         var _ = _commandExecutor.ExecuteChangeCommand(command);
     }

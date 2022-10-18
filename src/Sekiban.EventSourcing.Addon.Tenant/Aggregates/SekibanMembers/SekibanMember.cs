@@ -4,7 +4,7 @@ using Sekiban.EventSourcing.AggregateEvents;
 using Sekiban.EventSourcing.Aggregates;
 namespace Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanMembers;
 
-public class SekibanMember : TransferableAggregateBase<SekibanMemberContents>
+public class SekibanMember : AggregateBase<SekibanMemberContents>
 {
     public void Create(SekibanMemberString name, SekibanMemberEmailString email, SekibanMemberUniqueIdString uniqueId)
     {

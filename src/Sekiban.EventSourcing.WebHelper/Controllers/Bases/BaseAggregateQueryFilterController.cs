@@ -7,7 +7,7 @@ namespace Sekiban.EventSourcing.WebHelper.Controllers.Bases;
 [ApiController]
 [Produces("application/json")]
 public class BaseAggregateQueryFilterController<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TQueryFilterResponse> : ControllerBase
-    where TAggregate : TransferableAggregateBase<TAggregateContents>
+    where TAggregate : AggregateBase<TAggregateContents>
     where TAggregateContents : IAggregateContents, new()
     where TQueryFilter : IAggregateQueryFilterDefinition<TAggregate, TAggregateContents, TQueryParameter, TQueryFilterResponse>, new()
     where TQueryParameter : IQueryParameter

@@ -15,7 +15,7 @@ public class AggregateTestCommandExecutor
 
     public (IEnumerable<IAggregateEvent>, Guid) ExecuteCreateCommand<TAggregate>(
         ICreateAggregateCommand<TAggregate> command,
-        Guid? injectingAggregateId = null) where TAggregate : AggregateBase, new()
+        Guid? injectingAggregateId = null) where TAggregate : AggregateCommonBase, new()
     {
         var validationResults = command.TryValidateProperties().ToList();
         if (validationResults.Any())
@@ -63,7 +63,7 @@ public class AggregateTestCommandExecutor
         return (latestEvents, aggregateId.Value);
     }
 
-    private TAggregate GetAggregate<TAggregate>(Guid aggregateId) where TAggregate : AggregateBase, new()
+    private TAggregate GetAggregate<TAggregate>(Guid aggregateId) where TAggregate : AggregateCommonBase, new()
     {
 
         var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleAggregateService)) as ISingleAggregateService;
@@ -73,7 +73,7 @@ public class AggregateTestCommandExecutor
         var aggregateBaseType = typeof(TAggregate).BaseType;
         if (aggregateBaseType is null) { throw new Exception("Failed to get Aggregate Service"); }
         var genericType = aggregateBaseType.GetGenericTypeDefinition();
-        if (genericType != typeof(TransferableAggregateBase<>)) { throw new Exception("Failed to get Aggregate Base Type"); }
+        if (genericType != typeof(AggregateBase<>)) { throw new Exception("Failed to get Aggregate Base Type"); }
         var contentsType = aggregateBaseType.GetGenericArguments()[0];
         var genericMethod = method.MakeGenericMethod(typeof(TAggregate), contentsType);
         var aggregateTask = genericMethod.Invoke(singleAggregateService, new object?[] { aggregateId, null }) as dynamic;
@@ -83,7 +83,7 @@ public class AggregateTestCommandExecutor
     }
 
     public IEnumerable<IAggregateEvent> ExecuteChangeCommand<TAggregate>(ChangeAggregateCommandBase<TAggregate> command)
-        where TAggregate : AggregateBase, new()
+        where TAggregate : AggregateCommonBase, new()
     {
         var validationResults = command.TryValidateProperties().ToList();
         if (validationResults.Any())

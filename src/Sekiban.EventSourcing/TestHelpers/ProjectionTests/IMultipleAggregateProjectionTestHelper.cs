@@ -29,12 +29,12 @@ public interface IMultipleAggregateProjectionTestHelper<TProjection, TProjection
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenScenario(Action initialAction);
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenContents(TProjectionContents contents);
     public Guid RunCreateCommand<TAggregate>(ICreateAggregateCommand<TAggregate> command, Guid? injectingAggregateId = null)
-        where TAggregate : AggregateBase, new();
-    public void RunChangeCommand<TAggregate>(ChangeAggregateCommandBase<TAggregate> command) where TAggregate : AggregateBase, new();
+        where TAggregate : AggregateCommonBase, new();
+    public void RunChangeCommand<TAggregate>(ChangeAggregateCommandBase<TAggregate> command) where TAggregate : AggregateCommonBase, new();
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenCommandExecutorAction(
         Action<AggregateTestCommandExecutor> action);
     public AggregateDto<TEnvironmentAggregateContents> GetAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid aggregateId)
-        where TEnvironmentAggregate : TransferableAggregateBase<TEnvironmentAggregateContents>, new()
+        where TEnvironmentAggregate : AggregateBase<TEnvironmentAggregateContents>, new()
         where TEnvironmentAggregateContents : IAggregateContents, new();
     public IReadOnlyCollection<IAggregateEvent> GetLatestEvents();
 }

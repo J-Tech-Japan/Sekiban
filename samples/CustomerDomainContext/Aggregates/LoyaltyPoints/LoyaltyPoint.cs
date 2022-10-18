@@ -3,7 +3,7 @@ using CustomerDomainContext.Aggregates.LoyaltyPoints.ValueObjects;
 using CustomerDomainContext.Shared.Exceptions;
 namespace CustomerDomainContext.Aggregates.LoyaltyPoints;
 
-public class LoyaltyPoint : TransferableAggregateBase<LoyaltyPointContents>
+public class LoyaltyPoint : AggregateBase<LoyaltyPointContents>
 {
 
     public void CreateLoyaltyPoint(int initialPoint)

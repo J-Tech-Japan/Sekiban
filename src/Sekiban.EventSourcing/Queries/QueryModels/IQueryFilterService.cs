@@ -19,18 +19,18 @@ public interface IQueryFilterService
         where TQueryFilterParameter : IQueryParameter;
     public Task<QueryFilterListResult<TQueryFilterResponse>>
         GetAggregateListQueryFilterAsync<TAggregate, TAggregateContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
-            TQueryFilterParameter param) where TAggregate : TransferableAggregateBase<TAggregateContents>
+            TQueryFilterParameter param) where TAggregate : AggregateBase<TAggregateContents>
         where TAggregateContents : IAggregateContents, new()
         where TQueryFilter : IAggregateListQueryFilterDefinition<TAggregate, TAggregateContents, TQueryFilterParameter, TQueryFilterResponse>
         where TQueryFilterParameter : IQueryParameter;
     public Task<TQueryFilterResponse> GetAggregateQueryFilterAsync<TAggregate, TAggregateContents, TQueryFilter,
-        TQueryFilterParameter, TQueryFilterResponse>(TQueryFilterParameter param) where TAggregate : TransferableAggregateBase<TAggregateContents>
+        TQueryFilterParameter, TQueryFilterResponse>(TQueryFilterParameter param) where TAggregate : AggregateBase<TAggregateContents>
         where TAggregateContents : IAggregateContents, new()
         where TQueryFilter : IAggregateQueryFilterDefinition<TAggregate, TAggregateContents, TQueryFilterParameter, TQueryFilterResponse>
         where TQueryFilterParameter : IQueryParameter;
     public Task<QueryFilterListResult<TQueryFilterResponse>>
         GetSingleAggregateProjectionListQueryFilterAsync<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents, TQueryFilter,
-            TQueryFilterParameter, TQueryFilterResponse>(TQueryFilterParameter param) where TAggregate : AggregateBase, new()
+            TQueryFilterParameter, TQueryFilterResponse>(TQueryFilterParameter param) where TAggregate : AggregateCommonBase, new()
         where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
         new()
         where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
@@ -40,7 +40,7 @@ public interface IQueryFilterService
 
     public Task<TQueryFilterResponse>
         GetSingleAggregateProjectionQueryFilterAsync<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents, TQueryFilter,
-            TQueryFilterParameter, TQueryFilterResponse>(TQueryFilterParameter param) where TAggregate : AggregateBase, new()
+            TQueryFilterParameter, TQueryFilterResponse>(TQueryFilterParameter param) where TAggregate : AggregateCommonBase, new()
         where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
         new()
         where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents

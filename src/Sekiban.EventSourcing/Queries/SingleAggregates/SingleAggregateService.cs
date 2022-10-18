@@ -38,7 +38,7 @@ public class SingleAggregateService : ISingleAggregateService
     /// <typeparam name="TContents"></typeparam>
     /// <returns></returns>
     public async Task<T?> GetAggregateFromInitialDefaultAggregateAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new()
+        where T : AggregateBase<TContents> where TContents : IAggregateContents, new()
     {
         return await GetAggregateFromInitialAsync<T, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion);
     }
@@ -54,13 +54,13 @@ public class SingleAggregateService : ISingleAggregateService
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
     public async Task<AggregateDto<TContents>?> GetAggregateFromInitialDefaultAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new()
+        where T : AggregateBase<TContents> where TContents : IAggregateContents, new()
     {
         return (await GetAggregateFromInitialAsync<T, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion))?.ToDto();
     }
     public async Task<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>?>
         GetProjectionAsync<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>(Guid aggregateId, int? toVersion = null)
-        where TAggregate : AggregateBase, new()
+        where TAggregate : AggregateCommonBase, new()
         where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
         new()
         where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
@@ -80,7 +80,7 @@ public class SingleAggregateService : ISingleAggregateService
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TContents"></typeparam>
     /// <returns></returns>
-    public async Task<T?> GetAggregateAsync<T, TContents>(Guid aggregateId, int? toVersion = null) where T : TransferableAggregateBase<TContents>
+    public async Task<T?> GetAggregateAsync<T, TContents>(Guid aggregateId, int? toVersion = null) where T : AggregateBase<TContents>
         where TContents : IAggregateContents, new()
     {
         return await _singleProjection.GetAggregateAsync<T, AggregateDto<TContents>, DefaultSingleAggregateProjector<T>>(aggregateId, toVersion);
@@ -95,7 +95,7 @@ public class SingleAggregateService : ISingleAggregateService
     /// <typeparam name="TContents"></typeparam>
     /// <returns></returns>
     public async Task<AggregateDto<TContents>?> GetAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new()
+        where T : AggregateBase<TContents> where TContents : IAggregateContents, new()
     {
         var aggregate = await _singleProjection.GetAggregateAsync<T, AggregateDto<TContents>, DefaultSingleAggregateProjector<T>>(
             aggregateId,

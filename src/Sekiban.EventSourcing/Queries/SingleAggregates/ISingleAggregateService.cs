@@ -26,7 +26,7 @@ public interface ISingleAggregateService
     /// <typeparam name="TContents"></typeparam>
     /// <returns></returns>
     public Task<T?> GetAggregateFromInitialDefaultAggregateAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new();
+        where T : AggregateBase<TContents> where TContents : IAggregateContents, new();
 
     /// <summary>
     ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
@@ -39,7 +39,7 @@ public interface ISingleAggregateService
     /// <typeparam name="TContents"></typeparam>
     /// <returns></returns>
     public Task<AggregateDto<TContents>?> GetAggregateFromInitialDefaultAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new();
+        where T : AggregateBase<TContents> where TContents : IAggregateContents, new();
     /// <summary>
     ///     カスタムプロジェククションを取得
     /// </summary>
@@ -51,7 +51,7 @@ public interface ISingleAggregateService
     /// <returns></returns>
     public Task<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>?>
         GetProjectionAsync<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>(Guid aggregateId, int? toVersion = null)
-        where TAggregate : AggregateBase, new()
+        where TAggregate : AggregateCommonBase, new()
         where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
         new()
         where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents;
@@ -66,7 +66,7 @@ public interface ISingleAggregateService
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TContents"></typeparam>
     /// <returns></returns>
-    public Task<T?> GetAggregateAsync<T, TContents>(Guid aggregateId, int? toVersion = null) where T : TransferableAggregateBase<TContents>
+    public Task<T?> GetAggregateAsync<T, TContents>(Guid aggregateId, int? toVersion = null) where T : AggregateBase<TContents>
         where TContents : IAggregateContents, new();
 
     /// <summary>
@@ -78,5 +78,5 @@ public interface ISingleAggregateService
     /// <typeparam name="TContents"></typeparam>
     /// <returns></returns>
     public Task<AggregateDto<TContents>?> GetAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
-        where T : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new();
+        where T : AggregateBase<TContents> where TContents : IAggregateContents, new();
 }

@@ -17,7 +17,7 @@ public class MultipleAggregateProjectionService : IMultipleAggregateProjectionSe
         return _multipleProjection.GetMultipleProjectionAsync<TProjection, TContents>();
     }
     public async Task<List<AggregateDto<TContents>>> GetAggregateList<TAggregate, TContents>(QueryListType queryListType = QueryListType.ActiveOnly)
-        where TAggregate : TransferableAggregateBase<TContents> where TContents : IAggregateContents, new()
+        where TAggregate : AggregateBase<TContents> where TContents : IAggregateContents, new()
     {
         var projection = await GetAggregateListObject<TAggregate, TContents>();
         return queryListType switch
@@ -32,7 +32,7 @@ public class MultipleAggregateProjectionService : IMultipleAggregateProjectionSe
         Task<MultipleAggregateProjectionContentsDto<
             SingleAggregateListProjectionDto<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>>>>
         GetSingleAggregateProjectionListObject<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>()
-        where TAggregate : AggregateBase, new()
+        where TAggregate : AggregateCommonBase, new()
         where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
         new()
         where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
@@ -45,7 +45,7 @@ public class MultipleAggregateProjectionService : IMultipleAggregateProjectionSe
     }
     public async Task<List<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>>>
         GetSingleAggregateProjectionList<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>(
-            QueryListType queryListType = QueryListType.ActiveOnly) where TAggregate : AggregateBase, new()
+            QueryListType queryListType = QueryListType.ActiveOnly) where TAggregate : AggregateCommonBase, new()
         where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
         new()
         where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
@@ -60,7 +60,7 @@ public class MultipleAggregateProjectionService : IMultipleAggregateProjectionSe
         };
     }
     public async Task<MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<AggregateDto<TContents>>>>
-        GetAggregateListObject<TAggregate, TContents>() where TAggregate : TransferableAggregateBase<TContents>
+        GetAggregateListObject<TAggregate, TContents>() where TAggregate : AggregateBase<TContents>
         where TContents : IAggregateContents, new()
     {
         var list = await _multipleProjection

@@ -9,7 +9,7 @@ namespace Sekiban.EventSourcing.WebHelper.Controllers.Bases;
 [ApiController]
 [Produces("application/json")]
 public class BaseAggregateQueryController<TAggregate, TAggregateContents> : ControllerBase
-    where TAggregate : TransferableAggregateBase<TAggregateContents>, new() where TAggregateContents : IAggregateContents, new()
+    where TAggregate : AggregateBase<TAggregateContents>, new() where TAggregateContents : IAggregateContents, new()
 {
     private readonly IMultipleAggregateProjectionService _multipleAggregateProjectionService;
     private readonly SekibanControllerOptions _sekibanControllerOptions;

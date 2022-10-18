@@ -31,12 +31,12 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
     }
 
     public Guid RunCreateCommand<TAggregate>(ICreateAggregateCommand<TAggregate> command, Guid? injectingAggregateId = null)
-        where TAggregate : AggregateBase, new()
+        where TAggregate : AggregateCommonBase, new()
     {
         var (events, aggregateId) = _commandExecutor.ExecuteCreateCommand(command, injectingAggregateId);
         return aggregateId;
     }
-    public void RunChangeCommand<TAggregate>(ChangeAggregateCommandBase<TAggregate> command) where TAggregate : AggregateBase, new()
+    public void RunChangeCommand<TAggregate>(ChangeAggregateCommandBase<TAggregate> command) where TAggregate : AggregateCommonBase, new()
     {
         var events = _commandExecutor.ExecuteChangeCommand(command);
 
@@ -55,7 +55,7 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
     }
 
     public AggregateDto<TEnvironmentAggregateContents> GetAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid aggregateId)
-        where TEnvironmentAggregate : TransferableAggregateBase<TEnvironmentAggregateContents>, new()
+        where TEnvironmentAggregate : AggregateBase<TEnvironmentAggregateContents>, new()
         where TEnvironmentAggregateContents : IAggregateContents, new()
     {
         var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleAggregateService)) as ISingleAggregateService;

@@ -4,7 +4,7 @@ public abstract class SingleAggregateProjectionBase<TAggregate, TProjection, TSi
     ISingleAggregateProjectionDtoConvertible<SingleAggregateProjectionDto<TSingleAggregateContents>>, ISingleAggregate,
     ISingleAggregateProjector<TProjection> where TProjection : SingleAggregateProjectionBase<TAggregate, TProjection, TSingleAggregateContents>
     where TSingleAggregateContents : ISingleAggregateProjectionContents
-    where TAggregate : AggregateBase, new()
+    where TAggregate : AggregateCommonBase, new()
 {
     public TSingleAggregateContents Contents { get; set; } = default!;
     public Guid LastEventId { get; set; }

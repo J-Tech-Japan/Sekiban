@@ -2,7 +2,7 @@ using Sekiban.EventSourcing.Queries.QueryModels.Parameters;
 namespace Sekiban.EventSourcing.Queries.QueryModels;
 
 public interface IAggregateListQueryFilterDefinition<TAggregate, TAggregateContents, in TQueryParameter, TResponseQueryModel>
-    where TAggregate : TransferableAggregateBase<TAggregateContents>
+    where TAggregate : AggregateBase<TAggregateContents>
     where TAggregateContents : IAggregateContents, new()
     where TQueryParameter : IQueryParameter
 {

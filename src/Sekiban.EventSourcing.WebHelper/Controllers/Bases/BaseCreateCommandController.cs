@@ -9,7 +9,7 @@ namespace Sekiban.EventSourcing.WebHelper.Controllers.Bases;
 [ApiController]
 [Produces("application/json")]
 public class BaseCreateCommandController<TAggregate, TAggregateContents, TAggregateCommand> : ControllerBase
-    where TAggregate : TransferableAggregateBase<TAggregateContents>, new()
+    where TAggregate : AggregateBase<TAggregateContents>, new()
     where TAggregateContents : IAggregateContents, new()
     where TAggregateCommand : ICreateAggregateCommand<TAggregate>
 {

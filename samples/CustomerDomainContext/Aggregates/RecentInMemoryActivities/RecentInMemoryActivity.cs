@@ -2,7 +2,7 @@ using CustomerDomainContext.Aggregates.RecentInMemoryActivities.Events;
 namespace CustomerDomainContext.Aggregates.RecentInMemoryActivities;
 
 [AggregateContainerGroup(AggregateContainerGroup.InMemoryContainer)]
-public class RecentInMemoryActivity : TransferableAggregateBase<RecentInMemoryActivityContents>
+public class RecentInMemoryActivity : AggregateBase<RecentInMemoryActivityContents>
 {
 
     public void CreateRecentInMemoryActivity(string firstActivity)

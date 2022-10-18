@@ -14,7 +14,7 @@ public interface IAggregateCommandExecutor
     /// <returns></returns>
     Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecChangeCommandAsync<T, TContents, C>(
         C command,
-        List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>
+        List<CallHistory>? callHistories = null) where T : AggregateBase<TContents>
         where TContents : IAggregateContents, new()
         where C : ChangeAggregateCommandBase<T>;
 
@@ -30,7 +30,7 @@ public interface IAggregateCommandExecutor
     /// <returns></returns>
     Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecChangeCommandWithoutValidationAsync<T, TContents, C>(
         C command,
-        List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>
+        List<CallHistory>? callHistories = null) where T : AggregateBase<TContents>
         where TContents : IAggregateContents, new()
         where C : ChangeAggregateCommandBase<T>;
     /// <summary>
@@ -45,7 +45,7 @@ public interface IAggregateCommandExecutor
     /// <returns></returns>
     Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecCreateCommandAsync<T, TContents, C>(
         C command,
-        List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>, new()
+        List<CallHistory>? callHistories = null) where T : AggregateBase<TContents>, new()
         where TContents : IAggregateContents, new()
         where C : ICreateAggregateCommand<T>;
     /// <summary>
@@ -60,7 +60,7 @@ public interface IAggregateCommandExecutor
     /// <returns></returns>
     Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecCreateCommandWithoutValidationAsync<T, TContents, C>(
         C command,
-        List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>, new()
+        List<CallHistory>? callHistories = null) where T : AggregateBase<TContents>, new()
         where TContents : IAggregateContents, new()
         where C : ICreateAggregateCommand<T>;
 }

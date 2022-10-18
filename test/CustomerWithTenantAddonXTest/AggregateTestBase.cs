@@ -4,6 +4,6 @@ using Sekiban.EventSourcing.TestHelpers.SingleAggregates;
 namespace CustomerWithTenantAddonXTest;
 
 public class AggregateTestBase<TAggregate, TContents> : SingleAggregateTestBase<TAggregate, TContents, CustomerWithTenantAddonDependency>
-    where TAggregate : TransferableAggregateBase<TContents>, new() where TContents : IAggregateContents, new()
+    where TAggregate : AggregateBase<TContents>, new() where TContents : IAggregateContents, new()
 {
 }

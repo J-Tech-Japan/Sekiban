@@ -4,7 +4,7 @@ namespace Sekiban.EventSourcing.Queries.QueryModels;
 
 public interface
     ISingleAggregateProjectionListQueryFilterDefinition<TAggregate, in TSingleAggregateProjection, TSingleAggregateProjectionContents, in TQueryParam,
-        TResponseQueryModel> where TAggregate : AggregateBase, new()
+        TResponseQueryModel> where TAggregate : AggregateCommonBase, new()
     where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>
     where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
     where TQueryParam : IQueryParameter

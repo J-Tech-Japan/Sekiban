@@ -5,7 +5,7 @@ using Sekiban.EventSourcing.Validations;
 namespace Sekiban.EventSourcing.TestHelpers.SingleAggregates;
 
 public abstract class SingleAggregateTestBase<TAggregate, TContents, TDependencyDefinition> : IDisposable, IAggregateTestHelper<TAggregate, TContents>
-    where TAggregate : TransferableAggregateBase<TContents>, new()
+    where TAggregate : AggregateBase<TContents>, new()
     where TContents : IAggregateContents, new()
     where TDependencyDefinition : IDependencyDefinition, new()
 {
@@ -44,19 +44,19 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents, TDependency
     }
     public AggregateDto<TEnvironmentAggregateContents>
         GetEnvironmentAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid aggregateId)
-        where TEnvironmentAggregate : TransferableAggregateBase<TEnvironmentAggregateContents>, new()
+        where TEnvironmentAggregate : AggregateBase<TEnvironmentAggregateContents>, new()
         where TEnvironmentAggregateContents : IAggregateContents, new()
     {
         return _helper.GetEnvironmentAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(aggregateId);
     }
     public Guid RunEnvironmentCreateCommand<TEnvironmentAggregate>(
         ICreateAggregateCommand<TEnvironmentAggregate> command,
-        Guid? injectingAggregateId = null) where TEnvironmentAggregate : AggregateBase, new()
+        Guid? injectingAggregateId = null) where TEnvironmentAggregate : AggregateCommonBase, new()
     {
         return _helper.RunEnvironmentCreateCommand(command, injectingAggregateId);
     }
     public void RunEnvironmentChangeCommand<TEnvironmentAggregate>(ChangeAggregateCommandBase<TEnvironmentAggregate> command)
-        where TEnvironmentAggregate : AggregateBase, new()
+        where TEnvironmentAggregate : AggregateCommonBase, new()
     {
         _helper.RunEnvironmentChangeCommand(command);
     }

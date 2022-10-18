@@ -304,7 +304,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
     }
 
     private async Task CheckSnapshots<T, TContents>(List<SnapshotDocument> snapshots, Guid aggregateId)
-        where T : TransferableAggregateBase<TContents>, new() where TContents : IAggregateContents, new()
+        where T : AggregateBase<TContents>, new() where TContents : IAggregateContents, new()
     {
         foreach (var dto in snapshots.Select(snapshot => snapshot.ToDto<AggregateDto<TContents>>()))
         {

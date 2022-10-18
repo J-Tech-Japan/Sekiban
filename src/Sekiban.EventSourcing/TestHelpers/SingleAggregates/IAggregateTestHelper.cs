@@ -2,7 +2,7 @@ using Sekiban.EventSourcing.TestHelpers.Helpers;
 using Sekiban.EventSourcing.Validations;
 namespace Sekiban.EventSourcing.TestHelpers.SingleAggregates;
 
-public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : TransferableAggregateBase<TContents>
+public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : AggregateBase<TContents>
     where TContents : IAggregateContents, new()
 {
     public TSingleAggregateProjection SetupSingleAggregateProjection<TSingleAggregateProjection>()
@@ -15,13 +15,13 @@ public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : 
     public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentEventsFile(string filename);
     public AggregateDto<TEnvironmentAggregateContents>
         GetEnvironmentAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid aggregateId)
-        where TEnvironmentAggregate : TransferableAggregateBase<TEnvironmentAggregateContents>, new()
+        where TEnvironmentAggregate : AggregateBase<TEnvironmentAggregateContents>, new()
         where TEnvironmentAggregateContents : IAggregateContents, new();
     public Guid RunEnvironmentCreateCommand<TEnvironmentAggregate>(
         ICreateAggregateCommand<TEnvironmentAggregate> command,
-        Guid? injectingAggregateId = null) where TEnvironmentAggregate : AggregateBase, new();
+        Guid? injectingAggregateId = null) where TEnvironmentAggregate : AggregateCommonBase, new();
     public void RunEnvironmentChangeCommand<TEnvironmentAggregate>(ChangeAggregateCommandBase<TEnvironmentAggregate> command)
-        where TEnvironmentAggregate : AggregateBase, new();
+        where TEnvironmentAggregate : AggregateCommonBase, new();
     public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentCommandExecutorAction(Action<AggregateTestCommandExecutor> action);
     public IReadOnlyCollection<IAggregateEvent> GetLatestEnvironmentEvents();
     // TODO : remove this methods
@@ -29,7 +29,7 @@ public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : 
     // public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtoContents<DAggregate, DAggregateContents>(
     //     Guid aggregateId,
     //     DAggregateContents contents) where DAggregateContents : IAggregateContents, new()
-    //     where DAggregate : TransferableAggregateBase<DAggregateContents>, new();
+    //     where DAggregate : AggregateBase<DAggregateContents>, new();
     // public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDto(ISingleAggregate dto);
     // public IAggregateTestHelper<TAggregate, TContents> Given(AggregateDto<TContents> snapshot);
     //public IAggregateTestHelper<TAggregate, TContents> Given(IAggregateEvent ev);

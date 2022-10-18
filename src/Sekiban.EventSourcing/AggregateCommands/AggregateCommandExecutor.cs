@@ -25,7 +25,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
     }
     public async Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecChangeCommandAsync<T, TContents, C>(
         C command,
-        List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>
+        List<CallHistory>? callHistories = null) where T : AggregateBase<TContents>
         where TContents : IAggregateContents, new()
         where C : ChangeAggregateCommandBase<T>
     {
@@ -38,7 +38,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
     }
     public async Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecChangeCommandWithoutValidationAsync<T, TContents, C>(
         C command,
-        List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>
+        List<CallHistory>? callHistories = null) where T : AggregateBase<TContents>
         where TContents : IAggregateContents, new()
         where C : ChangeAggregateCommandBase<T>
     {
@@ -113,7 +113,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
 
     public async Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecCreateCommandAsync<T, TContents, C>(
         C command,
-        List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>, new()
+        List<CallHistory>? callHistories = null) where T : AggregateBase<TContents>, new()
         where TContents : IAggregateContents, new()
         where C : ICreateAggregateCommand<T>
     {
@@ -126,7 +126,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
     }
     public async Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecCreateCommandWithoutValidationAsync<T, TContents, C>(
         C command,
-        List<CallHistory>? callHistories = null) where T : TransferableAggregateBase<TContents>, new()
+        List<CallHistory>? callHistories = null) where T : AggregateBase<TContents>, new()
         where TContents : IAggregateContents, new()
         where C : ICreateAggregateCommand<T>
     {
@@ -203,7 +203,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
 
     private async Task<List<IAggregateEvent>> HandleEventsAsync<T, TContents, C>(
         IReadOnlyCollection<IAggregateEvent> events,
-        AggregateCommandDocument<C> commandDocument) where T : TransferableAggregateBase<TContents>
+        AggregateCommandDocument<C> commandDocument) where T : AggregateBase<TContents>
         where TContents : IAggregateContents, new()
         where C : ChangeAggregateCommandBase<T>
     {

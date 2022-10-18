@@ -6,7 +6,7 @@ using Xunit;
 namespace Sekiban.EventSourcing.TestHelpers;
 
 public class SingleProjectionTestBaseEventSubscriber<TAggregate, TProjection, TProjectionContents> : SingleAggregateTestBase
-    where TAggregate : AggregateBase, new()
+    where TAggregate : AggregateCommonBase, new()
     where TProjection : SingleAggregateProjectionBase<TAggregate, TProjection, TProjectionContents>, new()
     where TProjectionContents : ISingleAggregateProjectionContents
 {

@@ -7,7 +7,7 @@ namespace Sekiban.EventSourcing.TestHelpers.ProjectionTests;
 public class AggregateListProjectionTestBase<TAggregate, TAggregateContents, TDependencyDefinition> : CommonMultipleAggregateProjectionTestBase<
     SingleAggregateListProjector<TAggregate, AggregateDto<TAggregateContents>, DefaultSingleAggregateProjector<TAggregate>>,
     SingleAggregateListProjectionDto<AggregateDto<TAggregateContents>>, TDependencyDefinition>
-    where TAggregate : TransferableAggregateBase<TAggregateContents>
+    where TAggregate : AggregateBase<TAggregateContents>
     where TAggregateContents : IAggregateContents, new()
     where TDependencyDefinition : IDependencyDefinition, new()
 {

@@ -2,7 +2,7 @@ using CustomerWithTenantAddonDomainContext.Aggregates.RecentActivities.Events;
 namespace CustomerWithTenantAddonDomainContext.Aggregates.RecentActivities;
 
 [AggregateContainerGroup(AggregateContainerGroup.Dissolvable)]
-public class RecentActivity : TransferableAggregateBase<RecentActivityContents>
+public class RecentActivity : AggregateBase<RecentActivityContents>
 {
 
     public void CreateRecentActivity(string firstActivity)

@@ -1,60 +1,57 @@
-﻿using System.Reflection;
+using Sekiban.EventSourcing.Queries.SingleAggregates;
 namespace Sekiban.EventSourcing.Aggregates;
 
-public abstract class AggregateBase : IAggregate
+public abstract class AggregateBase<TContents> : AggregateCommonBase, ISingleAggregateProjectionDtoConvertible<AggregateDto<TContents>>
+    where TContents : IAggregateContents, new()
 {
-    protected AggregateBasicInfo _basicInfo = new();
-    public ReadOnlyCollection<IAggregateEvent> Events => _basicInfo.Events.AsReadOnly();
-    public Guid AggregateId
+    protected TContents Contents { get; private set; } = new();
+    private new bool IsDeleted { get => _basicInfo.IsDeleted; set => _basicInfo.IsDeleted = value; }
+    public AggregateDto<TContents> ToDto()
     {
-        get => _basicInfo.AggregateId;
-        init => _basicInfo.AggregateId = value;
+        return new AggregateDto<TContents>(this, Contents);
     }
 
-    public Guid LastEventId => _basicInfo.LastEventId;
-    public string LastSortableUniqueId => _basicInfo.LastSortableUniqueId;
-    public int AppliedSnapshotVersion => _basicInfo.AppliedSnapshotVersion;
-    public int Version => _basicInfo.Version;
-    public bool IsDeleted => _basicInfo.IsDeleted;
-    public bool CanApplyEvent(IAggregateEvent ev)
+    public void ApplySnapshot(AggregateDto<TContents> snapshot)
     {
-        return GetApplyEventAction(ev, ev.GetPayload()) is not null;
+        _basicInfo.Version = snapshot.Version;
+        _basicInfo.LastEventId = snapshot.LastEventId;
+        _basicInfo.LastSortableUniqueId = snapshot.LastSortableUniqueId;
+        _basicInfo.AppliedSnapshotVersion = snapshot.Version;
+        _basicInfo.IsDeleted = snapshot.IsDeleted;
+        CopyPropertiesFromSnapshot(snapshot);
     }
 
-    public void ApplyEvent(IAggregateEvent ev)
+    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload)
     {
-        var action = GetApplyEventAction(ev, ev.GetPayload());
-        if (action is null) { return; }
-        if (ev.IsAggregateInitialEvent == false && Version == 0)
+        var func = GetApplyEventFunc(ev, payload);
+        return () =>
         {
-            throw new SekibanInvalidEventException();
-        }
-        if (ev.Id == LastEventId) { return; }
-        action();
-        _basicInfo.LastEventId = ev.Id;
-        _basicInfo.LastSortableUniqueId = ev.SortableUniqueId;
-        _basicInfo.Version++;
+            if (func == null) { return; }
+            var result = func(new AggregateVariable<TContents>(Contents, IsDeleted));
+            Contents = result.Contents;
+            IsDeleted = result.IsDeleted;
+        };
     }
-    public void ResetEventsAndSnapshots()
-    {
-        _basicInfo.Events.Clear();
-    }
+    protected abstract Func<AggregateVariable<TContents>, AggregateVariable<TContents>>? GetApplyEventFunc(IAggregateEvent ev, IEventPayload payload);
 
-    public static UAggregate Create<UAggregate>(Guid aggregateId) where UAggregate : AggregateBase
+    protected sealed override void AddAndApplyEvent<TEventPayload>(TEventPayload eventPayload)
     {
-        if (typeof(UAggregate).GetConstructor(Type.EmptyTypes) is ConstructorInfo c)
+        var ev = eventPayload is ICreatedEventPayload
+            ? AggregateEvent<TEventPayload>.CreatedEvent(AggregateId, GetType(), eventPayload)
+            : AggregateEvent<TEventPayload>.ChangedEvent(AggregateId, GetType(), eventPayload);
+
+        if (GetApplyEventAction(ev, eventPayload) is null)
         {
-            var aggregate = c.Invoke(new object[] { }) as UAggregate ?? throw new InvalidProgramException();
-            aggregate._basicInfo.AggregateId = aggregateId;
-            return aggregate;
+            throw new SekibanEventNotImplementedException();
         }
-
-        throw new InvalidProgramException();
-
-        // C#の将来の正式バージョンで、インターフェースに静的メソッドを定義できるようになったら、書き換える。
+        // バージョンが変わる前に、イベントには現在のバージョンを入れて動かす
+        ev = ev with { Version = Version };
+        ApplyEvent(ev);
+        ev = ev with { Version = Version };
+        _basicInfo.Events.Add(ev);
     }
-
-    protected abstract Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload);
-
-    protected abstract void AddAndApplyEvent<TEventPayload>(TEventPayload eventPayload) where TEventPayload : IEventPayload;
+    protected void CopyPropertiesFromSnapshot(AggregateDto<TContents> snapshot)
+    {
+        Contents = snapshot.Contents;
+    }
 }

@@ -1,7 +1,7 @@
 using CustomerWithTenantAddonDomainContext.Aggregates.Branches.Events;
 namespace CustomerWithTenantAddonDomainContext.Aggregates.Branches;
 
-public class Branch : TransferableAggregateBase<BranchContents>
+public class Branch : AggregateBase<BranchContents>
 {
     public void Created(NameString name)
     {

@@ -4,7 +4,7 @@ using Sekiban.EventSourcing.AggregateEvents;
 using Sekiban.EventSourcing.Aggregates;
 namespace Sekiban.EventSourcing.Addon.Tenant.Aggregates.SekibanTenants;
 
-public class SekibanTenant : TransferableAggregateBase<SekibanTenantContents>
+public class SekibanTenant : AggregateBase<SekibanTenantContents>
 {
     public void CreateSekibanTenant(TenantNameString tenantName, TenantCodeString tenantCode)
     {

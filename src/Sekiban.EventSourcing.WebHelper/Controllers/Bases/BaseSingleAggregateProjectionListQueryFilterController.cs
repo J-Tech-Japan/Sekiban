@@ -8,7 +8,7 @@ namespace Sekiban.EventSourcing.WebHelper.Controllers.Bases;
 [ApiController]
 [Produces("application/json")]
 public class BaseSingleAggregateProjectionListQueryFilterController<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents,
-    TQueryFilter, TQueryFilterParameter, TQueryFilterResponse> : ControllerBase where TAggregate : AggregateBase, new()
+    TQueryFilter, TQueryFilterParameter, TQueryFilterResponse> : ControllerBase where TAggregate : AggregateCommonBase, new()
     where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>, new
     ()
     where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents

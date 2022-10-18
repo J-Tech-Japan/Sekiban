@@ -52,7 +52,7 @@ public class QueryFilterHandler
     public QueryFilterListResult<TQueryFilterResponse>
         GetAggregateListQueryFilter<TAggregate, TAggregateContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
             TQueryFilterParameter param,
-            IEnumerable<AggregateDto<TAggregateContents>> list) where TAggregate : TransferableAggregateBase<TAggregateContents>
+            IEnumerable<AggregateDto<TAggregateContents>> list) where TAggregate : AggregateBase<TAggregateContents>
         where TAggregateContents : IAggregateContents, new()
         where TQueryFilter : IAggregateListQueryFilterDefinition<TAggregate, TAggregateContents, TQueryFilterParameter, TQueryFilterResponse>
         where TQueryFilterParameter : IQueryParameter
@@ -70,7 +70,7 @@ public class QueryFilterHandler
     }
     public TQueryFilterResponse GetAggregateQueryFilter<TAggregate, TAggregateContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
         TQueryFilterParameter param,
-        IEnumerable<AggregateDto<TAggregateContents>> list) where TAggregate : TransferableAggregateBase<TAggregateContents>
+        IEnumerable<AggregateDto<TAggregateContents>> list) where TAggregate : AggregateBase<TAggregateContents>
         where TAggregateContents : IAggregateContents, new()
         where TQueryFilter : IAggregateQueryFilterDefinition<TAggregate, TAggregateContents, TQueryFilterParameter, TQueryFilterResponse>
         where TQueryFilterParameter : IQueryParameter
@@ -85,7 +85,7 @@ public class QueryFilterHandler
         GetSingleAggregateProjectionListQueryFilter<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents, TQueryFilter,
             TQueryFilterParameter, TQueryFilterResponse>(
             TQueryFilterParameter param,
-            IEnumerable<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>> projections) where TAggregate : AggregateBase, new()
+            IEnumerable<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>> projections) where TAggregate : AggregateCommonBase, new()
         where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
         new()
         where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
@@ -133,7 +133,7 @@ public class QueryFilterHandler
         GetSingleAggregateProjectionQueryFilter<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents, TQueryFilter,
             TQueryFilterParameter, TQueryFilterResponse>(
             TQueryFilterParameter param,
-            IEnumerable<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>> projections) where TAggregate : AggregateBase, new()
+            IEnumerable<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>> projections) where TAggregate : AggregateCommonBase, new()
         where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
         new()
         where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents

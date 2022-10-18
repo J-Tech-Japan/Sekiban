@@ -8,7 +8,7 @@ namespace Sekiban.EventSourcing.TestHelpers.QueryFilters;
 public class
     AggregateQueryFilterTestChecker<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> : IQueryFilterChecker<
         MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<AggregateDto<TAggregateContents>>>>
-    where TAggregate : TransferableAggregateBase<TAggregateContents>
+    where TAggregate : AggregateBase<TAggregateContents>
     where TAggregateContents : IAggregateContents, new()
     where TQueryFilter : IAggregateQueryFilterDefinition<TAggregate, TAggregateContents, TQueryParameter, TResponseQueryModel>
     where TQueryParameter : IQueryParameter
