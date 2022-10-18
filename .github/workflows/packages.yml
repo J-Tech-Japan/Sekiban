@@ -24,28 +24,33 @@ jobs:
     - name: Restore dependencies
       run: |
         pushd ./src
-        dotnet restore Sekiban.EventSourcing.sln
+        dotnet restore Sekiban.Lib.sln
     - name: Build with dotnet
       run: |
         pushd ./src
-        dotnet build Sekiban.EventSourcing.sln
+        dotnet build Sekiban.Lib.sln
     - name: Pack Core
       run: |
-        pushd ./src/Sekiban.EventSourcing
+        pushd ./src/Sekiban.Core
         dotnet pack --configuration Release
-        dotnet nuget push "bin/Release/JJ_Sekiban.EventSourcing.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
+        dotnet nuget push "bin/Release/JJ_Sekiban.Core.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
+    - name: Pack Testing
+      run: |
+        pushd ./src/Sekiban.Testing
+        dotnet pack --configuration Release
+        dotnet nuget push "bin/Release/JJ_Sekiban.Testing.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
     - name: Pack Cosmos
       run: |
-        pushd ./src/Sekiban.EventSourcing.CosmosInfrastracture
+        pushd ./src/Sekiban.Infrastructure.Cosmos
         dotnet pack --configuration Release
-        dotnet nuget push "bin/Release/JJ_Sekiban.EventSourcing.CosmosInfrastructure.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
+        dotnet nuget push "bin/Release/JJ_Sekiban.Infrastructure.Cosmos.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
     - name: Pack WebHelper
       run: |
-        pushd ./src/Sekiban.EventSourcing.WebHelper
+        pushd ./src/Sekiban.Addon.Web
         dotnet pack --configuration Release
-        dotnet nuget push "bin/Release/JJ_Sekiban.EventSourcing.WebHelper.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
+        dotnet nuget push "bin/Release/JJ_Sekiban.Addon.Web.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
     - name: Pack TenantAddon
       run: |
-        pushd ./src/Sekiban.EventSourcing.Addon.Tenant
+        pushd ./src/Sekiban.Addon.Tenant
         dotnet pack --configuration Release
-        dotnet nuget push "bin/Release/JJ_Sekiban.EventSourcing.Addon.Tenant.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
+        dotnet nuget push "bin/Release/JJ_Sekiban.Addon.Tenant.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
