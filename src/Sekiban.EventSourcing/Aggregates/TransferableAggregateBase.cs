@@ -4,11 +4,11 @@ namespace Sekiban.EventSourcing.Aggregates;
 public abstract class TransferableAggregateBase<TContents> : AggregateBase, ISingleAggregateProjectionDtoConvertible<AggregateDto<TContents>>
     where TContents : IAggregateContents, new()
 {
-    protected TContents Contents { get; set; } = new();
-
+    protected TContents Contents { get; private set; } = new();
+    private new bool IsDeleted { get => _basicInfo.IsDeleted; set => _basicInfo.IsDeleted = value; }
     public AggregateDto<TContents> ToDto()
     {
-        return new(this, Contents);
+        return new AggregateDto<TContents>(this, Contents);
     }
 
     public void ApplySnapshot(AggregateDto<TContents> snapshot)
@@ -20,6 +20,19 @@ public abstract class TransferableAggregateBase<TContents> : AggregateBase, ISin
         _basicInfo.IsDeleted = snapshot.IsDeleted;
         CopyPropertiesFromSnapshot(snapshot);
     }
+
+    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload)
+    {
+        var func = GetApplyEventFunc(ev, payload);
+        return () =>
+        {
+            if (func == null) { return; }
+            var result = func(new AggregateVariable<TContents>(Contents, IsDeleted));
+            Contents = result.Contents;
+            IsDeleted = result.IsDeleted;
+        };
+    }
+    protected abstract Func<AggregateVariable<TContents>, AggregateVariable<TContents>>? GetApplyEventFunc(IAggregateEvent ev, IEventPayload payload);
 
     protected sealed override void AddAndApplyEvent<TEventPayload>(TEventPayload eventPayload)
     {

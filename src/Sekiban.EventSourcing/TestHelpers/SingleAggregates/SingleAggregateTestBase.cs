@@ -1,8 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Shared;
-using Sekiban.EventSourcing.TestHelpers.SingleAggregates;
+using Sekiban.EventSourcing.TestHelpers.Helpers;
 using Sekiban.EventSourcing.Validations;
-namespace Sekiban.EventSourcing.TestHelpers;
+namespace Sekiban.EventSourcing.TestHelpers.SingleAggregates;
 
 public abstract class SingleAggregateTestBase<TAggregate, TContents, TDependencyDefinition> : IDisposable, IAggregateTestHelper<TAggregate, TContents>
     where TAggregate : TransferableAggregateBase<TContents>, new()
@@ -59,6 +59,11 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents, TDependency
         where TEnvironmentAggregate : AggregateBase, new()
     {
         _helper.RunEnvironmentChangeCommand(command);
+    }
+    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentCommandExecutorAction(Action<AggregateTestCommandExecutor> action)
+    {
+        _helper.GivenEnvironmentCommandExecutorAction(action);
+        return this;
     }
     public IReadOnlyCollection<IAggregateEvent> GetLatestEnvironmentEvents()
     {

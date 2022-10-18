@@ -3,7 +3,7 @@ using CustomerDomainContext.Aggregates.RecentActivities.Commands;
 using CustomerDomainContext.Aggregates.RecentActivities.Events;
 using CustomerDomainContext.Shared;
 using Sekiban.EventSourcing.AggregateEvents;
-using Sekiban.EventSourcing.TestHelpers;
+using Sekiban.EventSourcing.TestHelpers.SingleAggregates;
 using System;
 using System.Collections.Generic;
 using Xunit;

@@ -1,6 +1,7 @@
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
 using Sekiban.EventSourcing.Queries.QueryModels;
 using Sekiban.EventSourcing.Queries.QueryModels.Parameters;
+using System.Collections.Immutable;
 namespace CustomerDomainContext.Projections.ClientLoyaltyPointMultiples;
 
 public class ClientLoyaltyPointMultipleProjectionQueryFilter : IProjectionQueryFilterDefinition<ClientLoyaltyPointMultipleProjection,
@@ -19,8 +20,8 @@ public class ClientLoyaltyPointMultipleProjectionQueryFilter : IProjectionQueryF
         if (queryFilterParam.BranchId is null) { return projection.Contents; }
         return new ClientLoyaltyPointMultipleProjection.ContentsDefinition
         {
-            Branches = projection.Contents.Branches.Where(x => x.BranchId == queryFilterParam.BranchId).ToList(),
-            Records = projection.Contents.Records.Where(m => m.BranchId == queryFilterParam.BranchId).ToList()
+            Branches = projection.Contents.Branches.Where(x => x.BranchId == queryFilterParam.BranchId).ToImmutableList(),
+            Records = projection.Contents.Records.Where(m => m.BranchId == queryFilterParam.BranchId).ToImmutableList()
         };
     }
     public ClientLoyaltyPointMultipleProjection.ContentsDefinition HandleSortAndPagingIfNeeded(
@@ -32,8 +33,8 @@ public class ClientLoyaltyPointMultipleProjectionQueryFilter : IProjectionQueryF
             return response with
             {
                 Records = queryFilterParam.SortIsAsc
-                    ? response.Records.OrderBy(x => x.ClientName).ToList()
-                    : response.Records.OrderByDescending(x => x.ClientName).ToList()
+                    ? response.Records.OrderBy(x => x.ClientName).ToImmutableList()
+                    : response.Records.OrderByDescending(x => x.ClientName).ToImmutableList()
             };
         }
         if (queryFilterParam.SortKey == QuerySortKeys.Points)
@@ -41,11 +42,11 @@ public class ClientLoyaltyPointMultipleProjectionQueryFilter : IProjectionQueryF
             return response with
             {
                 Records = queryFilterParam.SortIsAsc
-                    ? response.Records.OrderBy(x => x.Point).ToList()
-                    : response.Records.OrderByDescending(x => x.Point).ToList()
+                    ? response.Records.OrderBy(x => x.Point).ToImmutableList()
+                    : response.Records.OrderByDescending(x => x.Point).ToImmutableList()
             };
         }
-        return response with { Records = response.Records.OrderBy(x => x.ClientName).ToList() };
+        return response with { Records = response.Records.OrderBy(x => x.ClientName).ToImmutableList() };
     }
     public record QueryFilterParameter(Guid? BranchId, QuerySortKeys SortKey, bool SortIsAsc = true) : IQueryParameter;
 }

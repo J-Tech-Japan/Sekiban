@@ -22,7 +22,7 @@ public abstract class SingleAggregateProjectionBase<TAggregate, TProjection, TSi
             throw new SekibanInvalidEventException();
         }
         if (ev.Id == LastEventId) { return; }
-        var action = GetApplyEventAction(ev);
+        var action = GetApplyEventAction(ev, ev.GetPayload());
         if (action is null) { return; }
         action();
 
@@ -32,7 +32,7 @@ public abstract class SingleAggregateProjectionBase<TAggregate, TProjection, TSi
     }
     public bool CanApplyEvent(IAggregateEvent ev)
     {
-        return GetApplyEventAction(ev) is not null;
+        return GetApplyEventAction(ev, ev.GetPayload()) is not null;
     }
     public void ApplySnapshot(SingleAggregateProjectionDto<TSingleAggregateContents> snapshot)
     {
@@ -60,5 +60,18 @@ public abstract class SingleAggregateProjectionBase<TAggregate, TProjection, TSi
     {
         return typeof(TAggregate);
     }
-    protected abstract Action? GetApplyEventAction(IAggregateEvent ev);
+    protected Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload)
+    {
+        var func = GetApplyEventFunc(ev, payload);
+        return () =>
+        {
+            if (func == null) { return; }
+            var result = func(new AggregateVariable<TSingleAggregateContents>(Contents, IsDeleted));
+            Contents = result.Contents;
+            IsDeleted = result.IsDeleted;
+        };
+    }
+    protected abstract Func<AggregateVariable<TSingleAggregateContents>, AggregateVariable<TSingleAggregateContents>>? GetApplyEventFunc(
+        IAggregateEvent ev,
+        IEventPayload payload);
 }

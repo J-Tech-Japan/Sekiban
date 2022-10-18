@@ -4,9 +4,10 @@ using CustomerDomainContext.Aggregates.Clients.Commands;
 using CustomerDomainContext.Aggregates.Clients.Events;
 using CustomerDomainContext.Shared;
 using CustomerDomainContext.Shared.Exceptions;
+using CustomerDomainXTest.AggregateTests.CommandsHelpers;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.EventSourcing.Aggregates;
-using Sekiban.EventSourcing.TestHelpers;
+using Sekiban.EventSourcing.TestHelpers.SingleAggregates;
 using System;
 using Xunit;
 namespace CustomerDomainXTest.AggregateTests;
@@ -61,5 +62,12 @@ public class ClientSpec : SingleAggregateTestBase<Client, ClientContents, Custom
         var branchId = RunEnvironmentCreateCommand(new CreateBranch("TEST"));
         RunEnvironmentCreateCommand(new CreateClient(branchId, "NOT DUPLICATED NAME", testEmail));
         WhenCreate(new CreateClient(branchId, testClientName, testEmail)).ThenThrows<SekibanEmailAlreadyRegistered>();
+    }
+    [Fact]
+    public void UseCommandExecutor()
+    {
+        GivenEnvironmentCommandExecutorAction(BranchClientCommandsHelper.CreateClient)
+            .WhenCreate(new CreateClient(BranchClientCommandsHelper.BranchId, "Client Name New", BranchClientCommandsHelper.FirstClientEmail))
+            .ThenThrows<SekibanEmailAlreadyRegistered>();
     }
 }

@@ -1,4 +1,5 @@
 using Sekiban.EventSourcing.Queries.MultipleAggregates;
+using Sekiban.EventSourcing.TestHelpers.Helpers;
 using Sekiban.EventSourcing.TestHelpers.QueryFilters;
 namespace Sekiban.EventSourcing.TestHelpers.ProjectionTests;
 
@@ -30,6 +31,8 @@ public interface IMultipleAggregateProjectionTestHelper<TProjection, TProjection
     public Guid RunCreateCommand<TAggregate>(ICreateAggregateCommand<TAggregate> command, Guid? injectingAggregateId = null)
         where TAggregate : AggregateBase, new();
     public void RunChangeCommand<TAggregate>(ChangeAggregateCommandBase<TAggregate> command) where TAggregate : AggregateBase, new();
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenCommandExecutorAction(
+        Action<AggregateTestCommandExecutor> action);
     public AggregateDto<TEnvironmentAggregateContents> GetAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid aggregateId)
         where TEnvironmentAggregate : TransferableAggregateBase<TEnvironmentAggregateContents>, new()
         where TEnvironmentAggregateContents : IAggregateContents, new();

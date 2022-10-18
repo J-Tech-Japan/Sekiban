@@ -52,6 +52,7 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
         var events = _commandExecutor.ExecuteChangeCommand(command);
 
     }
+
     public AggregateDto<TEnvironmentAggregateContents> GetAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid aggregateId)
         where TEnvironmentAggregate : TransferableAggregateBase<TEnvironmentAggregateContents>, new()
         where TEnvironmentAggregateContents : IAggregateContents, new()
@@ -210,6 +211,12 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenScenario(Action initialAction)
     {
         initialAction();
+        return this;
+    }
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenCommandExecutorAction(
+        Action<AggregateTestCommandExecutor> action)
+    {
+        action(_commandExecutor);
         return this;
     }
 

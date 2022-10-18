@@ -15,7 +15,7 @@ public abstract class AggregateBase : IAggregate
     public string LastSortableUniqueId => _basicInfo.LastSortableUniqueId;
     public int AppliedSnapshotVersion => _basicInfo.AppliedSnapshotVersion;
     public int Version => _basicInfo.Version;
-    public bool IsDeleted { get => _basicInfo.IsDeleted; protected set => _basicInfo.IsDeleted = value; }
+    public bool IsDeleted => _basicInfo.IsDeleted;
     public bool CanApplyEvent(IAggregateEvent ev)
     {
         return GetApplyEventAction(ev, ev.GetPayload()) is not null;

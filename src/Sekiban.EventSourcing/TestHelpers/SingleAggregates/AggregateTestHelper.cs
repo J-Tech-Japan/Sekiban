@@ -420,6 +420,11 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
     {
         var _ = _commandExecutor.ExecuteChangeCommand(command);
     }
+    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentCommandExecutorAction(Action<AggregateTestCommandExecutor> action)
+    {
+        action(_commandExecutor);
+        return this;
+    }
 
     private void DeliverEventsToSubscribers(IEnumerable<IAggregateEvent> events)
     {

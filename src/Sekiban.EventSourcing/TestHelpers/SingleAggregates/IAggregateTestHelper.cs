@@ -1,3 +1,4 @@
+using Sekiban.EventSourcing.TestHelpers.Helpers;
 using Sekiban.EventSourcing.Validations;
 namespace Sekiban.EventSourcing.TestHelpers.SingleAggregates;
 
@@ -21,6 +22,7 @@ public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : 
         Guid? injectingAggregateId = null) where TEnvironmentAggregate : AggregateBase, new();
     public void RunEnvironmentChangeCommand<TEnvironmentAggregate>(ChangeAggregateCommandBase<TEnvironmentAggregate> command)
         where TEnvironmentAggregate : AggregateBase, new();
+    public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentCommandExecutorAction(Action<AggregateTestCommandExecutor> action);
     public IReadOnlyCollection<IAggregateEvent> GetLatestEnvironmentEvents();
     // TODO : remove this methods
     // public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentDtos(List<ISingleAggregate> dtos);

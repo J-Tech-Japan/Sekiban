@@ -10,11 +10,14 @@ public class SekibanMember : TransferableAggregateBase<SekibanMemberContents>
     {
         AddAndApplyEvent(new SekibanMemberCreated(name, email, uniqueId));
     }
-    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload)
+    protected override Func<AggregateVariable<SekibanMemberContents>, AggregateVariable<SekibanMemberContents>>? GetApplyEventFunc(
+        IAggregateEvent ev,
+        IEventPayload payload)
     {
         return payload switch
         {
-            SekibanMemberCreated created => () => Contents = new SekibanMemberContents(created.Name, created.Email, created.UniqueId),
+            SekibanMemberCreated created => variable => new AggregateVariable<SekibanMemberContents>(
+                new SekibanMemberContents(created.Name, created.Email, created.UniqueId)),
             _ => null
         };
     }
