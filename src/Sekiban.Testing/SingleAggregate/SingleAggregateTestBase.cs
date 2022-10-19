@@ -22,7 +22,7 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents, TDependency
         // ReSharper disable once VirtualMemberCallInConstructor
         SetupDependency(services);
         services.AddQueryFiltersFromDependencyDefinition(new TDependencyDefinition());
-        SekibanEventSourcingDependency.RegisterForAggregateTest(services, new TDependencyDefinition());
+        services.AddSekibanCoreForAggregateTestWithDependency(new TDependencyDefinition());
         _serviceProvider = services.BuildServiceProvider();
         _helper = new AggregateTestHelper<TAggregate, TContents>(_serviceProvider);
     }

@@ -11,12 +11,7 @@ using Sekiban.Core.Query.SingleAggregate;
 using Sekiban.Core.Shared;
 using Sekiban.Testing.Command;
 using Sekiban.Testing.QueryFilter;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Xunit;
 namespace Sekiban.Testing.Projection;
 
@@ -40,7 +35,7 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
         // ReSharper disable once VirtualMemberCallInConstructor
         SetupDependency(services);
         services.AddQueryFiltersFromDependencyDefinition(new TDependencyDefinition());
-        SekibanEventSourcingDependency.RegisterForAggregateTest(services, new TDependencyDefinition());
+        services.AddSekibanCoreForAggregateTestWithDependency(new TDependencyDefinition());
         _serviceProvider = services.BuildServiceProvider();
         _commandExecutor = new AggregateTestCommandExecutor(_serviceProvider);
     }
