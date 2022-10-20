@@ -15,6 +15,6 @@ public class TenantSpec : AggregateTestBase<SekibanTenant, SekibanTenantContents
     {
         WhenCreate(new CreateSekibanTenant(TenantId, TenantName, TenantCode))
             .ThenNotThrowsAnException()
-            .ThenContents(new SekibanTenantContents(TenantName, TenantCode));
+            .ThenContentsIs(new SekibanTenantContents(TenantName, TenantCode));
     }
 }

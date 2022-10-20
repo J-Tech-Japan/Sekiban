@@ -3,8 +3,6 @@ using Sekiban.Core.Query.MultipleAggregate;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Shared;
-using System;
-using System.IO;
 using System.Text.Json;
 using Xunit;
 namespace Sekiban.Testing.QueryFilter;
@@ -42,8 +40,8 @@ public class
             _dto.Contents.List);
         return this;
     }
-    public AggregateListQueryFilterTestChecker<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> WriteResponse(
-        string filename)
+    public AggregateListQueryFilterTestChecker<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel>
+        WriteResponseToFile(string filename)
     {
         if (Response == null)
         {
@@ -57,7 +55,7 @@ public class
         File.WriteAllTextAsync(filename, json);
         return this;
     }
-    public AggregateListQueryFilterTestChecker<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenResponse(
+    public AggregateListQueryFilterTestChecker<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenResponseIs(
         QueryFilterListResult<TResponseQueryModel> expectedResponse)
     {
         if (Response == null)
@@ -71,21 +69,28 @@ public class
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public AggregateListQueryFilterTestChecker<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel>
-        ThenResponseFromJson(string responseJson)
+    public AggregateListQueryFilterTestChecker<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenGetResponse(
+        Action<QueryFilterListResult<TResponseQueryModel>> responseAction)
     {
-        var response = JsonSerializer.Deserialize<QueryFilterListResult<TResponseQueryModel>>(responseJson);
-        if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
-        ThenResponse(response);
+        Assert.NotNull(Response);
+        responseAction(Response!);
         return this;
     }
     public AggregateListQueryFilterTestChecker<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel>
-        ThenResponseFromFile(string responseFilename)
+        ThenResponseIsFromJson(string responseJson)
+    {
+        var response = JsonSerializer.Deserialize<QueryFilterListResult<TResponseQueryModel>>(responseJson);
+        if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        ThenResponseIs(response);
+        return this;
+    }
+    public AggregateListQueryFilterTestChecker<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel>
+        ThenResponseIsFromFile(string responseFilename)
     {
         using var openStream = File.OpenRead(responseFilename);
         var response = JsonSerializer.Deserialize<QueryFilterListResult<TResponseQueryModel>>(openStream);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
-        ThenResponse(response);
+        ThenResponseIs(response);
         return this;
     }
 }

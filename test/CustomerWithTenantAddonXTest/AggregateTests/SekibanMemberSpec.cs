@@ -20,7 +20,7 @@ public class SekibanMemberSpec : AggregateTestBase<SekibanMember, SekibanMemberC
         RunEnvironmentCreateCommand(new CreateSekibanTenant(TenantSpec.TenantId, TenantSpec.TenantName, TenantSpec.TenantCode));
         WhenCreate(new CreateSekibanMember(TenantSpec.TenantId, MemberId, MemberName, MemberEmail, UniqueId))
             .ThenNotThrowsAnException()
-            .ThenState(member => new AggregateDto<SekibanMemberContents>(member, new SekibanMemberContents(MemberName, MemberEmail, UniqueId)));
+            .ThenStateIs(new AggregateDto<SekibanMemberContents>(GetAggregate(), new SekibanMemberContents(MemberName, MemberEmail, UniqueId)));
     }
     [Fact]
     public void CreateMemberFailedWithGuid()

@@ -21,7 +21,7 @@ public class ClientAndProjectionSpec : SingleAggregateTestBase<Client, ClientCon
     public Guid branchId = Guid.Parse("cdb93f86-8d2f-442c-9f62-b9e791401f5f");
     public DateTime FirstEventDatetime { get; set; } = DateTime.Now;
     public DateTime ChangedEventDatetime { get; set; } = DateTime.Now;
-    public SingleProjectionTestBaseEventSubscriber<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.ContentsDefinition>
+    public SingleAggregateProjectionTestBase<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.ContentsDefinition>
         ProjectionSubscriber
     {
         get;
@@ -29,7 +29,7 @@ public class ClientAndProjectionSpec : SingleAggregateTestBase<Client, ClientCon
     public ClientAndProjectionSpec()
     {
         ProjectionSubscriber
-            = SetupSingleAggregateProjection<SingleProjectionTestBaseEventSubscriber<Client, ClientNameHistoryProjection,
+            = SetupSingleAggregateProjection<SingleAggregateProjectionTestBase<Client, ClientNameHistoryProjection,
                 ClientNameHistoryProjection.ContentsDefinition>>();
     }
 
@@ -43,7 +43,7 @@ public class ClientAndProjectionSpec : SingleAggregateTestBase<Client, ClientCon
 
         WhenCreate(new CreateClient(branchId, clientName, clientEmail))
             .ThenNotThrowsAnException()
-            .ThenEvents(
+            .ThenGetEvents(
                 events =>
                 {
                     foreach (var ev in events.Where(m => m.GetPayload().GetType() == typeof(ClientCreated)))
@@ -51,8 +51,8 @@ public class ClientAndProjectionSpec : SingleAggregateTestBase<Client, ClientCon
                         FirstEventDatetime = ev.TimeStamp;
                     }
                 })
-            .ThenContents(new ClientContents(branchId, clientName, clientEmail));
-        ProjectionSubscriber.ThenContents(
+            .ThenContentsIs(new ClientContents(branchId, clientName, clientEmail));
+        ProjectionSubscriber.ThenContentsIs(
             new ClientNameHistoryProjection.ContentsDefinition(
                 branchId,
                 new List<ClientNameHistoryProjection.ClientNameHistoryProjectionRecord> { new(clientName, FirstEventDatetime) },
@@ -64,7 +64,7 @@ public class ClientAndProjectionSpec : SingleAggregateTestBase<Client, ClientCon
         GivenScenario(CreateTest)
             .WhenChange(client => new ChangeClientName(client.AggregateId, clientNameChanged) { ReferenceVersion = client.Version })
             .ThenNotThrowsAnException()
-            .ThenEvents(
+            .ThenGetEvents(
                 events =>
                 {
                     foreach (var ev in events.Where(e => e.GetPayload().GetType().Name == nameof(ClientNameChanged)))
@@ -72,8 +72,8 @@ public class ClientAndProjectionSpec : SingleAggregateTestBase<Client, ClientCon
                         ChangedEventDatetime = ev.TimeStamp;
                     }
                 })
-            .ThenContents(new ClientContents(branchId, clientNameChanged, clientEmail));
-        ProjectionSubscriber.ThenContents(
+            .ThenContentsIs(new ClientContents(branchId, clientNameChanged, clientEmail));
+        ProjectionSubscriber.ThenContentsIs(
             new ClientNameHistoryProjection.ContentsDefinition(
                 branchId,
                 new List<ClientNameHistoryProjection.ClientNameHistoryProjectionRecord>
@@ -87,16 +87,16 @@ public class ClientAndProjectionSpec : SingleAggregateTestBase<Client, ClientCon
     {
         // Sekibanのテストでは結果をファイルに書いたり、期待値をファイルから読み込んだり、JSONで比較したりすることができる。
         GivenScenario(ChangeNameTest)
-            .WriteDtoToFile("ClientTestOut.json")
+            .WriteStateToFile("ClientTestOut.json")
             .WriteContentsToFile("ClientContentsTestOut.json")
-            .ThenStateFromJson(
+            .ThenStateIsFromJson(
                 "{\"Contents\":{\"BranchId\":\"cdb93f86-8d2f-442c-9f62-b9e791401f5f\",\"ClientName\":\"Test Client Changed\",\"ClientEmail\":\"client@example.com\"},\"IsDeleted\":false,\"AggregateId\":\"9cfa698b-fda7-44a1-86c0-1f167914bb47\",\"Version\":2,\"LastEventId\":\"19c7e148-550f-4954-b0d5-e05ef93cb32a\",\"AppliedSnapshotVersion\":0,\"LastSortableUniqueId\":\"638002628133105260000616586510\"}")
-            .ThenStateFromFile("ClientTestResult.json")
-            .ThenContentsFromJson(
+            .ThenStateIsFromFile("ClientTestResult.json")
+            .ThenContentsIsFromJson(
                 "{\"BranchId\":\"cdb93f86-8d2f-442c-9f62-b9e791401f5f\",\"ClientName\":\"Test Client Changed\",\"ClientEmail\":\"client@example.com\"}")
-            .ThenContentsFromFile("ClientContentsTestResult.json");
-        ProjectionSubscriber.WriteProjectionDto("ClientProjectionOut.json")
-            .ThenContentsFromJson(
+            .ThenContentsIsFromFile("ClientContentsTestResult.json");
+        ProjectionSubscriber.WriteProjectionDtoToFile("ClientProjectionOut.json")
+            .ThenContentsIsFromJson(
                 "{\"BranchId\":\"cdb93f86-8d2f-442c-9f62-b9e791401f5f\",\"ClientNames\":[{\"Name\":\"Test Client\",\"DateChanged\":\"" +
                 FirstEventDatetime.ToString("O") +
                 "\"},{\"Name\":\"Test Client Changed\",\"DateChanged\":\"" +

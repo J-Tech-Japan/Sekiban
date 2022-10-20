@@ -8,10 +8,6 @@ using Sekiban.Core.Query.SingleAggregate;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Text.Json;
 using Xunit;
 namespace Sekiban.Testing.SingleAggregate;
@@ -137,7 +133,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
             throw new SekibanCreateCommandShouldSaveCreateEventFirstException();
         }
         SingleAggregateProjections.ForEach(m => m.SetAggregateId(_aggregate.AggregateId));
-        DeliverEventsToSubscribers(_latestEvents);
+        SaveEvents(_latestEvents);
         CheckCommandJSONSupports(commandDocument);
         _aggregate.ResetEventsAndSnapshots();
         CheckStateJSONSupports();
@@ -200,22 +196,28 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         {
             if (ev.IsAggregateInitialEvent) { throw new SekibanChangeCommandShouldNotSaveCreateEventException(); }
         }
-        DeliverEventsToSubscribers(_latestEvents);
+        SaveEvents(_latestEvents);
         _aggregate.ResetEventsAndSnapshots();
         CheckStateJSONSupports();
         return this;
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenEvents(Action<List<IAggregateEvent>, TAggregate> checkEventsAction)
-    {
-        checkEventsAction(_latestEvents, _aggregate);
-        return this;
-    }
-    public IAggregateTestHelper<TAggregate, TContents> ThenEvents(Action<List<IAggregateEvent>> checkEventsAction)
+    public IAggregateTestHelper<TAggregate, TContents> ThenGetEvents(Action<List<IAggregateEvent>> checkEventsAction)
     {
         checkEventsAction(_latestEvents);
         return this;
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEventPayload<T>(T payload) where T : IEventPayload
+    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEventIs<T>(AggregateEvent<T> aggregateEvent) where T : IEventPayload
+    {
+        if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
+        Assert.IsType<T>(_latestEvents.First());
+        var actual = _latestEvents.First();
+        var expected = aggregateEvent;
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(expectedJson, actualJson);
+        return this;
+    }
+    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEventPayloadIs<T>(T payload) where T : IEventPayload
     {
         if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
         Assert.IsType<AggregateEvent<T>>(_latestEvents.First());
@@ -225,59 +227,36 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEventPayload<T>(Func<TAggregate, T> constructExpectedEvent) where T : IEventPayload
+    public IAggregateTestHelper<TAggregate, TContents> ThenGetSingleEventPayload<T>(Action<T> checkPayloadAction) where T : class, IEventPayload
     {
-        var payload = constructExpectedEvent(_aggregate);
-        return ThenSingleEventPayload(payload);
-    }
-    public IAggregateTestHelper<TAggregate, TContents> ThenState(Action<AggregateDto<TContents>, TAggregate> checkDtoAction)
-    {
-        checkDtoAction(_aggregate.ToDto(), _aggregate);
+        if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
+        Assert.IsType<T>(_latestEvents.First().GetPayload());
+        checkPayloadAction(_latestEvents.First().GetPayload() as T ?? throw new SekibanInvalidEventException());
         return this;
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenState(Action<AggregateDto<TContents>> checkDtoAction)
+    public IAggregateTestHelper<TAggregate, TContents> ThenGetState(Action<AggregateDto<TContents>> checkDtoAction)
     {
         checkDtoAction(_aggregate.ToDto());
         return this;
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEvent<T>(Action<T, TAggregate> checkEventAction) where T : IAggregateEvent
+    public IAggregateTestHelper<TAggregate, TContents> ThenStateIs(AggregateDto<TContents> expectedDto)
     {
-        if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
-        Assert.IsType<T>(_latestEvents.First());
-        checkEventAction((T)_latestEvents.First(), _aggregate);
+        var actual = _aggregate.ToDto();
+        var expected = expectedDto.GetComparableObject(actual);
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(expectedJson, actualJson);
         return this;
     }
 
-    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEvent<T>(Action<T> checkEventAction) where T : IAggregateEvent
+    public IAggregateTestHelper<TAggregate, TContents> ThenGetSingleEvent<T>(Action<T> checkEventAction) where T : IAggregateEvent
     {
         if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
         Assert.IsType<T>(_latestEvents.First());
         checkEventAction((T)_latestEvents.First());
         return this;
     }
-
-    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEvent<T>(Func<TAggregate, T> constructExpectedEvent) where T : IAggregateEvent
-    {
-        if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
-        Assert.IsType<T>(_latestEvents.First());
-        var actual = _latestEvents.First();
-        var expected = constructExpectedEvent(_aggregate);
-        expected = constructExpectedEvent(_aggregate).GetComparableObject(actual, expected.Version == 0);
-        var actualJson = SekibanJsonHelper.Serialize(actual);
-        var expectedJson = SekibanJsonHelper.Serialize(expected);
-        Assert.Equal(expectedJson, actualJson);
-        return this;
-    }
-    public IAggregateTestHelper<TAggregate, TContents> ThenState(Func<TAggregate, AggregateDto<TContents>> constructExpectedDto)
-    {
-        var actual = _aggregate.ToDto();
-        var expected = constructExpectedDto(_aggregate).GetComparableObject(actual);
-        var actualJson = SekibanJsonHelper.Serialize(actual);
-        var expectedJson = SekibanJsonHelper.Serialize(expected);
-        Assert.Equal(expectedJson, actualJson);
-        return this;
-    }
-    public IAggregateTestHelper<TAggregate, TContents> ThenContents(TContents contents)
+    public IAggregateTestHelper<TAggregate, TContents> ThenContentsIs(TContents contents)
     {
         var actual = _aggregate.ToDto().Contents;
         var expected = contents;
@@ -286,20 +265,11 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public IAggregateTestHelper<TAggregate, TContents> WriteDtoToFile(string filename)
+    public IAggregateTestHelper<TAggregate, TContents> WriteStateToFile(string filename)
     {
         var actual = _aggregate.ToDto();
         var actualJson = SekibanJsonHelper.Serialize(actual);
         File.WriteAllText(filename, actualJson);
-        return this;
-    }
-    public IAggregateTestHelper<TAggregate, TContents> ThenContents(Func<TAggregate, TContents> constructExpectedDto)
-    {
-        var actual = _aggregate.ToDto().Contents;
-        var expected = constructExpectedDto(_aggregate);
-        var actualJson = SekibanJsonHelper.Serialize(actual);
-        var expectedJson = SekibanJsonHelper.Serialize(expected);
-        Assert.Equal(expectedJson, actualJson);
         return this;
     }
     public Guid GetAggregateId()
@@ -328,13 +298,6 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         checkException((exception as T)!);
         return this;
     }
-
-    public IAggregateTestHelper<TAggregate, TContents> ThenAggregateCheck(Action<TAggregate> checkAction)
-    {
-        checkAction(_aggregate);
-        return this;
-    }
-
     public IAggregateTestHelper<TAggregate, TContents> ThenNotThrowsAnException()
     {
         var exception = _latestException is AggregateException aggregateException ? aggregateException.InnerExceptions.First() : _latestException;
@@ -343,7 +306,6 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         Assert.Empty(_latestValidationErrors);
         return this;
     }
-
     public IAggregateTestHelper<TAggregate, TContents> ThenHasValidationErrors(IEnumerable<SekibanValidationParameterError> validationParameterErrors)
     {
         var actual = _latestValidationErrors;
@@ -353,13 +315,11 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-
     public IAggregateTestHelper<TAggregate, TContents> ThenHasValidationErrors()
     {
         Assert.NotEmpty(_latestValidationErrors);
         return this;
     }
-
     public IAggregateTestHelper<TAggregate, TContents> WriteContentsToFile(string filename)
     {
         var actual = _aggregate.ToDto().Contents;
@@ -367,8 +327,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         File.WriteAllText(filename, actualJson);
         return this;
     }
-
-    public IAggregateTestHelper<TAggregate, TContents> ThenStateFromJson(string dtoJson)
+    public IAggregateTestHelper<TAggregate, TContents> ThenStateIsFromJson(string dtoJson)
     {
         var dto = JsonSerializer.Deserialize<AggregateDto<TContents>>(dtoJson);
         if (dto is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
@@ -379,8 +338,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-
-    public IAggregateTestHelper<TAggregate, TContents> ThenStateFromFile(string dtoFileName)
+    public IAggregateTestHelper<TAggregate, TContents> ThenStateIsFromFile(string dtoFileName)
     {
         using var openStream = File.OpenRead(dtoFileName);
         var dto = JsonSerializer.Deserialize<AggregateDto<TContents>>(openStream);
@@ -393,7 +351,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         return this;
     }
 
-    public IAggregateTestHelper<TAggregate, TContents> ThenContentsFromJson(string contentsJson)
+    public IAggregateTestHelper<TAggregate, TContents> ThenContentsIsFromJson(string contentsJson)
     {
         var contents = JsonSerializer.Deserialize<TContents>(contentsJson);
         if (contents is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
@@ -405,7 +363,7 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         return this;
     }
 
-    public IAggregateTestHelper<TAggregate, TContents> ThenContentsFromFile(string contentsFileName)
+    public IAggregateTestHelper<TAggregate, TContents> ThenContentsIsFromFile(string contentsFileName)
     {
         using var openStream = File.OpenRead(contentsFileName);
         var contents = JsonSerializer.Deserialize<TContents>(openStream);
@@ -435,15 +393,13 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         action(_commandExecutor);
         return this;
     }
-
-    private void DeliverEventsToSubscribers(IEnumerable<IAggregateEvent> events)
+    private void SaveEvents(IEnumerable<IAggregateEvent> events)
     {
         foreach (var ev in events)
         {
             GivenEnvironmentEvent(ev);
         }
     }
-
     private void AddEventsFromList(List<JsonElement> list)
     {
         var registeredEventTypes = _serviceProvider.GetService<RegisteredEventTypes>();
@@ -506,21 +462,6 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
             Assert.Equal(json, json2);
         }
     }
-
-    public AggregateTestHelper<TAggregate, TContents> ThenSingleEvent(Action<IAggregateEvent, TAggregate> checkEventAction)
-    {
-        if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
-        checkEventAction(_latestEvents.First(), _aggregate);
-        return this;
-    }
-
-    public AggregateTestHelper<TAggregate, TContents> ThenSingleEvent(Action<IAggregateEvent> checkEventAction)
-    {
-        if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
-        checkEventAction(_latestEvents.First());
-        return this;
-    }
-
     private void ResetBeforeCommand()
     {
         _latestValidationErrors = new List<SekibanValidationParameterError>();

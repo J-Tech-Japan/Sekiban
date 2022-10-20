@@ -15,6 +15,16 @@ public static class SekibanEventSourcingDependency
         return Assembly.GetExecutingAssembly();
     }
 
+    public static IServiceCollection AddSekibanSekibanCoreWithDependency(
+        this IServiceCollection services,
+        IDependencyDefinition dependencyDefinition,
+        ISekibanDateProducer? sekibanDateProducer = null,
+        ServiceCollectionExtensions.MultipleProjectionType multipleProjectionType = ServiceCollectionExtensions.MultipleProjectionType.MemoryCache)
+
+    {
+        Register(services, dependencyDefinition, sekibanDateProducer, multipleProjectionType);
+        return services;
+    }
     public static IEnumerable<(Type serviceType, Type? implementationType)> GetDependencies()
     {
         // Aggregate: RecentInMemoryActivity
@@ -45,6 +55,15 @@ public static class SekibanEventSourcingDependency
         services.AddTransient(GetDependencies());
     }
 
+    public static IServiceCollection AddSekibanCoreInMemoryTestWithDependency(
+        this IServiceCollection services,
+        IDependencyDefinition dependencyDefinition,
+        ISekibanDateProducer? sekibanDateProducer = null)
+
+    {
+        RegisterForInMemoryTest(services, dependencyDefinition, sekibanDateProducer);
+        return services;
+    }
     public static void RegisterForInMemoryTest(
         IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
@@ -67,6 +86,15 @@ public static class SekibanEventSourcingDependency
         services.AddTransient(GetDependencies());
     }
 
+    public static IServiceCollection AddSekibanCoreForAggregateTestWithDependency(
+        this IServiceCollection services,
+        IDependencyDefinition dependencyDefinition,
+        ISekibanDateProducer? sekibanDateProducer = null)
+
+    {
+        RegisterForAggregateTest(services, dependencyDefinition, sekibanDateProducer);
+        return services;
+    }
     public static void RegisterForAggregateTest(
         IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
@@ -76,7 +104,7 @@ public static class SekibanEventSourcingDependency
         services.AddMediatR(Assembly.GetExecutingAssembly(), GetAssembly());
 
         // Sekibanイベントソーシング
-        services.AddSekibanCoreInAggregateTest(sekibanDateProducer);
+        services.AddSekibanCoreAggregateTest(sekibanDateProducer);
 
         services.AddSekibanHTTPUser();
 

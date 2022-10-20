@@ -53,6 +53,10 @@ public record AggregateEvent<TEventPayload> : DocumentBase, IAggregateEvent wher
     {
         return Payload;
     }
+    public T? GetPayload<T>() where T : class, IEventPayload
+    {
+        return Payload as T;
+    }
 
     public List<CallHistory> GetCallHistoriesIncludesItself()
     {

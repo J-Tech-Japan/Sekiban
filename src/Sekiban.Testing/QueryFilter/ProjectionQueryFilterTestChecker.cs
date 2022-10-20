@@ -2,8 +2,6 @@ using Sekiban.Core.Query.MultipleAggregate;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Shared;
-using System;
-using System.IO;
 using System.Text.Json;
 using Xunit;
 namespace Sekiban.Testing.QueryFilter;
@@ -40,7 +38,7 @@ public class
         return this;
     }
     public ProjectionQueryFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
-        WriteResponse(string filename)
+        WriteResponseToFile(string filename)
     {
         if (_response == null)
         {
@@ -55,7 +53,7 @@ public class
         return this;
     }
     public ProjectionQueryFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
-        ThenResponse(TQueryFilterResponse expectedResponse)
+        ThenResponseIs(TQueryFilterResponse expectedResponse)
     {
         var actual = _response;
         var expected = expectedResponse;
@@ -65,20 +63,28 @@ public class
         return this;
     }
     public ProjectionQueryFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
-        ThenResponseFromJson(string responseJson)
+        ThenGetResponse(Action<TQueryFilterResponse> responseAction)
+    {
+        Assert.NotNull(_response);
+        responseAction(_response!);
+        return this;
+    }
+
+    public ProjectionQueryFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
+        ThenResponseIsFromJson(string responseJson)
     {
         var response = JsonSerializer.Deserialize<TQueryFilterResponse>(responseJson);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
-        ThenResponse(response);
+        ThenResponseIs(response);
         return this;
     }
     public ProjectionQueryFilterTestChecker<TProjection, TProjectionContents, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
-        ThenResponseFromFile(string responseFilename)
+        ThenResponseIsFromFile(string responseFilename)
     {
         using var openStream = File.OpenRead(responseFilename);
         var response = JsonSerializer.Deserialize<TQueryFilterResponse>(openStream);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
-        ThenResponse(response);
+        ThenResponseIs(response);
         return this;
     }
 }

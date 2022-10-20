@@ -19,10 +19,10 @@ public static class DependencyHelper
         services.AddSingleton<IConfiguration>(fixture.Configuration);
         if (inMemory)
         {
-            SekibanEventSourcingDependency.RegisterForInMemoryTest(services, new CustomerDependency());
+            services.AddSekibanCoreInMemoryTestWithDependency(new CustomerDependency());
         } else
         {
-            SekibanEventSourcingDependency.Register(services, new CustomerDependency(), sekibanDateProducer, multipleProjectionType);
+            services.AddSekibanSekibanCoreWithDependency(new CustomerDependency(), sekibanDateProducer, multipleProjectionType);
             services.AddSekibanCosmosDB();
         }
         services.AddQueryFiltersFromDependencyDefinition(new CustomerDependency());

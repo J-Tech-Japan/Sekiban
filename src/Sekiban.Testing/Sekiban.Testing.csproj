@@ -5,18 +5,18 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>JJ_Sekiban.Testing</PackageId>
-        <Version>0.8.0</Version>
+        <Version>0.8.1</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Testing</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.8.0</PackageVersion>
-        <Description>フォルダ構成、プロジェクト構成のリファクタリング、ApplyEventの副作用削除</Description>
+        <PackageVersion>0.8.1</PackageVersion>
+        <Description>テストの名前変更など</Description>
         <AssemblyName>Sekiban.Testing</AssemblyName>
         <RootNamespace>Sekiban.Testing</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="xunit.assert" Version="2.4.1" />
+        <PackageReference Include="xunit.assert" Version="2.4.1"/>
     </ItemGroup>
     <ItemGroup>
         <None Update="host.json">
@@ -28,6 +28,6 @@
         </None>
     </ItemGroup>
     <ItemGroup>
-      <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj" />
+        <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj"/>
     </ItemGroup>
 </Project>

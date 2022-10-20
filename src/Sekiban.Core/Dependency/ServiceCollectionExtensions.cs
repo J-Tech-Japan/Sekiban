@@ -94,7 +94,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<QueryFilterHandler>();
         return services;
     }
-    public static IServiceCollection AddSekibanCoreInAggregateTest(this IServiceCollection services, ISekibanDateProducer? sekibanDateProducer = null)
+    public static IServiceCollection AddSekibanCoreAggregateTest(this IServiceCollection services, ISekibanDateProducer? sekibanDateProducer = null)
     {
         services.AddMemoryCache();
 

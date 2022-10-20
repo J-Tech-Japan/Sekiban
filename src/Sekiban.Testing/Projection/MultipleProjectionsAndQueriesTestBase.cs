@@ -6,8 +6,6 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.SingleAggregate;
 using Sekiban.Testing.Command;
-using System;
-using System.Collections.Generic;
 namespace Sekiban.Testing.Projection;
 
 public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> where TDependencyDefinition : IDependencyDefinition, new()
@@ -22,7 +20,7 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         // ReSharper disable once VirtualMemberCallInConstructor
         SetupDependency(services);
         services.AddQueryFiltersFromDependencyDefinition(new TDependencyDefinition());
-        SekibanEventSourcingDependency.RegisterForAggregateTest(services, new TDependencyDefinition());
+        services.AddSekibanCoreForAggregateTestWithDependency(new TDependencyDefinition());
         _serviceProvider = services.BuildServiceProvider();
         _commandExecutor = new AggregateTestCommandExecutor(_serviceProvider);
     }

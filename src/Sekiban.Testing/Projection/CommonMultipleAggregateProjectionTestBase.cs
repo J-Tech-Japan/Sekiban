@@ -11,12 +11,7 @@ using Sekiban.Core.Query.SingleAggregate;
 using Sekiban.Core.Shared;
 using Sekiban.Testing.Command;
 using Sekiban.Testing.QueryFilter;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Xunit;
 namespace Sekiban.Testing.Projection;
 
@@ -40,7 +35,7 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
         // ReSharper disable once VirtualMemberCallInConstructor
         SetupDependency(services);
         services.AddQueryFiltersFromDependencyDefinition(new TDependencyDefinition());
-        SekibanEventSourcingDependency.RegisterForAggregateTest(services, new TDependencyDefinition());
+        services.AddSekibanCoreForAggregateTestWithDependency(new TDependencyDefinition());
         _serviceProvider = services.BuildServiceProvider();
         _commandExecutor = new AggregateTestCommandExecutor(_serviceProvider);
     }
@@ -52,6 +47,18 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
 
     public void Dispose()
     {
+    }
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenContentsIsFromFile(string filename)
+    {
+        using var openStream = File.OpenRead(filename);
+        var projection = JsonSerializer.Deserialize<TProjectionContents>(openStream);
+        if (projection is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        return ThenContentsIs(projection);
+    }
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenGetContents(Action<TProjectionContents> contentsAction)
+    {
+        contentsAction(Dto.Contents);
+        return this;
     }
     public Guid RunCreateCommand<TAggregate>(ICreateAggregateCommand<TAggregate> command, Guid? injectingAggregateId = null)
         where TAggregate : AggregateCommonBase, new()
@@ -96,17 +103,9 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
     {
         return GivenEvents(events.AsEnumerable());
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenEvents(string jsonEvents)
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenEventsFromJson(string jsonEvents)
     {
         var list = JsonSerializer.Deserialize<List<JsonElement>>(jsonEvents);
-        if (list is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
-        AddEventsFromList(list);
-        return this;
-    }
-    public async Task<IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents>> GivenEventsFromFileAsync(string filename)
-    {
-        await using var openStream = File.OpenRead(filename);
-        var list = await JsonSerializer.DeserializeAsync<List<JsonElement>>(openStream);
         if (list is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         AddEventsFromList(list);
         return this;
@@ -120,21 +119,13 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
         return this;
     }
 
-    public async Task<IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents>> ThenDtoFileAsync(string filename)
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenGetDto(
+        Action<MultipleAggregateProjectionContentsDto<TProjectionContents>> dtoAction)
     {
-        await using var openStream = File.OpenRead(filename);
-        var projection = await JsonSerializer.DeserializeAsync<MultipleAggregateProjectionContentsDto<TProjectionContents>>(openStream);
-        if (projection is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
-        return ThenDto(projection);
-    }
-
-    public async Task<IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents>> WriteProjectionToFileAsync(string filename)
-    {
-        var json = SekibanJsonHelper.Serialize(Dto);
-        await File.WriteAllTextAsync(filename, json);
+        dtoAction(Dto);
         return this;
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenDto(
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenDtoIs(
         MultipleAggregateProjectionContentsDto<TProjectionContents> dto)
     {
         var actual = Dto;
@@ -144,7 +135,7 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenContents(TProjectionContents contents)
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenContentsIs(TProjectionContents contents)
     {
         var actual = Dto.Contents;
         var expected = contents;
@@ -153,12 +144,12 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenDtoFile(string filename)
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenDtoIsFromFile(string filename)
     {
         using var openStream = File.OpenRead(filename);
         var projection = JsonSerializer.Deserialize<MultipleAggregateProjectionContentsDto<TProjectionContents>>(openStream);
         if (projection is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
-        return ThenDto(projection);
+        return ThenDtoIs(projection);
     }
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> WriteProjectionToFile(string filename)
     {
@@ -229,6 +220,28 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
         Action<AggregateTestCommandExecutor> action)
     {
         action(_commandExecutor);
+        return this;
+    }
+    public async Task<IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents>> GivenEventsFromFileAsync(string filename)
+    {
+        await using var openStream = File.OpenRead(filename);
+        var list = await JsonSerializer.DeserializeAsync<List<JsonElement>>(openStream);
+        if (list is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        AddEventsFromList(list);
+        return this;
+    }
+    public async Task<IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents>> ThenDtoFileAsync(string filename)
+    {
+        await using var openStream = File.OpenRead(filename);
+        var projection = await JsonSerializer.DeserializeAsync<MultipleAggregateProjectionContentsDto<TProjectionContents>>(openStream);
+        if (projection is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        return ThenDtoIs(projection);
+    }
+
+    public async Task<IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents>> WriteProjectionToFileAsync(string filename)
+    {
+        var json = SekibanJsonHelper.Serialize(Dto);
+        await File.WriteAllTextAsync(filename, json);
         return this;
     }
 

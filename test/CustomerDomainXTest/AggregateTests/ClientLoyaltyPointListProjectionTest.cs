@@ -35,7 +35,7 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
             .WhenProjection()
             .ThenNotThrowsAnException()
 //        await ThenDtoFileAsync("TestData1Result.json");
-            .WriteProjectionToFileAsync("TestData1ResultOut.json");
+            .WriteProjectionToFile("TestData1ResultOut.json");
     }
     [Fact]
     public void QueryFilterCheckerTest()
@@ -52,7 +52,7 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     null,
                     null,
                     null))
-            .WriteResponse("ClientLoyaltyPointQueryFilter.json");
+            .WriteResponseToFile("ClientLoyaltyPointQueryFilter.json");
     }
 
 
@@ -83,7 +83,7 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     null,
                     null,
                     null))
-            .ThenResponse(
+            .ThenResponseIs(
                 new QueryFilterListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     null,
@@ -112,7 +112,7 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     null,
                     null,
                     null))
-            .ThenResponse(
+            .ThenResponseIs(
                 new QueryFilterListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     2,
@@ -139,7 +139,7 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     null,
                     null,
                     null))
-            .ThenResponse(
+            .ThenResponseIs(
                 new QueryFilterListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     1,
@@ -168,7 +168,7 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     null,
                     null,
                     null))
-            .ThenResponse(
+            .ThenResponseIs(
                 new QueryFilterListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     2,
@@ -194,7 +194,7 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     null,
                     null,
                     null))
-            .ThenResponse(
+            .ThenResponseIs(
                 new QueryFilterListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     2,
@@ -216,7 +216,7 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     null,
                     null,
                     null))
-            .ThenResponse(
+            .ThenResponseIs(
                 new QueryFilterListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     2,

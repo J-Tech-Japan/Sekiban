@@ -96,7 +96,7 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
                 });
         _clientLoyaltyProjectionTest.WhenProjection()
             .ThenNotThrowsAnException()
-            .ThenContents(
+            .ThenContentsIs(
                 new ClientLoyaltyPointMultipleProjection.ContentsDefinition(
                     ImmutableList<ClientLoyaltyPointMultipleProjection.ProjectedBranch>.Empty.Add(
                         new ClientLoyaltyPointMultipleProjection.ProjectedBranch(_branchId, branchName)),
@@ -107,7 +107,7 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
                 new ClientLoyaltyPointMultipleProjectionQueryFilter.QueryFilterParameter(
                     null,
                     ClientLoyaltyPointMultipleProjectionQueryFilter.QuerySortKeys.ClientName))
-            .ThenResponse(
+            .ThenResponseIs(
                 new ClientLoyaltyPointMultipleProjection.ContentsDefinition(
                     ImmutableList<ClientLoyaltyPointMultipleProjection.ProjectedBranch>.Empty.Add(
                         new ClientLoyaltyPointMultipleProjection.ProjectedBranch(_branchId, branchName)),
@@ -120,8 +120,8 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
     {
         GivenScenario(Test);
         _branchListProjection.GivenQueryFilterChecker(_branchExistsQueryFilterChecker).WhenProjection().ThenNotThrowsAnException();
-        _branchExistsQueryFilterChecker.WhenParam(new BranchExistsQueryFilter.QueryParameter(_branchId)).ThenResponse(true);
-        _branchExistsQueryFilterChecker.WhenParam(new BranchExistsQueryFilter.QueryParameter(Guid.NewGuid())).ThenResponse(false);
+        _branchExistsQueryFilterChecker.WhenParam(new BranchExistsQueryFilter.QueryParameter(_branchId)).ThenResponseIs(true);
+        _branchExistsQueryFilterChecker.WhenParam(new BranchExistsQueryFilter.QueryParameter(Guid.NewGuid())).ThenResponseIs(false);
     }
 
     [Fact]
@@ -133,7 +133,7 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
             .ThenNotThrowsAnException();
         _singleAggregateProjectionListQueryFilterTestChecker
             .WhenParam(new ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionParameter(null, null, null, null, null))
-            .ThenResponse(
+            .ThenResponseIs(
                 new QueryFilterListResult<ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionQueryResponse>(
                     1,
                     null,
@@ -157,7 +157,7 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
                 new ClientLoyaltyPointMultipleProjectionQueryFilter.QueryFilterParameter(
                     null,
                     ClientLoyaltyPointMultipleProjectionQueryFilter.QuerySortKeys.ClientName))
-            .ThenResponse(
+            .ThenResponseIs(
                 new ClientLoyaltyPointMultipleProjection.ContentsDefinition(
                     ImmutableList<ClientLoyaltyPointMultipleProjection.ProjectedBranch>.Empty.Add(
                         new ClientLoyaltyPointMultipleProjection.ProjectedBranch(_branchId, branchName)),
