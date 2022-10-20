@@ -242,8 +242,9 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
     public IAggregateTestHelper<TAggregate, TContents> ThenStateIs(AggregateDto<TContents> expectedDto)
     {
         var actual = _aggregate.ToDto();
+        var expected = expectedDto.GetComparableObject(actual);
         var actualJson = SekibanJsonHelper.Serialize(actual);
-        var expectedJson = SekibanJsonHelper.Serialize(expectedDto);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
         Assert.Equal(expectedJson, actualJson);
         return this;
     }

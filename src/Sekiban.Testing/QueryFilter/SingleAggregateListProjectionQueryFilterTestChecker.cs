@@ -4,8 +4,6 @@ using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleAggregate;
 using Sekiban.Core.Shared;
-using System;
-using System.IO;
 using System.Text.Json;
 using Xunit;
 namespace Sekiban.Testing.QueryFilter;
@@ -77,6 +75,14 @@ public class SingleAggregateListProjectionQueryFilterTestChecker<TAggregate, TSi
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
+    public SingleAggregateListProjectionQueryFilterTestChecker<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents,
+        TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenGetResponse(Action<TResponseQueryModel> responseAction)
+    {
+        Assert.NotNull(Response);
+        responseAction(Response!);
+        return this;
+    }
+
     public SingleAggregateListProjectionQueryFilterTestChecker<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents,
         TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenResponseFromJson(string responseJson)
     {

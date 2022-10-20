@@ -24,7 +24,7 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMu
         GivenEvents((branchId, new BranchCreated(branchName)))
             .WhenProjection()
             .ThenNotThrowsAnException()
-            .ThenDto(
+            .ThenDtoIs(
                 new MultipleAggregateProjectionContentsDto<ClientLoyaltyPointMultipleProjection.ContentsDefinition>(
                     new ClientLoyaltyPointMultipleProjection.ContentsDefinition(
                         ImmutableList<ClientLoyaltyPointMultipleProjection.ProjectedBranch>.Empty.Add(
@@ -40,7 +40,7 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMu
     public void JsonEventsTest()
     {
         #region json
-        GivenEvents(
+        GivenEventsFromJson(
                 @"
 [
     {
@@ -610,7 +610,7 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMu
             .WhenProjection()
             .ThenNotThrowsAnException()
 //        await ThenDtoFileAsync("TestData1Result.json");
-            .WriteProjectionToFileAsync("TestData1ResultOut.json");
+            .WriteProjectionToFile("TestData1ResultOut.json");
 
     }
     [Fact]
@@ -621,8 +621,8 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMu
                 new ClientLoyaltyPointMultipleProjectionQueryFilter.QueryFilterParameter(
                     branchId,
                     ClientLoyaltyPointMultipleProjectionQueryFilter.QuerySortKeys.ClientName))
-            // .WriteResponse("QueryResponseOut.json")
-            .ThenResponseFromFile("ClientLoyaltyPointProjectionQueryResponse01.json");
+            // .WriteResponseToFile("QueryResponseOut.json")
+            .ThenResponseIsFromFile("ClientLoyaltyPointProjectionQueryResponse01.json");
 
     }
 }
