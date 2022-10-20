@@ -59,7 +59,7 @@ public abstract class AggregateBase<TContents> : AggregateCommonBase, ISingleAgg
         ev = ev with { Version = Version };
         ApplyEvent(ev);
         ev = ev with { Version = Version };
-        _basicInfo.Events.Add(ev);
+        _basicInfo = _basicInfo with { Events = _basicInfo.Events.Add(ev) };
     }
     protected void CopyPropertiesFromSnapshot(AggregateDto<TContents> snapshot)
     {

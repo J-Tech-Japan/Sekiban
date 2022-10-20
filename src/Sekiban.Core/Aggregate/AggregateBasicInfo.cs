@@ -1,4 +1,5 @@
 using Sekiban.Core.Event;
+using System.Collections.Immutable;
 namespace Sekiban.Core.Aggregate;
 
 public record AggregateBasicInfo
@@ -9,5 +10,5 @@ public record AggregateBasicInfo
     public string LastSortableUniqueId { get; init; } = string.Empty;
     public int AppliedSnapshotVersion { get; init; } = 0;
     public int Version { get; init; } = 0;
-    public List<IAggregateEvent> Events { get; init; } = new();
+    public ImmutableList<IAggregateEvent> Events { get; init; } = ImmutableList<IAggregateEvent>.Empty;
 }

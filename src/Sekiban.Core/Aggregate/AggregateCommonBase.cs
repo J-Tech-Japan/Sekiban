@@ -1,11 +1,12 @@
 ﻿using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
+using System.Collections.Immutable;
 namespace Sekiban.Core.Aggregate;
 
 public abstract class AggregateCommonBase : IAggregate
 {
     protected AggregateBasicInfo _basicInfo = new();
-    public ReadOnlyCollection<IAggregateEvent> Events => _basicInfo.Events.AsReadOnly();
+    public ReadOnlyCollection<IAggregateEvent> Events => _basicInfo.Events.ToList().AsReadOnly();
     public Guid AggregateId
     {
         get => _basicInfo.AggregateId;
@@ -36,7 +37,7 @@ public abstract class AggregateCommonBase : IAggregate
     }
     public void ResetEventsAndSnapshots()
     {
-        _basicInfo.Events.Clear();
+        _basicInfo = _basicInfo with { Events = ImmutableList<IAggregateEvent>.Empty };
     }
 
     public static UAggregate Create<UAggregate>(Guid aggregateId) where UAggregate : AggregateCommonBase
