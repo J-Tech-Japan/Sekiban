@@ -8,13 +8,13 @@ using System.Text.Json;
 using Xunit;
 namespace Sekiban.Testing.SingleAggregate;
 
-public class SingleProjectionTestBaseEventSubscriber<TAggregate, TProjection, TProjectionContents> : SingleAggregateTestBase
+public class SingleAggregateProjectionTestBase<TAggregate, TProjection, TProjectionContents> : SingleAggregateTestBase
     where TAggregate : AggregateCommonBase, new()
     where TProjection : SingleAggregateProjectionBase<TAggregate, TProjection, TProjectionContents>, new()
     where TProjectionContents : ISingleAggregateProjectionContents
 {
     public TProjection Projection { get; } = new();
-    public SingleProjectionTestBaseEventSubscriber(IServiceProvider serviceProvider) : base(serviceProvider)
+    public SingleAggregateProjectionTestBase(IServiceProvider serviceProvider) : base(serviceProvider)
     {
     }
 
@@ -27,7 +27,7 @@ public class SingleProjectionTestBaseEventSubscriber<TAggregate, TProjection, TP
         if (projectionDto is null) { throw new Exception("Projection not found"); }
         return projectionDto;
     }
-    public SingleProjectionTestBaseEventSubscriber<TAggregate, TProjection, TProjectionContents> ThenDto(
+    public SingleAggregateProjectionTestBase<TAggregate, TProjection, TProjectionContents> ThenDtoIs(
         SingleAggregateProjectionDto<TProjectionContents> dto)
     {
         var actual = GetProjectionDto();
@@ -43,7 +43,7 @@ public class SingleProjectionTestBaseEventSubscriber<TAggregate, TProjection, TP
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public SingleProjectionTestBaseEventSubscriber<TAggregate, TProjection, TProjectionContents> ThenContents(TProjectionContents dtoContents)
+    public SingleAggregateProjectionTestBase<TAggregate, TProjection, TProjectionContents> ThenContentsIs(TProjectionContents dtoContents)
     {
         var actual = GetProjectionDto().Contents;
         var expected = dtoContents;
@@ -52,7 +52,7 @@ public class SingleProjectionTestBaseEventSubscriber<TAggregate, TProjection, TP
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public SingleProjectionTestBaseEventSubscriber<TAggregate, TProjection, TProjectionContents> ThenContentsFromJson(string dtoContentsJson)
+    public SingleAggregateProjectionTestBase<TAggregate, TProjection, TProjectionContents> ThenContentsIsFromJson(string dtoContentsJson)
     {
         var actual = GetProjectionDto().Contents;
         var contents = JsonSerializer.Deserialize<TProjectionContents>(dtoContentsJson);
@@ -63,7 +63,7 @@ public class SingleProjectionTestBaseEventSubscriber<TAggregate, TProjection, TP
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public SingleProjectionTestBaseEventSubscriber<TAggregate, TProjection, TProjectionContents> ThenContentsFromFile(string dtoContentsFilename)
+    public SingleAggregateProjectionTestBase<TAggregate, TProjection, TProjectionContents> ThenContentsIsFromFile(string dtoContentsFilename)
     {
         using var openStream = File.OpenRead(dtoContentsFilename);
         var actual = GetProjectionDto().Contents;
@@ -75,7 +75,7 @@ public class SingleProjectionTestBaseEventSubscriber<TAggregate, TProjection, TP
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public SingleProjectionTestBaseEventSubscriber<TAggregate, TProjection, TProjectionContents> WriteProjectionDto(string filename)
+    public SingleAggregateProjectionTestBase<TAggregate, TProjection, TProjectionContents> WriteProjectionDtoToFile(string filename)
     {
         var dto = GetProjectionDto();
         var json = SekibanJsonHelper.Serialize(dto);

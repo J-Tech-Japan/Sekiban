@@ -5,8 +5,6 @@ using Sekiban.Core.Dependency;
 using Sekiban.Core.Event;
 using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
-using System;
-using System.Collections.Generic;
 namespace Sekiban.Testing.SingleAggregate;
 
 public abstract class SingleAggregateTestBase<TAggregate, TContents, TDependencyDefinition> : IDisposable, IAggregateTestHelper<TAggregate, TContents>
@@ -87,78 +85,61 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents, TDependency
         return _helper.WhenChange(commandFunc);
     }
 
-    public IAggregateTestHelper<TAggregate, TContents> ThenEvents(Action<List<IAggregateEvent>, TAggregate> checkEventsAction)
+    public IAggregateTestHelper<TAggregate, TContents> ThenGetEvents(Action<List<IAggregateEvent>> checkEventsAction)
     {
-        return _helper.ThenEvents(checkEventsAction);
+        return _helper.ThenGetEvents(checkEventsAction);
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenEvents(Action<List<IAggregateEvent>> checkEventsAction)
+    public IAggregateTestHelper<TAggregate, TContents> ThenGetSingleEvent<T>(Action<T> checkEventAction) where T : IAggregateEvent
     {
-        return _helper.ThenEvents(checkEventsAction);
+        return _helper.ThenGetSingleEvent(checkEventAction);
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEvent<T>(Action<T, TAggregate> checkEventAction) where T : IAggregateEvent
+    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEventIs<T>(AggregateEvent<T> aggregateEvent) where T : IEventPayload
     {
-        return _helper.ThenSingleEvent(checkEventAction);
+        return _helper.ThenSingleEventIs(aggregateEvent);
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEvent<T>(Action<T> checkEventAction) where T : IAggregateEvent
+    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEventPayloadIs<T>(T payload) where T : IEventPayload
     {
-        return _helper.ThenSingleEvent(checkEventAction);
+        return _helper.ThenSingleEventPayloadIs(payload);
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEvent<T>(Func<TAggregate, T> constructExpectedEvent) where T : IAggregateEvent
+    public IAggregateTestHelper<TAggregate, TContents> ThenGetSingleEventPayload<T>(Action<T> checkPayloadAction) where T : class, IEventPayload
     {
-        return _helper.ThenSingleEvent(constructExpectedEvent);
+        return _helper.ThenGetSingleEventPayload(checkPayloadAction);
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEventPayload<T>(T payload) where T : IEventPayload
+    public IAggregateTestHelper<TAggregate, TContents> ThenGetState(Action<AggregateDto<TContents>> checkDtoAction)
     {
-        return _helper.ThenSingleEventPayload(payload);
+        return _helper.ThenGetState(checkDtoAction);
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenSingleEventPayload<T>(Func<TAggregate, T> constructExpectedEvent) where T : IEventPayload
+    public IAggregateTestHelper<TAggregate, TContents> ThenStateIs(AggregateDto<TContents> expectedDto)
     {
-        return _helper.ThenSingleEventPayload(constructExpectedEvent);
+        return _helper.ThenStateIs(expectedDto);
     }
-
-    public IAggregateTestHelper<TAggregate, TContents> ThenState(Action<AggregateDto<TContents>, TAggregate> checkDtoAction)
+    public IAggregateTestHelper<TAggregate, TContents> ThenContentsIs(TContents contents)
     {
-        return _helper.ThenState(checkDtoAction);
+        return _helper.ThenContentsIs(contents);
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenState(Action<AggregateDto<TContents>> checkDtoAction)
+    public IAggregateTestHelper<TAggregate, TContents> WriteStateToFile(string filename)
     {
-        return _helper.ThenState(checkDtoAction);
-    }
-    public IAggregateTestHelper<TAggregate, TContents> ThenState(Func<TAggregate, AggregateDto<TContents>> constructExpectedDto)
-    {
-        return _helper.ThenState(constructExpectedDto);
-    }
-    public IAggregateTestHelper<TAggregate, TContents> ThenContents(TContents contents)
-    {
-        return _helper.ThenContents(contents);
-    }
-    public IAggregateTestHelper<TAggregate, TContents> WriteDtoToFile(string filename)
-    {
-        return _helper.WriteDtoToFile(filename);
+        return _helper.WriteStateToFile(filename);
     }
     public IAggregateTestHelper<TAggregate, TContents> WriteContentsToFile(string filename)
     {
-        return _helper.WriteDtoToFile(filename);
+        return _helper.WriteStateToFile(filename);
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenStateFromJson(string dtoJson)
+    public IAggregateTestHelper<TAggregate, TContents> ThenStateIsFromJson(string dtoJson)
     {
-        return _helper.ThenStateFromJson(dtoJson);
+        return _helper.ThenStateIsFromJson(dtoJson);
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenStateFromFile(string dtoFileName)
+    public IAggregateTestHelper<TAggregate, TContents> ThenStateIsFromFile(string dtoFileName)
     {
-        return _helper.ThenStateFromFile(dtoFileName);
+        return _helper.ThenStateIsFromFile(dtoFileName);
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenContentsFromJson(string contentsJson)
+    public IAggregateTestHelper<TAggregate, TContents> ThenContentsIsFromJson(string contentsJson)
     {
-        return _helper.ThenContentsFromJson(contentsJson);
+        return _helper.ThenContentsIsFromJson(contentsJson);
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenContentsFromFile(string contentsFileName)
+    public IAggregateTestHelper<TAggregate, TContents> ThenContentsIsFromFile(string contentsFileName)
     {
-        return _helper.ThenContentsFromFile(contentsFileName);
-    }
-    public IAggregateTestHelper<TAggregate, TContents> ThenContents(Func<TAggregate, TContents> constructExpectedDto)
-    {
-        return _helper.ThenContents(constructExpectedDto);
+        return _helper.ThenContentsIsFromFile(contentsFileName);
     }
     public Guid GetAggregateId()
     {
@@ -181,10 +162,6 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents, TDependency
     {
         return _helper.ThenThrows(checkException);
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenAggregateCheck(Action<TAggregate> checkAction)
-    {
-        return _helper.ThenAggregateCheck(checkAction);
-    }
     public IAggregateTestHelper<TAggregate, TContents> ThenNotThrowsAnException()
     {
         return _helper.ThenNotThrowsAnException();
@@ -199,7 +176,6 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents, TDependency
     }
 
     public void Dispose() { }
-
 
     protected virtual void SetupDependency(IServiceCollection serviceCollection)
     {

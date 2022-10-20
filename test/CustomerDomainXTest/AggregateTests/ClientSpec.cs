@@ -35,24 +35,24 @@ public class ClientSpec : SingleAggregateTestBase<Client, ClientContents, Custom
         // エラーとならない
         ThenNotThrowsAnException();
         // コマンドによって生成されたイベントを検証する
-        ThenSingleEventPayload(new ClientCreated(branchId, testClientName, testEmail));
+        ThenSingleEventPayloadIs(new ClientCreated(branchId, testClientName, testEmail));
         // 現在の集約のステータスを検証する
-        ThenState(
-            client => new AggregateDto<ClientContents>
+        ThenStateIs(
+            new AggregateDto<ClientContents>
             {
-                AggregateId = client.AggregateId, Version = client.Version, Contents = new ClientContents(branchId, testClientName, testEmail)
+                AggregateId = GetAggregateId(), Version = GetCurrentVersion(), Contents = new ClientContents(branchId, testClientName, testEmail)
             });
         // 名前変更コマンドを実行する
         WhenChange(client => new ChangeClientName(client.AggregateId, testClientChangedName) { ReferenceVersion = client.Version });
-        WriteDtoToFile("ClientCreateSpec.json");
+        WriteStateToFile("ClientCreateSpec.json");
         // コマンドによって生成されたイベントを検証する
-        ThenSingleEventPayload(new ClientNameChanged(testClientChangedName));
+        ThenSingleEventPayloadIs(new ClientNameChanged(testClientChangedName));
         // 現在の集約のステータスを検証する
-        ThenState(
-            client => new AggregateDto<ClientContents>
+        ThenStateIs(
+            new AggregateDto<ClientContents>
             {
-                AggregateId = client.AggregateId,
-                Version = client.Version,
+                AggregateId = GetAggregateId(),
+                Version = GetCurrentVersion(),
                 Contents = new ClientContents(branchId, testClientChangedName, testEmail)
             });
     }

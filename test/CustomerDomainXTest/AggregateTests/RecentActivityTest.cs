@@ -19,8 +19,8 @@ public class RecentActivityTest : SingleAggregateTestBase<RecentActivity, Recent
     {
         WhenCreate(new CreateRecentActivity())
             .ThenNotThrowsAnException()
-            .ThenSingleEvent<AggregateEvent<RecentActivityCreated>>(ev => firstRecord = ev.Payload.Activity)
-            .ThenContents(new RecentActivityContents(new List<RecentActivityRecord> { firstRecord }));
+            .ThenGetSingleEvent<AggregateEvent<RecentActivityCreated>>(ev => firstRecord = ev.Payload.Activity)
+            .ThenContentsIs(new RecentActivityContents(new List<RecentActivityRecord> { firstRecord }));
     }
     [Fact]
     public void AddRegularEventTest()
@@ -28,8 +28,8 @@ public class RecentActivityTest : SingleAggregateTestBase<RecentActivity, Recent
         GivenScenario(CreateRecentActivityTest)
             .WhenChange(new AddRecentActivity(GetAggregateId(), "Regular Event"))
             .ThenNotThrowsAnException()
-            .ThenSingleEvent<AggregateEvent<RecentActivityAdded>>(ev => regularRecord = ev.Payload.Record)
-            .ThenContents(new RecentActivityContents(new List<RecentActivityRecord> { regularRecord, firstRecord }));
+            .ThenGetSingleEvent<AggregateEvent<RecentActivityAdded>>(ev => regularRecord = ev.Payload.Record)
+            .ThenContentsIs(new RecentActivityContents(new List<RecentActivityRecord> { regularRecord, firstRecord }));
     }
     [Fact]
     public void PublishOnlyCommandTest()
@@ -37,7 +37,7 @@ public class RecentActivityTest : SingleAggregateTestBase<RecentActivity, Recent
         GivenScenario(AddRegularEventTest)
             .WhenChange(new OnlyPublishingAddRecentActivity(GetAggregateId(), "Publish Only Event"))
             .ThenNotThrowsAnException()
-            .ThenSingleEvent<AggregateEvent<RecentActivityAdded>>(ev => publishOnlyRecord = ev.Payload.Record)
-            .ThenContents(new RecentActivityContents(new List<RecentActivityRecord> { publishOnlyRecord, regularRecord, firstRecord }));
+            .ThenGetSingleEvent<AggregateEvent<RecentActivityAdded>>(ev => publishOnlyRecord = ev.Payload.Record)
+            .ThenContentsIs(new RecentActivityContents(new List<RecentActivityRecord> { publishOnlyRecord, regularRecord, firstRecord }));
     }
 }
