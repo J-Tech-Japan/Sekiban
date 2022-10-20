@@ -7,7 +7,7 @@ public abstract class AggregateBase<TContents> : AggregateCommonBase, ISingleAgg
     where TContents : IAggregateContents, new()
 {
     protected TContents Contents { get; private set; } = new();
-    private new bool IsDeleted { get => _basicInfo.IsDeleted; set => _basicInfo.IsDeleted = value; }
+    private new bool IsDeleted { get => _basicInfo.IsDeleted; set => _basicInfo = _basicInfo with { IsDeleted = value }; }
     public AggregateDto<TContents> ToDto()
     {
         return new AggregateDto<TContents>(this, Contents);
@@ -15,12 +15,21 @@ public abstract class AggregateBase<TContents> : AggregateCommonBase, ISingleAgg
 
     public void ApplySnapshot(AggregateDto<TContents> snapshot)
     {
-        _basicInfo.Version = snapshot.Version;
-        _basicInfo.LastEventId = snapshot.LastEventId;
-        _basicInfo.LastSortableUniqueId = snapshot.LastSortableUniqueId;
-        _basicInfo.AppliedSnapshotVersion = snapshot.Version;
-        _basicInfo.IsDeleted = snapshot.IsDeleted;
+        _basicInfo = _basicInfo with
+        {
+            Version = snapshot.Version,
+            LastEventId = snapshot.LastEventId,
+            LastSortableUniqueId = snapshot.LastSortableUniqueId,
+            AppliedSnapshotVersion = snapshot.Version,
+            IsDeleted = snapshot.IsDeleted
+        };
         CopyPropertiesFromSnapshot(snapshot);
+    }
+
+    public TAggregate Clone<TAggregate>() where TAggregate : AggregateBase<TContents>, new()
+    {
+        var clone = new TAggregate { _basicInfo = _basicInfo, Contents = Contents };
+        return clone;
     }
 
     protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload)

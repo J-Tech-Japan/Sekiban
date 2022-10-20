@@ -1,6 +1,5 @@
 ﻿using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
-using System.Reflection;
 namespace Sekiban.Core.Aggregate;
 
 public abstract class AggregateCommonBase : IAggregate
@@ -10,7 +9,7 @@ public abstract class AggregateCommonBase : IAggregate
     public Guid AggregateId
     {
         get => _basicInfo.AggregateId;
-        init => _basicInfo.AggregateId = value;
+        init => _basicInfo = _basicInfo with { AggregateId = value };
     }
 
     public Guid LastEventId => _basicInfo.LastEventId;
@@ -33,9 +32,7 @@ public abstract class AggregateCommonBase : IAggregate
         }
         if (ev.Id == LastEventId) { return; }
         action();
-        _basicInfo.LastEventId = ev.Id;
-        _basicInfo.LastSortableUniqueId = ev.SortableUniqueId;
-        _basicInfo.Version++;
+        _basicInfo = _basicInfo with { LastEventId = ev.Id, LastSortableUniqueId = ev.SortableUniqueId, Version = Version + 1 };
     }
     public void ResetEventsAndSnapshots()
     {
@@ -44,14 +41,13 @@ public abstract class AggregateCommonBase : IAggregate
 
     public static UAggregate Create<UAggregate>(Guid aggregateId) where UAggregate : AggregateCommonBase
     {
-        if (typeof(UAggregate).GetConstructor(Type.EmptyTypes) is ConstructorInfo c)
+        if (typeof(UAggregate).GetConstructor(Type.EmptyTypes) is not { } c)
         {
-            var aggregate = c.Invoke(new object[] { }) as UAggregate ?? throw new InvalidProgramException();
-            aggregate._basicInfo.AggregateId = aggregateId;
-            return aggregate;
+            throw new InvalidProgramException();
         }
-
-        throw new InvalidProgramException();
+        var aggregate = c.Invoke(new object[] { }) as UAggregate ?? throw new InvalidProgramException();
+        aggregate._basicInfo = aggregate._basicInfo with { AggregateId = aggregateId };
+        return aggregate;
 
         // C#の将来の正式バージョンで、インターフェースに静的メソッドを定義できるようになったら、書き換える。
     }
