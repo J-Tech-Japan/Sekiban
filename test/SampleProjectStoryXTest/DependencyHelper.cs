@@ -10,7 +10,7 @@ namespace SampleProjectStoryXTest;
 public static class DependencyHelper
 {
     public static ServiceProvider CreateDefaultProvider(
-        SekibanTestFixture fixture,
+        ISekibanTestFixture fixture,
         bool inMemory = false,
         ISekibanDateProducer? sekibanDateProducer = null,
         ServiceCollectionExtensions.MultipleProjectionType multipleProjectionType = ServiceCollectionExtensions.MultipleProjectionType.MemoryCache)
