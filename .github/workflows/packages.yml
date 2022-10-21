@@ -44,13 +44,3 @@ jobs:
         pushd ./src/Sekiban.Infrastructure.Cosmos
         dotnet pack --configuration Release
         dotnet nuget push "bin/Release/JJ_Sekiban.Infrastructure.Cosmos.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
-    - name: Pack WebHelper
-      run: |
-        pushd ./src/Sekiban.Addon.Web
-        dotnet pack --configuration Release
-        dotnet nuget push "bin/Release/JJ_Sekiban.Addon.Web.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
-    - name: Pack TenantAddon
-      run: |
-        pushd ./src/Sekiban.Addon.Tenant
-        dotnet pack --configuration Release
-        dotnet nuget push "bin/Release/JJ_Sekiban.Addon.Tenant.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
