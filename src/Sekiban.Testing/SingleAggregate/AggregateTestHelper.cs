@@ -248,6 +248,11 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
+    public IAggregateTestHelper<TAggregate, TContents> ThenGetContents(Action<TContents> contentsAction)
+    {
+        contentsAction(_aggregate.ToDto().Contents);
+        return this;
+    }
 
     public IAggregateTestHelper<TAggregate, TContents> ThenGetSingleEvent<T>(Action<T> checkEventAction) where T : IAggregateEvent
     {
