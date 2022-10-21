@@ -16,7 +16,8 @@
         <RootNamespace>Sekiban.Testing</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="xunit.assert" Version="2.4.1"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="6.0.1" />
+        <PackageReference Include="xunit.assert" Version="2.4.1" />
     </ItemGroup>
     <ItemGroup>
         <None Update="host.json">
@@ -28,6 +29,6 @@
         </None>
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj"/>
+        <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj" />
     </ItemGroup>
 </Project>

@@ -100,6 +100,72 @@ dotnet user-secrets set "Sekiban:Secondary:CosmosDbAuthorizationKey" "******"
 ```
 
 
+# 基本の追加方法
+## WebAPI
+dotnet user-secrets init 
+のコマンドをシークレットが必要な各フォルダで行う
+
+## Test
+dotnet user-secrets init
+のコマンドをシークレットが必要なプロジェクトで行う
+
+以下のような、ConfigurationBuilderを定義する。AddUserSecretを行うために
+
+Microsoft.Extensions.Configuration.UserSecrets package
+
+をNugetで追加する必要がある。
+
+以下のようなTestBaseを使うことにより、対応可能
+```
+[Collection("Sequential")]
+public class TestBase : IClassFixture<TestBase.SekibanTestFixture>, IDisposable
+{
+    protected readonly ServiceProvider _serviceProvider;
+    protected readonly SekibanTestFixture _sekibanTestFixture;
+
+    public class SekibanTestFixture : ISekibanTestFixture
+    {
+        public SekibanTestFixture()
+        {
+            var builder = new ConfigurationBuilder().SetBasePath(PlatformServices.Default.Application.ApplicationBasePath)
+                .AddJsonFile("appsettings.json", false, false)
+                .AddEnvironmentVariables()
+                .AddUserSecrets(Assembly.GetExecutingAssembly());
+            Configuration = builder.Build();
+        }
+        public IConfigurationRoot Configuration { get; set; }
+    }
+
+    public TestBase(
+        SekibanTestFixture sekibanTestFixture,
+        bool inMemory = false,
+        ServiceCollectionExtensions.MultipleProjectionType multipleProjectionType = ServiceCollectionExtensions.MultipleProjectionType.MemoryCache)
+    {
+        _sekibanTestFixture = sekibanTestFixture;
+        _serviceProvider = DependencyHelper.CreateDefaultProvider(sekibanTestFixture, inMemory, null, multipleProjectionType);
+    }
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing) { }
+    }
+    public T GetService<T>()
+    {
+        var toreturn = _serviceProvider.GetService<T>();
+        if (toreturn is null)
+        {
+            throw new Exception("オブジェクトが登録されていません。" + typeof(T));
+        }
+        return toreturn;
+    }
+}
+```
+
+
 
 
 
