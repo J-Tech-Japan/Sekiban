@@ -1,4 +1,3 @@
-using System;
 namespace Sekiban.Testing.SingleAggregate;
 
 public abstract class SingleAggregateTestBase

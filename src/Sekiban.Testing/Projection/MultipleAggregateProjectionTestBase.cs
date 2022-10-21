@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Query.MultipleAggregate;
-using System;
 namespace Sekiban.Testing.Projection;
 
 public class

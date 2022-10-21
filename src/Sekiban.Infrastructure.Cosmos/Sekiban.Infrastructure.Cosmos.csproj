@@ -4,13 +4,13 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>JJ_Sekiban.Infrastructure.Cosmos</PackageId>
-        <Version>0.8.2</Version>
+        <Version>0.8.5</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework CosmosInfrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.8.2</PackageVersion>
-        <Description>Addonとのリポジトリの分離</Description>
+        <PackageVersion>0.8.5</PackageVersion>
+        <Description>ThenGetContentsの追加</Description>
         <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
         <LangVersion>11</LangVersion>
     </PropertyGroup>

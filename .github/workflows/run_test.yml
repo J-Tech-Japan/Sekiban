@@ -28,7 +28,7 @@ jobs:
         dotnet nuget add source --username USERNAME --password ${{secrets.TOMOHISA_PAT}} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/J-Tech-Japan/index.json"
     - name: Secret Settings
       run: |
-        pushd ./test/SampleProjectStoryXTest
+        pushd ./test/Sekiban.Consistency.Test.CosmosDb
         dotnet user-secrets set "Sekiban:Default:CosmosDbEndPointUrl" ${{secrets.TEST_COSMOS_ENDPOINT}}
         dotnet user-secrets set "Sekiban:Default:CosmosDbAuthorizationKey" ${{secrets.TEST_COSMOS_SECRET}}
         dotnet user-secrets set "Sekiban:Secondary:CosmosDbEndPointUrl" ${{secrets.TEST_COSMOS_ENDPOINT}}

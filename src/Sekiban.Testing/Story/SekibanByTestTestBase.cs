@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using System;
 using Xunit;
 namespace Sekiban.Testing.Story;
 
