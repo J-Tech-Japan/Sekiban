@@ -9,10 +9,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Testing", "Sekiban.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Infrastructure.Cosmos", "Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj", "{006403BC-8CE7-45CE-ACB3-067361735977}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Addon.Tenant", "Sekiban.Addon.Tenant\Sekiban.Addon.Tenant.csproj", "{BEB9BC74-75F7-422F-A99B-B63760E48F03}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Addon.Web", "Sekiban.Addon.Web\Sekiban.Addon.Web.csproj", "{A6F6EFEC-8E1E-4FF3-B649-786620F209E3}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -34,13 +30,5 @@ Global
 		{006403BC-8CE7-45CE-ACB3-067361735977}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{006403BC-8CE7-45CE-ACB3-067361735977}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{006403BC-8CE7-45CE-ACB3-067361735977}.Release|Any CPU.Build.0 = Release|Any CPU
-		{BEB9BC74-75F7-422F-A99B-B63760E48F03}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{BEB9BC74-75F7-422F-A99B-B63760E48F03}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{BEB9BC74-75F7-422F-A99B-B63760E48F03}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{BEB9BC74-75F7-422F-A99B-B63760E48F03}.Release|Any CPU.Build.0 = Release|Any CPU
-		{A6F6EFEC-8E1E-4FF3-B649-786620F209E3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{A6F6EFEC-8E1E-4FF3-B649-786620F209E3}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{A6F6EFEC-8E1E-4FF3-B649-786620F209E3}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{A6F6EFEC-8E1E-4FF3-B649-786620F209E3}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
