@@ -296,11 +296,17 @@ public class AggregateTestHelper<TAggregate, TContents> : IAggregateTestHelper<T
         return this;
     }
 
-    public IAggregateTestHelper<TAggregate, TContents> ThenThrows<T>(Action<T> checkException) where T : Exception
+    public IAggregateTestHelper<TAggregate, TContents> ThenGetException<T>(Action<T> checkException) where T : Exception
     {
         var exception = _latestException is AggregateException aggregateException ? aggregateException.InnerExceptions.First() : _latestException;
         Assert.IsType<T>(exception);
         checkException((exception as T)!);
+        return this;
+    }
+    public IAggregateTestHelper<TAggregate, TContents> ThenGetException(Action<Exception> checkException)
+    {
+        Assert.NotNull(_latestException);
+        checkException(_latestException!);
         return this;
     }
     public IAggregateTestHelper<TAggregate, TContents> ThenNotThrowsAnException()

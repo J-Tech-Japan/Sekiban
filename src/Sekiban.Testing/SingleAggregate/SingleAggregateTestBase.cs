@@ -162,9 +162,13 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents, TDependency
     {
         return _helper.ThenThrows<T>();
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenThrows<T>(Action<T> checkException) where T : Exception
+    public IAggregateTestHelper<TAggregate, TContents> ThenGetException<T>(Action<T> checkException) where T : Exception
     {
-        return _helper.ThenThrows(checkException);
+        return _helper.ThenGetException(checkException);
+    }
+    public IAggregateTestHelper<TAggregate, TContents> ThenGetException(Action<Exception> checkException)
+    {
+        return _helper.ThenGetException(checkException);
     }
     public IAggregateTestHelper<TAggregate, TContents> ThenNotThrowsAnException()
     {

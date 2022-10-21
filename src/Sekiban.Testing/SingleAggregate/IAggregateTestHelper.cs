@@ -7,6 +7,7 @@ namespace Sekiban.Testing.SingleAggregate;
 
 public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : AggregateBase<TContents> where TContents : IAggregateContents, new()
 {
+    #region given and setup
     public TSingleAggregateProjection SetupSingleAggregateProjection<TSingleAggregateProjection>()
         where TSingleAggregateProjection : SingleAggregateTestBase;
     public IAggregateTestHelper<TAggregate, TContents> GivenScenario(Action initialAction);
@@ -25,10 +26,17 @@ public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : 
         where TEnvironmentAggregate : AggregateCommonBase, new();
     public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentCommandExecutorAction(Action<AggregateTestCommandExecutor> action);
     public IReadOnlyCollection<IAggregateEvent> GetLatestEnvironmentEvents();
+    #endregion
+
+    #region When
     public IAggregateTestHelper<TAggregate, TContents> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregate>;
     public IAggregateTestHelper<TAggregate, TContents> WhenChange<C>(C changeCommand) where C : ChangeAggregateCommandBase<TAggregate>;
     public IAggregateTestHelper<TAggregate, TContents> WhenChange<C>(Func<TAggregate, C> commandFunc)
         where C : ChangeAggregateCommandBase<TAggregate>;
+    
+    #endregion
+
+    #region Then
     public IAggregateTestHelper<TAggregate, TContents> ThenGetEvents(Action<List<IAggregateEvent>> checkEventsAction);
     public IAggregateTestHelper<TAggregate, TContents> ThenGetSingleEvent<T>(Action<T> checkEventAction) where T : IAggregateEvent;
     public IAggregateTestHelper<TAggregate, TContents> ThenSingleEventIs<T>(AggregateEvent<T> aggregateEvent) where T : IEventPayload;
@@ -44,14 +52,19 @@ public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : 
     public IAggregateTestHelper<TAggregate, TContents> ThenStateIsFromFile(string dtoFileName);
     public IAggregateTestHelper<TAggregate, TContents> ThenContentsIsFromJson(string contentsJson);
     public IAggregateTestHelper<TAggregate, TContents> ThenContentsIsFromFile(string contentsFileName);
-    public Guid GetAggregateId();
-    public int GetCurrentVersion();
-    public TAggregate GetAggregate();
-
     public IAggregateTestHelper<TAggregate, TContents> ThenThrows<T>() where T : Exception;
-    public IAggregateTestHelper<TAggregate, TContents> ThenThrows<T>(Action<T> checkException) where T : Exception;
+    public IAggregateTestHelper<TAggregate, TContents> ThenGetException<T>(Action<T> checkException) where T : Exception;
+    public IAggregateTestHelper<TAggregate, TContents> ThenGetException(Action<Exception> checkException);
     public IAggregateTestHelper<TAggregate, TContents> ThenNotThrowsAnException();
     public IAggregateTestHelper<TAggregate, TContents> ThenHasValidationErrors(
         IEnumerable<SekibanValidationParameterError> validationParameterErrors);
     public IAggregateTestHelper<TAggregate, TContents> ThenHasValidationErrors();
+    #endregion
+
+    #region Get
+    public Guid GetAggregateId();
+    public int GetCurrentVersion();
+    public TAggregate GetAggregate();
+    #endregion
+
 }
