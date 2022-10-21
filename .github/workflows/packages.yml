@@ -13,7 +13,7 @@ jobs:
     - name: Setup .NET 7
       uses: actions/setup-dotnet@v1
       with:
-        dotnet-version: 7.0.100-rc.1.22431.12
+        dotnet-version: 7.0.100-rc.2.22477.23
     - name: Setup .NET 6
       uses: actions/setup-dotnet@v1
       with:
@@ -44,13 +44,3 @@ jobs:
         pushd ./src/Sekiban.Infrastructure.Cosmos
         dotnet pack --configuration Release
         dotnet nuget push "bin/Release/JJ_Sekiban.Infrastructure.Cosmos.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
-    - name: Pack WebHelper
-      run: |
-        pushd ./src/Sekiban.Addon.Web
-        dotnet pack --configuration Release
-        dotnet nuget push "bin/Release/JJ_Sekiban.Addon.Web.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
-    - name: Pack TenantAddon
-      run: |
-        pushd ./src/Sekiban.Addon.Tenant
-        dotnet pack --configuration Release
-        dotnet nuget push "bin/Release/JJ_Sekiban.Addon.Tenant.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
