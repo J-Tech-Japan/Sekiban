@@ -1,0 +1,6 @@
+using Customer.Domain.Aggregates.LoyaltyPoints.Consts;
+using Sekiban.Core.Event;
+namespace Customer.Domain.Aggregates.LoyaltyPoints.Events;
+
+public record LoyaltyPointUsed
+    (DateTime HappenedDate, LoyaltyPointUsageTypeKeys Reason, int PointAmount, string Note) : IChangedAggregateEventPayload<LoyaltyPoint>;

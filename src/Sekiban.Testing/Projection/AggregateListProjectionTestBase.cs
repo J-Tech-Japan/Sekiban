@@ -3,7 +3,6 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Query.MultipleAggregate;
 using Sekiban.Core.Query.SingleAggregate;
-using System;
 namespace Sekiban.Testing.Projection;
 
 public class AggregateListProjectionTestBase<TAggregate, TAggregateContents, TDependencyDefinition> : CommonMultipleAggregateProjectionTestBase<

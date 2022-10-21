@@ -6,11 +6,8 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.SingleAggregate;
 using Sekiban.Core.Validation;
-using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel.DataAnnotations;
-using System.Linq;
 namespace Sekiban.Testing.Command;
 
 public class AggregateTestCommandExecutor

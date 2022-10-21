@@ -2,8 +2,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.SingleAggregate;
 using Sekiban.Core.Shared;
-using System;
-using System.IO;
 using System.Text.Json;
 using Xunit;
 namespace Sekiban.Testing.SingleAggregate;
