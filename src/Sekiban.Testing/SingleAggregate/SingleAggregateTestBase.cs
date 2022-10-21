@@ -113,6 +113,10 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents, TDependency
     {
         return _helper.ThenStateIs(expectedDto);
     }
+    public IAggregateTestHelper<TAggregate, TContents> ThenGetContents(Action<TContents> contentsAction)
+    {
+        return _helper.ThenGetContents(contentsAction);
+    }
     public IAggregateTestHelper<TAggregate, TContents> ThenContentsIs(TContents contents)
     {
         return _helper.ThenContentsIs(contents);

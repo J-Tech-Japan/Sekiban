@@ -36,6 +36,7 @@ public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : 
     public IAggregateTestHelper<TAggregate, TContents> ThenGetSingleEventPayload<T>(Action<T> checkPayloadAction) where T : class, IEventPayload;
     public IAggregateTestHelper<TAggregate, TContents> ThenGetState(Action<AggregateDto<TContents>> checkDtoAction);
     public IAggregateTestHelper<TAggregate, TContents> ThenStateIs(AggregateDto<TContents> expectedDto);
+    public IAggregateTestHelper<TAggregate, TContents> ThenGetContents(Action<TContents> contentsAction);
     public IAggregateTestHelper<TAggregate, TContents> ThenContentsIs(TContents contents);
     public IAggregateTestHelper<TAggregate, TContents> WriteStateToFile(string filename);
     public IAggregateTestHelper<TAggregate, TContents> WriteContentsToFile(string filename);
