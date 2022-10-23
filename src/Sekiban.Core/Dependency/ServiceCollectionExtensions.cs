@@ -65,7 +65,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<QueryFilterHandler>();
         services.AddTransient<ISingleAggregateProjectionCache, SingleAggregateProjectionCache>();
         services.AddTransient<IMultipleAggregateProjectionCache, MultipleAggregateProjectionCache>();
-        services.AddTransient<ISnapshotDocumentCache, ISnapshotDocumentCache>();
+        services.AddTransient<ISnapshotDocumentCache, SnapshotDocumentCache>();
         return services;
     }
     public static IServiceCollection AddSekibanCoreInMemory(this IServiceCollection services, ISekibanDateProducer? sekibanDateProducer = null)
@@ -98,7 +98,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<QueryFilterHandler>();
         services.AddTransient<ISingleAggregateProjectionCache, SingleAggregateProjectionCache>();
         services.AddTransient<IMultipleAggregateProjectionCache, MultipleAggregateProjectionCache>();
-        services.AddTransient<ISnapshotDocumentCache, ISnapshotDocumentCache>();
+        services.AddTransient<ISnapshotDocumentCache, SnapshotDocumentCache>();
         return services;
     }
     public static IServiceCollection AddSekibanCoreAggregateTest(this IServiceCollection services, ISekibanDateProducer? sekibanDateProducer = null)
@@ -132,7 +132,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<QueryFilterHandler>();
         services.AddTransient<ISingleAggregateProjectionCache, SingleAggregateProjectionCache>();
         services.AddTransient<IMultipleAggregateProjectionCache, MultipleAggregateProjectionCache>();
-        services.AddTransient<ISnapshotDocumentCache, ISnapshotDocumentCache>();
+        services.AddTransient<ISnapshotDocumentCache, SnapshotDocumentCache>();
         return services;
     }
 
