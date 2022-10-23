@@ -1,0 +1,35 @@
+using Microsoft.Extensions.Caching.Memory;
+using Sekiban.Core.Query.SingleAggregate;
+using Sekiban.Core.Query.SingleAggregate.SingleProjection;
+namespace Sekiban.Core.Cache;
+
+public class SingleAggregateProjectionCache : ISingleAggregateProjectionCache
+{
+    private readonly IMemoryCache _memoryCache;
+    public SingleAggregateProjectionCache(IMemoryCache memoryCache)
+    {
+        _memoryCache = memoryCache;
+    }
+    
+    public void SetContainer<TAggregate, TDto>(Guid aggregateId, SingleMemoryCacheProjectionContainer<TAggregate, TDto> container) where TAggregate : ISingleAggregate, ISingleAggregateProjection where TDto : ISingleAggregate
+    {
+        _memoryCache.Set(GetCacheKeyForSingleProjectionContainer<TAggregate>(aggregateId), container, GetMemoryCacheOptionsForSingleProjectionContainer());
+    }
+    public SingleMemoryCacheProjectionContainer<TAggregate, TDto>? GetContainer<TAggregate, TDto>(Guid aggregateId) where TAggregate : ISingleAggregate, ISingleAggregateProjection where TDto : ISingleAggregate
+    {
+        return _memoryCache.Get<SingleMemoryCacheProjectionContainer<TAggregate, TDto>>(GetCacheKeyForSingleProjectionContainer<TAggregate>(aggregateId));
+    }
+    
+    private static MemoryCacheEntryOptions GetMemoryCacheOptionsForSingleProjectionContainer()
+    {
+        return new MemoryCacheEntryOptions
+        {
+            AbsoluteExpiration = DateTimeOffset.UtcNow.AddHours(2), SlidingExpiration = TimeSpan.FromMinutes(15)
+            // 5分読まれなかったら削除するが、2時間経ったらどちらにしても削除する
+        };
+    }
+    public string GetCacheKeyForSingleProjectionContainer<TAggregate>(Guid aggregateId)
+    {
+        return "SingleAggregate" + typeof(TAggregate).Name + aggregateId;
+    }
+}

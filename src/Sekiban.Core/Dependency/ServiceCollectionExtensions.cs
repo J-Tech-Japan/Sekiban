@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Sekiban.Core.Cache;
 using Sekiban.Core.Command;
 using Sekiban.Core.Command.UserInformation;
 using Sekiban.Core.Document;
@@ -62,6 +63,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISekibanContext, SekibanContext>();
         services.AddTransient<IQueryFilterService, QueryFilterService>();
         services.AddTransient<QueryFilterHandler>();
+        services.AddTransient<ISingleAggregateProjectionCache, SingleAggregateProjectionCache>();
+        services.AddTransient<IMultipleAggregateProjectionCache, MultipleAggregateProjectionCache>();
+        services.AddTransient<ISnapshotDocumentCache, ISnapshotDocumentCache>();
         return services;
     }
     public static IServiceCollection AddSekibanCoreInMemory(this IServiceCollection services, ISekibanDateProducer? sekibanDateProducer = null)
@@ -92,6 +96,9 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IDocumentPersistentWriter, InMemoryDocumentWriter>();
         services.AddTransient<IQueryFilterService, QueryFilterService>();
         services.AddTransient<QueryFilterHandler>();
+        services.AddTransient<ISingleAggregateProjectionCache, SingleAggregateProjectionCache>();
+        services.AddTransient<IMultipleAggregateProjectionCache, MultipleAggregateProjectionCache>();
+        services.AddTransient<ISnapshotDocumentCache, ISnapshotDocumentCache>();
         return services;
     }
     public static IServiceCollection AddSekibanCoreAggregateTest(this IServiceCollection services, ISekibanDateProducer? sekibanDateProducer = null)
@@ -123,6 +130,9 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IDocumentPersistentWriter, InMemoryDocumentWriter>();
         services.AddTransient<IQueryFilterService, QueryFilterService>();
         services.AddTransient<QueryFilterHandler>();
+        services.AddTransient<ISingleAggregateProjectionCache, SingleAggregateProjectionCache>();
+        services.AddTransient<IMultipleAggregateProjectionCache, MultipleAggregateProjectionCache>();
+        services.AddTransient<ISnapshotDocumentCache, ISnapshotDocumentCache>();
         return services;
     }
 

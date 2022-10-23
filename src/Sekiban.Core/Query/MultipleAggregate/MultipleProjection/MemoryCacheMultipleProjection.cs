@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
+using Sekiban.Core.Cache;
 using Sekiban.Core.Document;
 using Sekiban.Core.Document.ValueObjects;
 using Sekiban.Core.Query.UpdateNotice;
@@ -10,29 +11,26 @@ public class MemoryCacheMultipleProjection : IMultipleProjection
 {
     private readonly IAggregateSettings _aggregateSettings;
     private readonly IDocumentRepository _documentRepository;
-    private readonly IMemoryCache _memoryCache;
-    private readonly IServiceProvider _serviceProvider;
     private readonly IUpdateNotice _updateNotice;
+    private readonly IMultipleAggregateProjectionCache _multipleAggregateProjectionCache;
     public MemoryCacheMultipleProjection(
         IMemoryCache memoryCache,
         IDocumentRepository documentRepository,
         IServiceProvider serviceProvider,
         IUpdateNotice updateNotice,
-        IAggregateSettings aggregateSettings)
+        IAggregateSettings aggregateSettings,
+        IMultipleAggregateProjectionCache multipleAggregateProjectionCache)
     {
-        _memoryCache = memoryCache;
         _documentRepository = documentRepository;
-        _serviceProvider = serviceProvider;
         _updateNotice = updateNotice;
         _aggregateSettings = aggregateSettings;
+        _multipleAggregateProjectionCache = multipleAggregateProjectionCache;
     }
     public async Task<MultipleAggregateProjectionContentsDto<TProjectionContents>> GetMultipleProjectionAsync<TProjection, TProjectionContents>()
         where TProjection : IMultipleAggregateProjector<TProjectionContents>, new()
         where TProjectionContents : IMultipleAggregateProjectionContents, new()
     {
-        var savedContainer
-            = _memoryCache.Get<MultipleMemoryProjectionContainer<TProjection, TProjectionContents>>(
-                GetInMemoryKey<TProjection, TProjectionContents>());
+        var savedContainer = _multipleAggregateProjectionCache.Get<TProjection, TProjectionContents>();
         if (savedContainer == null)
         {
             return await GetInitialProjection<TProjection, TProjectionContents>();
@@ -96,7 +94,7 @@ public class MemoryCacheMultipleProjection : IMultipleProjection
         }
         if (container.SafeDto is not null && container.SafeSortableUniqueId != savedContainer?.SafeSortableUniqueId)
         {
-            _memoryCache.Set(GetInMemoryKey<TProjection, TProjectionContents>(), container, GetMemoryCacheOptions());
+            _multipleAggregateProjectionCache.Set(container);
         }
         return container.Dto;
     }
@@ -137,21 +135,9 @@ public class MemoryCacheMultipleProjection : IMultipleProjection
         }
         if (container.SafeDto is not null)
         {
-            _memoryCache.Set(GetInMemoryKey<TProjection, TContents>(), container, GetMemoryCacheOptions());
+            _multipleAggregateProjectionCache.Set(container);
         }
         return container.Dto;
     }
-    private static MemoryCacheEntryOptions GetMemoryCacheOptions()
-    {
-        return new MemoryCacheEntryOptions
-        {
-            AbsoluteExpiration = DateTimeOffset.UtcNow.AddHours(2), SlidingExpiration = TimeSpan.FromMinutes(15)
-            // 5分読まれなかったら削除するが、2時間経ったらどちらにしても削除する
-        };
-    }
-    private string GetInMemoryKey<P, Q>() where P : IMultipleAggregateProjector<Q>, new() where Q : IMultipleAggregateProjectionContents, new()
-    {
-        var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
-        return "MultipleProjection-" + sekibanContext?.SettingGroupIdentifier + "-" + typeof(P).FullName;
-    }
+
 }

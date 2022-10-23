@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
+using Sekiban.Core.Cache;
 using Sekiban.Core.Event;
 using Sekiban.Core.Partition;
 using Sekiban.Core.Setting;
@@ -10,13 +11,13 @@ namespace Sekiban.Core.Document;
 public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumentPersistentRepository
 {
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
-    private readonly IMemoryCache _memoryCache;
+    private readonly ISnapshotDocumentCache _snapshotDocumentCache;
     private readonly IServiceProvider _serviceProvider;
-    public InMemoryDocumentRepository(InMemoryDocumentStore inMemoryDocumentStore, IMemoryCache memoryCache, IServiceProvider serviceProvider)
+    public InMemoryDocumentRepository(InMemoryDocumentStore inMemoryDocumentStore, IServiceProvider serviceProvider, ISnapshotDocumentCache snapshotDocumentCache)
     {
         _inMemoryDocumentStore = inMemoryDocumentStore;
-        _memoryCache = memoryCache;
         _serviceProvider = serviceProvider;
+        _snapshotDocumentCache = snapshotDocumentCache;
     }
     public async Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(Guid aggregateId, Type originalType)
     {
@@ -111,9 +112,9 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
     public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type originalType)
     {
         await Task.CompletedTask;
-        if (_memoryCache.TryGetValue<SnapshotDocument>(PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, originalType), out var sd))
+        if (_snapshotDocumentCache.Get(aggregateId, originalType) is { } snapshotDocument)
         {
-            return sd;
+            return snapshotDocument;
         }
         return null;
     }

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
+using Sekiban.Core.Cache;
 using Sekiban.Core.Event;
 using Sekiban.Core.PubSub;
 using Sekiban.Core.Setting;
@@ -10,18 +11,18 @@ public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersist
 {
     private readonly AggregateEventPublisher _eventPublisher;
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
-    private readonly IMemoryCache _memoryCache;
+    private readonly ISnapshotDocumentCache _snapshotDocumentCache;
     private readonly IServiceProvider _serviceProvider;
     public InMemoryDocumentWriter(
         InMemoryDocumentStore inMemoryDocumentStore,
         AggregateEventPublisher eventPublisher,
-        IMemoryCache memoryCache,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        ISnapshotDocumentCache snapshotDocumentCache)
     {
         _inMemoryDocumentStore = inMemoryDocumentStore;
         _eventPublisher = eventPublisher;
-        _memoryCache = memoryCache;
         _serviceProvider = serviceProvider;
+        _snapshotDocumentCache = snapshotDocumentCache;
     }
     public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType) where TDocument : IDocument
     {
@@ -37,7 +38,7 @@ public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersist
             case DocumentType.AggregateSnapshot:
                 if (document is SnapshotDocument sd)
                 {
-                    _memoryCache.Set(document.PartitionKey, sd);
+                    _snapshotDocumentCache.Set(sd);
                 }
                 break;
         }

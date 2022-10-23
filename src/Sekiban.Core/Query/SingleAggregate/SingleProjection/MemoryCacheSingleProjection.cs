@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Caching.Memory;
+using Sekiban.Core.Cache;
 using Sekiban.Core.Document;
 using Sekiban.Core.Document.ValueObjects;
 using Sekiban.Core.Exceptions;
@@ -12,25 +13,25 @@ public class MemoryCacheSingleProjection : ISingleProjection
 {
     private readonly IAggregateSettings _aggregateSettings;
     private readonly IDocumentRepository _documentRepository;
-    private readonly IMemoryCache _memoryCache;
+    private readonly ISingleAggregateProjectionCache singleAggregateProjectionCache;
     private readonly IUpdateNotice _updateNotice;
     public MemoryCacheSingleProjection(
         IDocumentRepository documentRepository,
-        IMemoryCache memoryCache,
         IUpdateNotice updateNotice,
-        IAggregateSettings aggregateSettings)
+        IAggregateSettings aggregateSettings,
+        ISingleAggregateProjectionCache singleAggregateProjectionCache)
     {
         _documentRepository = documentRepository;
-        _memoryCache = memoryCache;
         _updateNotice = updateNotice;
         _aggregateSettings = aggregateSettings;
+        this.singleAggregateProjectionCache = singleAggregateProjectionCache;
     }
     public async Task<T?> GetAggregateAsync<T, Q, P>(Guid aggregateId, int? toVersion = null)
         where T : ISingleAggregate, ISingleAggregateProjection, ISingleAggregateProjectionDtoConvertible<Q>
         where Q : ISingleAggregate
         where P : ISingleAggregateProjector<T>, new()
     {
-        var savedContainer = _memoryCache.Get<SingleMemoryCacheProjectionContainer<T, Q>>(GetCacheKey<T>(aggregateId));
+        var savedContainer = singleAggregateProjectionCache.GetContainer<T,Q>(aggregateId);
         if (savedContainer == null)
         {
             return await GetAggregateWithoutCacheAsync<T, Q, P>(aggregateId, toVersion);
@@ -99,7 +100,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
         }
         if (container.SafeDto is not null)
         {
-            _memoryCache.Set(GetCacheKey<T>(aggregateId), container, GetMemoryCacheOptions());
+            singleAggregateProjectionCache.SetContainer(aggregateId,container);
         }
         return aggregate;
     }
@@ -172,7 +173,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
         }
         if (container.SafeDto is not null)
         {
-            _memoryCache.Set(GetCacheKey<T>(aggregateId), container, GetMemoryCacheOptions());
+            singleAggregateProjectionCache.SetContainer(aggregateId, container);
         }
         return aggregate;
     }
@@ -232,22 +233,8 @@ public class MemoryCacheSingleProjection : ISingleProjection
         }
         if (container.SafeDto is not null)
         {
-            _memoryCache.Set(GetCacheKey<T>(aggregateId), container, GetMemoryCacheOptions());
+            singleAggregateProjectionCache.SetContainer(aggregateId, container);
         }
         return aggregate;
-    }
-
-    private static MemoryCacheEntryOptions GetMemoryCacheOptions()
-    {
-        return new MemoryCacheEntryOptions
-        {
-            AbsoluteExpiration = DateTimeOffset.UtcNow.AddHours(2), SlidingExpiration = TimeSpan.FromMinutes(15)
-            // 5分読まれなかったら削除するが、2時間経ったらどちらにしても削除する
-        };
-    }
-
-    public string GetCacheKey<TAggregate>(Guid aggregateId)
-    {
-        return "SingleAggregate" + typeof(TAggregate).Name + aggregateId;
     }
 }
