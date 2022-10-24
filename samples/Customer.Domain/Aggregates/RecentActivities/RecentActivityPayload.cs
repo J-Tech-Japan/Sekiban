@@ -1,15 +1,15 @@
 using Sekiban.Core.Aggregate;
 namespace Customer.Domain.Aggregates.RecentActivities;
 
-public record RecentActivityContents : IAggregateContents
+public record RecentActivityPayload : IAggregatePayload
 {
     public IReadOnlyCollection<RecentActivityRecord> LatestActivities { get; set; } = new List<RecentActivityRecord> { new() };
-    public RecentActivityContents(IReadOnlyCollection<RecentActivityRecord> latestActivities)
+    public RecentActivityPayload(IReadOnlyCollection<RecentActivityRecord> latestActivities)
     {
         LatestActivities = latestActivities;
     }
-    public RecentActivityContents() { }
-    public virtual bool Equals(RecentActivityContents? other)
+    public RecentActivityPayload() { }
+    public virtual bool Equals(RecentActivityPayload? other)
     {
         if (ReferenceEquals(null, other))
         {

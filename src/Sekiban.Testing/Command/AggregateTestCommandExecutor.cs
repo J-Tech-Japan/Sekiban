@@ -79,7 +79,7 @@ public class AggregateTestCommandExecutor
         var aggregateBaseType = typeof(TAggregate).BaseType;
         if (aggregateBaseType is null) { throw new Exception("Failed to get Aggregate Service"); }
         var genericType = aggregateBaseType.GetGenericTypeDefinition();
-        if (genericType != typeof(AggregateBase<>)) { throw new Exception("Failed to get Aggregate Base Type"); }
+        if (genericType != typeof(Aggregate<>)) { throw new Exception("Failed to get Aggregate Base Type"); }
         var contentsType = aggregateBaseType.GetGenericArguments()[0];
         var genericMethod = method.MakeGenericMethod(typeof(TAggregate), contentsType);
         var aggregateTask = genericMethod.Invoke(singleAggregateService, new object?[] { aggregateId, null }) as dynamic;

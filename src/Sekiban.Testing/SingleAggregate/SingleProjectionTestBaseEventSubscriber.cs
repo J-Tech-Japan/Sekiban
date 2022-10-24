@@ -9,7 +9,7 @@ namespace Sekiban.Testing.SingleAggregate;
 public class SingleAggregateProjectionTestBase<TAggregate, TProjection, TProjectionContents> : SingleAggregateTestBase
     where TAggregate : AggregateCommonBase, new()
     where TProjection : SingleAggregateProjectionBase<TAggregate, TProjection, TProjectionContents>, new()
-    where TProjectionContents : ISingleAggregateProjectionContents
+    where TProjectionContents : ISingleAggregateProjectionPayload
 {
     public TProjection Projection { get; } = new();
     public SingleAggregateProjectionTestBase(IServiceProvider serviceProvider) : base(serviceProvider)
@@ -43,7 +43,7 @@ public class SingleAggregateProjectionTestBase<TAggregate, TProjection, TProject
     }
     public SingleAggregateProjectionTestBase<TAggregate, TProjection, TProjectionContents> ThenContentsIs(TProjectionContents dtoContents)
     {
-        var actual = GetProjectionDto().Contents;
+        var actual = GetProjectionDto().Payload;
         var expected = dtoContents;
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
@@ -52,7 +52,7 @@ public class SingleAggregateProjectionTestBase<TAggregate, TProjection, TProject
     }
     public SingleAggregateProjectionTestBase<TAggregate, TProjection, TProjectionContents> ThenContentsIsFromJson(string dtoContentsJson)
     {
-        var actual = GetProjectionDto().Contents;
+        var actual = GetProjectionDto().Payload;
         var contents = JsonSerializer.Deserialize<TProjectionContents>(dtoContentsJson);
         if (contents is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         var expected = contents;
@@ -64,7 +64,7 @@ public class SingleAggregateProjectionTestBase<TAggregate, TProjection, TProject
     public SingleAggregateProjectionTestBase<TAggregate, TProjection, TProjectionContents> ThenContentsIsFromFile(string dtoContentsFilename)
     {
         using var openStream = File.OpenRead(dtoContentsFilename);
-        var actual = GetProjectionDto().Contents;
+        var actual = GetProjectionDto().Payload;
         var contents = JsonSerializer.Deserialize<TProjectionContents>(openStream);
         if (contents is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         var expected = contents;

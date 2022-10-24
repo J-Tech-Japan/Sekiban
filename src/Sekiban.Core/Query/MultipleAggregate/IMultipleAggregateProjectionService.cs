@@ -7,10 +7,9 @@ public interface IMultipleAggregateProjectionService
 
     public Task<MultipleAggregateProjectionContentsDto<TContents>> GetProjectionAsync<TProjection, TContents>()
         where TProjection : MultipleAggregateProjectionBase<TContents>, new() where TContents : IMultipleAggregateProjectionContents, new();
-    public Task<MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<AggregateDto<TContents>>>>
-        GetAggregateListObject<TAggregate, TContents>() where TAggregate : AggregateBase<TContents> where TContents : IAggregateContents, new();
-    public Task<List<AggregateDto<TContents>>> GetAggregateList<TAggregate, TContents>(QueryListType queryListType = QueryListType.ActiveOnly)
-        where TAggregate : AggregateBase<TContents> where TContents : IAggregateContents, new();
+    public Task<MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<AggregateState<TAggregatePayload>>>>
+        GetAggregateListObject<TAggregatePayload>() where TAggregatePayload : IAggregatePayload, new();
+    public Task<List<AggregateState<TAggregatePayload>>> GetAggregateList<TAggregatePayload>(QueryListType queryListType = QueryListType.ActiveOnly) where TAggregatePayload : IAggregatePayload, new();
     public
         Task<MultipleAggregateProjectionContentsDto<
             SingleAggregateListProjectionDto<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>>>>
@@ -18,11 +17,11 @@ public interface IMultipleAggregateProjectionService
         where TAggregate : AggregateCommonBase, new()
         where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
         new()
-        where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents;
+        where TSingleAggregateProjectionContents : ISingleAggregateProjectionPayload;
     public Task<List<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>>>
         GetSingleAggregateProjectionList<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>(
             QueryListType queryListType = QueryListType.ActiveOnly) where TAggregate : AggregateCommonBase, new()
         where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
         new()
-        where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents;
+        where TSingleAggregateProjectionContents : ISingleAggregateProjectionPayload;
 }

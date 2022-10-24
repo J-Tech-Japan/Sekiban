@@ -11,7 +11,7 @@ public class SekibanAggregateTypes
     public IReadOnlyCollection<ProjectionAggregateType> ProjectionAggregateTypes { get; }
     public SekibanAggregateTypes(params Assembly[] assemblies)
     {
-        var attributeType = typeof(AggregateBase<>);
+        var attributeType = typeof(Aggregate<>);
         foreach (var assembly in assemblies)
         {
             var aggregates = assembly.DefinedTypes.Where(

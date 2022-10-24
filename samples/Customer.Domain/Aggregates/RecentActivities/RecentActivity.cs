@@ -4,24 +4,24 @@ using Sekiban.Core.Event;
 namespace Customer.Domain.Aggregates.RecentActivities;
 
 [AggregateContainerGroup(AggregateContainerGroup.Dissolvable)]
-public class RecentActivity : AggregateBase<RecentActivityContents>
+public class RecentActivity : Aggregate<RecentActivityPayload>
 {
 
     public void CreateRecentActivity(string firstActivity)
     {
         AddAndApplyEvent(new RecentActivityCreated(new RecentActivityRecord(firstActivity, DateTime.UtcNow)));
     }
-    protected override Func<AggregateVariable<RecentActivityContents>, AggregateVariable<RecentActivityContents>>? GetApplyEventFunc(
+    protected override Func<AggregateVariable<RecentActivityPayload>, AggregateVariable<RecentActivityPayload>>? GetApplyEventFunc(
         IAggregateEvent ev,
         IEventPayload payload)
     {
         return payload switch
         {
             RecentActivityCreated created => _ =>
-                new AggregateVariable<RecentActivityContents>(new RecentActivityContents(new List<RecentActivityRecord> { created.Activity })),
+                new AggregateVariable<RecentActivityPayload>(new RecentActivityPayload(new List<RecentActivityRecord> { created.Activity })),
             RecentActivityAdded added => variable => variable with
             {
-                Contents = Contents with
+                Contents = Payload with
                 {
                     LatestActivities = variable.Contents.LatestActivities.Append(added.Record)
                         .OrderByDescending(m => m.OccuredAt)

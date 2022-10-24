@@ -49,23 +49,23 @@ public class MultipleDbStoryTest : TestBase
             DefaultDb,
             async () =>
             {
-                await aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchContents, CreateBranch>(new CreateBranch("TEST"));
+                await aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchPayload, CreateBranch>(new CreateBranch("TEST"));
             });
 
         // Default で Listを取得すると1件取得
         var list = await _sekibanContext.SekibanActionAsync(
             DefaultDb,
-            async () => await multipleAggregateProjectionService.GetAggregateList<Branch, BranchContents>());
+            async () => await multipleAggregateProjectionService.GetAggregateList<Branch, BranchPayload>());
         Assert.Single(list);
 
         // 何もつけない場合も Default のDbから取得
-        list = await multipleAggregateProjectionService.GetAggregateList<Branch, BranchContents>();
+        list = await multipleAggregateProjectionService.GetAggregateList<Branch, BranchPayload>();
         Assert.Single(list);
 
         // Secondary で Listを取得すると0件取得
         list = await _sekibanContext.SekibanActionAsync(
             SecondaryDb,
-            async () => await multipleAggregateProjectionService.GetAggregateList<Branch, BranchContents>());
+            async () => await multipleAggregateProjectionService.GetAggregateList<Branch, BranchPayload>());
         Assert.Empty(list);
 
         // Secondaryで3件データを作成
@@ -73,25 +73,25 @@ public class MultipleDbStoryTest : TestBase
             SecondaryDb,
             async () =>
             {
-                await aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchContents, CreateBranch>(new CreateBranch("JAPAN"));
-                await aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchContents, CreateBranch>(new CreateBranch("USA"));
-                await aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchContents, CreateBranch>(new CreateBranch("MEXICO"));
+                await aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchPayload, CreateBranch>(new CreateBranch("JAPAN"));
+                await aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchPayload, CreateBranch>(new CreateBranch("USA"));
+                await aggregateCommandExecutor.ExecCreateCommandAsync<Branch, BranchPayload, CreateBranch>(new CreateBranch("MEXICO"));
             });
 
         // Default で Listを取得すると1件取得
         list = await _sekibanContext.SekibanActionAsync(
             DefaultDb,
-            async () => await multipleAggregateProjectionService.GetAggregateList<Branch, BranchContents>());
+            async () => await multipleAggregateProjectionService.GetAggregateList<Branch, BranchPayload>());
         Assert.Single(list);
 
         // 何もつけない場合も Default のDbから取得
-        list = await multipleAggregateProjectionService.GetAggregateList<Branch, BranchContents>();
+        list = await multipleAggregateProjectionService.GetAggregateList<Branch, BranchPayload>();
         Assert.Single(list);
 
         // Secondary で Listを取得すると3件取得
         list = await _sekibanContext.SekibanActionAsync(
             SecondaryDb,
-            async () => await multipleAggregateProjectionService.GetAggregateList<Branch, BranchContents>());
+            async () => await multipleAggregateProjectionService.GetAggregateList<Branch, BranchPayload>());
         Assert.Equal(3, list.Count);
     }
 }

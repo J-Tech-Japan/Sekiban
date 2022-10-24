@@ -15,7 +15,7 @@ public class
     where TAggregate : AggregateCommonBase, new()
     where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>, new
     ()
-    where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
+    where TSingleAggregateProjectionContents : ISingleAggregateProjectionPayload
     where TQueryFilter : ISingleAggregateProjectionListQueryFilterDefinition<TAggregate, TSingleAggregateProjection,
         TSingleAggregateProjectionContents, TQueryParameter, TResponseQueryModel>
     where TQueryParameter : IQueryParameter

@@ -6,9 +6,9 @@ using Sekiban.Core.Query.SingleAggregate;
 namespace Sekiban.Testing.Projection;
 
 public class AggregateListProjectionTestBase<TAggregate, TAggregateContents, TDependencyDefinition> : CommonMultipleAggregateProjectionTestBase<
-    SingleAggregateListProjector<TAggregate, AggregateDto<TAggregateContents>, DefaultSingleAggregateProjector<TAggregate>>,
-    SingleAggregateListProjectionDto<AggregateDto<TAggregateContents>>, TDependencyDefinition> where TAggregate : AggregateBase<TAggregateContents>
-    where TAggregateContents : IAggregateContents, new()
+    SingleAggregateListProjector<TAggregate, AggregateState<TAggregateContents>, DefaultSingleAggregateProjector<TAggregate>>,
+    SingleAggregateListProjectionDto<AggregateState<TAggregateContents>>, TDependencyDefinition> where TAggregate : Aggregate<TAggregateContents>
+    where TAggregateContents : IAggregatePayload, new()
     where TDependencyDefinition : IDependencyDefinition, new()
 {
     public AggregateListProjectionTestBase()
@@ -19,8 +19,8 @@ public class AggregateListProjectionTestBase<TAggregate, TAggregateContents, TDe
     }
     public override
         IMultipleAggregateProjectionTestHelper<
-            SingleAggregateListProjector<TAggregate, AggregateDto<TAggregateContents>, DefaultSingleAggregateProjector<TAggregate>>,
-            SingleAggregateListProjectionDto<AggregateDto<TAggregateContents>>> WhenProjection()
+            SingleAggregateListProjector<TAggregate, AggregateState<TAggregateContents>, DefaultSingleAggregateProjector<TAggregate>>,
+            SingleAggregateListProjectionDto<AggregateState<TAggregateContents>>> WhenProjection()
     {
         if (_serviceProvider == null)
         {

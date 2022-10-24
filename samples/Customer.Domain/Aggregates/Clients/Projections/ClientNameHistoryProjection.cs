@@ -12,7 +12,7 @@ namespace Customer.Domain.Aggregates.Clients.Projections;
 ///     分割することも可能
 /// </summary>
 public class ClientNameHistoryProjection : SingleAggregateProjectionBase<Client, ClientNameHistoryProjection,
-    ClientNameHistoryProjection.ContentsDefinition>
+    ClientNameHistoryProjection.PayloadDefinition>
 {
     public ClientNameHistoryProjection(Guid aggregateId)
     {
@@ -23,32 +23,32 @@ public class ClientNameHistoryProjection : SingleAggregateProjectionBase<Client,
     {
         return new ClientNameHistoryProjection(aggregateId);
     }
-    protected override Func<AggregateVariable<ContentsDefinition>, AggregateVariable<ContentsDefinition>>? GetApplyEventFunc(
+    protected override Func<AggregateVariable<PayloadDefinition>, AggregateVariable<PayloadDefinition>>? GetApplyEventFunc(
         IAggregateEvent ev,
         IEventPayload payload)
     {
         return payload switch
         {
-            ClientCreated clientCreated => _ => new AggregateVariable<ContentsDefinition>(
-                new ContentsDefinition(
+            ClientCreated clientCreated => _ => new AggregateVariable<PayloadDefinition>(
+                new PayloadDefinition(
                     clientCreated.BranchId,
                     new List<ClientNameHistoryProjectionRecord> { new(clientCreated.ClientName, ev.TimeStamp) },
                     clientCreated.ClientEmail)),
 
             ClientNameChanged clientNameChanged => variable =>
             {
-                var list = Contents.ClientNames.ToList();
+                var list = Payload.ClientNames.ToList();
                 list.Add(new ClientNameHistoryProjectionRecord(clientNameChanged.ClientName, ev.TimeStamp));
-                return variable with { Contents = Contents with { ClientNames = list } };
+                return variable with { Contents = Payload with { ClientNames = list } };
             },
             ClientDeleted => variable => variable with { IsDeleted = true },
             _ => null
         };
     }
-    public record ContentsDefinition(
+    public record PayloadDefinition(
         Guid BranchId,
         IReadOnlyCollection<ClientNameHistoryProjectionRecord> ClientNames,
-        string ClientEmail) : ISingleAggregateProjectionContents;
+        string ClientEmail) : ISingleAggregateProjectionPayload;
 
     public record ClientNameHistoryProjectionRecord(string Name, DateTime DateChanged);
 }

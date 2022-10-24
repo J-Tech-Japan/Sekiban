@@ -52,11 +52,11 @@ public class QueryFilterHandler
 
 
     public QueryFilterListResult<TQueryFilterResponse>
-        GetAggregateListQueryFilter<TAggregate, TAggregateContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
+        GetAggregateListQueryFilter<TAggregatePayload, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
             TQueryFilterParameter param,
-            IEnumerable<AggregateDto<TAggregateContents>> list) where TAggregate : AggregateBase<TAggregateContents>
-        where TAggregateContents : IAggregateContents, new()
-        where TQueryFilter : IAggregateListQueryFilterDefinition<TAggregate, TAggregateContents, TQueryFilterParameter, TQueryFilterResponse>
+            IEnumerable<AggregateState<TAggregatePayload>> list)
+        where TAggregatePayload : IAggregatePayload, new()
+        where TQueryFilter : IAggregateListQueryFilterDefinition<TAggregatePayload, TQueryFilterParameter, TQueryFilterResponse>
         where TQueryFilterParameter : IQueryParameter
     {
         var queryFilter = _serviceProvider.GetService<TQueryFilter>();
@@ -70,11 +70,11 @@ public class QueryFilterHandler
         }
         return new QueryFilterListResult<TQueryFilterResponse>(queryFilterResponses.ToList().Count, null, null, null, queryFilterResponses);
     }
-    public TQueryFilterResponse GetAggregateQueryFilter<TAggregate, TAggregateContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
+    public TQueryFilterResponse GetAggregateQueryFilter<TAggregatePayload, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
         TQueryFilterParameter param,
-        IEnumerable<AggregateDto<TAggregateContents>> list) where TAggregate : AggregateBase<TAggregateContents>
-        where TAggregateContents : IAggregateContents, new()
-        where TQueryFilter : IAggregateQueryFilterDefinition<TAggregate, TAggregateContents, TQueryFilterParameter, TQueryFilterResponse>
+        IEnumerable<AggregateState<TAggregatePayload>> list)
+        where TAggregatePayload : IAggregatePayload, new()
+        where TQueryFilter : IAggregateQueryFilterDefinition< TAggregatePayload, TQueryFilterParameter, TQueryFilterResponse>
         where TQueryFilterParameter : IQueryParameter
     {
         var queryFilter = _serviceProvider.GetService<TQueryFilter>();
@@ -90,7 +90,7 @@ public class QueryFilterHandler
             IEnumerable<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>> projections) where TAggregate : AggregateCommonBase, new()
         where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
         new()
-        where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
+        where TSingleAggregateProjectionContents : ISingleAggregateProjectionPayload
         where TQueryFilter : ISingleAggregateProjectionListQueryFilterDefinition<TAggregate, TSingleAggregateProjection,
             TSingleAggregateProjectionContents, TQueryFilterParameter, TQueryFilterResponse>
         where TQueryFilterParameter : IQueryParameter
@@ -138,7 +138,7 @@ public class QueryFilterHandler
             IEnumerable<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>> projections) where TAggregate : AggregateCommonBase, new()
         where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
         new()
-        where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
+        where TSingleAggregateProjectionContents : ISingleAggregateProjectionPayload
         where TQueryFilter : ISingleAggregateProjectionQueryFilterDefinition<TAggregate, TSingleAggregateProjection,
             TSingleAggregateProjectionContents, TQueryFilterParameter, TQueryFilterResponse>
         where TQueryFilterParameter : IQueryParameter

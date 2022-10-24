@@ -5,25 +5,25 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Event;
 namespace Customer.Domain.Aggregates.LoyaltyPoints;
 
-public class LoyaltyPoint : AggregateBase<LoyaltyPointContents>
+public class LoyaltyPoint : Aggregate<LoyaltyPointPayload>
 {
 
     public void CreateLoyaltyPoint(int initialPoint)
     {
         AddAndApplyEvent(new LoyaltyPointCreated(initialPoint));
     }
-    protected override Func<AggregateVariable<LoyaltyPointContents>, AggregateVariable<LoyaltyPointContents>>? GetApplyEventFunc(
+    protected override Func<AggregateVariable<LoyaltyPointPayload>, AggregateVariable<LoyaltyPointPayload>>? GetApplyEventFunc(
         IAggregateEvent ev,
         IEventPayload payload)
     {
         return payload switch
         {
             LoyaltyPointCreated created => variable =>
-                new AggregateVariable<LoyaltyPointContents>(new LoyaltyPointContents(created.InitialPoint, null)),
+                new AggregateVariable<LoyaltyPointPayload>(new LoyaltyPointPayload(created.InitialPoint, null)),
             LoyaltyPointAdded added => variable =>
-                variable with { Contents = new LoyaltyPointContents(Contents.CurrentPoint + added.PointAmount, added.HappenedDate) },
+                variable with { Contents = new LoyaltyPointPayload(Payload.CurrentPoint + added.PointAmount, added.HappenedDate) },
             LoyaltyPointUsed used => variable =>
-                variable with { Contents = new LoyaltyPointContents(Contents.CurrentPoint - used.PointAmount, used.HappenedDate) },
+                variable with { Contents = new LoyaltyPointPayload(Payload.CurrentPoint - used.PointAmount, used.HappenedDate) },
             LoyaltyPointDeleted => variable => variable with { IsDeleted = true },
             _ => null
         };
@@ -31,7 +31,7 @@ public class LoyaltyPoint : AggregateBase<LoyaltyPointContents>
 
     public void AddLoyaltyPoint(DateTime happenedDate, LoyaltyPointReceiveType reason, int pointAmount, string note)
     {
-        if (Contents.LastOccuredTime is not null && Contents.LastOccuredTime > happenedDate)
+        if (Payload.LastOccuredTime is not null && Payload.LastOccuredTime > happenedDate)
         {
             throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
         }
@@ -40,11 +40,11 @@ public class LoyaltyPoint : AggregateBase<LoyaltyPointContents>
 
     public void UseLoyaltyPoint(DateTime happenedDate, LoyaltyPointUsageType reason, int pointAmount, string note)
     {
-        if (Contents.LastOccuredTime > happenedDate)
+        if (Payload.LastOccuredTime > happenedDate)
         {
             throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
         }
-        if (Contents.CurrentPoint - pointAmount < 0)
+        if (Payload.CurrentPoint - pointAmount < 0)
         {
             throw new SekibanLoyaltyPointNotEnoughException();
         }

@@ -12,20 +12,20 @@ public enum ClientNameHistoryProjectionQueryFilterSortKeys
 }
 // ReSharper disable once ClassNeverInstantiated.Global
 public class ClientNameHistoryProjectionQueryFilter : ISingleAggregateProjectionListQueryFilterDefinition<Client, ClientNameHistoryProjection,
-    ClientNameHistoryProjection.ContentsDefinition, ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionParameter,
+    ClientNameHistoryProjection.PayloadDefinition, ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionParameter,
     ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionQueryResponse>
 {
     public IEnumerable<ClientNameHistoryProjectionQueryResponse> HandleFilter(
         ClientNameHistoryProjectionParameter queryParam,
-        IEnumerable<SingleAggregateProjectionDto<ClientNameHistoryProjection.ContentsDefinition>> list)
+        IEnumerable<SingleAggregateProjectionDto<ClientNameHistoryProjection.PayloadDefinition>> list)
     {
         return (from projection in list
-                from name in projection.Contents.ClientNames
+                from name in projection.Payload.ClientNames
                 select new ClientNameHistoryProjectionQueryResponse(
-                    projection.Contents.BranchId,
+                    projection.Payload.BranchId,
                     projection.AggregateId,
                     name.Name,
-                    projection.Contents.ClientEmail,
+                    projection.Payload.ClientEmail,
                     name.DateChanged)).Where(
             m => (queryParam.BranchId == null || m.BranchId == queryParam.BranchId) &&
                 (queryParam.ClientId == null || m.ClientId == queryParam.ClientId));

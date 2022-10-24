@@ -13,7 +13,7 @@ public class SingleAggregateListProjectionQueryFilterTestChecker<TAggregate, TSi
     SingleAggregateListProjectionDto<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>>>> where TAggregate : AggregateCommonBase, new()
     where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>, new
     ()
-    where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
+    where TSingleAggregateProjectionContents : ISingleAggregateProjectionPayload
     where TQueryFilter : ISingleAggregateProjectionQueryFilterDefinition<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents,
         TQueryParameter, TResponseQueryModel>
     where TQueryParameter : IQueryParameter

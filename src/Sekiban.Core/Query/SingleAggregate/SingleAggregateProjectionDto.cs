@@ -1,10 +1,16 @@
+using Sekiban.Core.Aggregate;
 namespace Sekiban.Core.Query.SingleAggregate;
 
-public record SingleAggregateProjectionDto<TContents>(
-    TContents Contents,
+public record SingleAggregateProjectionDto<TPayload>(
+    TPayload Payload,
     Guid AggregateId,
-    bool IsDeleted,
     Guid LastEventId,
     string LastSortableUniqueId,
     int AppliedSnapshotVersion,
-    int Version) : ISingleAggregateProjectionContents, ISingleAggregate where TContents : ISingleAggregateProjectionContents;
+    int Version) : ISingleAggregateProjectionPayload, ISingleAggregate where TPayload : ISingleAggregateProjectionPayload
+{
+    public bool GetIsDeleted()
+    {
+        return Payload is IDeletableAggregate { IsDeleted: true };
+    }
+};

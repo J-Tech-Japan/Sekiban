@@ -9,20 +9,20 @@ namespace Sekiban.Testing.QueryFilter;
 
 public class
     AggregateQueryFilterTestChecker<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> : IQueryFilterChecker<
-        MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<AggregateDto<TAggregateContents>>>>
-    where TAggregate : AggregateBase<TAggregateContents>
-    where TAggregateContents : IAggregateContents, new()
+        MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<AggregateState<TAggregateContents>>>>
+    where TAggregate : Aggregate<TAggregateContents>
+    where TAggregateContents : IAggregatePayload, new()
     where TQueryFilter : IAggregateQueryFilterDefinition<TAggregate, TAggregateContents, TQueryParameter, TResponseQueryModel>
     where TQueryParameter : IQueryParameter
 {
     public TResponseQueryModel? Response { get; set; }
-    private MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<AggregateDto<TAggregateContents>>>? _dto { get; set; }
+    private MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<AggregateState<TAggregateContents>>>? _dto { get; set; }
     public QueryFilterHandler? QueryFilterHandler
     {
         get;
         set;
     }
-    public void RegisterDto(MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<AggregateDto<TAggregateContents>>> dto)
+    public void RegisterDto(MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<AggregateState<TAggregateContents>>> dto)
     {
         _dto = dto;
     }

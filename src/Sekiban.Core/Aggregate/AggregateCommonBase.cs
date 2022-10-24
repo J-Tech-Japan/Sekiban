@@ -6,7 +6,6 @@ namespace Sekiban.Core.Aggregate;
 public abstract class AggregateCommonBase : IAggregate
 {
     protected AggregateBasicInfo _basicInfo = new();
-    public ReadOnlyCollection<IAggregateEvent> Events => _basicInfo.Events.ToList().AsReadOnly();
     public Guid AggregateId
     {
         get => _basicInfo.AggregateId;
@@ -17,7 +16,6 @@ public abstract class AggregateCommonBase : IAggregate
     public string LastSortableUniqueId => _basicInfo.LastSortableUniqueId;
     public int AppliedSnapshotVersion => _basicInfo.AppliedSnapshotVersion;
     public int Version => _basicInfo.Version;
-    public bool IsDeleted => _basicInfo.IsDeleted;
     public bool CanApplyEvent(IAggregateEvent ev)
     {
         return GetApplyEventAction(ev, ev.GetPayload()) is not null;
@@ -35,11 +33,6 @@ public abstract class AggregateCommonBase : IAggregate
         action();
         _basicInfo = _basicInfo with { LastEventId = ev.Id, LastSortableUniqueId = ev.SortableUniqueId, Version = Version + 1 };
     }
-    public void ResetEventsAndSnapshots()
-    {
-        _basicInfo = _basicInfo with { Events = ImmutableList<IAggregateEvent>.Empty };
-    }
-
     public static UAggregate Create<UAggregate>(Guid aggregateId) where UAggregate : AggregateCommonBase
     {
         if (typeof(UAggregate).GetConstructor(Type.EmptyTypes) is not { } c)
@@ -54,6 +47,4 @@ public abstract class AggregateCommonBase : IAggregate
     }
 
     protected abstract Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload);
-
-    protected abstract void AddAndApplyEvent<TEventPayload>(TEventPayload eventPayload) where TEventPayload : IEventPayload;
 }

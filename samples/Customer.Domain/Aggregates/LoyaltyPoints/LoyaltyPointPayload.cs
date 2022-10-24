@@ -1,14 +1,14 @@
 using Sekiban.Core.Aggregate;
 namespace Customer.Domain.Aggregates.LoyaltyPoints;
 
-public record LoyaltyPointContents : IAggregateContents
+public record LoyaltyPointPayload : IAggregatePayload
 {
     public DateTime? LastOccuredTime { get; init; }
     public int CurrentPoint { get; init; }
-    public LoyaltyPointContents(int currentPoint, DateTime? lastOccuredTime)
+    public LoyaltyPointPayload(int currentPoint, DateTime? lastOccuredTime)
     {
         CurrentPoint = currentPoint;
         LastOccuredTime = lastOccuredTime;
     }
-    public LoyaltyPointContents() { }
+    public LoyaltyPointPayload() { }
 }

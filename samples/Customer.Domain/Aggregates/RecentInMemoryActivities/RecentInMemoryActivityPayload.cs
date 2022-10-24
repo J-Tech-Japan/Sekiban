@@ -1,12 +1,12 @@
 using Sekiban.Core.Aggregate;
 namespace Customer.Domain.Aggregates.RecentInMemoryActivities;
 
-public record RecentInMemoryActivityContents : IAggregateContents
+public record RecentInMemoryActivityPayload : IAggregatePayload
 {
     public List<RecentInMemoryActivityRecord> LatestActivities { get; set; } = new();
-    public RecentInMemoryActivityContents(List<RecentInMemoryActivityRecord> latestActivities)
+    public RecentInMemoryActivityPayload(List<RecentInMemoryActivityRecord> latestActivities)
     {
         LatestActivities = latestActivities;
     }
-    public RecentInMemoryActivityContents() { }
+    public RecentInMemoryActivityPayload() { }
 }

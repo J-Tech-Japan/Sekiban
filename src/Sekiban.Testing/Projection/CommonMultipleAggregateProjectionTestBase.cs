@@ -72,13 +72,13 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
 
     }
 
-    public AggregateDto<TEnvironmentAggregateContents> GetAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid aggregateId)
-        where TEnvironmentAggregate : AggregateBase<TEnvironmentAggregateContents>, new()
-        where TEnvironmentAggregateContents : IAggregateContents, new()
+    public AggregateState<TEnvironmentAggregateContents> GetAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid aggregateId)
+        where TEnvironmentAggregate : Aggregate<TEnvironmentAggregateContents>, new()
+        where TEnvironmentAggregateContents : IAggregatePayload, new()
     {
         var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleAggregateService)) as ISingleAggregateService;
         if (singleAggregateService is null) { throw new Exception("Failed to get single aggregate service"); }
-        var aggregate = singleAggregateService.GetAggregateDtoAsync<TEnvironmentAggregate, TEnvironmentAggregateContents>(aggregateId).Result;
+        var aggregate = singleAggregateService.GetAggregateStateAsync<TEnvironmentAggregate, TEnvironmentAggregateContents>(aggregateId).Result;
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregate).Name);
     }
     public IReadOnlyCollection<IAggregateEvent> GetLatestEvents()

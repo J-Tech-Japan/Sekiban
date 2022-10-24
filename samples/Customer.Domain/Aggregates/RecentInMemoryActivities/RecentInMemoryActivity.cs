@@ -4,22 +4,22 @@ using Sekiban.Core.Event;
 namespace Customer.Domain.Aggregates.RecentInMemoryActivities;
 
 [AggregateContainerGroup(AggregateContainerGroup.InMemoryContainer)]
-public class RecentInMemoryActivity : AggregateBase<RecentInMemoryActivityContents>
+public class RecentInMemoryActivity : Aggregate<RecentInMemoryActivityPayload>
 {
 
     public void CreateRecentInMemoryActivity(string firstActivity)
     {
         AddAndApplyEvent(new RecentInMemoryActivityCreated(new RecentInMemoryActivityRecord(firstActivity, DateTime.UtcNow)));
     }
-    protected override Func<AggregateVariable<RecentInMemoryActivityContents>, AggregateVariable<RecentInMemoryActivityContents>>? GetApplyEventFunc(
+    protected override Func<AggregateVariable<RecentInMemoryActivityPayload>, AggregateVariable<RecentInMemoryActivityPayload>>? GetApplyEventFunc(
         IAggregateEvent ev,
         IEventPayload payload)
     {
         return payload switch
         {
             RecentInMemoryActivityCreated created => _ =>
-                new AggregateVariable<RecentInMemoryActivityContents>(
-                    new RecentInMemoryActivityContents(new List<RecentInMemoryActivityRecord> { created.Activity })),
+                new AggregateVariable<RecentInMemoryActivityPayload>(
+                    new RecentInMemoryActivityPayload(new List<RecentInMemoryActivityRecord> { created.Activity })),
             RecentInMemoryActivityAdded added => variable =>
             {
                 var records = variable.Contents.LatestActivities.ToList();
@@ -28,7 +28,7 @@ public class RecentInMemoryActivity : AggregateBase<RecentInMemoryActivityConten
                 {
                     records.RemoveRange(5, records.Count - 5);
                 }
-                return variable with { Contents = new RecentInMemoryActivityContents(records) };
+                return variable with { Contents = new RecentInMemoryActivityPayload(records) };
             },
             _ => null
         };

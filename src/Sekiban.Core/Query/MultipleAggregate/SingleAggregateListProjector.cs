@@ -18,7 +18,7 @@ public class SingleAggregateListProjector<T, Q, P> : IMultipleAggregateProjector
     public SingleAggregateListProjector()
     {
         _eventChecker = _projector.CreateInitialAggregate(Guid.Empty);
-        Contents = new SingleAggregateListProjectionDto<Q> { List = List.Select(m => m.ToDto()).ToList() };
+        Contents = new SingleAggregateListProjectionDto<Q> { List = List.Select(m => m.ToState()).ToList() };
     }
     public void ApplyEvent(IAggregateEvent ev)
     {
@@ -44,7 +44,7 @@ public class SingleAggregateListProjector<T, Q, P> : IMultipleAggregateProjector
     }
     public MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<Q>> ToDto()
     {
-        Contents = new SingleAggregateListProjectionDto<Q> { List = List.Select(m => m.ToDto()).ToList() };
+        Contents = new SingleAggregateListProjectionDto<Q> { List = List.Select(m => m.ToState()).ToList() };
         return new MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<Q>>(
             Contents,
             LastEventId,

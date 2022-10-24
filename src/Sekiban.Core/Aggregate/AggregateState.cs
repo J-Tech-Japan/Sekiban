@@ -2,33 +2,32 @@ using Sekiban.Core.Query.SingleAggregate;
 using System.ComponentModel.DataAnnotations;
 namespace Sekiban.Core.Aggregate;
 
-public record AggregateDto<TContents> : ISingleAggregate where TContents : IAggregateContents, new()
+public record AggregateState<TPayload> : ISingleAggregate where TPayload : IAggregatePayload, new()
 {
 
-    public TContents Contents { get; init; } = new();
+    public TPayload Payload { get; init; } = new();
 
     /// <summary>
     ///     スナップショットからの再構築用。
     /// </summary>
-    public AggregateDto() { }
+    public AggregateState() { }
 
     /// <summary>
     ///     一般の構築用。
     /// </summary>
     /// <param name="aggregate"></param>
-    public AggregateDto(IAggregate aggregate)
+    public AggregateState(IAggregate aggregate)
     {
         AggregateId = aggregate.AggregateId;
         Version = aggregate.Version;
         LastEventId = aggregate.LastEventId;
         LastSortableUniqueId = aggregate.LastSortableUniqueId;
         AppliedSnapshotVersion = aggregate.AppliedSnapshotVersion;
-        IsDeleted = aggregate.IsDeleted;
     }
 
-    public AggregateDto(IAggregate aggregate, TContents contents) : this(aggregate)
+    public AggregateState(IAggregate aggregate, TPayload payload) : this(aggregate)
     {
-        Contents = contents;
+        Payload = payload;
     }
     [Required]
     [Description("集約が削除済みかどうか")]
@@ -54,7 +53,7 @@ public record AggregateDto<TContents> : ISingleAggregate where TContents : IAggr
     [Description("並べ替え可能なユニークID（自動付与）、このIDの順番でイベントは常に順番を決定する")]
     public string LastSortableUniqueId { get; init; } = string.Empty;
 
-    public dynamic GetComparableObject(AggregateDto<TContents> original, bool copyVersion = true)
+    public dynamic GetComparableObject(AggregateState<TPayload> original, bool copyVersion = true)
     {
         return this with
         {

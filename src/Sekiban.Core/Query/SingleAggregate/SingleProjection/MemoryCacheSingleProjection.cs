@@ -70,7 +70,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
                     }
                     if (container.LastSortableUniqueId == null && e.GetSortableUniqueId().LaterThan(targetSafeId) && aggregate.Version > 0)
                     {
-                        container.SafeDto = aggregate.ToDto();
+                        container.SafeDto = aggregate.ToState();
                         container.SafeSortableUniqueId = container.SafeDto.LastSortableUniqueId;
                     }
                     aggregate.ApplyEvent(e);
@@ -90,7 +90,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
         {
             throw new SekibanVersionNotReachToSpecificVersion();
         }
-        container.Dto = aggregate.ToDto();
+        container.Dto = aggregate.ToState();
         if (container.LastSortableUniqueId != null &&
             container.SafeSortableUniqueId == null &&
             container.LastSortableUniqueId?.EarlierThan(SortableUniqueIdValue.GetSafeIdFromUtc()) == true)
@@ -143,7 +143,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
                     }
                     if (container.LastSortableUniqueId == null && e.GetSortableUniqueId().EarlierThan(targetSafeId) && aggregate.Version > 0)
                     {
-                        container.SafeDto = aggregate.ToDto();
+                        container.SafeDto = aggregate.ToState();
                         container.SafeSortableUniqueId = container.SafeDto.LastSortableUniqueId;
                     }
                     aggregate.ApplyEvent(e);
@@ -163,7 +163,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
         {
             throw new SekibanVersionNotReachToSpecificVersion();
         }
-        container.Dto = aggregate.ToDto();
+        container.Dto = aggregate.ToState();
         if (container.LastSortableUniqueId != null &&
             container.SafeSortableUniqueId == null &&
             container.LastSortableUniqueId?.EarlierThan(SortableUniqueIdValue.GetSafeIdFromUtc()) == true)
@@ -205,7 +205,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
                 {
                     if (container.LastSortableUniqueId == null && e.GetSortableUniqueId().EarlierThan(targetSafeId) && aggregate.Version > 0)
                     {
-                        container.SafeDto = aggregate.ToDto();
+                        container.SafeDto = aggregate.ToState();
                         container.SafeSortableUniqueId = container.SafeDto.LastSortableUniqueId;
                     }
                     aggregate.ApplyEvent(e);
@@ -223,7 +223,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
             });
         if (aggregate.Version == 0) { return default; }
 
-        container.Dto = aggregate.ToDto();
+        container.Dto = aggregate.ToState();
         if (container.LastSortableUniqueId != null &&
             container.SafeSortableUniqueId == null &&
             container.LastSortableUniqueId?.EarlierThan(SortableUniqueIdValue.GetSafeIdFromUtc()) == true)

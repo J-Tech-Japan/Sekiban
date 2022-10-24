@@ -22,10 +22,10 @@ namespace Customer.Test.AggregateTests;
 public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<CustomerDependency>
 {
 
-    private readonly AggregateQueryFilterTestChecker<Branch, BranchContents, BranchExistsQueryFilter, BranchExistsQueryFilter.QueryParameter, bool>
+    private readonly AggregateQueryFilterTestChecker<Branch, BranchPayload, BranchExistsQueryFilter, BranchExistsQueryFilter.QueryParameter, bool>
         _branchExistsQueryFilterChecker = new();
 
-    private readonly AggregateListProjectionTestBase<Branch, BranchContents, CustomerDependency> _branchListProjection;
+    private readonly AggregateListProjectionTestBase<Branch, BranchPayload, CustomerDependency> _branchListProjection;
     private readonly
         MultipleAggregateProjectionTestBase<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.ContentsDefinition,
             CustomerDependency> _clientLoyaltyProjectionTest;
@@ -42,11 +42,11 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
         ClientLoyaltyPointMultipleProjection.ContentsDefinition> _projectionQueryFilterTestChecker = new();
 
     private readonly
-        SingleAggregateProjectionListProjectionTestBase<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.ContentsDefinition,
+        SingleAggregateProjectionListProjectionTestBase<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition,
             CustomerDependency> _singleAggregateProjectionListProjectionTestBase;
 
     private readonly SingleAggregateListProjectionListQueryFilterTestChecker<Client, ClientNameHistoryProjection,
-        ClientNameHistoryProjection.ContentsDefinition, ClientNameHistoryProjectionQueryFilter,
+        ClientNameHistoryProjection.PayloadDefinition, ClientNameHistoryProjectionQueryFilter,
         ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionParameter,
         ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionQueryResponse> _singleAggregateProjectionListQueryFilterTestChecker = new();
 
@@ -70,11 +70,11 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
             = SetupMultipleAggregateProjectionTest<MultipleAggregateProjectionTestBase<ClientLoyaltyPointListProjection,
                 ClientLoyaltyPointListProjection.ContentsDefinition, CustomerDependency>>();
 
-        _branchListProjection = SetupMultipleAggregateProjectionTest<AggregateListProjectionTestBase<Branch, BranchContents, CustomerDependency>>();
+        _branchListProjection = SetupMultipleAggregateProjectionTest<AggregateListProjectionTestBase<Branch, BranchPayload, CustomerDependency>>();
 
         _singleAggregateProjectionListProjectionTestBase
             = SetupMultipleAggregateProjectionTest<SingleAggregateProjectionListProjectionTestBase<Client, ClientNameHistoryProjection,
-                ClientNameHistoryProjection.ContentsDefinition, CustomerDependency>>();
+                ClientNameHistoryProjection.PayloadDefinition, CustomerDependency>>();
 
 
     }

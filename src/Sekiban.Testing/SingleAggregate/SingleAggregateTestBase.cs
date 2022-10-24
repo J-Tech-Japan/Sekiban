@@ -8,8 +8,8 @@ using Sekiban.Testing.Command;
 namespace Sekiban.Testing.SingleAggregate;
 
 public abstract class SingleAggregateTestBase<TAggregate, TContents, TDependencyDefinition> : IDisposable, IAggregateTestHelper<TAggregate, TContents>
-    where TAggregate : AggregateBase<TContents>, new()
-    where TContents : IAggregateContents, new()
+    where TAggregate : Aggregate<TContents>, new()
+    where TContents : IAggregatePayload, new()
     where TDependencyDefinition : IDependencyDefinition, new()
 {
     private readonly IAggregateTestHelper<TAggregate, TContents> _helper;
@@ -45,10 +45,10 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents, TDependency
     {
         return _helper.GivenEnvironmentEventsFile(filename);
     }
-    public AggregateDto<TEnvironmentAggregateContents>
+    public AggregateState<TEnvironmentAggregateContents>
         GetEnvironmentAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid aggregateId)
-        where TEnvironmentAggregate : AggregateBase<TEnvironmentAggregateContents>, new()
-        where TEnvironmentAggregateContents : IAggregateContents, new()
+        where TEnvironmentAggregate : Aggregate<TEnvironmentAggregateContents>, new()
+        where TEnvironmentAggregateContents : IAggregatePayload, new()
     {
         return _helper.GetEnvironmentAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(aggregateId);
     }
@@ -105,13 +105,13 @@ public abstract class SingleAggregateTestBase<TAggregate, TContents, TDependency
     {
         return _helper.ThenGetSingleEventPayload(checkPayloadAction);
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenGetState(Action<AggregateDto<TContents>> checkDtoAction)
+    public IAggregateTestHelper<TAggregate, TContents> ThenGetState(Action<AggregateState<TContents>> checkDtoAction)
     {
         return _helper.ThenGetState(checkDtoAction);
     }
-    public IAggregateTestHelper<TAggregate, TContents> ThenStateIs(AggregateDto<TContents> expectedDto)
+    public IAggregateTestHelper<TAggregate, TContents> ThenStateIs(AggregateState<TContents> expectedState)
     {
-        return _helper.ThenStateIs(expectedDto);
+        return _helper.ThenStateIs(expectedState);
     }
     public IAggregateTestHelper<TAggregate, TContents> ThenGetContents(Action<TContents> contentsAction)
     {

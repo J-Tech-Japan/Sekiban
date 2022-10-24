@@ -13,7 +13,7 @@ public interface ISingleAggregateService
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
-    public Task<T?> GetAggregateFromInitialAsync<T, P>(Guid aggregateId, int? toVersion) where T : ISingleAggregate, ISingleAggregateProjection
+    public Task<T?> GetAggregateProjectionFromInitialAsync<T, P>(Guid aggregateId, int? toVersion) where T : ISingleAggregate, ISingleAggregateProjection
         where P : ISingleAggregateProjector<T>, new();
 
     /// <summary>
@@ -24,10 +24,9 @@ public interface ISingleAggregateService
     /// <param name="aggregateId"></param>
     /// <param name="toVersion"></param>
     /// <typeparam name="T"></typeparam>
-    /// <typeparam name="TContents"></typeparam>
+    /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Task<T?> GetAggregateFromInitialDefaultAggregateAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
-        where T : AggregateBase<TContents> where TContents : IAggregateContents, new();
+    public Task<Aggregate<TAggregatePayload>?> GetAggregateFromInitialAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null) where TAggregatePayload : IAggregatePayload, new();
 
     /// <summary>
     ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
@@ -36,11 +35,10 @@ public interface ISingleAggregateService
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <param name="toVersion"></param>
-    /// <typeparam name="T"></typeparam>
-    /// <typeparam name="TContents"></typeparam>
+    /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Task<AggregateDto<TContents>?> GetAggregateFromInitialDefaultAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
-        where T : AggregateBase<TContents> where TContents : IAggregateContents, new();
+    public Task<AggregateState<TAggregatePayload>?> GetAggregateStateFromInitialAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)
+        where TAggregatePayload : IAggregatePayload, new();
     /// <summary>
     ///     カスタムプロジェククションを取得
     /// </summary>
@@ -55,7 +53,7 @@ public interface ISingleAggregateService
         where TAggregate : AggregateCommonBase, new()
         where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
         new()
-        where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents;
+        where TSingleAggregateProjectionContents : ISingleAggregateProjectionPayload;
 
 
     /// <summary>
@@ -65,10 +63,10 @@ public interface ISingleAggregateService
     /// <param name="aggregateId"></param>
     /// <param name="toVersion"></param>
     /// <typeparam name="T"></typeparam>
-    /// <typeparam name="TContents"></typeparam>
+    /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Task<T?> GetAggregateAsync<T, TContents>(Guid aggregateId, int? toVersion = null) where T : AggregateBase<TContents>
-        where TContents : IAggregateContents, new();
+    public Task<Aggregate<TAggregatePayload>?> GetAggregateAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)
+        where TAggregatePayload : IAggregatePayload, new();
 
     /// <summary>
     ///     スナップショット、メモリキャッシュを使用する通常版
@@ -76,8 +74,7 @@ public interface ISingleAggregateService
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <typeparam name="T"></typeparam>
-    /// <typeparam name="TContents"></typeparam>
+    /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Task<AggregateDto<TContents>?> GetAggregateDtoAsync<T, TContents>(Guid aggregateId, int? toVersion = null)
-        where T : AggregateBase<TContents> where TContents : IAggregateContents, new();
+    public Task<AggregateState<TAggregatePayload>?> GetAggregateStateAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null) where TAggregatePayload : IAggregatePayload, new();
 }

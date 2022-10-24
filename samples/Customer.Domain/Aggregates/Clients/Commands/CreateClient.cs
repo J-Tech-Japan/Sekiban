@@ -56,7 +56,7 @@ public class CreateClientHandler : CreateAggregateCommandHandlerBase<Client, Cre
         // Check if branch exists
         var branchExists
             = await _queryFilterService
-                .GetAggregateQueryFilterAsync<Branch, BranchContents, BranchExistsQueryFilter, BranchExistsQueryFilter.QueryParameter, bool>(
+                .GetAggregateQueryFilterAsync<Branch, BranchPayload, BranchExistsQueryFilter, BranchExistsQueryFilter.QueryParameter, bool>(
                     new BranchExistsQueryFilter.QueryParameter(command.BranchId));
         if (!branchExists)
         {
@@ -66,7 +66,7 @@ public class CreateClientHandler : CreateAggregateCommandHandlerBase<Client, Cre
         // Check no email duplicates
         var emailExists
             = await _queryFilterService
-                .GetAggregateQueryFilterAsync<Client, ClientContents, ClientEmailExistsQueryFilter, ClientEmailExistsQueryFilter.QueryParameter,
+                .GetAggregateQueryFilterAsync<Client, ClientPayload, ClientEmailExistsQueryFilter, ClientEmailExistsQueryFilter.QueryParameter,
                     bool>(new ClientEmailExistsQueryFilter.QueryParameter(command.ClientEmail));
         if (emailExists)
         {

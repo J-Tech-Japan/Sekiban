@@ -18,13 +18,13 @@ public record BasicClientQueryFilterParameter(
     bool? SortKey1Asc,
     bool? SortKey2Asc) : IQueryFilterParameter;
 public record BasicClientQueryModel(Guid BranchId, string ClientName, string ClientEmail);
-public class BasicClientQueryFilter : IAggregateListQueryFilterDefinition<Client, ClientContents, BasicClientQueryFilterParameter,
+public class BasicClientQueryFilter : IAggregateListQueryFilterDefinition<Client, ClientPayload, BasicClientQueryFilterParameter,
     BasicClientQueryModel>
 {
-    public IEnumerable<BasicClientQueryModel> HandleFilter(BasicClientQueryFilterParameter queryParam, IEnumerable<AggregateDto<ClientContents>> list)
+    public IEnumerable<BasicClientQueryModel> HandleFilter(BasicClientQueryFilterParameter queryParam, IEnumerable<AggregateState<ClientPayload>> list)
     {
-        return list.Where(m => queryParam.BranchId is null || m.Contents.BranchId == queryParam.BranchId)
-            .Select(m => new BasicClientQueryModel(m.Contents.BranchId, m.Contents.ClientName, m.Contents.ClientEmail));
+        return list.Where(m => queryParam.BranchId is null || m.Payload.BranchId == queryParam.BranchId)
+            .Select(m => new BasicClientQueryModel(m.Payload.BranchId, m.Payload.ClientName, m.Payload.ClientEmail));
     }
     public IEnumerable<BasicClientQueryModel> HandleSort(BasicClientQueryFilterParameter queryParam, IEnumerable<BasicClientQueryModel> projections)
     {

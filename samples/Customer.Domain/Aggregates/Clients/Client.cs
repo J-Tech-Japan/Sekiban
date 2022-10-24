@@ -3,22 +3,22 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Event;
 namespace Customer.Domain.Aggregates.Clients;
 
-public class Client : AggregateBase<ClientContents>
+public class Client : Aggregate<ClientPayload>
 {
     public void CreateClient(Guid branchId, NameString clientName, EmailString clientEmail)
     {
         AddAndApplyEvent(new ClientCreated(branchId, clientName, clientEmail));
     }
-    protected override Func<AggregateVariable<ClientContents>, AggregateVariable<ClientContents>>? GetApplyEventFunc(
+    protected override Func<AggregateVariable<ClientPayload>, AggregateVariable<ClientPayload>>? GetApplyEventFunc(
         IAggregateEvent ev,
         IEventPayload payload)
     {
         return payload switch
         {
-            ClientCreated clientChanged => _ => new AggregateVariable<ClientContents>(
-                new ClientContents(clientChanged.BranchId, clientChanged.ClientName, clientChanged.ClientEmail)),
+            ClientCreated clientChanged => _ => new AggregateVariable<ClientPayload>(
+                new ClientPayload(clientChanged.BranchId, clientChanged.ClientName, clientChanged.ClientEmail)),
             ClientNameChanged clientNameChanged => variable =>
-                variable with { Contents = Contents with { ClientName = clientNameChanged.ClientName } },
+                variable with { Contents = Payload with { ClientName = clientNameChanged.ClientName } },
             ClientDeleted => variable => variable with { IsDeleted = true },
             _ => null
         };

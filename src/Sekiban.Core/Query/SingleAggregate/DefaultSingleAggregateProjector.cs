@@ -1,14 +1,14 @@
 using Sekiban.Core.Aggregate;
 namespace Sekiban.Core.Query.SingleAggregate;
 
-public class DefaultSingleAggregateProjector<T> : ISingleAggregateProjector<T> where T : AggregateCommonBase
+public class DefaultSingleAggregateProjector<TAggregatePayload> : ISingleAggregateProjector<Aggregate<TAggregatePayload>> where TAggregatePayload : IAggregatePayload, new()
 {
-    public T CreateInitialAggregate(Guid aggregateId)
+    public Aggregate<TAggregatePayload> CreateInitialAggregate(Guid aggregateId)
     {
-        return AggregateCommonBase.Create<T>(aggregateId);
+        return AggregateCommonBase.Create<Aggregate<TAggregatePayload>>(aggregateId);
     }
     public Type OriginalAggregateType()
     {
-        return typeof(T);
+        return typeof(TAggregatePayload);
     }
 }

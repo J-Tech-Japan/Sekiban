@@ -4,5 +4,4 @@ namespace Sekiban.Core.Aggregate;
 
 public interface IAggregate : ISingleAggregate, ISingleAggregateProjection
 {
-    ReadOnlyCollection<IAggregateEvent> Events { get; }
 }

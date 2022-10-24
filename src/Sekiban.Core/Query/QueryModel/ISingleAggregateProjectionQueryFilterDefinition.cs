@@ -7,7 +7,7 @@ public interface
     ISingleAggregateProjectionQueryFilterDefinition<TAggregate, in TSingleAggregateProjection, TSingleAggregateProjectionContents, in TQueryParam,
         TResponseQueryModel> where TAggregate : AggregateCommonBase, new()
     where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>
-    where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
+    where TSingleAggregateProjectionContents : ISingleAggregateProjectionPayload
     where TQueryParam : IQueryParameter
 {
     public TResponseQueryModel HandleFilter(

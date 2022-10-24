@@ -47,9 +47,9 @@ public interface IMultipleAggregateProjectionTestHelper<TProjection, TProjection
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenGetContents(Action<TProjectionContents> contentsAction);
     #endregion
     #region Get
-    public AggregateDto<TEnvironmentAggregateContents> GetAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid aggregateId)
-        where TEnvironmentAggregate : AggregateBase<TEnvironmentAggregateContents>, new()
-        where TEnvironmentAggregateContents : IAggregateContents, new();
+    public AggregateState<TEnvironmentAggregateContents> GetAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid aggregateId)
+        where TEnvironmentAggregate : Aggregate<TEnvironmentAggregateContents>, new()
+        where TEnvironmentAggregateContents : IAggregatePayload, new();
     public IReadOnlyCollection<IAggregateEvent> GetLatestEvents();
     #endregion
 }

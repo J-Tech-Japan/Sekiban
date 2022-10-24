@@ -39,24 +39,27 @@ public class QueryFilterService : IQueryFilterService
                 param,
                 allProjection);
     }
-    public async Task<QueryFilterListResult<TQueryFilterResponse>> GetAggregateListQueryFilterAsync<TAggregate, TAggregateContents, TQueryFilter,
-        TQueryFilterParameter, TQueryFilterResponse>(TQueryFilterParameter param) where TAggregate : AggregateBase<TAggregateContents>
-        where TAggregateContents : IAggregateContents, new()
-        where TQueryFilter : IAggregateListQueryFilterDefinition<TAggregate, TAggregateContents, TQueryFilterParameter, TQueryFilterResponse>
-        where TQueryFilterParameter : IQueryParameter
+    public async Task<QueryFilterListResult<TQueryFilterResponse>> GetAggregateListQueryFilterAsync<TAggregatePayload, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(TQueryFilterParameter param) where TAggregatePayload : IAggregatePayload, new() where TQueryFilter : IAggregateListQueryFilterDefinition<TAggregatePayload, TQueryFilterParameter, TQueryFilterResponse> where TQueryFilterParameter : IQueryParameter
     {
-        var allProjection = await _multipleAggregateProjectionService.GetAggregateList<TAggregate, TAggregateContents>();
+        var allProjection = await _multipleAggregateProjectionService.GetAggregateList< TAggregatePayload>();
         return _queryFilterHandler
-            .GetAggregateListQueryFilter<TAggregate, TAggregateContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
+            .GetAggregateListQueryFilter<TAggregatePayload, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
                 param,
                 allProjection);
+    }
+    public async Task<TQueryFilterResponse> GetAggregateQueryFilterAsync<TAggregatePayload, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(TQueryFilterParameter param) where TAggregatePayload : IAggregatePayload, new() where TQueryFilter : IAggregateQueryFilterDefinition<TAggregatePayload, TQueryFilterParameter, TQueryFilterResponse> where TQueryFilterParameter : IQueryParameter
+    {
+        var allProjection = await _multipleAggregateProjectionService.GetAggregateList<TAggregatePayload>();
+        return _queryFilterHandler.GetAggregateQueryFilter<TAggregatePayload, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
+            param,
+            allProjection);
     }
     public async Task<QueryFilterListResult<TQueryFilterResponse>>
         GetSingleAggregateProjectionListQueryFilterAsync<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents, TQueryFilter,
             TQueryFilterParameter, TQueryFilterResponse>(TQueryFilterParameter param) where TAggregate : AggregateCommonBase, new()
         where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
         new()
-        where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
+        where TSingleAggregateProjectionContents : ISingleAggregateProjectionPayload
         where TQueryFilter : ISingleAggregateProjectionListQueryFilterDefinition<TAggregate, TSingleAggregateProjection,
             TSingleAggregateProjectionContents, TQueryFilterParameter, TQueryFilterResponse>
         where TQueryFilterParameter : IQueryParameter
@@ -67,24 +70,12 @@ public class QueryFilterService : IQueryFilterService
             .GetSingleAggregateProjectionListQueryFilter<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents, TQueryFilter,
                 TQueryFilterParameter, TQueryFilterResponse>(param, allProjection);
     }
-    public async Task<TQueryFilterResponse> GetAggregateQueryFilterAsync<TAggregate, TAggregateContents, TQueryFilter,
-        TQueryFilterParameter, TQueryFilterResponse>(TQueryFilterParameter param) where TAggregate : AggregateBase<TAggregateContents>
-        where TAggregateContents : IAggregateContents, new()
-        where TQueryFilter : IAggregateQueryFilterDefinition<TAggregate, TAggregateContents, TQueryFilterParameter, TQueryFilterResponse>
-        where TQueryFilterParameter : IQueryParameter
-    {
-        var allProjection = await _multipleAggregateProjectionService.GetAggregateList<TAggregate, TAggregateContents>();
-        return _queryFilterHandler.GetAggregateQueryFilter<TAggregate, TAggregateContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
-            param,
-            allProjection);
-    }
-
     public async Task<TQueryFilterResponse>
         GetSingleAggregateProjectionQueryFilterAsync<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents, TQueryFilter,
             TQueryFilterParameter, TQueryFilterResponse>(TQueryFilterParameter param) where TAggregate : AggregateCommonBase, new()
         where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
         new()
-        where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
+        where TSingleAggregateProjectionContents : ISingleAggregateProjectionPayload
         where TQueryFilter : ISingleAggregateProjectionQueryFilterDefinition<TAggregate, TSingleAggregateProjection,
             TSingleAggregateProjectionContents, TQueryFilterParameter, TQueryFilterResponse>
         where TQueryFilterParameter : IQueryParameter

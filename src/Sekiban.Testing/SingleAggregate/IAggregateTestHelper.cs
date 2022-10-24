@@ -5,7 +5,7 @@ using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
 namespace Sekiban.Testing.SingleAggregate;
 
-public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : AggregateBase<TContents> where TContents : IAggregateContents, new()
+public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : Aggregate<TContents> where TContents : IAggregatePayload, new()
 {
     #region given and setup
     public TSingleAggregateProjection SetupSingleAggregateProjection<TSingleAggregateProjection>()
@@ -15,10 +15,10 @@ public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : 
     public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentEvent(IAggregateEvent ev);
     public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentEvents(IEnumerable<IAggregateEvent> events);
     public IAggregateTestHelper<TAggregate, TContents> GivenEnvironmentEventsFile(string filename);
-    public AggregateDto<TEnvironmentAggregateContents>
+    public AggregateState<TEnvironmentAggregateContents>
         GetEnvironmentAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid aggregateId)
-        where TEnvironmentAggregate : AggregateBase<TEnvironmentAggregateContents>, new()
-        where TEnvironmentAggregateContents : IAggregateContents, new();
+        where TEnvironmentAggregate : Aggregate<TEnvironmentAggregateContents>, new()
+        where TEnvironmentAggregateContents : IAggregatePayload, new();
     public Guid RunEnvironmentCreateCommand<TEnvironmentAggregate>(
         ICreateAggregateCommand<TEnvironmentAggregate> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregate : AggregateCommonBase, new();
@@ -42,8 +42,8 @@ public interface IAggregateTestHelper<TAggregate, TContents> where TAggregate : 
     public IAggregateTestHelper<TAggregate, TContents> ThenSingleEventIs<T>(AggregateEvent<T> aggregateEvent) where T : IEventPayload;
     public IAggregateTestHelper<TAggregate, TContents> ThenSingleEventPayloadIs<T>(T payload) where T : IEventPayload;
     public IAggregateTestHelper<TAggregate, TContents> ThenGetSingleEventPayload<T>(Action<T> checkPayloadAction) where T : class, IEventPayload;
-    public IAggregateTestHelper<TAggregate, TContents> ThenGetState(Action<AggregateDto<TContents>> checkDtoAction);
-    public IAggregateTestHelper<TAggregate, TContents> ThenStateIs(AggregateDto<TContents> expectedDto);
+    public IAggregateTestHelper<TAggregate, TContents> ThenGetState(Action<AggregateState<TContents>> checkDtoAction);
+    public IAggregateTestHelper<TAggregate, TContents> ThenStateIs(AggregateState<TContents> expectedState);
     public IAggregateTestHelper<TAggregate, TContents> ThenGetContents(Action<TContents> contentsAction);
     public IAggregateTestHelper<TAggregate, TContents> ThenContentsIs(TContents contents);
     public IAggregateTestHelper<TAggregate, TContents> WriteStateToFile(string filename);
