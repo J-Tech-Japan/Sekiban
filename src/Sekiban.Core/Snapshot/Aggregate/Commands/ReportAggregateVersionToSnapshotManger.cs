@@ -10,7 +10,7 @@ public record ReportAggregateVersionToSnapshotManger(
     Type AggregateType,
     Guid TargetAggregateId,
     int Version,
-    int? SnapshotVersion) : ChangeAggregateCommandBase<SnapshotManagerPayload>, INoValidateCommand
+    int? SnapshotVersion) : ChangeAggregateCommandBase<SnapshotManager>, INoValidateCommand
 {
     public ReportAggregateVersionToSnapshotManger() : this(Guid.Empty, typeof(object), Guid.Empty, 0, null) { }
     public override Guid GetAggregateId()
@@ -18,7 +18,7 @@ public record ReportAggregateVersionToSnapshotManger(
         return SnapshotManagerId;
     }
 }
-public class ReportAggregateVersionToSnapshotMangerHandler : ChangeAggregateCommandHandlerBase<SnapshotManagerPayload,
+public class ReportAggregateVersionToSnapshotMangerHandler : ChangeAggregateCommandHandlerBase<SnapshotManager,
     ReportAggregateVersionToSnapshotManger>
 {
     private readonly IAggregateSettings _aggregateSettings;
@@ -26,8 +26,8 @@ public class ReportAggregateVersionToSnapshotMangerHandler : ChangeAggregateComm
     {
         _aggregateSettings = aggregateSettings;
     }
-    protected override async IAsyncEnumerable<IChangedEvent<SnapshotManagerPayload>> ExecCommandAsync(
-        AggregateState<SnapshotManagerPayload> aggregate,
+    protected override async IAsyncEnumerable<IChangedEvent<SnapshotManager>> ExecCommandAsync(
+        AggregateState<SnapshotManager> aggregate,
         ReportAggregateVersionToSnapshotManger command)
     {
         await Task.CompletedTask;
@@ -37,7 +37,7 @@ public class ReportAggregateVersionToSnapshotMangerHandler : ChangeAggregateComm
         var nextSnapshotVersion = command.Version / snapshotFrequency * snapshotFrequency;
         var offset = command.Version - nextSnapshotVersion;
         if (nextSnapshotVersion == 0) { yield break; }
-        var key = SnapshotManagerPayload.SnapshotKey(command.AggregateType.Name, command.TargetAggregateId, nextSnapshotVersion);
+        var key = SnapshotManager.SnapshotKey(command.AggregateType.Name, command.TargetAggregateId, nextSnapshotVersion);
         if (!aggregate.Payload.Requests.Contains(key) && !aggregate.Payload.RequestTakens.Contains(key))
         {
             yield return new SnapshotManagerRequestAdded(

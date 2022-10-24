@@ -6,8 +6,8 @@ using Sekiban.Core.Query.SingleAggregate;
 namespace Sekiban.Testing.Projection;
 
 public class AggregateListProjectionTestBase<TAggregate, TAggregateContents, TDependencyDefinition> : CommonMultipleAggregateProjectionTestBase<
-    SingleAggregateListProjector<TAggregate, AggregateState<TAggregateContents>, DefaultSingleAggregateProjector<TAggregate>>,
-    SingleAggregateListProjectionDto<AggregateState<TAggregateContents>>, TDependencyDefinition> where TAggregate : Aggregate<TAggregateContents>
+    SingleAggregateListProjector<Aggregate<TAggregateContents>, AggregateState<TAggregateContents>, DefaultSingleAggregateProjector<TAggregateContents>>,
+    SingleAggregateListProjectionDto<AggregateState<TAggregateContents>>, TDependencyDefinition> 
     where TAggregateContents : IAggregatePayload, new()
     where TDependencyDefinition : IDependencyDefinition, new()
 {
@@ -19,7 +19,7 @@ public class AggregateListProjectionTestBase<TAggregate, TAggregateContents, TDe
     }
     public override
         IMultipleAggregateProjectionTestHelper<
-            SingleAggregateListProjector<TAggregate, AggregateState<TAggregateContents>, DefaultSingleAggregateProjector<TAggregate>>,
+            SingleAggregateListProjector<Aggregate<TAggregateContents>, AggregateState<TAggregateContents>, DefaultSingleAggregateProjector<TAggregateContents>>,
             SingleAggregateListProjectionDto<AggregateState<TAggregateContents>>> WhenProjection()
     {
         if (_serviceProvider == null)
@@ -31,7 +31,7 @@ public class AggregateListProjectionTestBase<TAggregate, TAggregateContents, TDe
         if (multipleProjectionService is null) { throw new Exception("Failed to get multipleProjectionService "); }
         try
         {
-            Dto = multipleProjectionService.GetAggregateListObject<TAggregate, TAggregateContents>().Result;
+            Dto = multipleProjectionService.GetAggregateListObject<TAggregateContents>().Result;
         }
         catch (Exception ex)
         {

@@ -259,7 +259,7 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Equal(3, p.Contents.Branches.Count);
         Assert.Empty(p.Contents.Records);
         var snapshotManager
-            = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<SnapshotManager, SnapshotManagerPayload>(
+            = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<SnapshotManager, SnapshotManager>(
                 SnapshotManager.SharedId);
         _testOutputHelper.WriteLine("-requests-");
         foreach (var key in snapshotManager!.Payload.Requests)
@@ -334,7 +334,7 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
 
         var snapshotManager
-            = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<SnapshotManager, SnapshotManagerPayload>(
+            = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<SnapshotManager, SnapshotManager>(
                 SnapshotManager.SharedId);
         _testOutputHelper.WriteLine("-requests-");
         foreach (var key in snapshotManager!.Payload.Requests)
@@ -468,7 +468,7 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
 
         var snapshotManager
-            = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<SnapshotManager, SnapshotManagerPayload>(
+            = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<SnapshotManager, SnapshotManager>(
                 SnapshotManager.SharedId);
         _testOutputHelper.WriteLine("-requests-");
         foreach (var key in snapshotManager!.Payload.Requests)

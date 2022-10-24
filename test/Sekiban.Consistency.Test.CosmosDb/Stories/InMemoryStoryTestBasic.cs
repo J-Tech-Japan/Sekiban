@@ -231,7 +231,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         Assert.Equal(2, p.Contents.Branches.Count);
         Assert.Empty(p.Contents.Records);
         var snapshotManager
-            = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<SnapshotManager, SnapshotManagerPayload>(
+            = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<SnapshotManager, SnapshotManager>(
                 SnapshotManager.SharedId);
         _testOutputHelper.WriteLine("-requests-");
         foreach (var key in snapshotManager!.Payload.Requests)
@@ -289,7 +289,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
 
         var snapshotManager
-            = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<SnapshotManager, SnapshotManagerPayload>(
+            = await _aggregateService.GetAggregateFromInitialDefaultAggregateDtoAsync<SnapshotManager, SnapshotManager>(
                 SnapshotManager.SharedId);
         _testOutputHelper.WriteLine("-requests-");
         foreach (var key in snapshotManager!.Payload.Requests)

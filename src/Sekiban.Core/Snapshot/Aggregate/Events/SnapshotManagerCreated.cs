@@ -3,10 +3,10 @@ using Sekiban.Core.Shared;
 using System.Collections.Immutable;
 namespace Sekiban.Core.Snapshot.Aggregate.Events;
 
-public record SnapshotManagerCreated(DateTime CreatedAt) : ICreatedEvent<SnapshotManagerPayload>
+public record SnapshotManagerCreated(DateTime CreatedAt) : ICreatedEvent<SnapshotManager>
 {
-    public SnapshotManagerPayload OnEvent(SnapshotManagerPayload aggregatePayload, IAggregateEvent aggregateEvent)
+    public SnapshotManager OnEvent(SnapshotManager aggregate, IAggregateEvent aggregateEvent)
     {
-        return new SnapshotManagerPayload();
+        return new SnapshotManager();
     }
 }

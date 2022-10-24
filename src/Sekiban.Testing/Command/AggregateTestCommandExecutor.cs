@@ -21,7 +21,7 @@ public class AggregateTestCommandExecutor
 
     public (IEnumerable<IAggregateEvent>, Guid) ExecuteCreateCommand<TAggregate>(
         ICreateAggregateCommand<TAggregate> command,
-        Guid? injectingAggregateId = null) where TAggregate : AggregateCommonBase, new()
+        Guid? injectingAggregateId = null) where TAggregate : IAggregatePayload, new()
     {
         var validationResults = command.TryValidateProperties().ToList();
         if (validationResults.Any())
@@ -44,7 +44,7 @@ public class AggregateTestCommandExecutor
         var aggregateCommandDocumentBaseType = typeof(AggregateCommandDocument<>);
         var aggregateCommandDocumentType = aggregateCommandDocumentBaseType.MakeGenericType(command.GetType());
         var commandDocument = Activator.CreateInstance(aggregateCommandDocumentType, aggregateId, command, typeof(TAggregate), null);
-        var aggregate = new TAggregate { AggregateId = aggregateId.Value };
+        var aggregate = new Aggregate<TAggregate> { AggregateId = aggregateId.Value };
         var handlerType = handler.GetType().GetMethods();
         var handleAsyncMethod = handler.GetType().GetMethods().First(m => m.Name == "HandleAsync");
         var result = ((dynamic)handleAsyncMethod.Invoke(handler, new[] { commandDocument, aggregate })!)?.Result;
@@ -69,7 +69,7 @@ public class AggregateTestCommandExecutor
         return (latestEvents, aggregateId.Value);
     }
 
-    private TAggregate GetAggregate<TAggregate>(Guid aggregateId) where TAggregate : AggregateCommonBase, new()
+    private Aggregate<TAggregate> GetAggregate<TAggregate>(Guid aggregateId) where TAggregate : IAggregatePayload, new()
     {
 
         var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleAggregateService)) as ISingleAggregateService;
@@ -88,8 +88,8 @@ public class AggregateTestCommandExecutor
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TAggregate).Name);
     }
 
-    public IEnumerable<IAggregateEvent> ExecuteChangeCommand<TAggregate>(ChangeAggregateCommandBase<TAggregate> command)
-        where TAggregate : AggregateCommonBase, new()
+    public IEnumerable<IAggregateEvent> ExecuteChangeCommand<TAggregatePayload>(ChangeAggregateCommandBase<TAggregatePayload> command)
+        where TAggregatePayload : IAggregatePayload, new()
     {
         var validationResults = command.TryValidateProperties().ToList();
         if (validationResults.Any())
@@ -98,7 +98,7 @@ public class AggregateTestCommandExecutor
         }
 
         var baseType = typeof(IChangeAggregateCommandHandler<,>);
-        var genericType = baseType.MakeGenericType(typeof(TAggregate), command.GetType());
+        var genericType = baseType.MakeGenericType(typeof(TAggregatePayload), command.GetType());
         var handler = _serviceProvider.GetService(genericType);
         if (handler is null)
         {
@@ -108,16 +108,15 @@ public class AggregateTestCommandExecutor
 
         if (command is not IOnlyPublishingCommand)
         {
-            var aggregate = GetAggregate<TAggregate>(aggregateId);
+            var aggregate = GetAggregate<TAggregatePayload>(aggregateId);
             if (aggregate is null)
             {
-                throw new SekibanAggregateNotExistsException(aggregateId, typeof(TAggregate).Name);
+                throw new SekibanAggregateNotExistsException(aggregateId, typeof(TAggregatePayload).Name);
             }
-            aggregate.ResetEventsAndSnapshots();
             var aggregateCommandDocumentBaseType = typeof(AggregateCommandDocument<>);
             var aggregateCommandDocumentType = aggregateCommandDocumentBaseType.MakeGenericType(command.GetType());
             var commandToSend = command with { ReferenceVersion = aggregate?.Version ?? 0 };
-            var commandDocument = Activator.CreateInstance(aggregateCommandDocumentType, aggregateId, commandToSend, typeof(TAggregate), null);
+            var commandDocument = Activator.CreateInstance(aggregateCommandDocumentType, aggregateId, commandToSend, typeof(TAggregatePayload), null);
 
             var handleAsyncMethod = handler.GetType().GetMethods().First(m => m.Name == "HandleAsync");
             var result = ((dynamic)handleAsyncMethod.Invoke(handler, new[] { commandDocument, aggregate })!)?.Result;
@@ -125,16 +124,15 @@ public class AggregateTestCommandExecutor
             LatestEvents = (ReadOnlyCollection<IAggregateEvent>)result.Events;
         } else
         {
-            var aggregate = GetAggregate<TAggregate>(aggregateId);
+            var aggregate = GetAggregate<TAggregatePayload>(aggregateId);
             if (aggregate is null)
             {
-                throw new SekibanAggregateNotExistsException(aggregateId, typeof(TAggregate).Name);
+                throw new SekibanAggregateNotExistsException(aggregateId, typeof(TAggregatePayload).Name);
             }
-            aggregate.ResetEventsAndSnapshots();
             var aggregateCommandDocumentBaseType = typeof(AggregateCommandDocument<>);
             var aggregateCommandDocumentType = aggregateCommandDocumentBaseType.MakeGenericType(command.GetType());
             var commandToSend = command with { ReferenceVersion = aggregate?.Version ?? 0 };
-            var commandDocument = Activator.CreateInstance(aggregateCommandDocumentType, aggregateId, commandToSend, typeof(TAggregate), null);
+            var commandDocument = Activator.CreateInstance(aggregateCommandDocumentType, aggregateId, commandToSend, typeof(TAggregatePayload), null);
 
             var handleAsyncMethod = handler.GetType().GetMethods().First(m => m.Name == "HandleForOnlyPublishingCommandAsync");
             var result = ((dynamic)handleAsyncMethod.Invoke(handler, new[] { commandDocument, aggregate!.AggregateId })!)?.Result;
@@ -149,7 +147,7 @@ public class AggregateTestCommandExecutor
         if (documentWriter is null) { throw new Exception("Failed to get document writer"); }
         foreach (var e in LatestEvents)
         {
-            documentWriter.SaveAsync(e, typeof(TAggregate)).Wait();
+            documentWriter.SaveAsync(e, typeof(TAggregatePayload)).Wait();
         }
         return LatestEvents;
     }
