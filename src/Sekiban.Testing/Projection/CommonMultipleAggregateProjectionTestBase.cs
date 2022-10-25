@@ -24,10 +24,6 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
     private readonly AggregateTestCommandExecutor _commandExecutor;
     protected readonly List<IQueryFilterChecker<MultipleAggregateProjectionContentsDto<TProjectionContents>>> _queryFilterCheckers = new();
     protected IServiceProvider _serviceProvider;
-    public MultipleAggregateProjectionContentsDto<TProjectionContents> Dto { get; protected set; }
-        = new(new TProjectionContents(), Guid.Empty, string.Empty, 0, 0);
-    protected Exception? _latestException { get; set; }
-    public Action<IAggregateEvent> OnEvent => e => GivenEvents(new List<IAggregateEvent> { e });
 
     public CommonMultipleAggregateProjectionTestBase()
     {
@@ -44,6 +40,10 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
         _serviceProvider = serviceProvider;
         _commandExecutor = new AggregateTestCommandExecutor(_serviceProvider);
     }
+    public MultipleAggregateProjectionContentsDto<TProjectionContents> Dto { get; protected set; }
+        = new(new TProjectionContents(), Guid.Empty, string.Empty, 0, 0);
+    protected Exception? _latestException { get; set; }
+    public Action<IAggregateEvent> OnEvent => e => GivenEvents(new List<IAggregateEvent> { e });
 
     public void Dispose()
     {
@@ -60,26 +60,27 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
         contentsAction(Dto.Contents);
         return this;
     }
-    public Guid RunCreateCommand<TAggregate>(ICreateAggregateCommand<TAggregate> command, Guid? injectingAggregateId = null)
-        where TAggregate : AggregateCommonBase, new()
+
+    public Guid RunCreateCommand<TAggregatePayload>(ICreateAggregateCommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
+        where TAggregatePayload : IAggregatePayload, new()
     {
         var (events, aggregateId) = _commandExecutor.ExecuteCreateCommand(command, injectingAggregateId);
         return aggregateId;
     }
-    public void RunChangeCommand<TAggregate>(ChangeAggregateCommandBase<TAggregate> command) where TAggregate : AggregateCommonBase, new()
+    public void RunChangeCommand<TAggregatePayload>(ChangeAggregateCommandBase<TAggregatePayload> command)
+        where TAggregatePayload : IAggregatePayload, new()
     {
         var events = _commandExecutor.ExecuteChangeCommand(command);
 
     }
 
-    public AggregateState<TEnvironmentAggregateContents> GetAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid aggregateId)
-        where TEnvironmentAggregate : Aggregate<TEnvironmentAggregateContents>, new()
-        where TEnvironmentAggregateContents : IAggregatePayload, new()
+    public AggregateState<TEnvironmentAggregatePayload> GetAggregateDto<TEnvironmentAggregatePayload>(Guid aggregateId)
+        where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
         var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleAggregateService)) as ISingleAggregateService;
         if (singleAggregateService is null) { throw new Exception("Failed to get single aggregate service"); }
-        var aggregate = singleAggregateService.GetAggregateStateAsync<TEnvironmentAggregate, TEnvironmentAggregateContents>(aggregateId).Result;
-        return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregate).Name);
+        var aggregate = singleAggregateService.GetAggregateStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
+        return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name);
     }
     public IReadOnlyCollection<IAggregateEvent> GetLatestEvents()
     {
@@ -199,7 +200,7 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
             var interfaces = payload.GetType().GetInterfaces();
             var interfaceType = payload.GetType()
                 .GetInterfaces()
-                ?.FirstOrDefault(m => m.IsGenericType && m.GetGenericTypeDefinition() == typeof(IAggregatePointerEvent<>));
+                ?.FirstOrDefault(m => m.IsGenericType && m.GetGenericTypeDefinition() == typeof(IApplicableEvent<>));
             var aggregateType = interfaceType?.GenericTypeArguments?.FirstOrDefault();
             if (aggregateType is null) { throw new InvalidDataException("イベントの生成に失敗しました。" + payload); }
             var eventType = typeof(AggregateEvent<>);

@@ -27,9 +27,10 @@ public interface IMultipleAggregateProjectionTestHelper<TProjection, TProjection
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenQueryFilterChecker(
         IQueryFilterChecker<MultipleAggregateProjectionContentsDto<TProjectionContents>> checker);
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenScenario(Action initialAction);
-    public Guid RunCreateCommand<TAggregate>(ICreateAggregateCommand<TAggregate> command, Guid? injectingAggregateId = null)
-        where TAggregate : AggregateCommonBase, new();
-    public void RunChangeCommand<TAggregate>(ChangeAggregateCommandBase<TAggregate> command) where TAggregate : AggregateCommonBase, new();
+    public Guid RunCreateCommand<TAggregatePayload>(ICreateAggregateCommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
+        where TAggregatePayload : IAggregatePayload, new();
+    public void RunChangeCommand<TAggregatePayload>(ChangeAggregateCommandBase<TAggregatePayload> command)
+        where TAggregatePayload : IAggregatePayload, new();
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenCommandExecutorAction(
         Action<AggregateTestCommandExecutor> action);
     #endregion
@@ -47,9 +48,8 @@ public interface IMultipleAggregateProjectionTestHelper<TProjection, TProjection
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenGetContents(Action<TProjectionContents> contentsAction);
     #endregion
     #region Get
-    public AggregateState<TEnvironmentAggregateContents> GetAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid aggregateId)
-        where TEnvironmentAggregate : Aggregate<TEnvironmentAggregateContents>, new()
-        where TEnvironmentAggregateContents : IAggregatePayload, new();
+    public AggregateState<TEnvironmentAggregatePayload> GetAggregateDto<TEnvironmentAggregatePayload>(Guid aggregateId)
+        where TEnvironmentAggregatePayload : IAggregatePayload, new();
     public IReadOnlyCollection<IAggregateEvent> GetLatestEvents();
     #endregion
 }

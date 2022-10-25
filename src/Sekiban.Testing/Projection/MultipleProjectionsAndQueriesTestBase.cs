@@ -34,13 +34,14 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         return test;
     }
 
-    public Guid RunCreateCommand<TAggregate>(ICreateAggregateCommand<TAggregate> command, Guid? injectingAggregateId = null)
-        where TAggregate : AggregateCommonBase, new()
+    public Guid RunCreateCommand<TAggregatePayload>(ICreateAggregateCommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
+        where TAggregatePayload : IAggregatePayload, new()
     {
         var (events, aggregateId) = _commandExecutor.ExecuteCreateCommand(command, injectingAggregateId);
         return aggregateId;
     }
-    public void RunChangeCommand<TAggregate>(ChangeAggregateCommandBase<TAggregate> command) where TAggregate : AggregateCommonBase, new()
+    public void RunChangeCommand<TAggregatePayload>(ChangeAggregateCommandBase<TAggregatePayload> command)
+        where TAggregatePayload : IAggregatePayload, new()
     {
         var events = _commandExecutor.ExecuteChangeCommand(command);
 
@@ -58,13 +59,12 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         return this;
     }
 
-    public AggregateState<TEnvironmentAggregateContents> GetAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid aggregateId)
-        where TEnvironmentAggregate : Aggregate<TEnvironmentAggregateContents>, new()
-        where TEnvironmentAggregateContents : IAggregatePayload, new()
+    public AggregateState<TEnvironmentAggregatePayload> GetAggregateDto<TEnvironmentAggregate, TEnvironmentAggregatePayload>(Guid aggregateId)
+        where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
         var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleAggregateService)) as ISingleAggregateService;
         if (singleAggregateService is null) { throw new Exception("Failed to get single aggregate service"); }
-        var aggregate = singleAggregateService.GetAggregateStateAsync<TEnvironmentAggregate, TEnvironmentAggregateContents>(aggregateId).Result;
+        var aggregate = singleAggregateService.GetAggregateStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregate).Name);
     }
     public IReadOnlyCollection<IAggregateEvent> GetLatestEvents()
