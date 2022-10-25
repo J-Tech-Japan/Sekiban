@@ -79,7 +79,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                         }
                         dynamic? awaitable = _singleAggregateService.GetType()
                             ?.GetMethod(nameof(_singleAggregateService.GetAggregateStateAsync))
-                            ?.MakeGenericMethod(aggregateType.Aggregate, aggregateType.Dto)
+                            ?.MakeGenericMethod(aggregateType.Aggregate)
                             .Invoke(_singleAggregateService, new object[] { notification.AggregateId, taken.Payload.NextSnapshotVersion });
                         if (awaitable is null) { continue; }
                         var aggregateToSnapshot = await awaitable;
@@ -107,7 +107,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
             }
 
             foreach (var projection in _sekibanAggregateTypes.ProjectionAggregateTypes.Where(
-                m => m.OriginalType.FullName == aggregateType.Aggregate.FullName))
+                m => m.Aggregate.FullName == aggregateType.Aggregate.FullName))
             {
                 if (!_aggregateSettings.ShouldTakeSnapshotForType(projection.Aggregate))
                 {
@@ -139,7 +139,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                     }
                     dynamic? awaitable = _singleAggregateService.GetType()
                         ?.GetMethod(nameof(_singleAggregateService.GetProjectionAsync))
-                        ?.MakeGenericMethod(projection.OriginalType, projection.Projection, projection.Dto)
+                        ?.MakeGenericMethod(projection.Aggregate, projection.Projection, projection.ContentsType)
                         .Invoke(_singleAggregateService, new object[] { notification.AggregateId, taken.Payload.NextSnapshotVersion });
                     if (awaitable is null) { continue; }
                     var aggregateToSnapshot = await awaitable;

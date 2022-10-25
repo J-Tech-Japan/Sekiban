@@ -238,7 +238,7 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMu
             ""ClientName"": ""Tomo"",
             ""ClientEmail"": ""tomo@jtechs.com""
         },
-        ""AggregateType"": ""Client"",
+        ""AggregateType"": ""ClientAgggg"",
         ""IsAggregateInitialEvent"": true,
         ""Version"": 1,
         ""CallHistories"": [
@@ -265,7 +265,7 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMu
         ""Payload"": {
             ""InitialPoint"": 0
         },
-        ""AggregateType"": ""LoyaltyPoint"",
+        ""AggregateType"": ""LoyaltyPointToBeOld"",
         ""IsAggregateInitialEvent"": true,
         ""Version"": 1,
         ""CallHistories"": [
@@ -302,7 +302,7 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMu
         ""Payload"": {
             ""ClientName"": ""new name""
         },
-        ""AggregateType"": ""Client"",
+        ""AggregateType"": ""ClientAgggg"",
         ""IsAggregateInitialEvent"": false,
         ""Version"": 2,
         ""CallHistories"": [
@@ -329,7 +329,7 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMu
         ""Payload"": {
             ""ClientName"": ""V3""
         },
-        ""AggregateType"": ""Client"",
+        ""AggregateType"": ""ClientAgggg"",
         ""IsAggregateInitialEvent"": false,
         ""Version"": 3,
         ""CallHistories"": [
@@ -545,7 +545,7 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMu
         ""Payload"": {
             ""ClientName"": ""v4 name""
         },
-        ""AggregateType"": ""Client"",
+        ""AggregateType"": ""ClientAgggg"",
         ""IsAggregateInitialEvent"": false,
         ""Version"": 4,
         ""CallHistories"": [
@@ -572,7 +572,7 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMu
         ""Payload"": {
             ""ClientName"": ""new name 5""
         },
-        ""AggregateType"": ""Client"",
+        ""AggregateType"": ""ClientAgggg"",
         ""IsAggregateInitialEvent"": false,
         ""Version"": 5,
         ""CallHistories"": [

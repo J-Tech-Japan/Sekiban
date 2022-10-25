@@ -17,6 +17,14 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 {
     private readonly AggregateTestCommandExecutor _commandExecutor;
     private readonly IServiceProvider _serviceProvider;
+
+    public AggregateTestHelper(IServiceProvider serviceProvider)
+    {
+        _serviceProvider = serviceProvider;
+        _projector = new DefaultSingleAggregateProjector<TAggregatePayload>();
+        _aggregate = _projector.CreateInitialAggregate(Guid.Empty);
+        _commandExecutor = new AggregateTestCommandExecutor(_serviceProvider);
+    }
     private Aggregate<TAggregatePayload> _aggregate
     {
         get;
@@ -35,14 +43,6 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     {
         get;
     } = new();
-
-    public AggregateTestHelper(IServiceProvider serviceProvider)
-    {
-        _serviceProvider = serviceProvider;
-        _projector = new DefaultSingleAggregateProjector<TAggregatePayload>();
-        _aggregate = _projector.CreateInitialAggregate(Guid.Empty);
-        _commandExecutor = new AggregateTestCommandExecutor(_serviceProvider);
-    }
     public TSingleAggregateProjection SetupSingleAggregateProjection<TSingleAggregateProjection>()
         where TSingleAggregateProjection : SingleAggregateTestBase
     {
@@ -79,14 +79,14 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         AddEventsFromList(list);
         return this;
     }
-    public AggregateState<TEnvironmentAggregateContents>
-        GetEnvironmentAggregateDto<TEnvironmentAggregateContents>(Guid aggregateId)
-        where TEnvironmentAggregateContents : IAggregatePayload, new()
+    public AggregateState<TEnvironmentAggregatePayload>
+        GetEnvironmentAggregateDto<TEnvironmentAggregatePayload>(Guid aggregateId)
+        where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
         var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleAggregateService)) as ISingleAggregateService;
         if (singleAggregateService is null) { throw new Exception("Failed to get single aggregate service"); }
-        var aggregate = singleAggregateService.GetAggregateStateAsync<TEnvironmentAggregateContents>(aggregateId).Result;
-        return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregateContents).Name);
+        var aggregate = singleAggregateService.GetAggregateStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
+        return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name);
     }
     public IReadOnlyCollection<IAggregateEvent> GetLatestEnvironmentEvents()
     {
@@ -104,12 +104,13 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             return this;
         }
         var handler
-            = _serviceProvider.GetService(typeof(ICreateAggregateCommandHandler<TAggregatePayload, C>)) as ICreateAggregateCommandHandler<TAggregatePayload, C>;
+            = _serviceProvider.GetService(typeof(ICreateAggregateCommandHandler<TAggregatePayload, C>)) as
+                ICreateAggregateCommandHandler<TAggregatePayload, C>;
         if (handler is null)
         {
             throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
         }
-        var aggregateId = handler.GenerateAggregateId(createCommand);
+        var aggregateId = createCommand.GetAggregateId();
         var commandDocument = new AggregateCommandDocument<C>(aggregateId, createCommand, typeof(TAggregatePayload));
         try
         {
@@ -142,11 +143,13 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     {
         return WhenChange(_ => changeCommand);
     }
-    public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(Func<Aggregate<TAggregatePayload>, C> commandFunc) where C : ChangeAggregateCommandBase<TAggregatePayload>
+    public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(Func<Aggregate<TAggregatePayload>, C> commandFunc)
+        where C : ChangeAggregateCommandBase<TAggregatePayload>
     {
         ResetBeforeCommand();
         var handler
-            = _serviceProvider.GetService(typeof(IChangeAggregateCommandHandler<TAggregatePayload, C>)) as IChangeAggregateCommandHandler<TAggregatePayload, C>;
+            = _serviceProvider.GetService(typeof(IChangeAggregateCommandHandler<TAggregatePayload, C>)) as
+                IChangeAggregateCommandHandler<TAggregatePayload, C>;
         if (handler is null)
         {
             throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
@@ -173,7 +176,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             }
             CheckCommandJSONSupports(commandDocument);
 
-        } else
+        }
+        else
         {
             try
             {

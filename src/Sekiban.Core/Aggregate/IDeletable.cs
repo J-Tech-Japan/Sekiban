@@ -1,6 +1,6 @@
 namespace Sekiban.Core.Aggregate;
 
-public interface IDeletableAggregate
+public interface IDeletable
 {
     public bool IsDeleted { get; }
 }

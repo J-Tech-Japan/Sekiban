@@ -5,19 +5,19 @@ using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
 namespace Sekiban.Testing.SingleAggregate;
 
-public interface IAggregateTestHelper<TAggregatePayload>　where TAggregatePayload : IAggregatePayload, new()
+public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload : IAggregatePayload, new()
 {
     #region given and setup
     public TSingleAggregateProjection SetupSingleAggregateProjection<TSingleAggregateProjection>()
         where TSingleAggregateProjection : SingleAggregateTestBase;
     public IAggregateTestHelper<TAggregatePayload> GivenScenario(Action initialAction);
 
-    public IAggregateTestHelper< TAggregatePayload> GivenEnvironmentEvent(IAggregateEvent ev);
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvent(IAggregateEvent ev);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvents(IEnumerable<IAggregateEvent> events);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFile(string filename);
-    public AggregateState<TEnvironmentAggregateContents>
-        GetEnvironmentAggregateDto<TEnvironmentAggregateContents>(Guid aggregateId)
-        where TEnvironmentAggregateContents : IAggregatePayload, new();
+    public AggregateState<TEnvironmentAggregatePayload>
+        GetEnvironmentAggregateDto<TEnvironmentAggregatePayload>(Guid aggregateId)
+        where TEnvironmentAggregatePayload : IAggregatePayload, new();
     public Guid RunEnvironmentCreateCommand<TEnvironmentAggregate>(
         ICreateAggregateCommand<TEnvironmentAggregate> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregate : IAggregatePayload, new();
@@ -32,7 +32,6 @@ public interface IAggregateTestHelper<TAggregatePayload>　where TAggregatePaylo
     public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(C changeCommand) where C : ChangeAggregateCommandBase<TAggregatePayload>;
     public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(Func<Aggregate<TAggregatePayload>, C> commandFunc)
         where C : ChangeAggregateCommandBase<TAggregatePayload>;
-    
     #endregion
 
     #region Then
@@ -65,5 +64,4 @@ public interface IAggregateTestHelper<TAggregatePayload>　where TAggregatePaylo
     public int GetCurrentVersion();
     public Aggregate<TAggregatePayload> GetAggregate();
     #endregion
-
 }

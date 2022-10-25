@@ -50,7 +50,7 @@ public interface ISingleAggregateService
     /// <returns></returns>
     public Task<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>?>
         GetProjectionAsync<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>(Guid aggregateId, int? toVersion = null)
-        where TAggregate : AggregateCommonBase, new()
+        where TAggregate : IAggregatePayload, new()
         where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
         new()
         where TSingleAggregateProjectionContents : ISingleAggregateProjectionPayload;

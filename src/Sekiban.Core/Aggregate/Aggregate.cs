@@ -3,17 +3,17 @@ using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.SingleAggregate;
 namespace Sekiban.Core.Aggregate;
 
-public class Aggregate<TPayload> : AggregateCommonBase, ISingleAggregateProjectionDtoConvertible<AggregateState<TPayload>>
-    where TPayload : IAggregatePayload, new()
+public class Aggregate<TAggregatePayload> : AggregateCommonBase, ISingleAggregateProjectionDtoConvertible<AggregateState<TAggregatePayload>>
+    where TAggregatePayload : IAggregatePayload, new()
 {
-    protected TPayload Payload { get; private set; } = new();
+    protected TAggregatePayload Payload { get; private set; } = new();
     private bool IsDeleted => Payload is IDeletableAggregatePayload { IsDeleted: true };
-    public AggregateState<TPayload> ToState()
+    public AggregateState<TAggregatePayload> ToState()
     {
-        return new AggregateState<TPayload>(this, Payload);
+        return new AggregateState<TAggregatePayload>(this, Payload);
     }
 
-    public void ApplySnapshot(AggregateState<TPayload> snapshot)
+    public void ApplySnapshot(AggregateState<TAggregatePayload> snapshot)
     {
         _basicInfo = _basicInfo with
         {
@@ -25,7 +25,7 @@ public class Aggregate<TPayload> : AggregateCommonBase, ISingleAggregateProjecti
         CopyPropertiesFromSnapshot(snapshot);
     }
 
-    public TAggregate Clone<TAggregate>() where TAggregate : Aggregate<TPayload>, new()
+    public TAggregate Clone<TAggregate>() where TAggregate : Aggregate<TAggregatePayload>, new()
     {
         var clone = new TAggregate { _basicInfo = _basicInfo, Payload = Payload };
         return clone;
@@ -41,17 +41,17 @@ public class Aggregate<TPayload> : AggregateCommonBase, ISingleAggregateProjecti
             Payload = result;
         };
     }
-    protected Func<TPayload, IAggregateEvent, TPayload>? GetApplyEventFunc(IAggregateEvent ev, IEventPayload payload)
+    protected Func<TAggregatePayload, IAggregateEvent, TAggregatePayload>? GetApplyEventFunc(IAggregateEvent ev, IEventPayload payload)
     {
-        if (payload is IApplicableEvent<TPayload> applicableEvent)
+        if (payload is IApplicableEvent<TAggregatePayload> applicableEvent)
         {
             return applicableEvent.OnEvent;
         }
         return null;
     }
 
-    internal static IAggregateEvent AddAndApplyEvent<TEventPayload>(Aggregate<TPayload> aggregate, TEventPayload eventPayload)
-        where TEventPayload : IEventPayload, IApplicableEvent<TPayload>
+    internal static IAggregateEvent AddAndApplyEvent<TEventPayload>(Aggregate<TAggregatePayload> aggregate, TEventPayload eventPayload)
+        where TEventPayload : IEventPayload, IApplicableEvent<TAggregatePayload>
     {
         var ev = eventPayload is ICreatedEventPayload
             ? AggregateEvent<TEventPayload>.CreatedEvent(aggregate.AggregateId, aggregate.GetType(), eventPayload)
@@ -67,7 +67,7 @@ public class Aggregate<TPayload> : AggregateCommonBase, ISingleAggregateProjecti
         ev = ev with { Version = aggregate.Version };
         return ev;
     }
-    protected void CopyPropertiesFromSnapshot(AggregateState<TPayload> snapshot)
+    protected void CopyPropertiesFromSnapshot(AggregateState<TAggregatePayload> snapshot)
     {
         Payload = snapshot.Payload;
     }

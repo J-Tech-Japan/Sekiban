@@ -1,4 +1,7 @@
-﻿using Sekiban.Core.Command;
+﻿using Customer.Domain.Aggregates.Clients.Events;
+using Sekiban.Core.Aggregate;
+using Sekiban.Core.Command;
+using Sekiban.Core.Event;
 namespace Customer.Domain.Aggregates.Clients.Commands;
 
 public record DeleteClient(Guid ClientId) : ChangeAggregateCommandBase<Client>
@@ -11,9 +14,9 @@ public record DeleteClient(Guid ClientId) : ChangeAggregateCommandBase<Client>
 }
 public class DeleteClientHandler : ChangeAggregateCommandHandlerBase<Client, DeleteClient>
 {
-    protected override async Task ExecCommandAsync(Client aggregate, DeleteClient _)
+    protected override async IAsyncEnumerable<IChangedEvent<Client>> ExecCommandAsync(AggregateState<Client> aggregate, DeleteClient command)
     {
-        aggregate.Delete();
         await Task.CompletedTask;
+        yield return new ClientDeleted();
     }
 }

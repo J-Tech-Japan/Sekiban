@@ -17,13 +17,12 @@ public abstract class CreateAggregateCommandHandlerBase<T, C> : ICreateAggregate
         }
         var eventPayloads = ExecCreateCommandAsync(aggregate.ToState(), command.Payload);
         var events = new List<IAggregateEvent>();
-        await foreach(var eventPayload in eventPayloads)
+        await foreach (var eventPayload in eventPayloads)
         {
             events.Add(Aggregate<T>.AddAndApplyEvent(aggregate, eventPayload));
         }
         return await Task.FromResult(new AggregateCommandResponse(aggregate.AggregateId, events.ToImmutableList(), aggregate.Version));
     }
-    public abstract Guid GenerateAggregateId(C command);
     public virtual C CleanupCommandIfNeeded(C command)
     {
         return command;

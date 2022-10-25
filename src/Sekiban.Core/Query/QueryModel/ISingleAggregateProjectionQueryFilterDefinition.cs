@@ -5,7 +5,7 @@ namespace Sekiban.Core.Query.QueryModel;
 
 public interface
     ISingleAggregateProjectionQueryFilterDefinition<TAggregate, in TSingleAggregateProjection, TSingleAggregateProjectionContents, in TQueryParam,
-        TResponseQueryModel> where TAggregate : AggregateCommonBase, new()
+        TResponseQueryModel> where TAggregate : IAggregatePayload, new()
     where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>
     where TSingleAggregateProjectionContents : ISingleAggregateProjectionPayload
     where TQueryParam : IQueryParameter

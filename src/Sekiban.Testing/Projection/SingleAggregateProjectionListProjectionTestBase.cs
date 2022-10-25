@@ -10,7 +10,7 @@ public class
         TDependencyDefinition> : CommonMultipleAggregateProjectionTestBase<
         SingleAggregateListProjector<TSingleAggregateProjection, SingleAggregateProjectionDto<TSingleAggregateProjectionContents>,
             TSingleAggregateProjection>, SingleAggregateListProjectionDto<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>>,
-        TDependencyDefinition> where TAggregate : AggregateCommonBase, new()
+        TDependencyDefinition> where TAggregate : IAggregatePayload, new()
     where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>, new
     ()
     where TSingleAggregateProjectionContents : ISingleAggregateProjectionPayload

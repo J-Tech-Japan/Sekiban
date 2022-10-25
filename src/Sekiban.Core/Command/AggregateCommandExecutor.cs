@@ -28,7 +28,10 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         _singleAggregateService = singleAggregateService;
         _userInformationFactory = userInformationFactory;
     }
-    public async Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecChangeCommandAsync<TAggregatePayload, C>(C command, List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new() where C : ChangeAggregateCommandBase<TAggregatePayload>
+    public async Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecChangeCommandAsync<TAggregatePayload, C>(
+        C command,
+        List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new()
+        where C : ChangeAggregateCommandBase<TAggregatePayload>
     {
         var validationResult = command.TryValidateProperties()?.ToList();
         if (validationResult?.Any() == true)
@@ -37,7 +40,10 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         }
         return await ExecChangeCommandWithoutValidationAsync<TAggregatePayload, C>(command, callHistories);
     }
-    public async Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecChangeCommandWithoutValidationAsync<TAggregatePayload, C>(C command, List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new() where C : ChangeAggregateCommandBase<TAggregatePayload>
+    public async Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecChangeCommandWithoutValidationAsync<TAggregatePayload, C>(
+        C command,
+        List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new()
+        where C : ChangeAggregateCommandBase<TAggregatePayload>
     {
         var commandDocument = new AggregateCommandDocument<C>(command.GetAggregateId(), command, typeof(TAggregatePayload), callHistories)
         {
@@ -54,7 +60,9 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         }
         try
         {
-            var handler = _serviceProvider.GetService(typeof(IChangeAggregateCommandHandler<TAggregatePayload, C>)) as IChangeAggregateCommandHandler<TAggregatePayload, C>;
+            var handler =
+                _serviceProvider.GetService(typeof(IChangeAggregateCommandHandler<TAggregatePayload, C>)) as
+                    IChangeAggregateCommandHandler<TAggregatePayload, C>;
             if (handler is null)
             {
                 throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
@@ -76,7 +84,8 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
                 {
                     throw new SekibanInvalidArgumentException();
                 }
-            } else
+            }
+            else
             {
                 commandToSave = handler.CleanupCommandIfNeeded(commandToSave);
                 var result = await handler.HandleForOnlyPublishingCommandAsync(commandDocument, command.GetAggregateId());
@@ -105,7 +114,10 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         }
         return (new AggregateCommandExecutorResponse(commandDocument.AggregateId, commandDocument.Id, version, null), events);
     }
-    public async Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecCreateCommandAsync<TAggregatePayload, C>(C command, List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new() where C : ICreateAggregateCommand<TAggregatePayload>
+    public async Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecCreateCommandAsync<TAggregatePayload, C>(
+        C command,
+        List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new()
+        where C : ICreateAggregateCommand<TAggregatePayload>
     {
         var validationResult = command.TryValidateProperties()?.ToList();
         if (validationResult?.Any() == true)
@@ -114,7 +126,10 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         }
         return await ExecCreateCommandWithoutValidationAsync<TAggregatePayload, C>(command, callHistories);
     }
-    public async Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecCreateCommandWithoutValidationAsync<TAggregatePayload, C>(C command, List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new() where C : ICreateAggregateCommand<TAggregatePayload>
+    public async Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecCreateCommandWithoutValidationAsync<TAggregatePayload, C>(
+        C command,
+        List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new()
+        where C : ICreateAggregateCommand<TAggregatePayload>
     {
         var commandDocument
             = new AggregateCommandDocument<C>(Guid.Empty, command, typeof(TAggregatePayload), callHistories)
@@ -131,13 +146,15 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         }
         try
         {
-            var handler = _serviceProvider.GetService(typeof(ICreateAggregateCommandHandler<TAggregatePayload, C>)) as ICreateAggregateCommandHandler<TAggregatePayload, C>;
+            var handler =
+                _serviceProvider.GetService(typeof(ICreateAggregateCommandHandler<TAggregatePayload, C>)) as
+                    ICreateAggregateCommandHandler<TAggregatePayload, C>;
             if (handler is null)
             {
                 throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
             }
             commandToSave = handler.CleanupCommandIfNeeded(commandToSave);
-            var aggregateId = handler.GenerateAggregateId(command);
+            var aggregateId = command.GetAggregateId();
             commandDocument
                 = new AggregateCommandDocument<C>(aggregateId, command, typeof(TAggregatePayload), callHistories)
                 {
@@ -188,7 +205,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
 
     private async Task<List<IAggregateEvent>> HandleEventsAsync<TAggregatePayload, C>(
         IReadOnlyCollection<IAggregateEvent> events,
-        AggregateCommandDocument<C> commandDocument) 
+        AggregateCommandDocument<C> commandDocument)
         where TAggregatePayload : IAggregatePayload, new()
         where C : ChangeAggregateCommandBase<TAggregatePayload>
     {

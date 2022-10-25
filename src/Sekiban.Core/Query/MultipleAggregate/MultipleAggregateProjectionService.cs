@@ -39,7 +39,7 @@ public class MultipleAggregateProjectionService : IMultipleAggregateProjectionSe
         Task<MultipleAggregateProjectionContentsDto<
             SingleAggregateListProjectionDto<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>>>>
         GetSingleAggregateProjectionListObject<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>()
-        where TAggregate : AggregateCommonBase, new()
+        where TAggregate : IAggregatePayload, new()
         where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
         new()
         where TSingleAggregateProjectionContents : ISingleAggregateProjectionPayload
@@ -52,7 +52,7 @@ public class MultipleAggregateProjectionService : IMultipleAggregateProjectionSe
     }
     public async Task<List<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>>>
         GetSingleAggregateProjectionList<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>(
-            QueryListType queryListType = QueryListType.ActiveOnly) where TAggregate : AggregateCommonBase, new()
+            QueryListType queryListType = QueryListType.ActiveOnly) where TAggregate : IAggregatePayload, new()
         where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
         new()
         where TSingleAggregateProjectionContents : ISingleAggregateProjectionPayload

@@ -7,7 +7,7 @@ using Xunit;
 namespace Sekiban.Testing.SingleAggregate;
 
 public class SingleAggregateProjectionTestBase<TAggregate, TProjection, TProjectionContents> : SingleAggregateTestBase
-    where TAggregate : AggregateCommonBase, new()
+    where TAggregate : IAggregatePayload, new()
     where TProjection : SingleAggregateProjectionBase<TAggregate, TProjection, TProjectionContents>, new()
     where TProjectionContents : ISingleAggregateProjectionPayload
 {

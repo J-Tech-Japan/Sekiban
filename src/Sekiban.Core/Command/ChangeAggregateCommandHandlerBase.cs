@@ -32,7 +32,7 @@ public abstract class ChangeAggregateCommandHandlerBase<T, C> : IChangeAggregate
         // Execute Command
         var eventPayloads = ExecCommandAsync(aggregate.ToState(), command);
         var events = new List<IAggregateEvent>();
-        await foreach(var eventPayload in eventPayloads)
+        await foreach (var eventPayload in eventPayloads)
         {
             events.Add(Aggregate<T>.AddAndApplyEvent(aggregate, eventPayload));
         }

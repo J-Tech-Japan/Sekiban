@@ -1,5 +1,5 @@
 namespace Sekiban.Core.Aggregate;
 
-public interface IDeletableAggregatePayload : IAggregatePayload,IDeletableAggregate
+public interface IDeletableAggregatePayload : IAggregatePayload, IDeletable
 {
 }

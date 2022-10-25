@@ -11,6 +11,6 @@ public record SingleAggregateProjectionDto<TPayload>(
 {
     public bool GetIsDeleted()
     {
-        return Payload is IDeletableAggregate { IsDeleted: true };
+        return Payload is IDeletable { IsDeleted: true };
     }
-};
+}

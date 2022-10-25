@@ -1,4 +1,8 @@
+using Customer.Domain.Aggregates.RecentInMemoryActivities.Events;
+using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
+using Sekiban.Core.Event;
+using Sekiban.Core.Shared;
 namespace Customer.Domain.Aggregates.RecentInMemoryActivities.Commands;
 
 public record AddRecentInMemoryActivity(Guid RecentInMemoryActivityId, string Activity) : ChangeAggregateCommandBase<RecentInMemoryActivity>,
@@ -12,9 +16,16 @@ public record AddRecentInMemoryActivity(Guid RecentInMemoryActivityId, string Ac
 }
 public class AddRecentInMemoryActivityHandler : ChangeAggregateCommandHandlerBase<RecentInMemoryActivity, AddRecentInMemoryActivity>
 {
-    protected override async Task ExecCommandAsync(RecentInMemoryActivity aggregate, AddRecentInMemoryActivity command)
+    private readonly ISekibanDateProducer _sekibanDateProducer;
+    public AddRecentInMemoryActivityHandler(ISekibanDateProducer sekibanDateProducer)
     {
-        aggregate.AddActivity(command.Activity);
+        _sekibanDateProducer = sekibanDateProducer;
+    }
+    protected override async IAsyncEnumerable<IChangedEvent<RecentInMemoryActivity>> ExecCommandAsync(
+        AggregateState<RecentInMemoryActivity> aggregate,
+        AddRecentInMemoryActivity command)
+    {
         await Task.CompletedTask;
+        yield return new RecentInMemoryActivityAdded(new RecentInMemoryActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
     }
 }

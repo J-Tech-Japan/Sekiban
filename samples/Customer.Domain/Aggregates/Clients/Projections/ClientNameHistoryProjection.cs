@@ -1,5 +1,4 @@
 using Customer.Domain.Aggregates.Clients.Events;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Event;
 using Sekiban.Core.Query.SingleAggregate;
 // ReSharper disable UnusedVariable
@@ -23,32 +22,33 @@ public class ClientNameHistoryProjection : SingleAggregateProjectionBase<Client,
     {
         return new ClientNameHistoryProjection(aggregateId);
     }
-    protected override Func<AggregateVariable<PayloadDefinition>, AggregateVariable<PayloadDefinition>>? GetApplyEventFunc(
+    protected override Func<PayloadDefinition, PayloadDefinition>? GetApplyEventFunc(
         IAggregateEvent ev,
-        IEventPayload payload)
+        IEventPayload eventPayload)
     {
-        return payload switch
+        return eventPayload switch
         {
-            ClientCreated clientCreated => _ => new AggregateVariable<PayloadDefinition>(
+            ClientCreated clientCreated => _ =>
                 new PayloadDefinition(
                     clientCreated.BranchId,
                     new List<ClientNameHistoryProjectionRecord> { new(clientCreated.ClientName, ev.TimeStamp) },
-                    clientCreated.ClientEmail)),
+                    clientCreated.ClientEmail),
 
-            ClientNameChanged clientNameChanged => variable =>
+            ClientNameChanged clientNameChanged => p =>
             {
                 var list = Payload.ClientNames.ToList();
                 list.Add(new ClientNameHistoryProjectionRecord(clientNameChanged.ClientName, ev.TimeStamp));
-                return variable with { Contents = Payload with { ClientNames = list } };
+                return p with { ClientNames = list };
             },
-            ClientDeleted => variable => variable with { IsDeleted = true },
+            ClientDeleted => p => p with { IsDeleted = true },
             _ => null
         };
     }
     public record PayloadDefinition(
         Guid BranchId,
         IReadOnlyCollection<ClientNameHistoryProjectionRecord> ClientNames,
-        string ClientEmail) : ISingleAggregateProjectionPayload;
+        string ClientEmail,
+        bool IsDeleted = false) : IDeletableSingleAggregateProjectionPayload;
 
     public record ClientNameHistoryProjectionRecord(string Name, DateTime DateChanged);
 }

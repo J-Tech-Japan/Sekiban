@@ -3,9 +3,9 @@ using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
 namespace Customer.Domain.Aggregates.Branches.QueryFilters;
 
-public class BranchExistsQueryFilter : IAggregateQueryFilterDefinition<Branch, BranchPayload, BranchExistsQueryFilter.QueryParameter, bool>
+public class BranchExistsQueryFilter : IAggregateQueryFilterDefinition<Branch, BranchExistsQueryFilter.QueryParameter, bool>
 {
-    public bool HandleFilter(QueryParameter queryParam, IEnumerable<AggregateState<BranchPayload>> list)
+    public bool HandleFilter(QueryParameter queryParam, IEnumerable<AggregateState<Branch>> list)
     {
         return list.Any(b => b.AggregateId == queryParam.BranchId);
     }

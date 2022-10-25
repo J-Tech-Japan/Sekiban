@@ -79,14 +79,14 @@ public class CustomerDependency : IDependencyDefinition
         // Aggregate: Branch
         yield return (typeof(ICreateAggregateCommandHandler<Branch, CreateBranch>), typeof(CreateBranchHandler));
 
-        // Aggregate: Client
+        // Aggregate: ClientAgggg
         yield return (typeof(ICreateAggregateCommandHandler<Client, CreateClient>), typeof(CreateClientHandler));
 
         yield return (typeof(IChangeAggregateCommandHandler<Client, ChangeClientName>), typeof(ChangeClientNameHandler));
 
         yield return (typeof(IChangeAggregateCommandHandler<Client, DeleteClient>), typeof(DeleteClientHandler));
 
-        // Aggregate: LoyaltyPoint
+        // Aggregate: LoyaltyPointToBeOld
         yield return (typeof(ICreateAggregateCommandHandler<LoyaltyPoint, CreateLoyaltyPoint>), typeof(CreateLoyaltyPointHandler));
 
         yield return (typeof(IChangeAggregateCommandHandler<LoyaltyPoint, AddLoyaltyPoint>), typeof(AddLoyaltyPointHandler));
@@ -95,13 +95,13 @@ public class CustomerDependency : IDependencyDefinition
 
         yield return (typeof(IChangeAggregateCommandHandler<LoyaltyPoint, DeleteLoyaltyPoint>), typeof(DeleteLoyaltyPointHandler));
 
-        // Aggregate: RecentActivity
+        // Aggregate: RecentActivityToDelete
         yield return (typeof(ICreateAggregateCommandHandler<RecentActivity, CreateRecentActivity>), typeof(CreateRecentActivityHandler));
 
         yield return (typeof(IChangeAggregateCommandHandler<RecentActivity, AddRecentActivity>), typeof(AddRecentActivityHandler));
         yield return (typeof(IChangeAggregateCommandHandler<RecentActivity, OnlyPublishingAddRecentActivity>),
             typeof(OnlyPublishingAddRecentActivityHandler));
-        // Aggregate: RecentInMemoryActivity
+        // Aggregate: RecentInMemoryActivityToDel
         yield return (typeof(ICreateAggregateCommandHandler<RecentInMemoryActivity, CreateRecentInMemoryActivity>),
             typeof(CreateRecentInMemoryActivityHandler));
 

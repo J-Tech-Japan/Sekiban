@@ -7,7 +7,7 @@ public abstract class SingleAggregateProjectionBase<TAggregate, TProjection, TSi
     ISingleAggregateProjectionDtoConvertible<SingleAggregateProjectionDto<TSingleAggregateContents>>, ISingleAggregate,
     ISingleAggregateProjector<TProjection> where TProjection : SingleAggregateProjectionBase<TAggregate, TProjection, TSingleAggregateContents>
     where TSingleAggregateContents : ISingleAggregateProjectionPayload
-    where TAggregate : AggregateCommonBase, new()
+    where TAggregate : IAggregatePayload, new()
 {
     public TSingleAggregateContents Payload { get; set; } = default!;
     public Guid LastEventId { get; set; }
@@ -15,10 +15,6 @@ public abstract class SingleAggregateProjectionBase<TAggregate, TProjection, TSi
     public int AppliedSnapshotVersion { get; set; }
     public int Version { get; set; }
     public Guid AggregateId { get; set; }
-    public bool GetIsDeleted()
-    {
-        return Payload is IDeletableAggregate { IsDeleted: true };
-    }
     public void ApplyEvent(IAggregateEvent ev)
     {
         // IsAggregateInitialEvent は V0 の時のみ
@@ -64,9 +60,13 @@ public abstract class SingleAggregateProjectionBase<TAggregate, TProjection, TSi
     {
         return typeof(TAggregate);
     }
-    protected Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload)
+    public bool GetIsDeleted()
     {
-        var func = GetApplyEventFunc(ev, payload);
+        return Payload is IDeletable { IsDeleted: true };
+    }
+    protected Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload eventPayload)
+    {
+        var func = GetApplyEventFunc(ev, eventPayload);
         return () =>
         {
             if (func == null) { return; }
@@ -76,5 +76,5 @@ public abstract class SingleAggregateProjectionBase<TAggregate, TProjection, TSi
     }
     protected abstract Func<TSingleAggregateContents, TSingleAggregateContents>? GetApplyEventFunc(
         IAggregateEvent ev,
-        IEventPayload payload);
+        IEventPayload eventPayload);
 }
