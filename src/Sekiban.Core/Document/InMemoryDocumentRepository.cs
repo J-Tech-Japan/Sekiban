@@ -1,8 +1,6 @@
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Event;
-using Sekiban.Core.Partition;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
@@ -11,9 +9,12 @@ namespace Sekiban.Core.Document;
 public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumentPersistentRepository
 {
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
-    private readonly ISnapshotDocumentCache _snapshotDocumentCache;
     private readonly IServiceProvider _serviceProvider;
-    public InMemoryDocumentRepository(InMemoryDocumentStore inMemoryDocumentStore, IServiceProvider serviceProvider, ISnapshotDocumentCache snapshotDocumentCache)
+    private readonly ISnapshotDocumentCache _snapshotDocumentCache;
+    public InMemoryDocumentRepository(
+        InMemoryDocumentStore inMemoryDocumentStore,
+        IServiceProvider serviceProvider,
+        ISnapshotDocumentCache snapshotDocumentCache)
     {
         _inMemoryDocumentStore = inMemoryDocumentStore;
         _serviceProvider = serviceProvider;
@@ -42,7 +43,8 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         if (string.IsNullOrWhiteSpace(sinceSortableUniqueId))
         {
             resultAction(list.OrderBy(m => m.SortableUniqueId));
-        } else
+        }
+        else
         {
             var index = list.Any(m => m.SortableUniqueId == sinceSortableUniqueId)
                 ? list.FindIndex(m => m.SortableUniqueId == sinceSortableUniqueId)
@@ -96,14 +98,16 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             if (index == list.Count - 1)
             {
                 resultAction(new List<IAggregateEvent>());
-            } else
+            }
+            else
             {
                 resultAction(
                     list.GetRange(index + 1, list.Count - index - 1)
                         .Where(m => targetAggregateNames.Count == 0 || targetAggregateNames.Contains(m.AggregateType))
                         .OrderBy(m => m.SortableUniqueId));
             }
-        } else
+        }
+        else
         {
             resultAction(
                 list.Where(m => targetAggregateNames.Count == 0 || targetAggregateNames.Contains(m.AggregateType)).OrderBy(m => m.SortableUniqueId));
@@ -160,11 +164,13 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             if (index == list.Count - 1)
             {
                 resultAction(new List<IAggregateEvent>());
-            } else
+            }
+            else
             {
                 resultAction(list.GetRange(index + 1, list.Count - index - 1).OrderBy(m => m.SortableUniqueId));
             }
-        } else
+        }
+        else
         {
             resultAction(list.OrderBy(m => m.SortableUniqueId));
         }

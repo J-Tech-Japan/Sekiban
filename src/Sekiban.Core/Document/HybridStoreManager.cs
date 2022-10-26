@@ -3,15 +3,15 @@ namespace Sekiban.Core.Document;
 
 public class HybridStoreManager
 {
+    public HybridStoreManager(bool elanbled)
+    {
+        Enabled = elanbled;
+    }
     private ConcurrentDictionary<string, string> HybridPartitionKeys
     {
         get;
     } = new();
     public bool Enabled { get; set; }
-    public HybridStoreManager(bool elanbled)
-    {
-        Enabled = elanbled;
-    }
     public bool HasPartition(string partitionKey)
     {
         return Enabled && HybridPartitionKeys.Keys.Contains(partitionKey);

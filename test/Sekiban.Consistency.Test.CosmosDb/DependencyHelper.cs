@@ -20,7 +20,8 @@ public static class DependencyHelper
         if (inMemory)
         {
             services.AddSekibanCoreInMemoryTestWithDependency(new CustomerDependency());
-        } else
+        }
+        else
         {
             services.AddSekibanSekibanCoreWithDependency(new CustomerDependency(), sekibanDateProducer, multipleProjectionType);
             services.AddSekibanCosmosDB();

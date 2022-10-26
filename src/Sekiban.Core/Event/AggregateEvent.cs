@@ -6,7 +6,6 @@ namespace Sekiban.Core.Event;
 [SekibanEventType]
 public record AggregateEvent<TEventPayload> : DocumentBase, IAggregateEvent where TEventPayload : IEventPayload
 {
-    public TEventPayload Payload { get; init; } = default!;
 
     public AggregateEvent()
     {
@@ -22,6 +21,7 @@ public record AggregateEvent<TEventPayload> : DocumentBase, IAggregateEvent wher
         AggregateType = aggregateType.Name;
         IsAggregateInitialEvent = isAggregateInitialEvent;
     }
+    public TEventPayload Payload { get; init; } = default!;
 
     public string AggregateType { get; init; } = null!;
 

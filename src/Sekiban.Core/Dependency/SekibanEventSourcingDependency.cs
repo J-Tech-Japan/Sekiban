@@ -124,7 +124,8 @@ public static class SekibanEventSourcingDependency
             if (implementationType is null)
             {
                 services.AddTransient(serviceType);
-            } else
+            }
+            else
             {
                 services.AddTransient(serviceType, implementationType);
             }

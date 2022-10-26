@@ -19,7 +19,7 @@ public class SnapshotDocumentCache : ISnapshotDocumentCache
     {
         return _memoryCache.Get<SnapshotDocument>(GetCacheKey(aggregateId, originalAggregateType));
     }
-    
+
     public string GetCacheKey(Guid aggregateId, Type aggregateType)
     {
         return "SnapshotDocument" + PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregateType);

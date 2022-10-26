@@ -15,8 +15,8 @@ public class
     where TProjectionQueryFilter : IProjectionQueryFilterDefinition<TProjection, TProjectionPayload, TQueryFilterParameter, TQueryFilterResponse>,
     new()
 {
-    private MultipleAggregateProjectionState<TProjectionPayload>? _state;
     private TQueryFilterResponse? _response;
+    private MultipleAggregateProjectionState<TProjectionPayload>? _state;
     public QueryFilterHandler? QueryFilterHandler { get; set; } = null;
     public void RegisterState(MultipleAggregateProjectionState<TProjectionPayload> state)
     {

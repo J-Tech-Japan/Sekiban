@@ -27,7 +27,8 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
                 {
                     await container.CreateItemAsync(document, new PartitionKey(document.PartitionKey));
                 });
-        } else
+        }
+        else
         {
             await _cosmosDbFactory.CosmosActionAsync(
                 document.DocumentType,

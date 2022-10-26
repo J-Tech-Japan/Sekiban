@@ -5,6 +5,18 @@ namespace Sekiban.Core.Command;
 
 public record AggregateCommandDocument<T> : DocumentBase, IDocument, ICallHistories where T : IAggregateCommand
 {
+
+    public AggregateCommandDocument() { }
+
+    public AggregateCommandDocument(Guid aggregateId, T commandPayload, Type aggregateType, List<CallHistory>? callHistories = null) : base(
+        aggregateId,
+        PartitionKeyGenerator.ForAggregateCommand(aggregateId, aggregateType),
+        DocumentType.AggregateCommand,
+        typeof(T).Name)
+    {
+        Payload = commandPayload;
+        CallHistories = callHistories ?? new List<CallHistory>();
+    }
     /// <summary>
     ///     コマンド内容
     /// </summary>
@@ -21,18 +33,6 @@ public record AggregateCommandDocument<T> : DocumentBase, IDocument, ICallHistor
     ///     何もエラーがない場合は null
     /// </summary>
     public string? Exception { get; init; } = null;
-
-    public AggregateCommandDocument() { }
-
-    public AggregateCommandDocument(Guid aggregateId, T commandPayload, Type aggregateType, List<CallHistory>? callHistories = null) : base(
-        aggregateId,
-        PartitionKeyGenerator.ForAggregateCommand(aggregateId, aggregateType),
-        DocumentType.AggregateCommand,
-        typeof(T).Name)
-    {
-        Payload = commandPayload;
-        CallHistories = callHistories ?? new List<CallHistory>();
-    }
 
     /// <summary>
     ///     イベント、コマンドの呼び出し履歴

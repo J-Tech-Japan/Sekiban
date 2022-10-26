@@ -9,6 +9,9 @@ public record SnapshotManagerRequestAdded(
 {
     public SnapshotManager OnEvent(SnapshotManager payload, IAggregateEvent aggregateEvent)
     {
-        return payload with {  Requests = payload.Requests.Add(SnapshotManager.SnapshotKey(AggregateTypeName, TargetAggregateId, NextSnapshotVersion))  };
+        return payload with
+        {
+            Requests = payload.Requests.Add(SnapshotManager.SnapshotKey(AggregateTypeName, TargetAggregateId, NextSnapshotVersion))
+        };
     }
 }

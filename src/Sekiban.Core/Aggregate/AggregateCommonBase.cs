@@ -1,6 +1,5 @@
 ﻿using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
-using System.Collections.Immutable;
 namespace Sekiban.Core.Aggregate;
 
 public abstract class AggregateCommonBase : IAggregate

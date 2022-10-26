@@ -4,9 +4,6 @@ namespace Sekiban.Core.Dependency;
 
 public record SekibanDependencyOptions
 {
-    public RegisteredEventTypes RegisteredEventTypes { get; init; }
-    public SekibanAggregateTypes SekibanAggregateTypes { get; init; }
-    public IEnumerable<(Type serviceType, Type? implementationType)> TransientDependencies { get; init; }
     public SekibanDependencyOptions(
         RegisteredEventTypes registeredEventTypes,
         SekibanAggregateTypes sekibanAggregateTypes,
@@ -16,4 +13,7 @@ public record SekibanDependencyOptions
         SekibanAggregateTypes = sekibanAggregateTypes;
         TransientDependencies = transientDependencies;
     }
+    public RegisteredEventTypes RegisteredEventTypes { get; init; }
+    public SekibanAggregateTypes SekibanAggregateTypes { get; init; }
+    public IEnumerable<(Type serviceType, Type? implementationType)> TransientDependencies { get; init; }
 }

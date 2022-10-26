@@ -11,21 +11,8 @@ namespace SampleProjectStoryXTest;
 [Collection("Sequential")]
 public class TestBase : IClassFixture<TestBase.SekibanTestFixture>, IDisposable
 {
-    protected readonly ServiceProvider _serviceProvider;
     protected readonly SekibanTestFixture _sekibanTestFixture;
-
-    public class SekibanTestFixture : ISekibanTestFixture
-    {
-        public SekibanTestFixture()
-        {
-            var builder = new ConfigurationBuilder().SetBasePath(PlatformServices.Default.Application.ApplicationBasePath)
-                .AddJsonFile("appsettings.json", false, false)
-                .AddEnvironmentVariables()
-                .AddUserSecrets(Assembly.GetExecutingAssembly());
-            Configuration = builder.Build();
-        }
-        public IConfigurationRoot Configuration { get; set; }
-    }
+    protected readonly ServiceProvider _serviceProvider;
 
     public TestBase(
         SekibanTestFixture sekibanTestFixture,
@@ -52,5 +39,18 @@ public class TestBase : IClassFixture<TestBase.SekibanTestFixture>, IDisposable
             throw new Exception("オブジェクトが登録されていません。" + typeof(T));
         }
         return toreturn;
+    }
+
+    public class SekibanTestFixture : ISekibanTestFixture
+    {
+        public SekibanTestFixture()
+        {
+            var builder = new ConfigurationBuilder().SetBasePath(PlatformServices.Default.Application.ApplicationBasePath)
+                .AddJsonFile("appsettings.json", false, false)
+                .AddEnvironmentVariables()
+                .AddUserSecrets(Assembly.GetExecutingAssembly());
+            Configuration = builder.Build();
+        }
+        public IConfigurationRoot Configuration { get; set; }
     }
 }

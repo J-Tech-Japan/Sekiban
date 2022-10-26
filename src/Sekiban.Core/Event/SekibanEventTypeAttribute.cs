@@ -8,7 +8,6 @@ public class SekibanEventTypeAttribute : Attribute
 public class RegisteredEventTypes
 {
     private readonly List<Type> _registeredTypes = new();
-    public ReadOnlyCollection<Type> RegisteredTypes { get; }
 
     public RegisteredEventTypes(params Assembly[] assemblies)
     {
@@ -23,4 +22,5 @@ public class RegisteredEventTypes
         }
         RegisteredTypes = _registeredTypes.AsReadOnly();
     }
+    public ReadOnlyCollection<Type> RegisteredTypes { get; }
 }

@@ -5,6 +5,6 @@ public record ClientCreated(Guid BranchId, string ClientName, string ClientEmail
 {
     public Client OnEvent(Client payload, IAggregateEvent aggregateEvent)
     {
-        return new Client(BranchId, ClientName, ClientEmail, false);
+        return new Client(BranchId, ClientName, ClientEmail);
     }
 }

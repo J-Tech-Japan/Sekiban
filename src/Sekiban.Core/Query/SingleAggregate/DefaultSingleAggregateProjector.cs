@@ -1,7 +1,8 @@
 using Sekiban.Core.Aggregate;
 namespace Sekiban.Core.Query.SingleAggregate;
 
-public class DefaultSingleAggregateProjector<TAggregatePayload> : ISingleAggregateProjector<Aggregate<TAggregatePayload>> where TAggregatePayload : IAggregatePayload, new()
+public class DefaultSingleAggregateProjector<TAggregatePayload> : ISingleAggregateProjector<Aggregate<TAggregatePayload>>
+    where TAggregatePayload : IAggregatePayload, new()
 {
     public Aggregate<TAggregatePayload> CreateInitialAggregate(Guid aggregateId)
     {

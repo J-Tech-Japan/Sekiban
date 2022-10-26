@@ -1,5 +1,3 @@
-using Sekiban.Core.Event;
-using System.Collections.Immutable;
 namespace Sekiban.Core.Aggregate;
 
 public record AggregateBasicInfo

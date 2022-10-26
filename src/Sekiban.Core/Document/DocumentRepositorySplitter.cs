@@ -90,7 +90,8 @@ public class DocumentRepositorySplitter : IDocumentRepository
                         if (!hasPartitionKey)
                         {
                             SaveAggregateEvents(aggregateEvents, originalType, partitionKey, sinceSortableUniqueId);
-                        } else
+                        }
+                        else
                         {
                             if (!string.IsNullOrWhiteSpace(sinceSortableUniqueIdInPartition) &&
                                 string.Compare(sinceSortableUniqueIdInPartition!, sinceSortableUniqueId!, StringComparison.Ordinal) > 0)
