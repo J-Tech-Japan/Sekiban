@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Caching.Memory;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Document;
 using Sekiban.Core.Document.ValueObjects;
@@ -13,7 +12,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
 {
     private readonly IAggregateSettings _aggregateSettings;
     private readonly IDocumentRepository _documentRepository;
-    private readonly ISingleAggregateProjectionCache singleAggregateProjectionCache;
+    private readonly ISingleAggregateProjectionCache _singleAggregateProjectionCache;
     private readonly IUpdateNotice _updateNotice;
     public MemoryCacheSingleProjection(
         IDocumentRepository documentRepository,
@@ -24,14 +23,14 @@ public class MemoryCacheSingleProjection : ISingleProjection
         _documentRepository = documentRepository;
         _updateNotice = updateNotice;
         _aggregateSettings = aggregateSettings;
-        this.singleAggregateProjectionCache = singleAggregateProjectionCache;
+        _singleAggregateProjectionCache = singleAggregateProjectionCache;
     }
     public async Task<T?> GetAggregateAsync<T, Q, P>(Guid aggregateId, int? toVersion = null)
         where T : ISingleAggregate, ISingleAggregateProjection, ISingleAggregateProjectionDtoConvertible<Q>
         where Q : ISingleAggregate
         where P : ISingleAggregateProjector<T>, new()
     {
-        var savedContainer = singleAggregateProjectionCache.GetContainer<T,Q>(aggregateId);
+        var savedContainer = _singleAggregateProjectionCache.GetContainer<T, Q>(aggregateId);
         if (savedContainer == null)
         {
             return await GetAggregateWithoutCacheAsync<T, Q, P>(aggregateId, toVersion);
@@ -44,9 +43,12 @@ public class MemoryCacheSingleProjection : ISingleProjection
         var aggregate = projector.CreateInitialAggregate(aggregateId);
         aggregate.ApplySnapshot(savedContainer.SafeDto!);
 
-        if (_aggregateSettings.UseUpdateMarkerForType(typeof(T).Name))
+        if (_aggregateSettings.UseUpdateMarkerForType(projector.OriginalAggregateType().Name))
         {
-            var (updated, type) = _updateNotice.HasUpdateAfter(typeof(T).Name, aggregateId, savedContainer.SafeSortableUniqueId!);
+            var (updated, type) = _updateNotice.HasUpdateAfter(
+                projector.OriginalAggregateType().Name,
+                aggregateId,
+                savedContainer.SafeSortableUniqueId!);
             if (!updated)
             {
                 return aggregate;
@@ -100,7 +102,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
         }
         if (container.SafeDto is not null)
         {
-            singleAggregateProjectionCache.SetContainer(aggregateId,container);
+            _singleAggregateProjectionCache.SetContainer(aggregateId, container);
         }
         return aggregate;
     }
@@ -173,7 +175,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
         }
         if (container.SafeDto is not null)
         {
-            singleAggregateProjectionCache.SetContainer(aggregateId, container);
+            _singleAggregateProjectionCache.SetContainer(aggregateId, container);
         }
         return aggregate;
     }
@@ -233,7 +235,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
         }
         if (container.SafeDto is not null)
         {
-            singleAggregateProjectionCache.SetContainer(aggregateId, container);
+            _singleAggregateProjectionCache.SetContainer(aggregateId, container);
         }
         return aggregate;
     }

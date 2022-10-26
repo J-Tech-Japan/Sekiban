@@ -28,7 +28,7 @@ public abstract class ChangeAggregateCommandHandlerBase<TAggregatePayload, TComm
         // Validate Aggregate Version
         if (command is not INoValidateCommand && command.ReferenceVersion != aggregate.Version)
         {
-            throw new SekibanAggregateCommandInconsistentVersionException(aggregate.AggregateId, aggregate.Version);
+            throw new SekibanAggregateCommandInconsistentVersionException(aggregate.AggregateId, command.ReferenceVersion, aggregate.Version);
         }
 
         // Execute Command

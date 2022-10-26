@@ -5,8 +5,6 @@ namespace Sekiban.Core.Aggregate;
 public record AggregateState<TPayload> : ISingleAggregate where TPayload : IAggregatePayload, new()
 {
 
-    public TPayload Payload { get; init; } = new();
-
     /// <summary>
     ///     スナップショットからの再構築用。
     /// </summary>
@@ -29,9 +27,11 @@ public record AggregateState<TPayload> : ISingleAggregate where TPayload : IAggr
     {
         Payload = payload;
     }
+
+    public TPayload Payload { get; init; } = new();
     [Required]
     [Description("集約が削除済みかどうか")]
-    public bool IsDeleted { get; init; }
+    public bool IsDeleted => Payload is IDeletable { IsDeleted: true };
 
     [Required]
     [Description("集約ID")]
