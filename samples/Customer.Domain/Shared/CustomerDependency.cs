@@ -47,7 +47,6 @@ public class CustomerDependency : IDependencyDefinition
         yield return typeof(ClientLoyaltyPointListProjection);
     }
 
-
     public IEnumerable<Type> GetAggregateListQueryFilterTypes()
     {
         yield return typeof(BasicClientQueryFilter);
@@ -112,4 +111,6 @@ public class CustomerDependency : IDependencyDefinition
     {
         yield return typeof(ClientLoyaltyPointQueryFilter);
     }
+    public bool MakeSimpleAggregateListQueryFilter => true;
+    public bool MakeSimpleSingleAggregateProjectionListQueryFilter => true;
 }
