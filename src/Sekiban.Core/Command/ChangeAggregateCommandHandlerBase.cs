@@ -2,26 +2,27 @@
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 using System.Collections.Immutable;
-using System.Reflection;
 namespace Sekiban.Core.Command;
 
-public abstract class ChangeAggregateCommandHandlerBase<T, C> : IChangeAggregateCommandHandler<T, C>
-    where T : IAggregatePayload, new() where C : ChangeAggregateCommandBase<T>, new()
+public abstract class ChangeAggregateCommandHandlerBase<TAggregatePayload, TCommand> : IChangeAggregateCommandHandler<TAggregatePayload, TCommand>
+    where TAggregatePayload : IAggregatePayload, new() where TCommand : ChangeAggregateCommandBase<TAggregatePayload>, new()
 {
-    public async Task<AggregateCommandResponse> HandleAsync(AggregateCommandDocument<C> aggregateCommandDocument, Aggregate<T> aggregate)
+    public async Task<AggregateCommandResponse> HandleAsync(
+        AggregateCommandDocument<TCommand> aggregateCommandDocument,
+        Aggregate<TAggregatePayload> aggregate)
     {
         var command = aggregateCommandDocument.Payload;
 
         if (command is IOnlyPublishingCommand)
         {
-            throw new SekibanCanNotExecuteOnlyPublishingEventCommand(typeof(C).Name);
+            throw new SekibanCanNotExecuteOnlyPublishingEventCommand(typeof(TCommand).Name);
         }
         var state = aggregate.ToState();
         // Validate Aggregate is deleted
         // ReSharper disable once SuspiciousTypeConversion.Global
         if (command is not INoValidateCommand && state is IDeletableAggregatePayload { IsDeleted: true })
         {
-            throw new SekibanAggregateNotExistsException(aggregate.AggregateId, typeof(T).Name);
+            throw new SekibanAggregateNotExistsException(aggregate.AggregateId, typeof(TAggregatePayload).Name);
         }
 
         // Validate Aggregate Version
@@ -35,24 +36,22 @@ public abstract class ChangeAggregateCommandHandlerBase<T, C> : IChangeAggregate
         var events = new List<IAggregateEvent>();
         await foreach (var eventPayload in eventPayloads)
         {
-            var aggregateType = aggregate.GetType();
-            var methodName = nameof(Aggregate<T>.AddAndApplyEvent);
-            var aggregateMethodBase = aggregateType.GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Instance);
-            var aggregateMethod = aggregateMethodBase?.MakeGenericMethod(eventPayload.GetType());
-            events.Add(
-                aggregateMethod?.Invoke(aggregate, new object?[] { eventPayload }) as IAggregateEvent ??
-                throw new SekibanEventFailedToActivateException());
+            events.Add(AggregateEventHandler.HandleAggregateEvent(aggregate, eventPayload));
         }
         return await Task.FromResult(new AggregateCommandResponse(aggregate.AggregateId, events.ToImmutableList(), aggregate.Version));
     }
-    public Task<AggregateCommandResponse> HandleForOnlyPublishingCommandAsync(AggregateCommandDocument<C> aggregateCommandDocument, Guid aggregateId)
+    public Task<AggregateCommandResponse> HandleForOnlyPublishingCommandAsync(
+        AggregateCommandDocument<TCommand> aggregateCommandDocument,
+        Guid aggregateId)
     {
-        throw new SekibanCanNotExecuteOnlyPublishingEventCommand(typeof(C).Name);
+        throw new SekibanCanNotExecuteOnlyPublishingEventCommand(typeof(TCommand).Name);
     }
-    public virtual C CleanupCommandIfNeeded(C command)
+    public virtual TCommand CleanupCommandIfNeeded(TCommand command)
     {
         return command;
     }
 
-    protected abstract IAsyncEnumerable<IChangedEvent<T>> ExecCommandAsync(AggregateState<T> aggregate, C command);
+    protected abstract IAsyncEnumerable<IChangedEvent<TAggregatePayload>> ExecCommandAsync(
+        AggregateState<TAggregatePayload> aggregate,
+        TCommand command);
 }

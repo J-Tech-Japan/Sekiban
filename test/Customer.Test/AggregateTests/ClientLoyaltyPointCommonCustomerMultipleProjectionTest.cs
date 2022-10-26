@@ -265,7 +265,7 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMu
         ""Payload"": {
             ""InitialPoint"": 0
         },
-        ""AggregateType"": ""LoyaltyPointToBeOld"",
+        ""AggregateType"": ""LoyaltyPoint"",
         ""IsAggregateInitialEvent"": true,
         ""Version"": 1,
         ""CallHistories"": [

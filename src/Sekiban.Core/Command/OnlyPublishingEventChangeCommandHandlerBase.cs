@@ -27,7 +27,10 @@ public abstract class
         var events = new List<IAggregateEvent>();
         await foreach (var eventPayload in eventPayloads)
         {
-            events.Add(SaveEvent(eventPayload));
+            events.Add(
+                AggregateEventHandler.GenerateEventToSave<IChangedAggregateEventPayload<TAggregatePayload>, TAggregatePayload>(
+                    aggregateId,
+                    eventPayload));
         }
         await Task.CompletedTask;
         return new AggregateCommandResponse(aggregateId, events.ToImmutableList(), 0);
@@ -37,9 +40,4 @@ public abstract class
         return command;
     }
     protected abstract IAsyncEnumerable<IChangedAggregateEventPayload<TAggregatePayload>> ExecCommandAsync(Guid aggregateId, TCommand command);
-
-    private IAggregateEvent SaveEvent<TEventPayload>(TEventPayload payload) where TEventPayload : IChangedAggregateEventPayload<TAggregatePayload>
-    {
-        return new AggregateEvent<TEventPayload>(AggregateId, typeof(TAggregatePayload), payload);
-    }
 }

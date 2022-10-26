@@ -91,8 +91,11 @@ public class ClientAndProjectionSpec : SingleAggregateTestBase<Client, CustomerD
             .WriteStateToFile("ClientTestOut.json")
             .WriteContentsToFile("ClientContentsTestOut.json")
             .ThenStateIsFromJson(
-                "{\"Payload\":{\"BranchId\":\"cdb93f86-8d2f-442c-9f62-b9e791401f5f\",\"ClientName\":\"Test Client Changed\",\"ClientEmail\":\"client@example.com\"},\"IsDeleted\":false,\"AggregateId\":\"9cfa698b-fda7-44a1-86c0-1f167914bb47\",\"Version\":2,\"LastEventId\":\"19c7e148-550f-4954-b0d5-e05ef93cb32a\",\"AppliedSnapshotVersion\":0,\"LastSortableUniqueId\":\"638002628133105260000616586510\"}")
-            .ThenStateIsFromFile("ClientTestResult.json")
+                "{\"Payload\":{\"BranchId\":\"cdb93f86-8d2f-442c-9f62-b9e791401f5f\",\"ClientName\":\"Test Client Changed\",\"ClientEmail\":\"client@example.com\"},\"IsDeleted\":false,\"AggregateId\":\"9cfa698b-fda7-44a1-86c0-1f167914bb47\",\"Version\":2,\"LastEventId\":\"19c7e148-550f-4954-b0d5-e05ef93cb32a\",\"AppliedSnapshotVersion\":0,\"LastSortableUniqueId\":\"638002628133105260000616586510\"}");
+
+        WriteStateToFile("TEMPTEST.json");
+
+        ThenStateIsFromFile("ClientTestResult.json")
             .ThenContentsIsFromJson(
                 "{\"BranchId\":\"cdb93f86-8d2f-442c-9f62-b9e791401f5f\",\"ClientName\":\"Test Client Changed\",\"ClientEmail\":\"client@example.com\"}")
             .ThenContentsIsFromFile("ClientContentsTestResult.json");

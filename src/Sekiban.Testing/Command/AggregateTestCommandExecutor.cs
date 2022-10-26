@@ -6,7 +6,7 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.SingleAggregate;
 using Sekiban.Core.Validation;
-using System.Collections.ObjectModel;
+using System.Collections.Immutable;
 using System.ComponentModel.DataAnnotations;
 namespace Sekiban.Testing.Command;
 
@@ -17,7 +17,7 @@ public class AggregateTestCommandExecutor
     {
         _serviceProvider = serviceProvider;
     }
-    public IReadOnlyCollection<IAggregateEvent> LatestEvents { get; set; } = new List<IAggregateEvent>();
+    public ImmutableList<IAggregateEvent> LatestEvents { get; set; } = ImmutableList<IAggregateEvent>.Empty;
 
     public (IEnumerable<IAggregateEvent>, Guid) ExecuteCreateCommand<TAggregate>(
         ICreateAggregateCommand<TAggregate> command,
@@ -46,7 +46,7 @@ public class AggregateTestCommandExecutor
         var handleAsyncMethod = handler.GetType().GetMethods().First(m => m.Name == "HandleAsync");
         var result = ((dynamic)handleAsyncMethod.Invoke(handler, new[] { commandDocument, aggregate })!)?.Result;
         if (result is null) { throw new Exception("Failed to execute create command"); }
-        var latestEvents = (IReadOnlyCollection<IAggregateEvent>)result.Events;
+        var latestEvents = (ImmutableList<IAggregateEvent>)result.Events;
         if (latestEvents.Count == 0)
         {
             throw new SekibanCreateHasToMakeEventException();
@@ -73,12 +73,7 @@ public class AggregateTestCommandExecutor
         if (singleAggregateService is null) { throw new Exception("Failed to get Aggregate Service"); }
         var method = singleAggregateService.GetType().GetMethods().FirstOrDefault(m => m.Name == "GetAggregateAsync");
         if (method is null) { throw new Exception("Failed to get Aggregate Service"); }
-        var aggregateBaseType = typeof(TAggregate).BaseType;
-        if (aggregateBaseType is null) { throw new Exception("Failed to get Aggregate Service"); }
-        var genericType = aggregateBaseType.GetGenericTypeDefinition();
-        if (genericType != typeof(Aggregate<>)) { throw new Exception("Failed to get Aggregate Base Type"); }
-        var contentsType = aggregateBaseType.GetGenericArguments()[0];
-        var genericMethod = method.MakeGenericMethod(typeof(TAggregate), contentsType);
+        var genericMethod = method.MakeGenericMethod(typeof(TAggregate));
         var aggregateTask = genericMethod.Invoke(singleAggregateService, new object?[] { aggregateId, null }) as dynamic;
         if (aggregateTask is null) { throw new Exception("Failed to get Aggregate Service"); }
         var aggregate = aggregateTask.Result;
@@ -118,7 +113,7 @@ public class AggregateTestCommandExecutor
             var handleAsyncMethod = handler.GetType().GetMethods().First(m => m.Name == "HandleAsync");
             var result = ((dynamic)handleAsyncMethod.Invoke(handler, new[] { commandDocument, aggregate })!)?.Result;
             if (result is null) { throw new Exception("Failed to execute change command"); }
-            LatestEvents = (ReadOnlyCollection<IAggregateEvent>)result.Events;
+            LatestEvents = (ImmutableList<IAggregateEvent>)result.Events;
         }
         else
         {
@@ -135,7 +130,7 @@ public class AggregateTestCommandExecutor
             var handleAsyncMethod = handler.GetType().GetMethods().First(m => m.Name == "HandleForOnlyPublishingCommandAsync");
             var result = ((dynamic)handleAsyncMethod.Invoke(handler, new[] { commandDocument, aggregate!.AggregateId })!)?.Result;
             if (result is null) { throw new Exception("Failed to execute change command"); }
-            LatestEvents = (ReadOnlyCollection<IAggregateEvent>)result.Events;
+            LatestEvents = (ImmutableList<IAggregateEvent>)result.Events;
         }
         if (LatestEvents.Any(ev => ev.IsAggregateInitialEvent))
         {
