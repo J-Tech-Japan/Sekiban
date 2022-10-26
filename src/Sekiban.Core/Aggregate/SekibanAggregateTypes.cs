@@ -12,12 +12,12 @@ public class SekibanAggregateTypes
         foreach (var assembly in assemblies)
         {
             var aggregates = assembly.DefinedTypes.Where(
-                x => x.IsClass && x.ImplementedInterfaces.Contains(attributeType));
+                x => x.IsClass &&
+                    x.ImplementedInterfaces.Contains(attributeType) &&
+                    !x.ImplementedInterfaces.Contains(typeof(ISingleAggregateProjectionPayload)));
 
             foreach (var type in aggregates)
             {
-                var dto = type.BaseType?.GetGenericArguments()?.First();
-                if (dto is null) { continue; }
                 var baseProjector = typeof(DefaultSingleAggregateProjector<>);
                 var p = baseProjector.MakeGenericType(type);
                 _registeredTypes.Add(new DefaultAggregateType(type, p));

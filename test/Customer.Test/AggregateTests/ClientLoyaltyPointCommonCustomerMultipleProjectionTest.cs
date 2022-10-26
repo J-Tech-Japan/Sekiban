@@ -238,7 +238,7 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMu
             ""ClientName"": ""Tomo"",
             ""ClientEmail"": ""tomo@jtechs.com""
         },
-        ""AggregateType"": ""ClientAgggg"",
+        ""AggregateType"": ""Client"",
         ""IsAggregateInitialEvent"": true,
         ""Version"": 1,
         ""CallHistories"": [
@@ -302,7 +302,7 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMu
         ""Payload"": {
             ""ClientName"": ""new name""
         },
-        ""AggregateType"": ""ClientAgggg"",
+        ""AggregateType"": ""Client"",
         ""IsAggregateInitialEvent"": false,
         ""Version"": 2,
         ""CallHistories"": [
@@ -329,7 +329,7 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMu
         ""Payload"": {
             ""ClientName"": ""V3""
         },
-        ""AggregateType"": ""ClientAgggg"",
+        ""AggregateType"": ""Client"",
         ""IsAggregateInitialEvent"": false,
         ""Version"": 3,
         ""CallHistories"": [
@@ -545,7 +545,7 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMu
         ""Payload"": {
             ""ClientName"": ""v4 name""
         },
-        ""AggregateType"": ""ClientAgggg"",
+        ""AggregateType"": ""Client"",
         ""IsAggregateInitialEvent"": false,
         ""Version"": 4,
         ""CallHistories"": [
@@ -572,7 +572,7 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMu
         ""Payload"": {
             ""ClientName"": ""new name 5""
         },
-        ""AggregateType"": ""ClientAgggg"",
+        ""AggregateType"": ""Client"",
         ""IsAggregateInitialEvent"": false,
         ""Version"": 5,
         ""CallHistories"": [

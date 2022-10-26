@@ -13,11 +13,11 @@ namespace Sekiban.Testing.Command;
 public class AggregateTestCommandExecutor
 {
     private readonly IServiceProvider _serviceProvider;
-    public IReadOnlyCollection<IAggregateEvent> LatestEvents { get; set; } = new List<IAggregateEvent>();
     public AggregateTestCommandExecutor(IServiceProvider serviceProvider)
     {
         _serviceProvider = serviceProvider;
     }
+    public IReadOnlyCollection<IAggregateEvent> LatestEvents { get; set; } = new List<IAggregateEvent>();
 
     public (IEnumerable<IAggregateEvent>, Guid) ExecuteCreateCommand<TAggregate>(
         ICreateAggregateCommand<TAggregate> command,
@@ -36,15 +36,12 @@ public class AggregateTestCommandExecutor
         {
             throw new SekibanAggregateCommandNotRegisteredException(command.GetType().Name);
         }
-        var generateAggregateIdMethod = genericType.GetMethods().First(m => m.Name == "GenerateAggregateId");
-        var aggregateId = injectingAggregateId ?? generateAggregateIdMethod.Invoke(handler, new object?[] { command }) as Guid?;
-
-        if (aggregateId is null) { throw new Exception("Create Aggregate Id failed"); }
+        var aggregateId = injectingAggregateId ?? command.GetAggregateId();
 
         var aggregateCommandDocumentBaseType = typeof(AggregateCommandDocument<>);
         var aggregateCommandDocumentType = aggregateCommandDocumentBaseType.MakeGenericType(command.GetType());
         var commandDocument = Activator.CreateInstance(aggregateCommandDocumentType, aggregateId, command, typeof(TAggregate), null);
-        var aggregate = new Aggregate<TAggregate> { AggregateId = aggregateId.Value };
+        var aggregate = new Aggregate<TAggregate> { AggregateId = aggregateId };
         var handlerType = handler.GetType().GetMethods();
         var handleAsyncMethod = handler.GetType().GetMethods().First(m => m.Name == "HandleAsync");
         var result = ((dynamic)handleAsyncMethod.Invoke(handler, new[] { commandDocument, aggregate })!)?.Result;
@@ -66,7 +63,7 @@ public class AggregateTestCommandExecutor
             documentWriter.SaveAsync(e, typeof(TAggregate)).Wait();
         }
         LatestEvents = latestEvents;
-        return (latestEvents, aggregateId.Value);
+        return (latestEvents, aggregateId);
     }
 
     private Aggregate<TAggregate> GetAggregate<TAggregate>(Guid aggregateId) where TAggregate : IAggregatePayload, new()
@@ -122,7 +119,8 @@ public class AggregateTestCommandExecutor
             var result = ((dynamic)handleAsyncMethod.Invoke(handler, new[] { commandDocument, aggregate })!)?.Result;
             if (result is null) { throw new Exception("Failed to execute change command"); }
             LatestEvents = (ReadOnlyCollection<IAggregateEvent>)result.Events;
-        } else
+        }
+        else
         {
             var aggregate = GetAggregate<TAggregatePayload>(aggregateId);
             if (aggregate is null)

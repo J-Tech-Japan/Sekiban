@@ -53,8 +53,8 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
 
     private readonly string branchName = "BranchName";
     private readonly string clientEmail = "test@exmple.com";
-    private readonly string clientName = "ClientAgggg Name";
-    private readonly string clientName2 = "ClientAgggg Name2";
+    private readonly string clientName = "Client Name";
+    private readonly string clientName2 = "Client Name2";
     private Guid _branchId = Guid.Empty;
     private Guid _clientId = Guid.Empty;
     private DateTime dateNameSet = DateTime.Now;

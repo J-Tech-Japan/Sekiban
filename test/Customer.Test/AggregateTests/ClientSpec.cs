@@ -67,7 +67,7 @@ public class ClientSpec : SingleAggregateTestBase<Client, CustomerDependency>
     public void UseCommandExecutor()
     {
         GivenEnvironmentCommandExecutorAction(BranchClientCommandsHelper.CreateClient)
-            .WhenCreate(new CreateClient(BranchClientCommandsHelper.BranchId, "ClientAgggg Name New", BranchClientCommandsHelper.FirstClientEmail))
+            .WhenCreate(new CreateClient(BranchClientCommandsHelper.BranchId, "Client Name New", BranchClientCommandsHelper.FirstClientEmail))
             .ThenThrows<SekibanEmailAlreadyRegistered>();
     }
 }

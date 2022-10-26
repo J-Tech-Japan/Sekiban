@@ -50,21 +50,21 @@ public class Aggregate<TAggregatePayload> : AggregateCommonBase, ISingleAggregat
         return null;
     }
 
-    internal static IAggregateEvent AddAndApplyEvent<TEventPayload>(Aggregate<TAggregatePayload> aggregate, TEventPayload eventPayload)
+    internal IAggregateEvent AddAndApplyEvent<TEventPayload>(TEventPayload eventPayload)
         where TEventPayload : IEventPayload, IApplicableEvent<TAggregatePayload>
     {
         var ev = eventPayload is ICreatedEventPayload
-            ? AggregateEvent<TEventPayload>.CreatedEvent(aggregate.AggregateId, aggregate.GetType(), eventPayload)
-            : AggregateEvent<TEventPayload>.ChangedEvent(aggregate.AggregateId, aggregate.GetType(), eventPayload);
+            ? AggregateEvent<TEventPayload>.CreatedEvent(AggregateId, typeof(TAggregatePayload), eventPayload)
+            : AggregateEvent<TEventPayload>.ChangedEvent(AggregateId, typeof(TAggregatePayload), eventPayload);
 
-        if (aggregate.GetApplyEventAction(ev, eventPayload) is null)
+        if (GetApplyEventAction(ev, eventPayload) is null)
         {
             throw new SekibanEventNotImplementedException();
         }
         // バージョンが変わる前に、イベントには現在のバージョンを入れて動かす
-        ev = ev with { Version = aggregate.Version };
-        aggregate.ApplyEvent(ev);
-        ev = ev with { Version = aggregate.Version };
+        ev = ev with { Version = Version };
+        ApplyEvent(ev);
+        ev = ev with { Version = Version };
         return ev;
     }
     protected void CopyPropertiesFromSnapshot(AggregateState<TAggregatePayload> snapshot)

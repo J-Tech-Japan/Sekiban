@@ -2,6 +2,7 @@
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 using System.Collections.Immutable;
+using System.Reflection;
 namespace Sekiban.Core.Command;
 
 public abstract class CreateAggregateCommandHandlerBase<T, C> : ICreateAggregateCommandHandler<T, C>
@@ -19,7 +20,13 @@ public abstract class CreateAggregateCommandHandlerBase<T, C> : ICreateAggregate
         var events = new List<IAggregateEvent>();
         await foreach (var eventPayload in eventPayloads)
         {
-            events.Add(Aggregate<T>.AddAndApplyEvent(aggregate, eventPayload));
+            var aggregateType = aggregate.GetType();
+            var methodName = nameof(Aggregate<T>.AddAndApplyEvent);
+            var aggregateMethodBase = aggregateType.GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Instance);
+            var aggregateMethod = aggregateMethodBase?.MakeGenericMethod(eventPayload.GetType());
+            events.Add(
+                aggregateMethod?.Invoke(aggregate, new object?[] { eventPayload }) as IAggregateEvent ??
+                throw new SekibanEventFailedToActivateException());
         }
         return await Task.FromResult(new AggregateCommandResponse(aggregate.AggregateId, events.ToImmutableList(), aggregate.Version));
     }

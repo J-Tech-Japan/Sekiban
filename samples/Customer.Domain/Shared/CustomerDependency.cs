@@ -79,7 +79,7 @@ public class CustomerDependency : IDependencyDefinition
         // Aggregate: Branch
         yield return (typeof(ICreateAggregateCommandHandler<Branch, CreateBranch>), typeof(CreateBranchHandler));
 
-        // Aggregate: ClientAgggg
+        // Aggregate: Client
         yield return (typeof(ICreateAggregateCommandHandler<Client, CreateClient>), typeof(CreateClientHandler));
 
         yield return (typeof(IChangeAggregateCommandHandler<Client, ChangeClientName>), typeof(ChangeClientNameHandler));

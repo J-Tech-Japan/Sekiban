@@ -10,7 +10,7 @@ public class BranchClientCommandsHelper
     public static readonly Guid BranchId = Guid.NewGuid();
 
     public static readonly Guid FirstClientId = Guid.NewGuid();
-    public static readonly string FirstClientName = "ClientAgggg Name";
+    public static readonly string FirstClientName = "Client Name";
     public static readonly string FirstClientEmail = "client@example.com";
 
     public static void CreateBranches(AggregateTestCommandExecutor ex)

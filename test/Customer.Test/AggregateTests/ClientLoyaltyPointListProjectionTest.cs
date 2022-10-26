@@ -21,7 +21,7 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
     public Guid _clientId3 = Guid.NewGuid();
     public Guid _clientId4 = Guid.NewGuid();
     public Guid _clientId5 = Guid.NewGuid();
-    public string _clientNameBase = "ClientAgggg TEST ";
+    public string _clientNameBase = "Client TEST ";
     public ProjectionListQueryFilterTestChecker<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.ContentsDefinition,
         ClientLoyaltyPointQueryFilter, ClientLoyaltyPointQueryFilter.QueryFilterParameter,
         ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> ListQueryFilterTestChecker = new();
