@@ -38,8 +38,8 @@ public class ClientAndProjectionSpec : SingleAggregateTestBase<Client, CustomerD
     public void CreateTest()
     {
         RunEnvironmentCreateCommand(new CreateBranch(branchName), branchId);
-        // GetEnvironmentAggregateDtoのテスト
-        var branch = GetEnvironmentAggregateDto<Branch>(branchId);
+        // GetEnvironmentAggregateStateのテスト
+        var branch = GetEnvironmentAggregateState<Branch>(branchId);
         Assert.Equal(branchName, branch.Payload.Name);
 
         WhenCreate(new CreateClient(branchId, clientName, clientEmail))
@@ -52,8 +52,8 @@ public class ClientAndProjectionSpec : SingleAggregateTestBase<Client, CustomerD
                         FirstEventDatetime = ev.TimeStamp;
                     }
                 })
-            .ThenContentsIs(new Client(branchId, clientName, clientEmail));
-        ProjectionSubscriber.ThenContentsIs(
+            .ThenPayloadIs(new Client(branchId, clientName, clientEmail));
+        ProjectionSubscriber.ThenPayloadIs(
             new ClientNameHistoryProjection.PayloadDefinition(
                 branchId,
                 new List<ClientNameHistoryProjection.ClientNameHistoryProjectionRecord> { new(clientName, FirstEventDatetime) }.ToImmutableList(),
@@ -73,8 +73,8 @@ public class ClientAndProjectionSpec : SingleAggregateTestBase<Client, CustomerD
                         ChangedEventDatetime = ev.TimeStamp;
                     }
                 })
-            .ThenContentsIs(new Client(branchId, clientNameChanged, clientEmail));
-        ProjectionSubscriber.ThenContentsIs(
+            .ThenPayloadIs(new Client(branchId, clientNameChanged, clientEmail));
+        ProjectionSubscriber.ThenPayloadIs(
             new ClientNameHistoryProjection.PayloadDefinition(
                 branchId,
                 new List<ClientNameHistoryProjection.ClientNameHistoryProjectionRecord>
@@ -89,18 +89,18 @@ public class ClientAndProjectionSpec : SingleAggregateTestBase<Client, CustomerD
         // Sekibanのテストでは結果をファイルに書いたり、期待値をファイルから読み込んだり、JSONで比較したりすることができる。
         GivenScenario(ChangeNameTest)
             .WriteStateToFile("ClientTestOut.json")
-            .WriteContentsToFile("ClientContentsTestOut.json")
+            .WritePayloadToFile("ClientContentsTestOut.json")
             .ThenStateIsFromJson(
                 "{\"Payload\":{\"BranchId\":\"cdb93f86-8d2f-442c-9f62-b9e791401f5f\",\"ClientName\":\"Test Client Changed\",\"ClientEmail\":\"client@example.com\"},\"IsDeleted\":false,\"AggregateId\":\"9cfa698b-fda7-44a1-86c0-1f167914bb47\",\"Version\":2,\"LastEventId\":\"19c7e148-550f-4954-b0d5-e05ef93cb32a\",\"AppliedSnapshotVersion\":0,\"LastSortableUniqueId\":\"638002628133105260000616586510\"}");
 
         WriteStateToFile("TEMPTEST.json");
 
         ThenStateIsFromFile("ClientTestResult.json")
-            .ThenContentsIsFromJson(
+            .ThenPayloadIsFromJson(
                 "{\"BranchId\":\"cdb93f86-8d2f-442c-9f62-b9e791401f5f\",\"ClientName\":\"Test Client Changed\",\"ClientEmail\":\"client@example.com\"}")
-            .ThenContentsIsFromFile("ClientContentsTestResult.json");
-        ProjectionSubscriber.WriteProjectionDtoToFile("ClientProjectionOut.json")
-            .ThenContentsIsFromJson(
+            .ThenPayloadIsFromFile("ClientContentsTestResult.json");
+        ProjectionSubscriber.WriteProjectionStateToFile("ClientProjectionOut.json")
+            .ThenPayloadIsFromJson(
                 "{\"BranchId\":\"cdb93f86-8d2f-442c-9f62-b9e791401f5f\",\"ClientNames\":[{\"Name\":\"Test Client\",\"DateChanged\":\"" +
                 FirstEventDatetime.ToString("O") +
                 "\"},{\"Name\":\"Test Client Changed\",\"DateChanged\":\"" +

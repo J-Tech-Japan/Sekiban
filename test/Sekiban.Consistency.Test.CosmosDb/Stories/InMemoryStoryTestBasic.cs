@@ -93,7 +93,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         Assert.Equal(originalName, tanakaProjection.Payload.ClientNames.ToList().First().Name);
 
         var clientNameListFromMultiple = await _multipleAggregateProjectionService
-            .GetSingleAggregateProjectionList<Client,ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>();
+            .GetSingleAggregateProjectionList<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>();
         Assert.Single(clientNameListFromMultiple);
         Assert.Equal(clientNameList.First().AggregateId, clientNameListFromMultiple.First().AggregateId);
 
@@ -112,7 +112,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
 
         // change name projection
         clientNameList = await _multipleAggregateProjectionService
-            .GetSingleAggregateProjectionList<Client,ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>();
+            .GetSingleAggregateProjectionList<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>();
         Assert.Single(clientNameList);
         tanakaProjection = clientNameList.First(m => m.AggregateId == clientId);
         Assert.Equal(2, tanakaProjection.Payload.ClientNames.Count);
@@ -129,9 +129,9 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
             versionCN = changeNameResult2.Version;
         }
 
-        // get change name dto
+        // get change name state
         var changeNameProjection
-            = await _aggregateService.GetProjectionAsync<Client,ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>(
+            = await _aggregateService.GetProjectionAsync<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>(
                 clientId!.Value);
         Assert.NotNull(changeNameProjection);
 
@@ -179,10 +179,10 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         Assert.Equal(800, loyaltyPoint!.Payload.CurrentPoint);
 
         var p = await _multipleAggregateProjectionService
-            .GetProjectionAsync<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.ContentsDefinition>();
+            .GetProjectionAsync<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.PayloadDefinition>();
         Assert.NotNull(p);
-        Assert.Equal(2, p.Contents.Branches.Count);
-        Assert.Single(p.Contents.Records);
+        Assert.Equal(2, p.Payload.Branches.Count);
+        Assert.Single(p.Payload.Records);
 
         // delete client
         var (deleteClientResult, events7) = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, DeleteClient>(
@@ -226,10 +226,10 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         Assert.Equal(count + 1, version);
 
         p = await _multipleAggregateProjectionService
-            .GetProjectionAsync<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.ContentsDefinition>();
+            .GetProjectionAsync<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.PayloadDefinition>();
         Assert.NotNull(p);
-        Assert.Equal(2, p.Contents.Branches.Count);
-        Assert.Empty(p.Contents.Records);
+        Assert.Equal(2, p.Payload.Branches.Count);
+        Assert.Empty(p.Payload.Records);
         var snapshotManager
             = await _aggregateService.GetAggregateStateFromInitialAsync<SnapshotManager>(
                 SnapshotManager.SharedId);
@@ -303,16 +303,19 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         }
     }
 
-    private async Task CheckSnapshots<TAggregatePayload>(List<SnapshotDocument> snapshots, Guid aggregateId) 
+    private async Task CheckSnapshots<TAggregatePayload>(List<SnapshotDocument> snapshots, Guid aggregateId)
         where TAggregatePayload : IAggregatePayload, new()
     {
-        foreach (var dto in snapshots.Select(snapshot => snapshot.ToDto<AggregateState<TAggregatePayload>>()))
+        foreach (var state in snapshots.Select(snapshot => snapshot.ToState<AggregateState<TAggregatePayload>>()))
         {
-            if (dto is null) { throw new SekibanInvalidArgumentException(); }
-            var fromInitial = await _aggregateService.GetAggregateStateFromInitialAsync<TAggregatePayload>(aggregateId, dto.Version);
+            if (state is null)
+            {
+                throw new SekibanInvalidArgumentException();
+            }
+            var fromInitial = await _aggregateService.GetAggregateStateFromInitialAsync<TAggregatePayload>(aggregateId, state.Version);
             if (fromInitial is null) { throw new SekibanInvalidArgumentException(); }
-            Assert.Equal(fromInitial.Version, dto.Version);
-            Assert.Equal(fromInitial.LastEventId, dto.LastEventId);
+            Assert.Equal(fromInitial.Version, state.Version);
+            Assert.Equal(fromInitial.LastEventId, state.LastEventId);
         }
     }
     [Fact(DisplayName = "インメモリストーリーテスト 。並列でたくさん動かしたらどうなるか。 Versionの重複が発生しないことを確認")]
@@ -347,14 +350,14 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
                     }));
         }
         await Task.WhenAll(tasks);
-        recentActivityList = await _multipleAggregateProjectionService.GetAggregateList< RecentInMemoryActivity>();
+        recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentInMemoryActivity>();
         Assert.Single(recentActivityList);
 
         var aggregateRecentActivity
-            = await _aggregateService.GetAggregateStateFromInitialAsync< RecentInMemoryActivity>(
+            = await _aggregateService.GetAggregateStateFromInitialAsync<RecentInMemoryActivity>(
                 createRecentActivityResult.AggregateId!.Value);
         var aggregateRecentActivity2
-            = await _aggregateService.GetAggregateStateAsync< RecentInMemoryActivity>(
+            = await _aggregateService.GetAggregateStateAsync<RecentInMemoryActivity>(
                 createRecentActivityResult.AggregateId!.Value);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);

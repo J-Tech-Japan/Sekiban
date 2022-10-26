@@ -27,7 +27,7 @@ public class ClientSpec : SingleAggregateTestBase<Client, CustomerDependency>
     [Fact(DisplayName = "集約コマンドを実行してテストする")]
     public void ClientCreateSpec()
     {
-        // CreateコマンドでBranchを参照するため、BranchDtoオブジェクトを参照用に渡す
+        // CreateコマンドでBranchを参照するため、Branch作成コマンドを流す
         var branchId = RunEnvironmentCreateCommand(new CreateBranch("TEST"));
 
         // CreateClient コマンドを実行する

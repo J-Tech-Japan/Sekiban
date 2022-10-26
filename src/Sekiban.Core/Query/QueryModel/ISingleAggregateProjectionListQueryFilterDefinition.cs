@@ -4,14 +4,14 @@ using Sekiban.Core.Query.SingleAggregate;
 namespace Sekiban.Core.Query.QueryModel;
 
 public interface
-    ISingleAggregateProjectionListQueryFilterDefinition<TAggregate, in TSingleAggregateProjection, TSingleAggregateProjectionContents, in TQueryParam,
+    ISingleAggregateProjectionListQueryFilterDefinition<TAggregate, in TSingleAggregateProjection, TAggregateProjectionPayload, in TQueryParam,
         TResponseQueryModel> where TAggregate : IAggregatePayload, new()
-    where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>
-    where TSingleAggregateProjectionContents : ISingleAggregateProjectionPayload
+    where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TAggregateProjectionPayload>
+    where TAggregateProjectionPayload : ISingleAggregateProjectionPayload
     where TQueryParam : IQueryParameter
 {
     public IEnumerable<TResponseQueryModel> HandleFilter(
         TQueryParam queryParam,
-        IEnumerable<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>> list);
+        IEnumerable<SingleAggregateProjectionState<TAggregateProjectionPayload>> list);
     public IEnumerable<TResponseQueryModel> HandleSort(TQueryParam queryParam, IEnumerable<TResponseQueryModel> projections);
 }

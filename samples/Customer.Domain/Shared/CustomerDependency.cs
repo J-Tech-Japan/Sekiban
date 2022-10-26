@@ -85,7 +85,7 @@ public class CustomerDependency : IDependencyDefinition
 
         yield return (typeof(IChangeAggregateCommandHandler<Client, DeleteClient>), typeof(DeleteClientHandler));
 
-        // Aggregate: LoyaltyPointToBeOld
+        // Aggregate: LoyaltyPoint
         yield return (typeof(ICreateAggregateCommandHandler<LoyaltyPoint, CreateLoyaltyPoint>), typeof(CreateLoyaltyPointHandler));
 
         yield return (typeof(IChangeAggregateCommandHandler<LoyaltyPoint, AddLoyaltyPoint>), typeof(AddLoyaltyPointHandler));
@@ -94,13 +94,13 @@ public class CustomerDependency : IDependencyDefinition
 
         yield return (typeof(IChangeAggregateCommandHandler<LoyaltyPoint, DeleteLoyaltyPoint>), typeof(DeleteLoyaltyPointHandler));
 
-        // Aggregate: RecentActivityToDelete
+        // Aggregate: RecentActivity
         yield return (typeof(ICreateAggregateCommandHandler<RecentActivity, CreateRecentActivity>), typeof(CreateRecentActivityHandler));
 
         yield return (typeof(IChangeAggregateCommandHandler<RecentActivity, AddRecentActivity>), typeof(AddRecentActivityHandler));
         yield return (typeof(IChangeAggregateCommandHandler<RecentActivity, OnlyPublishingAddRecentActivity>),
             typeof(OnlyPublishingAddRecentActivityHandler));
-        // Aggregate: RecentInMemoryActivityToDel
+        // Aggregate: RecentInMemoryActivity
         yield return (typeof(ICreateAggregateCommandHandler<RecentInMemoryActivity, CreateRecentInMemoryActivity>),
             typeof(CreateRecentInMemoryActivityHandler));
 

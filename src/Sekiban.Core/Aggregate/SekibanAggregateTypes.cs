@@ -29,11 +29,11 @@ public class SekibanAggregateTypes
             {
                 var baseType = type.BaseType;
                 if (baseType is null) { continue; }
-                var tProjectionContents = baseType.GenericTypeArguments[2];
+                var projectionPayloadType = baseType.GenericTypeArguments[2];
                 var instance = (dynamic?)Activator.CreateInstance(type);
                 var original = instance?.OriginalAggregateType();
                 if (original is null) { continue; }
-                _registeredCustomProjectorTypes.Add(new ProjectionAggregateType(original, type, tProjectionContents));
+                _registeredCustomProjectorTypes.Add(new ProjectionAggregateType(original, type, projectionPayloadType));
             }
         }
         AggregateTypes = _registeredTypes.AsReadOnly();
@@ -43,7 +43,7 @@ public class SekibanAggregateTypes
     public IReadOnlyCollection<DefaultAggregateType> AggregateTypes { get; }
     public IReadOnlyCollection<ProjectionAggregateType> ProjectionAggregateTypes { get; }
     public record DefaultAggregateType(Type Aggregate, Type Projection);
-    public record ProjectionAggregateType(Type Aggregate, Type Projection, Type ContentsType) : DefaultAggregateType(
+    public record ProjectionAggregateType(Type Aggregate, Type Projection, Type PayloadType) : DefaultAggregateType(
         Aggregate,
         Projection);
 }

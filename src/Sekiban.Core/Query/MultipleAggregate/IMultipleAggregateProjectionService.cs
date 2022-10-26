@@ -5,23 +5,25 @@ namespace Sekiban.Core.Query.MultipleAggregate;
 public interface IMultipleAggregateProjectionService
 {
 
-    public Task<MultipleAggregateProjectionContentsDto<TContents>> GetProjectionAsync<TProjection, TContents>()
-        where TProjection : MultipleAggregateProjectionBase<TContents>, new() where TContents : IMultipleAggregateProjectionContents, new();
-    public Task<MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<AggregateState<TAggregatePayload>>>>
+    public Task<MultipleAggregateProjectionState<TProjectionPayload>> GetProjectionAsync<TProjection, TProjectionPayload>()
+        where TProjection : MultipleAggregateProjectionBase<TProjectionPayload>, new()
+        where TProjectionPayload : IMultipleAggregateProjectionPayload, new();
+    public Task<MultipleAggregateProjectionState<SingleAggregateListProjectionState<AggregateState<TAggregatePayload>>>>
         GetAggregateListObject<TAggregatePayload>() where TAggregatePayload : IAggregatePayload, new();
-    public Task<List<AggregateState<TAggregatePayload>>> GetAggregateList<TAggregatePayload>(QueryListType queryListType = QueryListType.ActiveOnly) where TAggregatePayload : IAggregatePayload, new();
+    public Task<List<AggregateState<TAggregatePayload>>> GetAggregateList<TAggregatePayload>(QueryListType queryListType = QueryListType.ActiveOnly)
+        where TAggregatePayload : IAggregatePayload, new();
     public
-        Task<MultipleAggregateProjectionContentsDto<
-            SingleAggregateListProjectionDto<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>>>>
-        GetSingleAggregateProjectionListObject<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>()
+        Task<MultipleAggregateProjectionState<
+            SingleAggregateListProjectionState<SingleAggregateProjectionState<TAggregateProjectionPayload>>>>
+        GetSingleAggregateProjectionListObject<TAggregate, TSingleAggregateProjection, TAggregateProjectionPayload>()
         where TAggregate : IAggregatePayload, new()
-        where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
+        where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TAggregateProjectionPayload>,
         new()
-        where TSingleAggregateProjectionContents : ISingleAggregateProjectionPayload;
-    public Task<List<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>>>
-        GetSingleAggregateProjectionList<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>(
+        where TAggregateProjectionPayload : ISingleAggregateProjectionPayload;
+    public Task<List<SingleAggregateProjectionState<TAggregateProjectionPayload>>>
+        GetSingleAggregateProjectionList<TAggregate, TSingleAggregateProjection, TAggregateProjectionPayload>(
             QueryListType queryListType = QueryListType.ActiveOnly) where TAggregate : IAggregatePayload, new()
-        where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
+        where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TAggregateProjectionPayload>,
         new()
-        where TSingleAggregateProjectionContents : ISingleAggregateProjectionPayload;
+        where TAggregateProjectionPayload : ISingleAggregateProjectionPayload;
 }

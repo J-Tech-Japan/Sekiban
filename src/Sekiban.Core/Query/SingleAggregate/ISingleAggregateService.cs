@@ -13,7 +13,8 @@ public interface ISingleAggregateService
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
-    public Task<T?> GetAggregateProjectionFromInitialAsync<T, P>(Guid aggregateId, int? toVersion) where T : ISingleAggregate, ISingleAggregateProjection
+    public Task<T?> GetAggregateProjectionFromInitialAsync<T, P>(Guid aggregateId, int? toVersion)
+        where T : ISingleAggregate, ISingleAggregateProjection
         where P : ISingleAggregateProjector<T>, new();
 
     /// <summary>
@@ -26,7 +27,8 @@ public interface ISingleAggregateService
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Task<Aggregate<TAggregatePayload>?> GetAggregateFromInitialAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null) where TAggregatePayload : IAggregatePayload, new();
+    public Task<Aggregate<TAggregatePayload>?> GetAggregateFromInitialAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)
+        where TAggregatePayload : IAggregatePayload, new();
 
     /// <summary>
     ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
@@ -46,14 +48,14 @@ public interface ISingleAggregateService
     /// <param name="toVersion"></param>
     /// <typeparam name="TAggregate"></typeparam>
     /// <typeparam name="TSingleAggregateProjection"></typeparam>
-    /// <typeparam name="TSingleAggregateProjectionContents"></typeparam>
+    /// <typeparam name="TAggregateProjectionPayload"></typeparam>
     /// <returns></returns>
-    public Task<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>?>
-        GetProjectionAsync<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>(Guid aggregateId, int? toVersion = null)
+    public Task<SingleAggregateProjectionState<TAggregateProjectionPayload>?>
+        GetProjectionAsync<TAggregate, TSingleAggregateProjection, TAggregateProjectionPayload>(Guid aggregateId, int? toVersion = null)
         where TAggregate : IAggregatePayload, new()
-        where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
+        where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TAggregateProjectionPayload>,
         new()
-        where TSingleAggregateProjectionContents : ISingleAggregateProjectionPayload;
+        where TAggregateProjectionPayload : ISingleAggregateProjectionPayload;
 
 
     /// <summary>
@@ -76,5 +78,6 @@ public interface ISingleAggregateService
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Task<AggregateState<TAggregatePayload>?> GetAggregateStateAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null) where TAggregatePayload : IAggregatePayload, new();
+    public Task<AggregateState<TAggregatePayload>?> GetAggregateStateAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)
+        where TAggregatePayload : IAggregatePayload, new();
 }

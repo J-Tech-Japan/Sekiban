@@ -4,23 +4,23 @@ using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleAggregate;
 namespace Sekiban.Core.Query;
 
-public class SimpleSingleAggregateProjectionListQueryFilter<TAggregate, TProjection, TSingleAggregateContents> :
-    ISingleAggregateProjectionListQueryFilterDefinition<TAggregate, TProjection, TSingleAggregateContents,
-        SimpleSingleAggregateProjectionListQueryFilter<TAggregate, TProjection, TSingleAggregateContents>.QueryParameter,
-        SingleAggregateProjectionDto<TSingleAggregateContents>>
-    where TProjection : SingleAggregateProjectionBase<TAggregate, TProjection, TSingleAggregateContents>
-    where TSingleAggregateContents : ISingleAggregateProjectionPayload
+public class SimpleSingleAggregateProjectionListQueryFilter<TAggregate, TProjection, TAggregateProjectionPayload> :
+    ISingleAggregateProjectionListQueryFilterDefinition<TAggregate, TProjection, TAggregateProjectionPayload,
+        SimpleSingleAggregateProjectionListQueryFilter<TAggregate, TProjection, TAggregateProjectionPayload>.QueryParameter,
+        SingleAggregateProjectionState<TAggregateProjectionPayload>>
+    where TProjection : SingleAggregateProjectionBase<TAggregate, TProjection, TAggregateProjectionPayload>
+    where TAggregateProjectionPayload : ISingleAggregateProjectionPayload
     where TAggregate : IAggregatePayload, new()
 {
-    public IEnumerable<SingleAggregateProjectionDto<TSingleAggregateContents>> HandleFilter(
+    public IEnumerable<SingleAggregateProjectionState<TAggregateProjectionPayload>> HandleFilter(
         QueryParameter queryParam,
-        IEnumerable<SingleAggregateProjectionDto<TSingleAggregateContents>> list)
+        IEnumerable<SingleAggregateProjectionState<TAggregateProjectionPayload>> list)
     {
         return list;
     }
-    public IEnumerable<SingleAggregateProjectionDto<TSingleAggregateContents>> HandleSort(
+    public IEnumerable<SingleAggregateProjectionState<TAggregateProjectionPayload>> HandleSort(
         QueryParameter queryParam,
-        IEnumerable<SingleAggregateProjectionDto<TSingleAggregateContents>> projections)
+        IEnumerable<SingleAggregateProjectionState<TAggregateProjectionPayload>> projections)
     {
         return projections.OrderByDescending(m => m.LastSortableUniqueId);
     }

@@ -1,7 +1,7 @@
 using Sekiban.Core.Aggregate;
 namespace Sekiban.Core.Query.SingleAggregate;
 
-public record SingleAggregateProjectionDto<TPayload>(
+public record SingleAggregateProjectionState<TPayload>(
     TPayload Payload,
     Guid AggregateId,
     Guid LastEventId,

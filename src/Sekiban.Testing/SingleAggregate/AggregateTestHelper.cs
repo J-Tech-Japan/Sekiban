@@ -80,7 +80,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         return this;
     }
     public AggregateState<TEnvironmentAggregatePayload>
-        GetEnvironmentAggregateDto<TEnvironmentAggregatePayload>(Guid aggregateId)
+        GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
         where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
         var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleAggregateService)) as ISingleAggregateService;
@@ -236,9 +236,9 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         checkPayloadAction(_latestEvents.First().GetPayload() as T ?? throw new SekibanInvalidEventException());
         return this;
     }
-    public IAggregateTestHelper<TAggregatePayload> ThenGetState(Action<AggregateState<TAggregatePayload>> checkDtoAction)
+    public IAggregateTestHelper<TAggregatePayload> ThenGetState(Action<AggregateState<TAggregatePayload>> checkStateAction)
     {
-        checkDtoAction(_aggregate.ToState());
+        checkStateAction(_aggregate.ToState());
         return this;
     }
     public IAggregateTestHelper<TAggregatePayload> ThenStateIs(AggregateState<TAggregatePayload> expectedState)
@@ -250,9 +250,9 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public IAggregateTestHelper<TAggregatePayload> ThenGetContents(Action<TAggregatePayload> contentsAction)
+    public IAggregateTestHelper<TAggregatePayload> ThenGetPayload(Action<TAggregatePayload> payloadAction)
     {
-        contentsAction(_aggregate.ToState().Payload);
+        payloadAction(_aggregate.ToState().Payload);
         return this;
     }
 
@@ -263,10 +263,10 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         checkEventAction((T)_latestEvents.First());
         return this;
     }
-    public IAggregateTestHelper<TAggregatePayload> ThenContentsIs(TAggregatePayload contents)
+    public IAggregateTestHelper<TAggregatePayload> ThenPayloadIs(TAggregatePayload payload)
     {
         var actual = _aggregate.ToState().Payload;
-        var expected = contents;
+        var expected = payload;
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
         Assert.Equal(expectedJson, actualJson);
@@ -333,56 +333,56 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         Assert.NotEmpty(_latestValidationErrors);
         return this;
     }
-    public IAggregateTestHelper<TAggregatePayload> WriteContentsToFile(string filename)
+    public IAggregateTestHelper<TAggregatePayload> WritePayloadToFile(string filename)
     {
         var actual = _aggregate.ToState().Payload;
         var actualJson = SekibanJsonHelper.Serialize(actual);
         File.WriteAllText(filename, actualJson);
         return this;
     }
-    public IAggregateTestHelper<TAggregatePayload> ThenStateIsFromJson(string dtoJson)
+    public IAggregateTestHelper<TAggregatePayload> ThenStateIsFromJson(string stateJson)
     {
-        var dto = JsonSerializer.Deserialize<AggregateState<TAggregatePayload>>(dtoJson);
-        if (dto is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        var state = JsonSerializer.Deserialize<AggregateState<TAggregatePayload>>(stateJson);
+        if (state is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         var actual = _aggregate.ToState();
-        var expected = dto.GetComparableObject(actual);
+        var expected = state.GetComparableObject(actual);
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public IAggregateTestHelper<TAggregatePayload> ThenStateIsFromFile(string dtoFileName)
+    public IAggregateTestHelper<TAggregatePayload> ThenStateIsFromFile(string stateFileName)
     {
-        using var openStream = File.OpenRead(dtoFileName);
-        var dto = JsonSerializer.Deserialize<AggregateState<TAggregatePayload>>(openStream);
-        if (dto is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        using var openStream = File.OpenRead(stateFileName);
+        var state = JsonSerializer.Deserialize<AggregateState<TAggregatePayload>>(openStream);
+        if (state is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         var actual = _aggregate.ToState();
-        var expected = dto.GetComparableObject(actual);
+        var expected = state.GetComparableObject(actual);
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
 
-    public IAggregateTestHelper<TAggregatePayload> ThenContentsIsFromJson(string contentsJson)
+    public IAggregateTestHelper<TAggregatePayload> ThenPayloadIsFromJson(string payloadJson)
     {
-        var contents = JsonSerializer.Deserialize<TAggregatePayload>(contentsJson);
-        if (contents is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        var payload = JsonSerializer.Deserialize<TAggregatePayload>(payloadJson);
+        if (payload is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         var actual = _aggregate.ToState().Payload;
-        var expected = contents;
+        var expected = payload;
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
 
-    public IAggregateTestHelper<TAggregatePayload> ThenContentsIsFromFile(string contentsFileName)
+    public IAggregateTestHelper<TAggregatePayload> ThenPayloadIsFromFile(string payloadFileName)
     {
-        using var openStream = File.OpenRead(contentsFileName);
-        var contents = JsonSerializer.Deserialize<TAggregatePayload>(openStream);
-        if (contents is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        using var openStream = File.OpenRead(payloadFileName);
+        var payload = JsonSerializer.Deserialize<TAggregatePayload>(openStream);
+        if (payload is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         var actual = _aggregate.ToState().Payload;
-        var expected = contents;
+        var expected = payload;
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
         Assert.Equal(expectedJson, actualJson);
@@ -441,17 +441,17 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     private void CheckStateJSONSupports()
     {
-        var dto = _aggregate.ToState();
-        var fromDto = _projector.CreateInitialAggregate(dto.AggregateId);
-        fromDto.ApplySnapshot(dto);
-        var dtoFromSnapshot = fromDto.ToState().GetComparableObject(dto);
-        var actualJson = SekibanJsonHelper.Serialize(dto);
-        var expectedJson = SekibanJsonHelper.Serialize(dtoFromSnapshot);
+        var state = _aggregate.ToState();
+        var fromState = _projector.CreateInitialAggregate(state.AggregateId);
+        fromState.ApplySnapshot(state);
+        var stateFromSnapshot = fromState.ToState().GetComparableObject(state);
+        var actualJson = SekibanJsonHelper.Serialize(state);
+        var expectedJson = SekibanJsonHelper.Serialize(stateFromSnapshot);
         Assert.Equal(expectedJson, actualJson);
-        var json = SekibanJsonHelper.Serialize(dto);
-        var dtoFromJson = SekibanJsonHelper.Deserialize<AggregateState<TAggregatePayload>>(json);
-        var dtoFromJsonJson = SekibanJsonHelper.Serialize(dtoFromJson);
-        Assert.Equal(json, dtoFromJsonJson);
+        var json = SekibanJsonHelper.Serialize(state);
+        var stateFromJson = SekibanJsonHelper.Deserialize<AggregateState<TAggregatePayload>>(json);
+        var stateFromJsonJson = SekibanJsonHelper.Serialize(stateFromJson);
+        Assert.Equal(json, stateFromJsonJson);
         CheckEventJsonCompatibility();
     }
 

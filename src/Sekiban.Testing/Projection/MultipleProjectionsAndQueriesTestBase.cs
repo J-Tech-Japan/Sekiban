@@ -59,7 +59,7 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         return this;
     }
 
-    public AggregateState<TEnvironmentAggregatePayload> GetAggregateDto<TEnvironmentAggregate, TEnvironmentAggregatePayload>(Guid aggregateId)
+    public AggregateState<TEnvironmentAggregatePayload> GetAggregateState<TEnvironmentAggregate, TEnvironmentAggregatePayload>(Guid aggregateId)
         where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
         var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleAggregateService)) as ISingleAggregateService;

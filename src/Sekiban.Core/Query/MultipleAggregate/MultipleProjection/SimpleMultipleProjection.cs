@@ -10,9 +10,9 @@ public class SimpleMultipleProjection : IMultipleProjection
         _documentRepository = documentRepository;
     }
 
-    public async Task<MultipleAggregateProjectionContentsDto<TProjectionContents>> GetMultipleProjectionAsync<TProjection, TProjectionContents>()
-        where TProjection : IMultipleAggregateProjector<TProjectionContents>, new()
-        where TProjectionContents : IMultipleAggregateProjectionContents, new()
+    public async Task<MultipleAggregateProjectionState<TProjectionPayload>> GetMultipleProjectionAsync<TProjection, TProjectionPayload>()
+        where TProjection : IMultipleAggregateProjector<TProjectionPayload>, new()
+        where TProjectionPayload : IMultipleAggregateProjectionPayload, new()
     {
         var projector = new TProjection();
         await _documentRepository.GetAllAggregateEventsAsync(
@@ -26,6 +26,6 @@ public class SimpleMultipleProjection : IMultipleProjection
                     projector.ApplyEvent(ev);
                 }
             });
-        return projector.ToDto();
+        return projector.ToState();
     }
 }

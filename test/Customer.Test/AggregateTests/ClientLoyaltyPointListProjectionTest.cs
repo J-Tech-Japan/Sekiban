@@ -10,7 +10,7 @@ using Xunit;
 namespace Customer.Test.AggregateTests;
 
 public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregateProjectionTestBase<ClientLoyaltyPointListProjection,
-    ClientLoyaltyPointListProjection.ContentsDefinition, CustomerDependency>
+    ClientLoyaltyPointListProjection.PayloadDefinition, CustomerDependency>
 {
 
     public Guid _branchId = Guid.NewGuid();
@@ -22,7 +22,7 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
     public Guid _clientId4 = Guid.NewGuid();
     public Guid _clientId5 = Guid.NewGuid();
     public string _clientNameBase = "Client TEST ";
-    public ProjectionListQueryFilterTestChecker<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.ContentsDefinition,
+    public ProjectionListQueryFilterTestChecker<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.PayloadDefinition,
         ClientLoyaltyPointQueryFilter, ClientLoyaltyPointQueryFilter.QueryFilterParameter,
         ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> ListQueryFilterTestChecker = new();
 
@@ -34,7 +34,7 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
             .GivenEventsFromFile("TestData1.json")
             .WhenProjection()
             .ThenNotThrowsAnException()
-//        await ThenDtoFileAsync("TestData1Result.json");
+//        await ThenStateFileAsync("TestData1Result.json");
             .WriteProjectionToFile("TestData1ResultOut.json");
     }
     [Fact]

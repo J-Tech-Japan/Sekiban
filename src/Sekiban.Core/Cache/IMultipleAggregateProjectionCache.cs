@@ -4,8 +4,10 @@ namespace Sekiban.Core.Cache;
 
 public interface IMultipleAggregateProjectionCache
 {
-    public void Set<TProjection, TContents>(MultipleMemoryProjectionContainer<TProjection, TContents> container)
-        where TProjection : IMultipleAggregateProjector<TContents>, new() where TContents : IMultipleAggregateProjectionContents, new();
-    public MultipleMemoryProjectionContainer<TProjection, TContents> Get<TProjection, TContents>()
-        where TProjection : IMultipleAggregateProjector<TContents>, new() where TContents : IMultipleAggregateProjectionContents, new();
+    public void Set<TProjection, TProjectionPayload>(MultipleMemoryProjectionContainer<TProjection, TProjectionPayload> container)
+        where TProjection : IMultipleAggregateProjector<TProjectionPayload>, new()
+        where TProjectionPayload : IMultipleAggregateProjectionPayload, new();
+    public MultipleMemoryProjectionContainer<TProjection, TProjectionPayload> Get<TProjection, TProjectionPayload>()
+        where TProjection : IMultipleAggregateProjector<TProjectionPayload>, new()
+        where TProjectionPayload : IMultipleAggregateProjectionPayload, new();
 }

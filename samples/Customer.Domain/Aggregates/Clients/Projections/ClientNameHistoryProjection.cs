@@ -6,10 +6,6 @@ using Sekiban.Core.Query.SingleAggregate;
 // ReSharper disable NotAccessedPositionalProperty.Global
 namespace Customer.Domain.Aggregates.Clients.Projections;
 
-/// <summary>
-///     プロジェクションに関しては、高速化のために、データとDTOを共通かしている。
-///     分割することも可能
-/// </summary>
 public class ClientNameHistoryProjection : SingleAggregateProjectionBase<Client, ClientNameHistoryProjection,
     ClientNameHistoryProjection.PayloadDefinition>
 {

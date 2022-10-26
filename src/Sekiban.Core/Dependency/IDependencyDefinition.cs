@@ -77,8 +77,8 @@ public interface IDependencyDefinition
                         }
                         var aggregateType = baseType.GenericTypeArguments[0];
                         var projectionType = baseType.GenericTypeArguments[1];
-                        var contentsType = baseType.GenericTypeArguments[2];
-                        return baseSimpleAggregateListQueryFilterType.MakeGenericType(aggregateType, projectionType, contentsType);
+                        var payloadType = baseType.GenericTypeArguments[2];
+                        return baseSimpleAggregateListQueryFilterType.MakeGenericType(aggregateType, projectionType, payloadType);
                     });
         }
         return Enumerable.Empty<Type>();

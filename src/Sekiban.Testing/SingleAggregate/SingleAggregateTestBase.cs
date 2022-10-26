@@ -44,11 +44,11 @@ public abstract class SingleAggregateTestBase<TAggregatePayload, TDependencyDefi
     {
         return _helper.GivenEnvironmentEventsFile(filename);
     }
-    public AggregateState<TEnvironmentAggregateContents>
-        GetEnvironmentAggregateDto< TEnvironmentAggregateContents>(Guid aggregateId)
-        where TEnvironmentAggregateContents : IAggregatePayload, new()
+    public AggregateState<TEnvironmentAggregatePayload>
+        GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
+        where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
-        return _helper.GetEnvironmentAggregateDto<TEnvironmentAggregateContents>(aggregateId);
+        return _helper.GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(aggregateId);
     }
     public Guid RunEnvironmentCreateCommand<TEnvironmentAggregate>(
         ICreateAggregateCommand<TEnvironmentAggregate> command,
@@ -78,7 +78,8 @@ public abstract class SingleAggregateTestBase<TAggregatePayload, TDependencyDefi
     {
         return _helper.WhenChange(changeCommand);
     }
-    public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(Func<Aggregate<TAggregatePayload>, C> commandFunc) where C : ChangeAggregateCommandBase<TAggregatePayload>
+    public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(Func<Aggregate<TAggregatePayload>, C> commandFunc)
+        where C : ChangeAggregateCommandBase<TAggregatePayload>
     {
         return _helper.WhenChange(commandFunc);
     }
@@ -103,45 +104,45 @@ public abstract class SingleAggregateTestBase<TAggregatePayload, TDependencyDefi
     {
         return _helper.ThenGetSingleEventPayload(checkPayloadAction);
     }
-    public IAggregateTestHelper<TAggregatePayload> ThenGetState(Action<AggregateState<TAggregatePayload>> checkDtoAction)
+    public IAggregateTestHelper<TAggregatePayload> ThenGetState(Action<AggregateState<TAggregatePayload>> checkStateAction)
     {
-        return _helper.ThenGetState(checkDtoAction);
+        return _helper.ThenGetState(checkStateAction);
     }
     public IAggregateTestHelper<TAggregatePayload> ThenStateIs(AggregateState<TAggregatePayload> expectedState)
     {
         return _helper.ThenStateIs(expectedState);
     }
-    public IAggregateTestHelper<TAggregatePayload> ThenGetContents(Action<TAggregatePayload> contentsAction)
+    public IAggregateTestHelper<TAggregatePayload> ThenGetPayload(Action<TAggregatePayload> payloadAction)
     {
-        return _helper.ThenGetContents(contentsAction);
+        return _helper.ThenGetPayload(payloadAction);
     }
-    public IAggregateTestHelper<TAggregatePayload> ThenContentsIs(TAggregatePayload contents)
+    public IAggregateTestHelper<TAggregatePayload> ThenPayloadIs(TAggregatePayload payload)
     {
-        return _helper.ThenContentsIs(contents);
+        return _helper.ThenPayloadIs(payload);
     }
     public IAggregateTestHelper<TAggregatePayload> WriteStateToFile(string filename)
     {
         return _helper.WriteStateToFile(filename);
     }
-    public IAggregateTestHelper<TAggregatePayload> WriteContentsToFile(string filename)
+    public IAggregateTestHelper<TAggregatePayload> WritePayloadToFile(string filename)
     {
         return _helper.WriteStateToFile(filename);
     }
-    public IAggregateTestHelper<TAggregatePayload> ThenStateIsFromJson(string dtoJson)
+    public IAggregateTestHelper<TAggregatePayload> ThenStateIsFromJson(string stateJson)
     {
-        return _helper.ThenStateIsFromJson(dtoJson);
+        return _helper.ThenStateIsFromJson(stateJson);
     }
-    public IAggregateTestHelper<TAggregatePayload> ThenStateIsFromFile(string dtoFileName)
+    public IAggregateTestHelper<TAggregatePayload> ThenStateIsFromFile(string stateFileName)
     {
-        return _helper.ThenStateIsFromFile(dtoFileName);
+        return _helper.ThenStateIsFromFile(stateFileName);
     }
-    public IAggregateTestHelper<TAggregatePayload> ThenContentsIsFromJson(string contentsJson)
+    public IAggregateTestHelper<TAggregatePayload> ThenPayloadIsFromJson(string payloadJson)
     {
-        return _helper.ThenContentsIsFromJson(contentsJson);
+        return _helper.ThenPayloadIsFromJson(payloadJson);
     }
-    public IAggregateTestHelper<TAggregatePayload> ThenContentsIsFromFile(string contentsFileName)
+    public IAggregateTestHelper<TAggregatePayload> ThenPayloadIsFromFile(string payloadFileName)
     {
-        return _helper.ThenContentsIsFromFile(contentsFileName);
+        return _helper.ThenPayloadIsFromFile(payloadFileName);
     }
     public Guid GetAggregateId()
     {

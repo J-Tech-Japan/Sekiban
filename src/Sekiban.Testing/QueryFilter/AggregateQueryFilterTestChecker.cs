@@ -9,34 +9,34 @@ namespace Sekiban.Testing.QueryFilter;
 
 public class
     AggregateQueryFilterTestChecker<TAggregatePayload, TQueryFilter, TQueryParameter, TResponseQueryModel> : IQueryFilterChecker<
-        MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<AggregateState<TAggregatePayload>>>>
+        MultipleAggregateProjectionState<SingleAggregateListProjectionState<AggregateState<TAggregatePayload>>>>
     where TAggregatePayload : IAggregatePayload, new()
     where TQueryFilter : IAggregateQueryFilterDefinition<TAggregatePayload, TQueryParameter, TResponseQueryModel>
     where TQueryParameter : IQueryParameter
 {
     public TResponseQueryModel? Response { get; set; }
-    private MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<AggregateState<TAggregatePayload>>>? _dto { get; set; }
+    private MultipleAggregateProjectionState<SingleAggregateListProjectionState<AggregateState<TAggregatePayload>>>? _state { get; set; }
     public QueryFilterHandler? QueryFilterHandler
     {
         get;
         set;
     }
-    public void RegisterDto(MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<AggregateState<TAggregatePayload>>> dto)
+    public void RegisterState(MultipleAggregateProjectionState<SingleAggregateListProjectionState<AggregateState<TAggregatePayload>>> state)
     {
-        _dto = dto;
+        _state = state;
     }
 
     public AggregateQueryFilterTestChecker<TAggregatePayload, TQueryFilter, TQueryParameter, TResponseQueryModel> WhenParam(
         TQueryParameter param)
     {
-        if (_dto == null)
+        if (_state == null)
         {
             throw new InvalidDataException("Projection is null");
         }
         if (QueryFilterHandler == null) { throw new MissingMemberException(nameof(QueryFilterHandler)); }
         Response = QueryFilterHandler.GetAggregateQueryFilter<TAggregatePayload, TQueryFilter, TQueryParameter, TResponseQueryModel>(
             param,
-            _dto.Contents.List);
+            _state.Payload.List);
         return this;
     }
     public AggregateQueryFilterTestChecker<TAggregatePayload, TQueryFilter, TQueryParameter, TResponseQueryModel> WriteResponseToFile(

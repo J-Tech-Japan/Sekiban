@@ -12,18 +12,18 @@ public class SingleAggregateProjectionCache : ISingleAggregateProjectionCache
         _memoryCache = memoryCache;
     }
 
-    public void SetContainer<TAggregate, TDto>(Guid aggregateId, SingleMemoryCacheProjectionContainer<TAggregate, TDto> container)
-        where TAggregate : ISingleAggregate, ISingleAggregateProjection where TDto : ISingleAggregate
+    public void SetContainer<TAggregate, TState>(Guid aggregateId, SingleMemoryCacheProjectionContainer<TAggregate, TState> container)
+        where TAggregate : ISingleAggregate, ISingleAggregateProjection where TState : ISingleAggregate
     {
         _memoryCache.Set(
             GetCacheKeyForSingleProjectionContainer<TAggregate>(aggregateId),
             container,
             GetMemoryCacheOptionsForSingleProjectionContainer());
     }
-    public SingleMemoryCacheProjectionContainer<TAggregate, TDto>? GetContainer<TAggregate, TDto>(Guid aggregateId)
-        where TAggregate : ISingleAggregate, ISingleAggregateProjection where TDto : ISingleAggregate
+    public SingleMemoryCacheProjectionContainer<TAggregate, TState>? GetContainer<TAggregate, TState>(Guid aggregateId)
+        where TAggregate : ISingleAggregate, ISingleAggregateProjection where TState : ISingleAggregate
     {
-        return _memoryCache.Get<SingleMemoryCacheProjectionContainer<TAggregate, TDto>>(
+        return _memoryCache.Get<SingleMemoryCacheProjectionContainer<TAggregate, TState>>(
             GetCacheKeyForSingleProjectionContainer<TAggregate>(aggregateId));
     }
 

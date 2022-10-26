@@ -21,7 +21,7 @@ public class RecentActivityTest : SingleAggregateTestBase<RecentActivity, Custom
         WhenCreate(new CreateRecentActivity())
             .ThenNotThrowsAnException()
             .ThenGetSingleEvent<AggregateEvent<RecentActivityCreated>>(ev => firstRecord = ev.Payload.Activity)
-            .ThenContentsIs(new RecentActivity(new List<RecentActivityRecord> { firstRecord }.ToImmutableList()));
+            .ThenPayloadIs(new RecentActivity(new List<RecentActivityRecord> { firstRecord }.ToImmutableList()));
     }
     [Fact]
     public void AddRegularEventTest()
@@ -30,7 +30,7 @@ public class RecentActivityTest : SingleAggregateTestBase<RecentActivity, Custom
             .WhenChange(new AddRecentActivity(GetAggregateId(), "Regular Event"))
             .ThenNotThrowsAnException()
             .ThenGetSingleEvent<AggregateEvent<RecentActivityAdded>>(ev => regularRecord = ev.Payload.Record)
-            .ThenContentsIs(new RecentActivity(new List<RecentActivityRecord> { regularRecord, firstRecord }.ToImmutableList()));
+            .ThenPayloadIs(new RecentActivity(new List<RecentActivityRecord> { regularRecord, firstRecord }.ToImmutableList()));
     }
     [Fact]
     public void PublishOnlyCommandTest()
@@ -39,6 +39,6 @@ public class RecentActivityTest : SingleAggregateTestBase<RecentActivity, Custom
             .WhenChange(new OnlyPublishingAddRecentActivity(GetAggregateId(), "Publish Only Event"))
             .ThenNotThrowsAnException()
             .ThenGetSingleEvent<AggregateEvent<RecentActivityAdded>>(ev => publishOnlyRecord = ev.Payload.Record)
-            .ThenContentsIs(new RecentActivity(new List<RecentActivityRecord> { publishOnlyRecord, regularRecord, firstRecord }.ToImmutableList()));
+            .ThenPayloadIs(new RecentActivity(new List<RecentActivityRecord> { publishOnlyRecord, regularRecord, firstRecord }.ToImmutableList()));
     }
 }

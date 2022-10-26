@@ -3,13 +3,13 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 namespace Sekiban.Core.Query.SingleAggregate;
 
-public abstract class SingleAggregateProjectionBase<TAggregate, TProjection, TSingleAggregateContents> : ISingleAggregateProjection,
-    ISingleAggregateProjectionDtoConvertible<SingleAggregateProjectionDto<TSingleAggregateContents>>, ISingleAggregate,
-    ISingleAggregateProjector<TProjection> where TProjection : SingleAggregateProjectionBase<TAggregate, TProjection, TSingleAggregateContents>
-    where TSingleAggregateContents : ISingleAggregateProjectionPayload
+public abstract class SingleAggregateProjectionBase<TAggregate, TProjection, TProjectionPayload> : ISingleAggregateProjection,
+    ISingleAggregateProjectionStateConvertible<SingleAggregateProjectionState<TProjectionPayload>>, ISingleAggregate,
+    ISingleAggregateProjector<TProjection> where TProjection : SingleAggregateProjectionBase<TAggregate, TProjection, TProjectionPayload>
+    where TProjectionPayload : ISingleAggregateProjectionPayload
     where TAggregate : IAggregatePayload, new()
 {
-    public TSingleAggregateContents Payload { get; set; } = default!;
+    public TProjectionPayload Payload { get; set; } = default!;
     public Guid LastEventId { get; set; }
     public string LastSortableUniqueId { get; set; } = string.Empty;
     public int AppliedSnapshotVersion { get; set; }
@@ -36,7 +36,7 @@ public abstract class SingleAggregateProjectionBase<TAggregate, TProjection, TSi
     {
         return GetApplyEventAction(ev, ev.GetPayload()) is not null;
     }
-    public void ApplySnapshot(SingleAggregateProjectionDto<TSingleAggregateContents> snapshot)
+    public void ApplySnapshot(SingleAggregateProjectionState<TProjectionPayload> snapshot)
     {
         Version = snapshot.Version;
         LastEventId = snapshot.LastEventId;
@@ -44,9 +44,9 @@ public abstract class SingleAggregateProjectionBase<TAggregate, TProjection, TSi
         AppliedSnapshotVersion = snapshot.Version;
         Payload = snapshot.Payload;
     }
-    public SingleAggregateProjectionDto<TSingleAggregateContents> ToState()
+    public SingleAggregateProjectionState<TProjectionPayload> ToState()
     {
-        return new SingleAggregateProjectionDto<TSingleAggregateContents>(
+        return new SingleAggregateProjectionState<TProjectionPayload>(
             Payload,
             AggregateId,
             LastEventId,
@@ -74,7 +74,7 @@ public abstract class SingleAggregateProjectionBase<TAggregate, TProjection, TSi
             Payload = result;
         };
     }
-    protected abstract Func<TSingleAggregateContents, TSingleAggregateContents>? GetApplyEventFunc(
+    protected abstract Func<TProjectionPayload, TProjectionPayload>? GetApplyEventFunc(
         IAggregateEvent ev,
         IEventPayload eventPayload);
 }

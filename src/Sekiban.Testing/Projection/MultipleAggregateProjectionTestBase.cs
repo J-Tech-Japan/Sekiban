@@ -4,9 +4,9 @@ using Sekiban.Core.Query.MultipleAggregate;
 namespace Sekiban.Testing.Projection;
 
 public class
-    MultipleAggregateProjectionTestBase<TProjection, TProjectionContents, TDependencyDefinition> : CommonMultipleAggregateProjectionTestBase<
-        TProjection, TProjectionContents, TDependencyDefinition> where TProjection : MultipleAggregateProjectionBase<TProjectionContents>, new()
-    where TProjectionContents : IMultipleAggregateProjectionContents, new()
+    MultipleAggregateProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> : CommonMultipleAggregateProjectionTestBase<
+        TProjection, TProjectionPayload, TDependencyDefinition> where TProjection : MultipleAggregateProjectionBase<TProjectionPayload>, new()
+    where TProjectionPayload : IMultipleAggregateProjectionPayload, new()
     where TDependencyDefinition : IDependencyDefinition, new()
 {
     public MultipleAggregateProjectionTestBase()
@@ -16,7 +16,7 @@ public class
     {
     }
 
-    public sealed override IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> WhenProjection()
+    public sealed override IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> WhenProjection()
     {
         if (_serviceProvider == null)
         {
@@ -27,7 +27,7 @@ public class
         if (multipleProjectionService is null) { throw new Exception("Failed to get multipleProjectionService "); }
         try
         {
-            Dto = multipleProjectionService.GetProjectionAsync<TProjection, TProjectionContents>().Result;
+            State = multipleProjectionService.GetProjectionAsync<TProjection, TProjectionPayload>().Result;
         }
         catch (Exception ex)
         {
@@ -37,7 +37,7 @@ public class
         ;
         foreach (var checker in _queryFilterCheckers)
         {
-            checker.RegisterDto(Dto);
+            checker.RegisterState(State);
         }
         return this;
     }

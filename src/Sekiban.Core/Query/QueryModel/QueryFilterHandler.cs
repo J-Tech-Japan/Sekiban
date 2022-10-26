@@ -16,12 +16,12 @@ public class QueryFilterHandler
     }
 
     public QueryFilterListResult<TQueryFilterResponse>
-        GetProjectionListQueryFilter<TProjection, TProjectionContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
+        GetProjectionListQueryFilter<TProjection, TProjectionPayload, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
             TQueryFilterParameter param,
-            MultipleAggregateProjectionContentsDto<TProjectionContents> projection)
-        where TProjection : MultipleAggregateProjectionBase<TProjectionContents>, new()
-        where TProjectionContents : IMultipleAggregateProjectionContents, new()
-        where TQueryFilter : IProjectionListQueryFilterDefinition<TProjection, TProjectionContents, TQueryFilterParameter, TQueryFilterResponse>
+            MultipleAggregateProjectionState<TProjectionPayload> projection)
+        where TProjection : MultipleAggregateProjectionBase<TProjectionPayload>, new()
+        where TProjectionPayload : IMultipleAggregateProjectionPayload, new()
+        where TQueryFilter : IProjectionListQueryFilterDefinition<TProjection, TProjectionPayload, TQueryFilterParameter, TQueryFilterResponse>
         where TQueryFilterParameter : IQueryParameter
     {
         var queryFilter = _serviceProvider.GetService<TQueryFilter>();
@@ -36,12 +36,12 @@ public class QueryFilterHandler
         return new QueryFilterListResult<TQueryFilterResponse>(queryFilterResponses.ToList().Count, null, null, null, queryFilterResponses);
     }
 
-    public TQueryFilterResponse GetProjectionQueryFilter<TProjection, TProjectionContents, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
+    public TQueryFilterResponse GetProjectionQueryFilter<TProjection, TProjectionPayload, TQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
         TQueryFilterParameter param,
-        MultipleAggregateProjectionContentsDto<TProjectionContents> projection)
-        where TProjection : MultipleAggregateProjectionBase<TProjectionContents>, new()
-        where TProjectionContents : IMultipleAggregateProjectionContents, new()
-        where TQueryFilter : IProjectionQueryFilterDefinition<TProjection, TProjectionContents, TQueryFilterParameter, TQueryFilterResponse>
+        MultipleAggregateProjectionState<TProjectionPayload> projection)
+        where TProjection : MultipleAggregateProjectionBase<TProjectionPayload>, new()
+        where TProjectionPayload : IMultipleAggregateProjectionPayload, new()
+        where TQueryFilter : IProjectionQueryFilterDefinition<TProjection, TProjectionPayload, TQueryFilterParameter, TQueryFilterResponse>
         where TQueryFilterParameter : IQueryParameter
     {
         var queryFilter = _serviceProvider.GetService<TQueryFilter>();
@@ -74,7 +74,7 @@ public class QueryFilterHandler
         TQueryFilterParameter param,
         IEnumerable<AggregateState<TAggregatePayload>> list)
         where TAggregatePayload : IAggregatePayload, new()
-        where TQueryFilter : IAggregateQueryFilterDefinition< TAggregatePayload, TQueryFilterParameter, TQueryFilterResponse>
+        where TQueryFilter : IAggregateQueryFilterDefinition<TAggregatePayload, TQueryFilterParameter, TQueryFilterResponse>
         where TQueryFilterParameter : IQueryParameter
     {
         var queryFilter = _serviceProvider.GetService<TQueryFilter>();
@@ -84,15 +84,15 @@ public class QueryFilterHandler
     }
 
     public QueryFilterListResult<TQueryFilterResponse>
-        GetSingleAggregateProjectionListQueryFilter<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents, TQueryFilter,
+        GetSingleAggregateProjectionListQueryFilter<TAggregate, TSingleAggregateProjection, TAggregateProjectionPayload, TQueryFilter,
             TQueryFilterParameter, TQueryFilterResponse>(
             TQueryFilterParameter param,
-            IEnumerable<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>> projections) where TAggregate : IAggregatePayload, new()
-        where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
+            IEnumerable<SingleAggregateProjectionState<TAggregateProjectionPayload>> projections) where TAggregate : IAggregatePayload, new()
+        where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TAggregateProjectionPayload>,
         new()
-        where TSingleAggregateProjectionContents : ISingleAggregateProjectionPayload
+        where TAggregateProjectionPayload : ISingleAggregateProjectionPayload
         where TQueryFilter : ISingleAggregateProjectionListQueryFilterDefinition<TAggregate, TSingleAggregateProjection,
-            TSingleAggregateProjectionContents, TQueryFilterParameter, TQueryFilterResponse>
+            TAggregateProjectionPayload, TQueryFilterParameter, TQueryFilterResponse>
         where TQueryFilterParameter : IQueryParameter
     {
         var queryFilter = _serviceProvider.GetService<TQueryFilter>();
@@ -132,15 +132,15 @@ public class QueryFilterHandler
     }
 
     public TQueryFilterResponse
-        GetSingleAggregateProjectionQueryFilter<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents, TQueryFilter,
+        GetSingleAggregateProjectionQueryFilter<TAggregate, TSingleAggregateProjection, TAggregateProjectionPayload, TQueryFilter,
             TQueryFilterParameter, TQueryFilterResponse>(
             TQueryFilterParameter param,
-            IEnumerable<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>> projections) where TAggregate : IAggregatePayload, new()
-        where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>,
+            IEnumerable<SingleAggregateProjectionState<TAggregateProjectionPayload>> projections) where TAggregate : IAggregatePayload, new()
+        where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TAggregateProjectionPayload>,
         new()
-        where TSingleAggregateProjectionContents : ISingleAggregateProjectionPayload
+        where TAggregateProjectionPayload : ISingleAggregateProjectionPayload
         where TQueryFilter : ISingleAggregateProjectionQueryFilterDefinition<TAggregate, TSingleAggregateProjection,
-            TSingleAggregateProjectionContents, TQueryFilterParameter, TQueryFilterResponse>
+            TAggregateProjectionPayload, TQueryFilterParameter, TQueryFilterResponse>
         where TQueryFilterParameter : IQueryParameter
     {
         var queryFilter = _serviceProvider.GetService<TQueryFilter>();

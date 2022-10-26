@@ -3,7 +3,7 @@ using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.SingleAggregate;
 namespace Sekiban.Core.Aggregate;
 
-public class Aggregate<TAggregatePayload> : AggregateCommonBase, ISingleAggregateProjectionDtoConvertible<AggregateState<TAggregatePayload>>
+public class Aggregate<TAggregatePayload> : AggregateCommonBase, ISingleAggregateProjectionStateConvertible<AggregateState<TAggregatePayload>>
     where TAggregatePayload : IAggregatePayload, new()
 {
     protected TAggregatePayload Payload { get; private set; } = new();

@@ -7,7 +7,7 @@ namespace Sekiban.Testing.Projection;
 
 public class AggregateListProjectionTestBase<TAggregatePayload, TDependencyDefinition> : CommonMultipleAggregateProjectionTestBase<
     SingleAggregateListProjector<Aggregate<TAggregatePayload>, AggregateState<TAggregatePayload>, DefaultSingleAggregateProjector<TAggregatePayload>>,
-    SingleAggregateListProjectionDto<AggregateState<TAggregatePayload>>, TDependencyDefinition>
+    SingleAggregateListProjectionState<AggregateState<TAggregatePayload>>, TDependencyDefinition>
     where TAggregatePayload : IAggregatePayload, new()
     where TDependencyDefinition : IDependencyDefinition, new()
 {
@@ -21,7 +21,7 @@ public class AggregateListProjectionTestBase<TAggregatePayload, TDependencyDefin
         IMultipleAggregateProjectionTestHelper<
             SingleAggregateListProjector<Aggregate<TAggregatePayload>, AggregateState<TAggregatePayload>,
                 DefaultSingleAggregateProjector<TAggregatePayload>>,
-            SingleAggregateListProjectionDto<AggregateState<TAggregatePayload>>> WhenProjection()
+            SingleAggregateListProjectionState<AggregateState<TAggregatePayload>>> WhenProjection()
     {
         if (_serviceProvider == null)
         {
@@ -32,7 +32,7 @@ public class AggregateListProjectionTestBase<TAggregatePayload, TDependencyDefin
         if (multipleProjectionService is null) { throw new Exception("Failed to get multipleProjectionService "); }
         try
         {
-            Dto = multipleProjectionService.GetAggregateListObject<TAggregatePayload>().Result;
+            State = multipleProjectionService.GetAggregateListObject<TAggregatePayload>().Result;
         }
         catch (Exception ex)
         {
@@ -42,7 +42,7 @@ public class AggregateListProjectionTestBase<TAggregatePayload, TDependencyDefin
         ;
         foreach (var checker in _queryFilterCheckers)
         {
-            checker.RegisterDto(Dto);
+            checker.RegisterState(State);
         }
         return this;
     }
