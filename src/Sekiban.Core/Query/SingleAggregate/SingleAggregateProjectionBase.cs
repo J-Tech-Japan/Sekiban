@@ -3,18 +3,17 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 namespace Sekiban.Core.Query.SingleAggregate;
 
-public abstract class SingleAggregateProjectionBase<TAggregate, TProjection, TSingleAggregateContents> : ISingleAggregateProjection,
-    ISingleAggregateProjectionDtoConvertible<SingleAggregateProjectionDto<TSingleAggregateContents>>, ISingleAggregate,
-    ISingleAggregateProjector<TProjection> where TProjection : SingleAggregateProjectionBase<TAggregate, TProjection, TSingleAggregateContents>
-    where TSingleAggregateContents : ISingleAggregateProjectionContents
-    where TAggregate : AggregateCommonBase, new()
+public abstract class SingleAggregateProjectionBase<TAggregate, TProjection, TProjectionPayload> : ISingleAggregateProjection,
+    ISingleAggregateProjectionStateConvertible<SingleAggregateProjectionState<TProjectionPayload>>, ISingleAggregate,
+    ISingleAggregateProjector<TProjection> where TProjection : SingleAggregateProjectionBase<TAggregate, TProjection, TProjectionPayload>
+    where TProjectionPayload : ISingleAggregateProjectionPayload
+    where TAggregate : IAggregatePayload, new()
 {
-    public TSingleAggregateContents Contents { get; set; } = default!;
+    public TProjectionPayload Payload { get; set; } = default!;
     public Guid LastEventId { get; set; }
     public string LastSortableUniqueId { get; set; } = string.Empty;
     public int AppliedSnapshotVersion { get; set; }
     public int Version { get; set; }
-    public bool IsDeleted { get; set; }
     public Guid AggregateId { get; set; }
     public void ApplyEvent(IAggregateEvent ev)
     {
@@ -37,21 +36,19 @@ public abstract class SingleAggregateProjectionBase<TAggregate, TProjection, TSi
     {
         return GetApplyEventAction(ev, ev.GetPayload()) is not null;
     }
-    public void ApplySnapshot(SingleAggregateProjectionDto<TSingleAggregateContents> snapshot)
+    public void ApplySnapshot(SingleAggregateProjectionState<TProjectionPayload> snapshot)
     {
         Version = snapshot.Version;
         LastEventId = snapshot.LastEventId;
         LastSortableUniqueId = snapshot.LastSortableUniqueId;
         AppliedSnapshotVersion = snapshot.Version;
-        IsDeleted = snapshot.IsDeleted;
-        Contents = snapshot.Contents;
+        Payload = snapshot.Payload;
     }
-    public SingleAggregateProjectionDto<TSingleAggregateContents> ToDto()
+    public SingleAggregateProjectionState<TProjectionPayload> ToState()
     {
-        return new SingleAggregateProjectionDto<TSingleAggregateContents>(
-            Contents,
+        return new SingleAggregateProjectionState<TProjectionPayload>(
+            Payload,
             AggregateId,
-            IsDeleted,
             LastEventId,
             LastSortableUniqueId,
             AppliedSnapshotVersion,
@@ -63,18 +60,21 @@ public abstract class SingleAggregateProjectionBase<TAggregate, TProjection, TSi
     {
         return typeof(TAggregate);
     }
-    protected Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload)
+    public bool GetIsDeleted()
     {
-        var func = GetApplyEventFunc(ev, payload);
+        return Payload is IDeletable { IsDeleted: true };
+    }
+    protected Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload eventPayload)
+    {
+        var func = GetApplyEventFunc(ev, eventPayload);
         return () =>
         {
             if (func == null) { return; }
-            var result = func(new AggregateVariable<TSingleAggregateContents>(Contents, IsDeleted));
-            Contents = result.Contents;
-            IsDeleted = result.IsDeleted;
+            var result = func(Payload);
+            Payload = result;
         };
     }
-    protected abstract Func<AggregateVariable<TSingleAggregateContents>, AggregateVariable<TSingleAggregateContents>>? GetApplyEventFunc(
+    protected abstract Func<TProjectionPayload, TProjectionPayload>? GetApplyEventFunc(
         IAggregateEvent ev,
-        IEventPayload payload);
+        IEventPayload eventPayload);
 }

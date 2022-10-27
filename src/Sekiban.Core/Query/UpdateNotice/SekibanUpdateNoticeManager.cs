@@ -6,11 +6,11 @@ namespace Sekiban.Core.Query.UpdateNotice;
 public class SekibanUpdateNoticeManager : IUpdateNotice
 {
     private readonly ISekibanDateProducer _sekibanDateProducer;
-    private ConcurrentDictionary<string, NoticeRecord> UpdateDictionary { get; } = new();
     public SekibanUpdateNoticeManager(ISekibanDateProducer sekibanDateProducer)
     {
         _sekibanDateProducer = sekibanDateProducer;
     }
+    private ConcurrentDictionary<string, NoticeRecord> UpdateDictionary { get; } = new();
     public void SendUpdate(string aggregateName, Guid aggregateId, string sortableUniqueId, UpdatedLocationType type)
     {
         var sortableUniqueIdValue = string.IsNullOrWhiteSpace(sortableUniqueId)

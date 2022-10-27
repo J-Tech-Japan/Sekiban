@@ -47,10 +47,10 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
 
         if (aggregateContainerGroup != AggregateContainerGroup.InMemoryContainer)
         {
-            var aggregate = await _singleAggregateService.GetAggregateAsync<SnapshotManager, SnapshotManagerContents>(SnapshotManager.SharedId);
+            var aggregate = await _singleAggregateService.GetAggregateAsync<SnapshotManager>(SnapshotManager.SharedId);
             if (aggregate is null)
             {
-                await _aggregateCommandExecutor.ExecCreateCommandAsync<SnapshotManager, SnapshotManagerContents, CreateSnapshotManager>(
+                await _aggregateCommandExecutor.ExecCreateCommandAsync<SnapshotManager, CreateSnapshotManager>(
                     new CreateSnapshotManager());
             }
 
@@ -58,7 +58,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
             {
                 var (snapshotManagerResponse, events)
                     = await _aggregateCommandExecutor
-                        .ExecChangeCommandAsync<SnapshotManager, SnapshotManagerContents, ReportAggregateVersionToSnapshotManger>(
+                        .ExecChangeCommandAsync<SnapshotManager, ReportAggregateVersionToSnapshotManger>(
                             new ReportAggregateVersionToSnapshotManger(
                                 SnapshotManager.SharedId,
                                 aggregateType.Aggregate,
@@ -78,12 +78,12 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                             continue;
                         }
                         dynamic? awaitable = _singleAggregateService.GetType()
-                            ?.GetMethod(nameof(_singleAggregateService.GetAggregateDtoAsync))
-                            ?.MakeGenericMethod(aggregateType.Aggregate, aggregateType.Dto)
+                            ?.GetMethod(nameof(_singleAggregateService.GetAggregateStateAsync))
+                            ?.MakeGenericMethod(aggregateType.Aggregate)
                             .Invoke(_singleAggregateService, new object[] { notification.AggregateId, taken.Payload.NextSnapshotVersion });
                         if (awaitable is null) { continue; }
                         var aggregateToSnapshot = await awaitable;
-                        // var aggregateToSnapshot = await _singleAggregateService.GetAggregateDtoAsync<T, Q>(
+                        // var aggregateToSnapshot = await _singleAggregateService.GetAggregateStateAsync<T, Q>(
                         // command.AggregateId,
                         // taken.NextSnapshotVersion);
                         if (aggregateToSnapshot is null)
@@ -107,7 +107,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
             }
 
             foreach (var projection in _sekibanAggregateTypes.ProjectionAggregateTypes.Where(
-                m => m.OriginalType.FullName == aggregateType.Aggregate.FullName))
+                m => m.Aggregate.FullName == aggregateType.Aggregate.FullName))
             {
                 if (!_aggregateSettings.ShouldTakeSnapshotForType(projection.Aggregate))
                 {
@@ -115,7 +115,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                 }
                 var (snapshotManagerResponseP, eventsP)
                     = await _aggregateCommandExecutor
-                        .ExecChangeCommandAsync<SnapshotManager, SnapshotManagerContents, ReportAggregateVersionToSnapshotManger>(
+                        .ExecChangeCommandAsync<SnapshotManager, ReportAggregateVersionToSnapshotManger>(
                             new ReportAggregateVersionToSnapshotManger(
                                 SnapshotManager.SharedId,
                                 projection.Aggregate,
@@ -139,7 +139,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                     }
                     dynamic? awaitable = _singleAggregateService.GetType()
                         ?.GetMethod(nameof(_singleAggregateService.GetProjectionAsync))
-                        ?.MakeGenericMethod(projection.OriginalType, projection.Projection, projection.Dto)
+                        ?.MakeGenericMethod(projection.Aggregate, projection.Projection, projection.PayloadType)
                         .Invoke(_singleAggregateService, new object[] { notification.AggregateId, taken.Payload.NextSnapshotVersion });
                     if (awaitable is null) { continue; }
                     var aggregateToSnapshot = await awaitable;

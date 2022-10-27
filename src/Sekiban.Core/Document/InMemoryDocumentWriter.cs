@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Event;
@@ -11,8 +10,8 @@ public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersist
 {
     private readonly AggregateEventPublisher _eventPublisher;
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
-    private readonly ISnapshotDocumentCache _snapshotDocumentCache;
     private readonly IServiceProvider _serviceProvider;
+    private readonly ISnapshotDocumentCache _snapshotDocumentCache;
     public InMemoryDocumentWriter(
         InMemoryDocumentStore inMemoryDocumentStore,
         AggregateEventPublisher eventPublisher,

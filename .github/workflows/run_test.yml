@@ -33,6 +33,8 @@ jobs:
         dotnet user-secrets set "Sekiban:Default:CosmosDbAuthorizationKey" ${{secrets.TEST_COSMOS_SECRET}}
         dotnet user-secrets set "Sekiban:Secondary:CosmosDbEndPointUrl" ${{secrets.TEST_COSMOS_ENDPOINT}}
         dotnet user-secrets set "Sekiban:Secondary:CosmosDbAuthorizationKey" ${{secrets.TEST_COSMOS_SECRET}}
+        dotnet user-secrets set "Sekiban:Default:CosmosDbDatabase" "GithubActions"
+        dotnet user-secrets set "Sekiban:Secondary:CosmosDbDatabase" "GithubActions"
     - name: Restore dependencies
       run: |
         dotnet restore Sekiban.sln

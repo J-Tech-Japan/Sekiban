@@ -1,4 +1,7 @@
-﻿using Sekiban.Core.Command;
+﻿using Customer.Domain.Aggregates.Clients.Events;
+using Sekiban.Core.Aggregate;
+using Sekiban.Core.Command;
+using Sekiban.Core.Event;
 namespace Customer.Domain.Aggregates.Clients.Commands;
 
 public record ChangeClientName(Guid ClientId, string ClientName) : ChangeAggregateCommandBase<Client>
@@ -11,13 +14,13 @@ public record ChangeClientName(Guid ClientId, string ClientName) : ChangeAggrega
 }
 public class ChangeClientNameHandler : ChangeAggregateCommandHandlerBase<Client, ChangeClientName>
 {
-    protected override async Task ExecCommandAsync(Client aggregate, ChangeClientName command)
-    {
-        aggregate.ChangeClientName(command.ClientName);
-        await Task.CompletedTask;
-    }
     public override ChangeClientName CleanupCommandIfNeeded(ChangeClientName command)
     {
         return command with { ClientName = "stripped for security" };
+    }
+    protected override async IAsyncEnumerable<IChangedEvent<Client>> ExecCommandAsync(AggregateState<Client> aggregate, ChangeClientName command)
+    {
+        await Task.CompletedTask;
+        yield return new ClientNameChanged(command.ClientName);
     }
 }

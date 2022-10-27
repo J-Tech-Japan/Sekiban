@@ -6,14 +6,14 @@ using Sekiban.Core.Query.SingleAggregate;
 namespace Sekiban.Testing.Projection;
 
 public class
-    SingleAggregateProjectionListProjectionTestBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents,
+    SingleAggregateProjectionListProjectionTestBase<TAggregate, TSingleAggregateProjection, TAggregateProjectionPayload,
         TDependencyDefinition> : CommonMultipleAggregateProjectionTestBase<
-        SingleAggregateListProjector<TSingleAggregateProjection, SingleAggregateProjectionDto<TSingleAggregateProjectionContents>,
-            TSingleAggregateProjection>, SingleAggregateListProjectionDto<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>>,
-        TDependencyDefinition> where TAggregate : AggregateCommonBase, new()
-    where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>, new
+        SingleAggregateListProjector<TSingleAggregateProjection, SingleAggregateProjectionState<TAggregateProjectionPayload>,
+            TSingleAggregateProjection>, SingleAggregateListProjectionState<SingleAggregateProjectionState<TAggregateProjectionPayload>>,
+        TDependencyDefinition> where TAggregate : IAggregatePayload, new()
+    where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TAggregateProjectionPayload>, new
     ()
-    where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
+    where TAggregateProjectionPayload : ISingleAggregateProjectionPayload
     where TDependencyDefinition : IDependencyDefinition, new()
 {
     public SingleAggregateProjectionListProjectionTestBase()
@@ -26,8 +26,8 @@ public class
 
 
     public override IMultipleAggregateProjectionTestHelper<
-            SingleAggregateListProjector<TSingleAggregateProjection, SingleAggregateProjectionDto<TSingleAggregateProjectionContents>,
-                TSingleAggregateProjection>, SingleAggregateListProjectionDto<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>>>
+            SingleAggregateListProjector<TSingleAggregateProjection, SingleAggregateProjectionState<TAggregateProjectionPayload>,
+                TSingleAggregateProjection>, SingleAggregateListProjectionState<SingleAggregateProjectionState<TAggregateProjectionPayload>>>
         WhenProjection()
     {
         if (_serviceProvider == null)
@@ -39,8 +39,8 @@ public class
         if (multipleProjectionService is null) { throw new Exception("Failed to get multipleProjectionService "); }
         try
         {
-            Dto = multipleProjectionService
-                .GetSingleAggregateProjectionListObject<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>()
+            State = multipleProjectionService
+                .GetSingleAggregateProjectionListObject<TAggregate, TSingleAggregateProjection, TAggregateProjectionPayload>()
                 .Result;
         }
         catch (Exception ex)
@@ -51,7 +51,7 @@ public class
         ;
         foreach (var checker in _queryFilterCheckers)
         {
-            checker.RegisterDto(Dto);
+            checker.RegisterState(State);
         }
         return this;
     }

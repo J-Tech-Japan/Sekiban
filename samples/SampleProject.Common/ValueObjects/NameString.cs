@@ -20,6 +20,6 @@ public record NameString : IValueObject<string>
     }
     public static implicit operator NameString(string v)
     {
-        return new(v);
+        return new NameString(v);
     }
 }

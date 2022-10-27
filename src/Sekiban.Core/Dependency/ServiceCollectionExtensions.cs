@@ -19,13 +19,11 @@ public static class ServiceCollectionExtensions
 {
     public enum HttpContextType
     {
-        Local = 1,
-        Azure = 2
+        Local = 1, Azure = 2
     }
     public enum MultipleProjectionType
     {
-        Simple = 1,
-        MemoryCache = 2
+        Simple = 1, MemoryCache = 2
     }
     public static IServiceCollection AddSekibanCore(
         this IServiceCollection services,

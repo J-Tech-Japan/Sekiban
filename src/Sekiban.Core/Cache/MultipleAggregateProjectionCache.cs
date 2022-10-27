@@ -9,22 +9,26 @@ public class MultipleAggregateProjectionCache : IMultipleAggregateProjectionCach
 {
     private readonly IMemoryCache _memoryCache;
     private readonly IServiceProvider _serviceProvider;
-    
+
     public MultipleAggregateProjectionCache(IMemoryCache memoryCache, IServiceProvider serviceProvider)
     {
         _memoryCache = memoryCache;
         _serviceProvider = serviceProvider;
     }
-    public void Set<TProjection, TContents>(MultipleMemoryProjectionContainer<TProjection, TContents> container) where TProjection : IMultipleAggregateProjector<TContents>, new() where TContents : IMultipleAggregateProjectionContents, new()
+    public void Set<TProjection, TProjectionPayload>(MultipleMemoryProjectionContainer<TProjection, TProjectionPayload> container)
+        where TProjection : IMultipleAggregateProjector<TProjectionPayload>, new()
+        where TProjectionPayload : IMultipleAggregateProjectionPayload, new()
     {
-        _memoryCache.Set(GetInMemoryKey<TProjection, TContents>(), container, GetMemoryCacheOptions());
+        _memoryCache.Set(GetInMemoryKey<TProjection, TProjectionPayload>(), container, GetMemoryCacheOptions());
     }
-    public MultipleMemoryProjectionContainer<TProjection, TContents> Get<TProjection, TContents>() where TProjection : IMultipleAggregateProjector<TContents>, new() where TContents : IMultipleAggregateProjectionContents, new()
+    public MultipleMemoryProjectionContainer<TProjection, TProjectionPayload> Get<TProjection, TProjectionPayload>()
+        where TProjection : IMultipleAggregateProjector<TProjectionPayload>, new()
+        where TProjectionPayload : IMultipleAggregateProjectionPayload, new()
     {
-        return _memoryCache.Get<MultipleMemoryProjectionContainer<TProjection, TContents>>(
-            GetInMemoryKey<TProjection, TContents>());
+        return _memoryCache.Get<MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>>(
+            GetInMemoryKey<TProjection, TProjectionPayload>());
     }
-    
+
     private static MemoryCacheEntryOptions GetMemoryCacheOptions()
     {
         return new MemoryCacheEntryOptions
@@ -33,7 +37,7 @@ public class MultipleAggregateProjectionCache : IMultipleAggregateProjectionCach
             // 5分読まれなかったら削除するが、2時間経ったらどちらにしても削除する
         };
     }
-    private string GetInMemoryKey<P, Q>() where P : IMultipleAggregateProjector<Q>, new() where Q : IMultipleAggregateProjectionContents, new()
+    private string GetInMemoryKey<P, Q>() where P : IMultipleAggregateProjector<Q>, new() where Q : IMultipleAggregateProjectionPayload, new()
     {
         var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
         return "MultipleProjection-" + sekibanContext?.SettingGroupIdentifier + "-" + typeof(P).FullName;

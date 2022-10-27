@@ -1,10 +1,10 @@
 using Sekiban.Core.Event;
 namespace Sekiban.Core.Query.MultipleAggregate;
 
-public abstract class MultipleAggregateProjectionBase<TContents> : IMultipleAggregateProjector<TContents>
-    where TContents : IMultipleAggregateProjectionContents, new()
+public abstract class MultipleAggregateProjectionBase<TProjectionPayload> : IMultipleAggregateProjector<TProjectionPayload>
+    where TProjectionPayload : IMultipleAggregateProjectionPayload, new()
 {
-    private TContents Contents { get; set; } = new();
+    private TProjectionPayload Payload { get; set; } = new();
     public Guid LastEventId { get; set; }
     public string LastSortableUniqueId { get; set; } = string.Empty;
     public int AppliedSnapshotVersion { get; set; }
@@ -18,17 +18,17 @@ public abstract class MultipleAggregateProjectionBase<TContents> : IMultipleAggr
         LastEventId = ev.Id;
         LastSortableUniqueId = ev.SortableUniqueId;
     }
-    public MultipleAggregateProjectionContentsDto<TContents> ToDto()
+    public MultipleAggregateProjectionState<TProjectionPayload> ToState()
     {
-        return new MultipleAggregateProjectionContentsDto<TContents>(Contents, LastEventId, LastSortableUniqueId, AppliedSnapshotVersion, Version);
+        return new MultipleAggregateProjectionState<TProjectionPayload>(Payload, LastEventId, LastSortableUniqueId, AppliedSnapshotVersion, Version);
     }
-    public void ApplySnapshot(MultipleAggregateProjectionContentsDto<TContents> snapshot)
+    public void ApplySnapshot(MultipleAggregateProjectionState<TProjectionPayload> snapshot)
     {
         Version = snapshot.Version;
         LastEventId = snapshot.LastEventId;
         LastSortableUniqueId = snapshot.LastSortableUniqueId;
         AppliedSnapshotVersion = snapshot.Version;
-        Contents = snapshot.Contents;
+        Payload = snapshot.Payload;
     }
     public virtual IList<string> TargetAggregateNames()
     {
@@ -40,9 +40,9 @@ public abstract class MultipleAggregateProjectionBase<TContents> : IMultipleAggr
         return () =>
         {
             if (func == null) { return; }
-            var result = func(Contents);
-            Contents = result;
+            var result = func(Payload);
+            Payload = result;
         };
     }
-    protected abstract Func<TContents, TContents>? GetApplyEventFunc(IAggregateEvent ev, IEventPayload payload);
+    protected abstract Func<TProjectionPayload, TProjectionPayload>? GetApplyEventFunc(IAggregateEvent ev, IEventPayload eventPayload);
 }

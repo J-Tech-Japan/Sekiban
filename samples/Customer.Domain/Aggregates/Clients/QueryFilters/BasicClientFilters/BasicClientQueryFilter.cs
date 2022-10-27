@@ -5,8 +5,7 @@ namespace Customer.Domain.Aggregates.Clients.QueryFilters.BasicClientFilters;
 
 public enum BasicClientQueryFilterSortKey
 {
-    Name,
-    Email
+    Name, Email
 }
 // ReSharper disable once ClassNeverInstantiated.Global
 public record BasicClientQueryFilterParameter(
@@ -18,13 +17,13 @@ public record BasicClientQueryFilterParameter(
     bool? SortKey1Asc,
     bool? SortKey2Asc) : IQueryFilterParameter;
 public record BasicClientQueryModel(Guid BranchId, string ClientName, string ClientEmail);
-public class BasicClientQueryFilter : IAggregateListQueryFilterDefinition<Client, ClientContents, BasicClientQueryFilterParameter,
+public class BasicClientQueryFilter : IAggregateListQueryFilterDefinition<Client, BasicClientQueryFilterParameter,
     BasicClientQueryModel>
 {
-    public IEnumerable<BasicClientQueryModel> HandleFilter(BasicClientQueryFilterParameter queryParam, IEnumerable<AggregateDto<ClientContents>> list)
+    public IEnumerable<BasicClientQueryModel> HandleFilter(BasicClientQueryFilterParameter queryParam, IEnumerable<AggregateState<Client>> list)
     {
-        return list.Where(m => queryParam.BranchId is null || m.Contents.BranchId == queryParam.BranchId)
-            .Select(m => new BasicClientQueryModel(m.Contents.BranchId, m.Contents.ClientName, m.Contents.ClientEmail));
+        return list.Where(m => queryParam.BranchId is null || m.Payload.BranchId == queryParam.BranchId)
+            .Select(m => new BasicClientQueryModel(m.Payload.BranchId, m.Payload.ClientName, m.Payload.ClientEmail));
     }
     public IEnumerable<BasicClientQueryModel> HandleSort(BasicClientQueryFilterParameter queryParam, IEnumerable<BasicClientQueryModel> projections)
     {
@@ -55,7 +54,8 @@ public class BasicClientQueryFilter : IAggregateListQueryFilterDefinition<Client
                             BasicClientQueryFilterSortKey.Email => m.ClientEmail,
                             _ => throw new ArgumentOutOfRangeException()
                         });
-            } else
+            }
+            else
             {
                 result = sortKey.Value
                     ? (result as IOrderedEnumerable<BasicClientQueryModel> ?? throw new InvalidCastException()).ThenBy(

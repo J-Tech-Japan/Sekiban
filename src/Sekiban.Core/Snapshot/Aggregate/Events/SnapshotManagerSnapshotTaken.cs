@@ -5,4 +5,15 @@ public record SnapshotManagerSnapshotTaken(
     string AggregateTypeName,
     Guid TargetAggregateId,
     int NextSnapshotVersion,
-    int? SnapshotVersion) : IChangedEventPayload;
+    int? SnapshotVersion) : IChangedEvent<SnapshotManager>
+{
+
+    public SnapshotManager OnEvent(SnapshotManager payload, IAggregateEvent aggregateEvent)
+    {
+        return payload with
+        {
+            Requests = payload.Requests.Remove(SnapshotManager.SnapshotKey(AggregateTypeName, TargetAggregateId, NextSnapshotVersion)),
+            RequestTakens = payload.RequestTakens.Add(SnapshotManager.SnapshotKey(AggregateTypeName, TargetAggregateId, NextSnapshotVersion))
+        };
+    }
+}

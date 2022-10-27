@@ -5,9 +5,9 @@ using Sekiban.Testing.Projection;
 namespace Customer.Test;
 
 public class
-    CustomerMultipleAggregateProjectionTestBase<TProjection, TProjectionContents, TDependencyDefinition> : MultipleAggregateProjectionTestBase<
-        TProjection, TProjectionContents, CustomerDependency> where TProjection : MultipleAggregateProjectionBase<TProjectionContents>, new()
-    where TProjectionContents : IMultipleAggregateProjectionContents, new()
+    CustomerMultipleAggregateProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> : MultipleAggregateProjectionTestBase<
+        TProjection, TProjectionPayload, CustomerDependency> where TProjection : MultipleAggregateProjectionBase<TProjectionPayload>, new()
+    where TProjectionPayload : IMultipleAggregateProjectionPayload, new()
     where TDependencyDefinition : IDependencyDefinition, new()
 {
     protected CustomerMultipleAggregateProjectionTestBase()

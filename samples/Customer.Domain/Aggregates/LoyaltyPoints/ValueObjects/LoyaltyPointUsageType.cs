@@ -29,6 +29,6 @@ public record LoyaltyPointUsageType : IValueObject<LoyaltyPointUsageTypeKeys>
     }
     public static implicit operator LoyaltyPointUsageType(LoyaltyPointUsageTypeKeys v)
     {
-        return new(v);
+        return new LoyaltyPointUsageType(v);
     }
 }

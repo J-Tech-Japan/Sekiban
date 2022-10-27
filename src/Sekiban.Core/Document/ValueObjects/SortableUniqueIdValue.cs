@@ -17,7 +17,7 @@ public record SortableUniqueIdValue(string Value)
     }
     public static implicit operator SortableUniqueIdValue(string v)
     {
-        return new(v);
+        return new SortableUniqueIdValue(v);
     }
     public static string Generate(DateTime timestamp, Guid id)
     {

@@ -8,46 +8,47 @@ using System.Text.Json;
 using Xunit;
 namespace Sekiban.Testing.QueryFilter;
 
-public class SingleAggregateListProjectionQueryFilterTestChecker<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents,
-    TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> : IQueryFilterChecker<MultipleAggregateProjectionContentsDto<
-    SingleAggregateListProjectionDto<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>>>> where TAggregate : AggregateCommonBase, new()
-    where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents>, new
+public class SingleAggregateListProjectionQueryFilterTestChecker<TAggregate, TSingleAggregateProjection, TAggregateProjectionPayload, TQueryFilter,
+    TQueryParameter, TResponseQueryModel> : IQueryFilterChecker<MultipleAggregateProjectionState<
+    SingleAggregateListProjectionState<SingleAggregateProjectionState<TAggregateProjectionPayload>>>>
+    where TAggregate : IAggregatePayload, new()
+    where TSingleAggregateProjection : SingleAggregateProjectionBase<TAggregate, TSingleAggregateProjection, TAggregateProjectionPayload>, new
     ()
-    where TSingleAggregateProjectionContents : ISingleAggregateProjectionContents
-    where TQueryFilter : ISingleAggregateProjectionQueryFilterDefinition<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents,
+    where TAggregateProjectionPayload : ISingleAggregateProjectionPayload
+    where TQueryFilter : ISingleAggregateProjectionQueryFilterDefinition<TAggregate, TSingleAggregateProjection, TAggregateProjectionPayload,
         TQueryParameter, TResponseQueryModel>
     where TQueryParameter : IQueryParameter
 {
     public TResponseQueryModel? Response { get; set; }
-    private MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>>>
-        ? _dto { get; set; }
+    private MultipleAggregateProjectionState<SingleAggregateListProjectionState<SingleAggregateProjectionState<TAggregateProjectionPayload>>>
+        ? _state { get; set; }
     public QueryFilterHandler? QueryFilterHandler
     {
         get;
         set;
     }
-    public void RegisterDto(
-        MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<SingleAggregateProjectionDto<TSingleAggregateProjectionContents>>>
-            dto)
+    public void RegisterState(
+        MultipleAggregateProjectionState<SingleAggregateListProjectionState<SingleAggregateProjectionState<TAggregateProjectionPayload>>>
+            state)
     {
-        _dto = dto;
+        _state = state;
     }
 
-    public SingleAggregateListProjectionQueryFilterTestChecker<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents,
-        TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> WhenParam(TQueryParameter param)
+    public SingleAggregateListProjectionQueryFilterTestChecker<TAggregate, TSingleAggregateProjection, TAggregateProjectionPayload
+        , TQueryFilter, TQueryParameter, TResponseQueryModel> WhenParam(TQueryParameter param)
     {
-        if (_dto == null)
+        if (_state == null)
         {
             throw new InvalidDataException("Projection is null");
         }
         if (QueryFilterHandler == null) { throw new MissingMemberException(nameof(QueryFilterHandler)); }
         Response = QueryFilterHandler
-            .GetSingleAggregateProjectionQueryFilter<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents, TQueryFilter,
-                TQueryParameter, TResponseQueryModel>(param, _dto.Contents.List);
+            .GetSingleAggregateProjectionQueryFilter<TAggregate, TSingleAggregateProjection, TAggregateProjectionPayload, TQueryFilter,
+                TQueryParameter, TResponseQueryModel>(param, _state.Payload.List);
         return this;
     }
-    public SingleAggregateListProjectionQueryFilterTestChecker<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents,
-        TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> WriteResponse(string filename)
+    public SingleAggregateListProjectionQueryFilterTestChecker<TAggregate, TSingleAggregateProjection, TAggregateProjectionPayload,
+        TQueryFilter, TQueryParameter, TResponseQueryModel> WriteResponse(string filename)
     {
         if (Response == null)
         {
@@ -61,8 +62,8 @@ public class SingleAggregateListProjectionQueryFilterTestChecker<TAggregate, TSi
         File.WriteAllTextAsync(filename, json);
         return this;
     }
-    public SingleAggregateListProjectionQueryFilterTestChecker<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents,
-        TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenResponse(TResponseQueryModel expectedResponse)
+    public SingleAggregateListProjectionQueryFilterTestChecker<TAggregate, TSingleAggregateProjection, TAggregateProjectionPayload, TQueryFilter,
+        TQueryParameter, TResponseQueryModel> ThenResponse(TResponseQueryModel expectedResponse)
     {
         if (Response == null)
         {
@@ -75,24 +76,24 @@ public class SingleAggregateListProjectionQueryFilterTestChecker<TAggregate, TSi
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public SingleAggregateListProjectionQueryFilterTestChecker<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents,
-        TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenGetResponse(Action<TResponseQueryModel> responseAction)
+    public SingleAggregateListProjectionQueryFilterTestChecker<TAggregate, TSingleAggregateProjection, TAggregateProjectionPayload, TQueryFilter,
+        TQueryParameter, TResponseQueryModel> ThenGetResponse(Action<TResponseQueryModel> responseAction)
     {
         Assert.NotNull(Response);
         responseAction(Response!);
         return this;
     }
 
-    public SingleAggregateListProjectionQueryFilterTestChecker<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents,
-        TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenResponseFromJson(string responseJson)
+    public SingleAggregateListProjectionQueryFilterTestChecker<TAggregate, TSingleAggregateProjection, TAggregateProjectionPayload, TQueryFilter,
+        TQueryParameter, TResponseQueryModel> ThenResponseFromJson(string responseJson)
     {
         var response = JsonSerializer.Deserialize<TResponseQueryModel>(responseJson);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         ThenResponse(response);
         return this;
     }
-    public SingleAggregateListProjectionQueryFilterTestChecker<TAggregate, TSingleAggregateProjection, TSingleAggregateProjectionContents,
-        TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenResponseFromFile(string responseFilename)
+    public SingleAggregateListProjectionQueryFilterTestChecker<TAggregate, TSingleAggregateProjection, TAggregateProjectionPayload, TQueryFilter,
+        TQueryParameter, TResponseQueryModel> ThenResponseFromFile(string responseFilename)
     {
         using var openStream = File.OpenRead(responseFilename);
         var response = JsonSerializer.Deserialize<TResponseQueryModel>(openStream);

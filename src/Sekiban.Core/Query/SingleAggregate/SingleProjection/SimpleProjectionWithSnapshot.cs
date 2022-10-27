@@ -23,7 +23,7 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
     public async Task<T?> GetAggregateAsync<T, Q, P>(Guid aggregateId, int? toVersion = null)
-        where T : ISingleAggregate, ISingleAggregateProjection, ISingleAggregateProjectionDtoConvertible<Q>
+        where T : ISingleAggregate, ISingleAggregateProjection, ISingleAggregateProjectionStateConvertible<Q>
         where Q : ISingleAggregate
         where P : ISingleAggregateProjector<T>, new()
     {
@@ -31,10 +31,10 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
         var aggregate = projector.CreateInitialAggregate(aggregateId);
 
         var snapshotDocument = await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(T));
-        var dto = snapshotDocument is null ? default : snapshotDocument.ToDto<Q>();
-        if (dto is not null)
+        var state = snapshotDocument is null ? default : snapshotDocument.ToState<Q>();
+        if (state is not null)
         {
-            aggregate.ApplySnapshot(dto);
+            aggregate.ApplySnapshot(state);
         }
         if (toVersion.HasValue && aggregate.Version >= toVersion.Value)
         {
@@ -44,13 +44,13 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
             aggregateId,
             projector.OriginalAggregateType(),
             PartitionKeyGenerator.ForAggregateEvent(aggregateId, projector.OriginalAggregateType()),
-            dto?.LastSortableUniqueId,
+            state?.LastSortableUniqueId,
             events =>
             {
                 foreach (var e in events)
                 {
-                    if (!string.IsNullOrWhiteSpace(dto?.LastSortableUniqueId) &&
-                        string.CompareOrdinal(dto?.LastSortableUniqueId, e.SortableUniqueId) > 0)
+                    if (!string.IsNullOrWhiteSpace(state?.LastSortableUniqueId) &&
+                        string.CompareOrdinal(state?.LastSortableUniqueId, e.SortableUniqueId) > 0)
                     {
                         throw new SekibanAggregateEventDuplicateException();
                     }

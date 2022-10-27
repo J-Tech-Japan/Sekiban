@@ -28,7 +28,7 @@ public class SimpleSingleAggregateFromInitial : ISingleAggregateFromInitial
         var addFinished = false;
         await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
             aggregateId,
-            typeof(T),
+            projector.OriginalAggregateType(),
             PartitionKeyGenerator.ForAggregateEvent(aggregateId, projector.OriginalAggregateType()),
             null,
             events =>

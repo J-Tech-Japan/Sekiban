@@ -1,5 +1,9 @@
 using Customer.Domain.Aggregates.LoyaltyPoints.Consts;
+using Customer.Domain.Aggregates.LoyaltyPoints.Events;
+using Customer.Domain.Shared.Exceptions;
+using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
+using Sekiban.Core.Event;
 namespace Customer.Domain.Aggregates.LoyaltyPoints.Commands;
 
 public record AddLoyaltyPoint(
@@ -17,9 +21,15 @@ public record AddLoyaltyPoint(
 }
 public class AddLoyaltyPointHandler : ChangeAggregateCommandHandlerBase<LoyaltyPoint, AddLoyaltyPoint>
 {
-    protected override async Task ExecCommandAsync(LoyaltyPoint aggregate, AddLoyaltyPoint command)
+    protected override async IAsyncEnumerable<IChangedEvent<LoyaltyPoint>> ExecCommandAsync(
+        AggregateState<LoyaltyPoint> aggregate,
+        AddLoyaltyPoint command)
     {
-        aggregate.AddLoyaltyPoint(command.HappenedDate, command.Reason, command.PointAmount, command.Note);
         await Task.CompletedTask;
+        if (aggregate.Payload.LastOccuredTime is not null && aggregate.Payload.LastOccuredTime > command.HappenedDate)
+        {
+            throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
+        }
+        yield return new LoyaltyPointAdded(command.HappenedDate, command.Reason, command.PointAmount, command.Note);
     }
 }

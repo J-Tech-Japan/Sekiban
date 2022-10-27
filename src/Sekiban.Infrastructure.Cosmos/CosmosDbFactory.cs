@@ -17,6 +17,13 @@ public class CosmosDbFactory
     private readonly IMemoryCache _memoryCache;
     private readonly string _sekibanContextIdentifier;
     private readonly IServiceProvider _serviceProvider;
+    public CosmosDbFactory(IConfiguration configuration, IMemoryCache memoryCache, ISekibanContext sekibanContext, IServiceProvider serviceProvider)
+    {
+        _configuration = configuration;
+        _memoryCache = memoryCache;
+        _serviceProvider = serviceProvider;
+        _sekibanContextIdentifier = sekibanContext.SettingGroupIdentifier;
+    }
     private IConfigurationSection? _section
     {
         get
@@ -29,13 +36,6 @@ public class CosmosDbFactory
             }
             return section;
         }
-    }
-    public CosmosDbFactory(IConfiguration configuration, IMemoryCache memoryCache, ISekibanContext sekibanContext, IServiceProvider serviceProvider)
-    {
-        _configuration = configuration;
-        _memoryCache = memoryCache;
-        _serviceProvider = serviceProvider;
-        _sekibanContextIdentifier = sekibanContext.SettingGroupIdentifier;
     }
     private string GetContainerId(DocumentType documentType, AggregateContainerGroup containerGroup)
     {

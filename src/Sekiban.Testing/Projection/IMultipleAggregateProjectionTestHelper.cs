@@ -6,50 +6,50 @@ using Sekiban.Testing.Command;
 using Sekiban.Testing.QueryFilter;
 namespace Sekiban.Testing.Projection;
 
-public interface IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents>
-    where TProjection : IMultipleAggregateProjector<TProjectionContents>, new()
-    where TProjectionContents : IMultipleAggregateProjectionContents, new()
+public interface IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload>
+    where TProjection : IMultipleAggregateProjector<TProjectionPayload>, new()
+    where TProjectionPayload : IMultipleAggregateProjectionPayload, new()
 {
 
 
     #region When
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> WhenProjection();
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> WhenProjection();
     #endregion
     #region Given
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenEvents(IEnumerable<IAggregateEvent> events);
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenEvents(params IAggregateEvent[] definitions);
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenEventsFromJson(string jsonEvents);
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenEventsFromFile(string filename);
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenEvents(
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> GivenEvents(IEnumerable<IAggregateEvent> events);
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> GivenEvents(params IAggregateEvent[] definitions);
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> GivenEventsFromJson(string jsonEvents);
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> GivenEventsFromFile(string filename);
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> GivenEvents(
         params (Guid aggregateId, Type aggregateType, IEventPayload payload)[] eventTouples);
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenEvents(
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> GivenEvents(
         params (Guid aggregateId, IEventPayload payload)[] eventTouples);
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenQueryFilterChecker(
-        IQueryFilterChecker<MultipleAggregateProjectionContentsDto<TProjectionContents>> checker);
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenScenario(Action initialAction);
-    public Guid RunCreateCommand<TAggregate>(ICreateAggregateCommand<TAggregate> command, Guid? injectingAggregateId = null)
-        where TAggregate : AggregateCommonBase, new();
-    public void RunChangeCommand<TAggregate>(ChangeAggregateCommandBase<TAggregate> command) where TAggregate : AggregateCommonBase, new();
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> GivenCommandExecutorAction(
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> GivenQueryFilterChecker(
+        IQueryFilterChecker<MultipleAggregateProjectionState<TProjectionPayload>> checker);
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> GivenScenario(Action initialAction);
+    public Guid RunCreateCommand<TAggregatePayload>(ICreateAggregateCommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
+        where TAggregatePayload : IAggregatePayload, new();
+    public void RunChangeCommand<TAggregatePayload>(ChangeAggregateCommandBase<TAggregatePayload> command)
+        where TAggregatePayload : IAggregatePayload, new();
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> GivenCommandExecutorAction(
         Action<AggregateTestCommandExecutor> action);
     #endregion
 
     #region Then
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenNotThrowsAnException();
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenDtoIs(
-        MultipleAggregateProjectionContentsDto<TProjectionContents> dto);
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenGetDto(
-        Action<MultipleAggregateProjectionContentsDto<TProjectionContents>> dtoAction);
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenDtoIsFromFile(string filename);
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> WriteProjectionToFile(string filename);
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenContentsIs(TProjectionContents contents);
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenContentsIsFromFile(string filename);
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionContents> ThenGetContents(Action<TProjectionContents> contentsAction);
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenNotThrowsAnException();
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenStateIs(
+        MultipleAggregateProjectionState<TProjectionPayload> state);
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenGetState(
+        Action<MultipleAggregateProjectionState<TProjectionPayload>> stateAction);
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenStateIsFromFile(string filename);
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> WriteProjectionToFile(string filename);
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenPayloadIs(TProjectionPayload payload);
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenPayloadIsFromFile(string filename);
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenGetPayload(Action<TProjectionPayload> payloadAction);
     #endregion
     #region Get
-    public AggregateDto<TEnvironmentAggregateContents> GetAggregateDto<TEnvironmentAggregate, TEnvironmentAggregateContents>(Guid aggregateId)
-        where TEnvironmentAggregate : AggregateBase<TEnvironmentAggregateContents>, new()
-        where TEnvironmentAggregateContents : IAggregateContents, new();
+    public AggregateState<TEnvironmentAggregatePayload> GetAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
+        where TEnvironmentAggregatePayload : IAggregatePayload, new();
     public IReadOnlyCollection<IAggregateEvent> GetLatestEvents();
     #endregion
 }

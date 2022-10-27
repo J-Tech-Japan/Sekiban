@@ -1,16 +1,30 @@
+using Customer.Domain.Aggregates.RecentInMemoryActivities.Events;
+using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
+using Sekiban.Core.Event;
+using Sekiban.Core.Shared;
 namespace Customer.Domain.Aggregates.RecentInMemoryActivities.Commands;
 
-public record CreateRecentInMemoryActivity : ICreateAggregateCommand<RecentInMemoryActivity>;
-public class CreateRecentInMemoryActivityHandler : CreateAggregateCommandHandlerBase<RecentInMemoryActivity, CreateRecentInMemoryActivity>
+public record CreateRecentInMemoryActivity : ICreateAggregateCommand<RecentInMemoryActivity>
 {
-    public override Guid GenerateAggregateId(CreateRecentInMemoryActivity command)
+    public Guid GetAggregateId()
     {
         return Guid.NewGuid();
     }
-    protected override async Task ExecCreateCommandAsync(RecentInMemoryActivity aggregate, CreateRecentInMemoryActivity command)
+}
+public class CreateRecentInMemoryActivityHandler : CreateAggregateCommandHandlerBase<RecentInMemoryActivity, CreateRecentInMemoryActivity>
+{
+    private readonly ISekibanDateProducer _sekibanDateProducer;
+    public CreateRecentInMemoryActivityHandler(ISekibanDateProducer sekibanDateProducer)
+    {
+        _sekibanDateProducer = sekibanDateProducer;
+    }
+
+    protected override async IAsyncEnumerable<IApplicableEvent<RecentInMemoryActivity>> ExecCreateCommandAsync(
+        AggregateState<RecentInMemoryActivity> aggregate,
+        CreateRecentInMemoryActivity command)
     {
         await Task.CompletedTask;
-        aggregate.CreateRecentInMemoryActivity("First Event Created");
+        yield return new RecentInMemoryActivityCreated(new RecentInMemoryActivityRecord("First Event Created", _sekibanDateProducer.UtcNow));
     }
 }

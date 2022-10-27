@@ -5,28 +5,27 @@ using System.Collections.Immutable;
 namespace Customer.Domain.Projections.ClientLoyaltyPointMultiples;
 
 public class ClientLoyaltyPointMultipleProjectionQueryFilter : IProjectionQueryFilterDefinition<ClientLoyaltyPointMultipleProjection,
-    ClientLoyaltyPointMultipleProjection.ContentsDefinition, ClientLoyaltyPointMultipleProjectionQueryFilter.QueryFilterParameter,
-    ClientLoyaltyPointMultipleProjection.ContentsDefinition>
+    ClientLoyaltyPointMultipleProjection.PayloadDefinition, ClientLoyaltyPointMultipleProjectionQueryFilter.QueryFilterParameter,
+    ClientLoyaltyPointMultipleProjection.PayloadDefinition>
 {
     public enum QuerySortKeys
     {
-        ClientName,
-        Points
+        ClientName, Points
     }
-    public ClientLoyaltyPointMultipleProjection.ContentsDefinition HandleFilter(
+    public ClientLoyaltyPointMultipleProjection.PayloadDefinition HandleFilter(
         QueryFilterParameter queryFilterParam,
-        MultipleAggregateProjectionContentsDto<ClientLoyaltyPointMultipleProjection.ContentsDefinition> projection)
+        MultipleAggregateProjectionState<ClientLoyaltyPointMultipleProjection.PayloadDefinition> projection)
     {
-        if (queryFilterParam.BranchId is null) { return projection.Contents; }
-        return new ClientLoyaltyPointMultipleProjection.ContentsDefinition
+        if (queryFilterParam.BranchId is null) { return projection.Payload; }
+        return new ClientLoyaltyPointMultipleProjection.PayloadDefinition
         {
-            Branches = projection.Contents.Branches.Where(x => x.BranchId == queryFilterParam.BranchId).ToImmutableList(),
-            Records = projection.Contents.Records.Where(m => m.BranchId == queryFilterParam.BranchId).ToImmutableList()
+            Branches = projection.Payload.Branches.Where(x => x.BranchId == queryFilterParam.BranchId).ToImmutableList(),
+            Records = projection.Payload.Records.Where(m => m.BranchId == queryFilterParam.BranchId).ToImmutableList()
         };
     }
-    public ClientLoyaltyPointMultipleProjection.ContentsDefinition HandleSortAndPagingIfNeeded(
+    public ClientLoyaltyPointMultipleProjection.PayloadDefinition HandleSortAndPagingIfNeeded(
         QueryFilterParameter queryFilterParam,
-        ClientLoyaltyPointMultipleProjection.ContentsDefinition response)
+        ClientLoyaltyPointMultipleProjection.PayloadDefinition response)
     {
         if (queryFilterParam.SortKey == QuerySortKeys.ClientName)
         {

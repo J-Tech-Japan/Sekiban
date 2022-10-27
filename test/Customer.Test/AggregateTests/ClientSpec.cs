@@ -12,7 +12,7 @@ using System;
 using Xunit;
 namespace Customer.Test.AggregateTests;
 
-public class ClientSpec : SingleAggregateTestBase<Client, ClientContents, CustomerDependency>
+public class ClientSpec : SingleAggregateTestBase<Client, CustomerDependency>
 {
 
     private const string testClientName = "TestName";
@@ -27,7 +27,7 @@ public class ClientSpec : SingleAggregateTestBase<Client, ClientContents, Custom
     [Fact(DisplayName = "集約コマンドを実行してテストする")]
     public void ClientCreateSpec()
     {
-        // CreateコマンドでBranchを参照するため、BranchDtoオブジェクトを参照用に渡す
+        // CreateコマンドでBranchを参照するため、Branch作成コマンドを流す
         var branchId = RunEnvironmentCreateCommand(new CreateBranch("TEST"));
 
         // CreateClient コマンドを実行する
@@ -38,9 +38,9 @@ public class ClientSpec : SingleAggregateTestBase<Client, ClientContents, Custom
         ThenSingleEventPayloadIs(new ClientCreated(branchId, testClientName, testEmail));
         // 現在の集約のステータスを検証する
         ThenStateIs(
-            new AggregateDto<ClientContents>
+            new AggregateState<Client>
             {
-                AggregateId = GetAggregateId(), Version = GetCurrentVersion(), Contents = new ClientContents(branchId, testClientName, testEmail)
+                AggregateId = GetAggregateId(), Version = GetCurrentVersion(), Payload = new Client(branchId, testClientName, testEmail)
             });
         // 名前変更コマンドを実行する
         WhenChange(client => new ChangeClientName(client.AggregateId, testClientChangedName) { ReferenceVersion = client.Version });
@@ -49,11 +49,11 @@ public class ClientSpec : SingleAggregateTestBase<Client, ClientContents, Custom
         ThenSingleEventPayloadIs(new ClientNameChanged(testClientChangedName));
         // 現在の集約のステータスを検証する
         ThenStateIs(
-            new AggregateDto<ClientContents>
+            new AggregateState<Client>
             {
                 AggregateId = GetAggregateId(),
                 Version = GetCurrentVersion(),
-                Contents = new ClientContents(branchId, testClientChangedName, testEmail)
+                Payload = new Client(branchId, testClientChangedName, testEmail)
             });
     }
     [Fact(DisplayName = "重複したメールアドレスが存在する場合、作成失敗する")]

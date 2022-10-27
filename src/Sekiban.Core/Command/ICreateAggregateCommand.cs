@@ -1,6 +1,7 @@
 using Sekiban.Core.Aggregate;
 namespace Sekiban.Core.Command;
 
-public interface ICreateAggregateCommand<T> : IAggregateCommand where T : IAggregate
+public interface ICreateAggregateCommand<T> : IAggregateCommand where T : IAggregatePayload
 {
+    public Guid GetAggregateId();
 }

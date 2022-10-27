@@ -4,7 +4,8 @@ public static class SekibanJsonHelper
 {
     public static JsonSerializerOptions GetDefaultJsonSerializerOptions()
     {
-        return new() { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, PropertyNameCaseInsensitive = true };
+        return new JsonSerializerOptions
+            { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, PropertyNameCaseInsensitive = true };
     }
 
     public static string? Serialize(dynamic? obj)

@@ -23,7 +23,8 @@ public class InMemoryDocumentStore
             {
                 eventContainer.Partitions[partition].Add(document);
             }
-        } else
+        }
+        else
         {
             var partitionCollection = new BlockingCollection<IAggregateEvent>();
             partitionCollection.Add(document);

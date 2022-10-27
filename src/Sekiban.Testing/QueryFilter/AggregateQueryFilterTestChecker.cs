@@ -8,39 +8,38 @@ using Xunit;
 namespace Sekiban.Testing.QueryFilter;
 
 public class
-    AggregateQueryFilterTestChecker<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> : IQueryFilterChecker<
-        MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<AggregateDto<TAggregateContents>>>>
-    where TAggregate : AggregateBase<TAggregateContents>
-    where TAggregateContents : IAggregateContents, new()
-    where TQueryFilter : IAggregateQueryFilterDefinition<TAggregate, TAggregateContents, TQueryParameter, TResponseQueryModel>
+    AggregateQueryFilterTestChecker<TAggregatePayload, TQueryFilter, TQueryParameter, TResponseQueryModel> : IQueryFilterChecker<
+        MultipleAggregateProjectionState<SingleAggregateListProjectionState<AggregateState<TAggregatePayload>>>>
+    where TAggregatePayload : IAggregatePayload, new()
+    where TQueryFilter : IAggregateQueryFilterDefinition<TAggregatePayload, TQueryParameter, TResponseQueryModel>
     where TQueryParameter : IQueryParameter
 {
     public TResponseQueryModel? Response { get; set; }
-    private MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<AggregateDto<TAggregateContents>>>? _dto { get; set; }
+    private MultipleAggregateProjectionState<SingleAggregateListProjectionState<AggregateState<TAggregatePayload>>>? _state { get; set; }
     public QueryFilterHandler? QueryFilterHandler
     {
         get;
         set;
     }
-    public void RegisterDto(MultipleAggregateProjectionContentsDto<SingleAggregateListProjectionDto<AggregateDto<TAggregateContents>>> dto)
+    public void RegisterState(MultipleAggregateProjectionState<SingleAggregateListProjectionState<AggregateState<TAggregatePayload>>> state)
     {
-        _dto = dto;
+        _state = state;
     }
 
-    public AggregateQueryFilterTestChecker<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> WhenParam(
+    public AggregateQueryFilterTestChecker<TAggregatePayload, TQueryFilter, TQueryParameter, TResponseQueryModel> WhenParam(
         TQueryParameter param)
     {
-        if (_dto == null)
+        if (_state == null)
         {
             throw new InvalidDataException("Projection is null");
         }
         if (QueryFilterHandler == null) { throw new MissingMemberException(nameof(QueryFilterHandler)); }
-        Response = QueryFilterHandler.GetAggregateQueryFilter<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel>(
+        Response = QueryFilterHandler.GetAggregateQueryFilter<TAggregatePayload, TQueryFilter, TQueryParameter, TResponseQueryModel>(
             param,
-            _dto.Contents.List);
+            _state.Payload.List);
         return this;
     }
-    public AggregateQueryFilterTestChecker<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> WriteResponseToFile(
+    public AggregateQueryFilterTestChecker<TAggregatePayload, TQueryFilter, TQueryParameter, TResponseQueryModel> WriteResponseToFile(
         string filename)
     {
         if (Response == null)
@@ -55,7 +54,7 @@ public class
         File.WriteAllTextAsync(filename, json);
         return this;
     }
-    public AggregateQueryFilterTestChecker<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenResponseIs(
+    public AggregateQueryFilterTestChecker<TAggregatePayload, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenResponseIs(
         TResponseQueryModel expectedResponse)
     {
         if (Response == null)
@@ -69,7 +68,7 @@ public class
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public AggregateQueryFilterTestChecker<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenGetResponse(
+    public AggregateQueryFilterTestChecker<TAggregatePayload, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenGetResponse(
         Action<TResponseQueryModel> responseAction)
     {
         Assert.NotNull(Response);
@@ -77,7 +76,7 @@ public class
         return this;
     }
 
-    public AggregateQueryFilterTestChecker<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenResponseIsFromJson(
+    public AggregateQueryFilterTestChecker<TAggregatePayload, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenResponseIsFromJson(
         string responseJson)
     {
         var response = JsonSerializer.Deserialize<TResponseQueryModel>(responseJson);
@@ -85,7 +84,7 @@ public class
         ThenResponseIs(response);
         return this;
     }
-    public AggregateQueryFilterTestChecker<TAggregate, TAggregateContents, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenResponseIsFromFile(
+    public AggregateQueryFilterTestChecker<TAggregatePayload, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenResponseIsFromFile(
         string responseFilename)
     {
         using var openStream = File.OpenRead(responseFilename);

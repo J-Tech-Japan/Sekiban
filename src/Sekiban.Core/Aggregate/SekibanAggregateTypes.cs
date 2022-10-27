@@ -6,24 +6,21 @@ public class SekibanAggregateTypes
 {
     private readonly List<ProjectionAggregateType> _registeredCustomProjectorTypes = new();
     private readonly List<DefaultAggregateType> _registeredTypes = new();
-
-    public IReadOnlyCollection<DefaultAggregateType> AggregateTypes { get; }
-    public IReadOnlyCollection<ProjectionAggregateType> ProjectionAggregateTypes { get; }
     public SekibanAggregateTypes(params Assembly[] assemblies)
     {
-        var attributeType = typeof(AggregateBase<>);
+        var attributeType = typeof(IAggregatePayload);
         foreach (var assembly in assemblies)
         {
             var aggregates = assembly.DefinedTypes.Where(
-                x => x.IsClass && x.BaseType?.Name == attributeType.Name && x.BaseType?.Namespace == attributeType.Namespace);
+                x => x.IsClass &&
+                    x.ImplementedInterfaces.Contains(attributeType) &&
+                    !x.ImplementedInterfaces.Contains(typeof(ISingleAggregateProjectionPayload)));
 
             foreach (var type in aggregates)
             {
-                var dto = type.BaseType?.GetGenericArguments()?.First();
-                if (dto is null) { continue; }
                 var baseProjector = typeof(DefaultSingleAggregateProjector<>);
                 var p = baseProjector.MakeGenericType(type);
-                _registeredTypes.Add(new DefaultAggregateType(type, dto, p));
+                _registeredTypes.Add(new DefaultAggregateType(type, p));
             }
             var projectorBase = typeof(SingleAggregateProjectionBase<,,>);
             var customProjectors = assembly.DefinedTypes.Where(
@@ -32,19 +29,21 @@ public class SekibanAggregateTypes
             {
                 var baseType = type.BaseType;
                 if (baseType is null) { continue; }
-                var tProjectionContents = baseType.GenericTypeArguments[2];
+                var projectionPayloadType = baseType.GenericTypeArguments[2];
                 var instance = (dynamic?)Activator.CreateInstance(type);
                 var original = instance?.OriginalAggregateType();
                 if (original is null) { continue; }
-                _registeredCustomProjectorTypes.Add(new ProjectionAggregateType(type, tProjectionContents, type, original));
+                _registeredCustomProjectorTypes.Add(new ProjectionAggregateType(original, type, projectionPayloadType));
             }
         }
         AggregateTypes = _registeredTypes.AsReadOnly();
         ProjectionAggregateTypes = _registeredCustomProjectorTypes.AsReadOnly();
     }
-    public record DefaultAggregateType(Type Aggregate, Type Dto, Type Projection);
-    public record ProjectionAggregateType(Type Aggregate, Type DtoContents, Type Projection, Type OriginalType) : DefaultAggregateType(
+
+    public IReadOnlyCollection<DefaultAggregateType> AggregateTypes { get; }
+    public IReadOnlyCollection<ProjectionAggregateType> ProjectionAggregateTypes { get; }
+    public record DefaultAggregateType(Type Aggregate, Type Projection);
+    public record ProjectionAggregateType(Type Aggregate, Type Projection, Type PayloadType) : DefaultAggregateType(
         Aggregate,
-        DtoContents,
         Projection);
 }

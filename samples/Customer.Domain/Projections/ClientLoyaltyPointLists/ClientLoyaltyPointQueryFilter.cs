@@ -5,13 +5,12 @@ using System.Collections.Immutable;
 namespace Customer.Domain.Projections.ClientLoyaltyPointLists;
 
 public class ClientLoyaltyPointQueryFilter : IProjectionListQueryFilterDefinition<ClientLoyaltyPointListProjection,
-    ClientLoyaltyPointListProjection.ContentsDefinition, ClientLoyaltyPointQueryFilter.QueryFilterParameter,
+    ClientLoyaltyPointListProjection.PayloadDefinition, ClientLoyaltyPointQueryFilter.QueryFilterParameter,
     ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>
 {
     public enum FilterSortKey
     {
-        BranchName,
-        ClientName
+        BranchName, ClientName
     }
 
     public IEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> HandleSort(
@@ -45,7 +44,8 @@ public class ClientLoyaltyPointQueryFilter : IProjectionListQueryFilterDefinitio
                             FilterSortKey.ClientName => m.ClientName,
                             _ => throw new ArgumentOutOfRangeException()
                         });
-            } else
+            }
+            else
             {
                 result = sortKey.Value
                     ? (result as IOrderedEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> ??
@@ -71,9 +71,9 @@ public class ClientLoyaltyPointQueryFilter : IProjectionListQueryFilterDefinitio
 
     public IEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> HandleFilter(
         QueryFilterParameter queryParam,
-        MultipleAggregateProjectionContentsDto<ClientLoyaltyPointListProjection.ContentsDefinition> projection)
+        MultipleAggregateProjectionState<ClientLoyaltyPointListProjection.PayloadDefinition> projection)
     {
-        var result = projection.Contents.Records;
+        var result = projection.Payload.Records;
         if (queryParam.BranchId.HasValue)
         {
             result = result.Where(x => x.BranchId == queryParam.BranchId.Value).ToImmutableList();

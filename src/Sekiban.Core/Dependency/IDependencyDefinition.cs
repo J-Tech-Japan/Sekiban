@@ -1,10 +1,15 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Event;
+using Sekiban.Core.Exceptions;
+using Sekiban.Core.Query;
 using System.Reflection;
 namespace Sekiban.Core.Dependency;
 
 public interface IDependencyDefinition
 {
+
+    public bool MakeSimpleAggregateListQueryFilter { get; }
+    public bool MakeSimpleSingleAggregateProjectionListQueryFilter { get; }
     public virtual SekibanDependencyOptions GetSekibanDependencyOptions()
     {
         return new SekibanDependencyOptions(
@@ -46,6 +51,39 @@ public interface IDependencyDefinition
     {
         return Enumerable.Empty<Type>();
     }
+
+    public virtual IEnumerable<Type> GetSimpleAggregateListQueryFilterTypes()
+    {
+        if (MakeSimpleAggregateListQueryFilter)
+        {
+            var baseSimpleAggregateListQueryFilterType = typeof(SimpleAggregateListQueryFilter<>);
+            return GetControllerAggregateTypes().Select(m => baseSimpleAggregateListQueryFilterType.MakeGenericType(m));
+        }
+        return Enumerable.Empty<Type>();
+    }
+    public virtual IEnumerable<Type> GetSimpleSingleAggregateProjectionListQueryFilterTypes()
+    {
+        if (MakeSimpleSingleAggregateProjectionListQueryFilter)
+        {
+            var baseSimpleAggregateListQueryFilterType = typeof(SimpleSingleAggregateProjectionListQueryFilter<,,>);
+            return GetSingleAggregateProjectionTypes()
+                .Select(
+                    m =>
+                    {
+                        var baseType = m.BaseType;
+                        if (baseType == null)
+                        {
+                            throw new SekibanQueryFilterGenerationError();
+                        }
+                        var aggregateType = baseType.GenericTypeArguments[0];
+                        var projectionType = baseType.GenericTypeArguments[1];
+                        var payloadType = baseType.GenericTypeArguments[2];
+                        return baseSimpleAggregateListQueryFilterType.MakeGenericType(aggregateType, projectionType, payloadType);
+                    });
+        }
+        return Enumerable.Empty<Type>();
+    }
+
     public virtual IEnumerable<Type> GetAggregateQueryFilterTypes()
     {
         return Enumerable.Empty<Type>();

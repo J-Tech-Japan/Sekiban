@@ -21,6 +21,6 @@ public record EmailString : IValueObject<string>
     }
     public static implicit operator EmailString(string v)
     {
-        return new(v);
+        return new EmailString(v);
     }
 }

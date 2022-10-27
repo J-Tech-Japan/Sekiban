@@ -1,4 +1,7 @@
-﻿using Sekiban.Core.Command;
+﻿using Customer.Domain.Aggregates.LoyaltyPoints.Events;
+using Sekiban.Core.Aggregate;
+using Sekiban.Core.Command;
+using Sekiban.Core.Event;
 namespace Customer.Domain.Aggregates.LoyaltyPoints.Commands;
 
 public record DeleteLoyaltyPoint(Guid ClientId) : ChangeAggregateCommandBase<LoyaltyPoint>, INoValidateCommand
@@ -11,9 +14,11 @@ public record DeleteLoyaltyPoint(Guid ClientId) : ChangeAggregateCommandBase<Loy
 }
 public class DeleteLoyaltyPointHandler : ChangeAggregateCommandHandlerBase<LoyaltyPoint, DeleteLoyaltyPoint>
 {
-    protected override async Task ExecCommandAsync(LoyaltyPoint aggregate, DeleteLoyaltyPoint _)
+    protected override async IAsyncEnumerable<IChangedEvent<LoyaltyPoint>> ExecCommandAsync(
+        AggregateState<LoyaltyPoint> aggregate,
+        DeleteLoyaltyPoint command)
     {
-        aggregate.Delete();
         await Task.CompletedTask;
+        yield return new LoyaltyPointDeleted();
     }
 }

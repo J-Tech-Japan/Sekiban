@@ -1,11 +1,11 @@
 using Sekiban.Core.Event;
 namespace Sekiban.Core.Query.MultipleAggregate;
 
-public interface IMultipleAggregateProjector<TContents> : IProjection where TContents : IMultipleAggregateProjectionContents
+public interface IMultipleAggregateProjector<TProjectionPayload> : IProjection where TProjectionPayload : IMultipleAggregateProjectionPayload
 {
     void ApplyEvent(IAggregateEvent ev);
-    MultipleAggregateProjectionContentsDto<TContents> ToDto();
-    void ApplySnapshot(MultipleAggregateProjectionContentsDto<TContents> snapshot);
+    MultipleAggregateProjectionState<TProjectionPayload> ToState();
+    void ApplySnapshot(MultipleAggregateProjectionState<TProjectionPayload> snapshot);
     /// <summary>
     ///     対象のAggregate名リスト
     ///     Emptyの場合は、全ての集約を対象とする
