@@ -287,6 +287,10 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     {
         return _aggregate.Version;
     }
+    public AggregateState<TAggregatePayload> GetAggregateState()
+    {
+        return _aggregate.ToState();
+    }
     public Aggregate<TAggregatePayload> GetAggregate()
     {
         return _aggregate;

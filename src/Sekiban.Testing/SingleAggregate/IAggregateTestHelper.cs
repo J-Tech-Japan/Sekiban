@@ -62,6 +62,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     #region Get
     public Guid GetAggregateId();
     public int GetCurrentVersion();
+    public AggregateState<TAggregatePayload> GetAggregateState();
     public Aggregate<TAggregatePayload> GetAggregate();
     #endregion
 }

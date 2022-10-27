@@ -152,6 +152,10 @@ public abstract class SingleAggregateTestBase<TAggregatePayload, TDependencyDefi
     {
         return _helper.GetCurrentVersion();
     }
+    public AggregateState<TAggregatePayload> GetAggregateState()
+    {
+        return _helper.GetAggregateState();
+    }
     public Aggregate<TAggregatePayload> GetAggregate()
     {
         return _helper.GetAggregate();
