@@ -15,7 +15,7 @@ public record DeleteLoyaltyPoint(Guid ClientId) : ChangeAggregateCommandBase<Loy
 public class DeleteLoyaltyPointHandler : ChangeAggregateCommandHandlerBase<LoyaltyPoint, DeleteLoyaltyPoint>
 {
     protected override async IAsyncEnumerable<IChangedEvent<LoyaltyPoint>> ExecCommandAsync(
-        AggregateState<LoyaltyPoint> aggregateState,
+        Func<AggregateState<LoyaltyPoint>> getAggregateState,
         DeleteLoyaltyPoint command)
     {
         await Task.CompletedTask;

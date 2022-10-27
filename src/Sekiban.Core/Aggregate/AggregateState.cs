@@ -1,3 +1,4 @@
+using Sekiban.Core.Event;
 using Sekiban.Core.Query.SingleAggregate;
 using System.ComponentModel.DataAnnotations;
 namespace Sekiban.Core.Aggregate;
@@ -53,7 +54,7 @@ public record AggregateState<TPayload> : ISingleAggregate where TPayload : IAggr
     {
         return Payload is IDeletable { IsDeleted: true };
     }
-
+    
     public dynamic GetComparableObject(AggregateState<TPayload> original, bool copyVersion = true)
     {
         return this with

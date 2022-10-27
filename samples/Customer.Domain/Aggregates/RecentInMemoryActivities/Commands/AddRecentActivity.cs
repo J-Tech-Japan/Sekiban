@@ -22,7 +22,7 @@ public class AddRecentInMemoryActivityHandler : ChangeAggregateCommandHandlerBas
         _sekibanDateProducer = sekibanDateProducer;
     }
     protected override async IAsyncEnumerable<IChangedEvent<RecentInMemoryActivity>> ExecCommandAsync(
-        AggregateState<RecentInMemoryActivity> aggregateState,
+        Func<AggregateState<RecentInMemoryActivity>> getAggregateState,
         AddRecentInMemoryActivity command)
     {
         await Task.CompletedTask;
