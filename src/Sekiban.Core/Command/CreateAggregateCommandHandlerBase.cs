@@ -8,7 +8,7 @@ public abstract class CreateAggregateCommandHandlerBase<TAggregatePayload, TComm
     where TAggregatePayload : IAggregatePayload, new() where TCommand : ICreateAggregateCommand<TAggregatePayload>, new()
 {
     private readonly List<IAggregateEvent> _events = new();
-    private Aggregate<TAggregatePayload>? _aggregate = null;
+    private Aggregate<TAggregatePayload>? _aggregate;
     public async Task<AggregateCommandResponse> HandleAsync(AggregateCommandDocument<TCommand> command, Aggregate<TAggregatePayload> aggregate)
     {
         // ReSharper disable once SuspiciousTypeConversion.Global
@@ -21,6 +21,8 @@ public abstract class CreateAggregateCommandHandlerBase<TAggregatePayload, TComm
         await foreach (var eventPayload in eventPayloads)
         {
             _events.Add(AggregateEventHandler.HandleAggregateEvent(aggregate, eventPayload));
+            if (_events.First().GetPayload() is not ICreatedEventPayload) { throw new SekibanCreateCommandShouldSaveCreateEventFirstException(); }
+            if (_events.Count > 1 && _events.Last().GetPayload() is ICreatedEventPayload) { throw new SekibanCreateCommandShouldOnlySaveFirstException(); }
         }
         return await Task.FromResult(new AggregateCommandResponse(aggregate.AggregateId, _events.ToImmutableList(), aggregate.Version));
     }

@@ -24,7 +24,7 @@ public class OnlyPublishingAddRecentActivityHandler : EventPublishOnlyChangeAggr
     {
         _sekibanDateProducer = sekibanDateProducer;
     }
-    protected override async IAsyncEnumerable<IChangedAggregateEventPayload<RecentActivity>> ExecCommandAsync(
+    protected override async IAsyncEnumerable<IChangedEvent<RecentActivity>> ExecCommandAsync(
         Guid aggregateId,
         OnlyPublishingAddRecentActivity command)
     {
