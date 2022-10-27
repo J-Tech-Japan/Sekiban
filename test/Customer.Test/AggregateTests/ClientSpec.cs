@@ -7,6 +7,7 @@ using Customer.Domain.Shared.Exceptions;
 using Customer.Test.AggregateTests.CommandsHelpers;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Exceptions;
 using Sekiban.Testing.SingleAggregate;
 using System;
 using Xunit;
@@ -69,5 +70,32 @@ public class ClientSpec : SingleAggregateTestBase<Client, CustomerDependency>
         GivenEnvironmentCommandExecutorAction(BranchClientCommandsHelper.CreateClient)
             .WhenCreate(new CreateClient(BranchClientCommandsHelper.BranchId, "Client Name New", BranchClientCommandsHelper.FirstClientEmail))
             .ThenThrows<SekibanEmailAlreadyRegistered>();
+    }
+
+    [Fact(DisplayName = "Can not delete client twice")]
+    public void CanNotDeleteClientTwice()
+    {
+        var branchId = RunEnvironmentCreateCommand(new CreateBranch("TEST"));
+        WhenCreate(new CreateClient(branchId, "client", "client@example.com"))
+            .ThenNotThrowsAnException()
+            .WhenChange(new DeleteClient(GetAggregateId()) { ReferenceVersion = GetCurrentVersion() })
+            .ThenNotThrowsAnException()
+            .WhenChange(new DeleteClient(GetAggregateId()) { ReferenceVersion = GetCurrentVersion() })
+            .ThenThrows<SekibanAggregateAlreadyDeletedException>();
+    }
+    [Fact(DisplayName = "Can Cancel Delete")]
+    public void CanCancelClientDelete()
+    {
+        var branchId = RunEnvironmentCreateCommand(new CreateBranch("TEST"));
+        WhenCreate(new CreateClient(branchId, "client", "client@example.com"))
+            .ThenNotThrowsAnException()
+            .WhenChange(new DeleteClient(GetAggregateId()) { ReferenceVersion = GetCurrentVersion() })
+            .ThenNotThrowsAnException()
+            .ThenGetPayload(payload => Assert.True(payload.IsDeleted))
+            .WhenChange(
+                new CancelDeleteClient
+                    { ReferenceVersion = GetCurrentVersion(), ClientId = GetAggregateId(), Reason = "Deleted by mistake" })
+            .ThenNotThrowsAnException()
+            .ThenGetPayload(payload => Assert.False(payload.IsDeleted));
     }
 }

@@ -19,10 +19,9 @@ public abstract class ChangeAggregateCommandHandlerBase<TAggregatePayload, TComm
         }
         var state = aggregate.ToState();
         // Validate Aggregate is deleted
-        // ReSharper disable once SuspiciousTypeConversion.Global
-        if (command is not INoValidateCommand && state is IDeletableAggregatePayload { IsDeleted: true })
+        if (state.GetIsDeleted() && command is not ICancelDeletedCommand)
         {
-            throw new SekibanAggregateNotExistsException(aggregate.AggregateId, typeof(TAggregatePayload).Name);
+            throw new SekibanAggregateAlreadyDeletedException();
         }
 
         // Validate Aggregate Version
@@ -52,6 +51,6 @@ public abstract class ChangeAggregateCommandHandlerBase<TAggregatePayload, TComm
     }
 
     protected abstract IAsyncEnumerable<IChangedEvent<TAggregatePayload>> ExecCommandAsync(
-        AggregateState<TAggregatePayload> aggregate,
+        AggregateState<TAggregatePayload> aggregateState,
         TCommand command);
 }

@@ -34,9 +34,9 @@ public class MultipleAggregateProjectionService : IMultipleAggregateProjectionSe
         return queryListType switch
         {
             QueryListType.ActiveAndDeleted => projection.Payload.List.ToList(),
-            QueryListType.ActiveOnly => projection.Payload.List.Where(m => m.IsDeleted == false).ToList(),
-            QueryListType.DeletedOnly => projection.Payload.List.Where(m => m.IsDeleted).ToList(),
-            _ => projection.Payload.List.Where(m => m.IsDeleted == false).ToList()
+            QueryListType.ActiveOnly => projection.Payload.List.Where(m => m.GetIsDeleted() == false).ToList(),
+            QueryListType.DeletedOnly => projection.Payload.List.Where(m => m.GetIsDeleted()).ToList(),
+            _ => projection.Payload.List.Where(m => m.GetIsDeleted() == false).ToList()
         };
     }
     public

@@ -18,7 +18,7 @@ public class ChangeClientNameHandler : ChangeAggregateCommandHandlerBase<Client,
     {
         return command with { ClientName = "stripped for security" };
     }
-    protected override async IAsyncEnumerable<IChangedEvent<Client>> ExecCommandAsync(AggregateState<Client> aggregate, ChangeClientName command)
+    protected override async IAsyncEnumerable<IChangedEvent<Client>> ExecCommandAsync(AggregateState<Client> aggregateState, ChangeClientName command)
     {
         await Task.CompletedTask;
         yield return new ClientNameChanged(command.ClientName);

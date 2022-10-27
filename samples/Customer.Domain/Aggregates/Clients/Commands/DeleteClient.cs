@@ -14,7 +14,7 @@ public record DeleteClient(Guid ClientId) : ChangeAggregateCommandBase<Client>
 }
 public class DeleteClientHandler : ChangeAggregateCommandHandlerBase<Client, DeleteClient>
 {
-    protected override async IAsyncEnumerable<IChangedEvent<Client>> ExecCommandAsync(AggregateState<Client> aggregate, DeleteClient command)
+    protected override async IAsyncEnumerable<IChangedEvent<Client>> ExecCommandAsync(AggregateState<Client> aggregateState, DeleteClient command)
     {
         await Task.CompletedTask;
         yield return new ClientDeleted();
