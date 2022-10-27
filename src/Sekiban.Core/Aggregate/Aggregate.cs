@@ -7,7 +7,6 @@ public class Aggregate<TAggregatePayload> : AggregateCommonBase, ISingleAggregat
     where TAggregatePayload : IAggregatePayload, new()
 {
     protected TAggregatePayload Payload { get; private set; } = new();
-    private bool IsDeleted => Payload is IDeletableAggregatePayload { IsDeleted: true };
     public AggregateState<TAggregatePayload> ToState()
     {
         return new AggregateState<TAggregatePayload>(this, Payload);

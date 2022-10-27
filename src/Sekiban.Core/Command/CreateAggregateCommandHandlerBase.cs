@@ -29,6 +29,6 @@ public abstract class CreateAggregateCommandHandlerBase<TAggregatePayload, TComm
     }
 
     protected abstract IAsyncEnumerable<IApplicableEvent<TAggregatePayload>> ExecCreateCommandAsync(
-        AggregateState<TAggregatePayload> aggregate,
+        AggregateState<TAggregatePayload> aggregateState,
         TCommand command);
 }

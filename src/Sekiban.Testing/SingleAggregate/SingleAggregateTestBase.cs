@@ -78,7 +78,7 @@ public abstract class SingleAggregateTestBase<TAggregatePayload, TDependencyDefi
     {
         return _helper.WhenChange(changeCommand);
     }
-    public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(Func<Aggregate<TAggregatePayload>, C> commandFunc)
+    public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(Func<AggregateState<TAggregatePayload>, C> commandFunc)
         where C : ChangeAggregateCommandBase<TAggregatePayload>
     {
         return _helper.WhenChange(commandFunc);
@@ -151,6 +151,10 @@ public abstract class SingleAggregateTestBase<TAggregatePayload, TDependencyDefi
     public int GetCurrentVersion()
     {
         return _helper.GetCurrentVersion();
+    }
+    public AggregateState<TAggregatePayload> GetAggregateState()
+    {
+        return _helper.GetAggregateState();
     }
     public Aggregate<TAggregatePayload> GetAggregate()
     {

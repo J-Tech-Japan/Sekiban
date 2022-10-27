@@ -54,7 +54,7 @@ public class CreateClientHandler : CreateAggregateCommandHandlerBase<Client, Cre
         _queryFilterService = queryFilterService;
     }
 
-    protected override async IAsyncEnumerable<IApplicableEvent<Client>> ExecCreateCommandAsync(AggregateState<Client> aggregate, CreateClient command)
+    protected override async IAsyncEnumerable<IApplicableEvent<Client>> ExecCreateCommandAsync(AggregateState<Client> aggregateState, CreateClient command)
     {
         // Check if branch exists
         var branchExists

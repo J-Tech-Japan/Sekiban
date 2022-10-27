@@ -143,7 +143,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     {
         return WhenChange(_ => changeCommand);
     }
-    public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(Func<Aggregate<TAggregatePayload>, C> commandFunc)
+    public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(Func<AggregateState<TAggregatePayload>, C> commandFunc)
         where C : ChangeAggregateCommandBase<TAggregatePayload>
     {
         ResetBeforeCommand();
@@ -154,7 +154,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         {
             throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
         }
-        var command = commandFunc(_aggregate);
+        var command = commandFunc(_aggregate.ToState());
         var validationResults = command.TryValidateProperties().ToList();
         if (validationResults.Any())
         {
@@ -286,6 +286,10 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public int GetCurrentVersion()
     {
         return _aggregate.Version;
+    }
+    public AggregateState<TAggregatePayload> GetAggregateState()
+    {
+        return _aggregate.ToState();
     }
     public Aggregate<TAggregatePayload> GetAggregate()
     {

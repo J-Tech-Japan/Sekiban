@@ -21,7 +21,7 @@ public class CreateRecentInMemoryActivityHandler : CreateAggregateCommandHandler
     }
 
     protected override async IAsyncEnumerable<IApplicableEvent<RecentInMemoryActivity>> ExecCreateCommandAsync(
-        AggregateState<RecentInMemoryActivity> aggregate,
+        AggregateState<RecentInMemoryActivity> aggregateState,
         CreateRecentInMemoryActivity command)
     {
         await Task.CompletedTask;

@@ -8,8 +8,8 @@ namespace Sekiban.Core.Dependency;
 public interface IDependencyDefinition
 {
 
-    public bool MakeSimpleAggregateListQueryFilter { get; }
-    public bool MakeSimpleSingleAggregateProjectionListQueryFilter { get; }
+    public bool ShouldMakeSimpleAggregateListQueryFilter { get; }
+    public bool ShouldMakeSimpleSingleAggregateProjectionListQueryFilter { get; }
     public virtual SekibanDependencyOptions GetSekibanDependencyOptions()
     {
         return new SekibanDependencyOptions(
@@ -54,7 +54,7 @@ public interface IDependencyDefinition
 
     public virtual IEnumerable<Type> GetSimpleAggregateListQueryFilterTypes()
     {
-        if (MakeSimpleAggregateListQueryFilter)
+        if (ShouldMakeSimpleAggregateListQueryFilter)
         {
             var baseSimpleAggregateListQueryFilterType = typeof(SimpleAggregateListQueryFilter<>);
             return GetControllerAggregateTypes().Select(m => baseSimpleAggregateListQueryFilterType.MakeGenericType(m));
@@ -63,7 +63,7 @@ public interface IDependencyDefinition
     }
     public virtual IEnumerable<Type> GetSimpleSingleAggregateProjectionListQueryFilterTypes()
     {
-        if (MakeSimpleSingleAggregateProjectionListQueryFilter)
+        if (ShouldMakeSimpleSingleAggregateProjectionListQueryFilter)
         {
             var baseSimpleAggregateListQueryFilterType = typeof(SimpleSingleAggregateProjectionListQueryFilter<,,>);
             return GetSingleAggregateProjectionTypes()

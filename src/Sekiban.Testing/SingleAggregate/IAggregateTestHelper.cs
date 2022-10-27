@@ -30,7 +30,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     #region When
     public IAggregateTestHelper<TAggregatePayload> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregatePayload>;
     public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(C changeCommand) where C : ChangeAggregateCommandBase<TAggregatePayload>;
-    public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(Func<Aggregate<TAggregatePayload>, C> commandFunc)
+    public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(Func<AggregateState<TAggregatePayload>, C> commandFunc)
         where C : ChangeAggregateCommandBase<TAggregatePayload>;
     #endregion
 
@@ -62,6 +62,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     #region Get
     public Guid GetAggregateId();
     public int GetCurrentVersion();
+    public AggregateState<TAggregatePayload> GetAggregateState();
     public Aggregate<TAggregatePayload> GetAggregate();
     #endregion
 }

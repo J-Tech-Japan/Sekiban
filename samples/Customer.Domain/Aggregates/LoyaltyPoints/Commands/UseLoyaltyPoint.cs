@@ -22,15 +22,15 @@ public record UseLoyaltyPoint(
 public class UseLoyaltyPointHandler : ChangeAggregateCommandHandlerBase<LoyaltyPoint, UseLoyaltyPoint>
 {
     protected override async IAsyncEnumerable<IChangedEvent<LoyaltyPoint>> ExecCommandAsync(
-        AggregateState<LoyaltyPoint> aggregate,
+        AggregateState<LoyaltyPoint> aggregateState,
         UseLoyaltyPoint command)
     {
         await Task.CompletedTask;
-        if (aggregate.Payload.LastOccuredTime > command.HappenedDate)
+        if (aggregateState.Payload.LastOccuredTime > command.HappenedDate)
         {
             throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
         }
-        if (aggregate.Payload.CurrentPoint - command.PointAmount < 0)
+        if (aggregateState.Payload.CurrentPoint - command.PointAmount < 0)
         {
             throw new SekibanLoyaltyPointNotEnoughException();
         }

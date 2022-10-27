@@ -85,6 +85,8 @@ public class CustomerDependency : IDependencyDefinition
 
         yield return (typeof(IChangeAggregateCommandHandler<Client, DeleteClient>), typeof(DeleteClientHandler));
 
+        yield return (typeof(IChangeAggregateCommandHandler<Client, CancelDeleteClient>), typeof(CancelDeleteClientHandler));
+
         // Aggregate: LoyaltyPoint
         yield return (typeof(ICreateAggregateCommandHandler<LoyaltyPoint, CreateLoyaltyPoint>), typeof(CreateLoyaltyPointHandler));
 
@@ -111,6 +113,6 @@ public class CustomerDependency : IDependencyDefinition
     {
         yield return typeof(ClientLoyaltyPointQueryFilter);
     }
-    public bool MakeSimpleAggregateListQueryFilter => true;
-    public bool MakeSimpleSingleAggregateProjectionListQueryFilter => true;
+    public bool ShouldMakeSimpleAggregateListQueryFilter => true;
+    public bool ShouldMakeSimpleSingleAggregateProjectionListQueryFilter => true;
 }
