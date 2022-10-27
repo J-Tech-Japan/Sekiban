@@ -2,6 +2,8 @@ using Customer.Domain.Aggregates.Branches.Commands;
 using Customer.Domain.Aggregates.Clients;
 using Customer.Domain.Aggregates.Clients.Commands;
 using Customer.Domain.Aggregates.Clients.Events;
+using Customer.Domain.Aggregates.LoyaltyPoints.Commands;
+using Customer.Domain.Aggregates.LoyaltyPoints.Consts;
 using Customer.Domain.Shared;
 using Customer.Domain.Shared.Exceptions;
 using Customer.Test.AggregateTests.CommandsHelpers;
@@ -70,6 +72,19 @@ public class ClientSpec : SingleAggregateTestBase<Client, CustomerDependency>
         GivenEnvironmentCommandExecutorAction(BranchClientCommandsHelper.CreateClient)
             .WhenCreate(new CreateClient(BranchClientCommandsHelper.BranchId, "Client Name New", BranchClientCommandsHelper.FirstClientEmail))
             .ThenThrows<SekibanEmailAlreadyRegistered>();
+    }
+    [Fact]
+    public void EnvironmentChangeCommandTest()
+    {
+        var branchId = RunEnvironmentCreateCommand(new CreateBranch("TEST"));
+        var otherClientId = Guid.NewGuid();
+        RunEnvironmentCreateCommand(
+            new CreateClient
+                { BranchId = branchId, ClientName = "NameFirst", ClientEmail = "test@example.com" },
+            otherClientId);
+        RunEnvironmentChangeCommand(new ChangeClientName(otherClientId, "Other Client Name"));
+        RunEnvironmentCreateCommand(new CreateLoyaltyPoint(otherClientId, 100));
+        RunEnvironmentChangeCommand(new UseLoyaltyPoint(otherClientId, DateTime.Today, LoyaltyPointUsageTypeKeys.TravelCarRental, 30, "test"));
     }
 
     [Fact(DisplayName = "Can not delete client twice")]

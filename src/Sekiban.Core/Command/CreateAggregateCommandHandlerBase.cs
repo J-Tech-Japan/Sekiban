@@ -8,7 +8,6 @@ public abstract class CreateAggregateCommandHandlerBase<TAggregatePayload, TComm
     where TAggregatePayload : IAggregatePayload, new() where TCommand : ICreateAggregateCommand<TAggregatePayload>, new()
 {
     private readonly List<IAggregateEvent> _events = new();
-    // ReSharper disable once FieldCanBeMadeReadOnly.Local
     private Aggregate<TAggregatePayload>? _aggregate = null;
     public async Task<AggregateCommandResponse> HandleAsync(AggregateCommandDocument<TCommand> command, Aggregate<TAggregatePayload> aggregate)
     {
@@ -17,6 +16,7 @@ public abstract class CreateAggregateCommandHandlerBase<TAggregatePayload, TComm
         {
             throw new SekibanCanNotExecuteOnlyPublishingEventCommand(typeof(TCommand).Name);
         }
+        _aggregate = aggregate;
         var eventPayloads = ExecCreateCommandAsync(GetAggregateState, command.Payload);
         await foreach (var eventPayload in eventPayloads)
         {
