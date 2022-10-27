@@ -27,7 +27,7 @@ public class CreateBranchHandler : CreateAggregateCommandHandlerBase<Branch, Cre
         return command with { Name = string.Empty };
     }
     protected override async IAsyncEnumerable<IApplicableEvent<Branch>> ExecCreateCommandAsync(
-        AggregateState<Branch> aggregate,
+        AggregateState<Branch> aggregateState,
         CreateBranch command)
     {
         await Task.CompletedTask;
