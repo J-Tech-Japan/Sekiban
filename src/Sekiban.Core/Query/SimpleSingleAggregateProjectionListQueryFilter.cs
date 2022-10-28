@@ -8,7 +8,7 @@ public class SimpleSingleAggregateProjectionListQueryFilter<TAggregate, TProject
     ISingleAggregateProjectionListQueryFilterDefinition<TAggregate, TProjection, TAggregateProjectionPayload,
         SimpleSingleAggregateProjectionListQueryFilter<TAggregate, TProjection, TAggregateProjectionPayload>.QueryParameter,
         SingleAggregateProjectionState<TAggregateProjectionPayload>>
-    where TProjection : SingleAggregateProjectionBase<TAggregate, TProjection, TAggregateProjectionPayload>
+    where TProjection : SingleAggregateProjectionBase<TAggregate, TProjection, TAggregateProjectionPayload>, new()
     where TAggregateProjectionPayload : ISingleAggregateProjectionPayload
     where TAggregate : IAggregatePayload, new()
 {
