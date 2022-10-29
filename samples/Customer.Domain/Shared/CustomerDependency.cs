@@ -23,7 +23,7 @@ using Sekiban.Core.Event;
 using System.Reflection;
 namespace Customer.WebApi;
 
-public class CustomerWebDependency :  IWebDependencyDefinition
+public class CustomerDependency :  IWebDependencyDefinition
 {
     public IEnumerable<Type> GetControllerAggregateTypes()
     {
