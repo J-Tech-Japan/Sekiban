@@ -54,6 +54,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public IAggregateTestHelper<TAggregatePayload> ThenGetException<T>(Action<T> checkException) where T : Exception;
     public IAggregateTestHelper<TAggregatePayload> ThenGetException(Action<Exception> checkException);
     public IAggregateTestHelper<TAggregatePayload> ThenNotThrowsAnException();
+    public IAggregateTestHelper<TAggregatePayload> ThenThrowsAnException();
     public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors(
         IEnumerable<SekibanValidationParameterError> validationParameterErrors);
     public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors();

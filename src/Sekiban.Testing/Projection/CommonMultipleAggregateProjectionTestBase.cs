@@ -119,6 +119,12 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
         Assert.Null(exception);
         return this;
     }
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenThrowsAnException()
+    {
+        var exception = _latestException is AggregateException aggregateException ? aggregateException.InnerExceptions.First() : _latestException;
+        Assert.NotNull(exception);
+        return this;
+    }
 
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenGetState(
         Action<MultipleAggregateProjectionState<TProjectionPayload>> stateAction)

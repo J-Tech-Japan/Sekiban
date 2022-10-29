@@ -37,6 +37,7 @@ public interface IMultipleAggregateProjectionTestHelper<TProjection, TProjection
 
     #region Then
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenNotThrowsAnException();
+    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenThrowsAnException();
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenStateIs(
         MultipleAggregateProjectionState<TProjectionPayload> state);
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenGetState(
