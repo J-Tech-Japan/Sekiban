@@ -1,4 +1,5 @@
 using Customer.Domain.Shared;
+using Customer.WebApi;
 using Sekiban.Core.Aggregate;
 using Sekiban.Testing.SingleAggregate;
 namespace Customer.Test;

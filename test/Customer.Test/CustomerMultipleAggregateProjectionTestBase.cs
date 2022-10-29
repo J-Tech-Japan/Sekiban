@@ -1,4 +1,5 @@
 using Customer.Domain.Shared;
+using Customer.WebApi;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Query.MultipleAggregate;
 using Sekiban.Testing.Projection;

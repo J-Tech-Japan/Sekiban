@@ -7,6 +7,7 @@ using Customer.Domain.Aggregates.LoyaltyPoints.Consts;
 using Customer.Domain.Shared;
 using Customer.Domain.Shared.Exceptions;
 using Customer.Test.AggregateTests.CommandsHelpers;
+using Customer.WebApi;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Exceptions;

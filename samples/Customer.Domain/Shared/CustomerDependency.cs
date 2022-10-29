@@ -16,37 +16,15 @@ using Customer.Domain.Aggregates.RecentInMemoryActivities;
 using Customer.Domain.Aggregates.RecentInMemoryActivities.Commands;
 using Customer.Domain.Projections.ClientLoyaltyPointLists;
 using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
-using Customer.Domain.Shared;
-using Sekiban.Addon.Web.Dependency;
 using Sekiban.Core.Command;
+using Sekiban.Core.Dependency;
 using Sekiban.Core.Event;
 using System.Reflection;
 namespace Customer.WebApi;
 
-public class CustomerDependency :  IWebDependencyDefinition
+public class CustomerDependency : IDependencyDefinition
 {
-    public IEnumerable<Type> GetControllerAggregateTypes()
-    {
-        yield return typeof(Branch);
-        yield return typeof(Client);
-        yield return typeof(LoyaltyPoint);
-        yield return typeof(RecentActivity);
-        yield return typeof(RecentInMemoryActivity);
-    }
-
-    public bool ShouldMakeSimpleAggregateListQueryFilter => true;
-    public bool ShouldMakeSimpleSingleAggregateProjectionListQueryFilter => true;
-
-    public IEnumerable<Type> GetSingleAggregateProjectionTypes()
-    {
-        yield return typeof(ClientNameHistoryProjection);
-    }
-    public IEnumerable<Type> GetMultipleAggregatesProjectionTypes()
-    {
-        yield return typeof(ClientLoyaltyPointMultipleProjection);
-        yield return typeof(ClientLoyaltyPointListProjection);
-    }
-        public Assembly GetExecutingAssembly()
+    public Assembly GetExecutingAssembly()
     {
         return Assembly.GetExecutingAssembly();
     }
@@ -117,5 +95,4 @@ public class CustomerDependency :  IWebDependencyDefinition
     {
         yield return typeof(ClientLoyaltyPointQueryFilter);
     }
-
 }

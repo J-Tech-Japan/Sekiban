@@ -5,6 +5,7 @@ using Customer.Domain.Aggregates.Clients.Commands;
 using Customer.Domain.Aggregates.Clients.Events;
 using Customer.Domain.Aggregates.Clients.Projections;
 using Customer.Domain.Shared;
+using Customer.WebApi;
 using Sekiban.Testing.SingleAggregate;
 using System;
 using System.Collections.Generic;

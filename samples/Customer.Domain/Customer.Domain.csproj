@@ -9,9 +9,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\..\src\Sekiban.Addon.Web\Sekiban.Addon.Web.csproj" />
-        <ProjectReference Include="..\SampleProject.Common\SampleProject.Common.csproj" />
-        <ProjectReference Include="..\..\src\Sekiban.Core\Sekiban.Core.csproj" />
+        <ProjectReference Include="..\SampleProject.Common\SampleProject.Common.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Core\Sekiban.Core.csproj"/>
     </ItemGroup>
 
 </Project>

@@ -1,6 +1,7 @@
 using Customer.Domain.Aggregates.Branches.Events;
 using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
 using Customer.Domain.Shared;
+using Customer.WebApi;
 using Sekiban.Core.Query.MultipleAggregate;
 using Sekiban.Testing.QueryFilter;
 using System;
