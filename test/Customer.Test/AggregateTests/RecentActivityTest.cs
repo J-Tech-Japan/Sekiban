@@ -2,6 +2,7 @@ using Customer.Domain.Aggregates.RecentActivities;
 using Customer.Domain.Aggregates.RecentActivities.Commands;
 using Customer.Domain.Aggregates.RecentActivities.Events;
 using Customer.Domain.Shared;
+using Customer.WebApi;
 using Sekiban.Core.Event;
 using Sekiban.Testing.SingleAggregate;
 using System;

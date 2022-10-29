@@ -177,6 +177,10 @@ public abstract class SingleAggregateTestBase<TAggregatePayload, TDependencyDefi
     {
         return _helper.ThenNotThrowsAnException();
     }
+    public IAggregateTestHelper<TAggregatePayload> ThenThrowsAnException()
+    {
+        return _helper.ThenThrowsAnException();
+    }
     public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors(IEnumerable<SekibanValidationParameterError> validationParameterErrors)
     {
         return _helper.ThenHasValidationErrors(validationParameterErrors);

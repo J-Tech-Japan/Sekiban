@@ -19,7 +19,7 @@ public class CancelDeleteClientHandler : ChangeAggregateCommandHandlerBase<Clien
 {
 
     protected override async IAsyncEnumerable<IChangedEvent<Client>> ExecCommandAsync(
-        AggregateState<Client> aggregateState,
+        Func<AggregateState<Client>> getAggregateState,
         CancelDeleteClient command)
     {
         await Task.CompletedTask;

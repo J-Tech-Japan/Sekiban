@@ -8,6 +8,7 @@ using Customer.Domain.Aggregates.Clients.Projections;
 using Customer.Domain.Projections.ClientLoyaltyPointLists;
 using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
 using Customer.Domain.Shared;
+using Customer.WebApi;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Testing.Projection;

@@ -2,6 +2,7 @@ using Customer.Domain.Aggregates.Branches.Commands;
 using Customer.Domain.Aggregates.Clients.Commands;
 using Customer.Domain.Projections.ClientLoyaltyPointLists;
 using Customer.Domain.Shared;
+using Customer.WebApi;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Testing.QueryFilter;
 using System;

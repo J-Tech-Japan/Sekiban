@@ -27,7 +27,7 @@ public class ReportAggregateVersionToSnapshotMangerHandler : ChangeAggregateComm
         _aggregateSettings = aggregateSettings;
     }
     protected override async IAsyncEnumerable<IChangedEvent<SnapshotManager>> ExecCommandAsync(
-        AggregateState<SnapshotManager> aggregateState,
+        Func<AggregateState<SnapshotManager>> getAggregateState,
         ReportAggregateVersionToSnapshotManger command)
     {
         await Task.CompletedTask;
@@ -38,7 +38,7 @@ public class ReportAggregateVersionToSnapshotMangerHandler : ChangeAggregateComm
         var offset = command.Version - nextSnapshotVersion;
         if (nextSnapshotVersion == 0) { yield break; }
         var key = SnapshotManager.SnapshotKey(command.AggregateType.Name, command.TargetAggregateId, nextSnapshotVersion);
-        if (!aggregateState.Payload.Requests.Contains(key) && !aggregateState.Payload.RequestTakens.Contains(key))
+        if (!getAggregateState().Payload.Requests.Contains(key) && !getAggregateState().Payload.RequestTakens.Contains(key))
         {
             yield return new SnapshotManagerRequestAdded(
                 command.AggregateType.Name,
@@ -46,7 +46,9 @@ public class ReportAggregateVersionToSnapshotMangerHandler : ChangeAggregateComm
                 nextSnapshotVersion,
                 command.SnapshotVersion);
         }
-        if (aggregateState.Payload.Requests.Contains(key) && !aggregateState.Payload.RequestTakens.Contains(key) && offset > snapshotOffset)
+        if (getAggregateState().Payload.Requests.Contains(key) &&
+            !getAggregateState().Payload.RequestTakens.Contains(key) &&
+            offset > snapshotOffset)
         {
             yield return new SnapshotManagerSnapshotTaken(
                 command.AggregateType.Name,

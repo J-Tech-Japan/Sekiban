@@ -1,4 +1,4 @@
-﻿using Customer.Domain.AggregateEventSubscribers;
+using Customer.Domain.AggregateEventSubscribers;
 using Customer.Domain.Aggregates.Branches;
 using Customer.Domain.Aggregates.Branches.Commands;
 using Customer.Domain.Aggregates.Branches.QueryFilters;
@@ -20,31 +20,13 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Event;
 using System.Reflection;
-namespace Customer.Domain.Shared;
+namespace Customer.WebApi;
 
 public class CustomerDependency : IDependencyDefinition
 {
     public Assembly GetExecutingAssembly()
     {
         return Assembly.GetExecutingAssembly();
-    }
-    public IEnumerable<Type> GetControllerAggregateTypes()
-    {
-        yield return typeof(Branch);
-        yield return typeof(Client);
-        yield return typeof(LoyaltyPoint);
-        yield return typeof(RecentActivity);
-        yield return typeof(RecentInMemoryActivity);
-    }
-
-    public IEnumerable<Type> GetSingleAggregateProjectionTypes()
-    {
-        yield return typeof(ClientNameHistoryProjection);
-    }
-    public IEnumerable<Type> GetMultipleAggregatesProjectionTypes()
-    {
-        yield return typeof(ClientLoyaltyPointMultipleProjection);
-        yield return typeof(ClientLoyaltyPointListProjection);
     }
 
     public IEnumerable<Type> GetAggregateListQueryFilterTypes()
@@ -113,6 +95,4 @@ public class CustomerDependency : IDependencyDefinition
     {
         yield return typeof(ClientLoyaltyPointQueryFilter);
     }
-    public bool ShouldMakeSimpleAggregateListQueryFilter => true;
-    public bool ShouldMakeSimpleSingleAggregateProjectionListQueryFilter => true;
 }

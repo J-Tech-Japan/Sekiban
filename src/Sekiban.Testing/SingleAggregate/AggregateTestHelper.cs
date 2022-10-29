@@ -323,6 +323,12 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         Assert.Empty(_latestValidationErrors);
         return this;
     }
+    public IAggregateTestHelper<TAggregatePayload> ThenThrowsAnException()
+    {
+        var exception = _latestException is AggregateException aggregateException ? aggregateException.InnerExceptions.First() : _latestException;
+        Assert.NotNull(exception);
+        return this;
+    }
     public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors(IEnumerable<SekibanValidationParameterError> validationParameterErrors)
     {
         var actual = _latestValidationErrors;

@@ -1,4 +1,5 @@
 using Customer.Domain.Shared;
+using Customer.WebApi;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Dependency;

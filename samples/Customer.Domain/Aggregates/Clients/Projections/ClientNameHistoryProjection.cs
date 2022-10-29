@@ -9,15 +9,6 @@ namespace Customer.Domain.Aggregates.Clients.Projections;
 public class ClientNameHistoryProjection : SingleAggregateProjectionBase<Client, ClientNameHistoryProjection,
     ClientNameHistoryProjection.PayloadDefinition>
 {
-    public ClientNameHistoryProjection(Guid aggregateId)
-    {
-        AggregateId = aggregateId;
-    }
-    public ClientNameHistoryProjection() { }
-    public override ClientNameHistoryProjection CreateInitialAggregate(Guid aggregateId)
-    {
-        return new ClientNameHistoryProjection(aggregateId);
-    }
     protected override Func<PayloadDefinition, PayloadDefinition>? GetApplyEventFunc(
         IAggregateEvent ev,
         IEventPayload eventPayload)

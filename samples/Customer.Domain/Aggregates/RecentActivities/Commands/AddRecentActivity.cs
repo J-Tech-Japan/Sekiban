@@ -22,7 +22,7 @@ public class AddRecentActivityHandler : ChangeAggregateCommandHandlerBase<Recent
     }
 
     protected override async IAsyncEnumerable<IChangedEvent<RecentActivity>> ExecCommandAsync(
-        AggregateState<RecentActivity> aggregateState,
+        Func<AggregateState<RecentActivity>> getAggregateState,
         AddRecentActivity command)
     {
         await Task.CompletedTask;

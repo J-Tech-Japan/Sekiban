@@ -15,7 +15,7 @@ public record CreateLoyaltyPoint(Guid ClientId, int InitialPoint) : ICreateAggre
 public class CreateLoyaltyPointHandler : CreateAggregateCommandHandlerBase<LoyaltyPoint, CreateLoyaltyPoint>
 {
     protected override async IAsyncEnumerable<IApplicableEvent<LoyaltyPoint>> ExecCreateCommandAsync(
-        AggregateState<LoyaltyPoint> aggregateState,
+        Func<AggregateState<LoyaltyPoint>> getAggregateState,
         CreateLoyaltyPoint command)
     {
         await Task.CompletedTask;

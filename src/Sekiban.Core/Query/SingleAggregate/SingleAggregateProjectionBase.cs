@@ -5,7 +5,7 @@ namespace Sekiban.Core.Query.SingleAggregate;
 
 public abstract class SingleAggregateProjectionBase<TAggregate, TProjection, TProjectionPayload> : ISingleAggregateProjection,
     ISingleAggregateProjectionStateConvertible<SingleAggregateProjectionState<TProjectionPayload>>, ISingleAggregate,
-    ISingleAggregateProjector<TProjection> where TProjection : SingleAggregateProjectionBase<TAggregate, TProjection, TProjectionPayload>
+    ISingleAggregateProjector<TProjection> where TProjection : SingleAggregateProjectionBase<TAggregate, TProjection, TProjectionPayload>, new()
     where TProjectionPayload : ISingleAggregateProjectionPayload
     where TAggregate : IAggregatePayload, new()
 {
@@ -14,7 +14,7 @@ public abstract class SingleAggregateProjectionBase<TAggregate, TProjection, TPr
     public string LastSortableUniqueId { get; set; } = string.Empty;
     public int AppliedSnapshotVersion { get; set; }
     public int Version { get; set; }
-    public Guid AggregateId { get; set; }
+    public Guid AggregateId { get; init; }
     public void ApplyEvent(IAggregateEvent ev)
     {
         // IsAggregateInitialEvent は V0 の時のみ
@@ -54,7 +54,11 @@ public abstract class SingleAggregateProjectionBase<TAggregate, TProjection, TPr
             AppliedSnapshotVersion,
             Version);
     }
-    public abstract TProjection CreateInitialAggregate(Guid aggregateId);
+    public TProjection CreateInitialAggregate(Guid aggregateId)
+    {
+        return new TProjection
+            { AggregateId = aggregateId };
+    }
 
     public Type OriginalAggregateType()
     {

@@ -39,5 +39,5 @@ public abstract class
     {
         return command;
     }
-    protected abstract IAsyncEnumerable<IChangedAggregateEventPayload<TAggregatePayload>> ExecCommandAsync(Guid aggregateId, TCommand command);
+    protected abstract IAsyncEnumerable<IChangedEvent<TAggregatePayload>> ExecCommandAsync(Guid aggregateId, TCommand command);
 }
