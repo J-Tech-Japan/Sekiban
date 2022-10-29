@@ -37,15 +37,6 @@ public class CustomerDependency : IDependencyDefinition
         yield return typeof(RecentInMemoryActivity);
     }
 
-    public IEnumerable<Type> GetSingleAggregateProjectionTypes()
-    {
-        yield return typeof(ClientNameHistoryProjection);
-    }
-    public IEnumerable<Type> GetMultipleAggregatesProjectionTypes()
-    {
-        yield return typeof(ClientLoyaltyPointMultipleProjection);
-        yield return typeof(ClientLoyaltyPointListProjection);
-    }
 
     public IEnumerable<Type> GetAggregateListQueryFilterTypes()
     {
@@ -113,6 +104,4 @@ public class CustomerDependency : IDependencyDefinition
     {
         yield return typeof(ClientLoyaltyPointQueryFilter);
     }
-    public bool ShouldMakeSimpleAggregateListQueryFilter => true;
-    public bool ShouldMakeSimpleSingleAggregateProjectionListQueryFilter => true;
 }
