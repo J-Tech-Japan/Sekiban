@@ -28,15 +28,6 @@ public class CustomerDependency : IDependencyDefinition
     {
         return Assembly.GetExecutingAssembly();
     }
-    public IEnumerable<Type> GetControllerAggregateTypes()
-    {
-        yield return typeof(Branch);
-        yield return typeof(Client);
-        yield return typeof(LoyaltyPoint);
-        yield return typeof(RecentActivity);
-        yield return typeof(RecentInMemoryActivity);
-    }
-
 
     public IEnumerable<Type> GetAggregateListQueryFilterTypes()
     {
