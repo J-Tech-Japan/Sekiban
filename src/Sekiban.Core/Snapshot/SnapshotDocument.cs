@@ -1,6 +1,6 @@
 using Sekiban.Core.Document;
 using Sekiban.Core.Partition;
-using Sekiban.Core.Query.SingleAggregate;
+using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Shared;
 namespace Sekiban.Core.Snapshot;
 
@@ -37,8 +37,5 @@ public record SnapshotDocument : DocumentBase, IDocument
 
     public int SavedVersion { get; init; }
 
-    public T? ToState<T>() where T : ISingleAggregate
-    {
-        return SekibanJsonHelper.ConvertTo<T>(Snapshot);
-    }
+    public T? ToState<T>() where T : ISingleAggregate => SekibanJsonHelper.ConvertTo<T>(Snapshot);
 }

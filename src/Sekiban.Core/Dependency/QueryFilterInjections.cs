@@ -21,12 +21,12 @@ public static class QueryFilterInjections
     {
         AddQueryFilters(
             services,
-            dependencyDefinition.GetAggregateQueryFilterTypes(),
-            dependencyDefinition.GetAggregateListQueryFilterTypes(),
-            dependencyDefinition.GetSingleAggregateProjectionQueryFilterTypes(),
-            dependencyDefinition.GetSingleAggregateProjectionListQueryFilterTypes(),
-            dependencyDefinition.GetProjectionQueryFilterTypes(),
-            dependencyDefinition.GetProjectionListQueryFilterTypes());
+            dependencyDefinition.GetAggregateQueryTypes(),
+            dependencyDefinition.GetAggregateListQueryTypes(),
+            dependencyDefinition.GetSingleProjectionQueryTypes(),
+            dependencyDefinition.GetSingleProjectionListQueryTypes(),
+            dependencyDefinition.GetMultiProjectionQueryTypes(),
+            dependencyDefinition.GetMultiProjectionListQueryTypes());
         return services;
     }
 }

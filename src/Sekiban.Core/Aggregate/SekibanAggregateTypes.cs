@@ -1,4 +1,4 @@
-using Sekiban.Core.Query.SingleAggregate;
+using Sekiban.Core.Query.SingleProjections;
 using System.Reflection;
 namespace Sekiban.Core.Aggregate;
 
@@ -14,15 +14,15 @@ public class SekibanAggregateTypes
             var aggregates = assembly.DefinedTypes.Where(
                 x => x.IsClass &&
                     x.ImplementedInterfaces.Contains(attributeType) &&
-                    !x.ImplementedInterfaces.Contains(typeof(ISingleAggregateProjectionPayload)));
+                    !x.ImplementedInterfaces.Contains(typeof(ISingleProjectionPayload)));
 
             foreach (var type in aggregates)
             {
-                var baseProjector = typeof(DefaultSingleAggregateProjector<>);
+                var baseProjector = typeof(DefaultSingleProjector<>);
                 var p = baseProjector.MakeGenericType(type);
                 _registeredTypes.Add(new DefaultAggregateType(type, p));
             }
-            var projectorBase = typeof(SingleAggregateProjectionBase<,,>);
+            var projectorBase = typeof(SingleProjectionBase<,,>);
             var customProjectors = assembly.DefinedTypes.Where(
                 x => x.IsClass && x.BaseType?.Name == projectorBase.Name && x.BaseType?.Namespace == projectorBase.Namespace);
             foreach (var type in customProjectors)

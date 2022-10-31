@@ -5,19 +5,17 @@ namespace Sekiban.Core.Dependency;
 
 public interface IDependencyDefinition
 {
-    public virtual SekibanDependencyOptions GetSekibanDependencyOptions()
-    {
-        return new SekibanDependencyOptions(
-            new RegisteredEventTypes(GetExecutingAssembly(), SekibanEventSourcingDependency.GetAssembly()),
-            new SekibanAggregateTypes(GetExecutingAssembly(), SekibanEventSourcingDependency.GetAssembly()),
-            GetCommandDependencies());
-    }
+    public virtual SekibanDependencyOptions GetSekibanDependencyOptions() => new SekibanDependencyOptions(
+        new RegisteredEventTypes(GetExecutingAssembly(), SekibanEventSourcingDependency.GetAssembly()),
+        new SekibanAggregateTypes(GetExecutingAssembly(), SekibanEventSourcingDependency.GetAssembly()),
+        GetCommandDependencies().Concat(GetSubscriberDependencies()));
     Assembly GetExecutingAssembly();
-    public virtual IEnumerable<Type> GetAggregateListQueryFilterTypes() { return Enumerable.Empty<Type>(); }
-    public virtual IEnumerable<Type> GetAggregateQueryFilterTypes() { return Enumerable.Empty<Type>(); }
-    public virtual IEnumerable<Type> GetSingleAggregateProjectionListQueryFilterTypes() { return Enumerable.Empty<Type>(); }
-    public virtual IEnumerable<Type> GetSingleAggregateProjectionQueryFilterTypes() { return Enumerable.Empty<Type>(); }
-    public virtual IEnumerable<Type> GetProjectionQueryFilterTypes() { return Enumerable.Empty<Type>(); }
-    public virtual IEnumerable<Type> GetProjectionListQueryFilterTypes() { return Enumerable.Empty<Type>(); }
+    public IEnumerable<Type> GetAggregateListQueryTypes();
+    public IEnumerable<Type> GetAggregateQueryTypes();
+    public IEnumerable<Type> GetSingleProjectionListQueryTypes();
+    public IEnumerable<Type> GetSingleProjectionQueryTypes();
+    public IEnumerable<Type> GetMultiProjectionQueryTypes();
+    public IEnumerable<Type> GetMultiProjectionListQueryTypes();
     IEnumerable<(Type serviceType, Type? implementationType)> GetCommandDependencies();
+    IEnumerable<(Type serviceType, Type? implementationType)> GetSubscriberDependencies();
 }

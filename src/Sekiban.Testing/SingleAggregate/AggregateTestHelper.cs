@@ -4,7 +4,7 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Document;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
-using Sekiban.Core.Query.SingleAggregate;
+using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
@@ -21,7 +21,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public AggregateTestHelper(IServiceProvider serviceProvider)
     {
         _serviceProvider = serviceProvider;
-        _projector = new DefaultSingleAggregateProjector<TAggregatePayload>();
+        _projector = new DefaultSingleProjector<TAggregatePayload>();
         _aggregate = _projector.CreateInitialAggregate(Guid.Empty);
         _commandExecutor = new AggregateTestCommandExecutor(_serviceProvider);
     }
@@ -34,22 +34,22 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     private List<IAggregateEvent> _latestEvents { get; set; } = new();
     private List<SekibanValidationParameterError> _latestValidationErrors { get; set; } = new();
 
-    private DefaultSingleAggregateProjector<TAggregatePayload> _projector
+    private DefaultSingleProjector<TAggregatePayload> _projector
     {
         get;
     }
 
-    private List<SingleAggregateTestBase> SingleAggregateProjections
+    private List<SingleAggregateTestBase> SingleProjections
     {
         get;
     } = new();
-    public TSingleAggregateProjection SetupSingleAggregateProjection<TSingleAggregateProjection>()
-        where TSingleAggregateProjection : SingleAggregateTestBase
+    public TSingleProjection SetupSingleProjection<TSingleProjection>()
+        where TSingleProjection : SingleAggregateTestBase
     {
-        var singleAggregateProjection = Activator.CreateInstance(typeof(TSingleAggregateProjection), _serviceProvider) as TSingleAggregateProjection;
-        if (singleAggregateProjection == null) { throw new Exception("Could not create single aggregate projection"); }
-        SingleAggregateProjections.Add(singleAggregateProjection);
-        return singleAggregateProjection;
+        var singleProjection = Activator.CreateInstance(typeof(TSingleProjection), _serviceProvider) as TSingleProjection;
+        if (singleProjection == null) { throw new Exception("Could not create single aggregate projection"); }
+        SingleProjections.Add(singleProjection);
+        return singleProjection;
     }
     public IAggregateTestHelper<TAggregatePayload> GivenScenario(Action initialAction)
     {
@@ -83,15 +83,12 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
         where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
-        var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleAggregateService)) as ISingleAggregateService;
+        var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleProjectionService)) as ISingleProjectionService;
         if (singleAggregateService is null) { throw new Exception("Failed to get single aggregate service"); }
         var aggregate = singleAggregateService.GetAggregateStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name);
     }
-    public IReadOnlyCollection<IAggregateEvent> GetLatestEnvironmentEvents()
-    {
-        return _commandExecutor.LatestEvents;
-    }
+    public IReadOnlyCollection<IAggregateEvent> GetLatestEnvironmentEvents() => _commandExecutor.LatestEvents;
 
     public IAggregateTestHelper<TAggregatePayload> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregatePayload>
     {
@@ -132,7 +129,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         {
             throw new SekibanCreateCommandShouldSaveCreateEventFirstException();
         }
-        SingleAggregateProjections.ForEach(m => m.SetAggregateId(_aggregate.AggregateId));
+        SingleProjections.ForEach(m => m.SetAggregateId(_aggregate.AggregateId));
         SaveEvents(_latestEvents);
         CheckCommandJSONSupports(commandDocument);
         CheckStateJSONSupports();
@@ -279,22 +276,10 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         File.WriteAllText(filename, actualJson);
         return this;
     }
-    public Guid GetAggregateId()
-    {
-        return _aggregate.AggregateId;
-    }
-    public int GetCurrentVersion()
-    {
-        return _aggregate.Version;
-    }
-    public AggregateState<TAggregatePayload> GetAggregateState()
-    {
-        return _aggregate.ToState();
-    }
-    public Aggregate<TAggregatePayload> GetAggregate()
-    {
-        return _aggregate;
-    }
+    public Guid GetAggregateId() => _aggregate.AggregateId;
+    public int GetCurrentVersion() => _aggregate.Version;
+    public AggregateState<TAggregatePayload> GetAggregateState() => _aggregate.ToState();
+    public Aggregate<TAggregatePayload> GetAggregate() => _aggregate;
     public IAggregateTestHelper<TAggregatePayload> ThenThrows<T>() where T : Exception
     {
         var exception = _latestException is AggregateException aggregateException ? aggregateException.InnerExceptions.First() : _latestException;

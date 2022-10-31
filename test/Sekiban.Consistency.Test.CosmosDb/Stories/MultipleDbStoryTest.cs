@@ -3,7 +3,7 @@ using Customer.Domain.Aggregates.Branches.Commands;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Document;
-using Sekiban.Core.Query.MultipleAggregate;
+using Sekiban.Core.Query.MultipleProjections;
 using Sekiban.Core.Setting;
 using Sekiban.Infrastructure.Cosmos;
 using System.Threading.Tasks;
@@ -17,17 +17,15 @@ public class MultipleDbStoryTest : TestBase
     private const string DefaultDb = "Default";
     private readonly ISekibanContext _sekibanContext;
 
-    public MultipleDbStoryTest(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(sekibanTestFixture)
-    {
+    public MultipleDbStoryTest(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(sekibanTestFixture) =>
         _sekibanContext = GetService<ISekibanContext>();
-    }
 
     [Fact(DisplayName = "CosmosDb ストーリーテスト 複数データベースでの動作を検証する")]
     public async Task CosmosDbStory()
     {
         var cosmosDbFactory = GetService<CosmosDbFactory>();
         var aggregateCommandExecutor = GetService<IAggregateCommandExecutor>();
-        var multipleAggregateProjectionService = GetService<IMultipleAggregateProjectionService>();
+        var multipleAggregateProjectionService = GetService<IMultiProjectionService>();
 
         // 何もしないで実行したら "Default"の動作となる
         // 先に全データを削除する

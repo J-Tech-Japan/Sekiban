@@ -4,7 +4,7 @@ using Sekiban.Core.Document;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.History;
-using Sekiban.Core.Query.SingleAggregate;
+using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Validation;
 namespace Sekiban.Core.Command;
@@ -14,18 +14,18 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
     private static readonly SemaphoreSlim _semaphoreInMemory = new(1, 1);
     private readonly IDocumentWriter _documentWriter;
     private readonly IServiceProvider _serviceProvider;
-    private readonly ISingleAggregateService _singleAggregateService;
     private readonly IUserInformationFactory _userInformationFactory;
+    private readonly ISingleProjectionService singleProjectionService;
 
     public AggregateCommandExecutor(
         IDocumentWriter documentWriter,
         IServiceProvider serviceProvider,
-        ISingleAggregateService singleAggregateService,
+        ISingleProjectionService singleProjectionService,
         IUserInformationFactory userInformationFactory)
     {
         _documentWriter = documentWriter;
         _serviceProvider = serviceProvider;
-        _singleAggregateService = singleAggregateService;
+        this.singleProjectionService = singleProjectionService;
         _userInformationFactory = userInformationFactory;
     }
     public async Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecChangeCommandAsync<TAggregatePayload, C>(
@@ -69,7 +69,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
             }
             if (command is not IOnlyPublishingCommand)
             {
-                var aggregate = await _singleAggregateService.GetAggregateAsync<TAggregatePayload>(command.GetAggregateId());
+                var aggregate = await singleProjectionService.GetAggregateAsync<TAggregatePayload>(command.GetAggregateId());
                 if (aggregate is null)
                 {
                     throw new SekibanInvalidArgumentException();

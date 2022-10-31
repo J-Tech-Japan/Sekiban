@@ -4,7 +4,7 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Document;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
-using Sekiban.Core.Query.SingleAggregate;
+using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Validation;
 using System.Collections.Immutable;
 using System.ComponentModel.DataAnnotations;
@@ -13,10 +13,7 @@ namespace Sekiban.Testing.Command;
 public class AggregateTestCommandExecutor
 {
     private readonly IServiceProvider _serviceProvider;
-    public AggregateTestCommandExecutor(IServiceProvider serviceProvider)
-    {
-        _serviceProvider = serviceProvider;
-    }
+    public AggregateTestCommandExecutor(IServiceProvider serviceProvider) => _serviceProvider = serviceProvider;
     public ImmutableList<IAggregateEvent> LatestEvents { get; set; } = ImmutableList<IAggregateEvent>.Empty;
 
     public (IEnumerable<IAggregateEvent>, Guid) ExecuteCreateCommand<TAggregate>(
@@ -69,7 +66,7 @@ public class AggregateTestCommandExecutor
     private Aggregate<TAggregate> GetAggregate<TAggregate>(Guid aggregateId) where TAggregate : IAggregatePayload, new()
     {
 
-        var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleAggregateService)) as ISingleAggregateService;
+        var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleProjectionService)) as ISingleProjectionService;
         if (singleAggregateService is null) { throw new Exception("Failed to get Aggregate Service"); }
         var method = singleAggregateService.GetType().GetMethods().FirstOrDefault(m => m.Name == "GetAggregateAsync");
         if (method is null) { throw new Exception("Failed to get Aggregate Service"); }

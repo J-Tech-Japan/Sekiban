@@ -17,8 +17,8 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Document;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query;
-using Sekiban.Core.Query.MultipleAggregate;
-using Sekiban.Core.Query.SingleAggregate;
+using Sekiban.Core.Query.MultipleProjections;
+using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Snapshot;
 using Sekiban.Core.Snapshot.Aggregate;
 using Sekiban.Infrastructure.Cosmos;
@@ -33,21 +33,21 @@ namespace SampleProjectStoryXTest.Stories;
 public class CustomerDbStoryBasic : TestBase
 {
     private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
-    private readonly ISingleAggregateService _aggregateService;
     private readonly CosmosDbFactory _cosmosDbFactory;
     private readonly IDocumentPersistentRepository _documentPersistentRepository;
     private readonly HybridStoreManager _hybridStoreManager;
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
-    private readonly IMultipleAggregateProjectionService _multipleAggregateProjectionService;
     private readonly ITestOutputHelper _testOutputHelper;
+    private readonly IMultiProjectionService multiProjectionService;
+    private readonly ISingleProjectionService projectionService;
     public CustomerDbStoryBasic(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(sekibanTestFixture)
     {
         _testOutputHelper = testOutputHelper;
         _cosmosDbFactory = GetService<CosmosDbFactory>();
         _aggregateCommandExecutor = GetService<IAggregateCommandExecutor>();
-        _aggregateService = GetService<ISingleAggregateService>();
+        projectionService = GetService<ISingleProjectionService>();
         _documentPersistentRepository = GetService<IDocumentPersistentRepository>();
-        _multipleAggregateProjectionService = GetService<IMultipleAggregateProjectionService>();
+        multiProjectionService = GetService<IMultiProjectionService>();
         _inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
         _hybridStoreManager = GetService<HybridStoreManager>();
     }
@@ -61,34 +61,34 @@ public class CustomerDbStoryBasic : TestBase
         await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.AggregateCommand);
 
         // create list branch
-        var branchList = await _multipleAggregateProjectionService.GetAggregateList<Branch>();
+        var branchList = await multiProjectionService.GetAggregateList<Branch>();
         Assert.Empty(branchList);
         var (branchResult, _)
             = await _aggregateCommandExecutor.ExecCreateCommandAsync<Branch, CreateBranch>(new CreateBranch("Japan"));
         var branchId = branchResult.AggregateId!.Value;
         Assert.NotNull(branchResult);
         Assert.NotNull(branchResult.AggregateId);
-        branchList = await _multipleAggregateProjectionService.GetAggregateList<Branch>();
+        branchList = await multiProjectionService.GetAggregateList<Branch>();
         Assert.Single(branchList);
         var branchFromList = branchList.First(m => m.AggregateId == branchId);
         Assert.NotNull(branchFromList);
 
         var branchResult2 = await _aggregateCommandExecutor.ExecCreateCommandAsync<Branch, CreateBranch>(new CreateBranch("USA"));
-        branchList = await _multipleAggregateProjectionService.GetAggregateList<Branch>();
+        branchList = await multiProjectionService.GetAggregateList<Branch>();
         Assert.Equal(2, branchList.Count);
-        var branchListFromMultiple = await _multipleAggregateProjectionService.GetAggregateList<Branch>();
+        var branchListFromMultiple = await multiProjectionService.GetAggregateList<Branch>();
         Assert.Equal(2, branchListFromMultiple.Count);
 
         // loyalty point should be []  
-        var loyaltyPointList = await _multipleAggregateProjectionService.GetAggregateList<LoyaltyPoint>();
+        var loyaltyPointList = await multiProjectionService.GetAggregateList<LoyaltyPoint>();
         Assert.Empty(loyaltyPointList);
 
-        var clientNameList = await _multipleAggregateProjectionService
-            .GetSingleAggregateProjectionList<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>();
+        var clientNameList = await multiProjectionService
+            .GetSingleProjectionList<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>();
         Assert.Empty(clientNameList);
 
         // create client
-        var clientList = await _multipleAggregateProjectionService.GetAggregateList<Client>();
+        var clientList = await multiProjectionService.GetAggregateList<Client>();
         Assert.Empty(clientList);
         var originalName = "Tanaka Taro";
         var (createClientResult, _) = await _aggregateCommandExecutor.ExecCreateCommandAsync<Client, CreateClient>(
@@ -96,25 +96,25 @@ public class CustomerDbStoryBasic : TestBase
         var clientId = createClientResult.AggregateId!.Value;
         Assert.NotNull(createClientResult);
         Assert.NotNull(createClientResult.AggregateId);
-        clientList = await _multipleAggregateProjectionService.GetAggregateList<Client>();
+        clientList = await multiProjectionService.GetAggregateList<Client>();
         Assert.Single(clientList);
 
         // singleAggregateProjection
-        clientNameList = await _multipleAggregateProjectionService
-            .GetSingleAggregateProjectionList<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>();
+        clientNameList = await multiProjectionService
+            .GetSingleProjectionList<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>();
         Assert.Single(clientNameList);
         var tanakaProjection = clientNameList.First(m => m.AggregateId == clientId);
         Assert.Single(tanakaProjection.Payload.ClientNames);
         Assert.Equal(originalName, tanakaProjection.Payload.ClientNames.First().Name);
 
-        var clientNameListFromMultiple = await _multipleAggregateProjectionService
-            .GetSingleAggregateProjectionList<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>();
+        var clientNameListFromMultiple = await multiProjectionService
+            .GetSingleProjectionList<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>();
         Assert.Single(clientNameListFromMultiple);
         Assert.Equal(clientNameList.First().AggregateId, clientNameListFromMultiple.First().AggregateId);
 
         var branchResult3
             = await _aggregateCommandExecutor.ExecCreateCommandAsync<Branch, CreateBranch>(new CreateBranch("California"));
-        branchList = await _multipleAggregateProjectionService.GetAggregateList<Branch>();
+        branchList = await multiProjectionService.GetAggregateList<Branch>();
 
         var secondName = "田中 太郎";
         // should throw version error 
@@ -129,8 +129,8 @@ public class CustomerDbStoryBasic : TestBase
             new ChangeClientName(clientId, secondName) { ReferenceVersion = createClientResult.Version });
 
         // change name projection
-        clientNameList = await _multipleAggregateProjectionService
-            .GetSingleAggregateProjectionList<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>();
+        clientNameList = await multiProjectionService
+            .GetSingleProjectionList<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>();
         Assert.Single(clientNameList);
         tanakaProjection = clientNameList.First(m => m.AggregateId == clientId);
         Assert.Equal(2, tanakaProjection.Payload.ClientNames.Count);
@@ -149,15 +149,15 @@ public class CustomerDbStoryBasic : TestBase
 
         // get change name state
         var changeNameProjection
-            = await _aggregateService.GetProjectionAsync<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>(
+            = await projectionService.GetProjectionAsync<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>(
                 clientId);
         Assert.NotNull(changeNameProjection);
 
         // loyalty point should be created with event subscribe
-        loyaltyPointList = await _multipleAggregateProjectionService.GetAggregateList<LoyaltyPoint>();
+        loyaltyPointList = await multiProjectionService.GetAggregateList<LoyaltyPoint>();
         Assert.Single(clientList);
         // first point = 0
-        var loyaltyPoint = await _aggregateService.GetAggregateStateAsync<LoyaltyPoint>(clientId);
+        var loyaltyPoint = await projectionService.GetAggregateStateAsync<LoyaltyPoint>(clientId);
         Assert.NotNull(loyaltyPoint);
         Assert.Equal(0, loyaltyPoint!.Payload.CurrentPoint);
 
@@ -170,7 +170,7 @@ public class CustomerDbStoryBasic : TestBase
         Assert.NotNull(addPointResult);
         Assert.NotNull(addPointResult.AggregateId);
 
-        loyaltyPoint = await _aggregateService.GetAggregateStateAsync<LoyaltyPoint>(clientId);
+        loyaltyPoint = await projectionService.GetAggregateStateAsync<LoyaltyPoint>(clientId);
         Assert.NotNull(loyaltyPoint);
         Assert.Equal(1000, loyaltyPoint!.Payload.CurrentPoint);
 
@@ -192,12 +192,12 @@ public class CustomerDbStoryBasic : TestBase
         Assert.NotNull(usePointResult);
         Assert.NotNull(usePointResult.AggregateId);
 
-        loyaltyPoint = await _aggregateService.GetAggregateStateAsync<LoyaltyPoint>(clientId);
+        loyaltyPoint = await projectionService.GetAggregateStateAsync<LoyaltyPoint>(clientId);
         Assert.NotNull(loyaltyPoint);
         Assert.Equal(800, loyaltyPoint!.Payload.CurrentPoint);
 
-        var p = await _multipleAggregateProjectionService
-            .GetProjectionAsync<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.PayloadDefinition>();
+        var p = await multiProjectionService
+            .GetMultiProjectionAsync<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.PayloadDefinition>();
         Assert.NotNull(p);
         Assert.Equal(3, p.Payload.Branches.Count);
         Assert.Single(p.Payload.Records);
@@ -208,18 +208,18 @@ public class CustomerDbStoryBasic : TestBase
         Assert.NotNull(deleteClientResult);
         Assert.NotNull(deleteClientResult.AggregateId);
         // client deleted
-        clientList = await _multipleAggregateProjectionService.GetAggregateList<Client>();
+        clientList = await multiProjectionService.GetAggregateList<Client>();
         Assert.Empty(clientList);
         // can find deleted client
-        clientList = await _multipleAggregateProjectionService.GetAggregateList<Client>(QueryListType.DeletedOnly);
+        clientList = await multiProjectionService.GetAggregateList<Client>(QueryListType.DeletedOnly);
         Assert.Single(clientList);
-        clientList = await _multipleAggregateProjectionService.GetAggregateList<Client>(QueryListType.ActiveAndDeleted);
+        clientList = await multiProjectionService.GetAggregateList<Client>(QueryListType.ActiveAndDeleted);
         Assert.Single(clientList);
 
         // loyalty point should be created with event subscribe
-        loyaltyPointList = await _multipleAggregateProjectionService.GetAggregateList<LoyaltyPoint>();
+        loyaltyPointList = await multiProjectionService.GetAggregateList<LoyaltyPoint>();
         Assert.Empty(loyaltyPointList);
-        loyaltyPointList = await _multipleAggregateProjectionService.GetAggregateList<LoyaltyPoint>(QueryListType.DeletedOnly);
+        loyaltyPointList = await multiProjectionService.GetAggregateList<LoyaltyPoint>(QueryListType.DeletedOnly);
         Assert.Single(loyaltyPointList);
 
         // create recent activity
@@ -227,7 +227,7 @@ public class CustomerDbStoryBasic : TestBase
             = await _aggregateCommandExecutor.ExecCreateCommandAsync<RecentActivity, CreateRecentActivity>(
                 new CreateRecentActivity());
 
-        var recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentActivity>();
+        var recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
         Assert.Single(recentActivityList);
         var version = createRecentActivityResult.Version;
         var count = 160;
@@ -238,7 +238,7 @@ public class CustomerDbStoryBasic : TestBase
                     new AddRecentActivity(createRecentActivityResult.AggregateId!.Value, $"Message - {i + 1}") { ReferenceVersion = version });
             version = recentActivityAddedResult.Version;
         }
-        recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentActivity>();
+        recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
         Assert.Single(recentActivityList);
         Assert.Equal(count + 1, version);
 
@@ -250,16 +250,16 @@ public class CustomerDbStoryBasic : TestBase
             new OnlyPublishingAddRecentActivity(recentActivityId, "only publish event"));
 
         // get single aggregate and applied event
-        var recentActivityState = await _aggregateService.GetAggregateStateAsync<RecentActivity>(recentActivityId);
+        var recentActivityState = await projectionService.GetAggregateStateAsync<RecentActivity>(recentActivityId);
         Assert.Equal("only publish event", recentActivityState?.Payload.LatestActivities.First().Activity);
 
-        p = await _multipleAggregateProjectionService
-            .GetProjectionAsync<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.PayloadDefinition>();
+        p = await multiProjectionService
+            .GetMultiProjectionAsync<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.PayloadDefinition>();
         Assert.NotNull(p);
         Assert.Equal(3, p.Payload.Branches.Count);
         Assert.Empty(p.Payload.Records);
         var snapshotManager
-            = await _aggregateService.GetAggregateStateFromInitialAsync<SnapshotManager>(
+            = await projectionService.GetAggregateStateFromInitialAsync<SnapshotManager>(
                 SnapshotManager.SharedId);
         _testOutputHelper.WriteLine("-requests-");
         foreach (var key in snapshotManager!.Payload.Requests)
@@ -272,7 +272,7 @@ public class CustomerDbStoryBasic : TestBase
             _testOutputHelper.WriteLine(key);
         }
 
-        branchList = await _multipleAggregateProjectionService.GetAggregateList<Branch>();
+        branchList = await multiProjectionService.GetAggregateList<Branch>();
         Assert.Equal(3, branchList.Count);
     }
     [Fact(DisplayName = "CosmosDbストーリーテスト用に削除のみを行う 。")]
@@ -299,7 +299,7 @@ public class CustomerDbStoryBasic : TestBase
                 new CreateRecentActivity());
         var recentActivityId = createRecentActivityResult.AggregateId;
 
-        var recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentActivity>();
+        var recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
         Assert.Single(recentActivityList);
         var version = createRecentActivityResult.Version;
         var tasks = new List<Task>();
@@ -320,21 +320,21 @@ public class CustomerDbStoryBasic : TestBase
                     }));
         }
         await Task.WhenAll(tasks);
-        recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentActivity>();
+        recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
         Assert.Single(recentActivityList);
         // this works
         var aggregateRecentActivity
-            = await _aggregateService.GetAggregateStateFromInitialAsync<RecentActivity>(
+            = await projectionService.GetAggregateStateFromInitialAsync<RecentActivity>(
                 createRecentActivityResult.AggregateId!.Value);
         var aggregateRecentActivity2
-            = await _aggregateService.GetAggregateStateAsync<RecentActivity>(createRecentActivityResult.AggregateId!.Value);
+            = await projectionService.GetAggregateStateAsync<RecentActivity>(createRecentActivityResult.AggregateId!.Value);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + 1, aggregateRecentActivity!.Version);
         Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
 
         var snapshotManager
-            = await _aggregateService.GetAggregateStateFromInitialAsync<SnapshotManager>(
+            = await projectionService.GetAggregateStateFromInitialAsync<SnapshotManager>(
                 SnapshotManager.SharedId);
         _testOutputHelper.WriteLine("-requests-");
         foreach (var key in snapshotManager!.Payload.Requests)
@@ -364,7 +364,7 @@ public class CustomerDbStoryBasic : TestBase
         foreach (var state in snapshots.Select(snapshot => snapshot.ToState<AggregateState<TAggregatePayload>>()))
         {
             if (state is null) { throw new SekibanInvalidArgumentException(); }
-            var fromInitial = await _aggregateService.GetAggregateStateFromInitialAsync<TAggregatePayload>(aggregateId, state.Version);
+            var fromInitial = await projectionService.GetAggregateStateFromInitialAsync<TAggregatePayload>(aggregateId, state.Version);
             if (fromInitial is null) { throw new SekibanInvalidArgumentException(); }
             Assert.Equal(fromInitial.Version, state.Version);
             Assert.Equal(fromInitial.LastEventId, state.LastEventId);
@@ -379,7 +379,7 @@ public class CustomerDbStoryBasic : TestBase
                 .ExecCreateCommandAsync<RecentInMemoryActivity, CreateRecentInMemoryActivity>(
                     new CreateRecentInMemoryActivity());
 
-        var recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentInMemoryActivity>();
+        var recentActivityList = await multiProjectionService.GetAggregateList<RecentInMemoryActivity>();
         Assert.Single(recentActivityList);
         var version = createRecentActivityResult.Version;
         var tasks = new List<Task>();
@@ -402,14 +402,14 @@ public class CustomerDbStoryBasic : TestBase
                     }));
         }
         await Task.WhenAll(tasks);
-        recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentInMemoryActivity>();
+        recentActivityList = await multiProjectionService.GetAggregateList<RecentInMemoryActivity>();
         Assert.Single(recentActivityList);
 
         var aggregateRecentActivity
-            = await _aggregateService.GetAggregateStateFromInitialAsync<RecentInMemoryActivity>(
+            = await projectionService.GetAggregateStateFromInitialAsync<RecentInMemoryActivity>(
                 createRecentActivityResult.AggregateId!.Value);
         var aggregateRecentActivity2
-            = await _aggregateService.GetAggregateStateAsync<RecentInMemoryActivity>(
+            = await projectionService.GetAggregateStateAsync<RecentInMemoryActivity>(
                 createRecentActivityResult.AggregateId!.Value);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
@@ -419,16 +419,16 @@ public class CustomerDbStoryBasic : TestBase
 
     public async Task ContinuousExecutionTestAsync()
     {
-        var recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentActivity>();
+        var recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
         Assert.Single(recentActivityList);
         var aggregateId = recentActivityList.First().AggregateId;
 
-        var aggregate = await _aggregateService.GetAggregateAsync<RecentActivity>(aggregateId);
+        var aggregate = await projectionService.GetAggregateAsync<RecentActivity>(aggregateId);
         Assert.NotNull(aggregate);
 
-        var aggregateRecentActivity2 = await _aggregateService.GetAggregateStateAsync<RecentActivity>(aggregateId);
+        var aggregateRecentActivity2 = await projectionService.GetAggregateStateAsync<RecentActivity>(aggregateId);
         //var aggregateRecentActivity =
-        //    await _aggregateService
+        //    await projectionService
         //        .GetAggregateStateFromInitialAsync<RecentActivity>(
         //            aggregateId);
         //Assert.Single(recentActivityList);
@@ -452,7 +452,7 @@ public class CustomerDbStoryBasic : TestBase
                     }));
         }
         await Task.WhenAll(tasks);
-        recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentActivity>();
+        recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
         Assert.Single(recentActivityList);
 
         var snapshots = await _documentPersistentRepository.GetSnapshotsForAggregateAsync(aggregateId, typeof(RecentActivity));
@@ -460,15 +460,15 @@ public class CustomerDbStoryBasic : TestBase
 
         // check aggregate result
         var aggregateRecentActivity
-            = await _aggregateService.GetAggregateStateFromInitialAsync<RecentActivity>(aggregateId);
-        aggregateRecentActivity2 = await _aggregateService.GetAggregateStateAsync<RecentActivity>(aggregateId);
+            = await projectionService.GetAggregateStateFromInitialAsync<RecentActivity>(aggregateId);
+        aggregateRecentActivity2 = await projectionService.GetAggregateStateAsync<RecentActivity>(aggregateId);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + aggregate!.ToState().Version, aggregateRecentActivity!.Version);
         Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
 
         var snapshotManager
-            = await _aggregateService.GetAggregateStateFromInitialAsync<SnapshotManager>(
+            = await projectionService.GetAggregateStateFromInitialAsync<SnapshotManager>(
                 SnapshotManager.SharedId);
         _testOutputHelper.WriteLine("-requests-");
         foreach (var key in snapshotManager!.Payload.Requests)

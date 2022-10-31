@@ -1,6 +1,6 @@
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
-using Sekiban.Core.Query.SingleAggregate;
+using Sekiban.Core.Query.SingleProjections;
 namespace Customer.Domain.Aggregates.Clients.Projections;
 
 public enum ClientNameHistoryProjectionQueryFilterSortKeys
@@ -11,13 +11,13 @@ public enum ClientNameHistoryProjectionQueryFilterSortKeys
     ClientEmail
 }
 // ReSharper disable once ClassNeverInstantiated.Global
-public class ClientNameHistoryProjectionQueryFilter : ISingleAggregateProjectionListQueryFilterDefinition<Client, ClientNameHistoryProjection,
+public class ClientNameHistoryProjectionQueryFilter : ISingleProjectionListQuery<Client, ClientNameHistoryProjection,
     ClientNameHistoryProjection.PayloadDefinition, ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionParameter,
     ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionQueryResponse>
 {
     public IEnumerable<ClientNameHistoryProjectionQueryResponse> HandleFilter(
         ClientNameHistoryProjectionParameter queryParam,
-        IEnumerable<SingleAggregateProjectionState<ClientNameHistoryProjection.PayloadDefinition>> list)
+        IEnumerable<SingleProjectionState<ClientNameHistoryProjection.PayloadDefinition>> list)
     {
         return (from projection in list
                 from name in projection.Payload.ClientNames
@@ -58,6 +58,6 @@ public class ClientNameHistoryProjectionQueryFilter : ISingleAggregateProjection
         Guid? BranchId,
         Guid? ClientId,
         ClientNameHistoryProjectionQueryFilterSortKeys? SortKey,
-        bool SortIsAsc = true) : IQueryFilterParameter;
+        bool SortIsAsc = true) : IQueryPagingParameter;
     public record ClientNameHistoryProjectionQueryResponse(Guid BranchId, Guid ClientId, string ClientName, string ClientEmail, DateTime NameSetAt);
 }

@@ -8,8 +8,8 @@ namespace Sekiban.Testing.SingleAggregate;
 public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload : IAggregatePayload, new()
 {
     #region given and setup
-    public TSingleAggregateProjection SetupSingleAggregateProjection<TSingleAggregateProjection>()
-        where TSingleAggregateProjection : SingleAggregateTestBase;
+    public TSingleProjection SetupSingleProjection<TSingleProjection>()
+        where TSingleProjection : SingleAggregateTestBase;
     public IAggregateTestHelper<TAggregatePayload> GivenScenario(Action initialAction);
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvent(IAggregateEvent ev);

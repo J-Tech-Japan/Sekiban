@@ -1,12 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Dependency;
-using Sekiban.Core.Query.MultipleAggregate;
+using Sekiban.Core.Query.MultipleProjections;
 namespace Sekiban.Testing.Projection;
 
 public class
     MultipleAggregateProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> : CommonMultipleAggregateProjectionTestBase<
-        TProjection, TProjectionPayload, TDependencyDefinition> where TProjection : MultipleAggregateProjectionBase<TProjectionPayload>, new()
-    where TProjectionPayload : IMultipleAggregateProjectionPayload, new()
+        TProjection, TProjectionPayload, TDependencyDefinition> where TProjection : MultiProjectionBase<TProjectionPayload>, new()
+    where TProjectionPayload : IMultiProjectionPayload, new()
     where TDependencyDefinition : IDependencyDefinition, new()
 {
     public MultipleAggregateProjectionTestBase()
@@ -23,11 +23,11 @@ public class
             throw new InvalidOperationException("Service provider not set");
         }
         var multipleProjectionService
-            = _serviceProvider.GetRequiredService(typeof(IMultipleAggregateProjectionService)) as IMultipleAggregateProjectionService;
+            = _serviceProvider.GetRequiredService(typeof(IMultiProjectionService)) as IMultiProjectionService;
         if (multipleProjectionService is null) { throw new Exception("Failed to get multipleProjectionService "); }
         try
         {
-            State = multipleProjectionService.GetProjectionAsync<TProjection, TProjectionPayload>().Result;
+            State = multipleProjectionService.GetMultiProjectionAsync<TProjection, TProjectionPayload>().Result;
         }
         catch (Exception ex)
         {

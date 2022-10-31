@@ -1,4 +1,4 @@
-using Sekiban.Core.Query.MultipleAggregate;
+using Sekiban.Core.Query.MultipleProjections;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Shared;
@@ -8,17 +8,17 @@ namespace Sekiban.Testing.QueryFilter;
 
 public class
     ProjectionQueryFilterTestChecker<TProjection, TProjectionPayload, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse> :
-        IQueryFilterChecker<MultipleAggregateProjectionState<TProjectionPayload>>
-    where TProjection : MultipleAggregateProjectionBase<TProjectionPayload>, new()
-    where TProjectionPayload : IMultipleAggregateProjectionPayload, new()
+        IQueryFilterChecker<MultiProjectionState<TProjectionPayload>>
+    where TProjection : MultiProjectionBase<TProjectionPayload>, new()
+    where TProjectionPayload : IMultiProjectionPayload, new()
     where TQueryFilterParameter : IQueryParameter
-    where TProjectionQueryFilter : IProjectionQueryFilterDefinition<TProjection, TProjectionPayload, TQueryFilterParameter, TQueryFilterResponse>,
+    where TProjectionQueryFilter : IMultiProjectionQuery<TProjection, TProjectionPayload, TQueryFilterParameter, TQueryFilterResponse>,
     new()
 {
     private TQueryFilterResponse? _response;
-    private MultipleAggregateProjectionState<TProjectionPayload>? _state;
-    public QueryFilterHandler? QueryFilterHandler { get; set; } = null;
-    public void RegisterState(MultipleAggregateProjectionState<TProjectionPayload> state)
+    private MultiProjectionState<TProjectionPayload>? _state;
+    public QueryHandler? QueryFilterHandler { get; set; } = null;
+    public void RegisterState(MultiProjectionState<TProjectionPayload> state)
     {
         _state = state;
     }
@@ -32,7 +32,7 @@ public class
         }
         if (QueryFilterHandler == null) { throw new MissingMemberException(nameof(QueryFilterHandler)); }
         _response = QueryFilterHandler
-            .GetProjectionQueryFilter<TProjection, TProjectionPayload, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
+            .GetMultiProjectionQuery<TProjection, TProjectionPayload, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
                 param,
                 _state);
         return this;

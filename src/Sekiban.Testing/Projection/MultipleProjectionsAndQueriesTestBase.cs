@@ -4,7 +4,7 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
-using Sekiban.Core.Query.SingleAggregate;
+using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Testing.Command;
 namespace Sekiban.Testing.Projection;
 
@@ -62,13 +62,10 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
     public AggregateState<TEnvironmentAggregatePayload> GetAggregateState<TEnvironmentAggregate, TEnvironmentAggregatePayload>(Guid aggregateId)
         where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
-        var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleAggregateService)) as ISingleAggregateService;
+        var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleProjectionService)) as ISingleProjectionService;
         if (singleAggregateService is null) { throw new Exception("Failed to get single aggregate service"); }
         var aggregate = singleAggregateService.GetAggregateStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregate).Name);
     }
-    public IReadOnlyCollection<IAggregateEvent> GetLatestEvents()
-    {
-        return _commandExecutor.LatestEvents;
-    }
+    public IReadOnlyCollection<IAggregateEvent> GetLatestEvents() => _commandExecutor.LatestEvents;
 }

@@ -20,29 +20,29 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Event;
 using System.Reflection;
-namespace Customer.WebApi;
+namespace Customer.Domain.Shared;
 
 public class CustomerDependency : IDependencyDefinition
 {
     public Assembly GetExecutingAssembly() => Assembly.GetExecutingAssembly();
 
-    public IEnumerable<Type> GetAggregateListQueryFilterTypes()
+    public IEnumerable<Type> GetAggregateListQueryTypes()
     {
         yield return typeof(BasicClientQueryFilter);
     }
-    public IEnumerable<Type> GetAggregateQueryFilterTypes()
+    public IEnumerable<Type> GetAggregateQueryTypes()
     {
         yield return typeof(ClientEmailExistsQueryFilter);
         yield return typeof(BranchExistsQueryFilter);
     }
-    public IEnumerable<Type> GetSingleAggregateProjectionListQueryFilterTypes()
+    public IEnumerable<Type> GetSingleProjectionListQueryTypes()
     {
         yield return typeof(ClientNameHistoryProjectionQueryFilter);
     }
-    public IEnumerable<Type> GetSingleAggregateProjectionQueryFilterTypes() => Enumerable.Empty<Type>();
-    public IEnumerable<Type> GetProjectionQueryFilterTypes()
+    public IEnumerable<Type> GetSingleProjectionQueryTypes() => Enumerable.Empty<Type>();
+    public IEnumerable<Type> GetMultiProjectionQueryTypes()
     {
-        yield return typeof(ClientLoyaltyPointMultipleProjectionQueryFilter);
+        yield return typeof(ClientLoyaltyPointMultipleMultiProjectionQueryFilter);
     }
     public IEnumerable<(Type serviceType, Type? implementationType)> GetCommandDependencies()
     {
@@ -85,7 +85,8 @@ public class CustomerDependency : IDependencyDefinition
         yield return (typeof(IChangeAggregateCommandHandler<RecentInMemoryActivity, AddRecentInMemoryActivity>),
             typeof(AddRecentInMemoryActivityHandler));
     }
-    public IEnumerable<Type> GetProjectionListQueryFilterTypes()
+    public IEnumerable<(Type serviceType, Type? implementationType)> GetSubscriberDependencies() => throw new NotImplementedException();
+    public IEnumerable<Type> GetMultiProjectionListQueryTypes()
     {
         yield return typeof(ClientLoyaltyPointQueryFilter);
     }

@@ -8,7 +8,7 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.QueryModel;
-using Sekiban.Core.Query.SingleAggregate;
+using Sekiban.Core.Query.SingleProjections;
 using System.ComponentModel.DataAnnotations;
 namespace Customer.Domain.Aggregates.Clients.Commands;
 
@@ -42,12 +42,12 @@ public record CreateClient : ICreateAggregateCommand<Client>
     public Guid GetAggregateId() => Guid.NewGuid();
     public class Handler : CreateAggregateCommandHandlerBase<Client, CreateClient>
     {
-        private readonly IQueryFilterService _queryFilterService;
-        private readonly ISingleAggregateService _singleAggregateService;
-        public Handler(ISingleAggregateService singleAggregateService, IQueryFilterService queryFilterService)
+        private readonly IQueryService queryService;
+        private readonly ISingleProjectionService singleProjectionService;
+        public Handler(ISingleProjectionService singleProjectionService, IQueryService queryService)
         {
-            _singleAggregateService = singleAggregateService;
-            _queryFilterService = queryFilterService;
+            this.singleProjectionService = singleProjectionService;
+            this.queryService = queryService;
         }
 
         protected override async IAsyncEnumerable<IApplicableEvent<Client>> ExecCreateCommandAsync(
@@ -56,8 +56,8 @@ public record CreateClient : ICreateAggregateCommand<Client>
         {
             // Check if branch exists
             var branchExists
-                = await _queryFilterService
-                    .GetAggregateQueryFilterAsync<Branch, BranchExistsQueryFilter, BranchExistsQueryFilter.QueryParameter, bool>(
+                = await queryService
+                    .GetAggregateQueryAsync<Branch, BranchExistsQueryFilter, BranchExistsQueryFilter.QueryParameter, bool>(
                         new BranchExistsQueryFilter.QueryParameter(command.BranchId));
             if (!branchExists)
             {
@@ -66,8 +66,8 @@ public record CreateClient : ICreateAggregateCommand<Client>
 
             // Check no email duplicates
             var emailExists
-                = await _queryFilterService
-                    .GetAggregateQueryFilterAsync<Client, ClientEmailExistsQueryFilter, ClientEmailExistsQueryFilter.QueryParameter,
+                = await queryService
+                    .GetAggregateQueryAsync<Client, ClientEmailExistsQueryFilter, ClientEmailExistsQueryFilter.QueryParameter,
                         bool>(new ClientEmailExistsQueryFilter.QueryParameter(command.ClientEmail));
             if (emailExists)
             {

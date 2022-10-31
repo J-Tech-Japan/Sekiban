@@ -1,5 +1,5 @@
 using Sekiban.Core.Aggregate;
-using Sekiban.Core.Query.MultipleAggregate;
+using Sekiban.Core.Query.MultipleProjections;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Shared;
@@ -9,19 +9,19 @@ namespace Sekiban.Testing.QueryFilter;
 
 public class
     AggregateListQueryFilterTestChecker<TAggregatePayload, TQueryFilter, TQueryParameter, TResponseQueryModel> : IQueryFilterChecker<
-        MultipleAggregateProjectionState<SingleAggregateListProjectionState<AggregateState<TAggregatePayload>>>>
+        MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>>
     where TAggregatePayload : IAggregatePayload, new()
-    where TQueryFilter : IAggregateListQueryFilterDefinition<TAggregatePayload, TQueryParameter, TResponseQueryModel>
+    where TQueryFilter : IAggregateListQuery<TAggregatePayload, TQueryParameter, TResponseQueryModel>
     where TQueryParameter : IQueryParameter
 {
-    public QueryFilterListResult<TResponseQueryModel>? Response { get; set; }
-    private MultipleAggregateProjectionState<SingleAggregateListProjectionState<AggregateState<TAggregatePayload>>>? _state { get; set; }
-    public QueryFilterHandler? QueryFilterHandler
+    public QueryListResult<TResponseQueryModel>? Response { get; set; }
+    private MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>? _state { get; set; }
+    public QueryHandler? QueryFilterHandler
     {
         get;
         set;
     }
-    public void RegisterState(MultipleAggregateProjectionState<SingleAggregateListProjectionState<AggregateState<TAggregatePayload>>> state)
+    public void RegisterState(MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>> state)
     {
         _state = state;
     }
@@ -34,7 +34,7 @@ public class
             throw new InvalidDataException("Projection is null");
         }
         if (QueryFilterHandler == null) { throw new MissingMemberException(nameof(QueryFilterHandler)); }
-        Response = QueryFilterHandler.GetAggregateListQueryFilter<TAggregatePayload, TQueryFilter, TQueryParameter, TResponseQueryModel>(
+        Response = QueryFilterHandler.GetAggregateListQuery<TAggregatePayload, TQueryFilter, TQueryParameter, TResponseQueryModel>(
             param,
             _state.Payload.List);
         return this;
@@ -55,7 +55,7 @@ public class
         return this;
     }
     public AggregateListQueryFilterTestChecker<TAggregatePayload, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenResponseIs(
-        QueryFilterListResult<TResponseQueryModel> expectedResponse)
+        QueryListResult<TResponseQueryModel> expectedResponse)
     {
         if (Response == null)
         {
@@ -69,7 +69,7 @@ public class
         return this;
     }
     public AggregateListQueryFilterTestChecker<TAggregatePayload, TQueryFilter, TQueryParameter, TResponseQueryModel> ThenGetResponse(
-        Action<QueryFilterListResult<TResponseQueryModel>> responseAction)
+        Action<QueryListResult<TResponseQueryModel>> responseAction)
     {
         Assert.NotNull(Response);
         responseAction(Response!);
@@ -78,7 +78,7 @@ public class
     public AggregateListQueryFilterTestChecker<TAggregatePayload, TQueryFilter, TQueryParameter, TResponseQueryModel>
         ThenResponseIsFromJson(string responseJson)
     {
-        var response = JsonSerializer.Deserialize<QueryFilterListResult<TResponseQueryModel>>(responseJson);
+        var response = JsonSerializer.Deserialize<QueryListResult<TResponseQueryModel>>(responseJson);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         ThenResponseIs(response);
         return this;
@@ -87,7 +87,7 @@ public class
         ThenResponseIsFromFile(string responseFilename)
     {
         using var openStream = File.OpenRead(responseFilename);
-        var response = JsonSerializer.Deserialize<QueryFilterListResult<TResponseQueryModel>>(openStream);
+        var response = JsonSerializer.Deserialize<QueryListResult<TResponseQueryModel>>(openStream);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         ThenResponseIs(response);
         return this;

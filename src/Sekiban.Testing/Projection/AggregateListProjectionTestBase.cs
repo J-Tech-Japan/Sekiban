@@ -1,13 +1,13 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Dependency;
-using Sekiban.Core.Query.MultipleAggregate;
-using Sekiban.Core.Query.SingleAggregate;
+using Sekiban.Core.Query.MultipleProjections;
+using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Testing.Projection;
 
 public class AggregateListProjectionTestBase<TAggregatePayload, TDependencyDefinition> : CommonMultipleAggregateProjectionTestBase<
-    SingleAggregateListProjector<Aggregate<TAggregatePayload>, AggregateState<TAggregatePayload>, DefaultSingleAggregateProjector<TAggregatePayload>>,
-    SingleAggregateListProjectionState<AggregateState<TAggregatePayload>>, TDependencyDefinition>
+    SingleProjectionListProjector<Aggregate<TAggregatePayload>, AggregateState<TAggregatePayload>, DefaultSingleProjector<TAggregatePayload>>,
+    SingleProjectionListState<AggregateState<TAggregatePayload>>, TDependencyDefinition>
     where TAggregatePayload : IAggregatePayload, new()
     where TDependencyDefinition : IDependencyDefinition, new()
 {
@@ -19,16 +19,16 @@ public class AggregateListProjectionTestBase<TAggregatePayload, TDependencyDefin
     }
     public override
         IMultipleAggregateProjectionTestHelper<
-            SingleAggregateListProjector<Aggregate<TAggregatePayload>, AggregateState<TAggregatePayload>,
-                DefaultSingleAggregateProjector<TAggregatePayload>>,
-            SingleAggregateListProjectionState<AggregateState<TAggregatePayload>>> WhenProjection()
+            SingleProjectionListProjector<Aggregate<TAggregatePayload>, AggregateState<TAggregatePayload>,
+                DefaultSingleProjector<TAggregatePayload>>,
+            SingleProjectionListState<AggregateState<TAggregatePayload>>> WhenProjection()
     {
         if (_serviceProvider == null)
         {
             throw new InvalidOperationException("Service provider not set");
         }
         var multipleProjectionService
-            = _serviceProvider.GetRequiredService(typeof(IMultipleAggregateProjectionService)) as IMultipleAggregateProjectionService;
+            = _serviceProvider.GetRequiredService(typeof(IMultiProjectionService)) as IMultiProjectionService;
         if (multipleProjectionService is null) { throw new Exception("Failed to get multipleProjectionService "); }
         try
         {

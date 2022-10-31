@@ -23,39 +23,21 @@ public abstract class SingleAggregateTestBase<TAggregatePayload, TDependencyDefi
         _serviceProvider = services.BuildServiceProvider();
         _helper = new AggregateTestHelper<TAggregatePayload>(_serviceProvider);
     }
-    public TSingleAggregateProjection SetupSingleAggregateProjection<TSingleAggregateProjection>()
-        where TSingleAggregateProjection : SingleAggregateTestBase
-    {
-        return _helper.SetupSingleAggregateProjection<TSingleAggregateProjection>();
-    }
-    public IAggregateTestHelper<TAggregatePayload> GivenScenario(Action initialAction)
-    {
-        return _helper.GivenScenario(initialAction);
-    }
-    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvent(IAggregateEvent ev)
-    {
-        return _helper.GivenEnvironmentEvent(ev);
-    }
-    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvents(IEnumerable<IAggregateEvent> events)
-    {
-        return _helper.GivenEnvironmentEvents(events);
-    }
-    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFile(string filename)
-    {
-        return _helper.GivenEnvironmentEventsFile(filename);
-    }
+    public TSingleProjection SetupSingleProjection<TSingleProjection>()
+        where TSingleProjection : SingleAggregateTestBase => _helper.SetupSingleProjection<TSingleProjection>();
+    public IAggregateTestHelper<TAggregatePayload> GivenScenario(Action initialAction) => _helper.GivenScenario(initialAction);
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvent(IAggregateEvent ev) => _helper.GivenEnvironmentEvent(ev);
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvents(IEnumerable<IAggregateEvent> events) =>
+        _helper.GivenEnvironmentEvents(events);
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFile(string filename) => _helper.GivenEnvironmentEventsFile(filename);
     public AggregateState<TEnvironmentAggregatePayload>
         GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
-        where TEnvironmentAggregatePayload : IAggregatePayload, new()
-    {
-        return _helper.GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(aggregateId);
-    }
+        where TEnvironmentAggregatePayload : IAggregatePayload, new() =>
+        _helper.GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(aggregateId);
     public Guid RunEnvironmentCreateCommand<TEnvironmentAggregate>(
         ICreateAggregateCommand<TEnvironmentAggregate> command,
-        Guid? injectingAggregateId = null) where TEnvironmentAggregate : IAggregatePayload, new()
-    {
-        return _helper.RunEnvironmentCreateCommand(command, injectingAggregateId);
-    }
+        Guid? injectingAggregateId = null) where TEnvironmentAggregate : IAggregatePayload, new() =>
+        _helper.RunEnvironmentCreateCommand(command, injectingAggregateId);
     public void RunEnvironmentChangeCommand<TEnvironmentAggregate>(ChangeAggregateCommandBase<TEnvironmentAggregate> command)
         where TEnvironmentAggregate : IAggregatePayload, new()
     {
@@ -66,129 +48,49 @@ public abstract class SingleAggregateTestBase<TAggregatePayload, TDependencyDefi
         _helper.GivenEnvironmentCommandExecutorAction(action);
         return this;
     }
-    public IReadOnlyCollection<IAggregateEvent> GetLatestEnvironmentEvents()
-    {
-        return _helper.GetLatestEnvironmentEvents();
-    }
-    public IAggregateTestHelper<TAggregatePayload> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregatePayload>
-    {
-        return _helper.WhenCreate(createCommand);
-    }
-    public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(C changeCommand) where C : ChangeAggregateCommandBase<TAggregatePayload>
-    {
-        return _helper.WhenChange(changeCommand);
-    }
+    public IReadOnlyCollection<IAggregateEvent> GetLatestEnvironmentEvents() => _helper.GetLatestEnvironmentEvents();
+    public IAggregateTestHelper<TAggregatePayload> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregatePayload> =>
+        _helper.WhenCreate(createCommand);
+    public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(C changeCommand) where C : ChangeAggregateCommandBase<TAggregatePayload> =>
+        _helper.WhenChange(changeCommand);
     public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(Func<AggregateState<TAggregatePayload>, C> commandFunc)
-        where C : ChangeAggregateCommandBase<TAggregatePayload>
-    {
-        return _helper.WhenChange(commandFunc);
-    }
+        where C : ChangeAggregateCommandBase<TAggregatePayload> => _helper.WhenChange(commandFunc);
 
-    public IAggregateTestHelper<TAggregatePayload> ThenGetEvents(Action<List<IAggregateEvent>> checkEventsAction)
-    {
-        return _helper.ThenGetEvents(checkEventsAction);
-    }
-    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleEvent<T>(Action<T> checkEventAction) where T : IAggregateEvent
-    {
-        return _helper.ThenGetSingleEvent(checkEventAction);
-    }
-    public IAggregateTestHelper<TAggregatePayload> ThenSingleEventIs<T>(AggregateEvent<T> aggregateEvent) where T : IEventPayload
-    {
-        return _helper.ThenSingleEventIs(aggregateEvent);
-    }
-    public IAggregateTestHelper<TAggregatePayload> ThenSingleEventPayloadIs<T>(T payload) where T : IEventPayload
-    {
-        return _helper.ThenSingleEventPayloadIs(payload);
-    }
-    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleEventPayload<T>(Action<T> checkPayloadAction) where T : class, IEventPayload
-    {
-        return _helper.ThenGetSingleEventPayload(checkPayloadAction);
-    }
-    public IAggregateTestHelper<TAggregatePayload> ThenGetState(Action<AggregateState<TAggregatePayload>> checkStateAction)
-    {
-        return _helper.ThenGetState(checkStateAction);
-    }
-    public IAggregateTestHelper<TAggregatePayload> ThenStateIs(AggregateState<TAggregatePayload> expectedState)
-    {
-        return _helper.ThenStateIs(expectedState);
-    }
-    public IAggregateTestHelper<TAggregatePayload> ThenGetPayload(Action<TAggregatePayload> payloadAction)
-    {
-        return _helper.ThenGetPayload(payloadAction);
-    }
-    public IAggregateTestHelper<TAggregatePayload> ThenPayloadIs(TAggregatePayload payload)
-    {
-        return _helper.ThenPayloadIs(payload);
-    }
-    public IAggregateTestHelper<TAggregatePayload> WriteStateToFile(string filename)
-    {
-        return _helper.WriteStateToFile(filename);
-    }
-    public IAggregateTestHelper<TAggregatePayload> WritePayloadToFile(string filename)
-    {
-        return _helper.WriteStateToFile(filename);
-    }
-    public IAggregateTestHelper<TAggregatePayload> ThenStateIsFromJson(string stateJson)
-    {
-        return _helper.ThenStateIsFromJson(stateJson);
-    }
-    public IAggregateTestHelper<TAggregatePayload> ThenStateIsFromFile(string stateFileName)
-    {
-        return _helper.ThenStateIsFromFile(stateFileName);
-    }
-    public IAggregateTestHelper<TAggregatePayload> ThenPayloadIsFromJson(string payloadJson)
-    {
-        return _helper.ThenPayloadIsFromJson(payloadJson);
-    }
-    public IAggregateTestHelper<TAggregatePayload> ThenPayloadIsFromFile(string payloadFileName)
-    {
-        return _helper.ThenPayloadIsFromFile(payloadFileName);
-    }
-    public Guid GetAggregateId()
-    {
-        return _helper.GetAggregateId();
-    }
-    public int GetCurrentVersion()
-    {
-        return _helper.GetCurrentVersion();
-    }
-    public AggregateState<TAggregatePayload> GetAggregateState()
-    {
-        return _helper.GetAggregateState();
-    }
-    public Aggregate<TAggregatePayload> GetAggregate()
-    {
-        return _helper.GetAggregate();
-    }
+    public IAggregateTestHelper<TAggregatePayload> ThenGetEvents(Action<List<IAggregateEvent>> checkEventsAction) =>
+        _helper.ThenGetEvents(checkEventsAction);
+    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleEvent<T>(Action<T> checkEventAction) where T : IAggregateEvent =>
+        _helper.ThenGetSingleEvent(checkEventAction);
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleEventIs<T>(AggregateEvent<T> aggregateEvent) where T : IEventPayload =>
+        _helper.ThenSingleEventIs(aggregateEvent);
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleEventPayloadIs<T>(T payload) where T : IEventPayload =>
+        _helper.ThenSingleEventPayloadIs(payload);
+    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleEventPayload<T>(Action<T> checkPayloadAction) where T : class, IEventPayload =>
+        _helper.ThenGetSingleEventPayload(checkPayloadAction);
+    public IAggregateTestHelper<TAggregatePayload> ThenGetState(Action<AggregateState<TAggregatePayload>> checkStateAction) =>
+        _helper.ThenGetState(checkStateAction);
+    public IAggregateTestHelper<TAggregatePayload> ThenStateIs(AggregateState<TAggregatePayload> expectedState) => _helper.ThenStateIs(expectedState);
+    public IAggregateTestHelper<TAggregatePayload> ThenGetPayload(Action<TAggregatePayload> payloadAction) => _helper.ThenGetPayload(payloadAction);
+    public IAggregateTestHelper<TAggregatePayload> ThenPayloadIs(TAggregatePayload payload) => _helper.ThenPayloadIs(payload);
+    public IAggregateTestHelper<TAggregatePayload> WriteStateToFile(string filename) => _helper.WriteStateToFile(filename);
+    public IAggregateTestHelper<TAggregatePayload> WritePayloadToFile(string filename) => _helper.WriteStateToFile(filename);
+    public IAggregateTestHelper<TAggregatePayload> ThenStateIsFromJson(string stateJson) => _helper.ThenStateIsFromJson(stateJson);
+    public IAggregateTestHelper<TAggregatePayload> ThenStateIsFromFile(string stateFileName) => _helper.ThenStateIsFromFile(stateFileName);
+    public IAggregateTestHelper<TAggregatePayload> ThenPayloadIsFromJson(string payloadJson) => _helper.ThenPayloadIsFromJson(payloadJson);
+    public IAggregateTestHelper<TAggregatePayload> ThenPayloadIsFromFile(string payloadFileName) => _helper.ThenPayloadIsFromFile(payloadFileName);
+    public Guid GetAggregateId() => _helper.GetAggregateId();
+    public int GetCurrentVersion() => _helper.GetCurrentVersion();
+    public AggregateState<TAggregatePayload> GetAggregateState() => _helper.GetAggregateState();
+    public Aggregate<TAggregatePayload> GetAggregate() => _helper.GetAggregate();
 
-    public IAggregateTestHelper<TAggregatePayload> ThenThrows<T>() where T : Exception
-    {
-        return _helper.ThenThrows<T>();
-    }
-    public IAggregateTestHelper<TAggregatePayload> ThenGetException<T>(Action<T> checkException) where T : Exception
-    {
-        return _helper.ThenGetException(checkException);
-    }
-    public IAggregateTestHelper<TAggregatePayload> ThenGetException(Action<Exception> checkException)
-    {
-        return _helper.ThenGetException(checkException);
-    }
-    public IAggregateTestHelper<TAggregatePayload> ThenNotThrowsAnException()
-    {
-        return _helper.ThenNotThrowsAnException();
-    }
-    public IAggregateTestHelper<TAggregatePayload> ThenThrowsAnException()
-    {
-        return _helper.ThenThrowsAnException();
-    }
-    public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors(IEnumerable<SekibanValidationParameterError> validationParameterErrors)
-    {
-        return _helper.ThenHasValidationErrors(validationParameterErrors);
-    }
-    public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors()
-    {
-        return _helper.ThenHasValidationErrors();
-    }
+    public IAggregateTestHelper<TAggregatePayload> ThenThrows<T>() where T : Exception => _helper.ThenThrows<T>();
+    public IAggregateTestHelper<TAggregatePayload> ThenGetException<T>(Action<T> checkException) where T : Exception =>
+        _helper.ThenGetException(checkException);
+    public IAggregateTestHelper<TAggregatePayload> ThenGetException(Action<Exception> checkException) => _helper.ThenGetException(checkException);
+    public IAggregateTestHelper<TAggregatePayload> ThenNotThrowsAnException() => _helper.ThenNotThrowsAnException();
+    public IAggregateTestHelper<TAggregatePayload> ThenThrowsAnException() => _helper.ThenThrowsAnException();
+    public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors(IEnumerable<SekibanValidationParameterError> validationParameterErrors) =>
+        _helper.ThenHasValidationErrors(validationParameterErrors);
+    public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors() => _helper.ThenHasValidationErrors();
 
     public void Dispose() { }
 

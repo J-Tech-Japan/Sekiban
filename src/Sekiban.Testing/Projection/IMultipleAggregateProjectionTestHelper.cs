@@ -1,14 +1,14 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Event;
-using Sekiban.Core.Query.MultipleAggregate;
+using Sekiban.Core.Query.MultipleProjections;
 using Sekiban.Testing.Command;
 using Sekiban.Testing.QueryFilter;
 namespace Sekiban.Testing.Projection;
 
 public interface IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload>
-    where TProjection : IMultipleAggregateProjector<TProjectionPayload>, new()
-    where TProjectionPayload : IMultipleAggregateProjectionPayload, new()
+    where TProjection : IMultiProjector<TProjectionPayload>, new()
+    where TProjectionPayload : IMultiProjectionPayload, new()
 {
 
 
@@ -25,7 +25,7 @@ public interface IMultipleAggregateProjectionTestHelper<TProjection, TProjection
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> GivenEvents(
         params (Guid aggregateId, IEventPayload payload)[] eventTouples);
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> GivenQueryFilterChecker(
-        IQueryFilterChecker<MultipleAggregateProjectionState<TProjectionPayload>> checker);
+        IQueryFilterChecker<MultiProjectionState<TProjectionPayload>> checker);
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> GivenScenario(Action initialAction);
     public Guid RunCreateCommand<TAggregatePayload>(ICreateAggregateCommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
         where TAggregatePayload : IAggregatePayload, new();
@@ -39,9 +39,9 @@ public interface IMultipleAggregateProjectionTestHelper<TProjection, TProjection
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenNotThrowsAnException();
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenThrowsAnException();
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenStateIs(
-        MultipleAggregateProjectionState<TProjectionPayload> state);
+        MultiProjectionState<TProjectionPayload> state);
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenGetState(
-        Action<MultipleAggregateProjectionState<TProjectionPayload>> stateAction);
+        Action<MultiProjectionState<TProjectionPayload>> stateAction);
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenStateIsFromFile(string filename);
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> WriteProjectionToFile(string filename);
     public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenPayloadIs(TProjectionPayload payload);

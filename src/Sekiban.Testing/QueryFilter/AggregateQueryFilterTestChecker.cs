@@ -1,5 +1,5 @@
 using Sekiban.Core.Aggregate;
-using Sekiban.Core.Query.MultipleAggregate;
+using Sekiban.Core.Query.MultipleProjections;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Shared;
@@ -9,19 +9,19 @@ namespace Sekiban.Testing.QueryFilter;
 
 public class
     AggregateQueryFilterTestChecker<TAggregatePayload, TQueryFilter, TQueryParameter, TResponseQueryModel> : IQueryFilterChecker<
-        MultipleAggregateProjectionState<SingleAggregateListProjectionState<AggregateState<TAggregatePayload>>>>
+        MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>>
     where TAggregatePayload : IAggregatePayload, new()
-    where TQueryFilter : IAggregateQueryFilterDefinition<TAggregatePayload, TQueryParameter, TResponseQueryModel>
+    where TQueryFilter : IAggregateQuery<TAggregatePayload, TQueryParameter, TResponseQueryModel>
     where TQueryParameter : IQueryParameter
 {
     public TResponseQueryModel? Response { get; set; }
-    private MultipleAggregateProjectionState<SingleAggregateListProjectionState<AggregateState<TAggregatePayload>>>? _state { get; set; }
-    public QueryFilterHandler? QueryFilterHandler
+    private MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>? _state { get; set; }
+    public QueryHandler? QueryFilterHandler
     {
         get;
         set;
     }
-    public void RegisterState(MultipleAggregateProjectionState<SingleAggregateListProjectionState<AggregateState<TAggregatePayload>>> state)
+    public void RegisterState(MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>> state)
     {
         _state = state;
     }
@@ -34,7 +34,7 @@ public class
             throw new InvalidDataException("Projection is null");
         }
         if (QueryFilterHandler == null) { throw new MissingMemberException(nameof(QueryFilterHandler)); }
-        Response = QueryFilterHandler.GetAggregateQueryFilter<TAggregatePayload, TQueryFilter, TQueryParameter, TResponseQueryModel>(
+        Response = QueryFilterHandler.GetAggregateQuery<TAggregatePayload, TQueryFilter, TQueryParameter, TResponseQueryModel>(
             param,
             _state.Payload.List);
         return this;

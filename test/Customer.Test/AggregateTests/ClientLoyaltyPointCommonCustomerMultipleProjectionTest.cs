@@ -1,8 +1,7 @@
 using Customer.Domain.Aggregates.Branches.Events;
 using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
 using Customer.Domain.Shared;
-using Customer.WebApi;
-using Sekiban.Core.Query.MultipleAggregate;
+using Sekiban.Core.Query.MultipleProjections;
 using Sekiban.Testing.QueryFilter;
 using System;
 using System.Collections.Immutable;
@@ -16,7 +15,7 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMu
     private static readonly string branchName = "Test Branch";
 
     private readonly ProjectionQueryFilterTestChecker<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.PayloadDefinition,
-        ClientLoyaltyPointMultipleProjectionQueryFilter, ClientLoyaltyPointMultipleProjectionQueryFilter.QueryFilterParameter,
+        ClientLoyaltyPointMultipleMultiProjectionQueryFilter, ClientLoyaltyPointMultipleMultiProjectionQueryFilter.QueryFilterParameter,
         ClientLoyaltyPointMultipleProjection.PayloadDefinition> _projectionQueryFilterTestChecker = new();
 
     [Fact]
@@ -26,7 +25,7 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMu
             .WhenProjection()
             .ThenNotThrowsAnException()
             .ThenStateIs(
-                new MultipleAggregateProjectionState<ClientLoyaltyPointMultipleProjection.PayloadDefinition>(
+                new MultiProjectionState<ClientLoyaltyPointMultipleProjection.PayloadDefinition>(
                     new ClientLoyaltyPointMultipleProjection.PayloadDefinition(
                         ImmutableList<ClientLoyaltyPointMultipleProjection.ProjectedBranch>.Empty.Add(
                             new ClientLoyaltyPointMultipleProjection.ProjectedBranch(branchId, branchName)),
@@ -619,9 +618,9 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMu
     {
         GivenScenario(JsonFileEventsTest);
         _projectionQueryFilterTestChecker.WhenParam(
-                new ClientLoyaltyPointMultipleProjectionQueryFilter.QueryFilterParameter(
+                new ClientLoyaltyPointMultipleMultiProjectionQueryFilter.QueryFilterParameter(
                     branchId,
-                    ClientLoyaltyPointMultipleProjectionQueryFilter.QuerySortKeys.ClientName))
+                    ClientLoyaltyPointMultipleMultiProjectionQueryFilter.QuerySortKeys.ClientName))
             // .WriteResponseToFile("QueryResponseOut.json")
             .ThenResponseIsFromFile("ClientLoyaltyPointProjectionQueryResponse01.json");
 

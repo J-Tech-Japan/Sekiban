@@ -1,4 +1,4 @@
-using Sekiban.Core.Query.MultipleAggregate;
+using Sekiban.Core.Query.MultipleProjections;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Shared;
@@ -8,20 +8,20 @@ namespace Sekiban.Testing.QueryFilter;
 
 public class
     ProjectionListQueryFilterTestChecker<TProjection, TProjectionPayload, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse> :
-        IQueryFilterChecker<MultipleAggregateProjectionState<TProjectionPayload>>
-    where TProjection : MultipleAggregateProjectionBase<TProjectionPayload>, new()
-    where TProjectionPayload : IMultipleAggregateProjectionPayload, new()
+        IQueryFilterChecker<MultiProjectionState<TProjectionPayload>>
+    where TProjection : MultiProjectionBase<TProjectionPayload>, new()
+    where TProjectionPayload : IMultiProjectionPayload, new()
     where TQueryFilterParameter : IQueryParameter
-    where TProjectionQueryFilter : IProjectionListQueryFilterDefinition<TProjection, TProjectionPayload, TQueryFilterParameter, TQueryFilterResponse>
+    where TProjectionQueryFilter : IMultiProjectionListQuery<TProjection, TProjectionPayload, TQueryFilterParameter, TQueryFilterResponse>
     , new()
 {
-    private QueryFilterListResult<TQueryFilterResponse>? _response;
+    private QueryListResult<TQueryFilterResponse>? _response;
 
 
 
-    private MultipleAggregateProjectionState<TProjectionPayload>? _state;
-    public QueryFilterHandler? QueryFilterHandler { get; set; } = null;
-    public void RegisterState(MultipleAggregateProjectionState<TProjectionPayload> state)
+    private MultiProjectionState<TProjectionPayload>? _state;
+    public QueryHandler? QueryFilterHandler { get; set; } = null;
+    public void RegisterState(MultiProjectionState<TProjectionPayload> state)
     {
         _state = state;
     }
@@ -35,7 +35,7 @@ public class
         }
         if (QueryFilterHandler == null) { throw new MissingMemberException(nameof(QueryFilterHandler)); }
         _response = QueryFilterHandler
-            .GetProjectionListQueryFilter<TProjection, TProjectionPayload, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
+            .GetMultiProjectionListQuery<TProjection, TProjectionPayload, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
                 param,
                 _state);
         return this;
@@ -56,7 +56,7 @@ public class
         return this;
     }
     public ProjectionListQueryFilterTestChecker<TProjection, TProjectionPayload, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
-        ThenResponseIs(QueryFilterListResult<TQueryFilterResponse> expectedResponse)
+        ThenResponseIs(QueryListResult<TQueryFilterResponse> expectedResponse)
     {
         var actual = _response;
         var expected = expectedResponse;
@@ -66,7 +66,7 @@ public class
         return this;
     }
     public ProjectionListQueryFilterTestChecker<TProjection, TProjectionPayload, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
-        ThenGetResponse(Action<QueryFilterListResult<TQueryFilterResponse>> responseAction)
+        ThenGetResponse(Action<QueryListResult<TQueryFilterResponse>> responseAction)
     {
         Assert.NotNull(_response);
         responseAction(_response!);
@@ -75,7 +75,7 @@ public class
     public ProjectionListQueryFilterTestChecker<TProjection, TProjectionPayload, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
         ThenResponseIsFromJson(string responseJson)
     {
-        var response = JsonSerializer.Deserialize<QueryFilterListResult<TQueryFilterResponse>>(responseJson);
+        var response = JsonSerializer.Deserialize<QueryListResult<TQueryFilterResponse>>(responseJson);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         ThenResponseIs(response);
         return this;
@@ -84,7 +84,7 @@ public class
         ThenResponseIsFromFile(string responseFilename)
     {
         using var openStream = File.OpenRead(responseFilename);
-        var response = JsonSerializer.Deserialize<QueryFilterListResult<TQueryFilterResponse>>(openStream);
+        var response = JsonSerializer.Deserialize<QueryListResult<TQueryFilterResponse>>(openStream);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         ThenResponseIs(response);
         return this;

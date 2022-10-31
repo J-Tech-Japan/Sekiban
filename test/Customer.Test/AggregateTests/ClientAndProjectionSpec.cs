@@ -5,7 +5,6 @@ using Customer.Domain.Aggregates.Clients.Commands;
 using Customer.Domain.Aggregates.Clients.Events;
 using Customer.Domain.Aggregates.Clients.Projections;
 using Customer.Domain.Shared;
-using Customer.WebApi;
 using Sekiban.Testing.SingleAggregate;
 using System;
 using System.Collections.Generic;
@@ -21,15 +20,12 @@ public class ClientAndProjectionSpec : SingleAggregateTestBase<Client, CustomerD
     public readonly string clientName = "Test Client";
     public readonly string clientNameChanged = "Test Client Changed";
     public Guid branchId = Guid.Parse("cdb93f86-8d2f-442c-9f62-b9e791401f5f");
-    public ClientAndProjectionSpec()
-    {
-        ProjectionSubscriber
-            = SetupSingleAggregateProjection<SingleAggregateProjectionTest<Client, ClientNameHistoryProjection,
-                ClientNameHistoryProjection.PayloadDefinition>>();
-    }
+    public ClientAndProjectionSpec() => ProjectionSubscriber
+        = SetupSingleProjection<SingleProjectionTest<Client, ClientNameHistoryProjection,
+            ClientNameHistoryProjection.PayloadDefinition>>();
     public DateTime FirstEventDatetime { get; set; } = DateTime.Now;
     public DateTime ChangedEventDatetime { get; set; } = DateTime.Now;
-    public SingleAggregateProjectionTest<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>
+    public SingleProjectionTest<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>
         ProjectionSubscriber
     {
         get;

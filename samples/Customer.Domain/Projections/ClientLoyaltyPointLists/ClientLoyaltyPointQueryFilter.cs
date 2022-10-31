@@ -1,10 +1,10 @@
-using Sekiban.Core.Query.MultipleAggregate;
+using Sekiban.Core.Query.MultipleProjections;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using System.Collections.Immutable;
 namespace Customer.Domain.Projections.ClientLoyaltyPointLists;
 
-public class ClientLoyaltyPointQueryFilter : IProjectionListQueryFilterDefinition<ClientLoyaltyPointListProjection,
+public class ClientLoyaltyPointQueryFilter : IMultiProjectionListQuery<ClientLoyaltyPointListProjection,
     ClientLoyaltyPointListProjection.PayloadDefinition, ClientLoyaltyPointQueryFilter.QueryFilterParameter,
     ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>
 {
@@ -71,7 +71,7 @@ public class ClientLoyaltyPointQueryFilter : IProjectionListQueryFilterDefinitio
 
     public IEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> HandleFilter(
         QueryFilterParameter queryParam,
-        MultipleAggregateProjectionState<ClientLoyaltyPointListProjection.PayloadDefinition> projection)
+        MultiProjectionState<ClientLoyaltyPointListProjection.PayloadDefinition> projection)
     {
         var result = projection.Payload.Records;
         if (queryParam.BranchId.HasValue)
@@ -92,5 +92,5 @@ public class ClientLoyaltyPointQueryFilter : IProjectionListQueryFilterDefinitio
         FilterSortKey? SortKey1,
         FilterSortKey? SortKey2,
         bool? SortKey1Asc,
-        bool? SortKey2Asc) : IQueryFilterParameter;
+        bool? SortKey2Asc) : IQueryPagingParameter;
 }

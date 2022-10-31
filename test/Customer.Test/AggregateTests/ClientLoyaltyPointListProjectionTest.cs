@@ -2,7 +2,6 @@ using Customer.Domain.Aggregates.Branches.Commands;
 using Customer.Domain.Aggregates.Clients.Commands;
 using Customer.Domain.Projections.ClientLoyaltyPointLists;
 using Customer.Domain.Shared;
-using Customer.WebApi;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Testing.QueryFilter;
 using System;
@@ -85,7 +84,7 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     null,
                     null))
             .ThenResponseIs(
-                new QueryFilterListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
+                new QueryListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     null,
                     null,
@@ -114,7 +113,7 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     null,
                     null))
             .ThenResponseIs(
-                new QueryFilterListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
+                new QueryListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     2,
                     1,
@@ -141,7 +140,7 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     null,
                     null))
             .ThenResponseIs(
-                new QueryFilterListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
+                new QueryListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     1,
                     1,
@@ -170,7 +169,7 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     null,
                     null))
             .ThenResponseIs(
-                new QueryFilterListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
+                new QueryListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     2,
                     2,
@@ -196,7 +195,7 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     null,
                     null))
             .ThenResponseIs(
-                new QueryFilterListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
+                new QueryListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     2,
                     3,
@@ -218,7 +217,7 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     null,
                     null))
             .ThenResponseIs(
-                new QueryFilterListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
+                new QueryListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     2,
                     0,

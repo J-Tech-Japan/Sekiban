@@ -15,9 +15,9 @@ public record BasicClientQueryFilterParameter(
     BasicClientQueryFilterSortKey? SortKey1,
     BasicClientQueryFilterSortKey? SortKey2,
     bool? SortKey1Asc,
-    bool? SortKey2Asc) : IQueryFilterParameter;
+    bool? SortKey2Asc) : IQueryPagingParameter;
 public record BasicClientQueryModel(Guid BranchId, string ClientName, string ClientEmail);
-public class BasicClientQueryFilter : IAggregateListQueryFilterDefinition<Client, BasicClientQueryFilterParameter,
+public class BasicClientQueryFilter : IAggregateListQuery<Client, BasicClientQueryFilterParameter,
     BasicClientQueryModel>
 {
     public IEnumerable<BasicClientQueryModel> HandleFilter(BasicClientQueryFilterParameter queryParam, IEnumerable<AggregateState<Client>> list)

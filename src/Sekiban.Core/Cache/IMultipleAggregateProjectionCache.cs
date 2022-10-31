@@ -1,13 +1,13 @@
-using Sekiban.Core.Query.MultipleAggregate;
-using Sekiban.Core.Query.MultipleAggregate.MultipleProjection;
+using Sekiban.Core.Query.MultipleProjections;
+using Sekiban.Core.Query.MultipleProjections.Projections;
 namespace Sekiban.Core.Cache;
 
 public interface IMultipleAggregateProjectionCache
 {
     public void Set<TProjection, TProjectionPayload>(MultipleMemoryProjectionContainer<TProjection, TProjectionPayload> container)
-        where TProjection : IMultipleAggregateProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultipleAggregateProjectionPayload, new();
+        where TProjection : IMultiProjector<TProjectionPayload>, new()
+        where TProjectionPayload : IMultiProjectionPayload, new();
     public MultipleMemoryProjectionContainer<TProjection, TProjectionPayload> Get<TProjection, TProjectionPayload>()
-        where TProjection : IMultipleAggregateProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultipleAggregateProjectionPayload, new();
+        where TProjection : IMultiProjector<TProjectionPayload>, new()
+        where TProjectionPayload : IMultiProjectionPayload, new();
 }

@@ -1,16 +1,13 @@
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
-using Sekiban.Core.Query.SingleAggregate;
+using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Aggregate;
 
-public class Aggregate<TAggregatePayload> : AggregateCommonBase, ISingleAggregateProjectionStateConvertible<AggregateState<TAggregatePayload>>
+public class Aggregate<TAggregatePayload> : AggregateCommonBase, ISingleProjectionStateConvertible<AggregateState<TAggregatePayload>>
     where TAggregatePayload : IAggregatePayload, new()
 {
     protected TAggregatePayload Payload { get; private set; } = new();
-    public AggregateState<TAggregatePayload> ToState()
-    {
-        return new AggregateState<TAggregatePayload>(this, Payload);
-    }
+    public AggregateState<TAggregatePayload> ToState() => new AggregateState<TAggregatePayload>(this, Payload);
 
     public void ApplySnapshot(AggregateState<TAggregatePayload> snapshot)
     {

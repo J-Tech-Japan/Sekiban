@@ -1,12 +1,12 @@
 using Customer.Domain.Aggregates.Clients.Events;
 using Sekiban.Core.Event;
-using Sekiban.Core.Query.SingleAggregate;
+using Sekiban.Core.Query.SingleProjections;
 // ReSharper disable UnusedVariable
 // ReSharper disable CollectionNeverQueried.Global
 // ReSharper disable NotAccessedPositionalProperty.Global
 namespace Customer.Domain.Aggregates.Clients.Projections;
 
-public class ClientNameHistoryProjection : SingleAggregateProjectionBase<Client, ClientNameHistoryProjection,
+public class ClientNameHistoryProjection : SingleProjectionBase<Client, ClientNameHistoryProjection,
     ClientNameHistoryProjection.PayloadDefinition>
 {
     protected override Func<PayloadDefinition, PayloadDefinition>? GetApplyEventFunc(
@@ -35,7 +35,7 @@ public class ClientNameHistoryProjection : SingleAggregateProjectionBase<Client,
         Guid BranchId,
         IReadOnlyCollection<ClientNameHistoryProjectionRecord> ClientNames,
         string ClientEmail,
-        bool IsDeleted = false) : IDeletableSingleAggregateProjectionPayload;
+        bool IsDeleted = false) : IDeletableSingleProjectionPayload;
 
     public record ClientNameHistoryProjectionRecord(string Name, DateTime DateChanged);
 }
