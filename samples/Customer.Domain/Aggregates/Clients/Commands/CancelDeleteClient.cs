@@ -10,19 +10,15 @@ public record CancelDeleteClient : ChangeAggregateCommandBase<Client>, ICancelDe
     public Guid ClientId { get; init; }
     [Required]
     public string Reason { get; init; } = string.Empty;
-    public override Guid GetAggregateId()
+    public override Guid GetAggregateId() => ClientId;
+    public class Handler : ChangeAggregateCommandHandlerBase<Client, CancelDeleteClient>
     {
-        return ClientId;
-    }
-}
-public class CancelDeleteClientHandler : ChangeAggregateCommandHandlerBase<Client, CancelDeleteClient>
-{
-
-    protected override async IAsyncEnumerable<IChangedEvent<Client>> ExecCommandAsync(
-        Func<AggregateState<Client>> getAggregateState,
-        CancelDeleteClient command)
-    {
-        await Task.CompletedTask;
-        yield return new ClientDeleteCancelled();
+        protected override async IAsyncEnumerable<IChangedEvent<Client>> ExecCommandAsync(
+            Func<AggregateState<Client>> getAggregateState,
+            CancelDeleteClient command)
+        {
+            await Task.CompletedTask;
+            yield return new ClientDeleteCancelled();
+        }
     }
 }

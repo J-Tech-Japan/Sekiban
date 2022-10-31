@@ -18,18 +18,19 @@ public record AddLoyaltyPoint(
     {
         return ClientId;
     }
-}
-public class AddLoyaltyPointHandler : ChangeAggregateCommandHandlerBase<LoyaltyPoint, AddLoyaltyPoint>
-{
-    protected override async IAsyncEnumerable<IChangedEvent<LoyaltyPoint>> ExecCommandAsync(
-        Func<AggregateState<LoyaltyPoint>> getAggregateState,
-        AddLoyaltyPoint command)
+    public class Handler : ChangeAggregateCommandHandlerBase<LoyaltyPoint, AddLoyaltyPoint>
     {
-        await Task.CompletedTask;
-        if (getAggregateState().Payload.LastOccuredTime is not null && getAggregateState().Payload.LastOccuredTime > command.HappenedDate)
+        protected override async IAsyncEnumerable<IChangedEvent<LoyaltyPoint>> ExecCommandAsync(
+            Func<AggregateState<LoyaltyPoint>> getAggregateState,
+            AddLoyaltyPoint command)
         {
-            throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
+            await Task.CompletedTask;
+            if (getAggregateState().Payload.LastOccuredTime is not null && getAggregateState().Payload.LastOccuredTime > command.HappenedDate)
+            {
+                throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
+            }
+            yield return new LoyaltyPointAdded(command.HappenedDate, command.Reason, command.PointAmount, command.Note);
         }
-        yield return new LoyaltyPointAdded(command.HappenedDate, command.Reason, command.PointAmount, command.Note);
     }
+
 }

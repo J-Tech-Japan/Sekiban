@@ -24,10 +24,7 @@ namespace Customer.WebApi;
 
 public class CustomerDependency : IDependencyDefinition
 {
-    public Assembly GetExecutingAssembly()
-    {
-        return Assembly.GetExecutingAssembly();
-    }
+    public Assembly GetExecutingAssembly() => Assembly.GetExecutingAssembly();
 
     public IEnumerable<Type> GetAggregateListQueryFilterTypes()
     {
@@ -42,10 +39,7 @@ public class CustomerDependency : IDependencyDefinition
     {
         yield return typeof(ClientNameHistoryProjectionQueryFilter);
     }
-    public IEnumerable<Type> GetSingleAggregateProjectionQueryFilterTypes()
-    {
-        return Enumerable.Empty<Type>();
-    }
+    public IEnumerable<Type> GetSingleAggregateProjectionQueryFilterTypes() => Enumerable.Empty<Type>();
     public IEnumerable<Type> GetProjectionQueryFilterTypes()
     {
         yield return typeof(ClientLoyaltyPointMultipleProjectionQueryFilter);
@@ -61,18 +55,18 @@ public class CustomerDependency : IDependencyDefinition
         yield return (typeof(ICreateAggregateCommandHandler<Branch, CreateBranch>), typeof(CreateBranchHandler));
 
         // Aggregate: Client
-        yield return (typeof(ICreateAggregateCommandHandler<Client, CreateClient>), typeof(CreateClientHandler));
+        yield return (typeof(ICreateAggregateCommandHandler<Client, CreateClient>), typeof(CreateClient.Handler));
 
-        yield return (typeof(IChangeAggregateCommandHandler<Client, ChangeClientName>), typeof(ChangeClientNameHandler));
+        yield return (typeof(IChangeAggregateCommandHandler<Client, ChangeClientName>), typeof(ChangeClientName.Handler));
 
-        yield return (typeof(IChangeAggregateCommandHandler<Client, DeleteClient>), typeof(DeleteClientHandler));
+        yield return (typeof(IChangeAggregateCommandHandler<Client, DeleteClient>), typeof(DeleteClient.Handler));
 
-        yield return (typeof(IChangeAggregateCommandHandler<Client, CancelDeleteClient>), typeof(CancelDeleteClientHandler));
+        yield return (typeof(IChangeAggregateCommandHandler<Client, CancelDeleteClient>), typeof(CancelDeleteClient.Handler));
 
         // Aggregate: LoyaltyPoint
         yield return (typeof(ICreateAggregateCommandHandler<LoyaltyPoint, CreateLoyaltyPoint>), typeof(CreateLoyaltyPointHandler));
 
-        yield return (typeof(IChangeAggregateCommandHandler<LoyaltyPoint, AddLoyaltyPoint>), typeof(AddLoyaltyPointHandler));
+        yield return (typeof(IChangeAggregateCommandHandler<LoyaltyPoint, AddLoyaltyPoint>), typeof(AddLoyaltyPoint.Handler));
 
         yield return (typeof(IChangeAggregateCommandHandler<LoyaltyPoint, UseLoyaltyPoint>), typeof(UseLoyaltyPointHandler));
 

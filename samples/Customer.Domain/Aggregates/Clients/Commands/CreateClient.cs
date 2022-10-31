@@ -39,43 +39,42 @@ public record CreateClient : ICreateAggregateCommand<Client>
         get;
         init;
     }
-    public Guid GetAggregateId()
+    public Guid GetAggregateId() => Guid.NewGuid();
+    public class Handler : CreateAggregateCommandHandlerBase<Client, CreateClient>
     {
-        return Guid.NewGuid();
-    }
-}
-public class CreateClientHandler : CreateAggregateCommandHandlerBase<Client, CreateClient>
-{
-    private readonly IQueryFilterService _queryFilterService;
-    private readonly ISingleAggregateService _singleAggregateService;
-    public CreateClientHandler(ISingleAggregateService singleAggregateService, IQueryFilterService queryFilterService)
-    {
-        _singleAggregateService = singleAggregateService;
-        _queryFilterService = queryFilterService;
-    }
-
-    protected override async IAsyncEnumerable<IApplicableEvent<Client>> ExecCreateCommandAsync(Func<AggregateState<Client>> getAggregateStateState, CreateClient command)
-    {
-        // Check if branch exists
-        var branchExists
-            = await _queryFilterService
-                .GetAggregateQueryFilterAsync<Branch, BranchExistsQueryFilter, BranchExistsQueryFilter.QueryParameter, bool>(
-                    new BranchExistsQueryFilter.QueryParameter(command.BranchId));
-        if (!branchExists)
+        private readonly IQueryFilterService _queryFilterService;
+        private readonly ISingleAggregateService _singleAggregateService;
+        public Handler(ISingleAggregateService singleAggregateService, IQueryFilterService queryFilterService)
         {
-            throw new SekibanAggregateNotExistsException(command.BranchId, nameof(Branch));
+            _singleAggregateService = singleAggregateService;
+            _queryFilterService = queryFilterService;
         }
 
-        // Check no email duplicates
-        var emailExists
-            = await _queryFilterService
-                .GetAggregateQueryFilterAsync<Client, ClientEmailExistsQueryFilter, ClientEmailExistsQueryFilter.QueryParameter,
-                    bool>(new ClientEmailExistsQueryFilter.QueryParameter(command.ClientEmail));
-        if (emailExists)
+        protected override async IAsyncEnumerable<IApplicableEvent<Client>> ExecCreateCommandAsync(
+            Func<AggregateState<Client>> getAggregateStateState,
+            CreateClient command)
         {
-            throw new SekibanEmailAlreadyRegistered();
-        }
+            // Check if branch exists
+            var branchExists
+                = await _queryFilterService
+                    .GetAggregateQueryFilterAsync<Branch, BranchExistsQueryFilter, BranchExistsQueryFilter.QueryParameter, bool>(
+                        new BranchExistsQueryFilter.QueryParameter(command.BranchId));
+            if (!branchExists)
+            {
+                throw new SekibanAggregateNotExistsException(command.BranchId, nameof(Branch));
+            }
 
-        yield return new ClientCreated(command.BranchId, command.ClientName, command.ClientEmail);
+            // Check no email duplicates
+            var emailExists
+                = await _queryFilterService
+                    .GetAggregateQueryFilterAsync<Client, ClientEmailExistsQueryFilter, ClientEmailExistsQueryFilter.QueryParameter,
+                        bool>(new ClientEmailExistsQueryFilter.QueryParameter(command.ClientEmail));
+            if (emailExists)
+            {
+                throw new SekibanEmailAlreadyRegistered();
+            }
+
+            yield return new ClientCreated(command.BranchId, command.ClientName, command.ClientEmail);
+        }
     }
 }
