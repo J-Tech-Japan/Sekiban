@@ -4,8 +4,8 @@ using Sekiban.Core.Query.QueryModel.Parameters;
 using System.Collections.Immutable;
 namespace Customer.Domain.Projections.ClientLoyaltyPointMultiples;
 
-public class ClientLoyaltyPointMultipleMultiProjectionQueryFilter : IMultiProjectionQuery<ClientLoyaltyPointMultipleProjection,
-    ClientLoyaltyPointMultipleProjection.PayloadDefinition, ClientLoyaltyPointMultipleMultiProjectionQueryFilter.QueryFilterParameter,
+public class ClientLoyaltyPointMultipleMultiProjectionQuery : IMultiProjectionQuery<ClientLoyaltyPointMultipleProjection,
+    ClientLoyaltyPointMultipleProjection.PayloadDefinition, ClientLoyaltyPointMultipleMultiProjectionQuery.QueryParameter,
     ClientLoyaltyPointMultipleProjection.PayloadDefinition>
 {
     public enum QuerySortKeys
@@ -13,39 +13,39 @@ public class ClientLoyaltyPointMultipleMultiProjectionQueryFilter : IMultiProjec
         ClientName, Points
     }
     public ClientLoyaltyPointMultipleProjection.PayloadDefinition HandleFilter(
-        QueryFilterParameter queryFilterParam,
+        QueryParameter queryParam,
         MultiProjectionState<ClientLoyaltyPointMultipleProjection.PayloadDefinition> projection)
     {
-        if (queryFilterParam.BranchId is null) { return projection.Payload; }
+        if (queryParam.BranchId is null) { return projection.Payload; }
         return new ClientLoyaltyPointMultipleProjection.PayloadDefinition
         {
-            Branches = projection.Payload.Branches.Where(x => x.BranchId == queryFilterParam.BranchId).ToImmutableList(),
-            Records = projection.Payload.Records.Where(m => m.BranchId == queryFilterParam.BranchId).ToImmutableList()
+            Branches = projection.Payload.Branches.Where(x => x.BranchId == queryParam.BranchId).ToImmutableList(),
+            Records = projection.Payload.Records.Where(m => m.BranchId == queryParam.BranchId).ToImmutableList()
         };
     }
     public ClientLoyaltyPointMultipleProjection.PayloadDefinition HandleSortAndPagingIfNeeded(
-        QueryFilterParameter queryFilterParam,
+        QueryParameter queryParam,
         ClientLoyaltyPointMultipleProjection.PayloadDefinition response)
     {
-        if (queryFilterParam.SortKey == QuerySortKeys.ClientName)
+        if (queryParam.SortKey == QuerySortKeys.ClientName)
         {
             return response with
             {
-                Records = queryFilterParam.SortIsAsc
+                Records = queryParam.SortIsAsc
                     ? response.Records.OrderBy(x => x.ClientName).ToImmutableList()
                     : response.Records.OrderByDescending(x => x.ClientName).ToImmutableList()
             };
         }
-        if (queryFilterParam.SortKey == QuerySortKeys.Points)
+        if (queryParam.SortKey == QuerySortKeys.Points)
         {
             return response with
             {
-                Records = queryFilterParam.SortIsAsc
+                Records = queryParam.SortIsAsc
                     ? response.Records.OrderBy(x => x.Point).ToImmutableList()
                     : response.Records.OrderByDescending(x => x.Point).ToImmutableList()
             };
         }
         return response with { Records = response.Records.OrderBy(x => x.ClientName).ToImmutableList() };
     }
-    public record QueryFilterParameter(Guid? BranchId, QuerySortKeys SortKey, bool SortIsAsc = true) : IQueryParameter;
+    public record QueryParameter(Guid? BranchId, QuerySortKeys SortKey, bool SortIsAsc = true) : IQueryParameter;
 }

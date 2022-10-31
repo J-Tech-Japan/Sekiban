@@ -4,8 +4,8 @@ using Sekiban.Core.Query.QueryModel.Parameters;
 using System.Collections.Immutable;
 namespace Customer.Domain.Projections.ClientLoyaltyPointLists;
 
-public class ClientLoyaltyPointQueryFilter : IMultiProjectionListQuery<ClientLoyaltyPointListProjection,
-    ClientLoyaltyPointListProjection.PayloadDefinition, ClientLoyaltyPointQueryFilter.QueryFilterParameter,
+public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPointListProjection,
+    ClientLoyaltyPointListProjection.PayloadDefinition, ClientLoyaltyPointQuery.QueryParameter,
     ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>
 {
     public enum FilterSortKey
@@ -14,7 +14,7 @@ public class ClientLoyaltyPointQueryFilter : IMultiProjectionListQuery<ClientLoy
     }
 
     public IEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> HandleSort(
-        QueryFilterParameter queryParam,
+        QueryParameter queryParam,
         IEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> projections)
     {
         var sort = new Dictionary<FilterSortKey, bool>();
@@ -70,7 +70,7 @@ public class ClientLoyaltyPointQueryFilter : IMultiProjectionListQuery<ClientLoy
     }
 
     public IEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> HandleFilter(
-        QueryFilterParameter queryParam,
+        QueryParameter queryParam,
         MultiProjectionState<ClientLoyaltyPointListProjection.PayloadDefinition> projection)
     {
         var result = projection.Payload.Records;
@@ -84,7 +84,7 @@ public class ClientLoyaltyPointQueryFilter : IMultiProjectionListQuery<ClientLoy
         }
         return result;
     }
-    public record QueryFilterParameter(
+    public record QueryParameter(
         Guid? BranchId,
         Guid? ClientId,
         int? PageSize,

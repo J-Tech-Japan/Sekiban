@@ -2,21 +2,21 @@ using Customer.Domain.Aggregates.Branches.Events;
 using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
 using Customer.Domain.Shared;
 using Sekiban.Core.Query.MultipleProjections;
-using Sekiban.Testing.QueryFilter;
+using Sekiban.Testing.Queries;
 using System;
 using System.Collections.Immutable;
 using Xunit;
 namespace Customer.Test.AggregateTests;
 
-public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMultipleAggregateProjectionTestBase<ClientLoyaltyPointMultipleProjection
+public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMultiProjectionTestBase<ClientLoyaltyPointMultipleProjection
     , ClientLoyaltyPointMultipleProjection.PayloadDefinition, CustomerDependency>
 {
     private static readonly Guid branchId = Guid.Parse("b4a3c2e3-78ca-473b-8afb-f534e5d6d66b");
     private static readonly string branchName = "Test Branch";
 
-    private readonly ProjectionQueryFilterTestChecker<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.PayloadDefinition,
-        ClientLoyaltyPointMultipleMultiProjectionQueryFilter, ClientLoyaltyPointMultipleMultiProjectionQueryFilter.QueryFilterParameter,
-        ClientLoyaltyPointMultipleProjection.PayloadDefinition> _projectionQueryFilterTestChecker = new();
+    private readonly ProjectionQueryTestChecker<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.PayloadDefinition,
+        ClientLoyaltyPointMultipleMultiProjectionQuery, ClientLoyaltyPointMultipleMultiProjectionQuery.QueryParameter,
+        ClientLoyaltyPointMultipleProjection.PayloadDefinition> projectionQueryTestChecker = new();
 
     [Fact]
     public void ProjectionTest()
@@ -605,7 +605,7 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMu
     [Fact]
     public void JsonFileEventsTest()
     {
-        GivenQueryFilterChecker(_projectionQueryFilterTestChecker)
+        GivenQueryChecker(projectionQueryTestChecker)
             .GivenEventsFromFile("TestData1.json")
             .WhenProjection()
             .ThenNotThrowsAnException()
@@ -614,13 +614,13 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMu
 
     }
     [Fact]
-    public void QueryFilterTest()
+    public void QueryTest()
     {
         GivenScenario(JsonFileEventsTest);
-        _projectionQueryFilterTestChecker.WhenParam(
-                new ClientLoyaltyPointMultipleMultiProjectionQueryFilter.QueryFilterParameter(
+        projectionQueryTestChecker.WhenParam(
+                new ClientLoyaltyPointMultipleMultiProjectionQuery.QueryParameter(
                     branchId,
-                    ClientLoyaltyPointMultipleMultiProjectionQueryFilter.QuerySortKeys.ClientName))
+                    ClientLoyaltyPointMultipleMultiProjectionQuery.QuerySortKeys.ClientName))
             // .WriteResponseToFile("QueryResponseOut.json")
             .ThenResponseIsFromFile("ClientLoyaltyPointProjectionQueryResponse01.json");
 

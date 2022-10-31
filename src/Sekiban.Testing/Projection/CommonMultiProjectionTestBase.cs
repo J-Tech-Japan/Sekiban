@@ -10,32 +10,32 @@ using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Shared;
 using Sekiban.Testing.Command;
-using Sekiban.Testing.QueryFilter;
+using Sekiban.Testing.Queries;
 using System.Text.Json;
 using Xunit;
 namespace Sekiban.Testing.Projection;
 
-public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> : IDisposable,
-    IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload>, ITestHelperEventSubscriber
+public abstract class CommonMultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> : IDisposable,
+    IMultiProjectionTestHelper<TProjection, TProjectionPayload>, ITestHelperEventSubscriber
     where TProjection : IMultiProjector<TProjectionPayload>, new()
     where TProjectionPayload : IMultiProjectionPayload, new()
     where TDependencyDefinition : IDependencyDefinition, new()
 {
     private readonly AggregateTestCommandExecutor _commandExecutor;
-    protected readonly List<IQueryFilterChecker<MultiProjectionState<TProjectionPayload>>> _queryFilterCheckers = new();
+    protected readonly List<IQueryChecker<MultiProjectionState<TProjectionPayload>>> _queryCheckers = new();
     protected IServiceProvider _serviceProvider;
 
-    public CommonMultipleAggregateProjectionTestBase()
+    public CommonMultiProjectionTestBase()
     {
         var services = new ServiceCollection();
         // ReSharper disable once VirtualMemberCallInConstructor
         SetupDependency(services);
-        services.AddQueryFiltersFromDependencyDefinition(new TDependencyDefinition());
+        services.AddQueriesFromDependencyDefinition(new TDependencyDefinition());
         services.AddSekibanCoreForAggregateTestWithDependency(new TDependencyDefinition());
         _serviceProvider = services.BuildServiceProvider();
         _commandExecutor = new AggregateTestCommandExecutor(_serviceProvider);
     }
-    public CommonMultipleAggregateProjectionTestBase(IServiceProvider serviceProvider)
+    public CommonMultiProjectionTestBase(IServiceProvider serviceProvider)
     {
         _serviceProvider = serviceProvider;
         _commandExecutor = new AggregateTestCommandExecutor(_serviceProvider);
@@ -48,14 +48,14 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
     public void Dispose()
     {
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenPayloadIsFromFile(string filename)
+    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> ThenPayloadIsFromFile(string filename)
     {
         using var openStream = File.OpenRead(filename);
         var projection = JsonSerializer.Deserialize<TProjectionPayload>(openStream);
         if (projection is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         return ThenPayloadIs(projection);
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenGetPayload(Action<TProjectionPayload> payloadAction)
+    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> ThenGetPayload(Action<TProjectionPayload> payloadAction)
     {
         payloadAction(State.Payload);
         return this;
@@ -83,7 +83,7 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name);
     }
     public IReadOnlyCollection<IAggregateEvent> GetLatestEvents() => _commandExecutor.LatestEvents;
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> GivenEvents(IEnumerable<IAggregateEvent> events)
+    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenEvents(IEnumerable<IAggregateEvent> events)
     {
         var documentWriter = _serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter;
         if (documentWriter is null) { throw new Exception("Failed to get document writer"); }
@@ -97,37 +97,37 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
         }
         return this;
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> GivenEvents(params IAggregateEvent[] events) =>
+    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenEvents(params IAggregateEvent[] events) =>
         GivenEvents(events.AsEnumerable());
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> GivenEventsFromJson(string jsonEvents)
+    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenEventsFromJson(string jsonEvents)
     {
         var list = JsonSerializer.Deserialize<List<JsonElement>>(jsonEvents);
         if (list is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         AddEventsFromList(list);
         return this;
     }
-    public abstract IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> WhenProjection();
+    public abstract IMultiProjectionTestHelper<TProjection, TProjectionPayload> WhenProjection();
 
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenNotThrowsAnException()
+    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> ThenNotThrowsAnException()
     {
         var exception = _latestException is AggregateException aggregateException ? aggregateException.InnerExceptions.First() : _latestException;
         Assert.Null(exception);
         return this;
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenThrowsAnException()
+    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> ThenThrowsAnException()
     {
         var exception = _latestException is AggregateException aggregateException ? aggregateException.InnerExceptions.First() : _latestException;
         Assert.NotNull(exception);
         return this;
     }
 
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenGetState(
+    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> ThenGetState(
         Action<MultiProjectionState<TProjectionPayload>> stateAction)
     {
         stateAction(State);
         return this;
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenStateIs(
+    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> ThenStateIs(
         MultiProjectionState<TProjectionPayload> state)
     {
         var actual = State;
@@ -137,7 +137,7 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenPayloadIs(TProjectionPayload payload)
+    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> ThenPayloadIs(TProjectionPayload payload)
     {
         var actual = State.Payload;
         var expected = payload;
@@ -146,20 +146,20 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> ThenStateIsFromFile(string filename)
+    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> ThenStateIsFromFile(string filename)
     {
         using var openStream = File.OpenRead(filename);
         var projection = JsonSerializer.Deserialize<MultiProjectionState<TProjectionPayload>>(openStream);
         if (projection is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         return ThenStateIs(projection);
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> WriteProjectionToFile(string filename)
+    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> WriteProjectionToFile(string filename)
     {
         var json = SekibanJsonHelper.Serialize(State);
         File.WriteAllTextAsync(filename, json);
         return this;
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> GivenEventsFromFile(string filename)
+    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenEventsFromFile(string filename)
     {
         using var openStream = File.OpenRead(filename);
         var list = JsonSerializer.Deserialize<List<JsonElement>>(openStream);
@@ -168,15 +168,15 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
         return this;
     }
 
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> GivenQueryFilterChecker(
-        IQueryFilterChecker<MultiProjectionState<TProjectionPayload>> checker)
+    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenQueryChecker(
+        IQueryChecker<MultiProjectionState<TProjectionPayload>> checker)
     {
         if (_serviceProvider is null) { throw new Exception("Service provider is null. Please setup service provider."); }
-        checker.QueryFilterHandler = _serviceProvider.GetService<QueryHandler>();
-        _queryFilterCheckers.Add(checker);
+        checker.QueryHandler = _serviceProvider.GetService<QueryHandler>();
+        _queryCheckers.Add(checker);
         return this;
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> GivenEvents(
+    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenEvents(
         params (Guid aggregateId, Type aggregateType, IEventPayload payload)[] eventTouples)
     {
         foreach (var (aggregateId, aggregateType, payload) in eventTouples)
@@ -191,7 +191,7 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
         }
         return this;
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> GivenEvents(
+    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenEvents(
         params (Guid aggregateId, IEventPayload payload)[] eventTouples)
     {
         foreach (var (aggregateId, payload) in eventTouples)
@@ -213,18 +213,18 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
         return this;
     }
 
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> GivenScenario(Action initialAction)
+    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenScenario(Action initialAction)
     {
         initialAction();
         return this;
     }
-    public IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> GivenCommandExecutorAction(
+    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenCommandExecutorAction(
         Action<AggregateTestCommandExecutor> action)
     {
         action(_commandExecutor);
         return this;
     }
-    public async Task<IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload>> GivenEventsFromFileAsync(string filename)
+    public async Task<IMultiProjectionTestHelper<TProjection, TProjectionPayload>> GivenEventsFromFileAsync(string filename)
     {
         await using var openStream = File.OpenRead(filename);
         var list = await JsonSerializer.DeserializeAsync<List<JsonElement>>(openStream);
@@ -232,7 +232,7 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
         AddEventsFromList(list);
         return this;
     }
-    public async Task<IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload>> ThenStateFileAsync(string filename)
+    public async Task<IMultiProjectionTestHelper<TProjection, TProjectionPayload>> ThenStateFileAsync(string filename)
     {
         await using var openStream = File.OpenRead(filename);
         var projection = await JsonSerializer.DeserializeAsync<MultiProjectionState<TProjectionPayload>>(openStream);
@@ -240,7 +240,7 @@ public abstract class CommonMultipleAggregateProjectionTestBase<TProjection, TPr
         return ThenStateIs(projection);
     }
 
-    public async Task<IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload>> WriteProjectionToFileAsync(string filename)
+    public async Task<IMultiProjectionTestHelper<TProjection, TProjectionPayload>> WriteProjectionToFileAsync(string filename)
     {
         var json = SekibanJsonHelper.Serialize(State);
         await File.WriteAllTextAsync(filename, json);

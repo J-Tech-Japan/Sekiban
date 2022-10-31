@@ -63,7 +63,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IQueryService, QueryService>();
         services.AddTransient<QueryHandler>();
         services.AddTransient<ISingleProjectionCache, SingleProjectionCache>();
-        services.AddTransient<IMultipleAggregateProjectionCache, MultipleAggregateProjectionCache>();
+        services.AddTransient<IMultiProjectionCache, MultiProjectionCache>();
         services.AddTransient<ISnapshotDocumentCache, SnapshotDocumentCache>();
         return services;
     }
@@ -96,7 +96,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IQueryService, QueryService>();
         services.AddTransient<QueryHandler>();
         services.AddTransient<ISingleProjectionCache, SingleProjectionCache>();
-        services.AddTransient<IMultipleAggregateProjectionCache, MultipleAggregateProjectionCache>();
+        services.AddTransient<IMultiProjectionCache, MultiProjectionCache>();
         services.AddTransient<ISnapshotDocumentCache, SnapshotDocumentCache>();
         return services;
     }
@@ -130,7 +130,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IQueryService, QueryService>();
         services.AddTransient<QueryHandler>();
         services.AddTransient<ISingleProjectionCache, SingleProjectionCache>();
-        services.AddTransient<IMultipleAggregateProjectionCache, MultipleAggregateProjectionCache>();
+        services.AddTransient<IMultiProjectionCache, MultiProjectionCache>();
         services.AddTransient<ISnapshotDocumentCache, SnapshotDocumentCache>();
         return services;
     }

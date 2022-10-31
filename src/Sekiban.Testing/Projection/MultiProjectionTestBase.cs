@@ -4,19 +4,19 @@ using Sekiban.Core.Query.MultipleProjections;
 namespace Sekiban.Testing.Projection;
 
 public class
-    MultipleAggregateProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> : CommonMultipleAggregateProjectionTestBase<
+    MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> : CommonMultiProjectionTestBase<
         TProjection, TProjectionPayload, TDependencyDefinition> where TProjection : MultiProjectionBase<TProjectionPayload>, new()
     where TProjectionPayload : IMultiProjectionPayload, new()
     where TDependencyDefinition : IDependencyDefinition, new()
 {
-    public MultipleAggregateProjectionTestBase()
+    public MultiProjectionTestBase()
     {
     }
-    public MultipleAggregateProjectionTestBase(IServiceProvider serviceProvider) : base(serviceProvider)
+    public MultiProjectionTestBase(IServiceProvider serviceProvider) : base(serviceProvider)
     {
     }
 
-    public sealed override IMultipleAggregateProjectionTestHelper<TProjection, TProjectionPayload> WhenProjection()
+    public sealed override IMultiProjectionTestHelper<TProjection, TProjectionPayload> WhenProjection()
     {
         if (_serviceProvider == null)
         {
@@ -35,7 +35,7 @@ public class
             return this;
         }
         ;
-        foreach (var checker in _queryFilterCheckers)
+        foreach (var checker in _queryCheckers)
         {
             checker.RegisterState(State);
         }

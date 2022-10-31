@@ -4,40 +4,43 @@ using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Shared;
 using System.Text.Json;
 using Xunit;
-namespace Sekiban.Testing.QueryFilter;
+namespace Sekiban.Testing.Queries;
 
 public class
-    ProjectionQueryFilterTestChecker<TProjection, TProjectionPayload, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse> :
-        IQueryFilterChecker<MultiProjectionState<TProjectionPayload>>
+    ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TProjectionQuery, TQueryParameter, TQueryResponse> :
+        IQueryChecker<MultiProjectionState<TProjectionPayload>>
     where TProjection : MultiProjectionBase<TProjectionPayload>, new()
     where TProjectionPayload : IMultiProjectionPayload, new()
-    where TQueryFilterParameter : IQueryParameter
-    where TProjectionQueryFilter : IMultiProjectionQuery<TProjection, TProjectionPayload, TQueryFilterParameter, TQueryFilterResponse>,
-    new()
+    where TQueryParameter : IQueryParameter
+    where TProjectionQuery : IMultiProjectionListQuery<TProjection, TProjectionPayload, TQueryParameter, TQueryResponse>
+    , new()
 {
-    private TQueryFilterResponse? _response;
+    private QueryListResult<TQueryResponse>? _response;
+
+
+
     private MultiProjectionState<TProjectionPayload>? _state;
-    public QueryHandler? QueryFilterHandler { get; set; } = null;
+    public QueryHandler? QueryHandler { get; set; } = null;
     public void RegisterState(MultiProjectionState<TProjectionPayload> state)
     {
         _state = state;
     }
 
-    public ProjectionQueryFilterTestChecker<TProjection, TProjectionPayload, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
-        WhenParam(TQueryFilterParameter param)
+    public ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TProjectionQuery, TQueryParameter, TQueryResponse>
+        WhenParam(TQueryParameter param)
     {
         if (_state == null)
         {
             throw new InvalidDataException("Projection is null");
         }
-        if (QueryFilterHandler == null) { throw new MissingMemberException(nameof(QueryFilterHandler)); }
-        _response = QueryFilterHandler
-            .GetMultiProjectionQuery<TProjection, TProjectionPayload, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>(
+        if (QueryHandler == null) { throw new MissingMemberException(nameof(QueryHandler)); }
+        _response = QueryHandler
+            .GetMultiProjectionListQuery<TProjection, TProjectionPayload, TProjectionQuery, TQueryParameter, TQueryResponse>(
                 param,
                 _state);
         return this;
     }
-    public ProjectionQueryFilterTestChecker<TProjection, TProjectionPayload, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
+    public ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TProjectionQuery, TQueryParameter, TQueryResponse>
         WriteResponseToFile(string filename)
     {
         if (_response == null)
@@ -52,8 +55,8 @@ public class
         File.WriteAllTextAsync(filename, json);
         return this;
     }
-    public ProjectionQueryFilterTestChecker<TProjection, TProjectionPayload, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
-        ThenResponseIs(TQueryFilterResponse expectedResponse)
+    public ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TProjectionQuery, TQueryParameter, TQueryResponse>
+        ThenResponseIs(QueryListResult<TQueryResponse> expectedResponse)
     {
         var actual = _response;
         var expected = expectedResponse;
@@ -62,27 +65,26 @@ public class
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public ProjectionQueryFilterTestChecker<TProjection, TProjectionPayload, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
-        ThenGetResponse(Action<TQueryFilterResponse> responseAction)
+    public ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TProjectionQuery, TQueryParameter, TQueryResponse>
+        ThenGetResponse(Action<QueryListResult<TQueryResponse>> responseAction)
     {
         Assert.NotNull(_response);
         responseAction(_response!);
         return this;
     }
-
-    public ProjectionQueryFilterTestChecker<TProjection, TProjectionPayload, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
+    public ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TProjectionQuery, TQueryParameter, TQueryResponse>
         ThenResponseIsFromJson(string responseJson)
     {
-        var response = JsonSerializer.Deserialize<TQueryFilterResponse>(responseJson);
+        var response = JsonSerializer.Deserialize<QueryListResult<TQueryResponse>>(responseJson);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         ThenResponseIs(response);
         return this;
     }
-    public ProjectionQueryFilterTestChecker<TProjection, TProjectionPayload, TProjectionQueryFilter, TQueryFilterParameter, TQueryFilterResponse>
+    public ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TProjectionQuery, TQueryParameter, TQueryResponse>
         ThenResponseIsFromFile(string responseFilename)
     {
         using var openStream = File.OpenRead(responseFilename);
-        var response = JsonSerializer.Deserialize<TQueryFilterResponse>(openStream);
+        var response = JsonSerializer.Deserialize<QueryListResult<TQueryResponse>>(openStream);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         ThenResponseIs(response);
         return this;

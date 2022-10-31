@@ -18,7 +18,7 @@ public abstract class SingleAggregateTestBase<TAggregatePayload, TDependencyDefi
         var services = new ServiceCollection();
         // ReSharper disable once VirtualMemberCallInConstructor
         SetupDependency(services);
-        services.AddQueryFiltersFromDependencyDefinition(new TDependencyDefinition());
+        services.AddQueriesFromDependencyDefinition(new TDependencyDefinition());
         services.AddSekibanCoreForAggregateTestWithDependency(new TDependencyDefinition());
         _serviceProvider = services.BuildServiceProvider();
         _helper = new AggregateTestHelper<TAggregatePayload>(_serviceProvider);

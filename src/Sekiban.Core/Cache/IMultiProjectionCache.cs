@@ -2,7 +2,7 @@ using Sekiban.Core.Query.MultipleProjections;
 using Sekiban.Core.Query.MultipleProjections.Projections;
 namespace Sekiban.Core.Cache;
 
-public interface IMultipleAggregateProjectionCache
+public interface IMultiProjectionCache
 {
     public void Set<TProjection, TProjectionPayload>(MultipleMemoryProjectionContainer<TProjection, TProjectionPayload> container)
         where TProjection : IMultiProjector<TProjectionPayload>, new()

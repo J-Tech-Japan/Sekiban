@@ -26,7 +26,7 @@ public static class DependencyHelper
             services.AddSekibanSekibanCoreWithDependency(new CustomerDependency(), sekibanDateProducer, multipleProjectionType);
             services.AddSekibanCosmosDB();
         }
-        services.AddQueryFiltersFromDependencyDefinition(new CustomerDependency());
+        services.AddQueriesFromDependencyDefinition(new CustomerDependency());
         return services.BuildServiceProvider();
     }
     public static class LoginType

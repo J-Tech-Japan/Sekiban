@@ -1,10 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
 namespace Sekiban.Core.Dependency;
 
-public static class QueryFilterInjections
+public static class QueryInjections
 {
 
-    public static IServiceCollection AddQueryFilters(this IServiceCollection services, params IEnumerable<Type>[] controllerItems)
+    public static IServiceCollection AddQueries(this IServiceCollection services, params IEnumerable<Type>[] controllerItems)
     {
         foreach (var types in controllerItems)
         {
@@ -15,11 +15,11 @@ public static class QueryFilterInjections
         }
         return services;
     }
-    public static IServiceCollection AddQueryFiltersFromDependencyDefinition(
+    public static IServiceCollection AddQueriesFromDependencyDefinition(
         this IServiceCollection services,
         IDependencyDefinition dependencyDefinition)
     {
-        AddQueryFilters(
+        AddQueries(
             services,
             dependencyDefinition.GetAggregateQueryTypes(),
             dependencyDefinition.GetAggregateListQueryTypes(),

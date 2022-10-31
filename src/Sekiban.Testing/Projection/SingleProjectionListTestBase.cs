@@ -7,7 +7,7 @@ namespace Sekiban.Testing.Projection;
 
 public class
     SingleProjectionListTestBase<TAggregate, TSingleProjection, TAggregateProjectionPayload,
-        TDependencyDefinition> : CommonMultipleAggregateProjectionTestBase<
+        TDependencyDefinition> : CommonMultiProjectionTestBase<
         SingleProjectionListProjector<TSingleProjection, SingleProjectionState<TAggregateProjectionPayload>,
             TSingleProjection>, SingleProjectionListState<SingleProjectionState<TAggregateProjectionPayload>>,
         TDependencyDefinition> where TAggregate : IAggregatePayload, new()
@@ -25,7 +25,7 @@ public class
 
 
 
-    public override IMultipleAggregateProjectionTestHelper<
+    public override IMultiProjectionTestHelper<
             SingleProjectionListProjector<TSingleProjection, SingleProjectionState<TAggregateProjectionPayload>,
                 TSingleProjection>, SingleProjectionListState<SingleProjectionState<TAggregateProjectionPayload>>>
         WhenProjection()
@@ -49,7 +49,7 @@ public class
             return this;
         }
         ;
-        foreach (var checker in _queryFilterCheckers)
+        foreach (var checker in _queryCheckers)
         {
             checker.RegisterState(State);
         }

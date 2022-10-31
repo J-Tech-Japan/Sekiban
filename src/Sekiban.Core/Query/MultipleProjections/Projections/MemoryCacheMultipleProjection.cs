@@ -10,26 +10,26 @@ public class MemoryCacheMultipleProjection : IMultipleProjection
 {
     private readonly IAggregateSettings _aggregateSettings;
     private readonly IDocumentRepository _documentRepository;
-    private readonly IMultipleAggregateProjectionCache _multipleAggregateProjectionCache;
     private readonly IUpdateNotice _updateNotice;
+    private readonly IMultiProjectionCache multiProjectionCache;
     public MemoryCacheMultipleProjection(
         IMemoryCache memoryCache,
         IDocumentRepository documentRepository,
         IServiceProvider serviceProvider,
         IUpdateNotice updateNotice,
         IAggregateSettings aggregateSettings,
-        IMultipleAggregateProjectionCache multipleAggregateProjectionCache)
+        IMultiProjectionCache multiProjectionCache)
     {
         _documentRepository = documentRepository;
         _updateNotice = updateNotice;
         _aggregateSettings = aggregateSettings;
-        _multipleAggregateProjectionCache = multipleAggregateProjectionCache;
+        this.multiProjectionCache = multiProjectionCache;
     }
     public async Task<MultiProjectionState<TProjectionPayload>> GetMultipleProjectionAsync<TProjection, TProjectionPayload>()
         where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayload, new()
     {
-        var savedContainer = _multipleAggregateProjectionCache.Get<TProjection, TProjectionPayload>();
+        var savedContainer = multiProjectionCache.Get<TProjection, TProjectionPayload>();
         if (savedContainer == null)
         {
             return await GetInitialProjection<TProjection, TProjectionPayload>();
@@ -93,7 +93,7 @@ public class MemoryCacheMultipleProjection : IMultipleProjection
         }
         if (container.SafeState is not null && container.SafeSortableUniqueId != savedContainer?.SafeSortableUniqueId)
         {
-            _multipleAggregateProjectionCache.Set(container);
+            multiProjectionCache.Set(container);
         }
         return container.State;
     }
@@ -135,7 +135,7 @@ public class MemoryCacheMultipleProjection : IMultipleProjection
         }
         if (container.SafeState is not null)
         {
-            _multipleAggregateProjectionCache.Set(container);
+            multiProjectionCache.Set(container);
         }
         return container.State;
     }

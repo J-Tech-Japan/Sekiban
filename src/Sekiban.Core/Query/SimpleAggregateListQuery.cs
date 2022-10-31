@@ -3,8 +3,8 @@ using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
 namespace Sekiban.Core.Query;
 
-public class SimpleAggregateListQueryFilter<TAggregate> : IAggregateListQuery<TAggregate,
-    SimpleAggregateListQueryFilter<TAggregate>.QueryParameter,
+public class SimpleAggregateListQuery<TAggregate> : IAggregateListQuery<TAggregate,
+    SimpleAggregateListQuery<TAggregate>.QueryParameter,
     AggregateState<TAggregate>> where TAggregate : IAggregatePayload, new()
 {
     public IEnumerable<AggregateState<TAggregate>> HandleFilter(QueryParameter queryParam, IEnumerable<AggregateState<TAggregate>> list) => list;

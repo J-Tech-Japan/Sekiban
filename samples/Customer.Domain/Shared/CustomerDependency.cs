@@ -1,13 +1,13 @@
 using Customer.Domain.AggregateEventSubscribers;
 using Customer.Domain.Aggregates.Branches;
 using Customer.Domain.Aggregates.Branches.Commands;
-using Customer.Domain.Aggregates.Branches.QueryFilters;
+using Customer.Domain.Aggregates.Branches.Queries;
 using Customer.Domain.Aggregates.Clients;
 using Customer.Domain.Aggregates.Clients.Commands;
 using Customer.Domain.Aggregates.Clients.Events;
 using Customer.Domain.Aggregates.Clients.Projections;
-using Customer.Domain.Aggregates.Clients.QueryFilters;
-using Customer.Domain.Aggregates.Clients.QueryFilters.BasicClientFilters;
+using Customer.Domain.Aggregates.Clients.Queries;
+using Customer.Domain.Aggregates.Clients.Queries.BasicClientFilters;
 using Customer.Domain.Aggregates.LoyaltyPoints;
 using Customer.Domain.Aggregates.LoyaltyPoints.Commands;
 using Customer.Domain.Aggregates.RecentActivities;
@@ -28,21 +28,21 @@ public class CustomerDependency : IDependencyDefinition
 
     public IEnumerable<Type> GetAggregateListQueryTypes()
     {
-        yield return typeof(BasicClientQueryFilter);
+        yield return typeof(BasicClientQuery);
     }
     public IEnumerable<Type> GetAggregateQueryTypes()
     {
-        yield return typeof(ClientEmailExistsQueryFilter);
-        yield return typeof(BranchExistsQueryFilter);
+        yield return typeof(ClientEmailExistsQuery);
+        yield return typeof(BranchExistsQuery);
     }
     public IEnumerable<Type> GetSingleProjectionListQueryTypes()
     {
-        yield return typeof(ClientNameHistoryProjectionQueryFilter);
+        yield return typeof(ClientNameHistoryProjectionQuery);
     }
     public IEnumerable<Type> GetSingleProjectionQueryTypes() => Enumerable.Empty<Type>();
     public IEnumerable<Type> GetMultiProjectionQueryTypes()
     {
-        yield return typeof(ClientLoyaltyPointMultipleMultiProjectionQueryFilter);
+        yield return typeof(ClientLoyaltyPointMultipleMultiProjectionQuery);
     }
     public IEnumerable<(Type serviceType, Type? implementationType)> GetCommandDependencies()
     {
@@ -88,6 +88,6 @@ public class CustomerDependency : IDependencyDefinition
     public IEnumerable<(Type serviceType, Type? implementationType)> GetSubscriberDependencies() => throw new NotImplementedException();
     public IEnumerable<Type> GetMultiProjectionListQueryTypes()
     {
-        yield return typeof(ClientLoyaltyPointQueryFilter);
+        yield return typeof(ClientLoyaltyPointQuery);
     }
 }

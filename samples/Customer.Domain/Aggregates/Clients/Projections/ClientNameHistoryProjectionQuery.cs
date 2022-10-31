@@ -3,7 +3,7 @@ using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleProjections;
 namespace Customer.Domain.Aggregates.Clients.Projections;
 
-public enum ClientNameHistoryProjectionQueryFilterSortKeys
+public enum ClientNameHistoryProjectionQuerySortKeys
 {
     BranchId,
     ClientId,
@@ -11,9 +11,9 @@ public enum ClientNameHistoryProjectionQueryFilterSortKeys
     ClientEmail
 }
 // ReSharper disable once ClassNeverInstantiated.Global
-public class ClientNameHistoryProjectionQueryFilter : ISingleProjectionListQuery<Client, ClientNameHistoryProjection,
-    ClientNameHistoryProjection.PayloadDefinition, ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionParameter,
-    ClientNameHistoryProjectionQueryFilter.ClientNameHistoryProjectionQueryResponse>
+public class ClientNameHistoryProjectionQuery : ISingleProjectionListQuery<Client, ClientNameHistoryProjection,
+    ClientNameHistoryProjection.PayloadDefinition, ClientNameHistoryProjectionQuery.ClientNameHistoryProjectionParameter,
+    ClientNameHistoryProjectionQuery.ClientNameHistoryProjectionQueryResponse>
 {
     public IEnumerable<ClientNameHistoryProjectionQueryResponse> HandleFilter(
         ClientNameHistoryProjectionParameter queryParam,
@@ -41,13 +41,13 @@ public class ClientNameHistoryProjectionQueryFilter : ISingleProjectionListQuery
 
         switch (queryParam.SortKey)
         {
-            case ClientNameHistoryProjectionQueryFilterSortKeys.BranchId:
+            case ClientNameHistoryProjectionQuerySortKeys.BranchId:
                 return queryParam.SortIsAsc ? projections.OrderBy(m => m.BranchId) : projections.OrderByDescending(m => m.BranchId);
-            case ClientNameHistoryProjectionQueryFilterSortKeys.ClientId:
+            case ClientNameHistoryProjectionQuerySortKeys.ClientId:
                 return queryParam.SortIsAsc ? projections.OrderBy(m => m.ClientId) : projections.OrderByDescending(m => m.ClientId);
-            case ClientNameHistoryProjectionQueryFilterSortKeys.ClientName:
+            case ClientNameHistoryProjectionQuerySortKeys.ClientName:
                 return queryParam.SortIsAsc ? projections.OrderBy(m => m.ClientName) : projections.OrderByDescending(m => m.ClientName);
-            case ClientNameHistoryProjectionQueryFilterSortKeys.ClientEmail:
+            case ClientNameHistoryProjectionQuerySortKeys.ClientEmail:
                 return queryParam.SortIsAsc ? projections.OrderBy(m => m.ClientEmail) : projections.OrderByDescending(m => m.ClientEmail);
         }
         return projections;
@@ -57,7 +57,7 @@ public class ClientNameHistoryProjectionQueryFilter : ISingleProjectionListQuery
         int? PageNumber,
         Guid? BranchId,
         Guid? ClientId,
-        ClientNameHistoryProjectionQueryFilterSortKeys? SortKey,
+        ClientNameHistoryProjectionQuerySortKeys? SortKey,
         bool SortIsAsc = true) : IQueryPagingParameter;
     public record ClientNameHistoryProjectionQueryResponse(Guid BranchId, Guid ClientId, string ClientName, string ClientEmail, DateTime NameSetAt);
 }

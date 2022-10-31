@@ -1,9 +1,9 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
-namespace Customer.Domain.Aggregates.Clients.QueryFilters;
+namespace Customer.Domain.Aggregates.Clients.Queries;
 
-public class ClientEmailExistsQueryFilter : IAggregateQuery<Client, ClientEmailExistsQueryFilter.QueryParameter, bool>
+public class ClientEmailExistsQuery : IAggregateQuery<Client, ClientEmailExistsQuery.QueryParameter, bool>
 {
 
     public bool HandleFilter(QueryParameter queryParam, IEnumerable<AggregateState<Client>> list)

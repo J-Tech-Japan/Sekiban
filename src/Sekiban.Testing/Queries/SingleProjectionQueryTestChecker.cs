@@ -6,23 +6,23 @@ using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Shared;
 using System.Text.Json;
 using Xunit;
-namespace Sekiban.Testing.QueryFilter;
+namespace Sekiban.Testing.Queries;
 
-public class SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload, TQueryFilter,
-    TQueryParameter, TResponseQueryModel> : IQueryFilterChecker<MultiProjectionState<
+public class SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload, TQuery,
+    TQueryParameter, TResponseQueryModel> : IQueryChecker<MultiProjectionState<
     SingleProjectionListState<SingleProjectionState<TAggregateProjectionPayload>>>>
     where TAggregate : IAggregatePayload, new()
     where TSingleProjection : SingleProjectionBase<TAggregate, TSingleProjection, TAggregateProjectionPayload>, new
     ()
     where TAggregateProjectionPayload : ISingleProjectionPayload
-    where TQueryFilter : ISingleProjectionQuery<TAggregate, TSingleProjection, TAggregateProjectionPayload,
+    where TQuery : ISingleProjectionQuery<TAggregate, TSingleProjection, TAggregateProjectionPayload,
         TQueryParameter, TResponseQueryModel>
     where TQueryParameter : IQueryParameter
 {
     public TResponseQueryModel? Response { get; set; }
     private MultiProjectionState<SingleProjectionListState<SingleProjectionState<TAggregateProjectionPayload>>>
         ? _state { get; set; }
-    public QueryHandler? QueryFilterHandler
+    public QueryHandler? QueryHandler
     {
         get;
         set;
@@ -35,20 +35,20 @@ public class SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAg
     }
 
     public SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload
-        , TQueryFilter, TQueryParameter, TResponseQueryModel> WhenParam(TQueryParameter param)
+        , TQuery, TQueryParameter, TResponseQueryModel> WhenParam(TQueryParameter param)
     {
         if (_state == null)
         {
             throw new InvalidDataException("Projection is null");
         }
-        if (QueryFilterHandler == null) { throw new MissingMemberException(nameof(QueryFilterHandler)); }
-        Response = QueryFilterHandler
-            .GetSingleProjectionQuery<TAggregate, TSingleProjection, TAggregateProjectionPayload, TQueryFilter,
+        if (QueryHandler == null) { throw new MissingMemberException(nameof(QueryHandler)); }
+        Response = QueryHandler
+            .GetSingleProjectionQuery<TAggregate, TSingleProjection, TAggregateProjectionPayload, TQuery,
                 TQueryParameter, TResponseQueryModel>(param, _state.Payload.List);
         return this;
     }
     public SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload,
-        TQueryFilter, TQueryParameter, TResponseQueryModel> WriteResponse(string filename)
+        TQuery, TQueryParameter, TResponseQueryModel> WriteResponse(string filename)
     {
         if (Response == null)
         {
@@ -62,7 +62,7 @@ public class SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAg
         File.WriteAllTextAsync(filename, json);
         return this;
     }
-    public SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload, TQueryFilter,
+    public SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload, TQuery,
         TQueryParameter, TResponseQueryModel> ThenResponse(TResponseQueryModel expectedResponse)
     {
         if (Response == null)
@@ -76,7 +76,7 @@ public class SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAg
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload, TQueryFilter,
+    public SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload, TQuery,
         TQueryParameter, TResponseQueryModel> ThenGetResponse(Action<TResponseQueryModel> responseAction)
     {
         Assert.NotNull(Response);
@@ -84,7 +84,7 @@ public class SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAg
         return this;
     }
 
-    public SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload, TQueryFilter,
+    public SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload, TQuery,
         TQueryParameter, TResponseQueryModel> ThenResponseFromJson(string responseJson)
     {
         var response = JsonSerializer.Deserialize<TResponseQueryModel>(responseJson);
@@ -92,7 +92,7 @@ public class SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAg
         ThenResponse(response);
         return this;
     }
-    public SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload, TQueryFilter,
+    public SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload, TQuery,
         TQueryParameter, TResponseQueryModel> ThenResponseFromFile(string responseFilename)
     {
         using var openStream = File.OpenRead(responseFilename);

@@ -25,7 +25,7 @@ public class MultipleDbStoryTest : TestBase
     {
         var cosmosDbFactory = GetService<CosmosDbFactory>();
         var aggregateCommandExecutor = GetService<IAggregateCommandExecutor>();
-        var multipleAggregateProjectionService = GetService<IMultiProjectionService>();
+        var multiProjectionService = GetService<IMultiProjectionService>();
 
         // 何もしないで実行したら "Default"の動作となる
         // 先に全データを削除する
@@ -53,17 +53,17 @@ public class MultipleDbStoryTest : TestBase
         // Default で Listを取得すると1件取得
         var list = await _sekibanContext.SekibanActionAsync(
             DefaultDb,
-            async () => await multipleAggregateProjectionService.GetAggregateList<Branch>());
+            async () => await multiProjectionService.GetAggregateList<Branch>());
         Assert.Single(list);
 
         // 何もつけない場合も Default のDbから取得
-        list = await multipleAggregateProjectionService.GetAggregateList<Branch>();
+        list = await multiProjectionService.GetAggregateList<Branch>();
         Assert.Single(list);
 
         // Secondary で Listを取得すると0件取得
         list = await _sekibanContext.SekibanActionAsync(
             SecondaryDb,
-            async () => await multipleAggregateProjectionService.GetAggregateList<Branch>());
+            async () => await multiProjectionService.GetAggregateList<Branch>());
         Assert.Empty(list);
 
         // Secondaryで3件データを作成
@@ -79,17 +79,17 @@ public class MultipleDbStoryTest : TestBase
         // Default で Listを取得すると1件取得
         list = await _sekibanContext.SekibanActionAsync(
             DefaultDb,
-            async () => await multipleAggregateProjectionService.GetAggregateList<Branch>());
+            async () => await multiProjectionService.GetAggregateList<Branch>());
         Assert.Single(list);
 
         // 何もつけない場合も Default のDbから取得
-        list = await multipleAggregateProjectionService.GetAggregateList<Branch>();
+        list = await multiProjectionService.GetAggregateList<Branch>();
         Assert.Single(list);
 
         // Secondary で Listを取得すると3件取得
         list = await _sekibanContext.SekibanActionAsync(
             SecondaryDb,
-            async () => await multipleAggregateProjectionService.GetAggregateList<Branch>());
+            async () => await multiProjectionService.GetAggregateList<Branch>());
         Assert.Equal(3, list.Count);
     }
 }

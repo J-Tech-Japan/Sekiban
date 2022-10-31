@@ -1,9 +1,9 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
-namespace Customer.Domain.Aggregates.Branches.QueryFilters;
+namespace Customer.Domain.Aggregates.Branches.Queries;
 
-public class BranchExistsQueryFilter : IAggregateQuery<Branch, BranchExistsQueryFilter.QueryParameter, bool>
+public class BranchExistsQuery : IAggregateQuery<Branch, BranchExistsQuery.QueryParameter, bool>
 {
     public bool HandleFilter(QueryParameter queryParam, IEnumerable<AggregateState<Branch>> list)
     {

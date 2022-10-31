@@ -5,12 +5,12 @@ using Sekiban.Core.Query.MultipleProjections.Projections;
 using Sekiban.Core.Setting;
 namespace Sekiban.Core.Cache;
 
-public class MultipleAggregateProjectionCache : IMultipleAggregateProjectionCache
+public class MultiProjectionCache : IMultiProjectionCache
 {
     private readonly IMemoryCache _memoryCache;
     private readonly IServiceProvider _serviceProvider;
 
-    public MultipleAggregateProjectionCache(IMemoryCache memoryCache, IServiceProvider serviceProvider)
+    public MultiProjectionCache(IMemoryCache memoryCache, IServiceProvider serviceProvider)
     {
         _memoryCache = memoryCache;
         _serviceProvider = serviceProvider;
@@ -27,7 +27,7 @@ public class MultipleAggregateProjectionCache : IMultipleAggregateProjectionCach
         _memoryCache.Get<MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>>(
             GetInMemoryKey<TProjection, TProjectionPayload>());
 
-    private static MemoryCacheEntryOptions GetMemoryCacheOptions() => new MemoryCacheEntryOptions
+    private static MemoryCacheEntryOptions GetMemoryCacheOptions() => new()
     {
         AbsoluteExpiration = DateTimeOffset.UtcNow.AddHours(2), SlidingExpiration = TimeSpan.FromMinutes(15)
         // 5分読まれなかったら削除するが、2時間経ったらどちらにしても削除する

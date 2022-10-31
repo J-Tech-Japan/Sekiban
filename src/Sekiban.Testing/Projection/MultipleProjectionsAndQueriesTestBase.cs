@@ -19,14 +19,14 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         var services = new ServiceCollection();
         // ReSharper disable once VirtualMemberCallInConstructor
         SetupDependency(services);
-        services.AddQueryFiltersFromDependencyDefinition(new TDependencyDefinition());
+        services.AddQueriesFromDependencyDefinition(new TDependencyDefinition());
         services.AddSekibanCoreForAggregateTestWithDependency(new TDependencyDefinition());
         _serviceProvider = services.BuildServiceProvider();
         _commandExecutor = new AggregateTestCommandExecutor(_serviceProvider);
     }
     protected virtual void SetupDependency(IServiceCollection serviceCollection) { }
 
-    public TMultipleProjectionTest SetupMultipleAggregateProjectionTest<TMultipleProjectionTest>()
+    public TMultipleProjectionTest SetupMultiProjectionTest<TMultipleProjectionTest>()
         where TMultipleProjectionTest : class, ITestHelperEventSubscriber
     {
         var test = Activator.CreateInstance(typeof(TMultipleProjectionTest), _serviceProvider) as TMultipleProjectionTest;

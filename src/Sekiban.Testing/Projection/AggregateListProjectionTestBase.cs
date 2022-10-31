@@ -5,7 +5,7 @@ using Sekiban.Core.Query.MultipleProjections;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Testing.Projection;
 
-public class AggregateListProjectionTestBase<TAggregatePayload, TDependencyDefinition> : CommonMultipleAggregateProjectionTestBase<
+public class AggregateListProjectionTestBase<TAggregatePayload, TDependencyDefinition> : CommonMultiProjectionTestBase<
     SingleProjectionListProjector<Aggregate<TAggregatePayload>, AggregateState<TAggregatePayload>, DefaultSingleProjector<TAggregatePayload>>,
     SingleProjectionListState<AggregateState<TAggregatePayload>>, TDependencyDefinition>
     where TAggregatePayload : IAggregatePayload, new()
@@ -18,7 +18,7 @@ public class AggregateListProjectionTestBase<TAggregatePayload, TDependencyDefin
     {
     }
     public override
-        IMultipleAggregateProjectionTestHelper<
+        IMultiProjectionTestHelper<
             SingleProjectionListProjector<Aggregate<TAggregatePayload>, AggregateState<TAggregatePayload>,
                 DefaultSingleProjector<TAggregatePayload>>,
             SingleProjectionListState<AggregateState<TAggregatePayload>>> WhenProjection()
@@ -40,7 +40,7 @@ public class AggregateListProjectionTestBase<TAggregatePayload, TDependencyDefin
             return this;
         }
         ;
-        foreach (var checker in _queryFilterCheckers)
+        foreach (var checker in _queryCheckers)
         {
             checker.RegisterState(State);
         }
