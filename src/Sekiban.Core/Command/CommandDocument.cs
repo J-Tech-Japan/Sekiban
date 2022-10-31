@@ -3,15 +3,15 @@ using Sekiban.Core.History;
 using Sekiban.Core.Partition;
 namespace Sekiban.Core.Command;
 
-public record AggregateCommandDocument<T> : DocumentBase, IDocument, ICallHistories where T : IAggregateCommand
+public record CommandDocument<T> : DocumentBase, IDocument, ICallHistories where T : ICommand
 {
 
-    public AggregateCommandDocument() { }
+    public CommandDocument() { }
 
-    public AggregateCommandDocument(Guid aggregateId, T commandPayload, Type aggregateType, List<CallHistory>? callHistories = null) : base(
+    public CommandDocument(Guid aggregateId, T commandPayload, Type aggregateType, List<CallHistory>? callHistories = null) : base(
         aggregateId,
-        PartitionKeyGenerator.ForAggregateCommand(aggregateId, aggregateType),
-        DocumentType.AggregateCommand,
+        PartitionKeyGenerator.ForCommand(aggregateId, aggregateType),
+        DocumentType.Command,
         typeof(T).Name)
     {
         Payload = commandPayload;
@@ -24,7 +24,7 @@ public record AggregateCommandDocument<T> : DocumentBase, IDocument, ICallHistor
 
     /// <summary>
     ///     実行ユーザー
-    ///     AggregateCommandDocumentで入力する
+    ///     CommandDocumentで入力する
     /// </summary>
     public string? ExecutedUser { get; init; } = string.Empty;
 

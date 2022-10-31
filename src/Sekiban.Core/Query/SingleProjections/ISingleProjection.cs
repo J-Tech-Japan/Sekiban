@@ -3,6 +3,6 @@ namespace Sekiban.Core.Query.SingleProjections;
 
 public interface ISingleProjection
 {
-    void ApplyEvent(IAggregateEvent ev);
-    public bool CanApplyEvent(IAggregateEvent ev);
+    void ApplyEvent(IEvent ev);
+    public bool CanApplyEvent(IEvent ev);
 }

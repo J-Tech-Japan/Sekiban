@@ -9,7 +9,7 @@ public interface IDocumentRepository
         Type originalType,
         string? partitionKey,
         string? sinceSortableUniqueId,
-        Action<IEnumerable<IAggregateEvent>> resultAction);
+        Action<IEnumerable<IEvent>> resultAction);
 
     Task GetAllAggregateEventStringsForAggregateIdAsync(
         Guid aggregateId,
@@ -17,7 +17,7 @@ public interface IDocumentRepository
         string? partitionKey,
         string? sinceSortableUniqueId,
         Action<IEnumerable<string>> resultAction);
-    Task GetAllAggregateCommandStringsForAggregateIdAsync(
+    Task GetAllCommandStringsForAggregateIdAsync(
         Guid aggregateId,
         Type originalType,
         string? sinceSortableUniqueId,
@@ -26,13 +26,13 @@ public interface IDocumentRepository
     Task GetAllAggregateEventsForAggregateEventTypeAsync(
         Type originalType,
         string? sinceSortableUniqueId,
-        Action<IEnumerable<IAggregateEvent>> resultAction);
+        Action<IEnumerable<IEvent>> resultAction);
 
     Task GetAllAggregateEventsAsync(
         Type multipleProjectionType,
         IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
-        Action<IEnumerable<IAggregateEvent>> resultAction);
+        Action<IEnumerable<IEvent>> resultAction);
 
     Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type originalType);
 

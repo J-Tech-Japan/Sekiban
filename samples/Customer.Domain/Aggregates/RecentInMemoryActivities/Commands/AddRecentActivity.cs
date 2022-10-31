@@ -5,22 +5,16 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Shared;
 namespace Customer.Domain.Aggregates.RecentInMemoryActivities.Commands;
 
-public record AddRecentInMemoryActivity(Guid RecentInMemoryActivityId, string Activity) : ChangeAggregateCommandBase<RecentInMemoryActivity>,
+public record AddRecentInMemoryActivity(Guid RecentInMemoryActivityId, string Activity) : ChangeCommandBase<RecentInMemoryActivity>,
     INoValidateCommand
 {
     public AddRecentInMemoryActivity() : this(Guid.Empty, string.Empty) { }
-    public override Guid GetAggregateId()
-    {
-        return RecentInMemoryActivityId;
-    }
+    public override Guid GetAggregateId() => RecentInMemoryActivityId;
 }
-public class AddRecentInMemoryActivityHandler : ChangeAggregateCommandHandlerBase<RecentInMemoryActivity, AddRecentInMemoryActivity>
+public class AddRecentInMemoryActivityHandler : ChangeCommandHandlerBase<RecentInMemoryActivity, AddRecentInMemoryActivity>
 {
     private readonly ISekibanDateProducer _sekibanDateProducer;
-    public AddRecentInMemoryActivityHandler(ISekibanDateProducer sekibanDateProducer)
-    {
-        _sekibanDateProducer = sekibanDateProducer;
-    }
+    public AddRecentInMemoryActivityHandler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
     protected override async IAsyncEnumerable<IChangedEvent<RecentInMemoryActivity>> ExecCommandAsync(
         Func<AggregateState<RecentInMemoryActivity>> getAggregateState,
         AddRecentInMemoryActivity command)

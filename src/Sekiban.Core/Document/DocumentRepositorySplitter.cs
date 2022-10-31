@@ -31,7 +31,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
         Type originalType,
         string? partitionKey,
         string? sinceSortableUniqueId,
-        Action<IEnumerable<IAggregateEvent>> resultAction)
+        Action<IEnumerable<IEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
@@ -122,7 +122,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
             });
     }
 
-    public async Task GetAllAggregateCommandStringsForAggregateIdAsync(
+    public async Task GetAllCommandStringsForAggregateIdAsync(
         Guid aggregateId,
         Type originalType,
         string? sinceSortableUniqueId,
@@ -131,14 +131,14 @@ public class DocumentRepositorySplitter : IDocumentRepository
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
         {
-            await _documentTemporaryRepository.GetAllAggregateCommandStringsForAggregateIdAsync(
+            await _documentTemporaryRepository.GetAllCommandStringsForAggregateIdAsync(
                 aggregateId,
                 originalType,
                 sinceSortableUniqueId,
                 resultAction);
             return;
         }
-        await _documentPersistentRepository.GetAllAggregateCommandStringsForAggregateIdAsync(
+        await _documentPersistentRepository.GetAllCommandStringsForAggregateIdAsync(
             aggregateId,
             originalType,
             sinceSortableUniqueId,
@@ -149,7 +149,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
         Type multipleProjectionType,
         IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
-        Action<IEnumerable<IAggregateEvent>> resultAction)
+        Action<IEnumerable<IEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multipleProjectionType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
@@ -189,7 +189,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
     public Task GetAllAggregateEventsForAggregateEventTypeAsync(
         Type originalType,
         string? sinceSortableUniqueId,
-        Action<IEnumerable<IAggregateEvent>> resultAction)
+        Action<IEnumerable<IEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
@@ -214,7 +214,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
         }
         return await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(aggregateId, originalType, version);
     }
-    private void SaveAggregateEvents(List<IAggregateEvent> aggregateEvents, Type originalType, string partitionKey, string sortableUniqueKey)
+    private void SaveAggregateEvents(List<IEvent> aggregateEvents, Type originalType, string partitionKey, string sortableUniqueKey)
     {
         _hybridStoreManager.AddPartitionKey(partitionKey, sortableUniqueKey);
         foreach (var aggregateEvent in aggregateEvents)

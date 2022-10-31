@@ -11,18 +11,18 @@ using Sekiban.Core.Snapshot.Aggregate.Commands;
 using Sekiban.Core.Snapshot.Aggregate.Events;
 namespace Sekiban.Core.PubSub;
 
-public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEvent> where TEvent : IAggregateEvent
+public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEvent> where TEvent : IEvent
 {
-    private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
     private readonly IAggregateSettings _aggregateSettings;
     private readonly IDocumentPersistentRepository _documentPersistentRepository;
     private readonly IDocumentWriter _documentWriter;
     private readonly SekibanAggregateTypes _sekibanAggregateTypes;
     private readonly ISekibanContext _sekibanContext;
+    private readonly ICommandExecutor commandExecutor;
     private readonly ISingleProjectionService singleProjectionService;
     public SnapshotManagerEventSubscriber(
         SekibanAggregateTypes sekibanAggregateTypes,
-        IAggregateCommandExecutor aggregateCommandExecutor,
+        ICommandExecutor commandExecutor,
         IDocumentPersistentRepository documentPersistentRepository,
         ISingleProjectionService singleProjectionService,
         IDocumentWriter documentWriter,
@@ -30,7 +30,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
         ISekibanContext sekibanContext)
     {
         _sekibanAggregateTypes = sekibanAggregateTypes;
-        _aggregateCommandExecutor = aggregateCommandExecutor;
+        this.commandExecutor = commandExecutor;
         _documentPersistentRepository = documentPersistentRepository;
         this.singleProjectionService = singleProjectionService;
         _documentWriter = documentWriter;
@@ -50,16 +50,16 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
             var aggregate = await singleProjectionService.GetAggregateAsync<SnapshotManager>(SnapshotManager.SharedId);
             if (aggregate is null)
             {
-                await _aggregateCommandExecutor.ExecCreateCommandAsync<SnapshotManager, CreateSnapshotManager>(
+                await commandExecutor.ExecCreateCommandAsync<SnapshotManager, CreateSnapshotManager>(
                     new CreateSnapshotManager());
             }
 
             if (_aggregateSettings.ShouldTakeSnapshotForType(aggregateType.Aggregate))
             {
                 var (snapshotManagerResponse, events)
-                    = await _aggregateCommandExecutor
-                        .ExecChangeCommandAsync<SnapshotManager, ReportAggregateVersionToSnapshotManger>(
-                            new ReportAggregateVersionToSnapshotManger(
+                    = await commandExecutor
+                        .ExecChangeCommandAsync<SnapshotManager, ReportVersionToSnapshotManger>(
+                            new ReportVersionToSnapshotManger(
                                 SnapshotManager.SharedId,
                                 aggregateType.Aggregate,
                                 notification.AggregateId,
@@ -68,7 +68,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                 if (events.Any(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken)))
                 {
                     foreach (var taken in events.Where(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken))
-                        .Select(m => (AggregateEvent<SnapshotManagerSnapshotTaken>)m))
+                        .Select(m => (Event<SnapshotManagerSnapshotTaken>)m))
                     {
                         if (await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
                             notification.AggregateId,
@@ -114,9 +114,9 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                     continue;
                 }
                 var (snapshotManagerResponseP, eventsP)
-                    = await _aggregateCommandExecutor
-                        .ExecChangeCommandAsync<SnapshotManager, ReportAggregateVersionToSnapshotManger>(
-                            new ReportAggregateVersionToSnapshotManger(
+                    = await commandExecutor
+                        .ExecChangeCommandAsync<SnapshotManager, ReportVersionToSnapshotManger>(
+                            new ReportVersionToSnapshotManger(
                                 SnapshotManager.SharedId,
                                 projection.Aggregate,
                                 notification.AggregateId,
@@ -128,7 +128,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                 }
 
                 foreach (var taken in eventsP.Where(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken))
-                    .Select(m => (AggregateEvent<SnapshotManagerSnapshotTaken>)m))
+                    .Select(m => (Event<SnapshotManagerSnapshotTaken>)m))
                 {
                     if (await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
                         notification.AggregateId,

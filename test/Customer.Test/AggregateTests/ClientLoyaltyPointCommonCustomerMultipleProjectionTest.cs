@@ -276,7 +276,7 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMu
             },
             {
                 ""Id"": ""ed611e3a-4ffb-4157-80c4-225e310b17e8"",
-                ""TypeName"": ""AggregateEvent`1"",
+                ""TypeName"": ""Event`1"",
                 ""ExecutedUser"": """"
             },
             {

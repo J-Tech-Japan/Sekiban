@@ -3,7 +3,7 @@ namespace Sekiban.Core.Query.MultipleProjections;
 
 public interface IMultiProjector<TProjectionPayload> : IProjection where TProjectionPayload : IMultiProjectionPayload
 {
-    void ApplyEvent(IAggregateEvent ev);
+    void ApplyEvent(IEvent ev);
     MultiProjectionState<TProjectionPayload> ToState();
     void ApplySnapshot(MultiProjectionState<TProjectionPayload> snapshot);
     /// <summary>

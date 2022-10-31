@@ -32,11 +32,11 @@ public class DocumentWriterSplitter : IDocumentWriter
             return;
         }
         if (document.DocumentType == DocumentType.AggregateSnapshot) { }
-        if (document is IAggregateEvent) { }
+        if (document is IEvent) { }
         await _documentPersistentWriter.SaveAsync(document, aggregateType);
     }
     public async Task SaveAndPublishAggregateEvent<TAggregateEvent>(TAggregateEvent aggregateEvent, Type aggregateType)
-        where TAggregateEvent : IAggregateEvent
+        where TAggregateEvent : IEvent
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
@@ -48,21 +48,21 @@ public class DocumentWriterSplitter : IDocumentWriter
         await _documentPersistentWriter.SaveAndPublishAggregateEvent(aggregateEvent, aggregateType);
     }
 
-    private async Task AddToHybridIfPossible(IAggregateEvent aggregateEvent, Type aggregateType)
+    private async Task AddToHybridIfPossible(IEvent @event, Type aggregateType)
     {
         if (!_aggregateSettings.CanUseHybrid(aggregateType)) { return; }
-        if (aggregateEvent.IsAggregateInitialEvent)
+        if (@event.IsAggregateInitialEvent)
         {
-            if (_hybridStoreManager.AddPartitionKey(aggregateEvent.PartitionKey, string.Empty))
+            if (_hybridStoreManager.AddPartitionKey(@event.PartitionKey, string.Empty))
             {
-                await _documentTemporaryWriter.SaveAsync(aggregateEvent, aggregateType);
+                await _documentTemporaryWriter.SaveAsync(@event, aggregateType);
             }
         }
         else
         {
-            if (_hybridStoreManager.HasPartition(aggregateEvent.PartitionKey))
+            if (_hybridStoreManager.HasPartition(@event.PartitionKey))
             {
-                await _documentTemporaryWriter.SaveAsync(aggregateEvent, aggregateType);
+                await _documentTemporaryWriter.SaveAsync(@event, aggregateType);
             }
         }
     }

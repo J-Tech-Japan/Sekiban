@@ -8,16 +8,13 @@ namespace Customer.Domain.AggregateEventSubscribers;
 
 public class ClientDeletedSubscriber : AggregateEventSubscriberBase<ClientDeleted>
 {
-    private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
+    private readonly ICommandExecutor commandExecutor;
 
-    public ClientDeletedSubscriber(IAggregateCommandExecutor aggregateCommandExecutor)
-    {
-        _aggregateCommandExecutor = aggregateCommandExecutor;
-    }
+    public ClientDeletedSubscriber(ICommandExecutor commandExecutor) => this.commandExecutor = commandExecutor;
 
-    public override async Task SubscribeAggregateEventAsync(AggregateEvent<ClientDeleted> ev)
+    public override async Task SubscribeAggregateEventAsync(Event<ClientDeleted> ev)
     {
-        await _aggregateCommandExecutor.ExecChangeCommandAsync<LoyaltyPoint, DeleteLoyaltyPoint>(
+        await commandExecutor.ExecChangeCommandAsync<LoyaltyPoint, DeleteLoyaltyPoint>(
             new DeleteLoyaltyPoint(ev.AggregateId),
             ev.GetCallHistoriesIncludesItself());
     }

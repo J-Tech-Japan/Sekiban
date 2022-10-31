@@ -8,16 +8,13 @@ namespace Customer.Domain.AggregateEventSubscribers;
 
 public class ClientCreatedSubscriber : AggregateEventSubscriberBase<ClientCreated>
 {
-    private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
+    private readonly ICommandExecutor commandExecutor;
 
-    public ClientCreatedSubscriber(IAggregateCommandExecutor aggregateCommandExecutor)
-    {
-        _aggregateCommandExecutor = aggregateCommandExecutor;
-    }
+    public ClientCreatedSubscriber(ICommandExecutor commandExecutor) => this.commandExecutor = commandExecutor;
 
-    public override async Task SubscribeAggregateEventAsync(AggregateEvent<ClientCreated> ev)
+    public override async Task SubscribeAggregateEventAsync(Event<ClientCreated> ev)
     {
-        await _aggregateCommandExecutor.ExecCreateCommandAsync<LoyaltyPoint, CreateLoyaltyPoint>(
+        await commandExecutor.ExecCreateCommandAsync<LoyaltyPoint, CreateLoyaltyPoint>(
             new CreateLoyaltyPoint(ev.AggregateId, 0),
             ev.GetCallHistoriesIncludesItself());
     }

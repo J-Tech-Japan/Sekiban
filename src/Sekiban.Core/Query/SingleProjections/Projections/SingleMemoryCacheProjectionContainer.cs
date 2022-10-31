@@ -7,7 +7,7 @@ public record SingleMemoryCacheProjectionContainer<TAggregate, TState> where TAg
 {
     public SingleMemoryCacheProjectionContainer(Guid aggregateId) => AggregateId = aggregateId;
     public Guid AggregateId { get; set; }
-    public List<IAggregateEvent> UnsafeEvents { get; set; } = new();
+    public List<IEvent> UnsafeEvents { get; set; } = new();
     public TState? State { get; set; } = default;
     public TState? SafeState { get; set; } = default;
     public SortableUniqueIdValue? LastSortableUniqueId { get; set; } = null;

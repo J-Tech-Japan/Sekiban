@@ -16,8 +16,8 @@ public interface IMultiProjectionTestHelper<TProjection, TProjectionPayload>
     public IMultiProjectionTestHelper<TProjection, TProjectionPayload> WhenProjection();
     #endregion
     #region Given
-    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenEvents(IEnumerable<IAggregateEvent> events);
-    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenEvents(params IAggregateEvent[] definitions);
+    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenEvents(IEnumerable<IEvent> events);
+    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenEvents(params IEvent[] definitions);
     public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenEventsFromJson(string jsonEvents);
     public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenEventsFromFile(string filename);
     public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenEvents(
@@ -27,12 +27,12 @@ public interface IMultiProjectionTestHelper<TProjection, TProjectionPayload>
     public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenQueryChecker(
         IQueryChecker<MultiProjectionState<TProjectionPayload>> checker);
     public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenScenario(Action initialAction);
-    public Guid RunCreateCommand<TAggregatePayload>(ICreateAggregateCommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
+    public Guid RunCreateCommand<TAggregatePayload>(ICreateCommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
         where TAggregatePayload : IAggregatePayload, new();
-    public void RunChangeCommand<TAggregatePayload>(ChangeAggregateCommandBase<TAggregatePayload> command)
+    public void RunChangeCommand<TAggregatePayload>(ChangeCommandBase<TAggregatePayload> command)
         where TAggregatePayload : IAggregatePayload, new();
     public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenCommandExecutorAction(
-        Action<AggregateTestCommandExecutor> action);
+        Action<TestCommandExecutor> action);
     #endregion
 
     #region Then
@@ -51,6 +51,6 @@ public interface IMultiProjectionTestHelper<TProjection, TProjectionPayload>
     #region Get
     public AggregateState<TEnvironmentAggregatePayload> GetAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
         where TEnvironmentAggregatePayload : IAggregatePayload, new();
-    public IReadOnlyCollection<IAggregateEvent> GetLatestEvents();
+    public IReadOnlyCollection<IEvent> GetLatestEvents();
     #endregion
 }

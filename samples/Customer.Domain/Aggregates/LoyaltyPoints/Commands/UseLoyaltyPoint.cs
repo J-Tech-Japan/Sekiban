@@ -11,15 +11,12 @@ public record UseLoyaltyPoint(
     DateTime HappenedDate,
     LoyaltyPointUsageTypeKeys Reason,
     int PointAmount,
-    string Note) : ChangeAggregateCommandBase<LoyaltyPoint>
+    string Note) : ChangeCommandBase<LoyaltyPoint>
 {
     public UseLoyaltyPoint() : this(Guid.Empty, DateTime.MinValue, LoyaltyPointUsageTypeKeys.FlightDomestic, 0, string.Empty) { }
-    public override Guid GetAggregateId()
-    {
-        return ClientId;
-    }
+    public override Guid GetAggregateId() => ClientId;
 }
-public class UseLoyaltyPointHandler : ChangeAggregateCommandHandlerBase<LoyaltyPoint, UseLoyaltyPoint>
+public class UseLoyaltyPointHandler : ChangeCommandHandlerBase<LoyaltyPoint, UseLoyaltyPoint>
 {
     protected override async IAsyncEnumerable<IChangedEvent<LoyaltyPoint>> ExecCommandAsync(
         Func<AggregateState<LoyaltyPoint>> getAggregateState,

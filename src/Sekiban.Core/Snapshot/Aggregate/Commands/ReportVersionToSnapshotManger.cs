@@ -5,30 +5,24 @@ using Sekiban.Core.Setting;
 using Sekiban.Core.Snapshot.Aggregate.Events;
 namespace Sekiban.Core.Snapshot.Aggregate.Commands;
 
-public record ReportAggregateVersionToSnapshotManger(
+public record ReportVersionToSnapshotManger(
     Guid SnapshotManagerId,
     Type AggregateType,
     Guid TargetAggregateId,
     int Version,
-    int? SnapshotVersion) : ChangeAggregateCommandBase<SnapshotManager>, INoValidateCommand
+    int? SnapshotVersion) : ChangeCommandBase<SnapshotManager>, INoValidateCommand
 {
-    public ReportAggregateVersionToSnapshotManger() : this(Guid.Empty, typeof(object), Guid.Empty, 0, null) { }
-    public override Guid GetAggregateId()
-    {
-        return SnapshotManagerId;
-    }
+    public ReportVersionToSnapshotManger() : this(Guid.Empty, typeof(object), Guid.Empty, 0, null) { }
+    public override Guid GetAggregateId() => SnapshotManagerId;
 }
-public class ReportAggregateVersionToSnapshotMangerHandler : ChangeAggregateCommandHandlerBase<SnapshotManager,
-    ReportAggregateVersionToSnapshotManger>
+public class ReportVersionToSnapshotMangerHandler : ChangeCommandHandlerBase<SnapshotManager,
+    ReportVersionToSnapshotManger>
 {
     private readonly IAggregateSettings _aggregateSettings;
-    public ReportAggregateVersionToSnapshotMangerHandler(IAggregateSettings aggregateSettings)
-    {
-        _aggregateSettings = aggregateSettings;
-    }
+    public ReportVersionToSnapshotMangerHandler(IAggregateSettings aggregateSettings) => _aggregateSettings = aggregateSettings;
     protected override async IAsyncEnumerable<IChangedEvent<SnapshotManager>> ExecCommandAsync(
         Func<AggregateState<SnapshotManager>> getAggregateState,
-        ReportAggregateVersionToSnapshotManger command)
+        ReportVersionToSnapshotManger command)
     {
         await Task.CompletedTask;
         var snapshotFrequency = _aggregateSettings.SnapshotFrequencyForType(command.AggregateType);

@@ -10,10 +10,7 @@ namespace Sekiban.Core.Dependency;
 
 public static class SekibanEventSourcingDependency
 {
-    public static Assembly GetAssembly()
-    {
-        return Assembly.GetExecutingAssembly();
-    }
+    public static Assembly GetAssembly() => Assembly.GetExecutingAssembly();
 
     public static IServiceCollection AddSekibanSekibanCoreWithDependency(
         this IServiceCollection services,
@@ -28,9 +25,9 @@ public static class SekibanEventSourcingDependency
     public static IEnumerable<(Type serviceType, Type? implementationType)> GetDependencies()
     {
         // Aggregate: RecentInMemoryActivity
-        yield return (typeof(ICreateAggregateCommandHandler<SnapshotManager, CreateSnapshotManager>), typeof(CreateSnapshotManagerHandler));
-        yield return (typeof(IChangeAggregateCommandHandler<SnapshotManager, ReportAggregateVersionToSnapshotManger>),
-            typeof(ReportAggregateVersionToSnapshotMangerHandler));
+        yield return (typeof(ICreateCommandHandler<SnapshotManager, CreateSnapshotManager>), typeof(CreateSnapshotManagerHandler));
+        yield return (typeof(IChangeCommandHandler<SnapshotManager, ReportVersionToSnapshotManger>),
+            typeof(ReportVersionToSnapshotMangerHandler));
     }
 
     public static void Register(

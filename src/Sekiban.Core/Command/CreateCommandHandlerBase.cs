@@ -4,12 +4,12 @@ using Sekiban.Core.Exceptions;
 using System.Collections.Immutable;
 namespace Sekiban.Core.Command;
 
-public abstract class CreateAggregateCommandHandlerBase<TAggregatePayload, TCommand> : ICreateAggregateCommandHandler<TAggregatePayload, TCommand>
-    where TAggregatePayload : IAggregatePayload, new() where TCommand : ICreateAggregateCommand<TAggregatePayload>, new()
+public abstract class CreateCommandHandlerBase<TAggregatePayload, TCommand> : ICreateCommandHandler<TAggregatePayload, TCommand>
+    where TAggregatePayload : IAggregatePayload, new() where TCommand : ICreateCommand<TAggregatePayload>, new()
 {
-    private readonly List<IAggregateEvent> _events = new();
+    private readonly List<IEvent> _events = new();
     private Aggregate<TAggregatePayload>? _aggregate;
-    public async Task<AggregateCommandResponse> HandleAsync(AggregateCommandDocument<TCommand> command, Aggregate<TAggregatePayload> aggregate)
+    public async Task<CommandResponse> HandleAsync(CommandDocument<TCommand> command, Aggregate<TAggregatePayload> aggregate)
     {
         // ReSharper disable once SuspiciousTypeConversion.Global
         if (command is IOnlyPublishingCommand)
@@ -22,14 +22,14 @@ public abstract class CreateAggregateCommandHandlerBase<TAggregatePayload, TComm
         {
             _events.Add(AggregateEventHandler.HandleAggregateEvent(aggregate, eventPayload));
             if (_events.First().GetPayload() is not ICreatedEventPayload) { throw new SekibanCreateCommandShouldSaveCreateEventFirstException(); }
-            if (_events.Count > 1 && _events.Last().GetPayload() is ICreatedEventPayload) { throw new SekibanCreateCommandShouldOnlySaveFirstException(); }
+            if (_events.Count > 1 && _events.Last().GetPayload() is ICreatedEventPayload)
+            {
+                throw new SekibanCreateCommandShouldOnlySaveFirstException();
+            }
         }
-        return await Task.FromResult(new AggregateCommandResponse(aggregate.AggregateId, _events.ToImmutableList(), aggregate.Version));
+        return await Task.FromResult(new CommandResponse(aggregate.AggregateId, _events.ToImmutableList(), aggregate.Version));
     }
-    public virtual TCommand CleanupCommandIfNeeded(TCommand command)
-    {
-        return command;
-    }
+    public virtual TCommand CleanupCommandIfNeeded(TCommand command) => command;
     private AggregateState<TAggregatePayload> GetAggregateState()
     {
         if (_aggregate is null)

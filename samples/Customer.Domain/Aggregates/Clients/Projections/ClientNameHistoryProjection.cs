@@ -10,7 +10,7 @@ public class ClientNameHistoryProjection : SingleProjectionBase<Client, ClientNa
     ClientNameHistoryProjection.PayloadDefinition>
 {
     protected override Func<PayloadDefinition, PayloadDefinition>? GetApplyEventFunc(
-        IAggregateEvent ev,
+        IEvent ev,
         IEventPayload eventPayload)
     {
         return eventPayload switch

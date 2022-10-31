@@ -26,7 +26,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
         Type multipleProjectionType,
         IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
-        Action<IEnumerable<IAggregateEvent>> resultAction)
+        Action<IEnumerable<IEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multipleProjectionType);
 
@@ -38,8 +38,8 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 var options = new QueryRequestOptions();
                 var query = targetAggregateNames.Count switch
                 {
-                    0 => container.GetItemLinqQueryable<IAggregateEvent>().Where(b => b.DocumentType == DocumentType.AggregateEvent),
-                    _ => container.GetItemLinqQueryable<IAggregateEvent>()
+                    0 => container.GetItemLinqQueryable<IEvent>().Where(b => b.DocumentType == DocumentType.AggregateEvent),
+                    _ => container.GetItemLinqQueryable<IEvent>()
                         .Where(
                             b => b.DocumentType == DocumentType.AggregateEvent &&
                                 (targetAggregateNames.Count == 0 || targetAggregateNames.Contains(b.AggregateType)))
@@ -51,7 +51,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
 
                 query = query.OrderByDescending(m => m.SortableUniqueId);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
-                var events = new List<IAggregateEvent>();
+                var events = new List<IEvent>();
                 while (feedIterator.HasMoreResults)
                 {
                     var response = await feedIterator.ReadNextAsync();
@@ -64,7 +64,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                         }
 
                         var toAdd = _registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
-                            .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(AggregateEvent<>).MakeGenericType(m)) as IAggregateEvent)
+                            .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(Event<>).MakeGenericType(m)) as IEvent)
                             .FirstOrDefault(m => m is not null);
                         if (toAdd is null)
                         {
@@ -152,7 +152,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
         Type originalType,
         string? partitionKey,
         string? sinceSortableUniqueId,
-        Action<IEnumerable<IAggregateEvent>> resultAction)
+        Action<IEnumerable<IEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
 
@@ -168,13 +168,13 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     options.PartitionKey = new PartitionKey(partitionKey);
                 }
 
-                var query = container.GetItemLinqQueryable<IAggregateEvent>()
+                var query = container.GetItemLinqQueryable<IEvent>()
                     .Where(b => b.DocumentType == DocumentType.AggregateEvent && b.AggregateId == aggregateId);
                 query = sinceSortableUniqueId is not null
                     ? query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0).OrderByDescending(m => m.SortableUniqueId)
                     : query.OrderBy(m => m.SortableUniqueId);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
-                var events = new List<IAggregateEvent>();
+                var events = new List<IEvent>();
                 while (feedIterator.HasMoreResults)
                 {
                     var response = await feedIterator.ReadNextAsync();
@@ -187,7 +187,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                         }
 
                         var toAdd = types.Where(m => m.Name == typeName)
-                            .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(AggregateEvent<>).MakeGenericType(m)) as IAggregateEvent)
+                            .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(Event<>).MakeGenericType(m)) as IEvent)
                             .FirstOrDefault(m => m is not null);
                         if (toAdd is null)
                         {
@@ -222,7 +222,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             });
     }
 
-    public async Task GetAllAggregateCommandStringsForAggregateIdAsync(
+    public async Task GetAllCommandStringsForAggregateIdAsync(
         Guid aggregateId,
         Type originalType,
         string? sinceSortableUniqueId,
@@ -231,16 +231,16 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
 
         await _cosmosDbFactory.CosmosActionAsync(
-            DocumentType.AggregateCommand,
+            DocumentType.Command,
             aggregateContainerGroup,
             async container =>
             {
                 var types = _registeredEventTypes.RegisteredTypes;
                 var options = new QueryRequestOptions();
-                options.PartitionKey = new PartitionKey(PartitionKeyGenerator.ForAggregateCommand(aggregateId, originalType));
+                options.PartitionKey = new PartitionKey(PartitionKeyGenerator.ForCommand(aggregateId, originalType));
 
                 var query = container.GetItemLinqQueryable<IDocument>()
-                    .Where(b => b.DocumentType == DocumentType.AggregateCommand && b.AggregateId == aggregateId);
+                    .Where(b => b.DocumentType == DocumentType.Command && b.AggregateId == aggregateId);
                 query = sinceSortableUniqueId is not null
                     ? query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0).OrderByDescending(m => m.SortableUniqueId)
                     : query.OrderBy(m => m.SortableUniqueId);
@@ -264,7 +264,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
     public async Task GetAllAggregateEventsForAggregateEventTypeAsync(
         Type originalType,
         string? sinceSortableUniqueId,
-        Action<IEnumerable<IAggregateEvent>> resultAction)
+        Action<IEnumerable<IEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
 
@@ -275,14 +275,14 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             {
                 var options = new QueryRequestOptions();
                 var eventTypes = _registeredEventTypes.RegisteredTypes.Select(m => m.Name);
-                var query = container.GetItemLinqQueryable<IAggregateEvent>()
+                var query = container.GetItemLinqQueryable<IEvent>()
                     .Where(b => b.DocumentType == DocumentType.AggregateEvent && b.AggregateType == originalType.Name);
 
                 query = sinceSortableUniqueId is not null
                     ? query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0).OrderByDescending(m => m.SortableUniqueId)
                     : query.OrderByDescending(m => m.SortableUniqueId);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
-                var events = new List<IAggregateEvent>();
+                var events = new List<IEvent>();
                 while (feedIterator.HasMoreResults)
                 {
                     var response = await feedIterator.ReadNextAsync();
@@ -295,7 +295,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                         }
 
                         var toAdd = _registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
-                            .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(AggregateEvent<>).MakeGenericType(m)) as IAggregateEvent)
+                            .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(Event<>).MakeGenericType(m)) as IEvent)
                             .FirstOrDefault(m => m is not null);
                         if (toAdd is null)
                         {

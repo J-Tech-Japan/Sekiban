@@ -1,9 +1,9 @@
 namespace Sekiban.Core.Exceptions;
 
-public class SekibanAggregateCommandInconsistentVersionException : Exception, ISekibanException
+public class SekibanCommandInconsistentVersionException : Exception, ISekibanException
 {
 
-    public SekibanAggregateCommandInconsistentVersionException(Guid aggregateId, int passed, int correctVersion) : base(
+    public SekibanCommandInconsistentVersionException(Guid aggregateId, int passed, int correctVersion) : base(
         $"for aggregate {aggregateId} : {passed} was passed but should be {correctVersion}")
     {
         AggregateId = aggregateId;

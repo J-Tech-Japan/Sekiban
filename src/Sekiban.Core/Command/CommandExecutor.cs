@@ -9,7 +9,7 @@ using Sekiban.Core.Shared;
 using Sekiban.Core.Validation;
 namespace Sekiban.Core.Command;
 
-public class AggregateCommandExecutor : IAggregateCommandExecutor
+public class CommandExecutor : ICommandExecutor
 {
     private static readonly SemaphoreSlim _semaphoreInMemory = new(1, 1);
     private readonly IDocumentWriter _documentWriter;
@@ -17,7 +17,7 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
     private readonly IUserInformationFactory _userInformationFactory;
     private readonly ISingleProjectionService singleProjectionService;
 
-    public AggregateCommandExecutor(
+    public CommandExecutor(
         IDocumentWriter documentWriter,
         IServiceProvider serviceProvider,
         ISingleProjectionService singleProjectionService,
@@ -28,29 +28,29 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         this.singleProjectionService = singleProjectionService;
         _userInformationFactory = userInformationFactory;
     }
-    public async Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecChangeCommandAsync<TAggregatePayload, C>(
+    public async Task<(CommandExecutorResponse, List<IEvent>)> ExecChangeCommandAsync<TAggregatePayload, C>(
         C command,
         List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new()
-        where C : ChangeAggregateCommandBase<TAggregatePayload>
+        where C : ChangeCommandBase<TAggregatePayload>
     {
         var validationResult = command.TryValidateProperties()?.ToList();
         if (validationResult?.Any() == true)
         {
-            return (new AggregateCommandExecutorResponse(null, null, 0, validationResult), new List<IAggregateEvent>());
+            return (new CommandExecutorResponse(null, null, 0, validationResult), new List<IEvent>());
         }
         return await ExecChangeCommandWithoutValidationAsync<TAggregatePayload, C>(command, callHistories);
     }
-    public async Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecChangeCommandWithoutValidationAsync<TAggregatePayload, C>(
+    public async Task<(CommandExecutorResponse, List<IEvent>)> ExecChangeCommandWithoutValidationAsync<TAggregatePayload, C>(
         C command,
         List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new()
-        where C : ChangeAggregateCommandBase<TAggregatePayload>
+        where C : ChangeCommandBase<TAggregatePayload>
     {
-        var commandDocument = new AggregateCommandDocument<C>(command.GetAggregateId(), command, typeof(TAggregatePayload), callHistories)
+        var commandDocument = new CommandDocument<C>(command.GetAggregateId(), command, typeof(TAggregatePayload), callHistories)
         {
             ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
         };
 
-        List<IAggregateEvent> events;
+        List<IEvent> events;
         var version = 0;
         var commandToSave = command;
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(TAggregatePayload));
@@ -61,11 +61,11 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         try
         {
             var handler =
-                _serviceProvider.GetService(typeof(IChangeAggregateCommandHandler<TAggregatePayload, C>)) as
-                    IChangeAggregateCommandHandler<TAggregatePayload, C>;
+                _serviceProvider.GetService(typeof(IChangeCommandHandler<TAggregatePayload, C>)) as
+                    IChangeCommandHandler<TAggregatePayload, C>;
             if (handler is null)
             {
-                throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
+                throw new SekibanCommandNotRegisteredException(typeof(C).Name);
             }
             if (command is not IOnlyPublishingCommand)
             {
@@ -112,31 +112,31 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
                 _semaphoreInMemory.Release();
             }
         }
-        return (new AggregateCommandExecutorResponse(commandDocument.AggregateId, commandDocument.Id, version, null), events);
+        return (new CommandExecutorResponse(commandDocument.AggregateId, commandDocument.Id, version, null), events);
     }
-    public async Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecCreateCommandAsync<TAggregatePayload, C>(
+    public async Task<(CommandExecutorResponse, List<IEvent>)> ExecCreateCommandAsync<TAggregatePayload, C>(
         C command,
         List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new()
-        where C : ICreateAggregateCommand<TAggregatePayload>
+        where C : ICreateCommand<TAggregatePayload>
     {
         var validationResult = command.TryValidateProperties()?.ToList();
         if (validationResult?.Any() == true)
         {
-            return (new AggregateCommandExecutorResponse(null, null, 0, validationResult), new List<IAggregateEvent>());
+            return (new CommandExecutorResponse(null, null, 0, validationResult), new List<IEvent>());
         }
         return await ExecCreateCommandWithoutValidationAsync<TAggregatePayload, C>(command, callHistories);
     }
-    public async Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecCreateCommandWithoutValidationAsync<TAggregatePayload, C>(
+    public async Task<(CommandExecutorResponse, List<IEvent>)> ExecCreateCommandWithoutValidationAsync<TAggregatePayload, C>(
         C command,
         List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new()
-        where C : ICreateAggregateCommand<TAggregatePayload>
+        where C : ICreateCommand<TAggregatePayload>
     {
         var commandDocument
-            = new AggregateCommandDocument<C>(Guid.Empty, command, typeof(TAggregatePayload), callHistories)
+            = new CommandDocument<C>(Guid.Empty, command, typeof(TAggregatePayload), callHistories)
             {
                 ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
             };
-        List<IAggregateEvent> events = new();
+        List<IEvent> events = new();
         var commandToSave = command;
         var version = 0;
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(TAggregatePayload));
@@ -147,16 +147,16 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
         try
         {
             var handler =
-                _serviceProvider.GetService(typeof(ICreateAggregateCommandHandler<TAggregatePayload, C>)) as
-                    ICreateAggregateCommandHandler<TAggregatePayload, C>;
+                _serviceProvider.GetService(typeof(ICreateCommandHandler<TAggregatePayload, C>)) as
+                    ICreateCommandHandler<TAggregatePayload, C>;
             if (handler is null)
             {
-                throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
+                throw new SekibanCommandNotRegisteredException(typeof(C).Name);
             }
             commandToSave = handler.CleanupCommandIfNeeded(commandToSave);
             var aggregateId = command.GetAggregateId();
             commandDocument
-                = new AggregateCommandDocument<C>(aggregateId, command, typeof(TAggregatePayload), callHistories)
+                = new CommandDocument<C>(aggregateId, command, typeof(TAggregatePayload), callHistories)
                 {
                     ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
                 };
@@ -200,16 +200,16 @@ public class AggregateCommandExecutor : IAggregateCommandExecutor
                 _semaphoreInMemory.Release();
             }
         }
-        return (new AggregateCommandExecutorResponse(commandDocument.AggregateId, commandDocument.Id, version, null), events);
+        return (new CommandExecutorResponse(commandDocument.AggregateId, commandDocument.Id, version, null), events);
     }
 
-    private async Task<List<IAggregateEvent>> HandleEventsAsync<TAggregatePayload, C>(
-        IReadOnlyCollection<IAggregateEvent> events,
-        AggregateCommandDocument<C> commandDocument)
+    private async Task<List<IEvent>> HandleEventsAsync<TAggregatePayload, C>(
+        IReadOnlyCollection<IEvent> events,
+        CommandDocument<C> commandDocument)
         where TAggregatePayload : IAggregatePayload, new()
-        where C : ChangeAggregateCommandBase<TAggregatePayload>
+        where C : ChangeCommandBase<TAggregatePayload>
     {
-        var toReturnEvents = new List<IAggregateEvent>();
+        var toReturnEvents = new List<IEvent>();
         if (events.Any())
         {
             foreach (var ev in events)

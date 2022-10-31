@@ -1,5 +1,5 @@
 namespace Sekiban.Core.Command;
 
-public interface IAggregateCommand
+public interface ICommandHandler
 {
 }

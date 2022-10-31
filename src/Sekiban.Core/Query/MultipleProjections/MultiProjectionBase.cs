@@ -9,7 +9,7 @@ public abstract class MultiProjectionBase<TProjectionPayload> : IMultiProjector<
     public string LastSortableUniqueId { get; set; } = string.Empty;
     public int AppliedSnapshotVersion { get; set; }
     public int Version { get; set; }
-    public void ApplyEvent(IAggregateEvent ev)
+    public void ApplyEvent(IEvent ev)
     {
         var action = GetApplyEventAction(ev, ev.GetPayload());
         if (action is null) { return; }
@@ -18,7 +18,7 @@ public abstract class MultiProjectionBase<TProjectionPayload> : IMultiProjector<
         LastEventId = ev.Id;
         LastSortableUniqueId = ev.SortableUniqueId;
     }
-    public MultiProjectionState<TProjectionPayload> ToState() => new MultiProjectionState<TProjectionPayload>(
+    public MultiProjectionState<TProjectionPayload> ToState() => new(
         Payload,
         LastEventId,
         LastSortableUniqueId,
@@ -33,7 +33,7 @@ public abstract class MultiProjectionBase<TProjectionPayload> : IMultiProjector<
         Payload = snapshot.Payload;
     }
     public virtual IList<string> TargetAggregateNames() => new List<string>();
-    protected Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload)
+    protected Action? GetApplyEventAction(IEvent ev, IEventPayload payload)
     {
         var func = GetApplyEventFunc(ev, payload);
         return () =>
@@ -43,5 +43,5 @@ public abstract class MultiProjectionBase<TProjectionPayload> : IMultiProjector<
             Payload = result;
         };
     }
-    protected abstract Func<TProjectionPayload, TProjectionPayload>? GetApplyEventFunc(IAggregateEvent ev, IEventPayload eventPayload);
+    protected abstract Func<TProjectionPayload, TProjectionPayload>? GetApplyEventFunc(IEvent ev, IEventPayload eventPayload);
 }

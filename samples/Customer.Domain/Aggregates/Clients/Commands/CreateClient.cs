@@ -12,7 +12,7 @@ using Sekiban.Core.Query.SingleProjections;
 using System.ComponentModel.DataAnnotations;
 namespace Customer.Domain.Aggregates.Clients.Commands;
 
-public record CreateClient : ICreateAggregateCommand<Client>
+public record CreateClient : ICreateCommand<Client>
 {
     public CreateClient() : this(Guid.Empty, string.Empty, string.Empty) { }
     public CreateClient(Guid branchId, string clientName, string clientEmail)
@@ -40,7 +40,7 @@ public record CreateClient : ICreateAggregateCommand<Client>
         init;
     }
     public Guid GetAggregateId() => Guid.NewGuid();
-    public class Handler : CreateAggregateCommandHandlerBase<Client, CreateClient>
+    public class Handler : CreateCommandHandlerBase<Client, CreateClient>
     {
         private readonly IQueryService queryService;
         private readonly ISingleProjectionService singleProjectionService;

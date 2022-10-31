@@ -3,8 +3,5 @@ namespace Customer.Domain.Aggregates.Clients.Events;
 
 public record ClientNameChanged(string ClientName) : IChangedEvent<Client>
 {
-    public Client OnEvent(Client payload, IAggregateEvent aggregateEvent)
-    {
-        return payload with { ClientName = ClientName };
-    }
+    public Client OnEvent(Client payload, IEvent @event) => payload with { ClientName = ClientName };
 }

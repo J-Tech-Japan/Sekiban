@@ -3,7 +3,7 @@ using Sekiban.Core.Document;
 using Sekiban.Core.History;
 namespace Sekiban.Core.Event;
 
-public interface IAggregateEvent : INotification, ICallHistories, IDocument, IEventPayloadHolder
+public interface IEvent : INotification, ICallHistories, IDocument, IEventPayloadHolder
 {
     public string AggregateType { get; }
 
@@ -11,5 +11,5 @@ public interface IAggregateEvent : INotification, ICallHistories, IDocument, IEv
 
     public int Version { get; }
 
-    public dynamic GetComparableObject(IAggregateEvent original, bool copyVersion = true);
+    public dynamic GetComparableObject(IEvent original, bool copyVersion = true);
 }

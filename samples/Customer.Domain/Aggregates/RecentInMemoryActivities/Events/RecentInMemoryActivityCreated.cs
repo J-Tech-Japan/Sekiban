@@ -4,8 +4,6 @@ namespace Customer.Domain.Aggregates.RecentInMemoryActivities.Events;
 
 public record RecentInMemoryActivityCreated(RecentInMemoryActivityRecord Activity) : ICreatedEvent<RecentInMemoryActivity>
 {
-    public RecentInMemoryActivity OnEvent(RecentInMemoryActivity payload, IAggregateEvent aggregateEvent)
-    {
-        return new RecentInMemoryActivity(ImmutableList<RecentInMemoryActivityRecord>.Empty.Add(Activity));
-    }
+    public RecentInMemoryActivity OnEvent(RecentInMemoryActivity payload, IEvent @event) =>
+        new RecentInMemoryActivity(ImmutableList<RecentInMemoryActivityRecord>.Empty.Add(Activity));
 }

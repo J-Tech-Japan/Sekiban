@@ -3,7 +3,7 @@ using Sekiban.Core.Event;
 using Sekiban.Core.History;
 namespace Sekiban.Core.Command;
 
-public interface IAggregateCommandExecutor
+public interface ICommandExecutor
 {
     /// <summary>
     ///     集約コマンドを実行する
@@ -14,11 +14,11 @@ public interface IAggregateCommandExecutor
     /// <typeparam name="TAggregatePayload">集約クラス</typeparam>
     /// <typeparam name="C">コマンドクラス</typeparam>
     /// <returns></returns>
-    Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecChangeCommandAsync<TAggregatePayload, C>(
+    Task<(CommandExecutorResponse, List<IEvent>)> ExecChangeCommandAsync<TAggregatePayload, C>(
         C command,
         List<CallHistory>? callHistories = null)
         where TAggregatePayload : IAggregatePayload, new()
-        where C : ChangeAggregateCommandBase<TAggregatePayload>;
+        where C : ChangeCommandBase<TAggregatePayload>;
 
     /// <summary>
     ///     集約コマンドを実行する
@@ -29,11 +29,11 @@ public interface IAggregateCommandExecutor
     /// <typeparam name="TAggregatePayload">集約クラス</typeparam>
     /// <typeparam name="C">コマンドクラス</typeparam>
     /// <returns></returns>
-    Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecChangeCommandWithoutValidationAsync<TAggregatePayload, C>(
+    Task<(CommandExecutorResponse, List<IEvent>)> ExecChangeCommandWithoutValidationAsync<TAggregatePayload, C>(
         C command,
         List<CallHistory>? callHistories = null)
         where TAggregatePayload : IAggregatePayload, new()
-        where C : ChangeAggregateCommandBase<TAggregatePayload>;
+        where C : ChangeCommandBase<TAggregatePayload>;
     /// <summary>
     ///     集約コマンドを実行する
     ///     こちらのメソッドは集約の新規作成機能のメソッドとなります。
@@ -43,11 +43,11 @@ public interface IAggregateCommandExecutor
     /// <typeparam name="TAggregatePayload">集約クラス</typeparam>
     /// <typeparam name="C">コマンドクラス</typeparam>
     /// <returns></returns>
-    Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecCreateCommandAsync<TAggregatePayload, C>(
+    Task<(CommandExecutorResponse, List<IEvent>)> ExecCreateCommandAsync<TAggregatePayload, C>(
         C command,
         List<CallHistory>? callHistories = null)
         where TAggregatePayload : IAggregatePayload, new()
-        where C : ICreateAggregateCommand<TAggregatePayload>;
+        where C : ICreateCommand<TAggregatePayload>;
     /// <summary>
     ///     集約コマンドを実行する
     ///     こちらのメソッドは集約の新規作成機能のメソッドとなります。
@@ -57,9 +57,9 @@ public interface IAggregateCommandExecutor
     /// <typeparam name="TAggregatePayload">Payloadクラス</typeparam>
     /// <typeparam name="C">コマンドクラス</typeparam>
     /// <returns></returns>
-    Task<(AggregateCommandExecutorResponse, List<IAggregateEvent>)> ExecCreateCommandWithoutValidationAsync<TAggregatePayload, C>(
+    Task<(CommandExecutorResponse, List<IEvent>)> ExecCreateCommandWithoutValidationAsync<TAggregatePayload, C>(
         C command,
         List<CallHistory>? callHistories = null)
         where TAggregatePayload : IAggregatePayload, new()
-        where C : ICreateAggregateCommand<TAggregatePayload>;
+        where C : ICreateCommand<TAggregatePayload>;
 }

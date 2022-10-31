@@ -41,7 +41,7 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
     }
 
     public async Task SaveAndPublishAggregateEvent<TAggregateEvent>(TAggregateEvent aggregateEvent, Type aggregateType)
-        where TAggregateEvent : IAggregateEvent
+        where TAggregateEvent : IEvent
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
         await _cosmosDbFactory.CosmosActionAsync(

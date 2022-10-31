@@ -10,14 +10,14 @@ using System.Collections.Immutable;
 using System.ComponentModel.DataAnnotations;
 namespace Sekiban.Testing.Command;
 
-public class AggregateTestCommandExecutor
+public class TestCommandExecutor
 {
     private readonly IServiceProvider _serviceProvider;
-    public AggregateTestCommandExecutor(IServiceProvider serviceProvider) => _serviceProvider = serviceProvider;
-    public ImmutableList<IAggregateEvent> LatestEvents { get; set; } = ImmutableList<IAggregateEvent>.Empty;
+    public TestCommandExecutor(IServiceProvider serviceProvider) => _serviceProvider = serviceProvider;
+    public ImmutableList<IEvent> LatestEvents { get; set; } = ImmutableList<IEvent>.Empty;
 
-    public (IEnumerable<IAggregateEvent>, Guid) ExecuteCreateCommand<TAggregate>(
-        ICreateAggregateCommand<TAggregate> command,
+    public (IEnumerable<IEvent>, Guid) ExecuteCreateCommand<TAggregate>(
+        ICreateCommand<TAggregate> command,
         Guid? injectingAggregateId = null) where TAggregate : IAggregatePayload, new()
     {
         var validationResults = command.TryValidateProperties().ToList();
@@ -26,24 +26,24 @@ public class AggregateTestCommandExecutor
             throw new ValidationException("Validation failed " + validationResults);
         }
 
-        var baseType = typeof(ICreateAggregateCommandHandler<,>);
+        var baseType = typeof(ICreateCommandHandler<,>);
         var genericType = baseType.MakeGenericType(typeof(TAggregate), command.GetType());
         var handler = _serviceProvider.GetService(genericType);
         if (handler is null)
         {
-            throw new SekibanAggregateCommandNotRegisteredException(command.GetType().Name);
+            throw new SekibanCommandNotRegisteredException(command.GetType().Name);
         }
         var aggregateId = injectingAggregateId ?? command.GetAggregateId();
 
-        var aggregateCommandDocumentBaseType = typeof(AggregateCommandDocument<>);
-        var aggregateCommandDocumentType = aggregateCommandDocumentBaseType.MakeGenericType(command.GetType());
-        var commandDocument = Activator.CreateInstance(aggregateCommandDocumentType, aggregateId, command, typeof(TAggregate), null);
+        var commandDocumentBaseType = typeof(CommandDocument<>);
+        var commandDocumentType = commandDocumentBaseType.MakeGenericType(command.GetType());
+        var commandDocument = Activator.CreateInstance(commandDocumentType, aggregateId, command, typeof(TAggregate), null);
         var aggregate = new Aggregate<TAggregate> { AggregateId = aggregateId };
         var handlerType = handler.GetType().GetMethods();
         var handleAsyncMethod = handler.GetType().GetMethods().First(m => m.Name == "HandleAsync");
         var result = ((dynamic)handleAsyncMethod.Invoke(handler, new[] { commandDocument, aggregate })!)?.Result;
         if (result is null) { throw new Exception("Failed to execute create command"); }
-        var latestEvents = (ImmutableList<IAggregateEvent>)result.Events;
+        var latestEvents = (ImmutableList<IEvent>)result.Events;
         if (latestEvents.Count == 0)
         {
             throw new SekibanCreateHasToMakeEventException();
@@ -77,7 +77,7 @@ public class AggregateTestCommandExecutor
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TAggregate).Name);
     }
 
-    public IEnumerable<IAggregateEvent> ExecuteChangeCommand<TAggregatePayload>(ChangeAggregateCommandBase<TAggregatePayload> command)
+    public IEnumerable<IEvent> ExecuteChangeCommand<TAggregatePayload>(ChangeCommandBase<TAggregatePayload> command)
         where TAggregatePayload : IAggregatePayload, new()
     {
         var validationResults = command.TryValidateProperties().ToList();
@@ -86,12 +86,12 @@ public class AggregateTestCommandExecutor
             throw new ValidationException("Validation failed " + validationResults);
         }
 
-        var baseType = typeof(IChangeAggregateCommandHandler<,>);
+        var baseType = typeof(IChangeCommandHandler<,>);
         var genericType = baseType.MakeGenericType(typeof(TAggregatePayload), command.GetType());
         var handler = _serviceProvider.GetService(genericType);
         if (handler is null)
         {
-            throw new SekibanAggregateCommandNotRegisteredException(command.GetType().Name);
+            throw new SekibanCommandNotRegisteredException(command.GetType().Name);
         }
         var aggregateId = command.GetAggregateId();
 
@@ -102,15 +102,15 @@ public class AggregateTestCommandExecutor
             {
                 throw new SekibanAggregateNotExistsException(aggregateId, typeof(TAggregatePayload).Name);
             }
-            var aggregateCommandDocumentBaseType = typeof(AggregateCommandDocument<>);
-            var aggregateCommandDocumentType = aggregateCommandDocumentBaseType.MakeGenericType(command.GetType());
+            var commandDocumentBaseType = typeof(CommandDocument<>);
+            var commandDocumentType = commandDocumentBaseType.MakeGenericType(command.GetType());
             var commandToSend = command with { ReferenceVersion = aggregate?.Version ?? 0 };
-            var commandDocument = Activator.CreateInstance(aggregateCommandDocumentType, aggregateId, commandToSend, typeof(TAggregatePayload), null);
+            var commandDocument = Activator.CreateInstance(commandDocumentType, aggregateId, commandToSend, typeof(TAggregatePayload), null);
 
             var handleAsyncMethod = handler.GetType().GetMethods().First(m => m.Name == "HandleAsync");
             var result = ((dynamic)handleAsyncMethod.Invoke(handler, new[] { commandDocument, aggregate })!)?.Result;
             if (result is null) { throw new Exception("Failed to execute change command"); }
-            LatestEvents = (ImmutableList<IAggregateEvent>)result.Events;
+            LatestEvents = (ImmutableList<IEvent>)result.Events;
         }
         else
         {
@@ -119,15 +119,15 @@ public class AggregateTestCommandExecutor
             {
                 throw new SekibanAggregateNotExistsException(aggregateId, typeof(TAggregatePayload).Name);
             }
-            var aggregateCommandDocumentBaseType = typeof(AggregateCommandDocument<>);
-            var aggregateCommandDocumentType = aggregateCommandDocumentBaseType.MakeGenericType(command.GetType());
+            var commandDocumentBaseType = typeof(CommandDocument<>);
+            var commandDocumentType = commandDocumentBaseType.MakeGenericType(command.GetType());
             var commandToSend = command with { ReferenceVersion = aggregate?.Version ?? 0 };
-            var commandDocument = Activator.CreateInstance(aggregateCommandDocumentType, aggregateId, commandToSend, typeof(TAggregatePayload), null);
+            var commandDocument = Activator.CreateInstance(commandDocumentType, aggregateId, commandToSend, typeof(TAggregatePayload), null);
 
             var handleAsyncMethod = handler.GetType().GetMethods().First(m => m.Name == "HandleForOnlyPublishingCommandAsync");
             var result = ((dynamic)handleAsyncMethod.Invoke(handler, new[] { commandDocument, aggregate!.AggregateId })!)?.Result;
             if (result is null) { throw new Exception("Failed to execute change command"); }
-            LatestEvents = (ImmutableList<IAggregateEvent>)result.Events;
+            LatestEvents = (ImmutableList<IEvent>)result.Events;
         }
         if (LatestEvents.Any(ev => ev.IsAggregateInitialEvent))
         {

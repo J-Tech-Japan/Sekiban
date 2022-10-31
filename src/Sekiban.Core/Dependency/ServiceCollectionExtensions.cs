@@ -35,7 +35,7 @@ public static class ServiceCollectionExtensions
 
         services.AddTransient<AggregateEventPublisher>();
 
-        services.AddTransient<IAggregateCommandExecutor, AggregateCommandExecutor>();
+        services.AddTransient<ICommandExecutor, CommandExecutor>();
         services.AddTransient<ISingleProjectionService, SingleProjectionService>();
         services.AddTransient<IMultiProjectionService, MultiProjectionService>();
         switch (multipleProjectionType)
@@ -73,7 +73,7 @@ public static class ServiceCollectionExtensions
 
         services.AddTransient<AggregateEventPublisher>();
 
-        services.AddTransient<IAggregateCommandExecutor, AggregateCommandExecutor>();
+        services.AddTransient<ICommandExecutor, CommandExecutor>();
         services.AddTransient<ISingleProjectionService, SingleProjectionService>();
         services.AddTransient<IMultiProjectionService, MultiProjectionService>();
         services.AddTransient<IMultipleProjection, MemoryCacheMultipleProjection>();
@@ -107,7 +107,7 @@ public static class ServiceCollectionExtensions
 
         services.AddTransient<AggregateEventPublisher>();
 
-        services.AddTransient<IAggregateCommandExecutor, AggregateCommandExecutor>();
+        services.AddTransient<ICommandExecutor, CommandExecutor>();
         services.AddTransient<ISingleProjectionService, SingleProjectionService>();
         services.AddTransient<IMultiProjectionService, MultiProjectionService>();
         services.AddTransient<IMultipleProjection, MemoryCacheMultipleProjection>();

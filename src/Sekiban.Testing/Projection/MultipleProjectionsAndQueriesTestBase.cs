@@ -10,7 +10,7 @@ namespace Sekiban.Testing.Projection;
 
 public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> where TDependencyDefinition : IDependencyDefinition, new()
 {
-    private readonly AggregateTestCommandExecutor _commandExecutor;
+    private readonly TestCommandExecutor _commandExecutor;
     protected readonly IServiceProvider _serviceProvider;
 
     // ReSharper disable once PublicConstructorInAbstractClass
@@ -22,7 +22,7 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         services.AddQueriesFromDependencyDefinition(new TDependencyDefinition());
         services.AddSekibanCoreForAggregateTestWithDependency(new TDependencyDefinition());
         _serviceProvider = services.BuildServiceProvider();
-        _commandExecutor = new AggregateTestCommandExecutor(_serviceProvider);
+        _commandExecutor = new TestCommandExecutor(_serviceProvider);
     }
     protected virtual void SetupDependency(IServiceCollection serviceCollection) { }
 
@@ -34,20 +34,20 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         return test;
     }
 
-    public Guid RunCreateCommand<TAggregatePayload>(ICreateAggregateCommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
+    public Guid RunCreateCommand<TAggregatePayload>(ICreateCommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
         where TAggregatePayload : IAggregatePayload, new()
     {
         var (events, aggregateId) = _commandExecutor.ExecuteCreateCommand(command, injectingAggregateId);
         return aggregateId;
     }
-    public void RunChangeCommand<TAggregatePayload>(ChangeAggregateCommandBase<TAggregatePayload> command)
+    public void RunChangeCommand<TAggregatePayload>(ChangeCommandBase<TAggregatePayload> command)
         where TAggregatePayload : IAggregatePayload, new()
     {
         var events = _commandExecutor.ExecuteChangeCommand(command);
 
     }
 
-    public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GivenCommandExecutorAction(Action<AggregateTestCommandExecutor> action)
+    public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GivenCommandExecutorAction(Action<TestCommandExecutor> action)
     {
         action(_commandExecutor);
         return this;
@@ -67,5 +67,5 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         var aggregate = singleAggregateService.GetAggregateStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregate).Name);
     }
-    public IReadOnlyCollection<IAggregateEvent> GetLatestEvents() => _commandExecutor.LatestEvents;
+    public IReadOnlyCollection<IEvent> GetLatestEvents() => _commandExecutor.LatestEvents;
 }

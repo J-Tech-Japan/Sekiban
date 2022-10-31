@@ -12,7 +12,7 @@ namespace Customer.Domain.Projections.ClientLoyaltyPointLists;
 public class ClientLoyaltyPointListProjection : MultiProjectionBase<ClientLoyaltyPointListProjection.PayloadDefinition>
 {
     public override IList<string> TargetAggregateNames() => new List<string> { nameof(Branch), nameof(Client), nameof(LoyaltyPoint) };
-    protected override Func<PayloadDefinition, PayloadDefinition>? GetApplyEventFunc(IAggregateEvent ev, IEventPayload eventPayload)
+    protected override Func<PayloadDefinition, PayloadDefinition>? GetApplyEventFunc(IEvent ev, IEventPayload eventPayload)
     {
         return eventPayload switch
         {

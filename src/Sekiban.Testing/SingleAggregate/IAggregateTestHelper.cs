@@ -12,32 +12,32 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         where TSingleProjection : SingleAggregateTestBase;
     public IAggregateTestHelper<TAggregatePayload> GivenScenario(Action initialAction);
 
-    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvent(IAggregateEvent ev);
-    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvents(IEnumerable<IAggregateEvent> events);
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvent(IEvent ev);
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvents(IEnumerable<IEvent> events);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFile(string filename);
     public AggregateState<TEnvironmentAggregatePayload>
         GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
         where TEnvironmentAggregatePayload : IAggregatePayload, new();
     public Guid RunEnvironmentCreateCommand<TEnvironmentAggregate>(
-        ICreateAggregateCommand<TEnvironmentAggregate> command,
+        ICreateCommand<TEnvironmentAggregate> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregate : IAggregatePayload, new();
-    public void RunEnvironmentChangeCommand<TEnvironmentAggregate>(ChangeAggregateCommandBase<TEnvironmentAggregate> command)
+    public void RunEnvironmentChangeCommand<TEnvironmentAggregate>(ChangeCommandBase<TEnvironmentAggregate> command)
         where TEnvironmentAggregate : IAggregatePayload, new();
-    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentCommandExecutorAction(Action<AggregateTestCommandExecutor> action);
-    public IReadOnlyCollection<IAggregateEvent> GetLatestEnvironmentEvents();
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentCommandExecutorAction(Action<TestCommandExecutor> action);
+    public IReadOnlyCollection<IEvent> GetLatestEnvironmentEvents();
     #endregion
 
     #region When
-    public IAggregateTestHelper<TAggregatePayload> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregatePayload>;
-    public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(C changeCommand) where C : ChangeAggregateCommandBase<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> WhenCreate<C>(C createCommand) where C : ICreateCommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(C changeCommand) where C : ChangeCommandBase<TAggregatePayload>;
     public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(Func<AggregateState<TAggregatePayload>, C> commandFunc)
-        where C : ChangeAggregateCommandBase<TAggregatePayload>;
+        where C : ChangeCommandBase<TAggregatePayload>;
     #endregion
 
     #region Then
-    public IAggregateTestHelper<TAggregatePayload> ThenGetEvents(Action<List<IAggregateEvent>> checkEventsAction);
-    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleEvent<T>(Action<T> checkEventAction) where T : IAggregateEvent;
-    public IAggregateTestHelper<TAggregatePayload> ThenSingleEventIs<T>(AggregateEvent<T> aggregateEvent) where T : IEventPayload;
+    public IAggregateTestHelper<TAggregatePayload> ThenGetEvents(Action<List<IEvent>> checkEventsAction);
+    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleEvent<T>(Action<T> checkEventAction) where T : IEvent;
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleEventIs<T>(Event<T> @event) where T : IEventPayload;
     public IAggregateTestHelper<TAggregatePayload> ThenSingleEventPayloadIs<T>(T payload) where T : IEventPayload;
     public IAggregateTestHelper<TAggregatePayload> ThenGetSingleEventPayload<T>(Action<T> checkPayloadAction) where T : class, IEventPayload;
     public IAggregateTestHelper<TAggregatePayload> ThenGetState(Action<AggregateState<TAggregatePayload>> checkStateAction);

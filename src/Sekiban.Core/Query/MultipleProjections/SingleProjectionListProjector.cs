@@ -20,7 +20,7 @@ public class SingleProjectionListProjector<T, Q, P> : IMultiProjector<SingleProj
         get;
         private set;
     } = new();
-    public void ApplyEvent(IAggregateEvent ev)
+    public void ApplyEvent(IEvent ev)
     {
         if (_eventChecker.CanApplyEvent(ev))
         {

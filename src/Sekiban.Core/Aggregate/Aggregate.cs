@@ -7,7 +7,7 @@ public class Aggregate<TAggregatePayload> : AggregateCommonBase, ISingleProjecti
     where TAggregatePayload : IAggregatePayload, new()
 {
     protected TAggregatePayload Payload { get; private set; } = new();
-    public AggregateState<TAggregatePayload> ToState() => new AggregateState<TAggregatePayload>(this, Payload);
+    public AggregateState<TAggregatePayload> ToState() => new(this, Payload);
 
     public void ApplySnapshot(AggregateState<TAggregatePayload> snapshot)
     {
@@ -27,7 +27,7 @@ public class Aggregate<TAggregatePayload> : AggregateCommonBase, ISingleProjecti
         return clone;
     }
 
-    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload)
+    protected override Action? GetApplyEventAction(IEvent ev, IEventPayload payload)
     {
         var func = GetApplyEventFunc(ev, payload);
         return () =>
@@ -37,7 +37,7 @@ public class Aggregate<TAggregatePayload> : AggregateCommonBase, ISingleProjecti
             Payload = result;
         };
     }
-    protected Func<TAggregatePayload, IAggregateEvent, TAggregatePayload>? GetApplyEventFunc(IAggregateEvent ev, IEventPayload payload)
+    protected Func<TAggregatePayload, IEvent, TAggregatePayload>? GetApplyEventFunc(IEvent ev, IEventPayload payload)
     {
         if (payload is IApplicableEvent<TAggregatePayload> applicableEvent)
         {
@@ -46,12 +46,12 @@ public class Aggregate<TAggregatePayload> : AggregateCommonBase, ISingleProjecti
         return null;
     }
 
-    internal IAggregateEvent AddAndApplyEvent<TEventPayload>(TEventPayload eventPayload)
+    internal IEvent AddAndApplyEvent<TEventPayload>(TEventPayload eventPayload)
         where TEventPayload : IEventPayload, IApplicableEvent<TAggregatePayload>
     {
         var ev = eventPayload is ICreatedEventPayload
-            ? AggregateEvent<TEventPayload>.CreatedEvent(AggregateId, typeof(TAggregatePayload), eventPayload)
-            : AggregateEvent<TEventPayload>.ChangedEvent(AggregateId, typeof(TAggregatePayload), eventPayload);
+            ? Event<TEventPayload>.CreatedEvent(AggregateId, typeof(TAggregatePayload), eventPayload)
+            : Event<TEventPayload>.ChangedEvent(AggregateId, typeof(TAggregatePayload), eventPayload);
 
         if (GetApplyEventAction(ev, eventPayload) is null)
         {

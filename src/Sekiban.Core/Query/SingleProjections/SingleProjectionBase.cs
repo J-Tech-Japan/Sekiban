@@ -15,7 +15,7 @@ public abstract class SingleProjectionBase<TAggregate, TProjection, TProjectionP
     public int AppliedSnapshotVersion { get; set; }
     public int Version { get; set; }
     public Guid AggregateId { get; init; }
-    public void ApplyEvent(IAggregateEvent ev)
+    public void ApplyEvent(IEvent ev)
     {
         // IsAggregateInitialEvent は V0 の時のみ
         // IsAggregateInitialEvent == false は V0以外
@@ -32,7 +32,7 @@ public abstract class SingleProjectionBase<TAggregate, TProjection, TProjectionP
         LastSortableUniqueId = ev.SortableUniqueId;
         Version++;
     }
-    public bool CanApplyEvent(IAggregateEvent ev) => GetApplyEventAction(ev, ev.GetPayload()) is not null;
+    public bool CanApplyEvent(IEvent ev) => GetApplyEventAction(ev, ev.GetPayload()) is not null;
     public void ApplySnapshot(SingleProjectionState<TProjectionPayload> snapshot)
     {
         Version = snapshot.Version;
@@ -41,19 +41,19 @@ public abstract class SingleProjectionBase<TAggregate, TProjection, TProjectionP
         AppliedSnapshotVersion = snapshot.Version;
         Payload = snapshot.Payload;
     }
-    public SingleProjectionState<TProjectionPayload> ToState() => new SingleProjectionState<TProjectionPayload>(
+    public SingleProjectionState<TProjectionPayload> ToState() => new(
         Payload,
         AggregateId,
         LastEventId,
         LastSortableUniqueId,
         AppliedSnapshotVersion,
         Version);
-    public TProjection CreateInitialAggregate(Guid aggregateId) => new TProjection
+    public TProjection CreateInitialAggregate(Guid aggregateId) => new()
         { AggregateId = aggregateId };
 
     public Type OriginalAggregateType() => typeof(TAggregate);
     public bool GetIsDeleted() => Payload is IDeletable { IsDeleted: true };
-    protected Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload eventPayload)
+    protected Action? GetApplyEventAction(IEvent ev, IEventPayload eventPayload)
     {
         var func = GetApplyEventFunc(ev, eventPayload);
         return () =>
@@ -64,6 +64,6 @@ public abstract class SingleProjectionBase<TAggregate, TProjection, TProjectionP
         };
     }
     protected abstract Func<TProjectionPayload, TProjectionPayload>? GetApplyEventFunc(
-        IAggregateEvent ev,
+        IEvent ev,
         IEventPayload eventPayload);
 }

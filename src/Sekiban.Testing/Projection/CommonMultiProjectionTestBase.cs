@@ -21,7 +21,7 @@ public abstract class CommonMultiProjectionTestBase<TProjection, TProjectionPayl
     where TProjectionPayload : IMultiProjectionPayload, new()
     where TDependencyDefinition : IDependencyDefinition, new()
 {
-    private readonly AggregateTestCommandExecutor _commandExecutor;
+    private readonly TestCommandExecutor _commandExecutor;
     protected readonly List<IQueryChecker<MultiProjectionState<TProjectionPayload>>> _queryCheckers = new();
     protected IServiceProvider _serviceProvider;
 
@@ -33,17 +33,17 @@ public abstract class CommonMultiProjectionTestBase<TProjection, TProjectionPayl
         services.AddQueriesFromDependencyDefinition(new TDependencyDefinition());
         services.AddSekibanCoreForAggregateTestWithDependency(new TDependencyDefinition());
         _serviceProvider = services.BuildServiceProvider();
-        _commandExecutor = new AggregateTestCommandExecutor(_serviceProvider);
+        _commandExecutor = new TestCommandExecutor(_serviceProvider);
     }
     public CommonMultiProjectionTestBase(IServiceProvider serviceProvider)
     {
         _serviceProvider = serviceProvider;
-        _commandExecutor = new AggregateTestCommandExecutor(_serviceProvider);
+        _commandExecutor = new TestCommandExecutor(_serviceProvider);
     }
     public MultiProjectionState<TProjectionPayload> State { get; protected set; }
         = new(new TProjectionPayload(), Guid.Empty, string.Empty, 0, 0);
     protected Exception? _latestException { get; set; }
-    public Action<IAggregateEvent> OnEvent => e => GivenEvents(new List<IAggregateEvent> { e });
+    public Action<IEvent> OnEvent => e => GivenEvents(new List<IEvent> { e });
 
     public void Dispose()
     {
@@ -61,13 +61,13 @@ public abstract class CommonMultiProjectionTestBase<TProjection, TProjectionPayl
         return this;
     }
 
-    public Guid RunCreateCommand<TAggregatePayload>(ICreateAggregateCommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
+    public Guid RunCreateCommand<TAggregatePayload>(ICreateCommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
         where TAggregatePayload : IAggregatePayload, new()
     {
         var (events, aggregateId) = _commandExecutor.ExecuteCreateCommand(command, injectingAggregateId);
         return aggregateId;
     }
-    public void RunChangeCommand<TAggregatePayload>(ChangeAggregateCommandBase<TAggregatePayload> command)
+    public void RunChangeCommand<TAggregatePayload>(ChangeCommandBase<TAggregatePayload> command)
         where TAggregatePayload : IAggregatePayload, new()
     {
         var events = _commandExecutor.ExecuteChangeCommand(command);
@@ -82,8 +82,8 @@ public abstract class CommonMultiProjectionTestBase<TProjection, TProjectionPayl
         var aggregate = singleAggregateService.GetAggregateStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name);
     }
-    public IReadOnlyCollection<IAggregateEvent> GetLatestEvents() => _commandExecutor.LatestEvents;
-    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenEvents(IEnumerable<IAggregateEvent> events)
+    public IReadOnlyCollection<IEvent> GetLatestEvents() => _commandExecutor.LatestEvents;
+    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenEvents(IEnumerable<IEvent> events)
     {
         var documentWriter = _serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter;
         if (documentWriter is null) { throw new Exception("Failed to get document writer"); }
@@ -97,7 +97,7 @@ public abstract class CommonMultiProjectionTestBase<TProjection, TProjectionPayl
         }
         return this;
     }
-    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenEvents(params IAggregateEvent[] events) =>
+    public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenEvents(params IEvent[] events) =>
         GivenEvents(events.AsEnumerable());
     public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenEventsFromJson(string jsonEvents)
     {
@@ -183,9 +183,9 @@ public abstract class CommonMultiProjectionTestBase<TProjection, TProjectionPayl
         {
             var type = payload.GetType();
             var isCreateEvent = payload is ICreatedEventPayload;
-            var eventType = typeof(AggregateEvent<>);
+            var eventType = typeof(Event<>);
             var genericType = eventType.MakeGenericType(type);
-            var ev = Activator.CreateInstance(genericType, aggregateId, aggregateType, payload, isCreateEvent) as IAggregateEvent;
+            var ev = Activator.CreateInstance(genericType, aggregateId, aggregateType, payload, isCreateEvent) as IEvent;
             if (ev == null) { throw new InvalidDataException("イベントの生成に失敗しました。" + payload); }
             GivenEvents(ev);
         }
@@ -204,9 +204,9 @@ public abstract class CommonMultiProjectionTestBase<TProjection, TProjectionPayl
                 ?.FirstOrDefault(m => m.IsGenericType && m.GetGenericTypeDefinition() == typeof(IApplicableEvent<>));
             var aggregateType = interfaceType?.GenericTypeArguments?.FirstOrDefault();
             if (aggregateType is null) { throw new InvalidDataException("イベントの生成に失敗しました。" + payload); }
-            var eventType = typeof(AggregateEvent<>);
+            var eventType = typeof(Event<>);
             var genericType = eventType.MakeGenericType(type);
-            var ev = Activator.CreateInstance(genericType, aggregateId, aggregateType, payload, isCreateEvent) as IAggregateEvent;
+            var ev = Activator.CreateInstance(genericType, aggregateId, aggregateType, payload, isCreateEvent) as IEvent;
             if (ev == null) { throw new InvalidDataException("イベントの生成に失敗しました。" + payload); }
             GivenEvents(ev);
         }
@@ -219,7 +219,7 @@ public abstract class CommonMultiProjectionTestBase<TProjection, TProjectionPayl
         return this;
     }
     public IMultiProjectionTestHelper<TProjection, TProjectionPayload> GivenCommandExecutorAction(
-        Action<AggregateTestCommandExecutor> action)
+        Action<TestCommandExecutor> action)
     {
         action(_commandExecutor);
         return this;
@@ -266,7 +266,7 @@ public abstract class CommonMultiProjectionTestBase<TProjection, TProjectionPayl
             {
                 throw new InvalidDataException($"イベントタイプ {documentTypeName} は登録されていません。");
             }
-            var eventType = typeof(AggregateEvent<>).MakeGenericType(eventPayloadType);
+            var eventType = typeof(Event<>).MakeGenericType(eventPayloadType);
             if (eventType is null)
             {
                 throw new InvalidDataException($"イベント {documentTypeName} の生成に失敗しました。");
@@ -276,7 +276,7 @@ public abstract class CommonMultiProjectionTestBase<TProjection, TProjectionPayl
             {
                 throw new InvalidDataException($"イベント {documentTypeName} のデシリアライズに失敗しました。");
             }
-            var ev = eventInstance as IAggregateEvent;
+            var ev = eventInstance as IEvent;
             if (ev is null) { throw new InvalidDataException($"イベント {documentTypeName} の生成に失敗しました。"); }
             GivenEvents(ev);
         }
