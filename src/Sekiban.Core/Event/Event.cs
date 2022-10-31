@@ -13,8 +13,8 @@ public record Event<TEventPayload> : DocumentBase, IEvent where TEventPayload : 
 
     public Event(Guid aggregateId, Type aggregateType, TEventPayload eventPayload, bool isAggregateInitialEvent = false) : base(
         aggregateId,
-        PartitionKeyGenerator.ForAggregateEvent(aggregateId, aggregateType),
-        DocumentType.AggregateEvent,
+        PartitionKeyGenerator.ForEvent(aggregateId, aggregateType),
+        DocumentType.Event,
         typeof(TEventPayload).Name)
     {
         Payload = eventPayload;

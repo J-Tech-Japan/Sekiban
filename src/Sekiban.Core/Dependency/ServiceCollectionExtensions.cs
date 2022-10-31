@@ -33,7 +33,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddMemoryCache();
 
-        services.AddTransient<AggregateEventPublisher>();
+        services.AddTransient<EventPublisher>();
 
         services.AddTransient<ICommandExecutor, CommandExecutor>();
         services.AddTransient<ISingleProjectionService, SingleProjectionService>();
@@ -71,7 +71,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddMemoryCache();
 
-        services.AddTransient<AggregateEventPublisher>();
+        services.AddTransient<EventPublisher>();
 
         services.AddTransient<ICommandExecutor, CommandExecutor>();
         services.AddTransient<ISingleProjectionService, SingleProjectionService>();
@@ -105,7 +105,7 @@ public static class ServiceCollectionExtensions
         services.AddMemoryCache();
 
 
-        services.AddTransient<AggregateEventPublisher>();
+        services.AddTransient<EventPublisher>();
 
         services.AddTransient<ICommandExecutor, CommandExecutor>();
         services.AddTransient<ISingleProjectionService, SingleProjectionService>();

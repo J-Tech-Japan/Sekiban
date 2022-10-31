@@ -3,9 +3,9 @@ using Sekiban.Core.Exceptions;
 using System.Reflection;
 namespace Sekiban.Core.Aggregate;
 
-public static class AggregateEventHandler
+public static class EventHandler
 {
-    public static IEvent HandleAggregateEvent<TAggregatePayload>(Aggregate<TAggregatePayload> aggregate, IEventPayload eventPayload)
+    public static IEvent HandleEvent<TAggregatePayload>(Aggregate<TAggregatePayload> aggregate, IEventPayload eventPayload)
         where TAggregatePayload : IAggregatePayload, new()
     {
         var aggregateType = aggregate.GetType();
@@ -22,9 +22,9 @@ public static class AggregateEventHandler
         var eventPayloadType = payload.GetType();
         // ReSharper disable once SuspiciousTypeConversion.Global
         var isCreatedEvent = eventPayloadType is ICreatedEventPayload;
-        var aggregateEventBaseType = typeof(Event<>);
-        var aggregateEventType = aggregateEventBaseType.MakeGenericType(eventPayloadType);
-        return Activator.CreateInstance(aggregateEventType, aggregateId, typeof(TAggregatePayload), payload, isCreatedEvent) as IEvent ??
+        var eventBaseType = typeof(Event<>);
+        var eventType = eventBaseType.MakeGenericType(eventPayloadType);
+        return Activator.CreateInstance(eventType, aggregateId, typeof(TAggregatePayload), payload, isCreatedEvent) as IEvent ??
             throw new SekibanEventFailedToActivateException();
     }
 }

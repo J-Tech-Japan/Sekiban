@@ -22,7 +22,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
         _sekibanContext = sekibanContext;
     }
 
-    public async Task GetAllAggregateEventsAsync(
+    public async Task GetAllEventsAsync(
         Type multipleProjectionType,
         IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
@@ -31,17 +31,17 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multipleProjectionType);
 
         await _cosmosDbFactory.CosmosActionAsync(
-            DocumentType.AggregateEvent,
+            DocumentType.Event,
             aggregateContainerGroup,
             async container =>
             {
                 var options = new QueryRequestOptions();
                 var query = targetAggregateNames.Count switch
                 {
-                    0 => container.GetItemLinqQueryable<IEvent>().Where(b => b.DocumentType == DocumentType.AggregateEvent),
+                    0 => container.GetItemLinqQueryable<IEvent>().Where(b => b.DocumentType == DocumentType.Event),
                     _ => container.GetItemLinqQueryable<IEvent>()
                         .Where(
-                            b => b.DocumentType == DocumentType.AggregateEvent &&
+                            b => b.DocumentType == DocumentType.Event &&
                                 (targetAggregateNames.Count == 0 || targetAggregateNames.Contains(b.AggregateType)))
                 };
                 if (!string.IsNullOrEmpty(sinceSortableUniqueId))
@@ -147,7 +147,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 return list;
             });
     }
-    public async Task GetAllAggregateEventsForAggregateIdAsync(
+    public async Task GetAllEventsForAggregateIdAsync(
         Guid aggregateId,
         Type originalType,
         string? partitionKey,
@@ -157,7 +157,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
 
         await _cosmosDbFactory.CosmosActionAsync(
-            DocumentType.AggregateEvent,
+            DocumentType.Event,
             aggregateContainerGroup,
             async container =>
             {
@@ -169,7 +169,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 }
 
                 var query = container.GetItemLinqQueryable<IEvent>()
-                    .Where(b => b.DocumentType == DocumentType.AggregateEvent && b.AggregateId == aggregateId);
+                    .Where(b => b.DocumentType == DocumentType.Event && b.AggregateId == aggregateId);
                 query = sinceSortableUniqueId is not null
                     ? query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0).OrderByDescending(m => m.SortableUniqueId)
                     : query.OrderBy(m => m.SortableUniqueId);
@@ -204,14 +204,14 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 resultAction(events.OrderBy(m => m.SortableUniqueId));
             });
     }
-    public async Task GetAllAggregateEventStringsForAggregateIdAsync(
+    public async Task GetAllEventStringsForAggregateIdAsync(
         Guid aggregateId,
         Type originalType,
         string? partitionKey,
         string? sinceSortableUniqueId,
         Action<IEnumerable<string>> resultAction)
     {
-        await GetAllAggregateEventsForAggregateIdAsync(
+        await GetAllEventsForAggregateIdAsync(
             aggregateId,
             originalType,
             partitionKey,
@@ -261,7 +261,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 resultAction(commands);
             });
     }
-    public async Task GetAllAggregateEventsForAggregateEventTypeAsync(
+    public async Task GetAllEventsForAggregateAsync(
         Type originalType,
         string? sinceSortableUniqueId,
         Action<IEnumerable<IEvent>> resultAction)
@@ -269,14 +269,14 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
 
         await _cosmosDbFactory.CosmosActionAsync(
-            DocumentType.AggregateEvent,
+            DocumentType.Event,
             aggregateContainerGroup,
             async container =>
             {
                 var options = new QueryRequestOptions();
                 var eventTypes = _registeredEventTypes.RegisteredTypes.Select(m => m.Name);
                 var query = container.GetItemLinqQueryable<IEvent>()
-                    .Where(b => b.DocumentType == DocumentType.AggregateEvent && b.AggregateType == originalType.Name);
+                    .Where(b => b.DocumentType == DocumentType.Event && b.AggregateType == originalType.Name);
 
                 query = sinceSortableUniqueId is not null
                     ? query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0).OrderByDescending(m => m.SortableUniqueId)

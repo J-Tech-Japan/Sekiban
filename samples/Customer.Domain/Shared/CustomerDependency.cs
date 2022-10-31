@@ -1,4 +1,3 @@
-using Customer.Domain.AggregateEventSubscribers;
 using Customer.Domain.Aggregates.Branches;
 using Customer.Domain.Aggregates.Branches.Commands;
 using Customer.Domain.Aggregates.Branches.Queries;
@@ -14,6 +13,7 @@ using Customer.Domain.Aggregates.RecentActivities;
 using Customer.Domain.Aggregates.RecentActivities.Commands;
 using Customer.Domain.Aggregates.RecentInMemoryActivities;
 using Customer.Domain.Aggregates.RecentInMemoryActivities.Commands;
+using Customer.Domain.EventSubscribers;
 using Customer.Domain.Projections.ClientLoyaltyPointLists;
 using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
 using Sekiban.Core.Command;

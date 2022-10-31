@@ -55,8 +55,8 @@ public class CustomerDbStoryBasic : TestBase
     public async Task CosmosDbStory()
     {
         // 先に全データを削除する
-        await _cosmosDbFactory.DeleteAllFromAggregateEventContainer(AggregateContainerGroup.Default);
-        await _cosmosDbFactory.DeleteAllFromAggregateEventContainer(AggregateContainerGroup.Dissolvable);
+        await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default);
+        await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Dissolvable);
         await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command, AggregateContainerGroup.Dissolvable);
         await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command);
 
@@ -279,8 +279,8 @@ public class CustomerDbStoryBasic : TestBase
     public async Task DeleteonlyAsync()
     {
         // 先に全データを削除する
-        await _cosmosDbFactory.DeleteAllFromAggregateEventContainer(AggregateContainerGroup.Default);
-        await _cosmosDbFactory.DeleteAllFromAggregateEventContainer(AggregateContainerGroup.Dissolvable);
+        await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default);
+        await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Dissolvable);
         await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command, AggregateContainerGroup.Dissolvable);
         await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command);
     }
@@ -288,8 +288,8 @@ public class CustomerDbStoryBasic : TestBase
     public async Task AsynchronousExecutionTestAsync()
     {
         // 先に全データを削除する
-        await _cosmosDbFactory.DeleteAllFromAggregateEventContainer(AggregateContainerGroup.Default);
-        await _cosmosDbFactory.DeleteAllFromAggregateEventContainer(AggregateContainerGroup.Dissolvable);
+        await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default);
+        await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Dissolvable);
         await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command, AggregateContainerGroup.Dissolvable);
         await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command);
 

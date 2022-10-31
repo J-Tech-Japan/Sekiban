@@ -2,11 +2,11 @@ using MediatR;
 using Sekiban.Core.Event;
 namespace Sekiban.Core.PubSub;
 
-public class AggregateEventPublisher
+public class EventPublisher
 {
     private readonly IMediator _mediator;
 
-    public AggregateEventPublisher(IMediator mediator) => _mediator = mediator;
+    public EventPublisher(IMediator mediator) => _mediator = mediator;
 
     public async Task PublishAsync<TEvent>(TEvent ev) where TEvent : IEvent
     {

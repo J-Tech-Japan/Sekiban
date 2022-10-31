@@ -4,14 +4,14 @@ namespace Sekiban.Core.Document;
 
 public interface IDocumentRepository
 {
-    Task GetAllAggregateEventsForAggregateIdAsync(
+    Task GetAllEventsForAggregateIdAsync(
         Guid aggregateId,
         Type originalType,
         string? partitionKey,
         string? sinceSortableUniqueId,
         Action<IEnumerable<IEvent>> resultAction);
 
-    Task GetAllAggregateEventStringsForAggregateIdAsync(
+    Task GetAllEventStringsForAggregateIdAsync(
         Guid aggregateId,
         Type originalType,
         string? partitionKey,
@@ -23,12 +23,12 @@ public interface IDocumentRepository
         string? sinceSortableUniqueId,
         Action<IEnumerable<string>> resultAction);
 
-    Task GetAllAggregateEventsForAggregateEventTypeAsync(
+    Task GetAllEventsForAggregateAsync(
         Type originalType,
         string? sinceSortableUniqueId,
         Action<IEnumerable<IEvent>> resultAction);
 
-    Task GetAllAggregateEventsAsync(
+    Task GetAllEventsAsync(
         Type multipleProjectionType,
         IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
@@ -46,7 +46,7 @@ public interface IDocumentPersistentRepository : IDocumentRepository
 }
 public interface IDocumentTemporaryRepository : IDocumentRepository
 {
-    Task<bool> AggregateEventsForAggregateIdHasSortableUniqueIdAsync(
+    Task<bool> EventsForAggregateIdHasSortableUniqueIdAsync(
         Guid aggregateId,
         Type originalType,
         string? partitionKey,

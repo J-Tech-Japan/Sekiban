@@ -43,8 +43,8 @@ public abstract class QueryPerformanceTestBase : TestBase
     public void TestQuery1()
     {
         // 先に全データを削除する
-        _cosmosDbFactory.DeleteAllFromAggregateEventContainer(AggregateContainerGroup.Default).Wait();
-        _cosmosDbFactory.DeleteAllFromAggregateEventContainer(AggregateContainerGroup.Dissolvable).Wait();
+        _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default).Wait();
+        _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Dissolvable).Wait();
         _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command, AggregateContainerGroup.Dissolvable).Wait();
         _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command).Wait();
     }

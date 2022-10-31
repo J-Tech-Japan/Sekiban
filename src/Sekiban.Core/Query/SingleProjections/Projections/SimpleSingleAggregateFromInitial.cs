@@ -24,16 +24,16 @@ public class SimpleSingleAggregateFromInitial : ISingleAggregateFromInitial
         var projector = new P();
         var aggregate = projector.CreateInitialAggregate(aggregateId);
         var addFinished = false;
-        await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
+        await _documentRepository.GetAllEventsForAggregateIdAsync(
             aggregateId,
             projector.OriginalAggregateType(),
-            PartitionKeyGenerator.ForAggregateEvent(aggregateId, projector.OriginalAggregateType()),
+            PartitionKeyGenerator.ForEvent(aggregateId, projector.OriginalAggregateType()),
             null,
             events =>
             {
                 if (events.Count() != events.Select(m => m.Id).Distinct().Count())
                 {
-                    throw new SekibanAggregateEventDuplicateException();
+                    throw new SekibanEventDuplicateException();
                 }
                 if (addFinished) { return; }
                 foreach (var e in events)

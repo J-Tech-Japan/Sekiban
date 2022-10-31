@@ -8,7 +8,7 @@ public record SnapshotManagerSnapshotTaken(
     int? SnapshotVersion) : IChangedEvent<SnapshotManager>
 {
 
-    public SnapshotManager OnEvent(SnapshotManager payload, IEvent @event) => payload with
+    public SnapshotManager OnEvent(SnapshotManager payload, IEvent ev) => payload with
     {
         Requests = payload.Requests.Remove(SnapshotManager.SnapshotKey(AggregateTypeName, TargetAggregateId, NextSnapshotVersion)),
         RequestTakens = payload.RequestTakens.Add(SnapshotManager.SnapshotKey(AggregateTypeName, TargetAggregateId, NextSnapshotVersion))

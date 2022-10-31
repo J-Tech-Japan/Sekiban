@@ -2,6 +2,7 @@
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 using System.Collections.Immutable;
+using EventHandler = Sekiban.Core.Aggregate.EventHandler;
 namespace Sekiban.Core.Command;
 
 public abstract class CreateCommandHandlerBase<TAggregatePayload, TCommand> : ICreateCommandHandler<TAggregatePayload, TCommand>
@@ -20,7 +21,7 @@ public abstract class CreateCommandHandlerBase<TAggregatePayload, TCommand> : IC
         var eventPayloads = ExecCreateCommandAsync(GetAggregateState, command.Payload);
         await foreach (var eventPayload in eventPayloads)
         {
-            _events.Add(AggregateEventHandler.HandleAggregateEvent(aggregate, eventPayload));
+            _events.Add(EventHandler.HandleEvent(aggregate, eventPayload));
             if (_events.First().GetPayload() is not ICreatedEventPayload) { throw new SekibanCreateCommandShouldSaveCreateEventFirstException(); }
             if (_events.Count > 1 && _events.Last().GetPayload() is ICreatedEventPayload)
             {

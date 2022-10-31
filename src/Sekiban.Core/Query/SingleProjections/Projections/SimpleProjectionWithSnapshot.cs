@@ -40,10 +40,10 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
         {
             return await _singleAggregateFromInitial.GetAggregateFromInitialAsync<T, P>(aggregateId, toVersion.Value);
         }
-        await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
+        await _documentRepository.GetAllEventsForAggregateIdAsync(
             aggregateId,
             projector.OriginalAggregateType(),
-            PartitionKeyGenerator.ForAggregateEvent(aggregateId, projector.OriginalAggregateType()),
+            PartitionKeyGenerator.ForEvent(aggregateId, projector.OriginalAggregateType()),
             state?.LastSortableUniqueId,
             events =>
             {
@@ -52,7 +52,7 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
                     if (!string.IsNullOrWhiteSpace(state?.LastSortableUniqueId) &&
                         string.CompareOrdinal(state?.LastSortableUniqueId, e.SortableUniqueId) > 0)
                     {
-                        throw new SekibanAggregateEventDuplicateException();
+                        throw new SekibanEventDuplicateException();
                     }
                     aggregate.ApplyEvent(e);
                     if (toVersion.HasValue && aggregate.Version == toVersion.Value)

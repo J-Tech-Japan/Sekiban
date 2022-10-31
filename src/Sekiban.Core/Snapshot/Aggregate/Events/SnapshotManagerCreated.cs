@@ -3,5 +3,5 @@ namespace Sekiban.Core.Snapshot.Aggregate.Events;
 
 public record SnapshotManagerCreated(DateTime CreatedAt) : ICreatedEvent<SnapshotManager>
 {
-    public SnapshotManager OnEvent(SnapshotManager aggregate, IEvent @event) => new SnapshotManager();
+    public SnapshotManager OnEvent(SnapshotManager aggregate, IEvent ev) => new SnapshotManager();
 }

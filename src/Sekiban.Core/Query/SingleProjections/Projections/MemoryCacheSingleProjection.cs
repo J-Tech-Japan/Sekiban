@@ -55,10 +55,10 @@ public class MemoryCacheSingleProjection : ISingleProjection
             }
         }
         var container = new SingleMemoryCacheProjectionContainer<T, Q>(aggregateId);
-        await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
+        await _documentRepository.GetAllEventsForAggregateIdAsync(
             aggregateId,
             projector.OriginalAggregateType(),
-            PartitionKeyGenerator.ForAggregateEvent(aggregateId, projector.OriginalAggregateType()),
+            PartitionKeyGenerator.ForEvent(aggregateId, projector.OriginalAggregateType()),
             savedContainer?.SafeSortableUniqueId?.Value,
             events =>
             {
@@ -68,7 +68,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
                     if (!string.IsNullOrWhiteSpace(savedContainer?.SafeSortableUniqueId?.Value) &&
                         string.CompareOrdinal(savedContainer?.SafeSortableUniqueId?.Value, e.SortableUniqueId) > 0)
                     {
-                        throw new SekibanAggregateEventDuplicateException();
+                        throw new SekibanEventDuplicateException();
                     }
                     if (container.LastSortableUniqueId == null && e.GetSortableUniqueId().LaterThan(targetSafeId) && aggregate.Version > 0)
                     {
@@ -127,10 +127,10 @@ public class MemoryCacheSingleProjection : ISingleProjection
             return await GetAggregateFromInitialAsync<T, Q, P>(aggregateId, toVersion.Value);
         }
 
-        await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
+        await _documentRepository.GetAllEventsForAggregateIdAsync(
             aggregateId,
             projector.OriginalAggregateType(),
-            PartitionKeyGenerator.ForAggregateEvent(aggregateId, projector.OriginalAggregateType()),
+            PartitionKeyGenerator.ForEvent(aggregateId, projector.OriginalAggregateType()),
             state?.LastSortableUniqueId,
             events =>
             {
@@ -141,7 +141,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
                     if (!string.IsNullOrWhiteSpace(state?.LastSortableUniqueId) &&
                         string.CompareOrdinal(state?.LastSortableUniqueId, e.SortableUniqueId) > 0)
                     {
-                        throw new SekibanAggregateEventDuplicateException();
+                        throw new SekibanEventDuplicateException();
                     }
                     if (container.LastSortableUniqueId == null && e.GetSortableUniqueId().EarlierThan(targetSafeId) && aggregate.Version > 0)
                     {
@@ -189,16 +189,16 @@ public class MemoryCacheSingleProjection : ISingleProjection
         var container = new SingleMemoryCacheProjectionContainer<T, Q>(aggregateId);
         var aggregate = projector.CreateInitialAggregate(aggregateId);
         var addFinished = false;
-        await _documentRepository.GetAllAggregateEventsForAggregateIdAsync(
+        await _documentRepository.GetAllEventsForAggregateIdAsync(
             aggregateId,
             typeof(T),
-            PartitionKeyGenerator.ForAggregateEvent(aggregateId, projector.OriginalAggregateType()),
+            PartitionKeyGenerator.ForEvent(aggregateId, projector.OriginalAggregateType()),
             null,
             events =>
             {
                 if (events.Count() != events.Select(m => m.Id).Distinct().Count())
                 {
-                    throw new SekibanAggregateEventDuplicateException();
+                    throw new SekibanEventDuplicateException();
                 }
                 if (addFinished) { return; }
                 var someSafeId = SortableUniqueIdValue.Generate(SekibanDateProducer.GetRegistered().UtcNow, Guid.Empty);

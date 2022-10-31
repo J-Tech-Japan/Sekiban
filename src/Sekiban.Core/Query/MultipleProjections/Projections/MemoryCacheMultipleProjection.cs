@@ -60,7 +60,7 @@ public class MemoryCacheMultipleProjection : IMultipleProjection
         }
 
         var container = new MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>();
-        await _documentRepository.GetAllAggregateEventsAsync(
+        await _documentRepository.GetAllEventsAsync(
             typeof(TProjection),
             projector.TargetAggregateNames(),
             savedContainer.SafeSortableUniqueId?.Value,
@@ -103,7 +103,7 @@ public class MemoryCacheMultipleProjection : IMultipleProjection
     {
         var projector = new TProjection();
         var container = new MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>();
-        await _documentRepository.GetAllAggregateEventsAsync(
+        await _documentRepository.GetAllEventsAsync(
             typeof(TProjection),
             projector.TargetAggregateNames(),
             null,

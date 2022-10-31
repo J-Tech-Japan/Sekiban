@@ -2,6 +2,7 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 using System.Collections.Immutable;
+using EventHandler = Sekiban.Core.Aggregate.EventHandler;
 namespace Sekiban.Core.Command;
 
 public abstract class
@@ -25,7 +26,7 @@ public abstract class
         await foreach (var eventPayload in eventPayloads)
         {
             events.Add(
-                AggregateEventHandler.GenerateEventToSave<IChangedEvent<TAggregatePayload>, TAggregatePayload>(
+                EventHandler.GenerateEventToSave<IChangedEvent<TAggregatePayload>, TAggregatePayload>(
                     aggregateId,
                     eventPayload));
         }

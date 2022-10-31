@@ -12,7 +12,7 @@ public class SimpleMultipleProjection : IMultipleProjection
         where TProjectionPayload : IMultiProjectionPayload, new()
     {
         var projector = new TProjection();
-        await _documentRepository.GetAllAggregateEventsAsync(
+        await _documentRepository.GetAllEventsAsync(
             typeof(TProjection),
             projector.TargetAggregateNames(),
             null,

@@ -179,7 +179,7 @@ public class CommandExecutor : ICommandExecutor
                 events.AddRange(result.Events);
                 foreach (var ev in result.Events)
                 {
-                    await _documentWriter.SaveAndPublishAggregateEvent(ev, typeof(TAggregatePayload));
+                    await _documentWriter.SaveAndPublishEvent(ev, typeof(TAggregatePayload));
                 }
             }
             if (result is null)
@@ -223,7 +223,7 @@ public class CommandExecutor : ICommandExecutor
                 {
                     throw new SekibanChangeCommandShouldNotSaveCreateEventException();
                 }
-                await _documentWriter.SaveAndPublishAggregateEvent(ev, typeof(TAggregatePayload));
+                await _documentWriter.SaveAndPublishEvent(ev, typeof(TAggregatePayload));
             }
         }
         return toReturnEvents;

@@ -2,6 +2,7 @@
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 using System.Collections.Immutable;
+using EventHandler = Sekiban.Core.Aggregate.EventHandler;
 namespace Sekiban.Core.Command;
 
 public abstract class ChangeCommandHandlerBase<TAggregatePayload, TCommand> : IChangeCommandHandler<TAggregatePayload, TCommand>
@@ -36,7 +37,7 @@ public abstract class ChangeCommandHandlerBase<TAggregatePayload, TCommand> : IC
         var eventPayloads = ExecCommandAsync(GetAggregateState, command);
         await foreach (var eventPayload in eventPayloads)
         {
-            _events.Add(AggregateEventHandler.HandleAggregateEvent(aggregate, eventPayload));
+            _events.Add(EventHandler.HandleEvent(aggregate, eventPayload));
         }
         return await Task.FromResult(new CommandResponse(aggregate.AggregateId, _events.ToImmutableList(), aggregate.Version));
     }

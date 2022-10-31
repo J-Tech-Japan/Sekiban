@@ -3,5 +3,5 @@ namespace Customer.Domain.Aggregates.Clients.Events;
 
 public record ClientDeleted : IChangedEvent<Client>
 {
-    public Client OnEvent(Client payload, IEvent @event) => payload with { IsDeleted = true };
+    public Client OnEvent(Client payload, IEvent ev) => payload with { IsDeleted = true };
 }

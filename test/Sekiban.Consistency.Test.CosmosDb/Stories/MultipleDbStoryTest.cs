@@ -29,8 +29,8 @@ public class MultipleDbStoryTest : TestBase
 
         // 何もしないで実行したら "Default"の動作となる
         // 先に全データを削除する
-        await cosmosDbFactory.DeleteAllFromAggregateEventContainer(AggregateContainerGroup.Default);
-        await cosmosDbFactory.DeleteAllFromAggregateEventContainer(AggregateContainerGroup.Dissolvable);
+        await cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default);
+        await cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Dissolvable);
         await cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command, AggregateContainerGroup.Dissolvable);
         await cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command);
 
@@ -39,7 +39,7 @@ public class MultipleDbStoryTest : TestBase
             SecondaryDb,
             async () =>
             {
-                await cosmosDbFactory.DeleteAllFromAggregateEventContainer(AggregateContainerGroup.Default);
+                await cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default);
                 await cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command);
             });
         // Default を明示的に指定して、１件データを作成

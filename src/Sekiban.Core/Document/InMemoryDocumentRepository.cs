@@ -25,7 +25,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         await Task.CompletedTask;
         return new List<SnapshotDocument>();
     }
-    public async Task GetAllAggregateEventsForAggregateIdAsync(
+    public async Task GetAllEventsForAggregateIdAsync(
         Guid aggregateId,
         Type originalType,
         string? partitionKey,
@@ -54,14 +54,14 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
                 list.GetRange(index, list.Count - index).Where(m => m.SortableUniqueId != sinceSortableUniqueId).OrderBy(m => m.SortableUniqueId));
         }
     }
-    public async Task GetAllAggregateEventStringsForAggregateIdAsync(
+    public async Task GetAllEventStringsForAggregateIdAsync(
         Guid aggregateId,
         Type originalType,
         string? partitionKey,
         string? sinceSortableUniqueId,
         Action<IEnumerable<string>> resultAction)
     {
-        await GetAllAggregateEventsForAggregateIdAsync(
+        await GetAllEventsForAggregateIdAsync(
             aggregateId,
             originalType,
             partitionKey,
@@ -80,7 +80,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         await Task.CompletedTask;
         resultAction(new List<string>());
     }
-    public async Task GetAllAggregateEventsAsync(
+    public async Task GetAllEventsAsync(
         Type multipleProjectionType,
         IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
@@ -123,7 +123,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         return null;
     }
     public Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type originalType, string partitionKey) => throw new NotImplementedException();
-    public async Task<bool> AggregateEventsForAggregateIdHasSortableUniqueIdAsync(
+    public async Task<bool> EventsForAggregateIdHasSortableUniqueIdAsync(
         Guid aggregateId,
         Type originalType,
         string? partitionKey,
@@ -143,7 +143,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         }
         return list.Any(m => m.SortableUniqueId == sortableUniqueId);
     }
-    public async Task GetAllAggregateEventsForAggregateEventTypeAsync(
+    public async Task GetAllEventsForAggregateAsync(
         Type originalType,
         string? sinceSortableUniqueId,
         Action<IEnumerable<IEvent>> resultAction)
