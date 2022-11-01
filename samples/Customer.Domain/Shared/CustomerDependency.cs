@@ -6,7 +6,6 @@ using Customer.Domain.Aggregates.Clients.Commands;
 using Customer.Domain.Aggregates.Clients.Events;
 using Customer.Domain.Aggregates.Clients.Projections;
 using Customer.Domain.Aggregates.Clients.Queries;
-using Customer.Domain.Aggregates.Clients.Queries.BasicClientFilters;
 using Customer.Domain.Aggregates.LoyaltyPoints;
 using Customer.Domain.Aggregates.LoyaltyPoints.Commands;
 using Customer.Domain.Aggregates.RecentActivities;
@@ -16,79 +15,47 @@ using Customer.Domain.Aggregates.RecentInMemoryActivities.Commands;
 using Customer.Domain.EventSubscribers;
 using Customer.Domain.Projections.ClientLoyaltyPointLists;
 using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
-using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
-using Sekiban.Core.Event;
 using System.Reflection;
 namespace Customer.Domain.Shared;
 
-public class CustomerDependency : IDependencyDefinition
+public class CustomerDependency : DomainDependencyDefinitionBase
 {
-    public Assembly GetExecutingAssembly() => Assembly.GetExecutingAssembly();
-
-    public IEnumerable<Type> GetAggregateListQueryTypes()
+    public override Assembly GetExecutingAssembly() => Assembly.GetExecutingAssembly();
+    protected override void Define()
     {
-        yield return typeof(BasicClientQuery);
-    }
-    public IEnumerable<Type> GetAggregateQueryTypes()
-    {
-        yield return typeof(ClientEmailExistsQuery);
-        yield return typeof(BranchExistsQuery);
-    }
-    public IEnumerable<Type> GetSingleProjectionListQueryTypes()
-    {
-        yield return typeof(ClientNameHistoryProjectionQuery);
-    }
-    public IEnumerable<Type> GetSingleProjectionQueryTypes() => Enumerable.Empty<Type>();
-    public IEnumerable<Type> GetMultiProjectionQueryTypes()
-    {
-        yield return typeof(ClientLoyaltyPointMultipleMultiProjectionQuery);
-    }
-    public IEnumerable<(Type serviceType, Type? implementationType)> GetCommandDependencies()
-    {
-        // Aggregate Event Subscribers
-        yield return (typeof(INotificationHandler<Event<ClientCreated>>), typeof(ClientCreatedSubscriber));
+        Aggregate<Branch>()
+            .CreateCommandHandler<CreateBranch, CreateBranchHandler>()
+            .Query<BranchExistsQuery>();
 
-        yield return (typeof(INotificationHandler<Event<ClientDeleted>>), typeof(ClientDeletedSubscriber));
+        Aggregate<Client>()
+            .CreateCommandHandler<CreateClient, CreateClient.Handler>()
+            .ChangeCommandHandler<ChangeClientName, ChangeClientName.Handler>()
+            .ChangeCommandHandler<DeleteClient, DeleteClient.Handler>()
+            .ChangeCommandHandler<CancelDeleteClient, CancelDeleteClient.Handler>()
+            .EventSubscriber<ClientCreated, ClientCreatedSubscriber>()
+            .EventSubscriber<ClientDeleted, ClientDeletedSubscriber>()
+            .SingleProjection<ClientNameHistoryProjection>()
+            .Query<ClientNameHistoryProjectionQuery>()
+            .Query<ClientEmailExistsQuery>();
 
-        // Aggregate: Branch
-        yield return (typeof(ICreateCommandHandler<Branch, CreateBranch>), typeof(CreateBranchHandler));
+        Aggregate<LoyaltyPoint>()
+            .CreateCommandHandler<CreateLoyaltyPoint, CreateLoyaltyPointHandler>()
+            .ChangeCommandHandler<AddLoyaltyPoint, AddLoyaltyPoint.Handler>()
+            .ChangeCommandHandler<UseLoyaltyPoint, UseLoyaltyPointHandler>()
+            .ChangeCommandHandler<DeleteLoyaltyPoint, DeleteLoyaltyPointHandler>();
 
-        // Aggregate: Client
-        yield return (typeof(ICreateCommandHandler<Client, CreateClient>), typeof(CreateClient.Handler));
+        Aggregate<RecentActivity>()
+            .CreateCommandHandler<CreateRecentActivity, CreateRecentActivityHandler>()
+            .ChangeCommandHandler<AddRecentActivity, AddRecentActivityHandler>()
+            .ChangeCommandHandler<OnlyPublishingAddRecentActivity, OnlyPublishingAddRecentActivityHandler>();
 
-        yield return (typeof(IChangeCommandHandler<Client, ChangeClientName>), typeof(ChangeClientName.Handler));
+        Aggregate<RecentInMemoryActivity>()
+            .CreateCommandHandler<CreateRecentInMemoryActivity, CreateRecentInMemoryActivityHandler>()
+            .ChangeCommandHandler<AddRecentInMemoryActivity, AddRecentInMemoryActivityHandler>();
 
-        yield return (typeof(IChangeCommandHandler<Client, DeleteClient>), typeof(DeleteClient.Handler));
+        MultiProjectionQuery<ClientLoyaltyPointMultipleMultiProjectionQuery>();
+        MultiProjectionQuery<ClientLoyaltyPointQuery>();
 
-        yield return (typeof(IChangeCommandHandler<Client, CancelDeleteClient>), typeof(CancelDeleteClient.Handler));
-
-        // Aggregate: LoyaltyPoint
-        yield return (typeof(ICreateCommandHandler<LoyaltyPoint, CreateLoyaltyPoint>), typeof(CreateLoyaltyPointHandler));
-
-        yield return (typeof(IChangeCommandHandler<LoyaltyPoint, AddLoyaltyPoint>), typeof(AddLoyaltyPoint.Handler));
-
-        yield return (typeof(IChangeCommandHandler<LoyaltyPoint, UseLoyaltyPoint>), typeof(UseLoyaltyPointHandler));
-
-        yield return (typeof(IChangeCommandHandler<LoyaltyPoint, DeleteLoyaltyPoint>), typeof(DeleteLoyaltyPointHandler));
-
-        // Aggregate: RecentActivity
-        yield return (typeof(ICreateCommandHandler<RecentActivity, CreateRecentActivity>), typeof(CreateRecentActivityHandler));
-
-        yield return (typeof(IChangeCommandHandler<RecentActivity, AddRecentActivity>), typeof(AddRecentActivityHandler));
-        yield return (typeof(IChangeCommandHandler<RecentActivity, OnlyPublishingAddRecentActivity>),
-            typeof(OnlyPublishingAddRecentActivityHandler));
-        // Aggregate: RecentInMemoryActivity
-        yield return (typeof(ICreateCommandHandler<RecentInMemoryActivity, CreateRecentInMemoryActivity>),
-            typeof(CreateRecentInMemoryActivityHandler));
-
-        yield return (typeof(IChangeCommandHandler<RecentInMemoryActivity, AddRecentInMemoryActivity>),
-            typeof(AddRecentInMemoryActivityHandler));
-    }
-    public IEnumerable<(Type serviceType, Type? implementationType)> GetSubscriberDependencies() =>
-        Enumerable.Empty<(Type serviceType, Type? implementationType)>();
-    public IEnumerable<Type> GetMultiProjectionListQueryTypes()
-    {
-        yield return typeof(ClientLoyaltyPointQuery);
     }
 }
