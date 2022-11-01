@@ -22,7 +22,7 @@ public class QueryHandler
         where TQueryParameter : IQueryParameter
     {
         var query = _serviceProvider.GetService<TQuery>();
-        if (query is null) { throw new Exception($"Query {typeof(TQuery).FullName} is not registered to dependency injection"); }
+        if (query is null) { throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection"); }
         var filtered = query.HandleFilter(param, projection);
         var sorted = query.HandleSort(param, filtered);
         var queryResponses = sorted.ToList();
@@ -42,7 +42,7 @@ public class QueryHandler
         where TQueryParameter : IQueryParameter
     {
         var query = _serviceProvider.GetService<TQuery>();
-        if (query is null) { throw new Exception($"Query {typeof(TQuery).FullName} is not registered to dependency injection"); }
+        if (query is null) { throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection"); }
         var filtered = query.HandleFilter(param, projection);
         return filtered;
     }
@@ -57,7 +57,7 @@ public class QueryHandler
         where TQueryParameter : IQueryParameter
     {
         var query = _serviceProvider.GetService<TQuery>();
-        if (query is null) { throw new Exception($"Query {typeof(TQuery).FullName} is not registered to dependency injection"); }
+        if (query is null) { throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection"); }
         var filtered = query.HandleFilter(param, list);
         var sorted = query.HandleSort(param, filtered);
         var queryResponses = sorted.ToList();
@@ -75,7 +75,7 @@ public class QueryHandler
         where TQueryParameter : IQueryParameter
     {
         var query = _serviceProvider.GetService<TQuery>();
-        if (query is null) { throw new Exception($"Query {typeof(TQuery).FullName} is not registered to dependency injection"); }
+        if (query is null) { throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection"); }
         var filtered = query.HandleFilter(param, list);
         return filtered;
     }
@@ -93,7 +93,7 @@ public class QueryHandler
         where TQueryParameter : IQueryParameter
     {
         var query = _serviceProvider.GetService<TQuery>();
-        if (query is null) { throw new Exception($"Query {typeof(TQuery).FullName} is not registered to dependency injection"); }
+        if (query is null) { throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection"); }
         var filtered = query.HandleFilter(param, projections);
         var sorted = query.HandleSort(param, filtered);
         var queryResponses = sorted.ToList();
@@ -141,7 +141,7 @@ public class QueryHandler
         where TQueryParameter : IQueryParameter
     {
         var query = _serviceProvider.GetService<TQuery>();
-        if (query is null) { throw new Exception($"Query {typeof(TQuery).FullName} is not registered to dependency injection"); }
+        if (query is null) { throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection"); }
         var filtered = query.HandleFilter(param, projections);
         return filtered;
     }

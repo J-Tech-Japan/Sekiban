@@ -6,8 +6,7 @@ namespace Sekiban.Core.Dependency;
 
 public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
 {
-
-    public DomainDependencyDefinitionBase()
+    protected DomainDependencyDefinitionBase()
     {
         // ReSharper disable once VirtualMemberCallInConstructor
         Define();
@@ -15,38 +14,26 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
     private ImmutableList<IAggregateDependencyDefinition> AggregateDefinitions { get; set; } = ImmutableList<IAggregateDependencyDefinition>.Empty;
     private ImmutableList<Type> MultiProjectionQueryFilterTypes { get; set; } = ImmutableList<Type>.Empty;
     private ImmutableList<Type> MultiProjectionListQueryFilterTypes { get; set; } = ImmutableList<Type>.Empty;
-
     public abstract Assembly GetExecutingAssembly();
-
     public IEnumerable<(Type serviceType, Type? implementationType)> GetCommandDependencies() =>
         AggregateDefinitions.SelectMany(s => s.CommandTypes);
     public IEnumerable<(Type serviceType, Type? implementationType)> GetSubscriberDependencies() =>
         AggregateDefinitions.SelectMany(s => s.SubscriberTypes);
-
     public IEnumerable<Type> GetAggregateQueryTypes() =>
         AggregateDefinitions.SelectMany(s => s.AggregateQueryFilterTypes);
-
     public IEnumerable<Type> GetAggregateListQueryTypes() =>
         AggregateDefinitions.SelectMany(s => s.AggregateListQueryFilterTypes);
-
     public IEnumerable<Type> GetSingleProjectionQueryTypes() =>
         AggregateDefinitions.SelectMany(s => s.SingleProjectionQueryFilterTypes);
-
     public IEnumerable<Type> GetSingleProjectionListQueryTypes() =>
         AggregateDefinitions.SelectMany(s => s.SingleProjectionListQueryFilterTypes);
-
     public IEnumerable<Type> GetMultiProjectionQueryTypes() =>
         MultiProjectionQueryFilterTypes;
-
     public IEnumerable<Type> GetMultiProjectionListQueryTypes() =>
         MultiProjectionListQueryFilterTypes;
-
     public IEnumerable<Type> GetSingleProjectionTypes() => AggregateDefinitions.SelectMany(s => s.SingleProjectionTypes);
-
     protected abstract void Define();
-
     public IEnumerable<Type> GetAggregateTypes() => AggregateDefinitions.Select(s => s.AggregateType);
-
     protected AggregateDependencyDefinition<TAggregatePayload> Aggregate<TAggregatePayload>()
         where TAggregatePayload : IAggregatePayload, new()
     {
@@ -60,17 +47,16 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
         AggregateDefinitions = AggregateDefinitions.Add(newone);
         return newone;
     }
-
-    protected void MultiProjectionQuery<TQueryFilter>()
+    protected void AddMultiProjectionQuery<TQueryFilter>()
     {
         var t = typeof(TQueryFilter);
         Action action = t.GetInterfaces()
                 .Where(w => w.IsGenericType)
                 .Select(s => s.GetGenericTypeDefinition()) switch
             {
-                IEnumerable<Type> gis when gis.Contains(typeof(IMultiProjectionQuery<,,,>)) => () =>
+                { } gis when gis.Contains(typeof(IMultiProjectionQuery<,,,>)) => () =>
                     MultiProjectionQueryFilterTypes = MultiProjectionQueryFilterTypes.Add(t),
-                IEnumerable<Type> gis when gis.Contains(typeof(IMultiProjectionListQuery<,,,>)) => () =>
+                { } gis when gis.Contains(typeof(IMultiProjectionListQuery<,,,>)) => () =>
                     MultiProjectionListQueryFilterTypes = MultiProjectionListQueryFilterTypes.Add(t),
                 _ => throw new NotImplementedException()
             };

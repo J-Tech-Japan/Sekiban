@@ -13,7 +13,6 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
 {
 
     public AggregateDependencyDefinition() => AggregateType = typeof(TAggregatePayload);
-    public Type AggregateType { get; }
     public ImmutableList<(Type, Type?)> CommandTypes { get; private set; } = ImmutableList<(Type, Type?)>.Empty;
     public ImmutableList<(Type, Type?)> SubscriberTypes { get; private set; } = ImmutableList<(Type, Type?)>.Empty;
     public ImmutableList<Type> AggregateQueryFilterTypes { get; private set; } = ImmutableList<Type>.Empty;
@@ -21,8 +20,9 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
     public ImmutableList<Type> SingleProjectionTypes { get; private set; } = ImmutableList<Type>.Empty;
     public ImmutableList<Type> SingleProjectionQueryFilterTypes { get; private set; } = ImmutableList<Type>.Empty;
     public ImmutableList<Type> SingleProjectionListQueryFilterTypes { get; private set; } = ImmutableList<Type>.Empty;
+    public Type AggregateType { get; }
 
-    public AggregateDependencyDefinition<TAggregatePayload> CreateCommandHandler<TCreateCommand, TCommandHandler>()
+    public AggregateDependencyDefinition<TAggregatePayload> AddCreateCommandHandler<TCreateCommand, TCommandHandler>()
         where TCreateCommand : ICreateCommand<TAggregatePayload>, new()
         where TCommandHandler : CreateCommandHandlerBase<TAggregatePayload, TCreateCommand>
     {
@@ -30,7 +30,7 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         return this;
     }
 
-    public AggregateDependencyDefinition<TAggregatePayload> ChangeCommandHandler<TChangeCommand, TCommandHandler>()
+    public AggregateDependencyDefinition<TAggregatePayload> AddChangeCommandHandler<TChangeCommand, TCommandHandler>()
         where TChangeCommand : ChangeCommandBase<TAggregatePayload>, new()
         where TCommandHandler : IChangeCommandHandler<TAggregatePayload, TChangeCommand>
     {
@@ -38,7 +38,7 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         return this;
     }
 
-    public AggregateDependencyDefinition<TAggregatePayload> EventSubscriber<TEvent, TEventSubscriber>()
+    public AggregateDependencyDefinition<TAggregatePayload> AddEventSubscriber<TEvent, TEventSubscriber>()
         where TEvent : IApplicableEvent<TAggregatePayload>
         where TEventSubscriber : EventSubscriberBase<TEvent>
     {
@@ -46,7 +46,7 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         return this;
     }
 
-    public AggregateDependencyDefinition<TAggregatePayload> SingleProjection<TSingleProjection>()
+    public AggregateDependencyDefinition<TAggregatePayload> AddSingleProjection<TSingleProjection>()
         where TSingleProjection : ISingleProjection
     {
         var singleProjectionType = typeof(TSingleProjection);
@@ -64,7 +64,7 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         SingleProjectionTypes = SingleProjectionTypes.Add(typeof(TSingleProjection));
         return this;
     }
-    public AggregateDependencyDefinition<TAggregatePayload> Query<TQueryFilter>()
+    public AggregateDependencyDefinition<TAggregatePayload> AddQuery<TQueryFilter>()
     {
         var t = typeof(TQueryFilter);
         Action action = t.GetInterfaces()
