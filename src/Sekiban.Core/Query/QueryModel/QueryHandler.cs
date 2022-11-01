@@ -81,15 +81,15 @@ public class QueryHandler
     }
 
     public QueryListResult<TQueryResponse>
-        GetSingleProjectionListQuery<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload, TQuery,
+        GetSingleProjectionListQuery<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TQuery,
             TQueryParameter, TQueryResponse>(
             TQueryParameter param,
-            IEnumerable<SingleProjectionState<TAggregateProjectionPayload>> projections) where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload>,
+            IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections) where TAggregatePayload : IAggregatePayload, new()
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
         new()
-        where TAggregateProjectionPayload : ISingleProjectionPayload
+        where TSingleProjectionPayload : ISingleProjectionPayload
         where TQuery : ISingleProjectionListQuery<TAggregatePayload, TSingleProjection,
-            TAggregateProjectionPayload, TQueryParameter, TQueryResponse>
+            TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
         var query = _serviceProvider.GetService<TQuery>();
@@ -129,15 +129,15 @@ public class QueryHandler
     }
 
     public TQueryResponse
-        GetSingleProjectionQuery<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload, TQuery,
+        GetSingleProjectionQuery<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TQuery,
             TQueryParameter, TQueryResponse>(
             TQueryParameter param,
-            IEnumerable<SingleProjectionState<TAggregateProjectionPayload>> projections) where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload>,
+            IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections) where TAggregatePayload : IAggregatePayload, new()
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
         new()
-        where TAggregateProjectionPayload : ISingleProjectionPayload
+        where TSingleProjectionPayload : ISingleProjectionPayload
         where TQuery : ISingleProjectionQuery<TAggregatePayload, TSingleProjection,
-            TAggregateProjectionPayload, TQueryParameter, TQueryResponse>
+            TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
         var query = _serviceProvider.GetService<TQuery>();

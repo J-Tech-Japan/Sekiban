@@ -48,15 +48,15 @@ public class SingleProjectionService : ISingleProjectionService
         return aggregate?.ToState();
     }
 
-    public async Task<SingleProjectionState<TAggregateProjectionPayload>?>
-        GetProjectionAsync<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload>(Guid aggregateId, int? toVersion = null)
+    public async Task<SingleProjectionState<TSingleProjectionPayload>?>
+        GetProjectionAsync<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>(Guid aggregateId, int? toVersion = null)
         where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload>,
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
         new()
-        where TAggregateProjectionPayload : ISingleProjectionPayload
+        where TSingleProjectionPayload : ISingleProjectionPayload
     {
         var aggregate = await _singleProjection
-            .GetAggregateAsync<TSingleProjection, SingleProjectionState<TAggregateProjectionPayload>,
+            .GetAggregateAsync<TSingleProjection, SingleProjectionState<TSingleProjectionPayload>,
                 TSingleProjection>(aggregateId, toVersion);
         return aggregate?.ToState();
     }

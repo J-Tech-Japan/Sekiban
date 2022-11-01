@@ -4,20 +4,20 @@ using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Query;
 
-public class SimpleSingleProjectionListQuery<TAggregatePayload, TProjection, TAggregateProjectionPayload> :
-    ISingleProjectionListQuery<TAggregatePayload, TProjection, TAggregateProjectionPayload,
-        SimpleSingleProjectionListQuery<TAggregatePayload, TProjection, TAggregateProjectionPayload>.QueryParameter,
-        SingleProjectionState<TAggregateProjectionPayload>>
-    where TProjection : SingleProjectionBase<TAggregatePayload, TProjection, TAggregateProjectionPayload>, new()
-    where TAggregateProjectionPayload : ISingleProjectionPayload
+public class SimpleSingleProjectionListQuery<TAggregatePayload, TProjection, TSingleProjectionPayload> :
+    ISingleProjectionListQuery<TAggregatePayload, TProjection, TSingleProjectionPayload,
+        SimpleSingleProjectionListQuery<TAggregatePayload, TProjection, TSingleProjectionPayload>.QueryParameter,
+        SingleProjectionState<TSingleProjectionPayload>>
+    where TProjection : SingleProjectionBase<TAggregatePayload, TProjection, TSingleProjectionPayload>, new()
+    where TSingleProjectionPayload : ISingleProjectionPayload
     where TAggregatePayload : IAggregatePayload, new()
 {
-    public IEnumerable<SingleProjectionState<TAggregateProjectionPayload>> HandleFilter(
+    public IEnumerable<SingleProjectionState<TSingleProjectionPayload>> HandleFilter(
         QueryParameter queryParam,
-        IEnumerable<SingleProjectionState<TAggregateProjectionPayload>> list) => list;
-    public IEnumerable<SingleProjectionState<TAggregateProjectionPayload>> HandleSort(
+        IEnumerable<SingleProjectionState<TSingleProjectionPayload>> list) => list;
+    public IEnumerable<SingleProjectionState<TSingleProjectionPayload>> HandleSort(
         QueryParameter queryParam,
-        IEnumerable<SingleProjectionState<TAggregateProjectionPayload>> projections)
+        IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections)
     {
         return projections.OrderByDescending(m => m.LastSortableUniqueId);
     }

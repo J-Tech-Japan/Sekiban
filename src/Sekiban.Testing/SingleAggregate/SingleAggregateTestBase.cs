@@ -3,6 +3,7 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Event;
+using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
 namespace Sekiban.Testing.SingleAggregate;
@@ -23,8 +24,6 @@ public abstract class SingleAggregateTestBase<TAggregatePayload, TDependencyDefi
         _serviceProvider = services.BuildServiceProvider();
         _helper = new AggregateTestHelper<TAggregatePayload>(_serviceProvider);
     }
-    public TSingleProjection SetupSingleProjection<TSingleProjection>()
-        where TSingleProjection : SingleAggregateTestBase => _helper.SetupSingleProjection<TSingleProjection>();
     public IAggregateTestHelper<TAggregatePayload> GivenScenario(Action initialAction) => _helper.GivenScenario(initialAction);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvent(IEvent ev) => _helper.GivenEnvironmentEvent(ev);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvents(IEnumerable<IEvent> events) =>
@@ -77,6 +76,10 @@ public abstract class SingleAggregateTestBase<TAggregatePayload, TDependencyDefi
     public IAggregateTestHelper<TAggregatePayload> ThenStateIsFromFile(string stateFileName) => _helper.ThenStateIsFromFile(stateFileName);
     public IAggregateTestHelper<TAggregatePayload> ThenPayloadIsFromJson(string payloadJson) => _helper.ThenPayloadIsFromJson(payloadJson);
     public IAggregateTestHelper<TAggregatePayload> ThenPayloadIsFromFile(string payloadFileName) => _helper.ThenPayloadIsFromFile(payloadFileName);
+    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionTest<TSingleProjection, TSingleProjectionPayload>(
+        Action<SingleProjectionTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>> singleProjectionTestAction)
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
+        where TSingleProjectionPayload : ISingleProjectionPayload => _helper.ThenGetSingleProjectionTest(singleProjectionTestAction);
     public Guid GetAggregateId() => _helper.GetAggregateId();
     public int GetCurrentVersion() => _helper.GetCurrentVersion();
     public AggregateState<TAggregatePayload> GetAggregateState() => _helper.GetAggregateState();
@@ -93,6 +96,7 @@ public abstract class SingleAggregateTestBase<TAggregatePayload, TDependencyDefi
     public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors() => _helper.ThenHasValidationErrors();
 
     public void Dispose() { }
+
 
     protected virtual void SetupDependency(IServiceCollection serviceCollection)
     {

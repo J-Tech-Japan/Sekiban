@@ -1,7 +1,7 @@
 using Sekiban.Core.Event;
 namespace Sekiban.Core.Query.MultipleProjections;
 
-public abstract class MultiProjectionBase<TProjectionPayload> : IMultiProjector<TProjectionPayload>
+public abstract class MultiProjectionBase<TProjectionPayload> : IMultiProjector<TProjectionPayload>, IMultiProjectionBase
     where TProjectionPayload : IMultiProjectionPayload, new()
 {
     private TProjectionPayload Payload { get; set; } = new();

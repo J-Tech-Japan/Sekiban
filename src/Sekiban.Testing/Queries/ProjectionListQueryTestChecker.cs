@@ -8,7 +8,7 @@ namespace Sekiban.Testing.Queries;
 
 public class
     ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TProjectionQuery, TQueryParameter, TQueryResponse> :
-        IQueryChecker<MultiProjectionState<TProjectionPayload>>
+        IQueryChecker
     where TProjection : MultiProjectionBase<TProjectionPayload>, new()
     where TProjectionPayload : IMultiProjectionPayload, new()
     where TQueryParameter : IQueryParameter
@@ -16,28 +16,14 @@ public class
     , new()
 {
     private QueryListResult<TQueryResponse>? _response;
-
-
-
-    private MultiProjectionState<TProjectionPayload>? _state;
-    public QueryHandler? QueryHandler { get; set; } = null;
-    public void RegisterState(MultiProjectionState<TProjectionPayload> state)
-    {
-        _state = state;
-    }
-
+    public IQueryService? QueryService { get; set; } = null;
     public ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TProjectionQuery, TQueryParameter, TQueryResponse>
         WhenParam(TQueryParameter param)
     {
-        if (_state == null)
-        {
-            throw new InvalidDataException("Projection is null");
-        }
-        if (QueryHandler == null) { throw new MissingMemberException(nameof(QueryHandler)); }
-        _response = QueryHandler
-            .GetMultiProjectionListQuery<TProjection, TProjectionPayload, TProjectionQuery, TQueryParameter, TQueryResponse>(
-                param,
-                _state);
+        if (QueryService == null) { throw new MissingMemberException(nameof(QueryService)); }
+        _response = QueryService
+            .GetMultiProjectionListQueryAsync<TProjection, TProjectionPayload, TProjectionQuery, TQueryParameter, TQueryResponse>(param)
+            .Result;
         return this;
     }
     public ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TProjectionQuery, TQueryParameter, TQueryResponse>

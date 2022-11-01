@@ -1,5 +1,4 @@
 using Sekiban.Core.Aggregate;
-using Sekiban.Core.Query.MultipleProjections;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Shared;
@@ -8,38 +7,23 @@ using Xunit;
 namespace Sekiban.Testing.Queries;
 
 public class
-    AggregateListQueryTestChecker<TAggregatePayload, TQuery, TQueryParameter, TResponseQueryModel> : IQueryChecker<
-        MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>>
+    AggregateListQueryTestChecker<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> : IQueryChecker
     where TAggregatePayload : IAggregatePayload, new()
-    where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TResponseQueryModel>
+    where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
     where TQueryParameter : IQueryParameter
 {
-    public QueryListResult<TResponseQueryModel>? Response { get; set; }
-    private MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>? _state { get; set; }
-    public QueryHandler? QueryHandler
-    {
-        get;
-        set;
-    }
-    public void RegisterState(MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>> state)
-    {
-        _state = state;
-    }
-
-    public AggregateListQueryTestChecker<TAggregatePayload, TQuery, TQueryParameter, TResponseQueryModel> WhenParam(
+    public QueryListResult<TQueryResponse>? Response { get; set; }
+    public IQueryService? QueryService { get; set; } = null;
+    public AggregateListQueryTestChecker<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> WhenParam(
         TQueryParameter param)
     {
-        if (_state == null)
-        {
-            throw new InvalidDataException("Projection is null");
-        }
-        if (QueryHandler == null) { throw new MissingMemberException(nameof(QueryHandler)); }
-        Response = QueryHandler.GetAggregateListQuery<TAggregatePayload, TQuery, TQueryParameter, TResponseQueryModel>(
-            param,
-            _state.Payload.List);
+        if (QueryService == null) { throw new MissingMemberException(nameof(QueryService)); }
+        Response = QueryService
+            .GetAggregateListQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param)
+            .Result;
         return this;
     }
-    public AggregateListQueryTestChecker<TAggregatePayload, TQuery, TQueryParameter, TResponseQueryModel>
+    public AggregateListQueryTestChecker<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>
         WriteResponseToFile(string filename)
     {
         if (Response == null)
@@ -54,8 +38,8 @@ public class
         File.WriteAllTextAsync(filename, json);
         return this;
     }
-    public AggregateListQueryTestChecker<TAggregatePayload, TQuery, TQueryParameter, TResponseQueryModel> ThenResponseIs(
-        QueryListResult<TResponseQueryModel> expectedResponse)
+    public AggregateListQueryTestChecker<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> ThenResponseIs(
+        QueryListResult<TQueryResponse> expectedResponse)
     {
         if (Response == null)
         {
@@ -68,26 +52,26 @@ public class
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public AggregateListQueryTestChecker<TAggregatePayload, TQuery, TQueryParameter, TResponseQueryModel> ThenGetResponse(
-        Action<QueryListResult<TResponseQueryModel>> responseAction)
+    public AggregateListQueryTestChecker<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> ThenGetResponse(
+        Action<QueryListResult<TQueryResponse>> responseAction)
     {
         Assert.NotNull(Response);
         responseAction(Response!);
         return this;
     }
-    public AggregateListQueryTestChecker<TAggregatePayload, TQuery, TQueryParameter, TResponseQueryModel>
+    public AggregateListQueryTestChecker<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>
         ThenResponseIsFromJson(string responseJson)
     {
-        var response = JsonSerializer.Deserialize<QueryListResult<TResponseQueryModel>>(responseJson);
+        var response = JsonSerializer.Deserialize<QueryListResult<TQueryResponse>>(responseJson);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         ThenResponseIs(response);
         return this;
     }
-    public AggregateListQueryTestChecker<TAggregatePayload, TQuery, TQueryParameter, TResponseQueryModel>
+    public AggregateListQueryTestChecker<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>
         ThenResponseIsFromFile(string responseFilename)
     {
         using var openStream = File.OpenRead(responseFilename);
-        var response = JsonSerializer.Deserialize<QueryListResult<TResponseQueryModel>>(openStream);
+        var response = JsonSerializer.Deserialize<QueryListResult<TQueryResponse>>(openStream);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         ThenResponseIs(response);
         return this;

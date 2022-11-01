@@ -1,6 +1,7 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Event;
+using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
 namespace Sekiban.Testing.SingleAggregate;
@@ -8,8 +9,6 @@ namespace Sekiban.Testing.SingleAggregate;
 public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload : IAggregatePayload, new()
 {
     #region given and setup
-    public TSingleProjection SetupSingleProjection<TSingleProjection>()
-        where TSingleProjection : SingleAggregateTestBase;
     public IAggregateTestHelper<TAggregatePayload> GivenScenario(Action initialAction);
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvent(IEvent ev);
@@ -58,6 +57,10 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors(
         IEnumerable<SekibanValidationParameterError> validationParameterErrors);
     public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors();
+    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionTest<TSingleProjection, TSingleProjectionPayload>(
+        Action<SingleProjectionTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>> singleProjectionTestAction)
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
+        where TSingleProjectionPayload : ISingleProjectionPayload;
     #endregion
 
     #region Get

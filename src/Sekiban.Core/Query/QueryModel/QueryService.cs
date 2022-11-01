@@ -79,19 +79,19 @@ public class QueryService : IQueryService
                 TQueryParameter, TQueryResponse>(param, allProjection);
     }
     public async Task<TQueryResponse>
-        GetSingleProjectionQueryAsync<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload, TQuery,
+        GetSingleProjectionQueryAsync<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TQuery,
             TQueryParameter, TQueryResponse>(TQueryParameter param) where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload>,
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
         new()
-        where TAggregateProjectionPayload : ISingleProjectionPayload
+        where TSingleProjectionPayload : ISingleProjectionPayload
         where TQuery : ISingleProjectionQuery<TAggregatePayload, TSingleProjection,
-            TAggregateProjectionPayload, TQueryParameter, TQueryResponse>
+            TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
         var allProjection = await multiProjectionService
-            .GetSingleProjectionList<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload>();
+            .GetSingleProjectionList<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>();
         return queryHandler
-            .GetSingleProjectionQuery<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload, TQuery,
+            .GetSingleProjectionQuery<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TQuery,
                 TQueryParameter, TQueryResponse>(param, allProjection);
     }
 }

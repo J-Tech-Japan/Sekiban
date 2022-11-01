@@ -39,18 +39,6 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         get;
     }
 
-    private List<SingleAggregateTestBase> SingleProjections
-    {
-        get;
-    } = new();
-    public TSingleProjection SetupSingleProjection<TSingleProjection>()
-        where TSingleProjection : SingleAggregateTestBase
-    {
-        var singleProjection = Activator.CreateInstance(typeof(TSingleProjection), _serviceProvider) as TSingleProjection;
-        if (singleProjection == null) { throw new Exception("Could not create single aggregate projection"); }
-        SingleProjections.Add(singleProjection);
-        return singleProjection;
-    }
     public IAggregateTestHelper<TAggregatePayload> GivenScenario(Action initialAction)
     {
         initialAction();
@@ -129,7 +117,6 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         {
             throw new SekibanCreateCommandShouldSaveCreateEventFirstException();
         }
-        SingleProjections.ForEach(m => m.SetAggregateId(_aggregate.AggregateId));
         SaveEvents(_latestEvents);
         CheckCommandJSONSupports(commandDocument);
         CheckStateJSONSupports();
@@ -274,6 +261,20 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var actual = _aggregate.ToState();
         var actualJson = SekibanJsonHelper.Serialize(actual);
         File.WriteAllText(filename, actualJson);
+        return this;
+    }
+    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionTest<TSingleProjection, TSingleProjectionPayload>(
+        Action<SingleProjectionTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>> singleProjectionTestAction)
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
+        where TSingleProjectionPayload : ISingleProjectionPayload
+    {
+        var singleProjection =
+            Activator.CreateInstance(
+                typeof(SingleProjectionTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>),
+                _serviceProvider) as SingleProjectionTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>;
+        if (singleProjection == null) { throw new Exception("Could not create single aggregate projection"); }
+        singleProjection.AggregateId = GetAggregateId();
+        singleProjectionTestAction(singleProjection);
         return this;
     }
     public Guid GetAggregateId() => _aggregate.AggregateId;

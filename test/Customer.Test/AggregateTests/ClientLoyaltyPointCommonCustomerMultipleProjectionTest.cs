@@ -2,13 +2,14 @@ using Customer.Domain.Aggregates.Branches.Events;
 using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
 using Customer.Domain.Shared;
 using Sekiban.Core.Query.MultipleProjections;
+using Sekiban.Testing.Projection;
 using Sekiban.Testing.Queries;
 using System;
 using System.Collections.Immutable;
 using Xunit;
 namespace Customer.Test.AggregateTests;
 
-public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMultiProjectionTestBase<ClientLoyaltyPointMultipleProjection
+public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : MultiProjectionTestBase<ClientLoyaltyPointMultipleProjection
     , ClientLoyaltyPointMultipleProjection.PayloadDefinition, CustomerDependency>
 {
     private static readonly Guid branchId = Guid.Parse("b4a3c2e3-78ca-473b-8afb-f534e5d6d66b");
@@ -33,7 +34,19 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : CustomerMu
                     Guid.Empty,
                     string.Empty,
                     0,
-                    0));
+                    0))
+            .ThenGetQueryTest<ClientLoyaltyPointMultipleMultiProjectionQuery, ClientLoyaltyPointMultipleMultiProjectionQuery.QueryParameter,
+                ClientLoyaltyPointMultipleProjection.PayloadDefinition>(
+                test => test.WhenParam(
+                        new ClientLoyaltyPointMultipleMultiProjectionQuery.QueryParameter(
+                            null,
+                            ClientLoyaltyPointMultipleMultiProjectionQuery.QuerySortKeys.ClientName))
+                    .ThenResponseIs(
+                        new ClientLoyaltyPointMultipleProjection.PayloadDefinition(
+                            ImmutableList<ClientLoyaltyPointMultipleProjection.ProjectedBranch>.Empty.Add(
+                                new ClientLoyaltyPointMultipleProjection.ProjectedBranch(branchId, branchName)),
+                            ImmutableList<ClientLoyaltyPointMultipleProjection.ProjectedRecord>.Empty)));
+
     }
 
     [Fact]

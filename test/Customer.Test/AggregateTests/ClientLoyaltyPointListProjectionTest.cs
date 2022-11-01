@@ -3,13 +3,14 @@ using Customer.Domain.Aggregates.Clients.Commands;
 using Customer.Domain.Projections.ClientLoyaltyPointLists;
 using Customer.Domain.Shared;
 using Sekiban.Core.Query.QueryModel;
+using Sekiban.Testing.Projection;
 using Sekiban.Testing.Queries;
 using System;
 using System.Collections.Generic;
 using Xunit;
 namespace Customer.Test.AggregateTests;
 
-public class ClientLoyaltyPointListProjectionTest : CustomerMultiProjectionTestBase<ClientLoyaltyPointListProjection,
+public class ClientLoyaltyPointListProjectionTest : MultiProjectionTestBase<ClientLoyaltyPointListProjection,
     ClientLoyaltyPointListProjection.PayloadDefinition, CustomerDependency>
 {
 

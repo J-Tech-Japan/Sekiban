@@ -4,13 +4,13 @@ using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Query.QueryModel;
 
 public interface
-    ISingleProjectionQuery<TAggregatePayload, in TSingleProjection, TAggregateProjectionPayload, in TQueryParam,
-        TResponseQueryModel> where TAggregatePayload : IAggregatePayload, new()
-    where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload>, new()
-    where TAggregateProjectionPayload : ISingleProjectionPayload
+    ISingleProjectionQuery<TAggregatePayload, in TSingleProjection, TSingleProjectionPayload, in TQueryParam, out TQueryResponse>
+    where TAggregatePayload : IAggregatePayload, new()
+    where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
+    where TSingleProjectionPayload : ISingleProjectionPayload
     where TQueryParam : IQueryParameter
 {
-    public TResponseQueryModel HandleFilter(
+    public TQueryResponse HandleFilter(
         TQueryParam queryParam,
-        IEnumerable<SingleProjectionState<TAggregateProjectionPayload>> list);
+        IEnumerable<SingleProjectionState<TSingleProjectionPayload>> list);
 }
