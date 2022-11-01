@@ -3,11 +3,11 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 namespace Sekiban.Core.Query.SingleProjections;
 
-public abstract class SingleProjectionBase<TAggregate, TProjection, TProjectionPayload> : ISingleProjection,
+public abstract class SingleProjectionBase<TAggregatePayload, TProjection, TProjectionPayload> : ISingleProjection,
     ISingleProjectionStateConvertible<SingleProjectionState<TProjectionPayload>>, ISingleAggregate,
-    ISingleProjector<TProjection> where TProjection : SingleProjectionBase<TAggregate, TProjection, TProjectionPayload>, new()
+    ISingleProjector<TProjection> where TProjection : SingleProjectionBase<TAggregatePayload, TProjection, TProjectionPayload>, new()
     where TProjectionPayload : ISingleProjectionPayload
-    where TAggregate : IAggregatePayload, new()
+    where TAggregatePayload : IAggregatePayload, new()
 {
     public TProjectionPayload Payload { get; set; } = default!;
     public Guid LastEventId { get; set; }
@@ -51,7 +51,7 @@ public abstract class SingleProjectionBase<TAggregate, TProjection, TProjectionP
     public TProjection CreateInitialAggregate(Guid aggregateId) => new()
         { AggregateId = aggregateId };
 
-    public Type OriginalAggregateType() => typeof(TAggregate);
+    public Type OriginalAggregateType() => typeof(TAggregatePayload);
     public bool GetIsDeleted() => Payload is IDeletable { IsDeleted: true };
     protected Action? GetApplyEventAction(IEvent ev, IEventPayload eventPayload)
     {

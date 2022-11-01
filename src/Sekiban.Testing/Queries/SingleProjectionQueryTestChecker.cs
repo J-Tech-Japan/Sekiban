@@ -8,14 +8,14 @@ using System.Text.Json;
 using Xunit;
 namespace Sekiban.Testing.Queries;
 
-public class SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload, TQuery,
+public class SingleProjectionQueryTestChecker<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload, TQuery,
     TQueryParameter, TResponseQueryModel> : IQueryChecker<MultiProjectionState<
     SingleProjectionListState<SingleProjectionState<TAggregateProjectionPayload>>>>
-    where TAggregate : IAggregatePayload, new()
-    where TSingleProjection : SingleProjectionBase<TAggregate, TSingleProjection, TAggregateProjectionPayload>, new
+    where TAggregatePayload : IAggregatePayload, new()
+    where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload>, new
     ()
     where TAggregateProjectionPayload : ISingleProjectionPayload
-    where TQuery : ISingleProjectionQuery<TAggregate, TSingleProjection, TAggregateProjectionPayload,
+    where TQuery : ISingleProjectionQuery<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload,
         TQueryParameter, TResponseQueryModel>
     where TQueryParameter : IQueryParameter
 {
@@ -34,7 +34,7 @@ public class SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAg
         _state = state;
     }
 
-    public SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload
+    public SingleProjectionQueryTestChecker<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload
         , TQuery, TQueryParameter, TResponseQueryModel> WhenParam(TQueryParameter param)
     {
         if (_state == null)
@@ -43,11 +43,11 @@ public class SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAg
         }
         if (QueryHandler == null) { throw new MissingMemberException(nameof(QueryHandler)); }
         Response = QueryHandler
-            .GetSingleProjectionQuery<TAggregate, TSingleProjection, TAggregateProjectionPayload, TQuery,
+            .GetSingleProjectionQuery<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload, TQuery,
                 TQueryParameter, TResponseQueryModel>(param, _state.Payload.List);
         return this;
     }
-    public SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload,
+    public SingleProjectionQueryTestChecker<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload,
         TQuery, TQueryParameter, TResponseQueryModel> WriteResponse(string filename)
     {
         if (Response == null)
@@ -62,7 +62,7 @@ public class SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAg
         File.WriteAllTextAsync(filename, json);
         return this;
     }
-    public SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload, TQuery,
+    public SingleProjectionQueryTestChecker<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload, TQuery,
         TQueryParameter, TResponseQueryModel> ThenResponse(TResponseQueryModel expectedResponse)
     {
         if (Response == null)
@@ -76,7 +76,7 @@ public class SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAg
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload, TQuery,
+    public SingleProjectionQueryTestChecker<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload, TQuery,
         TQueryParameter, TResponseQueryModel> ThenGetResponse(Action<TResponseQueryModel> responseAction)
     {
         Assert.NotNull(Response);
@@ -84,7 +84,7 @@ public class SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAg
         return this;
     }
 
-    public SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload, TQuery,
+    public SingleProjectionQueryTestChecker<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload, TQuery,
         TQueryParameter, TResponseQueryModel> ThenResponseFromJson(string responseJson)
     {
         var response = JsonSerializer.Deserialize<TResponseQueryModel>(responseJson);
@@ -92,7 +92,7 @@ public class SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAg
         ThenResponse(response);
         return this;
     }
-    public SingleProjectionQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload, TQuery,
+    public SingleProjectionQueryTestChecker<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload, TQuery,
         TQueryParameter, TResponseQueryModel> ThenResponseFromFile(string responseFilename)
     {
         using var openStream = File.OpenRead(responseFilename);

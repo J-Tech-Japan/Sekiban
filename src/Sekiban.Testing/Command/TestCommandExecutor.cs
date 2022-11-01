@@ -16,9 +16,9 @@ public class TestCommandExecutor
     public TestCommandExecutor(IServiceProvider serviceProvider) => _serviceProvider = serviceProvider;
     public ImmutableList<IEvent> LatestEvents { get; set; } = ImmutableList<IEvent>.Empty;
 
-    public (IEnumerable<IEvent>, Guid) ExecuteCreateCommand<TAggregate>(
-        ICreateCommand<TAggregate> command,
-        Guid? injectingAggregateId = null) where TAggregate : IAggregatePayload, new()
+    public (IEnumerable<IEvent>, Guid) ExecuteCreateCommand<TAggregatePayload>(
+        ICreateCommand<TAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TAggregatePayload : IAggregatePayload, new()
     {
         var validationResults = command.TryValidateProperties().ToList();
         if (validationResults.Any())
@@ -27,7 +27,7 @@ public class TestCommandExecutor
         }
 
         var baseType = typeof(ICreateCommandHandler<,>);
-        var genericType = baseType.MakeGenericType(typeof(TAggregate), command.GetType());
+        var genericType = baseType.MakeGenericType(typeof(TAggregatePayload), command.GetType());
         var handler = _serviceProvider.GetService(genericType);
         if (handler is null)
         {
@@ -37,8 +37,8 @@ public class TestCommandExecutor
 
         var commandDocumentBaseType = typeof(CommandDocument<>);
         var commandDocumentType = commandDocumentBaseType.MakeGenericType(command.GetType());
-        var commandDocument = Activator.CreateInstance(commandDocumentType, aggregateId, command, typeof(TAggregate), null);
-        var aggregate = new Aggregate<TAggregate> { AggregateId = aggregateId };
+        var commandDocument = Activator.CreateInstance(commandDocumentType, aggregateId, command, typeof(TAggregatePayload), null);
+        var aggregate = new Aggregate<TAggregatePayload> { AggregateId = aggregateId };
         var handlerType = handler.GetType().GetMethods();
         var handleAsyncMethod = handler.GetType().GetMethods().First(m => m.Name == "HandleAsync");
         var result = ((dynamic)handleAsyncMethod.Invoke(handler, new[] { commandDocument, aggregate })!)?.Result;
@@ -57,24 +57,24 @@ public class TestCommandExecutor
         if (documentWriter is null) { throw new Exception("Failed to get document writer"); }
         foreach (var e in latestEvents)
         {
-            documentWriter.SaveAsync(e, typeof(TAggregate)).Wait();
+            documentWriter.SaveAsync(e, typeof(TAggregatePayload)).Wait();
         }
         LatestEvents = latestEvents;
         return (latestEvents, aggregateId);
     }
 
-    private Aggregate<TAggregate> GetAggregate<TAggregate>(Guid aggregateId) where TAggregate : IAggregatePayload, new()
+    private Aggregate<TAggregatePayload> GetAggregate<TAggregatePayload>(Guid aggregateId) where TAggregatePayload : IAggregatePayload, new()
     {
 
         var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleProjectionService)) as ISingleProjectionService;
         if (singleAggregateService is null) { throw new Exception("Failed to get Aggregate Service"); }
         var method = singleAggregateService.GetType().GetMethods().FirstOrDefault(m => m.Name == "GetAggregateAsync");
         if (method is null) { throw new Exception("Failed to get Aggregate Service"); }
-        var genericMethod = method.MakeGenericMethod(typeof(TAggregate));
+        var genericMethod = method.MakeGenericMethod(typeof(TAggregatePayload));
         var aggregateTask = genericMethod.Invoke(singleAggregateService, new object?[] { aggregateId, null }) as dynamic;
         if (aggregateTask is null) { throw new Exception("Failed to get Aggregate Service"); }
         var aggregate = aggregateTask.Result;
-        return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TAggregate).Name);
+        return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TAggregatePayload).Name);
     }
 
     public IEnumerable<IEvent> ExecuteChangeCommand<TAggregatePayload>(ChangeCommandBase<TAggregatePayload> command)

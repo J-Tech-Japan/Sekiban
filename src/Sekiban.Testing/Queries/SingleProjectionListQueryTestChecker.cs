@@ -9,14 +9,14 @@ using Xunit;
 namespace Sekiban.Testing.Queries;
 
 public class
-    SingleProjectionListQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload, TQuery,
+    SingleProjectionListQueryTestChecker<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload, TQuery,
         TQueryParameter, TResponseQueryModel> : IQueryChecker<MultiProjectionState<
         SingleProjectionListState<SingleProjectionState<TAggregateProjectionPayload>>>>
-    where TAggregate : IAggregatePayload, new()
-    where TSingleProjection : SingleProjectionBase<TAggregate, TSingleProjection, TAggregateProjectionPayload>, new
+    where TAggregatePayload : IAggregatePayload, new()
+    where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload>, new
     ()
     where TAggregateProjectionPayload : ISingleProjectionPayload
-    where TQuery : ISingleProjectionListQuery<TAggregate, TSingleProjection,
+    where TQuery : ISingleProjectionListQuery<TAggregatePayload, TSingleProjection,
         TAggregateProjectionPayload, TQueryParameter, TResponseQueryModel>
     where TQueryParameter : IQueryParameter
 {
@@ -35,7 +35,7 @@ public class
         _state = state;
     }
 
-    public SingleProjectionListQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload,
+    public SingleProjectionListQueryTestChecker<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload,
         TQuery, TQueryParameter, TResponseQueryModel> WhenParam(TQueryParameter param)
     {
         if (_state == null)
@@ -44,11 +44,11 @@ public class
         }
         if (QueryHandler == null) { throw new MissingMemberException(nameof(QueryHandler)); }
         Response = QueryHandler
-            .GetSingleProjectionListQuery<TAggregate, TSingleProjection, TAggregateProjectionPayload, TQuery,
+            .GetSingleProjectionListQuery<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload, TQuery,
                 TQueryParameter, TResponseQueryModel>(param, _state.Payload.List);
         return this;
     }
-    public SingleProjectionListQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload,
+    public SingleProjectionListQueryTestChecker<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload,
         TQuery, TQueryParameter, TResponseQueryModel> WriteResponseToFile(string filename)
     {
         if (Response == null)
@@ -63,7 +63,7 @@ public class
         File.WriteAllTextAsync(filename, json);
         return this;
     }
-    public SingleProjectionListQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload,
+    public SingleProjectionListQueryTestChecker<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload,
         TQuery, TQueryParameter, TResponseQueryModel> ThenResponseIs(QueryListResult<TResponseQueryModel> expectedResponse)
     {
         if (Response == null)
@@ -77,7 +77,7 @@ public class
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public SingleProjectionListQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload,
+    public SingleProjectionListQueryTestChecker<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload,
         TQuery, TQueryParameter, TResponseQueryModel> ThenGetResponse(Action<QueryListResult<TResponseQueryModel>> responseAction)
     {
         Assert.NotNull(Response);
@@ -85,7 +85,7 @@ public class
         return this;
     }
 
-    public SingleProjectionListQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload,
+    public SingleProjectionListQueryTestChecker<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload,
         TQuery, TQueryParameter, TResponseQueryModel> ThenResponseIsFromJson(string responseJson)
     {
         var response = JsonSerializer.Deserialize<QueryListResult<TResponseQueryModel>>(responseJson);
@@ -93,7 +93,7 @@ public class
         ThenResponseIs(response);
         return this;
     }
-    public SingleProjectionListQueryTestChecker<TAggregate, TSingleProjection, TAggregateProjectionPayload,
+    public SingleProjectionListQueryTestChecker<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload,
         TQuery, TQueryParameter, TResponseQueryModel> ThenResponseIsFromFile(string responseFilename)
     {
         using var openStream = File.OpenRead(responseFilename);

@@ -4,9 +4,9 @@ using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Query.QueryModel;
 
 public interface
-    ISingleProjectionQuery<TAggregate, in TSingleProjection, TAggregateProjectionPayload, in TQueryParam,
-        TResponseQueryModel> where TAggregate : IAggregatePayload, new()
-    where TSingleProjection : SingleProjectionBase<TAggregate, TSingleProjection, TAggregateProjectionPayload>, new()
+    ISingleProjectionQuery<TAggregatePayload, in TSingleProjection, TAggregateProjectionPayload, in TQueryParam,
+        TResponseQueryModel> where TAggregatePayload : IAggregatePayload, new()
+    where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload>, new()
     where TAggregateProjectionPayload : ISingleProjectionPayload
     where TQueryParam : IQueryParameter
 {

@@ -18,11 +18,11 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public AggregateState<TEnvironmentAggregatePayload>
         GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
         where TEnvironmentAggregatePayload : IAggregatePayload, new();
-    public Guid RunEnvironmentCreateCommand<TEnvironmentAggregate>(
-        ICreateCommand<TEnvironmentAggregate> command,
-        Guid? injectingAggregateId = null) where TEnvironmentAggregate : IAggregatePayload, new();
-    public void RunEnvironmentChangeCommand<TEnvironmentAggregate>(ChangeCommandBase<TEnvironmentAggregate> command)
-        where TEnvironmentAggregate : IAggregatePayload, new();
+    public Guid RunEnvironmentCreateCommand<TEnvironmentAggregatePayload>(
+        ICreateCommand<TEnvironmentAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayload, new();
+    public void RunEnvironmentChangeCommand<TEnvironmentAggregatePayload>(ChangeCommandBase<TEnvironmentAggregatePayload> command)
+        where TEnvironmentAggregatePayload : IAggregatePayload, new();
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentCommandExecutorAction(Action<TestCommandExecutor> action);
     public IReadOnlyCollection<IEvent> GetLatestEnvironmentEvents();
     #endregion

@@ -3,12 +3,12 @@ using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
 namespace Sekiban.Core.Query;
 
-public class SimpleAggregateListQuery<TAggregate> : IAggregateListQuery<TAggregate,
-    SimpleAggregateListQuery<TAggregate>.QueryParameter,
-    AggregateState<TAggregate>> where TAggregate : IAggregatePayload, new()
+public class SimpleAggregateListQuery<TAggregatePayload> : IAggregateListQuery<TAggregatePayload,
+    SimpleAggregateListQuery<TAggregatePayload>.QueryParameter,
+    AggregateState<TAggregatePayload>> where TAggregatePayload : IAggregatePayload, new()
 {
-    public IEnumerable<AggregateState<TAggregate>> HandleFilter(QueryParameter queryParam, IEnumerable<AggregateState<TAggregate>> list) => list;
-    public IEnumerable<AggregateState<TAggregate>> HandleSort(QueryParameter queryParam, IEnumerable<AggregateState<TAggregate>> projections)
+    public IEnumerable<AggregateState<TAggregatePayload>> HandleFilter(QueryParameter queryParam, IEnumerable<AggregateState<TAggregatePayload>> list) => list;
+    public IEnumerable<AggregateState<TAggregatePayload>> HandleSort(QueryParameter queryParam, IEnumerable<AggregateState<TAggregatePayload>> projections)
     {
         return projections.OrderByDescending(m => m.LastSortableUniqueId);
     }

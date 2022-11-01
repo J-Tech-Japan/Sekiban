@@ -30,22 +30,22 @@ public interface IQueryService
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter;
     public Task<QueryListResult<TQueryResponse>>
-        GetSingleProjectionListQueryAsync<TAggregate, TSingleProjection, TAggregateProjectionPayload, TQuery,
-            TQueryParameter, TQueryResponse>(TQueryParameter param) where TAggregate : IAggregatePayload, new()
-        where TSingleProjection : SingleProjectionBase<TAggregate, TSingleProjection, TAggregateProjectionPayload>,
+        GetSingleProjectionListQueryAsync<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload, TQuery,
+            TQueryParameter, TQueryResponse>(TQueryParameter param) where TAggregatePayload : IAggregatePayload, new()
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload>,
         new()
         where TAggregateProjectionPayload : ISingleProjectionPayload
-        where TQuery : ISingleProjectionListQuery<TAggregate, TSingleProjection,
+        where TQuery : ISingleProjectionListQuery<TAggregatePayload, TSingleProjection,
             TAggregateProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter;
 
     public Task<TQueryResponse>
-        GetSingleProjectionQueryAsync<TAggregate, TSingleProjection, TAggregateProjectionPayload, TQuery,
-            TQueryParameter, TQueryResponse>(TQueryParameter param) where TAggregate : IAggregatePayload, new()
-        where TSingleProjection : SingleProjectionBase<TAggregate, TSingleProjection, TAggregateProjectionPayload>,
+        GetSingleProjectionQueryAsync<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload, TQuery,
+            TQueryParameter, TQueryResponse>(TQueryParameter param) where TAggregatePayload : IAggregatePayload, new()
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload>,
         new()
         where TAggregateProjectionPayload : ISingleProjectionPayload
-        where TQuery : ISingleProjectionQuery<TAggregate, TSingleProjection,
+        where TQuery : ISingleProjectionQuery<TAggregatePayload, TSingleProjection,
             TAggregateProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter;
 }

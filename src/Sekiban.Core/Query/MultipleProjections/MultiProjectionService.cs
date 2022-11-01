@@ -37,9 +37,9 @@ public class MultiProjectionService : IMultiProjectionService
     public
         Task<MultiProjectionState<
             SingleProjectionListState<SingleProjectionState<TAggregateProjectionPayload>>>>
-        GetSingleProjectionListObject<TAggregate, TSingleProjection, TAggregateProjectionPayload>()
-        where TAggregate : IAggregatePayload, new()
-        where TSingleProjection : SingleProjectionBase<TAggregate, TSingleProjection, TAggregateProjectionPayload>,
+        GetSingleProjectionListObject<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload>()
+        where TAggregatePayload : IAggregatePayload, new()
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload>,
         new()
         where TAggregateProjectionPayload : ISingleProjectionPayload => _multipleProjection
         .GetMultipleProjectionAsync<
@@ -47,13 +47,13 @@ public class MultiProjectionService : IMultiProjectionService
                 TSingleProjection>,
             SingleProjectionListState<SingleProjectionState<TAggregateProjectionPayload>>>();
     public async Task<List<SingleProjectionState<TAggregateProjectionPayload>>>
-        GetSingleProjectionList<TAggregate, TSingleProjection, TAggregateProjectionPayload>(
-            QueryListType queryListType = QueryListType.ActiveOnly) where TAggregate : IAggregatePayload, new()
-        where TSingleProjection : SingleProjectionBase<TAggregate, TSingleProjection, TAggregateProjectionPayload>,
+        GetSingleProjectionList<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload>(
+            QueryListType queryListType = QueryListType.ActiveOnly) where TAggregatePayload : IAggregatePayload, new()
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload>,
         new()
         where TAggregateProjectionPayload : ISingleProjectionPayload
     {
-        var projection = await GetSingleProjectionListObject<TAggregate, TSingleProjection, TAggregateProjectionPayload>();
+        var projection = await GetSingleProjectionListObject<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload>();
         return queryListType switch
         {
             QueryListType.ActiveAndDeleted => projection.Payload.List.ToList(),

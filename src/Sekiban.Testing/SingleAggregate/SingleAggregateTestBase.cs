@@ -34,12 +34,12 @@ public abstract class SingleAggregateTestBase<TAggregatePayload, TDependencyDefi
         GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
         where TEnvironmentAggregatePayload : IAggregatePayload, new() =>
         _helper.GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(aggregateId);
-    public Guid RunEnvironmentCreateCommand<TEnvironmentAggregate>(
-        ICreateCommand<TEnvironmentAggregate> command,
-        Guid? injectingAggregateId = null) where TEnvironmentAggregate : IAggregatePayload, new() =>
+    public Guid RunEnvironmentCreateCommand<TEnvironmentAggregatePayload>(
+        ICreateCommand<TEnvironmentAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayload, new() =>
         _helper.RunEnvironmentCreateCommand(command, injectingAggregateId);
-    public void RunEnvironmentChangeCommand<TEnvironmentAggregate>(ChangeCommandBase<TEnvironmentAggregate> command)
-        where TEnvironmentAggregate : IAggregatePayload, new()
+    public void RunEnvironmentChangeCommand<TEnvironmentAggregatePayload>(ChangeCommandBase<TEnvironmentAggregatePayload> command)
+        where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
         _helper.RunEnvironmentChangeCommand(command);
     }

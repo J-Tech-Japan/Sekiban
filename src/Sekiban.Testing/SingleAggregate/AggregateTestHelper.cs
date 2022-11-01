@@ -383,16 +383,16 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public Guid RunEnvironmentCreateCommand<TEnvironmentAggregate>(
-        ICreateCommand<TEnvironmentAggregate> command,
-        Guid? injectingAggregateId = null) where TEnvironmentAggregate : IAggregatePayload, new()
+    public Guid RunEnvironmentCreateCommand<TEnvironmentAggregatePayload>(
+        ICreateCommand<TEnvironmentAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
         var (events, aggregateId) = _commandExecutor.ExecuteCreateCommand(command, injectingAggregateId);
         var aggregateEvents = events?.ToList() ?? new List<IEvent>();
         return aggregateId;
     }
-    public void RunEnvironmentChangeCommand<TEnvironmentAggregate>(ChangeCommandBase<TEnvironmentAggregate> command)
-        where TEnvironmentAggregate : IAggregatePayload, new()
+    public void RunEnvironmentChangeCommand<TEnvironmentAggregatePayload>(ChangeCommandBase<TEnvironmentAggregatePayload> command)
+        where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
         var _ = _commandExecutor.ExecuteChangeCommand(command);
     }

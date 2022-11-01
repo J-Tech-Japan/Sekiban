@@ -81,14 +81,14 @@ public class QueryHandler
     }
 
     public QueryListResult<TQueryResponse>
-        GetSingleProjectionListQuery<TAggregate, TSingleProjection, TAggregateProjectionPayload, TQuery,
+        GetSingleProjectionListQuery<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload, TQuery,
             TQueryParameter, TQueryResponse>(
             TQueryParameter param,
-            IEnumerable<SingleProjectionState<TAggregateProjectionPayload>> projections) where TAggregate : IAggregatePayload, new()
-        where TSingleProjection : SingleProjectionBase<TAggregate, TSingleProjection, TAggregateProjectionPayload>,
+            IEnumerable<SingleProjectionState<TAggregateProjectionPayload>> projections) where TAggregatePayload : IAggregatePayload, new()
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload>,
         new()
         where TAggregateProjectionPayload : ISingleProjectionPayload
-        where TQuery : ISingleProjectionListQuery<TAggregate, TSingleProjection,
+        where TQuery : ISingleProjectionListQuery<TAggregatePayload, TSingleProjection,
             TAggregateProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -129,14 +129,14 @@ public class QueryHandler
     }
 
     public TQueryResponse
-        GetSingleProjectionQuery<TAggregate, TSingleProjection, TAggregateProjectionPayload, TQuery,
+        GetSingleProjectionQuery<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload, TQuery,
             TQueryParameter, TQueryResponse>(
             TQueryParameter param,
-            IEnumerable<SingleProjectionState<TAggregateProjectionPayload>> projections) where TAggregate : IAggregatePayload, new()
-        where TSingleProjection : SingleProjectionBase<TAggregate, TSingleProjection, TAggregateProjectionPayload>,
+            IEnumerable<SingleProjectionState<TAggregateProjectionPayload>> projections) where TAggregatePayload : IAggregatePayload, new()
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload>,
         new()
         where TAggregateProjectionPayload : ISingleProjectionPayload
-        where TQuery : ISingleProjectionQuery<TAggregate, TSingleProjection,
+        where TQuery : ISingleProjectionQuery<TAggregatePayload, TSingleProjection,
             TAggregateProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {

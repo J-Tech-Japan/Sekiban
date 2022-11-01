@@ -6,12 +6,12 @@ using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Testing.Projection;
 
 public class
-    SingleProjectionListTestBase<TAggregate, TSingleProjection, TAggregateProjectionPayload,
+    SingleProjectionListTestBase<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload,
         TDependencyDefinition> : CommonMultiProjectionTestBase<
         SingleProjectionListProjector<TSingleProjection, SingleProjectionState<TAggregateProjectionPayload>,
             TSingleProjection>, SingleProjectionListState<SingleProjectionState<TAggregateProjectionPayload>>,
-        TDependencyDefinition> where TAggregate : IAggregatePayload, new()
-    where TSingleProjection : SingleProjectionBase<TAggregate, TSingleProjection, TAggregateProjectionPayload>, new
+        TDependencyDefinition> where TAggregatePayload : IAggregatePayload, new()
+    where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload>, new
     ()
     where TAggregateProjectionPayload : ISingleProjectionPayload
     where TDependencyDefinition : IDependencyDefinition, new()
@@ -40,7 +40,7 @@ public class
         try
         {
             State = multipleProjectionService
-                .GetSingleProjectionListObject<TAggregate, TSingleProjection, TAggregateProjectionPayload>()
+                .GetSingleProjectionListObject<TAggregatePayload, TSingleProjection, TAggregateProjectionPayload>()
                 .Result;
         }
         catch (Exception ex)
