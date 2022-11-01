@@ -34,7 +34,7 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
     public IEnumerable<Type> GetSingleProjectionTypes() => AggregateDefinitions.SelectMany(s => s.SingleProjectionTypes);
     protected abstract void Define();
     public IEnumerable<Type> GetAggregateTypes() => AggregateDefinitions.Select(s => s.AggregateType);
-    protected AggregateDependencyDefinition<TAggregatePayload> Aggregate<TAggregatePayload>()
+    protected AggregateDependencyDefinition<TAggregatePayload> AddAggregate<TAggregatePayload>()
         where TAggregatePayload : IAggregatePayload, new()
     {
         if (AggregateDefinitions.SingleOrDefault(s => s.AggregateType == typeof(TAggregatePayload)) is

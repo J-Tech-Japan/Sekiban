@@ -24,11 +24,11 @@ public class CustomerDependency : DomainDependencyDefinitionBase
     public override Assembly GetExecutingAssembly() => Assembly.GetExecutingAssembly();
     protected override void Define()
     {
-        Aggregate<Branch>()
+        AddAggregate<Branch>()
             .AddCreateCommandHandler<CreateBranch, CreateBranchHandler>()
             .AddQuery<BranchExistsQuery>();
 
-        Aggregate<Client>()
+        AddAggregate<Client>()
             .AddCreateCommandHandler<CreateClient, CreateClient.Handler>()
             .AddChangeCommandHandler<ChangeClientName, ChangeClientName.Handler>()
             .AddChangeCommandHandler<DeleteClient, DeleteClient.Handler>()
@@ -39,18 +39,18 @@ public class CustomerDependency : DomainDependencyDefinitionBase
             .AddQuery<ClientNameHistoryProjectionQuery>()
             .AddQuery<ClientEmailExistsQuery>();
 
-        Aggregate<LoyaltyPoint>()
+        AddAggregate<LoyaltyPoint>()
             .AddCreateCommandHandler<CreateLoyaltyPoint, CreateLoyaltyPointHandler>()
             .AddChangeCommandHandler<AddLoyaltyPoint, AddLoyaltyPoint.Handler>()
             .AddChangeCommandHandler<UseLoyaltyPoint, UseLoyaltyPointHandler>()
             .AddChangeCommandHandler<DeleteLoyaltyPoint, DeleteLoyaltyPointHandler>();
 
-        Aggregate<RecentActivity>()
+        AddAggregate<RecentActivity>()
             .AddCreateCommandHandler<CreateRecentActivity, CreateRecentActivityHandler>()
             .AddChangeCommandHandler<AddRecentActivity, AddRecentActivityHandler>()
             .AddChangeCommandHandler<OnlyPublishingAddRecentActivity, OnlyPublishingAddRecentActivityHandler>();
 
-        Aggregate<RecentInMemoryActivity>()
+        AddAggregate<RecentInMemoryActivity>()
             .AddCreateCommandHandler<CreateRecentInMemoryActivity, CreateRecentInMemoryActivityHandler>()
             .AddChangeCommandHandler<AddRecentInMemoryActivity, AddRecentInMemoryActivityHandler>();
 

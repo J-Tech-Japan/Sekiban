@@ -21,13 +21,13 @@ public abstract class ChangeCommandHandlerBase<TAggregatePayload, TCommand> : IC
             throw new SekibanCanNotExecuteOnlyPublishingEventCommand(typeof(TCommand).Name);
         }
         var state = aggregate.ToState();
-        // Validate Aggregate is deleted
+        // Validate AddAggregate is deleted
         if (state.GetIsDeleted() && command is not ICancelDeletedCommand)
         {
             throw new SekibanAggregateAlreadyDeletedException();
         }
 
-        // Validate Aggregate Version
+        // Validate AddAggregate Version
         if (command is not INoValidateCommand && command.ReferenceVersion != aggregate.Version)
         {
             throw new SekibanCommandInconsistentVersionException(aggregate.AggregateId, command.ReferenceVersion, aggregate.Version);

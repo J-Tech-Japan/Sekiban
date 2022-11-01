@@ -67,12 +67,12 @@ public class TestCommandExecutor
     {
 
         var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleProjectionService)) as ISingleProjectionService;
-        if (singleAggregateService is null) { throw new Exception("Failed to get Aggregate Service"); }
+        if (singleAggregateService is null) { throw new Exception("Failed to get AddAggregate Service"); }
         var method = singleAggregateService.GetType().GetMethods().FirstOrDefault(m => m.Name == "GetAggregateAsync");
-        if (method is null) { throw new Exception("Failed to get Aggregate Service"); }
+        if (method is null) { throw new Exception("Failed to get AddAggregate Service"); }
         var genericMethod = method.MakeGenericMethod(typeof(TAggregatePayload));
         var aggregateTask = genericMethod.Invoke(singleAggregateService, new object?[] { aggregateId, null }) as dynamic;
-        if (aggregateTask is null) { throw new Exception("Failed to get Aggregate Service"); }
+        if (aggregateTask is null) { throw new Exception("Failed to get AddAggregate Service"); }
         var aggregate = aggregateTask.Result;
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TAggregatePayload).Name);
     }
