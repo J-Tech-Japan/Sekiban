@@ -9,9 +9,9 @@ public interface ISingleProjectionFromInitial
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <param name="toVersion"></param>
-    /// <typeparam name="T"></typeparam>
-    /// <typeparam name="P"></typeparam>
+    /// <typeparam name="TProjection"></typeparam>
+    /// <typeparam name="TProjector"></typeparam>
     /// <returns></returns>
-    Task<T?> GetAggregateFromInitialAsync<T, P>(Guid aggregateId, int? toVersion) where T : IAggregateCommon, SingleProjections.ISingleProjection
-        where P : ISingleProjector<T>, new();
+    Task<TProjection?> GetAggregateFromInitialAsync<TProjection, TProjector>(Guid aggregateId, int? toVersion) where TProjection : IAggregateCommon, SingleProjections.ISingleProjection
+        where TProjector : ISingleProjector<TProjection>, new();
 }

@@ -25,20 +25,20 @@ public class MemoryCacheSingleProjection : ISingleProjection
         _aggregateSettings = aggregateSettings;
         this.singleProjectionCache = singleProjectionCache;
     }
-    public async Task<T?> GetAggregateAsync<T, Q, P>(Guid aggregateId, int? toVersion = null)
-        where T : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<Q>
-        where Q : IAggregateCommon
-        where P : ISingleProjector<T>, new()
+    public async Task<TProjection?> GetAggregateAsync<TProjection, TState, TProjector>(Guid aggregateId, int? toVersion = null)
+        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<TState>
+        where TState : IAggregateCommon
+        where TProjector : ISingleProjector<TProjection>, new()
     {
-        var savedContainer = singleProjectionCache.GetContainer<T, Q>(aggregateId);
+        var savedContainer = singleProjectionCache.GetContainer<TProjection, TState>(aggregateId);
         if (savedContainer == null)
         {
-            return await GetAggregateWithoutCacheAsync<T, Q, P>(aggregateId, toVersion);
+            return await GetAggregateWithoutCacheAsync<TProjection, TState, TProjector>(aggregateId, toVersion);
         }
-        var projector = new P();
+        var projector = new TProjector();
         if (savedContainer.SafeState is null && savedContainer?.SafeSortableUniqueId?.Value is null)
         {
-            return await GetAggregateWithoutCacheAsync<T, Q, P>(aggregateId, toVersion);
+            return await GetAggregateWithoutCacheAsync<TProjection, TState, TProjector>(aggregateId, toVersion);
         }
         var aggregate = projector.CreateInitialAggregate(aggregateId);
         aggregate.ApplySnapshot(savedContainer.SafeState!);
@@ -54,7 +54,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
                 return aggregate;
             }
         }
-        var container = new SingleMemoryCacheProjectionContainer<T, Q>(aggregateId);
+        var container = new SingleMemoryCacheProjectionContainer<TProjection, TState>(aggregateId);
         await _documentRepository.GetAllEventsForAggregateIdAsync(
             aggregateId,
             projector.OriginalAggregateType(),
@@ -107,24 +107,24 @@ public class MemoryCacheSingleProjection : ISingleProjection
         return aggregate;
     }
 
-    private async Task<T?> GetAggregateWithoutCacheAsync<T, Q, P>(Guid aggregateId, int? toVersion = null)
-        where T : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<Q>
-        where Q : IAggregateCommon
-        where P : ISingleProjector<T>, new()
+    private async Task<TProjection?> GetAggregateWithoutCacheAsync<TProjection, TState, TProjector>(Guid aggregateId, int? toVersion = null)
+        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<TState>
+        where TState : IAggregateCommon
+        where TProjector : ISingleProjector<TProjection>, new()
     {
-        var projector = new P();
+        var projector = new TProjector();
         var aggregate = projector.CreateInitialAggregate(aggregateId);
-        var container = new SingleMemoryCacheProjectionContainer<T, Q>(aggregateId);
+        var container = new SingleMemoryCacheProjectionContainer<TProjection, TState>(aggregateId);
 
-        var snapshotDocument = await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(T));
-        var state = snapshotDocument is null ? default : snapshotDocument.ToState<Q>();
+        var snapshotDocument = await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(TProjection));
+        var state = snapshotDocument is null ? default : snapshotDocument.ToState<TState>();
         if (state is not null)
         {
             aggregate.ApplySnapshot(state);
         }
         if (toVersion.HasValue && aggregate.Version >= toVersion.Value)
         {
-            return await GetAggregateFromInitialAsync<T, Q, P>(aggregateId, toVersion.Value);
+            return await GetAggregateFromInitialAsync<TProjection, TState, TProjector>(aggregateId, toVersion.Value);
         }
 
         await _documentRepository.GetAllEventsForAggregateIdAsync(
@@ -180,18 +180,18 @@ public class MemoryCacheSingleProjection : ISingleProjection
         return aggregate;
     }
 
-    public async Task<T?> GetAggregateFromInitialAsync<T, Q, P>(Guid aggregateId, int? toVersion)
-        where T : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<Q>
-        where Q : IAggregateCommon
-        where P : ISingleProjector<T>, new()
+    public async Task<TProjection?> GetAggregateFromInitialAsync<TProjection, TState, TProjector>(Guid aggregateId, int? toVersion)
+        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<TState>
+        where TState : IAggregateCommon
+        where TProjector : ISingleProjector<TProjection>, new()
     {
-        var projector = new P();
-        var container = new SingleMemoryCacheProjectionContainer<T, Q>(aggregateId);
+        var projector = new TProjector();
+        var container = new SingleMemoryCacheProjectionContainer<TProjection, TState>(aggregateId);
         var aggregate = projector.CreateInitialAggregate(aggregateId);
         var addFinished = false;
         await _documentRepository.GetAllEventsForAggregateIdAsync(
             aggregateId,
-            typeof(T),
+            typeof(TProjection),
             PartitionKeyGenerator.ForEvent(aggregateId, projector.OriginalAggregateType()),
             null,
             events =>

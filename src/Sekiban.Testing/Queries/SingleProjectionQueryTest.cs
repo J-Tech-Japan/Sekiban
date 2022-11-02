@@ -8,7 +8,7 @@ using Xunit;
 namespace Sekiban.Testing.Queries;
 
 public class SingleProjectionQueryTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TQuery,
-    TQueryParameter, TQueryResponse> : IQueryChecker
+    TQueryParameter, TQueryResponse> : IQueryTest
     where TAggregatePayload : IAggregatePayload, new()
     where TSingleProjection : MultiProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new
     ()

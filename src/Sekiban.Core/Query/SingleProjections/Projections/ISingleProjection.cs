@@ -2,8 +2,8 @@ namespace Sekiban.Core.Query.SingleProjections.Projections;
 
 public interface ISingleProjection
 {
-    Task<T?> GetAggregateAsync<T, Q, P>(Guid aggregateId, int? toVersion = null)
-        where T : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<Q>
-        where Q : IAggregateCommon
-        where P : ISingleProjector<T>, new();
+    Task<TProjection?> GetAggregateAsync<TProjection, TState, TProjector>(Guid aggregateId, int? toVersion = null)
+        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<TState>
+        where TState : IAggregateCommon
+        where TProjector : ISingleProjector<TProjection>, new();
 }

@@ -9,7 +9,7 @@ using System.Collections.Immutable;
 using Xunit;
 namespace Customer.Test.AggregateTests;
 
-public class ClientLoyaltyPointCommonCustomerMultipleProjectionMultiProjectTest : MultiProjectionMultiProjectTestBase<ClientLoyaltyPointMultipleProjection
+public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : MultiProjectionTestBase<ClientLoyaltyPointMultipleProjection
     , ClientLoyaltyPointMultipleProjection.PayloadDefinition, CustomerDependency>
 {
     private static readonly Guid branchId = Guid.Parse("b4a3c2e3-78ca-473b-8afb-f534e5d6d66b");
@@ -618,7 +618,7 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionMultiProjectTest 
     [Fact]
     public void JsonFileEventsTest()
     {
-        GivenQueryChecker(multiProjectionQueryTest)
+        GivenQueryTest(multiProjectionQueryTest)
             .GivenEventsFromFile("TestData1.json")
             .WhenProjection()
             .ThenNotThrowsAnException()

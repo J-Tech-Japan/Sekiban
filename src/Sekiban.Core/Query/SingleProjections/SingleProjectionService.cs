@@ -19,12 +19,12 @@ public class SingleProjectionService : ISingleProjectionService
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <param name="toVersion"></param>
-    /// <typeparam name="T"></typeparam>
-    /// <typeparam name="P"></typeparam>
+    /// <typeparam name="TProjection"></typeparam>
+    /// <typeparam name="TProjector"></typeparam>
     /// <returns></returns>
-    public async Task<T?> GetAggregateProjectionFromInitialAsync<T, P>(Guid aggregateId, int? toVersion)
-        where T : IAggregateCommon, ISingleProjection
-        where P : ISingleProjector<T>, new() => await singleProjectionFromInitial.GetAggregateFromInitialAsync<T, P>(aggregateId, toVersion);
+    public async Task<TProjection?> GetAggregateProjectionFromInitialAsync<TProjection, TProjector>(Guid aggregateId, int? toVersion)
+        where TProjection : IAggregateCommon, ISingleProjection
+        where TProjector : ISingleProjector<TProjection>, new() => await singleProjectionFromInitial.GetAggregateFromInitialAsync<TProjection, TProjector>(aggregateId, toVersion);
     public Task<Aggregate<TAggregatePayload>?> GetAggregateFromInitialAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)
         where TAggregatePayload : IAggregatePayload, new() =>
         GetAggregateProjectionFromInitialAsync<Aggregate<TAggregatePayload>, DefaultSingleProjector<TAggregatePayload>>(
