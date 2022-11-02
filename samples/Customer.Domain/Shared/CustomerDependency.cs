@@ -26,7 +26,7 @@ public class CustomerDependency : DomainDependencyDefinitionBase
     {
         AddAggregate<Branch>()
             .AddCreateCommandHandler<CreateBranch, CreateBranchHandler>()
-            .AddQuery<BranchExistsQuery>();
+            .AddAggregateQuery<BranchExistsQuery>();
 
         AddAggregate<Client>()
             .AddCreateCommandHandler<CreateClient, CreateClient.Handler>()
@@ -36,8 +36,8 @@ public class CustomerDependency : DomainDependencyDefinitionBase
             .AddEventSubscriber<ClientCreated, ClientCreatedSubscriber>()
             .AddEventSubscriber<ClientDeleted, ClientDeletedSubscriber>()
             .AddSingleProjection<ClientNameHistoryProjection>()
-            .AddQuery<ClientNameHistoryProjectionQuery>()
-            .AddQuery<ClientEmailExistsQuery>();
+            .AddSingleProjectionListQuery<ClientNameHistoryProjectionQuery>()
+            .AddAggregateQuery<ClientEmailExistsQuery>();
 
         AddAggregate<LoyaltyPoint>()
             .AddCreateCommandHandler<CreateLoyaltyPoint, CreateLoyaltyPointHandler>()
