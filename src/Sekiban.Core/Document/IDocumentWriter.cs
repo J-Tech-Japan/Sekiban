@@ -4,7 +4,7 @@ namespace Sekiban.Core.Document;
 public interface IDocumentWriter
 {
     Task SaveAsync<TDocument>(TDocument document, Type aggregateType) where TDocument : IDocument;
-    Task SaveAndPublishAggregateEvent<TAggregateEvent>(TAggregateEvent aggregateEvent, Type aggregateType) where TAggregateEvent : IAggregateEvent;
+    Task SaveAndPublishEvent<TEvent>(TEvent ev, Type aggregateType) where TEvent : IEvent;
 }
 public interface IDocumentPersistentWriter : IDocumentWriter
 {

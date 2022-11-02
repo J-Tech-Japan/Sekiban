@@ -1,6 +1,6 @@
-﻿using Sekiban.Core.Query.SingleAggregate;
+﻿using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Aggregate;
 
-public interface IAggregate : ISingleAggregate, ISingleAggregateProjection
+public interface IAggregate : ISingleAggregate, ISingleProjection
 {
 }

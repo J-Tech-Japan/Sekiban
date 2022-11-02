@@ -2,7 +2,6 @@ using Customer.Domain.Aggregates.RecentActivities;
 using Customer.Domain.Aggregates.RecentActivities.Commands;
 using Customer.Domain.Aggregates.RecentActivities.Events;
 using Customer.Domain.Shared;
-using Customer.WebApi;
 using Sekiban.Core.Event;
 using Sekiban.Testing.SingleAggregate;
 using System;
@@ -21,7 +20,7 @@ public class RecentActivityTest : SingleAggregateTestBase<RecentActivity, Custom
     {
         WhenCreate(new CreateRecentActivity())
             .ThenNotThrowsAnException()
-            .ThenGetSingleEvent<AggregateEvent<RecentActivityCreated>>(ev => firstRecord = ev.Payload.Activity)
+            .ThenGetSingleEvent<Event<RecentActivityCreated>>(ev => firstRecord = ev.Payload.Activity)
             .ThenPayloadIs(new RecentActivity(new List<RecentActivityRecord> { firstRecord }.ToImmutableList()));
     }
     [Fact]
@@ -30,7 +29,7 @@ public class RecentActivityTest : SingleAggregateTestBase<RecentActivity, Custom
         GivenScenario(CreateRecentActivityTest)
             .WhenChange(new AddRecentActivity(GetAggregateId(), "Regular Event"))
             .ThenNotThrowsAnException()
-            .ThenGetSingleEvent<AggregateEvent<RecentActivityAdded>>(ev => regularRecord = ev.Payload.Record)
+            .ThenGetSingleEvent<Event<RecentActivityAdded>>(ev => regularRecord = ev.Payload.Record)
             .ThenPayloadIs(new RecentActivity(new List<RecentActivityRecord> { regularRecord, firstRecord }.ToImmutableList()));
     }
     [Fact]
@@ -39,7 +38,7 @@ public class RecentActivityTest : SingleAggregateTestBase<RecentActivity, Custom
         GivenScenario(AddRegularEventTest)
             .WhenChange(new OnlyPublishingAddRecentActivity(GetAggregateId(), "Publish Only Event"))
             .ThenNotThrowsAnException()
-            .ThenGetSingleEvent<AggregateEvent<RecentActivityAdded>>(ev => publishOnlyRecord = ev.Payload.Record)
+            .ThenGetSingleEvent<Event<RecentActivityAdded>>(ev => publishOnlyRecord = ev.Payload.Record)
             .ThenPayloadIs(new RecentActivity(new List<RecentActivityRecord> { publishOnlyRecord, regularRecord, firstRecord }.ToImmutableList()));
     }
 }

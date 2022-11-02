@@ -16,8 +16,8 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query;
-using Sekiban.Core.Query.MultipleAggregate;
-using Sekiban.Core.Query.SingleAggregate;
+using Sekiban.Core.Query.MultipleProjections;
+using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Snapshot;
 using Sekiban.Core.Snapshot.Aggregate;
 using System;
@@ -30,89 +30,89 @@ namespace SampleProjectStoryXTest.Stories;
 
 public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
 {
-    private readonly IAggregateCommandExecutor _aggregateCommandExecutor;
-    private readonly ISingleAggregateService _aggregateService;
-    private readonly IMultipleAggregateProjectionService _multipleAggregateProjectionService;
     private readonly ITestOutputHelper _testOutputHelper;
+    private readonly ICommandExecutor commandExecutor;
+    private readonly IMultiProjectionService multiProjectionService;
+    private readonly ISingleProjectionService projectionService;
 
     public InMemoryStoryTestBasic(ITestOutputHelper testOutputHelper, bool inMemory = true) : base(inMemory)
     {
         _testOutputHelper = testOutputHelper;
-        _aggregateCommandExecutor = GetService<IAggregateCommandExecutor>();
-        _aggregateService = GetService<ISingleAggregateService>();
-        _multipleAggregateProjectionService = GetService<IMultipleAggregateProjectionService>();
+        commandExecutor = GetService<ICommandExecutor>();
+        projectionService = GetService<ISingleProjectionService>();
+        multiProjectionService = GetService<IMultiProjectionService>();
     }
     [Fact(DisplayName = "CosmosDb ストーリーテスト インメモリで集約の機能のテストを行う")]
     public async Task CosmosDbStory()
     {
         // create list branch
-        var branchList = await _multipleAggregateProjectionService.GetAggregateList<Branch>();
+        var branchList = await multiProjectionService.GetAggregateList<Branch>();
         Assert.Empty(branchList);
         var (branchResult, events)
-            = await _aggregateCommandExecutor.ExecCreateCommandAsync<Branch, CreateBranch>(new CreateBranch("Japan"));
+            = await commandExecutor.ExecCreateCommandAsync<Branch, CreateBranch>(new CreateBranch("Japan"));
         var branchId = branchResult.AggregateId;
         Assert.NotNull(branchResult);
         Assert.NotNull(branchResult.AggregateId);
-        branchList = await _multipleAggregateProjectionService.GetAggregateList<Branch>();
+        branchList = await multiProjectionService.GetAggregateList<Branch>();
         Assert.Single(branchList);
         var branchFromList = branchList.First(m => m.AggregateId == branchId);
         Assert.NotNull(branchFromList);
 
-        var branchResult2 = await _aggregateCommandExecutor.ExecCreateCommandAsync<Branch, CreateBranch>(new CreateBranch("USA"));
-        branchList = await _multipleAggregateProjectionService.GetAggregateList<Branch>();
+        var branchResult2 = await commandExecutor.ExecCreateCommandAsync<Branch, CreateBranch>(new CreateBranch("USA"));
+        branchList = await multiProjectionService.GetAggregateList<Branch>();
         Assert.Equal(2, branchList.Count);
-        var branchListFromMultiple = await _multipleAggregateProjectionService.GetAggregateList<Branch>();
+        var branchListFromMultiple = await multiProjectionService.GetAggregateList<Branch>();
         Assert.Equal(2, branchListFromMultiple.Count);
 
         // loyalty point should be []  
-        var loyaltyPointList = await _multipleAggregateProjectionService.GetAggregateList<LoyaltyPoint>();
+        var loyaltyPointList = await multiProjectionService.GetAggregateList<LoyaltyPoint>();
         Assert.Empty(loyaltyPointList);
 
-        var clientNameList = await _multipleAggregateProjectionService
-            .GetSingleAggregateProjectionList<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>();
+        var clientNameList = await multiProjectionService
+            .GetSingleProjectionList<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>();
         Assert.Empty(clientNameList);
 
         // create client
-        var clientList = await _multipleAggregateProjectionService.GetAggregateList<Client>();
+        var clientList = await multiProjectionService.GetAggregateList<Client>();
         Assert.Empty(clientList);
         var originalName = "Tanaka Taro";
-        var (createClientResult, events2) = await _aggregateCommandExecutor.ExecCreateCommandAsync<Client, CreateClient>(
+        var (createClientResult, events2) = await commandExecutor.ExecCreateCommandAsync<Client, CreateClient>(
             new CreateClient(branchId!.Value, originalName, "tanaka@example.com"));
         var clientId = createClientResult.AggregateId;
         Assert.NotNull(createClientResult);
         Assert.NotNull(createClientResult.AggregateId);
-        clientList = await _multipleAggregateProjectionService.GetAggregateList<Client>();
+        clientList = await multiProjectionService.GetAggregateList<Client>();
         Assert.Single(clientList);
 
         // singleAggregateProjection
-        clientNameList = await _multipleAggregateProjectionService
-            .GetSingleAggregateProjectionList<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>();
+        clientNameList = await multiProjectionService
+            .GetSingleProjectionList<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>();
         Assert.Single(clientNameList);
         var tanakaProjection = clientNameList.First(m => m.AggregateId == clientId);
         Assert.Single(tanakaProjection.Payload.ClientNames);
         Assert.Equal(originalName, tanakaProjection.Payload.ClientNames.ToList().First().Name);
 
-        var clientNameListFromMultiple = await _multipleAggregateProjectionService
-            .GetSingleAggregateProjectionList<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>();
+        var clientNameListFromMultiple = await multiProjectionService
+            .GetSingleProjectionList<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>();
         Assert.Single(clientNameListFromMultiple);
         Assert.Equal(clientNameList.First().AggregateId, clientNameListFromMultiple.First().AggregateId);
 
         var secondName = "田中 太郎";
 
         // should throw version error 
-        await Assert.ThrowsAsync<SekibanAggregateCommandInconsistentVersionException>(
+        await Assert.ThrowsAsync<SekibanCommandInconsistentVersionException>(
             async () =>
             {
-                await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ChangeClientName>(
+                await commandExecutor.ExecChangeCommandAsync<Client, ChangeClientName>(
                     new ChangeClientName(clientId!.Value, secondName));
             });
         // change name
-        var (changeNameResult, events3) = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ChangeClientName>(
+        var (changeNameResult, events3) = await commandExecutor.ExecChangeCommandAsync<Client, ChangeClientName>(
             new ChangeClientName(clientId!.Value, secondName) { ReferenceVersion = createClientResult.Version });
 
         // change name projection
-        clientNameList = await _multipleAggregateProjectionService
-            .GetSingleAggregateProjectionList<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>();
+        clientNameList = await multiProjectionService
+            .GetSingleProjectionList<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>();
         Assert.Single(clientNameList);
         tanakaProjection = clientNameList.First(m => m.AggregateId == clientId);
         Assert.Equal(2, tanakaProjection.Payload.ClientNames.Count);
@@ -124,27 +124,27 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         var countChangeName = 60;
         foreach (var i in Enumerable.Range(0, countChangeName))
         {
-            var (changeNameResult2, events4) = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, ChangeClientName>(
+            var (changeNameResult2, events4) = await commandExecutor.ExecChangeCommandAsync<Client, ChangeClientName>(
                 new ChangeClientName(clientId!.Value, $"newname - {i + 1}") { ReferenceVersion = versionCN });
             versionCN = changeNameResult2.Version;
         }
 
         // get change name state
         var changeNameProjection
-            = await _aggregateService.GetProjectionAsync<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>(
+            = await projectionService.GetProjectionAsync<Client, ClientNameHistoryProjection, ClientNameHistoryProjection.PayloadDefinition>(
                 clientId!.Value);
         Assert.NotNull(changeNameProjection);
 
         // loyalty point should be created with event subscribe
-        loyaltyPointList = await _multipleAggregateProjectionService.GetAggregateList<LoyaltyPoint>();
+        loyaltyPointList = await multiProjectionService.GetAggregateList<LoyaltyPoint>();
         Assert.Single(clientList);
         // first point = 0
-        var loyaltyPoint = await _aggregateService.GetAggregateStateAsync<LoyaltyPoint>(clientId!.Value);
+        var loyaltyPoint = await projectionService.GetAggregateStateAsync<LoyaltyPoint>(clientId!.Value);
         Assert.NotNull(loyaltyPoint);
         Assert.Equal(0, loyaltyPoint!.Payload.CurrentPoint);
 
         var datetimeFirst = DateTime.Now;
-        var (addPointResult, events5) = await _aggregateCommandExecutor.ExecChangeCommandAsync<LoyaltyPoint, AddLoyaltyPoint>(
+        var (addPointResult, events5) = await commandExecutor.ExecChangeCommandAsync<LoyaltyPoint, AddLoyaltyPoint>(
             new AddLoyaltyPoint(clientId!.Value, datetimeFirst, LoyaltyPointReceiveTypeKeys.FlightDomestic, 1000, "")
             {
                 ReferenceVersion = loyaltyPoint.Version
@@ -152,7 +152,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         Assert.NotNull(addPointResult);
         Assert.NotNull(addPointResult.AggregateId);
 
-        loyaltyPoint = await _aggregateService.GetAggregateStateAsync<LoyaltyPoint>(clientId!.Value);
+        loyaltyPoint = await projectionService.GetAggregateStateAsync<LoyaltyPoint>(clientId!.Value);
         Assert.NotNull(loyaltyPoint);
         Assert.Equal(1000, loyaltyPoint!.Payload.CurrentPoint);
 
@@ -160,13 +160,13 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         await Assert.ThrowsAsync<SekibanLoyaltyPointNotEnoughException>(
             async () =>
             {
-                await _aggregateCommandExecutor.ExecChangeCommandAsync<LoyaltyPoint, UseLoyaltyPoint>(
+                await commandExecutor.ExecChangeCommandAsync<LoyaltyPoint, UseLoyaltyPoint>(
                     new UseLoyaltyPoint(clientId!.Value, datetimeFirst.AddSeconds(1), LoyaltyPointUsageTypeKeys.FlightUpgrade, 2000, "")
                     {
                         ReferenceVersion = addPointResult.Version
                     });
             });
-        var (usePointResult, events6) = await _aggregateCommandExecutor.ExecChangeCommandAsync<LoyaltyPoint, UseLoyaltyPoint>(
+        var (usePointResult, events6) = await commandExecutor.ExecChangeCommandAsync<LoyaltyPoint, UseLoyaltyPoint>(
             new UseLoyaltyPoint(clientId.Value, DateTime.Now, LoyaltyPointUsageTypeKeys.FlightUpgrade, 200, "")
             {
                 ReferenceVersion = addPointResult.Version
@@ -174,64 +174,64 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         Assert.NotNull(usePointResult);
         Assert.NotNull(usePointResult.AggregateId);
 
-        loyaltyPoint = await _aggregateService.GetAggregateStateAsync<LoyaltyPoint>(clientId.Value);
+        loyaltyPoint = await projectionService.GetAggregateStateAsync<LoyaltyPoint>(clientId.Value);
         Assert.NotNull(loyaltyPoint);
         Assert.Equal(800, loyaltyPoint!.Payload.CurrentPoint);
 
-        var p = await _multipleAggregateProjectionService
-            .GetProjectionAsync<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.PayloadDefinition>();
+        var p = await multiProjectionService
+            .GetMultiProjectionAsync<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.PayloadDefinition>();
         Assert.NotNull(p);
         Assert.Equal(2, p.Payload.Branches.Count);
         Assert.Single(p.Payload.Records);
 
         // delete client
-        var (deleteClientResult, events7) = await _aggregateCommandExecutor.ExecChangeCommandAsync<Client, DeleteClient>(
+        var (deleteClientResult, events7) = await commandExecutor.ExecChangeCommandAsync<Client, DeleteClient>(
             new DeleteClient(clientId.Value) { ReferenceVersion = versionCN });
         Assert.NotNull(deleteClientResult);
         Assert.NotNull(deleteClientResult.AggregateId);
         // client deleted
-        clientList = await _multipleAggregateProjectionService.GetAggregateList<Client>();
+        clientList = await multiProjectionService.GetAggregateList<Client>();
         Assert.Empty(clientList);
         // can find deleted client
-        clientList = await _multipleAggregateProjectionService.GetAggregateList<Client>(QueryListType.DeletedOnly);
+        clientList = await multiProjectionService.GetAggregateList<Client>(QueryListType.DeletedOnly);
         Assert.Single(clientList);
-        clientList = await _multipleAggregateProjectionService.GetAggregateList<Client>(QueryListType.ActiveAndDeleted);
+        clientList = await multiProjectionService.GetAggregateList<Client>(QueryListType.ActiveAndDeleted);
         Assert.Single(clientList);
 
         // loyalty point should be created with event subscribe
-        loyaltyPointList = await _multipleAggregateProjectionService.GetAggregateList<LoyaltyPoint>();
+        loyaltyPointList = await multiProjectionService.GetAggregateList<LoyaltyPoint>();
         Assert.Empty(loyaltyPointList);
-        loyaltyPointList = await _multipleAggregateProjectionService.GetAggregateList<LoyaltyPoint>(QueryListType.DeletedOnly);
+        loyaltyPointList = await multiProjectionService.GetAggregateList<LoyaltyPoint>(QueryListType.DeletedOnly);
         Assert.Single(loyaltyPointList);
 
         // create recent activity
         var (createRecentActivityResult, events8)
-            = await _aggregateCommandExecutor.ExecCreateCommandAsync<RecentActivity, CreateRecentActivity>(
+            = await commandExecutor.ExecCreateCommandAsync<RecentActivity, CreateRecentActivity>(
                 new CreateRecentActivity());
         var recentActivityId = createRecentActivityResult.AggregateId;
 
-        var recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentActivity>();
+        var recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
         Assert.Single(recentActivityList);
         var version = createRecentActivityResult.Version;
         var count = 60;
         foreach (var i in Enumerable.Range(0, count))
         {
             var (recentActivityAddedResult, events9)
-                = await _aggregateCommandExecutor.ExecChangeCommandAsync<RecentActivity, AddRecentActivity>(
+                = await commandExecutor.ExecChangeCommandAsync<RecentActivity, AddRecentActivity>(
                     new AddRecentActivity(createRecentActivityResult.AggregateId!.Value, $"Message - {i + 1}") { ReferenceVersion = version });
             version = recentActivityAddedResult.Version;
         }
-        recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentActivity>();
+        recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
         Assert.Single(recentActivityList);
         Assert.Equal(count + 1, version);
 
-        p = await _multipleAggregateProjectionService
-            .GetProjectionAsync<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.PayloadDefinition>();
+        p = await multiProjectionService
+            .GetMultiProjectionAsync<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.PayloadDefinition>();
         Assert.NotNull(p);
         Assert.Equal(2, p.Payload.Branches.Count);
         Assert.Empty(p.Payload.Records);
         var snapshotManager
-            = await _aggregateService.GetAggregateStateFromInitialAsync<SnapshotManager>(
+            = await projectionService.GetAggregateStateFromInitialAsync<SnapshotManager>(
                 SnapshotManager.SharedId);
         _testOutputHelper.WriteLine("-requests-");
         foreach (var key in snapshotManager!.Payload.Requests)
@@ -251,10 +251,10 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         var recentActivityId = Guid.NewGuid();
         // create recent activity
         var (createRecentActivityResult, events)
-            = await _aggregateCommandExecutor.ExecCreateCommandAsync<RecentActivity, CreateRecentActivity>(
+            = await commandExecutor.ExecCreateCommandAsync<RecentActivity, CreateRecentActivity>(
                 new CreateRecentActivity());
 
-        var recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentActivity>();
+        var recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
         Assert.Single(recentActivityList);
         var version = createRecentActivityResult.Version;
         var tasks = new List<Task>();
@@ -266,7 +266,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
                     async () =>
                     {
                         var (recentActivityAddedResult, events2)
-                            = await _aggregateCommandExecutor.ExecChangeCommandAsync<RecentActivity, AddRecentActivity>(
+                            = await commandExecutor.ExecChangeCommandAsync<RecentActivity, AddRecentActivity>(
                                 new AddRecentActivity(createRecentActivityResult.AggregateId!.Value, $"Message - {i + 1}")
                                 {
                                     ReferenceVersion = version
@@ -275,21 +275,21 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
                     }));
         }
         await Task.WhenAll(tasks);
-        recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentActivity>();
+        recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
         Assert.Single(recentActivityList);
         // this works
         var aggregateRecentActivity
-            = await _aggregateService.GetAggregateStateFromInitialAsync<RecentActivity>(
+            = await projectionService.GetAggregateStateFromInitialAsync<RecentActivity>(
                 createRecentActivityResult.AggregateId!.Value);
         var aggregateRecentActivity2
-            = await _aggregateService.GetAggregateStateAsync<RecentActivity>(createRecentActivityResult.AggregateId!.Value);
+            = await projectionService.GetAggregateStateAsync<RecentActivity>(createRecentActivityResult.AggregateId!.Value);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + 1, aggregateRecentActivity!.Version);
         Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
 
         var snapshotManager
-            = await _aggregateService.GetAggregateStateFromInitialAsync<SnapshotManager>(
+            = await projectionService.GetAggregateStateFromInitialAsync<SnapshotManager>(
                 SnapshotManager.SharedId);
         _testOutputHelper.WriteLine("-requests-");
         foreach (var key in snapshotManager!.Payload.Requests)
@@ -312,7 +312,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
             {
                 throw new SekibanInvalidArgumentException();
             }
-            var fromInitial = await _aggregateService.GetAggregateStateFromInitialAsync<TAggregatePayload>(aggregateId, state.Version);
+            var fromInitial = await projectionService.GetAggregateStateFromInitialAsync<TAggregatePayload>(aggregateId, state.Version);
             if (fromInitial is null) { throw new SekibanInvalidArgumentException(); }
             Assert.Equal(fromInitial.Version, state.Version);
             Assert.Equal(fromInitial.LastEventId, state.LastEventId);
@@ -323,11 +323,11 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
     {
         // create recent activity
         var (createRecentActivityResult, events)
-            = await _aggregateCommandExecutor
+            = await commandExecutor
                 .ExecCreateCommandAsync<RecentInMemoryActivity, CreateRecentInMemoryActivity>(
                     new CreateRecentInMemoryActivity());
 
-        var recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentInMemoryActivity>();
+        var recentActivityList = await multiProjectionService.GetAggregateList<RecentInMemoryActivity>();
         Assert.Single(recentActivityList);
         var version = createRecentActivityResult.Version;
         var tasks = new List<Task>();
@@ -339,7 +339,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
                     async () =>
                     {
                         var (recentActivityAddedResult, _)
-                            = await _aggregateCommandExecutor
+                            = await commandExecutor
                                 .ExecChangeCommandAsync<RecentInMemoryActivity, AddRecentInMemoryActivity>(
                                     new AddRecentInMemoryActivity(createRecentActivityResult!.AggregateId!.Value, $"Message - {i + 1}")
                                     {
@@ -350,14 +350,14 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
                     }));
         }
         await Task.WhenAll(tasks);
-        recentActivityList = await _multipleAggregateProjectionService.GetAggregateList<RecentInMemoryActivity>();
+        recentActivityList = await multiProjectionService.GetAggregateList<RecentInMemoryActivity>();
         Assert.Single(recentActivityList);
 
         var aggregateRecentActivity
-            = await _aggregateService.GetAggregateStateFromInitialAsync<RecentInMemoryActivity>(
+            = await projectionService.GetAggregateStateFromInitialAsync<RecentInMemoryActivity>(
                 createRecentActivityResult.AggregateId!.Value);
         var aggregateRecentActivity2
-            = await _aggregateService.GetAggregateStateAsync<RecentInMemoryActivity>(
+            = await projectionService.GetAggregateStateAsync<RecentInMemoryActivity>(
                 createRecentActivityResult.AggregateId!.Value);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);

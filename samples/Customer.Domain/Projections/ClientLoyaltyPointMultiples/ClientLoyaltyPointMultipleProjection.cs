@@ -5,17 +5,14 @@ using Customer.Domain.Aggregates.Clients.Events;
 using Customer.Domain.Aggregates.LoyaltyPoints;
 using Customer.Domain.Aggregates.LoyaltyPoints.Events;
 using Sekiban.Core.Event;
-using Sekiban.Core.Query.MultipleAggregate;
+using Sekiban.Core.Query.MultipleProjections;
 using System.Collections.Immutable;
 namespace Customer.Domain.Projections.ClientLoyaltyPointMultiples;
 
-public class ClientLoyaltyPointMultipleProjection : MultipleAggregateProjectionBase<ClientLoyaltyPointMultipleProjection.PayloadDefinition>
+public class ClientLoyaltyPointMultipleProjection : MultiProjectionBase<ClientLoyaltyPointMultipleProjection.PayloadDefinition>
 {
-    public override IList<string> TargetAggregateNames()
-    {
-        return new List<string> { nameof(Branch), nameof(Client), nameof(LoyaltyPoint) };
-    }
-    protected override Func<PayloadDefinition, PayloadDefinition>? GetApplyEventFunc(IAggregateEvent ev, IEventPayload eventPayload)
+    public override IList<string> TargetAggregateNames() => new List<string> { nameof(Branch), nameof(Client), nameof(LoyaltyPoint) };
+    protected override Func<PayloadDefinition, PayloadDefinition>? GetApplyEventFunc(IEvent ev, IEventPayload eventPayload)
     {
         return eventPayload switch
         {
@@ -61,7 +58,7 @@ public class ClientLoyaltyPointMultipleProjection : MultipleAggregateProjectionB
         };
     }
     public record PayloadDefinition
-        (ImmutableList<ProjectedBranch> Branches, ImmutableList<ProjectedRecord> Records) : IMultipleAggregateProjectionPayload
+        (ImmutableList<ProjectedBranch> Branches, ImmutableList<ProjectedRecord> Records) : IMultiProjectionPayload
     {
         public PayloadDefinition() : this(ImmutableList<ProjectedBranch>.Empty, ImmutableList<ProjectedRecord>.Empty) { }
     }

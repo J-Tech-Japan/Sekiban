@@ -4,7 +4,7 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Document;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
-using Sekiban.Core.Query.SingleAggregate;
+using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
@@ -15,15 +15,15 @@ namespace Sekiban.Testing.SingleAggregate;
 public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggregatePayload>
     where TAggregatePayload : IAggregatePayload, new()
 {
-    private readonly AggregateTestCommandExecutor _commandExecutor;
+    private readonly TestCommandExecutor _commandExecutor;
     private readonly IServiceProvider _serviceProvider;
 
     public AggregateTestHelper(IServiceProvider serviceProvider)
     {
         _serviceProvider = serviceProvider;
-        _projector = new DefaultSingleAggregateProjector<TAggregatePayload>();
+        _projector = new DefaultSingleProjector<TAggregatePayload>();
         _aggregate = _projector.CreateInitialAggregate(Guid.Empty);
-        _commandExecutor = new AggregateTestCommandExecutor(_serviceProvider);
+        _commandExecutor = new TestCommandExecutor(_serviceProvider);
     }
     private Aggregate<TAggregatePayload> _aggregate
     {
@@ -31,39 +31,27 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         set;
     }
     private Exception? _latestException { get; set; }
-    private List<IAggregateEvent> _latestEvents { get; set; } = new();
+    private List<IEvent> _latestEvents { get; set; } = new();
     private List<SekibanValidationParameterError> _latestValidationErrors { get; set; } = new();
 
-    private DefaultSingleAggregateProjector<TAggregatePayload> _projector
+    private DefaultSingleProjector<TAggregatePayload> _projector
     {
         get;
     }
 
-    private List<SingleAggregateTestBase> SingleAggregateProjections
-    {
-        get;
-    } = new();
-    public TSingleAggregateProjection SetupSingleAggregateProjection<TSingleAggregateProjection>()
-        where TSingleAggregateProjection : SingleAggregateTestBase
-    {
-        var singleAggregateProjection = Activator.CreateInstance(typeof(TSingleAggregateProjection), _serviceProvider) as TSingleAggregateProjection;
-        if (singleAggregateProjection == null) { throw new Exception("Could not create single aggregate projection"); }
-        SingleAggregateProjections.Add(singleAggregateProjection);
-        return singleAggregateProjection;
-    }
     public IAggregateTestHelper<TAggregatePayload> GivenScenario(Action initialAction)
     {
         initialAction();
         return this;
     }
-    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvent(IAggregateEvent ev)
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvent(IEvent ev)
     {
         var documentWriter = _serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter;
         if (documentWriter is null) { throw new Exception("Failed to get document writer"); }
         documentWriter.SaveAsync(ev, typeof(TAggregatePayload)).Wait();
         return this;
     }
-    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvents(IEnumerable<IAggregateEvent> events)
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvents(IEnumerable<IEvent> events)
     {
         foreach (var ev in events)
         {
@@ -83,17 +71,14 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
         where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
-        var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleAggregateService)) as ISingleAggregateService;
+        var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleProjectionService)) as ISingleProjectionService;
         if (singleAggregateService is null) { throw new Exception("Failed to get single aggregate service"); }
         var aggregate = singleAggregateService.GetAggregateStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name);
     }
-    public IReadOnlyCollection<IAggregateEvent> GetLatestEnvironmentEvents()
-    {
-        return _commandExecutor.LatestEvents;
-    }
+    public IReadOnlyCollection<IEvent> GetLatestEnvironmentEvents() => _commandExecutor.LatestEvents;
 
-    public IAggregateTestHelper<TAggregatePayload> WhenCreate<C>(C createCommand) where C : ICreateAggregateCommand<TAggregatePayload>
+    public IAggregateTestHelper<TAggregatePayload> WhenCreate<C>(C createCommand) where C : ICreateCommand<TAggregatePayload>
     {
         ResetBeforeCommand();
 
@@ -104,14 +89,14 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             return this;
         }
         var handler
-            = _serviceProvider.GetService(typeof(ICreateAggregateCommandHandler<TAggregatePayload, C>)) as
-                ICreateAggregateCommandHandler<TAggregatePayload, C>;
+            = _serviceProvider.GetService(typeof(ICreateCommandHandler<TAggregatePayload, C>)) as
+                ICreateCommandHandler<TAggregatePayload, C>;
         if (handler is null)
         {
-            throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
+            throw new SekibanCommandNotRegisteredException(typeof(C).Name);
         }
         var aggregateId = createCommand.GetAggregateId();
-        var commandDocument = new AggregateCommandDocument<C>(aggregateId, createCommand, typeof(TAggregatePayload));
+        var commandDocument = new CommandDocument<C>(aggregateId, createCommand, typeof(TAggregatePayload));
         try
         {
             _aggregate = new Aggregate<TAggregatePayload> { AggregateId = aggregateId };
@@ -132,27 +117,26 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         {
             throw new SekibanCreateCommandShouldSaveCreateEventFirstException();
         }
-        SingleAggregateProjections.ForEach(m => m.SetAggregateId(_aggregate.AggregateId));
         SaveEvents(_latestEvents);
         CheckCommandJSONSupports(commandDocument);
         CheckStateJSONSupports();
         return this;
     }
 
-    public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(C changeCommand) where C : ChangeAggregateCommandBase<TAggregatePayload>
+    public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(C changeCommand) where C : ChangeCommandBase<TAggregatePayload>
     {
         return WhenChange(_ => changeCommand);
     }
     public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(Func<AggregateState<TAggregatePayload>, C> commandFunc)
-        where C : ChangeAggregateCommandBase<TAggregatePayload>
+        where C : ChangeCommandBase<TAggregatePayload>
     {
         ResetBeforeCommand();
         var handler
-            = _serviceProvider.GetService(typeof(IChangeAggregateCommandHandler<TAggregatePayload, C>)) as
-                IChangeAggregateCommandHandler<TAggregatePayload, C>;
+            = _serviceProvider.GetService(typeof(IChangeCommandHandler<TAggregatePayload, C>)) as
+                IChangeCommandHandler<TAggregatePayload, C>;
         if (handler is null)
         {
-            throw new SekibanAggregateCommandNotRegisteredException(typeof(C).Name);
+            throw new SekibanCommandNotRegisteredException(typeof(C).Name);
         }
         var command = commandFunc(_aggregate.ToState());
         var validationResults = command.TryValidateProperties().ToList();
@@ -161,7 +145,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             _latestValidationErrors = SekibanValidationParameterError.CreateFromValidationResults(validationResults).ToList();
             return this;
         }
-        var commandDocument = new AggregateCommandDocument<C>(_aggregate.AggregateId, command, typeof(TAggregatePayload));
+        var commandDocument = new CommandDocument<C>(_aggregate.AggregateId, command, typeof(TAggregatePayload));
         if (command is not IOnlyPublishingCommand)
         {
             try
@@ -203,17 +187,17 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         CheckStateJSONSupports();
         return this;
     }
-    public IAggregateTestHelper<TAggregatePayload> ThenGetEvents(Action<List<IAggregateEvent>> checkEventsAction)
+    public IAggregateTestHelper<TAggregatePayload> ThenGetEvents(Action<List<IEvent>> checkEventsAction)
     {
         checkEventsAction(_latestEvents);
         return this;
     }
-    public IAggregateTestHelper<TAggregatePayload> ThenSingleEventIs<T>(AggregateEvent<T> aggregateEvent) where T : IEventPayload
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleEventIs<T>(Event<T> @event) where T : IEventPayload
     {
         if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
         Assert.IsType<T>(_latestEvents.First());
         var actual = _latestEvents.First();
-        var expected = aggregateEvent;
+        var expected = @event;
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
         Assert.Equal(expectedJson, actualJson);
@@ -222,7 +206,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> ThenSingleEventPayloadIs<T>(T payload) where T : IEventPayload
     {
         if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
-        Assert.IsType<AggregateEvent<T>>(_latestEvents.First());
+        Assert.IsType<Event<T>>(_latestEvents.First());
 
         var actualJson = SekibanJsonHelper.Serialize(_latestEvents.First().GetPayload());
         var expectedJson = SekibanJsonHelper.Serialize(payload);
@@ -256,7 +240,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         return this;
     }
 
-    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleEvent<T>(Action<T> checkEventAction) where T : IAggregateEvent
+    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleEvent<T>(Action<T> checkEventAction) where T : IEvent
     {
         if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
         Assert.IsType<T>(_latestEvents.First());
@@ -279,22 +263,24 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         File.WriteAllText(filename, actualJson);
         return this;
     }
-    public Guid GetAggregateId()
+    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionTest<TSingleProjection, TSingleProjectionPayload>(
+        Action<SingleProjectionTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>> singleProjectionTestAction)
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
+        where TSingleProjectionPayload : ISingleProjectionPayload
     {
-        return _aggregate.AggregateId;
+        var singleProjection =
+            Activator.CreateInstance(
+                typeof(SingleProjectionTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>),
+                _serviceProvider) as SingleProjectionTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>;
+        if (singleProjection == null) { throw new Exception("Could not create single aggregate projection"); }
+        singleProjection.AggregateId = GetAggregateId();
+        singleProjectionTestAction(singleProjection);
+        return this;
     }
-    public int GetCurrentVersion()
-    {
-        return _aggregate.Version;
-    }
-    public AggregateState<TAggregatePayload> GetAggregateState()
-    {
-        return _aggregate.ToState();
-    }
-    public Aggregate<TAggregatePayload> GetAggregate()
-    {
-        return _aggregate;
-    }
+    public Guid GetAggregateId() => _aggregate.AggregateId;
+    public int GetCurrentVersion() => _aggregate.Version;
+    public AggregateState<TAggregatePayload> GetAggregateState() => _aggregate.ToState();
+    public Aggregate<TAggregatePayload> GetAggregate() => _aggregate;
     public IAggregateTestHelper<TAggregatePayload> ThenThrows<T>() where T : Exception
     {
         var exception = _latestException is AggregateException aggregateException ? aggregateException.InnerExceptions.First() : _latestException;
@@ -398,25 +384,25 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public Guid RunEnvironmentCreateCommand<TEnvironmentAggregate>(
-        ICreateAggregateCommand<TEnvironmentAggregate> command,
-        Guid? injectingAggregateId = null) where TEnvironmentAggregate : IAggregatePayload, new()
+    public Guid RunEnvironmentCreateCommand<TEnvironmentAggregatePayload>(
+        ICreateCommand<TEnvironmentAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
         var (events, aggregateId) = _commandExecutor.ExecuteCreateCommand(command, injectingAggregateId);
-        var aggregateEvents = events?.ToList() ?? new List<IAggregateEvent>();
+        var aggregateEvents = events?.ToList() ?? new List<IEvent>();
         return aggregateId;
     }
-    public void RunEnvironmentChangeCommand<TEnvironmentAggregate>(ChangeAggregateCommandBase<TEnvironmentAggregate> command)
-        where TEnvironmentAggregate : IAggregatePayload, new()
+    public void RunEnvironmentChangeCommand<TEnvironmentAggregatePayload>(ChangeCommandBase<TEnvironmentAggregatePayload> command)
+        where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
         var _ = _commandExecutor.ExecuteChangeCommand(command);
     }
-    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentCommandExecutorAction(Action<AggregateTestCommandExecutor> action)
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentCommandExecutorAction(Action<TestCommandExecutor> action)
     {
         action(_commandExecutor);
         return this;
     }
-    private void SaveEvents(IEnumerable<IAggregateEvent> events)
+    private void SaveEvents(IEnumerable<IEvent> events)
     {
         foreach (var ev in events)
         {
@@ -435,7 +421,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             {
                 throw new InvalidDataException($"イベントタイプ {documentTypeName} は登録されていません。");
             }
-            var eventType = typeof(AggregateEvent<>).MakeGenericType(eventPayloadType);
+            var eventType = typeof(Event<>).MakeGenericType(eventPayloadType);
             if (eventType is null)
             {
                 throw new InvalidDataException($"イベント {documentTypeName} の生成に失敗しました。");
@@ -445,7 +431,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             {
                 throw new InvalidDataException($"イベント {documentTypeName} のデシリアライズに失敗しました。");
             }
-            GivenEnvironmentEvent((AggregateEvent<IEventPayload>)eventInstance);
+            GivenEnvironmentEvent((Event<IEventPayload>)eventInstance);
         }
     }
 
@@ -488,7 +474,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     private void ResetBeforeCommand()
     {
         _latestValidationErrors = new List<SekibanValidationParameterError>();
-        _latestEvents = new List<IAggregateEvent>();
+        _latestEvents = new List<IEvent>();
         _latestException = null;
     }
 }

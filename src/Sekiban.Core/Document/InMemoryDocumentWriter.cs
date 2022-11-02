@@ -8,13 +8,13 @@ namespace Sekiban.Core.Document;
 
 public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersistentWriter
 {
-    private readonly AggregateEventPublisher _eventPublisher;
+    private readonly EventPublisher _eventPublisher;
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
     private readonly IServiceProvider _serviceProvider;
     private readonly ISnapshotDocumentCache _snapshotDocumentCache;
     public InMemoryDocumentWriter(
         InMemoryDocumentStore inMemoryDocumentStore,
-        AggregateEventPublisher eventPublisher,
+        EventPublisher eventPublisher,
         IServiceProvider serviceProvider,
         ISnapshotDocumentCache snapshotDocumentCache)
     {
@@ -31,8 +31,8 @@ public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersist
             : sekibanContext.SettingGroupIdentifier;
         switch (document.DocumentType)
         {
-            case DocumentType.AggregateEvent:
-                _inMemoryDocumentStore.SaveEvent((document as IAggregateEvent)!, document.PartitionKey, sekibanIdentifier);
+            case DocumentType.Event:
+                _inMemoryDocumentStore.SaveEvent((document as IEvent)!, document.PartitionKey, sekibanIdentifier);
                 break;
             case DocumentType.AggregateSnapshot:
                 if (document is SnapshotDocument sd)
@@ -43,15 +43,15 @@ public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersist
         }
         await Task.CompletedTask;
     }
-    public async Task SaveAndPublishAggregateEvent<TAggregateEvent>(TAggregateEvent aggregateEvent, Type aggregateType)
-        where TAggregateEvent : IAggregateEvent
+    public async Task SaveAndPublishEvent<TEvent>(TEvent ev, Type aggregateType)
+        where TEvent : IEvent
     {
         var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
         var sekibanIdentifier = string.IsNullOrWhiteSpace(sekibanContext?.SettingGroupIdentifier)
             ? string.Empty
             : sekibanContext.SettingGroupIdentifier;
 
-        _inMemoryDocumentStore.SaveEvent(aggregateEvent, aggregateEvent.PartitionKey, sekibanIdentifier);
-        await _eventPublisher.PublishAsync(aggregateEvent);
+        _inMemoryDocumentStore.SaveEvent(ev, ev.PartitionKey, sekibanIdentifier);
+        await _eventPublisher.PublishAsync(ev);
     }
 }

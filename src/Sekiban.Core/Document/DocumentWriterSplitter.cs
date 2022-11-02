@@ -32,43 +32,43 @@ public class DocumentWriterSplitter : IDocumentWriter
             return;
         }
         if (document.DocumentType == DocumentType.AggregateSnapshot) { }
-        if (document is IAggregateEvent) { }
+        if (document is IEvent) { }
         await _documentPersistentWriter.SaveAsync(document, aggregateType);
     }
-    public async Task SaveAndPublishAggregateEvent<TAggregateEvent>(TAggregateEvent aggregateEvent, Type aggregateType)
-        where TAggregateEvent : IAggregateEvent
+    public async Task SaveAndPublishEvent<TEvent>(TEvent ev, Type aggregateType)
+        where TEvent : IEvent
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
         {
-            await _documentTemporaryWriter.SaveAndPublishAggregateEvent(aggregateEvent, aggregateType);
+            await _documentTemporaryWriter.SaveAndPublishEvent(ev, aggregateType);
             return;
         }
-        await AddToHybridIfPossible(aggregateEvent, aggregateType);
-        await _documentPersistentWriter.SaveAndPublishAggregateEvent(aggregateEvent, aggregateType);
+        await AddToHybridIfPossible(ev, aggregateType);
+        await _documentPersistentWriter.SaveAndPublishEvent(ev, aggregateType);
     }
 
-    private async Task AddToHybridIfPossible(IAggregateEvent aggregateEvent, Type aggregateType)
+    private async Task AddToHybridIfPossible(IEvent @event, Type aggregateType)
     {
         if (!_aggregateSettings.CanUseHybrid(aggregateType)) { return; }
-        if (aggregateEvent.IsAggregateInitialEvent)
+        if (@event.IsAggregateInitialEvent)
         {
-            if (_hybridStoreManager.AddPartitionKey(aggregateEvent.PartitionKey, string.Empty))
+            if (_hybridStoreManager.AddPartitionKey(@event.PartitionKey, string.Empty))
             {
-                await _documentTemporaryWriter.SaveAsync(aggregateEvent, aggregateType);
+                await _documentTemporaryWriter.SaveAsync(@event, aggregateType);
             }
         }
         else
         {
-            if (_hybridStoreManager.HasPartition(aggregateEvent.PartitionKey))
+            if (_hybridStoreManager.HasPartition(@event.PartitionKey))
             {
-                await _documentTemporaryWriter.SaveAsync(aggregateEvent, aggregateType);
+                await _documentTemporaryWriter.SaveAsync(@event, aggregateType);
             }
         }
     }
     private async Task SaveSnapshotToHybridIfPossible(SnapshotDocument snapshot, Type aggregateType)
     {
-        if (_hybridStoreManager.HasPartition(PartitionKeyGenerator.ForAggregateEvent(snapshot.AggregateId, aggregateType)))
+        if (_hybridStoreManager.HasPartition(PartitionKeyGenerator.ForEvent(snapshot.AggregateId, aggregateType)))
         {
             await _documentTemporaryWriter.SaveAsync(snapshot, aggregateType);
         }

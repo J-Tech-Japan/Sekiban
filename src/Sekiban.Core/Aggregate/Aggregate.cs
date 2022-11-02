@@ -1,16 +1,13 @@
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
-using Sekiban.Core.Query.SingleAggregate;
+using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Aggregate;
 
-public class Aggregate<TAggregatePayload> : AggregateCommonBase, ISingleAggregateProjectionStateConvertible<AggregateState<TAggregatePayload>>
+public class Aggregate<TAggregatePayload> : AggregateCommonBase, ISingleProjectionStateConvertible<AggregateState<TAggregatePayload>>
     where TAggregatePayload : IAggregatePayload, new()
 {
     protected TAggregatePayload Payload { get; private set; } = new();
-    public AggregateState<TAggregatePayload> ToState()
-    {
-        return new AggregateState<TAggregatePayload>(this, Payload);
-    }
+    public AggregateState<TAggregatePayload> ToState() => new(this, Payload);
 
     public void ApplySnapshot(AggregateState<TAggregatePayload> snapshot)
     {
@@ -30,7 +27,7 @@ public class Aggregate<TAggregatePayload> : AggregateCommonBase, ISingleAggregat
         return clone;
     }
 
-    protected override Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload)
+    protected override Action? GetApplyEventAction(IEvent ev, IEventPayload payload)
     {
         var func = GetApplyEventFunc(ev, payload);
         return () =>
@@ -40,7 +37,7 @@ public class Aggregate<TAggregatePayload> : AggregateCommonBase, ISingleAggregat
             Payload = result;
         };
     }
-    protected Func<TAggregatePayload, IAggregateEvent, TAggregatePayload>? GetApplyEventFunc(IAggregateEvent ev, IEventPayload payload)
+    protected Func<TAggregatePayload, IEvent, TAggregatePayload>? GetApplyEventFunc(IEvent ev, IEventPayload payload)
     {
         if (payload is IApplicableEvent<TAggregatePayload> applicableEvent)
         {
@@ -49,12 +46,12 @@ public class Aggregate<TAggregatePayload> : AggregateCommonBase, ISingleAggregat
         return null;
     }
 
-    internal IAggregateEvent AddAndApplyEvent<TEventPayload>(TEventPayload eventPayload)
+    internal IEvent AddAndApplyEvent<TEventPayload>(TEventPayload eventPayload)
         where TEventPayload : IEventPayload, IApplicableEvent<TAggregatePayload>
     {
         var ev = eventPayload is ICreatedEventPayload
-            ? AggregateEvent<TEventPayload>.CreatedEvent(AggregateId, typeof(TAggregatePayload), eventPayload)
-            : AggregateEvent<TEventPayload>.ChangedEvent(AggregateId, typeof(TAggregatePayload), eventPayload);
+            ? Event<TEventPayload>.CreatedEvent(AggregateId, typeof(TAggregatePayload), eventPayload)
+            : Event<TEventPayload>.ChangedEvent(AggregateId, typeof(TAggregatePayload), eventPayload);
 
         if (GetApplyEventAction(ev, eventPayload) is null)
         {

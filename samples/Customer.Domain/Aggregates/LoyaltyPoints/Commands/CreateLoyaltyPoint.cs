@@ -4,15 +4,12 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Event;
 namespace Customer.Domain.Aggregates.LoyaltyPoints.Commands;
 
-public record CreateLoyaltyPoint(Guid ClientId, int InitialPoint) : ICreateAggregateCommand<LoyaltyPoint>
+public record CreateLoyaltyPoint(Guid ClientId, int InitialPoint) : ICreateCommand<LoyaltyPoint>
 {
     public CreateLoyaltyPoint() : this(Guid.Empty, 0) { }
-    public Guid GetAggregateId()
-    {
-        return ClientId;
-    }
+    public Guid GetAggregateId() => ClientId;
 }
-public class CreateLoyaltyPointHandler : CreateAggregateCommandHandlerBase<LoyaltyPoint, CreateLoyaltyPoint>
+public class CreateLoyaltyPointHandler : CreateCommandHandlerBase<LoyaltyPoint, CreateLoyaltyPoint>
 {
     protected override async IAsyncEnumerable<IApplicableEvent<LoyaltyPoint>> ExecCreateCommandAsync(
         Func<AggregateState<LoyaltyPoint>> getAggregateState,

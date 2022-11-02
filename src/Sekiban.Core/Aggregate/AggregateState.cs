@@ -1,5 +1,4 @@
-using Sekiban.Core.Event;
-using Sekiban.Core.Query.SingleAggregate;
+using Sekiban.Core.Query.SingleProjections;
 using System.ComponentModel.DataAnnotations;
 namespace Sekiban.Core.Aggregate;
 
@@ -24,10 +23,7 @@ public record AggregateState<TPayload> : ISingleAggregate where TPayload : IAggr
         AppliedSnapshotVersion = aggregate.AppliedSnapshotVersion;
     }
 
-    public AggregateState(IAggregate aggregate, TPayload payload) : this(aggregate)
-    {
-        Payload = payload;
-    }
+    public AggregateState(IAggregate aggregate, TPayload payload) : this(aggregate) => Payload = payload;
 
     public TPayload Payload { get; init; } = new();
 
@@ -50,20 +46,14 @@ public record AggregateState<TPayload> : ISingleAggregate where TPayload : IAggr
     [Required]
     [Description("並べ替え可能なユニークID（自動付与）、このIDの順番でイベントは常に順番を決定する")]
     public string LastSortableUniqueId { get; init; } = string.Empty;
-    public bool GetIsDeleted()
+    public bool GetIsDeleted() => Payload is IDeletable { IsDeleted: true };
+
+    public dynamic GetComparableObject(AggregateState<TPayload> original, bool copyVersion = true) => this with
     {
-        return Payload is IDeletable { IsDeleted: true };
-    }
-    
-    public dynamic GetComparableObject(AggregateState<TPayload> original, bool copyVersion = true)
-    {
-        return this with
-        {
-            AggregateId = original.AggregateId,
-            Version = copyVersion ? original.Version : Version,
-            LastEventId = original.LastEventId,
-            AppliedSnapshotVersion = original.AppliedSnapshotVersion,
-            LastSortableUniqueId = original.LastSortableUniqueId
-        };
-    }
+        AggregateId = original.AggregateId,
+        Version = copyVersion ? original.Version : Version,
+        LastEventId = original.LastEventId,
+        AppliedSnapshotVersion = original.AppliedSnapshotVersion,
+        LastSortableUniqueId = original.LastSortableUniqueId
+    };
 }

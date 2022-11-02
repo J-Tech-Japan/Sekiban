@@ -2,15 +2,15 @@ using Customer.Domain.Aggregates.Branches.Commands;
 using Customer.Domain.Aggregates.Clients.Commands;
 using Customer.Domain.Projections.ClientLoyaltyPointLists;
 using Customer.Domain.Shared;
-using Customer.WebApi;
 using Sekiban.Core.Query.QueryModel;
-using Sekiban.Testing.QueryFilter;
+using Sekiban.Testing.Projection;
+using Sekiban.Testing.Queries;
 using System;
 using System.Collections.Generic;
 using Xunit;
 namespace Customer.Test.AggregateTests;
 
-public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregateProjectionTestBase<ClientLoyaltyPointListProjection,
+public class ClientLoyaltyPointListProjectionTest : MultiProjectionTestBase<ClientLoyaltyPointListProjection,
     ClientLoyaltyPointListProjection.PayloadDefinition, CustomerDependency>
 {
 
@@ -23,15 +23,15 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
     public Guid _clientId4 = Guid.NewGuid();
     public Guid _clientId5 = Guid.NewGuid();
     public string _clientNameBase = "Client TEST ";
-    public ProjectionListQueryFilterTestChecker<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.PayloadDefinition,
-        ClientLoyaltyPointQueryFilter, ClientLoyaltyPointQueryFilter.QueryFilterParameter,
-        ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> ListQueryFilterTestChecker = new();
+    public ProjectionListQueryTestChecker<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.PayloadDefinition,
+        ClientLoyaltyPointQuery, ClientLoyaltyPointQuery.QueryParameter,
+        ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> ListQueryTestChecker = new();
 
     [Fact]
     public void RegularProjection()
     {
 
-        GivenQueryFilterChecker(ListQueryFilterTestChecker)
+        GivenQueryChecker(ListQueryTestChecker)
             .GivenEventsFromFile("TestData1.json")
             .WhenProjection()
             .ThenNotThrowsAnException()
@@ -39,12 +39,12 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
             .WriteProjectionToFile("TestData1ResultOut.json");
     }
     [Fact]
-    public void QueryFilterCheckerTest()
+    public void QueryCheckerTest()
     {
         GivenScenario(RegularProjection);
 
-        ListQueryFilterTestChecker.WhenParam(
-                new ClientLoyaltyPointQueryFilter.QueryFilterParameter(
+        ListQueryTestChecker.WhenParam(
+                new ClientLoyaltyPointQuery.QueryParameter(
                     null,
                     null,
                     null,
@@ -53,14 +53,14 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     null,
                     null,
                     null))
-            .WriteResponseToFile("ClientLoyaltyPointQueryFilter.json");
+            .WriteResponseToFile("ClientLoyaltyPointQuery.json");
     }
 
 
     [Fact]
     public void CommandTest1()
     {
-        GivenQueryFilterChecker(ListQueryFilterTestChecker);
+        GivenQueryChecker(ListQueryTestChecker);
         RunCreateCommand(new CreateBranch(_branchName), _branchId);
         RunCreateCommand(new CreateClient(_branchId, _clientNameBase + 1, "test" + 1 + "@example.com"), _clientId1);
         RunCreateCommand(new CreateClient(_branchId, _clientNameBase + 2, "test" + 2 + "@example.com"), _clientId2);
@@ -71,11 +71,11 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
         WhenProjection().ThenNotThrowsAnException();
     }
     [Fact]
-    public void QueryFilterBasic1()
+    public void QueryBasic1()
     {
         GivenScenario(CommandTest1);
-        ListQueryFilterTestChecker.WhenParam(
-                new ClientLoyaltyPointQueryFilter.QueryFilterParameter(
+        ListQueryTestChecker.WhenParam(
+                new ClientLoyaltyPointQuery.QueryParameter(
                     null,
                     null,
                     null,
@@ -85,7 +85,7 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     null,
                     null))
             .ThenResponseIs(
-                new QueryFilterListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
+                new QueryListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     null,
                     null,
@@ -100,11 +100,11 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     }));
     }
     [Fact]
-    public void QueryFilterBasicPaging()
+    public void QueryBasicPaging()
     {
         GivenScenario(CommandTest1);
-        ListQueryFilterTestChecker.WhenParam(
-                new ClientLoyaltyPointQueryFilter.QueryFilterParameter(
+        ListQueryTestChecker.WhenParam(
+                new ClientLoyaltyPointQuery.QueryParameter(
                     null,
                     null,
                     3,
@@ -114,7 +114,7 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     null,
                     null))
             .ThenResponseIs(
-                new QueryFilterListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
+                new QueryListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     2,
                     1,
@@ -127,11 +127,11 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     }));
     }
     [Fact]
-    public void QueryFilterBasicPaging2()
+    public void QueryBasicPaging2()
     {
         GivenScenario(CommandTest1);
-        ListQueryFilterTestChecker.WhenParam(
-                new ClientLoyaltyPointQueryFilter.QueryFilterParameter(
+        ListQueryTestChecker.WhenParam(
+                new ClientLoyaltyPointQuery.QueryParameter(
                     null,
                     null,
                     5,
@@ -141,7 +141,7 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     null,
                     null))
             .ThenResponseIs(
-                new QueryFilterListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
+                new QueryListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     1,
                     1,
@@ -156,11 +156,11 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     }));
     }
     [Fact]
-    public void QueryFilterBasicPaging3()
+    public void QueryBasicPaging3()
     {
         GivenScenario(CommandTest1);
-        ListQueryFilterTestChecker.WhenParam(
-                new ClientLoyaltyPointQueryFilter.QueryFilterParameter(
+        ListQueryTestChecker.WhenParam(
+                new ClientLoyaltyPointQuery.QueryParameter(
                     null,
                     null,
                     3,
@@ -170,7 +170,7 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     null,
                     null))
             .ThenResponseIs(
-                new QueryFilterListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
+                new QueryListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     2,
                     2,
@@ -182,11 +182,11 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     }));
     }
     [Fact]
-    public void QueryFilterBasicPagingRequestOverflowed()
+    public void QueryBasicPagingRequestOverflowed()
     {
         GivenScenario(CommandTest1);
-        ListQueryFilterTestChecker.WhenParam(
-                new ClientLoyaltyPointQueryFilter.QueryFilterParameter(
+        ListQueryTestChecker.WhenParam(
+                new ClientLoyaltyPointQuery.QueryParameter(
                     null,
                     null,
                     3,
@@ -196,7 +196,7 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     null,
                     null))
             .ThenResponseIs(
-                new QueryFilterListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
+                new QueryListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     2,
                     3,
@@ -204,11 +204,11 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     new List<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>()));
     }
     [Fact]
-    public void QueryFilterBasicPagingRequestZero()
+    public void QueryBasicPagingRequestZero()
     {
         GivenScenario(CommandTest1);
-        ListQueryFilterTestChecker.WhenParam(
-                new ClientLoyaltyPointQueryFilter.QueryFilterParameter(
+        ListQueryTestChecker.WhenParam(
+                new ClientLoyaltyPointQuery.QueryParameter(
                     null,
                     null,
                     3,
@@ -218,7 +218,7 @@ public class ClientLoyaltyPointListProjectionTest : CustomerMultipleAggregatePro
                     null,
                     null))
             .ThenResponseIs(
-                new QueryFilterListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
+                new QueryListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     2,
                     0,

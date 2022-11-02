@@ -1,13 +1,10 @@
-using Sekiban.Core.Query.MultipleAggregate;
+using Sekiban.Core.Query.MultipleProjections;
 namespace Sekiban.Core.Aggregate;
 
 [AttributeUsage(AttributeTargets.Class)]
 public class AggregateContainerGroupAttribute : Attribute
 {
-    public AggregateContainerGroupAttribute(AggregateContainerGroup group = AggregateContainerGroup.Default)
-    {
-        Group = group;
-    }
+    public AggregateContainerGroupAttribute(AggregateContainerGroup group = AggregateContainerGroup.Default) => Group = group;
     public AggregateContainerGroup Group { get; init; }
     public static AggregateContainerGroup FindAggregateContainerGroup(Type type)
     {
@@ -17,7 +14,7 @@ public class AggregateContainerGroupAttribute : Attribute
             var max = attributes.Max(m => m.Group);
             return max;
         }
-        if (type.Name.Equals(typeof(SingleAggregateListProjector<,,>).Name))
+        if (type.Name.Equals(typeof(SingleProjectionListProjector<,,>).Name))
         {
             var projectorType = type.GetGenericArguments()[2];
             var projector = Activator.CreateInstance(projectorType) as dynamic;

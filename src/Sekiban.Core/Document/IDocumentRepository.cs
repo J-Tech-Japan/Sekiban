@@ -4,35 +4,35 @@ namespace Sekiban.Core.Document;
 
 public interface IDocumentRepository
 {
-    Task GetAllAggregateEventsForAggregateIdAsync(
+    Task GetAllEventsForAggregateIdAsync(
         Guid aggregateId,
         Type originalType,
         string? partitionKey,
         string? sinceSortableUniqueId,
-        Action<IEnumerable<IAggregateEvent>> resultAction);
+        Action<IEnumerable<IEvent>> resultAction);
 
-    Task GetAllAggregateEventStringsForAggregateIdAsync(
+    Task GetAllEventStringsForAggregateIdAsync(
         Guid aggregateId,
         Type originalType,
         string? partitionKey,
         string? sinceSortableUniqueId,
         Action<IEnumerable<string>> resultAction);
-    Task GetAllAggregateCommandStringsForAggregateIdAsync(
+    Task GetAllCommandStringsForAggregateIdAsync(
         Guid aggregateId,
         Type originalType,
         string? sinceSortableUniqueId,
         Action<IEnumerable<string>> resultAction);
 
-    Task GetAllAggregateEventsForAggregateEventTypeAsync(
+    Task GetAllEventsForAggregateAsync(
         Type originalType,
         string? sinceSortableUniqueId,
-        Action<IEnumerable<IAggregateEvent>> resultAction);
+        Action<IEnumerable<IEvent>> resultAction);
 
-    Task GetAllAggregateEventsAsync(
+    Task GetAllEventsAsync(
         Type multipleProjectionType,
         IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
-        Action<IEnumerable<IAggregateEvent>> resultAction);
+        Action<IEnumerable<IEvent>> resultAction);
 
     Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type originalType);
 
@@ -46,7 +46,7 @@ public interface IDocumentPersistentRepository : IDocumentRepository
 }
 public interface IDocumentTemporaryRepository : IDocumentRepository
 {
-    Task<bool> AggregateEventsForAggregateIdHasSortableUniqueIdAsync(
+    Task<bool> EventsForAggregateIdHasSortableUniqueIdAsync(
         Guid aggregateId,
         Type originalType,
         string? partitionKey,

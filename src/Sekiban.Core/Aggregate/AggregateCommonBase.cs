@@ -15,12 +15,9 @@ public abstract class AggregateCommonBase : IAggregate
     public string LastSortableUniqueId => _basicInfo.LastSortableUniqueId;
     public int AppliedSnapshotVersion => _basicInfo.AppliedSnapshotVersion;
     public int Version => _basicInfo.Version;
-    public bool CanApplyEvent(IAggregateEvent ev)
-    {
-        return GetApplyEventAction(ev, ev.GetPayload()) is not null;
-    }
+    public bool CanApplyEvent(IEvent ev) => GetApplyEventAction(ev, ev.GetPayload()) is not null;
 
-    public void ApplyEvent(IAggregateEvent ev)
+    public void ApplyEvent(IEvent ev)
     {
         var action = GetApplyEventAction(ev, ev.GetPayload());
         if (action is null) { return; }
@@ -45,5 +42,5 @@ public abstract class AggregateCommonBase : IAggregate
         // C#の将来の正式バージョンで、インターフェースに静的メソッドを定義できるようになったら、書き換える。
     }
 
-    protected abstract Action? GetApplyEventAction(IAggregateEvent ev, IEventPayload payload);
+    protected abstract Action? GetApplyEventAction(IEvent ev, IEventPayload payload);
 }

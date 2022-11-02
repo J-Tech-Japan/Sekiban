@@ -5,8 +5,6 @@ namespace Customer.Domain.Aggregates.LoyaltyPoints.Events;
 public record LoyaltyPointUsed
     (DateTime HappenedDate, LoyaltyPointUsageTypeKeys Reason, int PointAmount, string Note) : IChangedEvent<LoyaltyPoint>
 {
-    public LoyaltyPoint OnEvent(LoyaltyPoint payload, IAggregateEvent aggregateEvent)
-    {
-        return payload with { CurrentPoint = payload.CurrentPoint - PointAmount, LastOccuredTime = HappenedDate };
-    }
+    public LoyaltyPoint OnEvent(LoyaltyPoint payload, IEvent ev) =>
+        payload with { CurrentPoint = payload.CurrentPoint - PointAmount, LastOccuredTime = HappenedDate };
 }

@@ -4,7 +4,7 @@ namespace Customer.Domain.Aggregates.RecentActivities.Events;
 
 public record RecentActivityAdded(RecentActivityRecord Record) : IChangedEvent<RecentActivity>
 {
-    public RecentActivity OnEvent(RecentActivity payload, IAggregateEvent aggregateEvent)
+    public RecentActivity OnEvent(RecentActivity payload, IEvent ev)
     {
         return new RecentActivity(
             payload.LatestActivities.Add(Record)

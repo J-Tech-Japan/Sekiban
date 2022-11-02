@@ -5,14 +5,15 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Command.UserInformation;
 using Sekiban.Core.Document;
 using Sekiban.Core.PubSub;
-using Sekiban.Core.Query.MultipleAggregate;
-using Sekiban.Core.Query.MultipleAggregate.MultipleProjection;
+using Sekiban.Core.Query.MultipleProjections;
+using Sekiban.Core.Query.MultipleProjections.Projections;
 using Sekiban.Core.Query.QueryModel;
-using Sekiban.Core.Query.SingleAggregate;
-using Sekiban.Core.Query.SingleAggregate.SingleProjection;
+using Sekiban.Core.Query.SingleProjections;
+using Sekiban.Core.Query.SingleProjections.Projections;
 using Sekiban.Core.Query.UpdateNotice;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
+using ISingleProjection = Sekiban.Core.Query.SingleProjections.Projections.ISingleProjection;
 namespace Sekiban.Core.Dependency;
 
 public static class ServiceCollectionExtensions
@@ -32,11 +33,11 @@ public static class ServiceCollectionExtensions
     {
         services.AddMemoryCache();
 
-        services.AddTransient<AggregateEventPublisher>();
+        services.AddTransient<EventPublisher>();
 
-        services.AddTransient<IAggregateCommandExecutor, AggregateCommandExecutor>();
-        services.AddTransient<ISingleAggregateService, SingleAggregateService>();
-        services.AddTransient<IMultipleAggregateProjectionService, MultipleAggregateProjectionService>();
+        services.AddTransient<ICommandExecutor, CommandExecutor>();
+        services.AddTransient<ISingleProjectionService, SingleProjectionService>();
+        services.AddTransient<IMultiProjectionService, MultiProjectionService>();
         switch (multipleProjectionType)
         {
             case MultipleProjectionType.Simple:
@@ -59,10 +60,10 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IDocumentRepository, DocumentRepositorySplitter>();
         services.AddSingleton(new HybridStoreManager(true));
         services.AddScoped<ISekibanContext, SekibanContext>();
-        services.AddTransient<IQueryFilterService, QueryFilterService>();
-        services.AddTransient<QueryFilterHandler>();
-        services.AddTransient<ISingleAggregateProjectionCache, SingleAggregateProjectionCache>();
-        services.AddTransient<IMultipleAggregateProjectionCache, MultipleAggregateProjectionCache>();
+        services.AddTransient<IQueryService, QueryService>();
+        services.AddTransient<QueryHandler>();
+        services.AddTransient<ISingleProjectionCache, SingleProjectionCache>();
+        services.AddTransient<IMultiProjectionCache, MultiProjectionCache>();
         services.AddTransient<ISnapshotDocumentCache, SnapshotDocumentCache>();
         return services;
     }
@@ -70,11 +71,11 @@ public static class ServiceCollectionExtensions
     {
         services.AddMemoryCache();
 
-        services.AddTransient<AggregateEventPublisher>();
+        services.AddTransient<EventPublisher>();
 
-        services.AddTransient<IAggregateCommandExecutor, AggregateCommandExecutor>();
-        services.AddTransient<ISingleAggregateService, SingleAggregateService>();
-        services.AddTransient<IMultipleAggregateProjectionService, MultipleAggregateProjectionService>();
+        services.AddTransient<ICommandExecutor, CommandExecutor>();
+        services.AddTransient<ISingleProjectionService, SingleProjectionService>();
+        services.AddTransient<IMultiProjectionService, MultiProjectionService>();
         services.AddTransient<IMultipleProjection, MemoryCacheMultipleProjection>();
         services.AddTransient<ISingleProjection, SimpleProjectionWithSnapshot>();
         var sekibanDateProducer1 = sekibanDateProducer ?? new SekibanDateProducer();
@@ -92,10 +93,10 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IDocumentPersistentRepository, InMemoryDocumentRepository>();
         services.AddTransient<IDocumentTemporaryWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentPersistentWriter, InMemoryDocumentWriter>();
-        services.AddTransient<IQueryFilterService, QueryFilterService>();
-        services.AddTransient<QueryFilterHandler>();
-        services.AddTransient<ISingleAggregateProjectionCache, SingleAggregateProjectionCache>();
-        services.AddTransient<IMultipleAggregateProjectionCache, MultipleAggregateProjectionCache>();
+        services.AddTransient<IQueryService, QueryService>();
+        services.AddTransient<QueryHandler>();
+        services.AddTransient<ISingleProjectionCache, SingleProjectionCache>();
+        services.AddTransient<IMultiProjectionCache, MultiProjectionCache>();
         services.AddTransient<ISnapshotDocumentCache, SnapshotDocumentCache>();
         return services;
     }
@@ -104,11 +105,11 @@ public static class ServiceCollectionExtensions
         services.AddMemoryCache();
 
 
-        services.AddTransient<AggregateEventPublisher>();
+        services.AddTransient<EventPublisher>();
 
-        services.AddTransient<IAggregateCommandExecutor, AggregateCommandExecutor>();
-        services.AddTransient<ISingleAggregateService, SingleAggregateService>();
-        services.AddTransient<IMultipleAggregateProjectionService, MultipleAggregateProjectionService>();
+        services.AddTransient<ICommandExecutor, CommandExecutor>();
+        services.AddTransient<ISingleProjectionService, SingleProjectionService>();
+        services.AddTransient<IMultiProjectionService, MultiProjectionService>();
         services.AddTransient<IMultipleProjection, MemoryCacheMultipleProjection>();
         services.AddTransient<ISingleProjection, SimpleProjectionWithSnapshot>();
         var sekibanDateProducer1 = sekibanDateProducer ?? new SekibanDateProducer();
@@ -126,10 +127,10 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IDocumentPersistentRepository, InMemoryDocumentRepository>();
         services.AddTransient<IDocumentTemporaryWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentPersistentWriter, InMemoryDocumentWriter>();
-        services.AddTransient<IQueryFilterService, QueryFilterService>();
-        services.AddTransient<QueryFilterHandler>();
-        services.AddTransient<ISingleAggregateProjectionCache, SingleAggregateProjectionCache>();
-        services.AddTransient<IMultipleAggregateProjectionCache, MultipleAggregateProjectionCache>();
+        services.AddTransient<IQueryService, QueryService>();
+        services.AddTransient<QueryHandler>();
+        services.AddTransient<ISingleProjectionCache, SingleProjectionCache>();
+        services.AddTransient<IMultiProjectionCache, MultiProjectionCache>();
         services.AddTransient<ISnapshotDocumentCache, SnapshotDocumentCache>();
         return services;
     }

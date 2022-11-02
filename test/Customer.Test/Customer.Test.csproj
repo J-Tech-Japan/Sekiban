@@ -9,8 +9,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.11.0"/>
-        <PackageReference Include="xunit" Version="2.4.1"/>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.11.0" />
+        <PackageReference Include="xunit" Version="2.4.1" />
         <PackageReference Include="xunit.runner.visualstudio" Version="2.4.3">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
@@ -22,9 +22,9 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\samples\Customer.Domain\Customer.Domain.csproj"/>
-        <ProjectReference Include="..\..\src\Sekiban.Core\Sekiban.Core.csproj"/>
-        <ProjectReference Include="..\..\src\Sekiban.Testing\Sekiban.Testing.csproj"/>
+        <ProjectReference Include="..\..\samples\Customer.Domain\Customer.Domain.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Core\Sekiban.Core.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Testing\Sekiban.Testing.csproj" />
     </ItemGroup>
 
     <ItemGroup>

@@ -5,13 +5,13 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>JJ_Sekiban.Testing</PackageId>
-        <Version>0.9.4</Version>
+        <Version>0.9.5</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Testing</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.9.4</PackageVersion>
-        <Description>SingleAggregateProjection,Test,Dependencyの調整</Description>
+        <PackageVersion>0.9.5</PackageVersion>
+        <Description>全体的な名称の統一、簡素化、テストでのクラス変数を使用しなくて良くする変更、Dependencyの調整</Description>
         <AssemblyName>Sekiban.Testing</AssemblyName>
         <RootNamespace>Sekiban.Testing</RootNamespace>
     </PropertyGroup>
