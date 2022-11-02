@@ -9,29 +9,29 @@ public abstract class CreateCommandHandlerBase<TAggregatePayload, TCommand> : IC
     where TAggregatePayload : IAggregatePayload, new() where TCommand : ICreateCommand<TAggregatePayload>, new()
 {
     private readonly List<IEvent> _events = new();
-    private AggregateIdentifier<TAggregatePayload>? _aggregate;
-    public async Task<CommandResponse> HandleAsync(CommandDocument<TCommand> command, AggregateIdentifier<TAggregatePayload> aggregateIdentifier)
+    private Aggregate<TAggregatePayload>? _aggregate;
+    public async Task<CommandResponse> HandleAsync(CommandDocument<TCommand> command, Aggregate<TAggregatePayload> aggregate)
     {
         // ReSharper disable once SuspiciousTypeConversion.Global
         if (command is IOnlyPublishingCommand)
         {
             throw new SekibanCanNotExecuteOnlyPublishingEventCommand(typeof(TCommand).Name);
         }
-        _aggregate = aggregateIdentifier;
+        _aggregate = aggregate;
         var eventPayloads = ExecCreateCommandAsync(GetAggregateState, command.Payload);
         await foreach (var eventPayload in eventPayloads)
         {
-            _events.Add(EventHandler.HandleEvent(aggregateIdentifier, eventPayload));
+            _events.Add(EventHandler.HandleEvent(aggregate, eventPayload));
             if (_events.First().GetPayload() is not ICreatedEventPayload) { throw new SekibanCreateCommandShouldSaveCreateEventFirstException(); }
             if (_events.Count > 1 && _events.Last().GetPayload() is ICreatedEventPayload)
             {
                 throw new SekibanCreateCommandShouldOnlySaveFirstException();
             }
         }
-        return await Task.FromResult(new CommandResponse(aggregateIdentifier.AggregateId, _events.ToImmutableList(), aggregateIdentifier.Version));
+        return await Task.FromResult(new CommandResponse(aggregate.AggregateId, _events.ToImmutableList(), aggregate.Version));
     }
     public virtual TCommand CleanupCommandIfNeeded(TCommand command) => command;
-    private AggregateIdentifierState<TAggregatePayload> GetAggregateState()
+    private AggregateState<TAggregatePayload> GetAggregateState()
     {
         if (_aggregate is null)
         {
@@ -40,7 +40,7 @@ public abstract class CreateCommandHandlerBase<TAggregatePayload, TCommand> : IC
         var state = _aggregate.ToState();
         foreach (var ev in _events)
         {
-            var aggregate = new AggregateIdentifier<TAggregatePayload>();
+            var aggregate = new Aggregate<TAggregatePayload>();
             aggregate.ApplySnapshot(state);
             aggregate.ApplyEvent(ev);
             state = aggregate.ToState();
@@ -48,6 +48,6 @@ public abstract class CreateCommandHandlerBase<TAggregatePayload, TCommand> : IC
         return state;
     }
     protected abstract IAsyncEnumerable<IApplicableEvent<TAggregatePayload>> ExecCreateCommandAsync(
-        Func<AggregateIdentifierState<TAggregatePayload>> getAggregateState,
+        Func<AggregateState<TAggregatePayload>> getAggregateState,
         TCommand command);
 }

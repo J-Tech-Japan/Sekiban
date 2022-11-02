@@ -59,7 +59,7 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         }
         if (singleProjectionBase.GenericTypeArguments[0] != AggregateType)
         {
-            throw new ArgumentException($"Single projection {singleProjectionType.Name} must be for aggregateIdentifier {AggregateType.Name}");
+            throw new ArgumentException($"Single projection {singleProjectionType.Name} must be for aggregate {AggregateType.Name}");
         }
         SingleProjectionTypes = SingleProjectionTypes.Add(typeof(TSingleProjection));
         return this;

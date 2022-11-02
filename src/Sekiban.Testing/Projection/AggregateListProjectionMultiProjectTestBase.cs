@@ -41,8 +41,8 @@ public class AggregateListProjectionMultiProjectTestBase<TAggregatePayload, TDep
 
 
 
-    public MultiProjectionState<SingleProjectionListState<AggregateIdentifierState<TAggregatePayload>>> State { get; protected set; }
-        = new(new SingleProjectionListState<AggregateIdentifierState<TAggregatePayload>>(), Guid.Empty, string.Empty, 0, 0);
+    public MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>> State { get; protected set; }
+        = new(new SingleProjectionListState<AggregateState<TAggregatePayload>>(), Guid.Empty, string.Empty, 0, 0);
     protected Exception? _latestException { get; set; }
     public Action<IEvent> OnEvent => e => GivenEvents(new List<IEvent> { e });
     public
@@ -73,12 +73,12 @@ public class AggregateListProjectionMultiProjectTestBase<TAggregatePayload, TDep
     public AggregateListProjectionMultiProjectTestBase<TAggregatePayload, TDependencyDefinition> ThenPayloadIsFromFile(string filename)
     {
         using var openStream = File.OpenRead(filename);
-        var projection = JsonSerializer.Deserialize<SingleProjectionListState<AggregateIdentifierState<TAggregatePayload>>>(openStream);
+        var projection = JsonSerializer.Deserialize<SingleProjectionListState<AggregateState<TAggregatePayload>>>(openStream);
         if (projection is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         return ThenPayloadIs(projection);
     }
     public AggregateListProjectionMultiProjectTestBase<TAggregatePayload, TDependencyDefinition> ThenGetPayload(
-        Action<SingleProjectionListState<AggregateIdentifierState<TAggregatePayload>>> payloadAction)
+        Action<SingleProjectionListState<AggregateState<TAggregatePayload>>> payloadAction)
     {
         payloadAction(State.Payload);
         return this;
@@ -97,11 +97,11 @@ public class AggregateListProjectionMultiProjectTestBase<TAggregatePayload, TDep
 
     }
 
-    public AggregateIdentifierState<TEnvironmentAggregatePayload> GetAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
+    public AggregateState<TEnvironmentAggregatePayload> GetAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
         where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
         var singleProjectionService = _serviceProvider.GetRequiredService(typeof(ISingleProjectionService)) as ISingleProjectionService;
-        if (singleProjectionService is null) { throw new Exception("Failed to get single aggregateIdentifier service"); }
+        if (singleProjectionService is null) { throw new Exception("Failed to get single aggregate service"); }
         var aggregate = singleProjectionService.GetAggregateStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name);
     }
@@ -111,12 +111,12 @@ public class AggregateListProjectionMultiProjectTestBase<TAggregatePayload, TDep
         var documentWriter = _serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter;
         if (documentWriter is null) { throw new Exception("Failed to get document writer"); }
         var sekibanAggregateTypes = _serviceProvider.GetService<SekibanAggregateTypes>() ??
-            throw new Exception("Failed to get aggregateIdentifier types");
+            throw new Exception("Failed to get aggregate types");
 
         foreach (var e in events)
         {
             var aggregateType = sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == e.AggregateType);
-            if (aggregateType is null) { throw new Exception($"Failed to find aggregateIdentifier type {e.AggregateType}"); }
+            if (aggregateType is null) { throw new Exception($"Failed to find aggregate type {e.AggregateType}"); }
             documentWriter.SaveAsync(e, aggregateType.Aggregate).Wait();
         }
         return this;
@@ -145,13 +145,13 @@ public class AggregateListProjectionMultiProjectTestBase<TAggregatePayload, TDep
     }
 
     public AggregateListProjectionMultiProjectTestBase<TAggregatePayload, TDependencyDefinition> ThenGetState(
-        Action<MultiProjectionState<SingleProjectionListState<AggregateIdentifierState<TAggregatePayload>>>> stateAction)
+        Action<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>> stateAction)
     {
         stateAction(State);
         return this;
     }
     public AggregateListProjectionMultiProjectTestBase<TAggregatePayload, TDependencyDefinition> ThenStateIs(
-        MultiProjectionState<SingleProjectionListState<AggregateIdentifierState<TAggregatePayload>>> state)
+        MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>> state)
     {
         var actual = State;
         var expected = state with { LastEventId = actual.LastEventId, LastSortableUniqueId = actual.LastSortableUniqueId, Version = actual.Version };
@@ -161,7 +161,7 @@ public class AggregateListProjectionMultiProjectTestBase<TAggregatePayload, TDep
         return this;
     }
     public AggregateListProjectionMultiProjectTestBase<TAggregatePayload, TDependencyDefinition> ThenPayloadIs(
-        SingleProjectionListState<AggregateIdentifierState<TAggregatePayload>> payload)
+        SingleProjectionListState<AggregateState<TAggregatePayload>> payload)
     {
         var actual = State.Payload;
         var expected = payload;
@@ -174,7 +174,7 @@ public class AggregateListProjectionMultiProjectTestBase<TAggregatePayload, TDep
     {
         using var openStream = File.OpenRead(filename);
         var projection =
-            JsonSerializer.Deserialize<MultiProjectionState<SingleProjectionListState<AggregateIdentifierState<TAggregatePayload>>>>(openStream);
+            JsonSerializer.Deserialize<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>>(openStream);
         if (projection is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         return ThenStateIs(projection);
     }
@@ -250,7 +250,8 @@ public class AggregateListProjectionMultiProjectTestBase<TAggregatePayload, TDep
     }
 
 
-    public AggregateListProjectionMultiProjectTestBase<TAggregatePayload, TDependencyDefinition> ThenGetQueryTest<TQuery, TQueryParameter, TQueryResponse>(
+    public AggregateListProjectionMultiProjectTestBase<TAggregatePayload, TDependencyDefinition> ThenGetQueryTest<TQuery, TQueryParameter,
+        TQueryResponse>(
         Action<AggregateQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>> queryTestAction)
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
@@ -261,7 +262,8 @@ public class AggregateListProjectionMultiProjectTestBase<TAggregatePayload, TDep
         return this;
     }
 
-    public AggregateListProjectionMultiProjectTestBase<TAggregatePayload, TDependencyDefinition> ThenGetListQueryTest<TQuery, TQueryParameter, TQueryResponse>(
+    public AggregateListProjectionMultiProjectTestBase<TAggregatePayload, TDependencyDefinition> ThenGetListQueryTest<TQuery, TQueryParameter,
+        TQueryResponse>(
         Action<AggregateListQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>> queryTestAction)
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter

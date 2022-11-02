@@ -18,7 +18,7 @@ public class SimpleSingleProjectionFromInitial : ISingleProjectionFromInitial
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
     public async Task<T?> GetAggregateFromInitialAsync<T, P>(Guid aggregateId, int? toVersion)
-        where T : IAggregateIdentifier, SingleProjections.ISingleProjection
+        where T : IAggregateCommon, SingleProjections.ISingleProjection
         where P : ISingleProjector<T>, new()
     {
         var projector = new P();

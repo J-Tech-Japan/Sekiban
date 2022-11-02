@@ -5,14 +5,14 @@ namespace Sekiban.Core.Query;
 
 public class SimpleAggregateListQuery<TAggregatePayload> : IAggregateListQuery<TAggregatePayload,
     SimpleAggregateListQuery<TAggregatePayload>.QueryParameter,
-    AggregateIdentifierState<TAggregatePayload>> where TAggregatePayload : IAggregatePayload, new()
+    AggregateState<TAggregatePayload>> where TAggregatePayload : IAggregatePayload, new()
 {
-    public IEnumerable<AggregateIdentifierState<TAggregatePayload>> HandleFilter(
+    public IEnumerable<AggregateState<TAggregatePayload>> HandleFilter(
         QueryParameter queryParam,
-        IEnumerable<AggregateIdentifierState<TAggregatePayload>> list) => list;
-    public IEnumerable<AggregateIdentifierState<TAggregatePayload>> HandleSort(
+        IEnumerable<AggregateState<TAggregatePayload>> list) => list;
+    public IEnumerable<AggregateState<TAggregatePayload>> HandleSort(
         QueryParameter queryParam,
-        IEnumerable<AggregateIdentifierState<TAggregatePayload>> projections)
+        IEnumerable<AggregateState<TAggregatePayload>> projections)
     {
         return projections.OrderByDescending(m => m.LastSortableUniqueId);
     }

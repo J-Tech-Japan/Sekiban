@@ -10,16 +10,16 @@ public record AddRecentInMemoryActivity(Guid RecentInMemoryActivityId, string Ac
 {
     public AddRecentInMemoryActivity() : this(Guid.Empty, string.Empty) { }
     public override Guid GetAggregateId() => RecentInMemoryActivityId;
-}
-public class AddRecentInMemoryActivityHandler : ChangeCommandHandlerBase<RecentInMemoryActivity, AddRecentInMemoryActivity>
-{
-    private readonly ISekibanDateProducer _sekibanDateProducer;
-    public AddRecentInMemoryActivityHandler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
-    protected override async IAsyncEnumerable<IChangedEvent<RecentInMemoryActivity>> ExecCommandAsync(
-        Func<AggregateIdentifierState<RecentInMemoryActivity>> getAggregateState,
-        AddRecentInMemoryActivity command)
+    public class Handler : ChangeCommandHandlerBase<RecentInMemoryActivity, AddRecentInMemoryActivity>
     {
-        await Task.CompletedTask;
-        yield return new RecentInMemoryActivityAdded(new RecentInMemoryActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
+        private readonly ISekibanDateProducer _sekibanDateProducer;
+        public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
+        protected override async IAsyncEnumerable<IChangedEvent<RecentInMemoryActivity>> ExecCommandAsync(
+            Func<AggregateState<RecentInMemoryActivity>> getAggregateState,
+            AddRecentInMemoryActivity command)
+        {
+            await Task.CompletedTask;
+            yield return new RecentInMemoryActivityAdded(new RecentInMemoryActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
+        }
     }
 }

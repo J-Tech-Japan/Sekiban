@@ -11,7 +11,7 @@ public class SingleProjectionCache : ISingleProjectionCache
     public SingleProjectionCache(IMemoryCache memoryCache) => _memoryCache = memoryCache;
 
     public void SetContainer<TAggregate, TState>(Guid aggregateId, SingleMemoryCacheProjectionContainer<TAggregate, TState> container)
-        where TAggregate : IAggregateIdentifier, ISingleProjection where TState : IAggregateIdentifier
+        where TAggregate : IAggregateCommon, ISingleProjection where TState : IAggregateCommon
     {
         _memoryCache.Set(
             GetCacheKeyForSingleProjectionContainer<TAggregate>(aggregateId),
@@ -19,18 +19,18 @@ public class SingleProjectionCache : ISingleProjectionCache
             GetMemoryCacheOptionsForSingleProjectionContainer());
     }
     public SingleMemoryCacheProjectionContainer<TAggregate, TState>? GetContainer<TAggregate, TState>(Guid aggregateId)
-        where TAggregate : IAggregateIdentifier, ISingleProjection where TState : IAggregateIdentifier =>
+        where TAggregate : IAggregateCommon, ISingleProjection where TState : IAggregateCommon =>
         _memoryCache.Get<SingleMemoryCacheProjectionContainer<TAggregate, TState>>(
             GetCacheKeyForSingleProjectionContainer<TAggregate>(aggregateId));
 
-    private static MemoryCacheEntryOptions GetMemoryCacheOptionsForSingleProjectionContainer() => new MemoryCacheEntryOptions
+    private static MemoryCacheEntryOptions GetMemoryCacheOptionsForSingleProjectionContainer() => new()
     {
         AbsoluteExpiration = DateTimeOffset.UtcNow.AddHours(2), SlidingExpiration = TimeSpan.FromMinutes(15)
         // 5分読まれなかったら削除するが、2時間経ったらどちらにしても削除する
     };
     public string GetCacheKeyForSingleProjectionContainer<TAggregate>(Guid aggregateId)
     {
-        if (typeof(TAggregate).IsGenericType && typeof(TAggregate).GetGenericTypeDefinition() == typeof(AggregateIdentifier<>))
+        if (typeof(TAggregate).IsGenericType && typeof(TAggregate).GetGenericTypeDefinition() == typeof(Aggregate<>))
         {
             return $"{typeof(TAggregate).GetGenericArguments()[0].Name}_{aggregateId}";
         }

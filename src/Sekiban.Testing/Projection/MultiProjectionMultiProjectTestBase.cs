@@ -78,7 +78,8 @@ public class
         if (projection is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         return ThenPayloadIs(projection);
     }
-    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> ThenGetPayload(Action<TProjectionPayload> payloadAction)
+    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> ThenGetPayload(
+        Action<TProjectionPayload> payloadAction)
     {
         payloadAction(State.Payload);
         return this;
@@ -97,11 +98,11 @@ public class
 
     }
 
-    public AggregateIdentifierState<TEnvironmentAggregatePayload> GetAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
+    public AggregateState<TEnvironmentAggregatePayload> GetAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
         where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
         var singleProjectionService = _serviceProvider.GetRequiredService(typeof(ISingleProjectionService)) as ISingleProjectionService;
-        if (singleProjectionService is null) { throw new Exception("Failed to get single aggregateIdentifier service"); }
+        if (singleProjectionService is null) { throw new Exception("Failed to get single aggregate service"); }
         var aggregate = singleProjectionService.GetAggregateStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name);
     }
@@ -111,12 +112,12 @@ public class
         var documentWriter = _serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter;
         if (documentWriter is null) { throw new Exception("Failed to get document writer"); }
         var sekibanAggregateTypes = _serviceProvider.GetService<SekibanAggregateTypes>() ??
-            throw new Exception("Failed to get aggregateIdentifier types");
+            throw new Exception("Failed to get aggregate types");
 
         foreach (var e in events)
         {
             var aggregateType = sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == e.AggregateType);
-            if (aggregateType is null) { throw new Exception($"Failed to find aggregateIdentifier type {e.AggregateType}"); }
+            if (aggregateType is null) { throw new Exception($"Failed to find aggregate type {e.AggregateType}"); }
             documentWriter.SaveAsync(e, aggregateType.Aggregate).Wait();
         }
         return this;
@@ -289,7 +290,8 @@ public class
         _latestException = null;
     }
 
-    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> ThenGetQueryTest<TQuery, TQueryParameter, TQueryResponse>(
+    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> ThenGetQueryTest<TQuery, TQueryParameter,
+        TQueryResponse>(
         Action<MultiProjectionQueryTest<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>> queryTestAction)
         where TQueryParameter : IQueryParameter
         where TQuery : IMultiProjectionQuery<TProjection, TProjectionPayload, TQueryParameter, TQueryResponse>, new()

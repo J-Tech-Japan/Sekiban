@@ -88,7 +88,8 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
     }
     public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GetSingleProjectionListProjectionTest<TAggregatePayload, TSingleProjection,
         TSingleProjectionPayload>(
-        Action<SingleProjectionListMultiProjectTestBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TDependencyDefinition>> testAction)
+        Action<SingleProjectionListMultiProjectTestBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TDependencyDefinition>>
+            testAction)
         where TAggregatePayload : IAggregatePayload, new()
         where TSingleProjection : MultiProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
         where TSingleProjectionPayload : ISingleProjectionPayload
@@ -189,12 +190,12 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
     }
 
 
-    public AggregateIdentifierState<TEnvironmentAggregatePayload> GetAggregateState<TEnvironmentAggregate, TEnvironmentAggregatePayload>(
+    public AggregateState<TEnvironmentAggregatePayload> GetAggregateState<TEnvironmentAggregate, TEnvironmentAggregatePayload>(
         Guid aggregateId)
         where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
         var singleProjectionService = _serviceProvider.GetRequiredService(typeof(ISingleProjectionService)) as ISingleProjectionService;
-        if (singleProjectionService is null) { throw new Exception("Failed to get single aggregateIdentifier service"); }
+        if (singleProjectionService is null) { throw new Exception("Failed to get single aggregate service"); }
         var aggregate = singleProjectionService.GetAggregateStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregate).Name);
     }

@@ -20,7 +20,7 @@ public record BasicClientQueryModel(Guid BranchId, string ClientName, string Cli
 public class BasicClientQuery : IAggregateListQuery<Client, BasicClientQueryParameter,
     BasicClientQueryModel>
 {
-    public IEnumerable<BasicClientQueryModel> HandleFilter(BasicClientQueryParameter queryParam, IEnumerable<AggregateIdentifierState<Client>> list)
+    public IEnumerable<BasicClientQueryModel> HandleFilter(BasicClientQueryParameter queryParam, IEnumerable<AggregateState<Client>> list)
     {
         return list.Where(m => queryParam.BranchId is null || m.Payload.BranchId == queryParam.BranchId)
             .Select(m => new BasicClientQueryModel(m.Payload.BranchId, m.Payload.ClientName, m.Payload.ClientEmail));

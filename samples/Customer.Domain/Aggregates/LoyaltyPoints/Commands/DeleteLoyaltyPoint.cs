@@ -8,14 +8,14 @@ public record DeleteLoyaltyPoint(Guid ClientId) : ChangeCommandBase<LoyaltyPoint
 {
     public DeleteLoyaltyPoint() : this(Guid.Empty) { }
     public override Guid GetAggregateId() => ClientId;
-}
-public class DeleteLoyaltyPointHandler : ChangeCommandHandlerBase<LoyaltyPoint, DeleteLoyaltyPoint>
-{
-    protected override async IAsyncEnumerable<IChangedEvent<LoyaltyPoint>> ExecCommandAsync(
-        Func<AggregateIdentifierState<LoyaltyPoint>> getAggregateState,
-        DeleteLoyaltyPoint command)
+    public class Handler : ChangeCommandHandlerBase<LoyaltyPoint, DeleteLoyaltyPoint>
     {
-        await Task.CompletedTask;
-        yield return new LoyaltyPointDeleted();
+        protected override async IAsyncEnumerable<IChangedEvent<LoyaltyPoint>> ExecCommandAsync(
+            Func<AggregateState<LoyaltyPoint>> getAggregateState,
+            DeleteLoyaltyPoint command)
+        {
+            await Task.CompletedTask;
+            yield return new LoyaltyPointDeleted();
+        }
     }
 }

@@ -8,17 +8,17 @@ namespace Customer.Domain.Aggregates.RecentActivities.Commands;
 public record CreateRecentActivity : ICreateCommand<RecentActivity>
 {
     public Guid GetAggregateId() => Guid.NewGuid();
-}
-public class CreateRecentActivityHandler : CreateCommandHandlerBase<RecentActivity, CreateRecentActivity>
-{
-    private readonly ISekibanDateProducer _sekibanDateProducer;
-    public CreateRecentActivityHandler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
-
-    protected override async IAsyncEnumerable<IApplicableEvent<RecentActivity>> ExecCreateCommandAsync(
-        Func<AggregateIdentifierState<RecentActivity>> getAggregateState,
-        CreateRecentActivity command)
+    public class Handler : CreateCommandHandlerBase<RecentActivity, CreateRecentActivity>
     {
-        await Task.CompletedTask;
-        yield return new RecentActivityCreated(new RecentActivityRecord("First Event Created", _sekibanDateProducer.UtcNow));
+        private readonly ISekibanDateProducer _sekibanDateProducer;
+        public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
+
+        protected override async IAsyncEnumerable<IApplicableEvent<RecentActivity>> ExecCreateCommandAsync(
+            Func<AggregateState<RecentActivity>> getAggregateState,
+            CreateRecentActivity command)
+        {
+            await Task.CompletedTask;
+            yield return new RecentActivityCreated(new RecentActivityRecord("First Event Created", _sekibanDateProducer.UtcNow));
+        }
     }
 }

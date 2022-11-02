@@ -9,7 +9,7 @@ public class BranchExistsQuery : IAggregateQuery<Branch, BranchExistsQuery.Query
     private readonly ISekibanDateProducer _dateProducer;
     public BranchExistsQuery(ISekibanDateProducer dateProducer) => _dateProducer = dateProducer;
 
-    public bool HandleFilter(QueryParameter queryParam, IEnumerable<AggregateIdentifierState<Branch>> list)
+    public bool HandleFilter(QueryParameter queryParam, IEnumerable<AggregateState<Branch>> list)
     {
         return list.Any(b => b.AggregateId == queryParam.BranchId);
     }

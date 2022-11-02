@@ -13,15 +13,15 @@ public record CreateBranch : ICreateCommand<Branch>
     [MaxLength(20)]
     public string Name { get; init; } = string.Empty;
     public Guid GetAggregateId() => Guid.NewGuid();
-}
-public class CreateBranchHandler : CreateCommandHandlerBase<Branch, CreateBranch>
-{
-    public override CreateBranch CleanupCommandIfNeeded(CreateBranch command) => command with { Name = string.Empty };
-    protected override async IAsyncEnumerable<IApplicableEvent<Branch>> ExecCreateCommandAsync(
-        Func<AggregateIdentifierState<Branch>> getAggregateState,
-        CreateBranch command)
+    public class Handler : CreateCommandHandlerBase<Branch, CreateBranch>
     {
-        await Task.CompletedTask;
-        yield return new BranchCreated(command.Name);
+        public override CreateBranch CleanupCommandIfNeeded(CreateBranch command) => command with { Name = string.Empty };
+        protected override async IAsyncEnumerable<IApplicableEvent<Branch>> ExecCreateCommandAsync(
+            Func<AggregateState<Branch>> getAggregateState,
+            CreateBranch command)
+        {
+            await Task.CompletedTask;
+            yield return new BranchCreated(command.Name);
+        }
     }
 }

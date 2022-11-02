@@ -9,17 +9,17 @@ public record AddRecentActivity(Guid RecentActivityId, string Activity) : Change
 {
     public AddRecentActivity() : this(Guid.Empty, string.Empty) { }
     public override Guid GetAggregateId() => RecentActivityId;
-}
-public class AddRecentActivityHandler : ChangeCommandHandlerBase<RecentActivity, AddRecentActivity>
-{
-    private readonly ISekibanDateProducer _sekibanDateProducer;
-    public AddRecentActivityHandler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
-
-    protected override async IAsyncEnumerable<IChangedEvent<RecentActivity>> ExecCommandAsync(
-        Func<AggregateIdentifierState<RecentActivity>> getAggregateState,
-        AddRecentActivity command)
+    public class Handler : ChangeCommandHandlerBase<RecentActivity, AddRecentActivity>
     {
-        await Task.CompletedTask;
-        yield return new RecentActivityAdded(new RecentActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
+        private readonly ISekibanDateProducer _sekibanDateProducer;
+        public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
+
+        protected override async IAsyncEnumerable<IChangedEvent<RecentActivity>> ExecCommandAsync(
+            Func<AggregateState<RecentActivity>> getAggregateState,
+            AddRecentActivity command)
+        {
+            await Task.CompletedTask;
+            yield return new RecentActivityAdded(new RecentActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
+        }
     }
 }

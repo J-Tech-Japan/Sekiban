@@ -5,14 +5,14 @@ namespace Sekiban.Core.Aggregate;
 
 public static class EventHandler
 {
-    public static IEvent HandleEvent<TAggregatePayload>(AggregateIdentifier<TAggregatePayload> aggregateIdentifier, IEventPayload eventPayload)
+    public static IEvent HandleEvent<TAggregatePayload>(Aggregate<TAggregatePayload> aggregate, IEventPayload eventPayload)
         where TAggregatePayload : IAggregatePayload, new()
     {
-        var aggregateType = aggregateIdentifier.GetType();
-        var methodName = nameof(AggregateIdentifier<TAggregatePayload>.AddAndApplyEvent);
+        var aggregateType = aggregate.GetType();
+        var methodName = nameof(Aggregate<TAggregatePayload>.AddAndApplyEvent);
         var aggregateMethodBase = aggregateType.GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Instance);
         var aggregateMethod = aggregateMethodBase?.MakeGenericMethod(eventPayload.GetType());
-        return aggregateMethod?.Invoke(aggregateIdentifier, new object?[] { eventPayload }) as IEvent ??
+        return aggregateMethod?.Invoke(aggregate, new object?[] { eventPayload }) as IEvent ??
             throw new SekibanEventFailedToActivateException();
     }
 
