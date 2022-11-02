@@ -14,7 +14,7 @@ public record SnapshotDocument : DocumentBase, IDocument
     public SnapshotDocument(
         Guid aggregateId,
         Type aggregateType,
-        ISingleAggregate stateToSnapshot,
+        IAggregateIdentifier stateToSnapshot,
         Guid lastEventId,
         string lastSortableUniqueId,
         int savedVersion) : base(
@@ -37,5 +37,5 @@ public record SnapshotDocument : DocumentBase, IDocument
 
     public int SavedVersion { get; init; }
 
-    public T? ToState<T>() where T : ISingleAggregate => SekibanJsonHelper.ConvertTo<T>(Snapshot);
+    public T? ToState<T>() where T : IAggregateIdentifier => SekibanJsonHelper.ConvertTo<T>(Snapshot);
 }

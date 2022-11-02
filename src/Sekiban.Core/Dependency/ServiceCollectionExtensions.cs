@@ -52,7 +52,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IUpdateNotice>(new SekibanUpdateNoticeManager(sekibanDateProducer1));
         SekibanDateProducer.Register(sekibanDateProducer1);
         services.AddTransient<ISingleProjection, MemoryCacheSingleProjection>();
-        services.AddTransient<ISingleAggregateFromInitial, SimpleSingleAggregateFromInitial>();
+        services.AddTransient<ISingleProjectionFromInitial, SimpleSingleProjectionFromInitial>();
         services.AddSingleton(new InMemoryDocumentStore());
         services.AddTransient<IDocumentTemporaryWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentTemporaryRepository, InMemoryDocumentRepository>();
@@ -82,7 +82,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(sekibanDateProducer1);
         SekibanDateProducer.Register(sekibanDateProducer1);
         services.AddSingleton<IUpdateNotice>(new SekibanUpdateNoticeManager(sekibanDateProducer1));
-        services.AddTransient<ISingleAggregateFromInitial, SimpleSingleAggregateFromInitial>();
+        services.AddTransient<ISingleProjectionFromInitial, SimpleSingleProjectionFromInitial>();
         services.AddSingleton(new InMemoryDocumentStore());
         services.AddTransient<IDocumentWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentRepository, InMemoryDocumentRepository>();
@@ -116,7 +116,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(sekibanDateProducer1);
         SekibanDateProducer.Register(sekibanDateProducer1);
         services.AddSingleton<IUpdateNotice>(new SekibanUpdateNoticeManager(sekibanDateProducer1));
-        services.AddTransient<ISingleAggregateFromInitial, SimpleSingleAggregateFromInitial>();
+        services.AddTransient<ISingleProjectionFromInitial, SimpleSingleProjectionFromInitial>();
         services.AddSingleton(new InMemoryDocumentStore());
         services.AddTransient<IDocumentWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentRepository, InMemoryDocumentRepository>();
@@ -167,7 +167,7 @@ public static class ServiceCollectionExtensions
         //             true,
         //             80,
         //             15,
-        //             new List<SingleAggregateSetting>
+        //             new List<AggregateSetting>
         //             {
         //                 new(nameof(Client), true, true),
         //                 new(nameof(ClientNameHistoryProjection), true, false, 111),

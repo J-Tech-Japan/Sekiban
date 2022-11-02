@@ -14,12 +14,6 @@ public record NameString : IValueObject<string>
     }
     public string Value { get; }
 
-    public static implicit operator string(NameString vo)
-    {
-        return vo.Value;
-    }
-    public static implicit operator NameString(string v)
-    {
-        return new NameString(v);
-    }
+    public static implicit operator string(NameString vo) => vo.Value;
+    public static implicit operator NameString(string v) => new NameString(v);
 }

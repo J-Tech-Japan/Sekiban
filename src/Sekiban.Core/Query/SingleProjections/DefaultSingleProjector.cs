@@ -1,10 +1,10 @@
 using Sekiban.Core.Aggregate;
 namespace Sekiban.Core.Query.SingleProjections;
 
-public class DefaultSingleProjector<TAggregatePayload> : ISingleProjector<Aggregate<TAggregatePayload>>
+public class DefaultSingleProjector<TAggregatePayload> : ISingleProjector<AggregateIdentifier<TAggregatePayload>>
     where TAggregatePayload : IAggregatePayload, new()
 {
-    public Aggregate<TAggregatePayload> CreateInitialAggregate(Guid aggregateId) =>
-        AggregateCommonBase.Create<Aggregate<TAggregatePayload>>(aggregateId);
+    public AggregateIdentifier<TAggregatePayload> CreateInitialAggregate(Guid aggregateId) =>
+        AggregateIdentifierCommonBase.Create<AggregateIdentifier<TAggregatePayload>>(aggregateId);
     public Type OriginalAggregateType() => typeof(TAggregatePayload);
 }

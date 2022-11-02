@@ -6,11 +6,9 @@ namespace Sekiban.Testing.Story;
 public abstract class SekibanByTestTestBase : IDisposable
 {
     protected readonly IServiceProvider _serviceProvider;
-    public SekibanByTestTestBase(bool inMemory)
-    {
+    public SekibanByTestTestBase(bool inMemory) =>
         // ReSharper disable once VirtualMemberCallInConstructor
         _serviceProvider = SetupService(inMemory);
-    }
     public void Dispose() { }
     public abstract IServiceProvider SetupService(bool inMemory);
     public T GetService<T>()

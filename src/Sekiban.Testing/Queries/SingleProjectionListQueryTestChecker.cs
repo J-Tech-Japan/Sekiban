@@ -11,7 +11,7 @@ public class
     SingleProjectionListQueryTestChecker<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TQuery,
         TQueryParameter, TQueryResponse> : IQueryChecker
     where TAggregatePayload : IAggregatePayload, new()
-    where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new
+    where TSingleProjection : ProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new
     ()
     where TSingleProjectionPayload : ISingleProjectionPayload
     where TQuery : ISingleProjectionListQuery<TAggregatePayload, TSingleProjection,

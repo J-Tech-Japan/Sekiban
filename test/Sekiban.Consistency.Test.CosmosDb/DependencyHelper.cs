@@ -23,7 +23,7 @@ public static class DependencyHelper
         }
         else
         {
-            services.AddSekibanSekibanCoreWithDependency(new CustomerDependency(), sekibanDateProducer, multipleProjectionType);
+            services.AddSekibanCoreWithDependency(new CustomerDependency(), sekibanDateProducer, multipleProjectionType);
             services.AddSekibanCosmosDB();
         }
         services.AddQueriesFromDependencyDefinition(new CustomerDependency());

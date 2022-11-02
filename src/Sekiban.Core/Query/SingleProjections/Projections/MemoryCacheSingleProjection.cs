@@ -26,8 +26,8 @@ public class MemoryCacheSingleProjection : ISingleProjection
         this.singleProjectionCache = singleProjectionCache;
     }
     public async Task<T?> GetAggregateAsync<T, Q, P>(Guid aggregateId, int? toVersion = null)
-        where T : ISingleAggregate, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<Q>
-        where Q : ISingleAggregate
+        where T : IAggregateIdentifier, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<Q>
+        where Q : IAggregateIdentifier
         where P : ISingleProjector<T>, new()
     {
         var savedContainer = singleProjectionCache.GetContainer<T, Q>(aggregateId);
@@ -108,8 +108,8 @@ public class MemoryCacheSingleProjection : ISingleProjection
     }
 
     private async Task<T?> GetAggregateWithoutCacheAsync<T, Q, P>(Guid aggregateId, int? toVersion = null)
-        where T : ISingleAggregate, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<Q>
-        where Q : ISingleAggregate
+        where T : IAggregateIdentifier, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<Q>
+        where Q : IAggregateIdentifier
         where P : ISingleProjector<T>, new()
     {
         var projector = new P();
@@ -181,8 +181,8 @@ public class MemoryCacheSingleProjection : ISingleProjection
     }
 
     public async Task<T?> GetAggregateFromInitialAsync<T, Q, P>(Guid aggregateId, int? toVersion)
-        where T : ISingleAggregate, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<Q>
-        where Q : ISingleAggregate
+        where T : IAggregateIdentifier, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<Q>
+        where Q : IAggregateIdentifier
         where P : ISingleProjector<T>, new()
     {
         var projector = new P();

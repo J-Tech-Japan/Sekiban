@@ -11,7 +11,7 @@ public class SingleProjectionCache : ISingleProjectionCache
     public SingleProjectionCache(IMemoryCache memoryCache) => _memoryCache = memoryCache;
 
     public void SetContainer<TAggregate, TState>(Guid aggregateId, SingleMemoryCacheProjectionContainer<TAggregate, TState> container)
-        where TAggregate : ISingleAggregate, ISingleProjection where TState : ISingleAggregate
+        where TAggregate : IAggregateIdentifier, ISingleProjection where TState : IAggregateIdentifier
     {
         _memoryCache.Set(
             GetCacheKeyForSingleProjectionContainer<TAggregate>(aggregateId),
@@ -19,7 +19,7 @@ public class SingleProjectionCache : ISingleProjectionCache
             GetMemoryCacheOptionsForSingleProjectionContainer());
     }
     public SingleMemoryCacheProjectionContainer<TAggregate, TState>? GetContainer<TAggregate, TState>(Guid aggregateId)
-        where TAggregate : ISingleAggregate, ISingleProjection where TState : ISingleAggregate =>
+        where TAggregate : IAggregateIdentifier, ISingleProjection where TState : IAggregateIdentifier =>
         _memoryCache.Get<SingleMemoryCacheProjectionContainer<TAggregate, TState>>(
             GetCacheKeyForSingleProjectionContainer<TAggregate>(aggregateId));
 
@@ -30,10 +30,10 @@ public class SingleProjectionCache : ISingleProjectionCache
     };
     public string GetCacheKeyForSingleProjectionContainer<TAggregate>(Guid aggregateId)
     {
-        if (typeof(TAggregate).IsGenericType && typeof(TAggregate).GetGenericTypeDefinition() == typeof(Aggregate<>))
+        if (typeof(TAggregate).IsGenericType && typeof(TAggregate).GetGenericTypeDefinition() == typeof(AggregateIdentifier<>))
         {
             return $"{typeof(TAggregate).GetGenericArguments()[0].Name}_{aggregateId}";
         }
-        return "SingleAggregate" + typeof(TAggregate).Name + aggregateId;
+        return "Aggregate" + typeof(TAggregate).Name + aggregateId;
     }
 }

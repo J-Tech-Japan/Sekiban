@@ -7,17 +7,17 @@ namespace Sekiban.Core.Query;
 public class SimpleSingleProjectionListQuery<TAggregatePayload, TProjection, TSingleProjectionPayload> :
     ISingleProjectionListQuery<TAggregatePayload, TProjection, TSingleProjectionPayload,
         SimpleSingleProjectionListQuery<TAggregatePayload, TProjection, TSingleProjectionPayload>.QueryParameter,
-        SingleProjectionState<TSingleProjectionPayload>>
-    where TProjection : SingleProjectionBase<TAggregatePayload, TProjection, TSingleProjectionPayload>, new()
+        ProjectionState<TSingleProjectionPayload>>
+    where TProjection : ProjectionBase<TAggregatePayload, TProjection, TSingleProjectionPayload>, new()
     where TSingleProjectionPayload : ISingleProjectionPayload
     where TAggregatePayload : IAggregatePayload, new()
 {
-    public IEnumerable<SingleProjectionState<TSingleProjectionPayload>> HandleFilter(
+    public IEnumerable<ProjectionState<TSingleProjectionPayload>> HandleFilter(
         QueryParameter queryParam,
-        IEnumerable<SingleProjectionState<TSingleProjectionPayload>> list) => list;
-    public IEnumerable<SingleProjectionState<TSingleProjectionPayload>> HandleSort(
+        IEnumerable<ProjectionState<TSingleProjectionPayload>> list) => list;
+    public IEnumerable<ProjectionState<TSingleProjectionPayload>> HandleSort(
         QueryParameter queryParam,
-        IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections)
+        IEnumerable<ProjectionState<TSingleProjectionPayload>> projections)
     {
         return projections.OrderByDescending(m => m.LastSortableUniqueId);
     }

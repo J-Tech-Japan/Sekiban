@@ -160,7 +160,7 @@ public class CommandExecutor : ICommandExecutor
                 {
                     ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
                 };
-            var aggregate = new Aggregate<TAggregatePayload> { AggregateId = aggregateId };
+            var aggregate = new AggregateIdentifier<TAggregatePayload> { AggregateId = aggregateId };
 
             var result = await handler.HandleAsync(commandDocument, aggregate);
             version = result.Version;

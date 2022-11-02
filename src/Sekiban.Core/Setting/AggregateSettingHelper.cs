@@ -18,7 +18,7 @@ public class AggregateSettingHelper
         int snapshotFrequencyDefault,
         int snapshotOffsetDefault,
         bool useUpdateMarker,
-        IEnumerable<SingleAggregateSetting> exceptions)
+        IEnumerable<AggregateSetting> exceptions)
     {
         TakeSnapshotDefault = takeSnapshotDefault;
         UseHybridDefault = useHybridDefault;
@@ -32,5 +32,5 @@ public class AggregateSettingHelper
     public int SnapshotFrequencyDefault { get; }
     public int SnapshotOffsetDefault { get; }
     public bool UseUpdateMarker { get; }
-    public IEnumerable<SingleAggregateSetting> Exceptions { get; } = new List<SingleAggregateSetting>();
+    public IEnumerable<AggregateSetting> Exceptions { get; } = new List<AggregateSetting>();
 }

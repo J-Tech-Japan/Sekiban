@@ -6,10 +6,7 @@ namespace Sekiban.Core.Query.UpdateNotice;
 public class SekibanUpdateNoticeManager : IUpdateNotice
 {
     private readonly ISekibanDateProducer _sekibanDateProducer;
-    public SekibanUpdateNoticeManager(ISekibanDateProducer sekibanDateProducer)
-    {
-        _sekibanDateProducer = sekibanDateProducer;
-    }
+    public SekibanUpdateNoticeManager(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
     private ConcurrentDictionary<string, NoticeRecord> UpdateDictionary { get; } = new();
     public void SendUpdate(string aggregateName, Guid aggregateId, string sortableUniqueId, UpdatedLocationType type)
     {
@@ -43,13 +40,7 @@ public class SekibanUpdateNoticeManager : IUpdateNotice
         return (!current.SortableUniqueId.Value?.Equals(sortableUniqueId) ?? true, current?.LocationType);
     }
 
-    public static string GetKeyForAggregate(string aggregateName, Guid aggregateId)
-    {
-        return "UpdateNotice-" + aggregateName + "-" + aggregateId;
-    }
-    public static string GetKeyForType(string aggregateName)
-    {
-        return "UpdateNotice-" + aggregateName + "-";
-    }
+    public static string GetKeyForAggregate(string aggregateName, Guid aggregateId) => "UpdateNotice-" + aggregateName + "-" + aggregateId;
+    public static string GetKeyForType(string aggregateName) => "UpdateNotice-" + aggregateName + "-";
     private record NoticeRecord(SortableUniqueIdValue SortableUniqueId, UpdatedLocationType LocationType);
 }

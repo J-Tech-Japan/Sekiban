@@ -6,10 +6,7 @@ public class HttpContextUserInformationFactory : IUserInformationFactory
 {
     private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public HttpContextUserInformationFactory(IHttpContextAccessor httpContextAccessor)
-    {
-        _httpContextAccessor = httpContextAccessor;
-    }
+    public HttpContextUserInformationFactory(IHttpContextAccessor httpContextAccessor) => _httpContextAccessor = httpContextAccessor;
     public string GetCurrentUserInformation()
     {
         var ip = _httpContextAccessor.HttpContext?.Connection?.RemoteIpAddress?.ToString();

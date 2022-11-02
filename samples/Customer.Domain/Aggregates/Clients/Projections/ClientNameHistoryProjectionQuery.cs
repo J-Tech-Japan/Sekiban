@@ -17,7 +17,7 @@ public class ClientNameHistoryProjectionQuery : ISingleProjectionListQuery<Clien
 {
     public IEnumerable<ClientNameHistoryProjectionQueryResponse> HandleFilter(
         ClientNameHistoryProjectionParameter queryParam,
-        IEnumerable<SingleProjectionState<ClientNameHistoryProjection.PayloadDefinition>> list)
+        IEnumerable<ProjectionState<ClientNameHistoryProjection.PayloadDefinition>> list)
     {
         return (from projection in list
                 from name in projection.Payload.ClientNames

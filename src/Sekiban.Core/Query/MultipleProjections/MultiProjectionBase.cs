@@ -18,7 +18,7 @@ public abstract class MultiProjectionBase<TProjectionPayload> : IMultiProjector<
         LastEventId = ev.Id;
         LastSortableUniqueId = ev.SortableUniqueId;
     }
-    public MultiProjectionState<TProjectionPayload> ToState() => new(
+    public MultiProjectionState<TProjectionPayload> ToState() => new MultiProjectionState<TProjectionPayload>(
         Payload,
         LastEventId,
         LastSortableUniqueId,

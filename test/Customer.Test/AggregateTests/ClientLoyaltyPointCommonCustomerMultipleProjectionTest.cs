@@ -15,9 +15,9 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : MultiProje
     private static readonly Guid branchId = Guid.Parse("b4a3c2e3-78ca-473b-8afb-f534e5d6d66b");
     private static readonly string branchName = "Test Branch";
 
-    private readonly ProjectionQueryTestChecker<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.PayloadDefinition,
+    private readonly MultiProjectionQueryTestChecker<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.PayloadDefinition,
         ClientLoyaltyPointMultipleMultiProjectionQuery, ClientLoyaltyPointMultipleMultiProjectionQuery.QueryParameter,
-        ClientLoyaltyPointMultipleProjection.PayloadDefinition> projectionQueryTestChecker = new();
+        ClientLoyaltyPointMultipleProjection.PayloadDefinition> multiProjectionQueryTestChecker = new();
 
     [Fact]
     public void ProjectionTest()
@@ -618,7 +618,7 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : MultiProje
     [Fact]
     public void JsonFileEventsTest()
     {
-        GivenQueryChecker(projectionQueryTestChecker)
+        GivenQueryChecker(multiProjectionQueryTestChecker)
             .GivenEventsFromFile("TestData1.json")
             .WhenProjection()
             .ThenNotThrowsAnException()
@@ -630,7 +630,7 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : MultiProje
     public void QueryTest()
     {
         GivenScenario(JsonFileEventsTest);
-        projectionQueryTestChecker.WhenParam(
+        multiProjectionQueryTestChecker.WhenParam(
                 new ClientLoyaltyPointMultipleMultiProjectionQuery.QueryParameter(
                     branchId,
                     ClientLoyaltyPointMultipleMultiProjectionQuery.QuerySortKeys.ClientName))

@@ -15,12 +15,6 @@ public record EmailString : IValueObject<string>
     }
     public string Value { get; } = null!;
 
-    public static implicit operator string(EmailString vo)
-    {
-        return vo.Value;
-    }
-    public static implicit operator EmailString(string v)
-    {
-        return new EmailString(v);
-    }
+    public static implicit operator string(EmailString vo) => vo.Value;
+    public static implicit operator EmailString(string v) => new EmailString(v);
 }

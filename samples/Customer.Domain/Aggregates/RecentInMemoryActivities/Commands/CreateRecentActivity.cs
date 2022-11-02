@@ -15,7 +15,7 @@ public class CreateRecentInMemoryActivityHandler : CreateCommandHandlerBase<Rece
     public CreateRecentInMemoryActivityHandler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
 
     protected override async IAsyncEnumerable<IApplicableEvent<RecentInMemoryActivity>> ExecCreateCommandAsync(
-        Func<AggregateState<RecentInMemoryActivity>> getAggregateState,
+        Func<AggregateIdentifierState<RecentInMemoryActivity>> getAggregateState,
         CreateRecentInMemoryActivity command)
     {
         await Task.CompletedTask;

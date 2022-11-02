@@ -20,7 +20,7 @@ public class
     SingleProjectionListTestBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload,
         TDependencyDefinition> : ITestHelperEventSubscriber
     where TAggregatePayload : IAggregatePayload, new()
-    where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
+    where TSingleProjection : ProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
     where TSingleProjectionPayload : ISingleProjectionPayload
     where TDependencyDefinition : IDependencyDefinition, new()
 {
@@ -47,8 +47,8 @@ public class
 
 
 
-    public MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>> State { get; protected set; }
-        = new(new SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>(), Guid.Empty, string.Empty, 0, 0);
+    public MultiProjectionState<SingleProjectionListState<ProjectionState<TSingleProjectionPayload>>> State { get; protected set; }
+        = new(new SingleProjectionListState<ProjectionState<TSingleProjectionPayload>>(), Guid.Empty, string.Empty, 0, 0);
     protected Exception? _latestException { get; set; }
     public Action<IEvent> OnEvent => e => GivenEvents(new List<IEvent> { e });
 
@@ -87,12 +87,12 @@ public class
         TDependencyDefinition> ThenPayloadIsFromFile(string filename)
     {
         using var openStream = File.OpenRead(filename);
-        var projection = JsonSerializer.Deserialize<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>(openStream);
+        var projection = JsonSerializer.Deserialize<SingleProjectionListState<ProjectionState<TSingleProjectionPayload>>>(openStream);
         if (projection is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         return ThenPayloadIs(projection);
     }
     public SingleProjectionListTestBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload,
-        TDependencyDefinition> ThenGetPayload(Action<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>> payloadAction)
+        TDependencyDefinition> ThenGetPayload(Action<SingleProjectionListState<ProjectionState<TSingleProjectionPayload>>> payloadAction)
     {
         payloadAction(State.Payload);
         return this;
@@ -110,12 +110,12 @@ public class
         var events = _commandExecutor.ExecuteChangeCommand(command);
     }
 
-    public AggregateState<TEnvironmentAggregatePayload> GetAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
+    public AggregateIdentifierState<TEnvironmentAggregatePayload> GetAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
         where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
-        var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleProjectionService)) as ISingleProjectionService;
-        if (singleAggregateService is null) { throw new Exception("Failed to get single aggregate service"); }
-        var aggregate = singleAggregateService.GetAggregateStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
+        var singleProjectionService = _serviceProvider.GetRequiredService(typeof(ISingleProjectionService)) as ISingleProjectionService;
+        if (singleProjectionService is null) { throw new Exception("Failed to get single aggregateIdentifier service"); }
+        var aggregate = singleProjectionService.GetAggregateStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name);
     }
     public IReadOnlyCollection<IEvent> GetLatestEvents() => _commandExecutor.LatestEvents;
@@ -124,19 +124,19 @@ public class
     {
         var documentWriter = _serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter;
         if (documentWriter is null) { throw new Exception("Failed to get document writer"); }
-        var sekibanAggregateTypes = _serviceProvider.GetService<SekibanAggregateTypes>() ?? throw new Exception("Failed to get aggregate types");
+        var sekibanAggregateTypes = _serviceProvider.GetService<SekibanAggregateTypes>() ??
+            throw new Exception("Failed to get aggregateIdentifier types");
 
         foreach (var e in events)
         {
             var aggregateType = sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == e.AggregateType);
-            if (aggregateType is null) { throw new Exception($"Failed to find aggregate type {e.AggregateType}"); }
+            if (aggregateType is null) { throw new Exception($"Failed to find aggregateIdentifier type {e.AggregateType}"); }
             documentWriter.SaveAsync(e, aggregateType.Aggregate).Wait();
         }
         return this;
     }
     public SingleProjectionListTestBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload,
-        TDependencyDefinition> GivenEvents(params IEvent[] events) =>
-        GivenEvents(events.AsEnumerable());
+        TDependencyDefinition> GivenEvents(params IEvent[] events) => GivenEvents(events.AsEnumerable());
     public SingleProjectionListTestBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload,
         TDependencyDefinition> GivenEventsFromJson(string jsonEvents)
     {
@@ -163,14 +163,14 @@ public class
 
     public SingleProjectionListTestBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload,
         TDependencyDefinition> ThenGetState(
-        Action<MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>> stateAction)
+        Action<MultiProjectionState<SingleProjectionListState<ProjectionState<TSingleProjectionPayload>>>> stateAction)
     {
         stateAction(State);
         return this;
     }
     public SingleProjectionListTestBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload,
         TDependencyDefinition> ThenStateIs(
-        MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>> state)
+        MultiProjectionState<SingleProjectionListState<ProjectionState<TSingleProjectionPayload>>> state)
     {
         var actual = State;
         var expected = state with { LastEventId = actual.LastEventId, LastSortableUniqueId = actual.LastSortableUniqueId, Version = actual.Version };
@@ -180,7 +180,7 @@ public class
         return this;
     }
     public SingleProjectionListTestBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload,
-        TDependencyDefinition> ThenPayloadIs(SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>> payload)
+        TDependencyDefinition> ThenPayloadIs(SingleProjectionListState<ProjectionState<TSingleProjectionPayload>> payload)
     {
         var actual = State.Payload;
         var expected = payload;
@@ -194,7 +194,7 @@ public class
     {
         using var openStream = File.OpenRead(filename);
         var projection =
-            JsonSerializer.Deserialize<MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>(openStream);
+            JsonSerializer.Deserialize<MultiProjectionState<SingleProjectionListState<ProjectionState<TSingleProjectionPayload>>>>(openStream);
         if (projection is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         return ThenStateIs(projection);
     }

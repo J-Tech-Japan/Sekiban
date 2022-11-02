@@ -1,10 +1,10 @@
 namespace Sekiban.Core.Setting;
 
-public class SingleAggregateSetting
+public class AggregateSetting
 {
-    public SingleAggregateSetting() { }
+    public AggregateSetting() { }
 
-    public SingleAggregateSetting(
+    public AggregateSetting(
         string aggregateClassName,
         bool? makeSnapshots,
         bool? useHybrid,

@@ -10,7 +10,7 @@ namespace Sekiban.Testing.Queries;
 public class SingleProjectionQueryTestChecker<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TQuery,
     TQueryParameter, TQueryResponse> : IQueryChecker
     where TAggregatePayload : IAggregatePayload, new()
-    where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new
+    where TSingleProjection : ProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new
     ()
     where TSingleProjectionPayload : ISingleProjectionPayload
     where TQuery : ISingleProjectionQuery<TAggregatePayload, TSingleProjection, TSingleProjectionPayload,

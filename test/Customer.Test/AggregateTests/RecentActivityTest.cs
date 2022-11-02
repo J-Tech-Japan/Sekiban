@@ -3,14 +3,14 @@ using Customer.Domain.Aggregates.RecentActivities.Commands;
 using Customer.Domain.Aggregates.RecentActivities.Events;
 using Customer.Domain.Shared;
 using Sekiban.Core.Event;
-using Sekiban.Testing.SingleAggregate;
+using Sekiban.Testing.SingleProjections;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using Xunit;
 namespace Customer.Test.AggregateTests;
 
-public class RecentActivityTest : SingleAggregateTestBase<RecentActivity, CustomerDependency>
+public class RecentActivityTest : AggregateTestBase<RecentActivity, CustomerDependency>
 {
     private RecentActivityRecord firstRecord = new("first", DateTime.UtcNow);
     private RecentActivityRecord publishOnlyRecord = new("publish only", DateTime.UtcNow);

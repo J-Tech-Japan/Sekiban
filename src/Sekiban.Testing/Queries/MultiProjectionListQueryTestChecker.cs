@@ -7,25 +7,25 @@ using Xunit;
 namespace Sekiban.Testing.Queries;
 
 public class
-    ProjectionQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse> :
+    MultiProjectionListQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse> :
         IQueryChecker
     where TProjection : MultiProjectionBase<TProjectionPayload>, new()
     where TProjectionPayload : IMultiProjectionPayload, new()
     where TQueryParameter : IQueryParameter
-    where TQuery : IMultiProjectionQuery<TProjection, TProjectionPayload, TQueryParameter, TQueryResponse>
+    where TQuery : IMultiProjectionListQuery<TProjection, TProjectionPayload, TQueryParameter, TQueryResponse>
 {
-    private TQueryResponse? _response;
+    private QueryListResult<TQueryResponse>? _response;
     public IQueryService? QueryService { get; set; } = null;
-    public ProjectionQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>
+    public MultiProjectionListQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>
         WhenParam(TQueryParameter param)
     {
         if (QueryService == null) { throw new MissingMemberException(nameof(QueryService)); }
         _response = QueryService
-            .GetMultiProjectionQueryAsync<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param)
+            .GetMultiProjectionListQueryAsync<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param)
             .Result;
         return this;
     }
-    public ProjectionQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>
+    public MultiProjectionListQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>
         WriteResponseToFile(string filename)
     {
         if (_response == null)
@@ -40,8 +40,8 @@ public class
         File.WriteAllTextAsync(filename, json);
         return this;
     }
-    public ProjectionQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>
-        ThenResponseIs(TQueryResponse expectedResponse)
+    public MultiProjectionListQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>
+        ThenResponseIs(QueryListResult<TQueryResponse> expectedResponse)
     {
         var actual = _response;
         var expected = expectedResponse;
@@ -50,27 +50,26 @@ public class
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public ProjectionQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>
-        ThenGetResponse(Action<TQueryResponse> responseAction)
+    public MultiProjectionListQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>
+        ThenGetResponse(Action<QueryListResult<TQueryResponse>> responseAction)
     {
         Assert.NotNull(_response);
         responseAction(_response!);
         return this;
     }
-
-    public ProjectionQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>
+    public MultiProjectionListQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>
         ThenResponseIsFromJson(string responseJson)
     {
-        var response = JsonSerializer.Deserialize<TQueryResponse>(responseJson);
+        var response = JsonSerializer.Deserialize<QueryListResult<TQueryResponse>>(responseJson);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         ThenResponseIs(response);
         return this;
     }
-    public ProjectionQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>
+    public MultiProjectionListQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>
         ThenResponseIsFromFile(string responseFilename)
     {
         using var openStream = File.OpenRead(responseFilename);
-        var response = JsonSerializer.Deserialize<TQueryResponse>(openStream);
+        var response = JsonSerializer.Deserialize<QueryListResult<TQueryResponse>>(openStream);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         ThenResponseIs(response);
         return this;

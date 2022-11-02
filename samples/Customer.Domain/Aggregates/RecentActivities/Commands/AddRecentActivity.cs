@@ -16,7 +16,7 @@ public class AddRecentActivityHandler : ChangeCommandHandlerBase<RecentActivity,
     public AddRecentActivityHandler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
 
     protected override async IAsyncEnumerable<IChangedEvent<RecentActivity>> ExecCommandAsync(
-        Func<AggregateState<RecentActivity>> getAggregateState,
+        Func<AggregateIdentifierState<RecentActivity>> getAggregateState,
         AddRecentActivity command)
     {
         await Task.CompletedTask;

@@ -1,6 +1,6 @@
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
-public interface ISingleAggregateFromInitial
+public interface ISingleProjectionFromInitial
 {
     /// <summary>
     ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
@@ -12,6 +12,6 @@ public interface ISingleAggregateFromInitial
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
-    Task<T?> GetAggregateFromInitialAsync<T, P>(Guid aggregateId, int? toVersion) where T : ISingleAggregate, SingleProjections.ISingleProjection
+    Task<T?> GetAggregateFromInitialAsync<T, P>(Guid aggregateId, int? toVersion) where T : IAggregateIdentifier, SingleProjections.ISingleProjection
         where P : ISingleProjector<T>, new();
 }

@@ -7,8 +7,8 @@ public interface ISingleProjectionCache
 {
     public void SetContainer<TAggregate, TState>(
         Guid aggregateId,
-        SingleMemoryCacheProjectionContainer<TAggregate, TState> container) where TAggregate : ISingleAggregate, ISingleProjection
-        where TState : ISingleAggregate;
+        SingleMemoryCacheProjectionContainer<TAggregate, TState> container) where TAggregate : IAggregateIdentifier, ISingleProjection
+        where TState : IAggregateIdentifier;
     public SingleMemoryCacheProjectionContainer<TAggregate, TState>? GetContainer<TAggregate, TState>(Guid aggregateId)
-        where TAggregate : ISingleAggregate, ISingleProjection where TState : ISingleAggregate;
+        where TAggregate : IAggregateIdentifier, ISingleProjection where TState : IAggregateIdentifier;
 }

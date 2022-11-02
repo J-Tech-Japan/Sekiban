@@ -2,11 +2,8 @@
 
 public static class SekibanJsonHelper
 {
-    public static JsonSerializerOptions GetDefaultJsonSerializerOptions()
-    {
-        return new JsonSerializerOptions
-            { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, PropertyNameCaseInsensitive = true };
-    }
+    public static JsonSerializerOptions GetDefaultJsonSerializerOptions() => new JsonSerializerOptions
+        { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, PropertyNameCaseInsensitive = true };
 
     public static string? Serialize(dynamic? obj)
     {
@@ -18,11 +15,9 @@ public static class SekibanJsonHelper
         return JsonSerializer.Serialize(obj, GetDefaultJsonSerializerOptions());
     }
 
-    public static string? Serialize(Exception ex)
-    {
+    public static string? Serialize(Exception ex) =>
         // System.Text.JsonはException型を直接シリアライズできないので、匿名型にしてからシリアライズする
-        return Serialize(new { ex.Message, ex.Source, ex.StackTrace });
-    }
+        Serialize(new { ex.Message, ex.Source, ex.StackTrace });
 
     public static object? Deserialize(string? jsonString, Type returnType)
     {
@@ -66,10 +61,7 @@ public static class SekibanJsonHelper
         return Deserialize<T>(jsonString);
     }
 
-    public static T? GetValue<T>(dynamic? jsonObj, string propertyName)
-    {
-        return GetValue<T>(Serialize(jsonObj), propertyName);
-    }
+    public static T? GetValue<T>(dynamic? jsonObj, string propertyName) => GetValue<T>(Serialize(jsonObj), propertyName);
 
     public static T? GetValue<T>(string? jsonString, string propertyName)
     {

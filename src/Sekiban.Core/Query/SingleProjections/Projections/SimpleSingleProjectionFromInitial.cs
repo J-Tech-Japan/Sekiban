@@ -3,10 +3,10 @@ using Sekiban.Core.Exceptions;
 using Sekiban.Core.Partition;
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
-public class SimpleSingleAggregateFromInitial : ISingleAggregateFromInitial
+public class SimpleSingleProjectionFromInitial : ISingleProjectionFromInitial
 {
     private readonly IDocumentRepository _documentRepository;
-    public SimpleSingleAggregateFromInitial(IDocumentRepository documentRepository) => _documentRepository = documentRepository;
+    public SimpleSingleProjectionFromInitial(IDocumentRepository documentRepository) => _documentRepository = documentRepository;
     /// <summary>
     ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
     ///     遅いので、通常はキャッシュバージョンを使用ください
@@ -18,7 +18,7 @@ public class SimpleSingleAggregateFromInitial : ISingleAggregateFromInitial
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
     public async Task<T?> GetAggregateFromInitialAsync<T, P>(Guid aggregateId, int? toVersion)
-        where T : ISingleAggregate, SingleProjections.ISingleProjection
+        where T : IAggregateIdentifier, SingleProjections.ISingleProjection
         where P : ISingleProjector<T>, new()
     {
         var projector = new P();

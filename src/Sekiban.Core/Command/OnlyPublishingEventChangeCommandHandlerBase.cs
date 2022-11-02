@@ -15,7 +15,8 @@ public abstract class
 
     public Task<CommandResponse> HandleAsync(
         CommandDocument<TCommand> commandDocument,
-        Aggregate<TAggregatePayload> aggregate) => throw new SekibanCanNotExecuteRegularChangeCommandException(typeof(TCommand).Name);
+        AggregateIdentifier<TAggregatePayload> aggregateIdentifier) =>
+        throw new SekibanCanNotExecuteRegularChangeCommandException(typeof(TCommand).Name);
     public async Task<CommandResponse> HandleForOnlyPublishingCommandAsync(
         CommandDocument<TCommand> commandDocument,
         Guid aggregateId)

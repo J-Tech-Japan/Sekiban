@@ -18,7 +18,7 @@ public class CreateBranchHandler : CreateCommandHandlerBase<Branch, CreateBranch
 {
     public override CreateBranch CleanupCommandIfNeeded(CreateBranch command) => command with { Name = string.Empty };
     protected override async IAsyncEnumerable<IApplicableEvent<Branch>> ExecCreateCommandAsync(
-        Func<AggregateState<Branch>> getAggregateState,
+        Func<AggregateIdentifierState<Branch>> getAggregateState,
         CreateBranch command)
     {
         await Task.CompletedTask;

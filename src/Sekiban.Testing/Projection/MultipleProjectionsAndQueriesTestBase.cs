@@ -90,7 +90,7 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         TSingleProjectionPayload>(
         Action<SingleProjectionListTestBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TDependencyDefinition>> testAction)
         where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
+        where TSingleProjection : ProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
         where TSingleProjectionPayload : ISingleProjectionPayload
     {
         var test =
@@ -102,26 +102,26 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
 
     public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GetMultiProjectionQueryTest<TProjection, TProjectionPayload, TQuery,
         TQueryParameter, TQueryResponse>(
-        Action<ProjectionQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>> queryTestAction)
+        Action<MultiProjectionQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>> queryTestAction)
         where TProjection : MultiProjectionBase<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayload, new()
         where TQueryParameter : IQueryParameter
         where TQuery : IMultiProjectionQuery<TProjection, TProjectionPayload, TQueryParameter, TQueryResponse>, new()
     {
-        var queryChecker = new ProjectionQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>();
+        var queryChecker = new MultiProjectionQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>();
         GivenQueryChecker(queryChecker);
         queryTestAction(queryChecker);
         return this;
     }
     public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GetMultiProjectionListQueryTest<TProjection, TProjectionPayload, TQuery,
         TQueryParameter, TQueryResponse>(
-        Action<ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>> queryTestAction)
+        Action<MultiProjectionListQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>> queryTestAction)
         where TProjection : MultiProjectionBase<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayload, new()
         where TQueryParameter : IQueryParameter
         where TQuery : IMultiProjectionListQuery<TProjection, TProjectionPayload, TQueryParameter, TQueryResponse>, new()
     {
-        var queryChecker = new ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>();
+        var queryChecker = new MultiProjectionListQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>();
         GivenQueryChecker(queryChecker);
         queryTestAction(queryChecker);
         return this;
@@ -158,7 +158,7 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         Action<SingleProjectionQueryTestChecker<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TQuery, TQueryParameter,
             TQueryResponse>> queryTestAction)
         where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
+        where TSingleProjection : ProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
         where TSingleProjectionPayload : ISingleProjectionPayload
         where TQuery : ISingleProjectionQuery<TAggregatePayload, TSingleProjection,
             TSingleProjectionPayload, TQueryParameter, TQueryResponse>
@@ -175,7 +175,7 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         Action<SingleProjectionListQueryTestChecker<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TQuery, TQueryParameter,
             TQueryResponse>> queryTestAction)
         where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
+        where TSingleProjection : ProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
         where TSingleProjectionPayload : ISingleProjectionPayload
         where TQuery : ISingleProjectionListQuery<TAggregatePayload, TSingleProjection,
             TSingleProjectionPayload, TQueryParameter, TQueryResponse>
@@ -189,12 +189,13 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
     }
 
 
-    public AggregateState<TEnvironmentAggregatePayload> GetAggregateState<TEnvironmentAggregate, TEnvironmentAggregatePayload>(Guid aggregateId)
+    public AggregateIdentifierState<TEnvironmentAggregatePayload> GetAggregateState<TEnvironmentAggregate, TEnvironmentAggregatePayload>(
+        Guid aggregateId)
         where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
-        var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleProjectionService)) as ISingleProjectionService;
-        if (singleAggregateService is null) { throw new Exception("Failed to get single aggregate service"); }
-        var aggregate = singleAggregateService.GetAggregateStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
+        var singleProjectionService = _serviceProvider.GetRequiredService(typeof(ISingleProjectionService)) as ISingleProjectionService;
+        if (singleProjectionService is null) { throw new Exception("Failed to get single aggregateIdentifier service"); }
+        var aggregate = singleProjectionService.GetAggregateStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregate).Name);
     }
     public IReadOnlyCollection<IEvent> GetLatestEvents() => _commandExecutor.LatestEvents;

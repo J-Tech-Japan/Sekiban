@@ -5,7 +5,7 @@ using Customer.Domain.Aggregates.Clients.Commands;
 using Customer.Domain.Aggregates.Clients.Events;
 using Customer.Domain.Aggregates.Clients.Projections;
 using Customer.Domain.Shared;
-using Sekiban.Testing.SingleAggregate;
+using Sekiban.Testing.SingleProjections;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -13,7 +13,7 @@ using System.Linq;
 using Xunit;
 namespace Customer.Test.AggregateTests;
 
-public class ClientAndProjectionSpec : SingleAggregateTestBase<Client, CustomerDependency>
+public class ClientAndProjectionSpec : AggregateTestBase<Client, CustomerDependency>
 {
     public readonly string branchName = "BranchName";
     public readonly string clientEmail = "client@example.com";

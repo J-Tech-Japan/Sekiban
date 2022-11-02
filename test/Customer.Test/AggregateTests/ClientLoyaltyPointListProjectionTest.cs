@@ -23,7 +23,7 @@ public class ClientLoyaltyPointListProjectionTest : MultiProjectionTestBase<Clie
     public Guid _clientId4 = Guid.NewGuid();
     public Guid _clientId5 = Guid.NewGuid();
     public string _clientNameBase = "Client TEST ";
-    public ProjectionListQueryTestChecker<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.PayloadDefinition,
+    public MultiProjectionListQueryTestChecker<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.PayloadDefinition,
         ClientLoyaltyPointQuery, ClientLoyaltyPointQuery.QueryParameter,
         ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> ListQueryTestChecker = new();
 

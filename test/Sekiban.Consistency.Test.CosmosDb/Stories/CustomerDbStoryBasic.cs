@@ -249,7 +249,7 @@ public class CustomerDbStoryBasic : TestBase
         await commandExecutor.ExecChangeCommandAsync<RecentActivity, OnlyPublishingAddRecentActivity>(
             new OnlyPublishingAddRecentActivity(recentActivityId, "only publish event"));
 
-        // get single aggregate and applied event
+        // get single aggregateIdentifier and applied event
         var recentActivityState = await projectionService.GetAggregateStateAsync<RecentActivity>(recentActivityId);
         Assert.Equal("only publish event", recentActivityState?.Payload.LatestActivities.First().Activity);
 
@@ -361,7 +361,7 @@ public class CustomerDbStoryBasic : TestBase
     private async Task CheckSnapshots<TAggregatePayload>(List<SnapshotDocument> snapshots, Guid aggregateId)
         where TAggregatePayload : IAggregatePayload, new()
     {
-        foreach (var state in snapshots.Select(snapshot => snapshot.ToState<AggregateState<TAggregatePayload>>()))
+        foreach (var state in snapshots.Select(snapshot => snapshot.ToState<AggregateIdentifierState<TAggregatePayload>>()))
         {
             if (state is null) { throw new SekibanInvalidArgumentException(); }
             var fromInitial = await projectionService.GetAggregateStateFromInitialAsync<TAggregatePayload>(aggregateId, state.Version);
@@ -458,7 +458,7 @@ public class CustomerDbStoryBasic : TestBase
         var snapshots = await _documentPersistentRepository.GetSnapshotsForAggregateAsync(aggregateId, typeof(RecentActivity));
         await CheckSnapshots<RecentActivity>(snapshots, aggregateId);
 
-        // check aggregate result
+        // check aggregateIdentifier result
         var aggregateRecentActivity
             = await projectionService.GetAggregateStateFromInitialAsync<RecentActivity>(aggregateId);
         aggregateRecentActivity2 = await projectionService.GetAggregateStateAsync<RecentActivity>(aggregateId);
