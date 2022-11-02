@@ -7,26 +7,25 @@ using Xunit;
 namespace Sekiban.Testing.Queries;
 
 public class
-    ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TProjectionQuery, TQueryParameter, TQueryResponse> :
+    ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse> :
         IQueryChecker
     where TProjection : MultiProjectionBase<TProjectionPayload>, new()
     where TProjectionPayload : IMultiProjectionPayload, new()
     where TQueryParameter : IQueryParameter
-    where TProjectionQuery : IMultiProjectionListQuery<TProjection, TProjectionPayload, TQueryParameter, TQueryResponse>
-    , new()
+    where TQuery : IMultiProjectionListQuery<TProjection, TProjectionPayload, TQueryParameter, TQueryResponse>
 {
     private QueryListResult<TQueryResponse>? _response;
     public IQueryService? QueryService { get; set; } = null;
-    public ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TProjectionQuery, TQueryParameter, TQueryResponse>
+    public ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>
         WhenParam(TQueryParameter param)
     {
         if (QueryService == null) { throw new MissingMemberException(nameof(QueryService)); }
         _response = QueryService
-            .GetMultiProjectionListQueryAsync<TProjection, TProjectionPayload, TProjectionQuery, TQueryParameter, TQueryResponse>(param)
+            .GetMultiProjectionListQueryAsync<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param)
             .Result;
         return this;
     }
-    public ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TProjectionQuery, TQueryParameter, TQueryResponse>
+    public ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>
         WriteResponseToFile(string filename)
     {
         if (_response == null)
@@ -41,7 +40,7 @@ public class
         File.WriteAllTextAsync(filename, json);
         return this;
     }
-    public ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TProjectionQuery, TQueryParameter, TQueryResponse>
+    public ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>
         ThenResponseIs(QueryListResult<TQueryResponse> expectedResponse)
     {
         var actual = _response;
@@ -51,14 +50,14 @@ public class
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TProjectionQuery, TQueryParameter, TQueryResponse>
+    public ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>
         ThenGetResponse(Action<QueryListResult<TQueryResponse>> responseAction)
     {
         Assert.NotNull(_response);
         responseAction(_response!);
         return this;
     }
-    public ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TProjectionQuery, TQueryParameter, TQueryResponse>
+    public ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>
         ThenResponseIsFromJson(string responseJson)
     {
         var response = JsonSerializer.Deserialize<QueryListResult<TQueryResponse>>(responseJson);
@@ -66,7 +65,7 @@ public class
         ThenResponseIs(response);
         return this;
     }
-    public ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TProjectionQuery, TQueryParameter, TQueryResponse>
+    public ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>
         ThenResponseIsFromFile(string responseFilename)
     {
         using var openStream = File.OpenRead(responseFilename);
