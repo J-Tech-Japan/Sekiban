@@ -5,8 +5,8 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Command.UserInformation;
 using Sekiban.Core.Document;
 using Sekiban.Core.PubSub;
-using Sekiban.Core.Query.MultipleProjections;
-using Sekiban.Core.Query.MultipleProjections.Projections;
+using Sekiban.Core.Query.MultProjections;
+using Sekiban.Core.Query.MultProjections.Projections;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Query.SingleProjections.Projections;
@@ -22,14 +22,14 @@ public static class ServiceCollectionExtensions
     {
         Local = 1, Azure = 2
     }
-    public enum MultipleProjectionType
+    public enum MultiProjectionType
     {
         Simple = 1, MemoryCache = 2
     }
     public static IServiceCollection AddSekibanCore(
         this IServiceCollection services,
         ISekibanDateProducer? sekibanDateProducer = null,
-        MultipleProjectionType multipleProjectionType = MultipleProjectionType.MemoryCache)
+        MultiProjectionType multiProjectionType = MultiProjectionType.MemoryCache)
     {
         services.AddMemoryCache();
 
@@ -38,13 +38,13 @@ public static class ServiceCollectionExtensions
         services.AddTransient<ICommandExecutor, CommandExecutor>();
         services.AddTransient<ISingleProjectionService, SingleProjectionService>();
         services.AddTransient<IMultiProjectionService, MultiProjectionService>();
-        switch (multipleProjectionType)
+        switch (multiProjectionType)
         {
-            case MultipleProjectionType.Simple:
-                services.AddTransient<IMultipleProjection, SimpleMultipleProjection>();
+            case MultiProjectionType.Simple:
+                services.AddTransient<IMultiProjection, SimpleMultiProjection>();
                 break;
-            case MultipleProjectionType.MemoryCache:
-                services.AddTransient<IMultipleProjection, MemoryCacheMultipleProjection>();
+            case MultiProjectionType.MemoryCache:
+                services.AddTransient<IMultiProjection, MemoryCacheMultiProjection>();
                 break;
         }
         var sekibanDateProducer1 = sekibanDateProducer ?? new SekibanDateProducer();
@@ -76,7 +76,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<ICommandExecutor, CommandExecutor>();
         services.AddTransient<ISingleProjectionService, SingleProjectionService>();
         services.AddTransient<IMultiProjectionService, MultiProjectionService>();
-        services.AddTransient<IMultipleProjection, MemoryCacheMultipleProjection>();
+        services.AddTransient<IMultiProjection, MemoryCacheMultiProjection>();
         services.AddTransient<ISingleProjection, SimpleProjectionWithSnapshot>();
         var sekibanDateProducer1 = sekibanDateProducer ?? new SekibanDateProducer();
         services.AddSingleton(sekibanDateProducer1);
@@ -110,7 +110,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<ICommandExecutor, CommandExecutor>();
         services.AddTransient<ISingleProjectionService, SingleProjectionService>();
         services.AddTransient<IMultiProjectionService, MultiProjectionService>();
-        services.AddTransient<IMultipleProjection, MemoryCacheMultipleProjection>();
+        services.AddTransient<IMultiProjection, MemoryCacheMultiProjection>();
         services.AddTransient<ISingleProjection, SimpleProjectionWithSnapshot>();
         var sekibanDateProducer1 = sekibanDateProducer ?? new SekibanDateProducer();
         services.AddSingleton(sekibanDateProducer1);

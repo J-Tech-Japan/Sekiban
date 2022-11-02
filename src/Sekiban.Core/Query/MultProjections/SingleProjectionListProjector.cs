@@ -1,6 +1,6 @@
 using Sekiban.Core.Event;
 using Sekiban.Core.Query.SingleProjections;
-namespace Sekiban.Core.Query.MultipleProjections;
+namespace Sekiban.Core.Query.MultProjections;
 
 public class SingleProjectionListProjector<TProjection, TState, TProjector> : IMultiProjector<SingleProjectionListState<TState>>
     where TProjection : IAggregateCommon, ISingleProjection, ISingleProjectionStateConvertible<TState>

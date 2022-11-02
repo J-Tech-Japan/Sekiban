@@ -16,10 +16,10 @@ public static class SekibanEventSourcingDependency
         this IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
         ISekibanDateProducer? sekibanDateProducer = null,
-        ServiceCollectionExtensions.MultipleProjectionType multipleProjectionType = ServiceCollectionExtensions.MultipleProjectionType.MemoryCache)
+        ServiceCollectionExtensions.MultiProjectionType multiProjectionType = ServiceCollectionExtensions.MultiProjectionType.MemoryCache)
 
     {
-        Register(services, dependencyDefinition, sekibanDateProducer, multipleProjectionType);
+        Register(services, dependencyDefinition, sekibanDateProducer, multiProjectionType);
         return services;
     }
     public static IEnumerable<(Type serviceType, Type? implementationType)> GetDependencies()
@@ -34,12 +34,12 @@ public static class SekibanEventSourcingDependency
         IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
         ISekibanDateProducer? sekibanDateProducer = null,
-        ServiceCollectionExtensions.MultipleProjectionType multipleProjectionType = ServiceCollectionExtensions.MultipleProjectionType.MemoryCache)
+        ServiceCollectionExtensions.MultiProjectionType multiProjectionType = ServiceCollectionExtensions.MultiProjectionType.MemoryCache)
     {
         // MediatR
         services.AddMediatR(Assembly.GetExecutingAssembly(), GetAssembly());
         // Sekibanイベントソーシング
-        services.AddSekibanCore(sekibanDateProducer ?? new SekibanDateProducer(), multipleProjectionType);
+        services.AddSekibanCore(sekibanDateProducer ?? new SekibanDateProducer(), multiProjectionType);
         // TODO : services.AddSekibanCosmosDB();
         services.AddSekibanHTTPUser();
 

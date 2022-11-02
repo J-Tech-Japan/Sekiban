@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Exceptions;
-using Sekiban.Core.Query.MultipleProjections;
+using Sekiban.Core.Query.MultProjections;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Query.QueryModel;
@@ -12,7 +12,7 @@ public class QueryHandler
 
     public QueryHandler(IServiceProvider serviceProvider) => _serviceProvider = serviceProvider;
 
-    public QueryListResult<TQueryResponse>
+    public ListQueryResult<TQueryResponse>
         GetMultiProjectionListQuery<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
             TQueryParameter param,
             MultiProjectionState<TProjectionPayload> projection)
@@ -30,7 +30,7 @@ public class QueryHandler
         {
             return makeQueryListResult(pagingParam, queryResponses);
         }
-        return new QueryListResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
+        return new ListQueryResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
     }
 
     public TQueryResponse GetMultiProjectionQuery<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
@@ -48,7 +48,7 @@ public class QueryHandler
     }
 
 
-    public QueryListResult<TQueryResponse>
+    public ListQueryResult<TQueryResponse>
         GetAggregateListQuery<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
             TQueryParameter param,
             IEnumerable<AggregateState<TAggregatePayload>> list)
@@ -65,7 +65,7 @@ public class QueryHandler
         {
             return makeQueryListResult(pagingParam, queryResponses);
         }
-        return new QueryListResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
+        return new ListQueryResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
     }
     public TQueryResponse GetAggregateQuery<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
         TQueryParameter param,
@@ -80,7 +80,7 @@ public class QueryHandler
         return filtered;
     }
 
-    public QueryListResult<TQueryResponse>
+    public ListQueryResult<TQueryResponse>
         GetSingleProjectionListQuery<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TQuery,
             TQueryParameter, TQueryResponse>(
             TQueryParameter param,
@@ -101,10 +101,10 @@ public class QueryHandler
         {
             return makeQueryListResult(pagingParam, queryResponses);
         }
-        return new QueryListResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
+        return new ListQueryResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
     }
 
-    private static QueryListResult<TQueryResponse> makeQueryListResult<TQueryResponse>(
+    private static ListQueryResult<TQueryResponse> makeQueryListResult<TQueryResponse>(
         IQueryPagingParameter pagingParam,
         List<TQueryResponse> queryResponses)
     {
@@ -118,9 +118,9 @@ public class QueryHandler
         var totalPages = total / pagingParam.PageSize.Value + (total % pagingParam.PageSize.Value > 0 ? 1 : 0);
         if (pageNumber < 1 || pageNumber > totalPages)
         {
-            return new QueryListResult<TQueryResponse>(total, totalPages, pageNumber, pageSize, new List<TQueryResponse>());
+            return new ListQueryResult<TQueryResponse>(total, totalPages, pageNumber, pageSize, new List<TQueryResponse>());
         }
-        return new QueryListResult<TQueryResponse>(
+        return new ListQueryResult<TQueryResponse>(
             total,
             totalPages,
             pageNumber,

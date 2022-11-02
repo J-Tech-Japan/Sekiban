@@ -146,23 +146,23 @@ public class DocumentRepositorySplitter : IDocumentRepository
     }
 
     public async Task GetAllEventsAsync(
-        Type multipleProjectionType,
+        Type multiProjectionType,
         IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
         Action<IEnumerable<IEvent>> resultAction)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multipleProjectionType);
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
         {
             await _documentTemporaryRepository.GetAllEventsAsync(
-                multipleProjectionType,
+                multiProjectionType,
                 targetAggregateNames,
                 sinceSortableUniqueId,
                 resultAction);
             return;
         }
         await _documentPersistentRepository.GetAllEventsAsync(
-            multipleProjectionType,
+            multiProjectionType,
             targetAggregateNames,
             sinceSortableUniqueId,
             resultAction);

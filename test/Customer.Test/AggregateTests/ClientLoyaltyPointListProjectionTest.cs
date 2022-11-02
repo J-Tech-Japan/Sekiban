@@ -85,7 +85,7 @@ public class ClientLoyaltyPointListProjectionTest : MultiProjectionTestBase<Clie
                     null,
                     null))
             .ThenResponseIs(
-                new QueryListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
+                new ListQueryResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     null,
                     null,
@@ -114,7 +114,7 @@ public class ClientLoyaltyPointListProjectionTest : MultiProjectionTestBase<Clie
                     null,
                     null))
             .ThenResponseIs(
-                new QueryListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
+                new ListQueryResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     2,
                     1,
@@ -141,7 +141,7 @@ public class ClientLoyaltyPointListProjectionTest : MultiProjectionTestBase<Clie
                     null,
                     null))
             .ThenResponseIs(
-                new QueryListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
+                new ListQueryResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     1,
                     1,
@@ -170,7 +170,7 @@ public class ClientLoyaltyPointListProjectionTest : MultiProjectionTestBase<Clie
                     null,
                     null))
             .ThenResponseIs(
-                new QueryListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
+                new ListQueryResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     2,
                     2,
@@ -196,7 +196,7 @@ public class ClientLoyaltyPointListProjectionTest : MultiProjectionTestBase<Clie
                     null,
                     null))
             .ThenResponseIs(
-                new QueryListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
+                new ListQueryResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     2,
                     3,
@@ -218,7 +218,7 @@ public class ClientLoyaltyPointListProjectionTest : MultiProjectionTestBase<Clie
                     null,
                     null))
             .ThenResponseIs(
-                new QueryListResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
+                new ListQueryResult<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
                     5,
                     2,
                     0,

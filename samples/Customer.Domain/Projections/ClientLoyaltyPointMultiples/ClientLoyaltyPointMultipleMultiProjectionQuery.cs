@@ -1,31 +1,31 @@
-using Sekiban.Core.Query.MultipleProjections;
+using Sekiban.Core.Query.MultProjections;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using System.Collections.Immutable;
 namespace Customer.Domain.Projections.ClientLoyaltyPointMultiples;
 
-public class ClientLoyaltyPointMultipleMultiProjectionQuery : IMultiProjectionQuery<ClientLoyaltyPointMultipleProjection,
-    ClientLoyaltyPointMultipleProjection.PayloadDefinition, ClientLoyaltyPointMultipleMultiProjectionQuery.QueryParameter,
-    ClientLoyaltyPointMultipleProjection.PayloadDefinition>
+public class ClientLoyaltyPointMultipleMultiProjectionQuery : IMultiProjectionQuery<ClientLoyaltyPointMultiProjection,
+    ClientLoyaltyPointMultiProjection.PayloadDefinition, ClientLoyaltyPointMultipleMultiProjectionQuery.QueryParameter,
+    ClientLoyaltyPointMultiProjection.PayloadDefinition>
 {
     public enum QuerySortKeys
     {
         ClientName, Points
     }
-    public ClientLoyaltyPointMultipleProjection.PayloadDefinition HandleFilter(
+    public ClientLoyaltyPointMultiProjection.PayloadDefinition HandleFilter(
         QueryParameter queryParam,
-        MultiProjectionState<ClientLoyaltyPointMultipleProjection.PayloadDefinition> projection)
+        MultiProjectionState<ClientLoyaltyPointMultiProjection.PayloadDefinition> projection)
     {
         if (queryParam.BranchId is null) { return projection.Payload; }
-        return new ClientLoyaltyPointMultipleProjection.PayloadDefinition
+        return new ClientLoyaltyPointMultiProjection.PayloadDefinition
         {
             Branches = projection.Payload.Branches.Where(x => x.BranchId == queryParam.BranchId).ToImmutableList(),
             Records = projection.Payload.Records.Where(m => m.BranchId == queryParam.BranchId).ToImmutableList()
         };
     }
-    public ClientLoyaltyPointMultipleProjection.PayloadDefinition HandleSortAndPagingIfNeeded(
+    public ClientLoyaltyPointMultiProjection.PayloadDefinition HandleSortAndPagingIfNeeded(
         QueryParameter queryParam,
-        ClientLoyaltyPointMultipleProjection.PayloadDefinition response)
+        ClientLoyaltyPointMultiProjection.PayloadDefinition response)
     {
         if (queryParam.SortKey == QuerySortKeys.ClientName)
         {

@@ -12,7 +12,7 @@ public class
     where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
     where TQueryParameter : IQueryParameter
 {
-    public QueryListResult<TQueryResponse>? Response { get; set; }
+    public ListQueryResult<TQueryResponse>? Response { get; set; }
     public IQueryService? QueryService { get; set; } = null;
     public AggregateListQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> WhenParam(
         TQueryParameter param)
@@ -39,7 +39,7 @@ public class
         return this;
     }
     public AggregateListQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> ThenResponseIs(
-        QueryListResult<TQueryResponse> expectedResponse)
+        ListQueryResult<TQueryResponse> expectedResponse)
     {
         if (Response == null)
         {
@@ -53,7 +53,7 @@ public class
         return this;
     }
     public AggregateListQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> ThenGetResponse(
-        Action<QueryListResult<TQueryResponse>> responseAction)
+        Action<ListQueryResult<TQueryResponse>> responseAction)
     {
         Assert.NotNull(Response);
         responseAction(Response!);
@@ -62,7 +62,7 @@ public class
     public AggregateListQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>
         ThenResponseIsFromJson(string responseJson)
     {
-        var response = JsonSerializer.Deserialize<QueryListResult<TQueryResponse>>(responseJson);
+        var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(responseJson);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         ThenResponseIs(response);
         return this;
@@ -71,7 +71,7 @@ public class
         ThenResponseIsFromFile(string responseFilename)
     {
         using var openStream = File.OpenRead(responseFilename);
-        var response = JsonSerializer.Deserialize<QueryListResult<TQueryResponse>>(openStream);
+        var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(openStream);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         ThenResponseIs(response);
         return this;

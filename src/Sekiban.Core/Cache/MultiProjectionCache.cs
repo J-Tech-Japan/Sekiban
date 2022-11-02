@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
-using Sekiban.Core.Query.MultipleProjections;
-using Sekiban.Core.Query.MultipleProjections.Projections;
+using Sekiban.Core.Query.MultProjections;
+using Sekiban.Core.Query.MultProjections.Projections;
 using Sekiban.Core.Setting;
 namespace Sekiban.Core.Cache;
 
@@ -35,6 +35,6 @@ public class MultiProjectionCache : IMultiProjectionCache
     private string GetInMemoryKey<TProjector, TPayload>() where TProjector : IMultiProjector<TPayload>, new() where TPayload : IMultiProjectionPayload, new()
     {
         var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
-        return "MultipleProjection-" + sekibanContext?.SettingGroupIdentifier + "-" + typeof(TProjector).FullName;
+        return "MultiProjection-" + sekibanContext?.SettingGroupIdentifier + "-" + typeof(TProjector).FullName;
     }
 }

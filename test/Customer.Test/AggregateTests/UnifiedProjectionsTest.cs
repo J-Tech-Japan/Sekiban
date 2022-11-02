@@ -19,7 +19,7 @@ using System.Linq;
 using Xunit;
 namespace Customer.Test.AggregateTests;
 
-public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<CustomerDependency>
+public class UnifiedProjectionsTest : MultiProjectionsAndQueriesTestBase<CustomerDependency>
 {
 
     private readonly AggregateQueryTest<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, bool>
@@ -31,7 +31,7 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
     private readonly string branchName = "BranchName";
     private readonly string clientEmail = "test@exmple.com";
     private readonly
-        MultiProjectionTestBase<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.PayloadDefinition,
+        MultiProjectionTestBase<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultiProjection.PayloadDefinition,
             CustomerDependency> clientLoyaltyProjectionTest;
     private readonly string clientName = "Client Name";
     private readonly string clientName2 = "Client Name2";
@@ -43,9 +43,9 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
         ClientLoyaltyPointQuery, ClientLoyaltyPointQuery.QueryParameter,
         ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> listQuery = new();
 
-    private readonly MultiProjectionQueryTest<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.PayloadDefinition,
+    private readonly MultiProjectionQueryTest<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultiProjection.PayloadDefinition,
         ClientLoyaltyPointMultipleMultiProjectionQuery, ClientLoyaltyPointMultipleMultiProjectionQuery.QueryParameter,
-        ClientLoyaltyPointMultipleProjection.PayloadDefinition> multiProjectionQueryTest = new();
+        ClientLoyaltyPointMultiProjection.PayloadDefinition> multiProjectionQueryTest = new();
 
     private readonly
         SingleProjectionListTestBase<Client, ClientNameHistoryMultiProjection, ClientNameHistoryMultiProjection.PayloadDefinition,
@@ -62,8 +62,8 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
     public UnifiedProjectionsTest()
     {
         clientLoyaltyProjectionTest
-            = SetupMultiProjectionTest<MultiProjectionTestBase<ClientLoyaltyPointMultipleProjection,
-                ClientLoyaltyPointMultipleProjection.PayloadDefinition, CustomerDependency>>();
+            = SetupMultiProjectionTest<MultiProjectionTestBase<ClientLoyaltyPointMultiProjection,
+                ClientLoyaltyPointMultiProjection.PayloadDefinition, CustomerDependency>>();
         clientLoyaltyProjectionTest.GivenQueryTest(multiProjectionQueryTest);
 
         listProjectionTest
@@ -95,22 +95,22 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
         clientLoyaltyProjectionTest.WhenProjection()
             .ThenNotThrowsAnException()
             .ThenPayloadIs(
-                new ClientLoyaltyPointMultipleProjection.PayloadDefinition(
-                    ImmutableList<ClientLoyaltyPointMultipleProjection.ProjectedBranch>.Empty.Add(
-                        new ClientLoyaltyPointMultipleProjection.ProjectedBranch(_branchId, branchName)),
-                    ImmutableList<ClientLoyaltyPointMultipleProjection.ProjectedRecord>.Empty.Add(
-                        new ClientLoyaltyPointMultipleProjection.ProjectedRecord(_branchId, branchName, _clientId, clientName, 0))));
+                new ClientLoyaltyPointMultiProjection.PayloadDefinition(
+                    ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty.Add(
+                        new ClientLoyaltyPointMultiProjection.ProjectedBranch(_branchId, branchName)),
+                    ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty.Add(
+                        new ClientLoyaltyPointMultiProjection.ProjectedRecord(_branchId, branchName, _clientId, clientName, 0))));
         multiProjectionQueryTest
             .WhenParam(
                 new ClientLoyaltyPointMultipleMultiProjectionQuery.QueryParameter(
                     null,
                     ClientLoyaltyPointMultipleMultiProjectionQuery.QuerySortKeys.ClientName))
             .ThenResponseIs(
-                new ClientLoyaltyPointMultipleProjection.PayloadDefinition(
-                    ImmutableList<ClientLoyaltyPointMultipleProjection.ProjectedBranch>.Empty.Add(
-                        new ClientLoyaltyPointMultipleProjection.ProjectedBranch(_branchId, branchName)),
-                    ImmutableList<ClientLoyaltyPointMultipleProjection.ProjectedRecord>.Empty.Add(
-                        new ClientLoyaltyPointMultipleProjection.ProjectedRecord(_branchId, branchName, _clientId, clientName, 0))));
+                new ClientLoyaltyPointMultiProjection.PayloadDefinition(
+                    ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty.Add(
+                        new ClientLoyaltyPointMultiProjection.ProjectedBranch(_branchId, branchName)),
+                    ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty.Add(
+                        new ClientLoyaltyPointMultiProjection.ProjectedRecord(_branchId, branchName, _clientId, clientName, 0))));
     }
 
     [Fact]
@@ -132,7 +132,7 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
         singleProjectionQueryTest
             .WhenParam(new ClientNameHistoryProjectionQuery.ClientNameHistoryProjectionParameter(null, null, null, null, null))
             .ThenResponseIs(
-                new QueryListResult<ClientNameHistoryProjectionQuery.ClientNameHistoryProjectionQueryResponse>(
+                new ListQueryResult<ClientNameHistoryProjectionQuery.ClientNameHistoryProjectionQueryResponse>(
                     1,
                     null,
                     null,
@@ -156,10 +156,10 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
                     null,
                     ClientLoyaltyPointMultipleMultiProjectionQuery.QuerySortKeys.ClientName))
             .ThenResponseIs(
-                new ClientLoyaltyPointMultipleProjection.PayloadDefinition(
-                    ImmutableList<ClientLoyaltyPointMultipleProjection.ProjectedBranch>.Empty.Add(
-                        new ClientLoyaltyPointMultipleProjection.ProjectedBranch(_branchId, branchName)),
-                    ImmutableList<ClientLoyaltyPointMultipleProjection.ProjectedRecord>.Empty.Add(
-                        new ClientLoyaltyPointMultipleProjection.ProjectedRecord(_branchId, branchName, _clientId, clientName2, 0))));
+                new ClientLoyaltyPointMultiProjection.PayloadDefinition(
+                    ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty.Add(
+                        new ClientLoyaltyPointMultiProjection.ProjectedBranch(_branchId, branchName)),
+                    ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty.Add(
+                        new ClientLoyaltyPointMultiProjection.ProjectedRecord(_branchId, branchName, _clientId, clientName2, 0))));
     }
 }

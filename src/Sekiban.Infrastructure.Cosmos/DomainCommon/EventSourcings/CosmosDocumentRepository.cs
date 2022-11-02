@@ -23,12 +23,12 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
     }
 
     public async Task GetAllEventsAsync(
-        Type multipleProjectionType,
+        Type multiProjectionType,
         IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
         Action<IEnumerable<IEvent>> resultAction)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multipleProjectionType);
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionType);
 
         await _cosmosDbFactory.CosmosActionAsync(
             DocumentType.Event,

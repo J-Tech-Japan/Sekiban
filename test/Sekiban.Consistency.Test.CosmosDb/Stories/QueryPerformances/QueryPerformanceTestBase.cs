@@ -6,7 +6,7 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Document;
-using Sekiban.Core.Query.MultipleProjections;
+using Sekiban.Core.Query.MultProjections;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Infrastructure.Cosmos;
 using System.Linq;
@@ -28,7 +28,7 @@ public abstract class QueryPerformanceTestBase : TestBase
     protected QueryPerformanceTestBase(
         SekibanTestFixture sekibanTestFixture,
         ITestOutputHelper testOutputHelper,
-        ServiceCollectionExtensions.MultipleProjectionType multipleProjectionType) : base(sekibanTestFixture, false, multipleProjectionType)
+        ServiceCollectionExtensions.MultiProjectionType multiProjectionType) : base(sekibanTestFixture, false, multiProjectionType)
     {
         _testOutputHelper = testOutputHelper;
         _cosmosDbFactory = GetService<CosmosDbFactory>();

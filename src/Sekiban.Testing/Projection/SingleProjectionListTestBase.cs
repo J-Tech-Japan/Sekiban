@@ -5,7 +5,7 @@ using Sekiban.Core.Dependency;
 using Sekiban.Core.Document;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
-using Sekiban.Core.Query.MultipleProjections;
+using Sekiban.Core.Query.MultProjections;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleProjections;
@@ -62,12 +62,12 @@ public class
         {
             throw new InvalidOperationException("Service provider not set");
         }
-        var multipleProjectionService
+        var multiProjectionService
             = _serviceProvider.GetRequiredService(typeof(IMultiProjectionService)) as IMultiProjectionService;
-        if (multipleProjectionService is null) { throw new Exception("Failed to get multipleProjectionService "); }
+        if (multiProjectionService is null) { throw new Exception("Failed to get multiProjectionService "); }
         try
         {
-            State = multipleProjectionService
+            State = multiProjectionService
                 .GetSingleProjectionListObject<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>()
                 .Result;
         }

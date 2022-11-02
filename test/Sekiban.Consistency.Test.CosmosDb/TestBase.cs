@@ -17,10 +17,10 @@ public class TestBase : IClassFixture<TestBase.SekibanTestFixture>, IDisposable
     public TestBase(
         SekibanTestFixture sekibanTestFixture,
         bool inMemory = false,
-        ServiceCollectionExtensions.MultipleProjectionType multipleProjectionType = ServiceCollectionExtensions.MultipleProjectionType.MemoryCache)
+        ServiceCollectionExtensions.MultiProjectionType multiProjectionType = ServiceCollectionExtensions.MultiProjectionType.MemoryCache)
     {
         _sekibanTestFixture = sekibanTestFixture;
-        _serviceProvider = DependencyHelper.CreateDefaultProvider(sekibanTestFixture, inMemory, null, multipleProjectionType);
+        _serviceProvider = DependencyHelper.CreateDefaultProvider(sekibanTestFixture, inMemory, null, multiProjectionType);
     }
     public void Dispose()
     {

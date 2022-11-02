@@ -29,7 +29,7 @@ public interface IDocumentRepository
         Action<IEnumerable<IEvent>> resultAction);
 
     Task GetAllEventsAsync(
-        Type multipleProjectionType,
+        Type multiProjectionType,
         IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
         Action<IEnumerable<IEvent>> resultAction);
