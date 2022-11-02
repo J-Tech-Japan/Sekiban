@@ -7,14 +7,14 @@ using Xunit;
 namespace Sekiban.Testing.Queries;
 
 public class
-    AggregateQueryTestChecker<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> : IQueryChecker
+    AggregateQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> : IQueryChecker
     where TAggregatePayload : IAggregatePayload, new()
     where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
     where TQueryParameter : IQueryParameter
 {
     public TQueryResponse? Response { get; set; }
     public IQueryService? QueryService { get; set; } = null;
-    public AggregateQueryTestChecker<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> WhenParam(
+    public AggregateQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> WhenParam(
         TQueryParameter param)
     {
         if (QueryService == null) { throw new MissingMemberException(nameof(QueryService)); }
@@ -23,7 +23,7 @@ public class
             .Result;
         return this;
     }
-    public AggregateQueryTestChecker<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> WriteResponseToFile(
+    public AggregateQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> WriteResponseToFile(
         string filename)
     {
         if (Response == null)
@@ -38,7 +38,7 @@ public class
         File.WriteAllTextAsync(filename, json);
         return this;
     }
-    public AggregateQueryTestChecker<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> ThenResponseIs(
+    public AggregateQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> ThenResponseIs(
         TQueryResponse expectedResponse)
     {
         if (Response == null)
@@ -52,7 +52,7 @@ public class
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public AggregateQueryTestChecker<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> ThenGetResponse(
+    public AggregateQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> ThenGetResponse(
         Action<TQueryResponse> responseAction)
     {
         Assert.NotNull(Response);
@@ -60,7 +60,7 @@ public class
         return this;
     }
 
-    public AggregateQueryTestChecker<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> ThenResponseIsFromJson(
+    public AggregateQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> ThenResponseIsFromJson(
         string responseJson)
     {
         var response = JsonSerializer.Deserialize<TQueryResponse>(responseJson);
@@ -68,7 +68,7 @@ public class
         ThenResponseIs(response);
         return this;
     }
-    public AggregateQueryTestChecker<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> ThenResponseIsFromFile(
+    public AggregateQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> ThenResponseIsFromFile(
         string responseFilename)
     {
         using var openStream = File.OpenRead(responseFilename);

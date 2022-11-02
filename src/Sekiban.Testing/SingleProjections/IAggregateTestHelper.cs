@@ -58,8 +58,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         IEnumerable<SekibanValidationParameterError> validationParameterErrors);
     public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors();
     public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionTest<TSingleProjection, TSingleProjectionPayload>(
-        Action<ProjectionTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>> singleProjectionTestAction)
-        where TSingleProjection : ProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
+        Action<MultiProjectionTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>> singleProjectionTestAction)
+        where TSingleProjection : MultiProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
         where TSingleProjectionPayload : ISingleProjectionPayload;
     #endregion
 

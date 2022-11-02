@@ -12,8 +12,8 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
         Define();
     }
     private ImmutableList<IAggregateDependencyDefinition> AggregateDefinitions { get; set; } = ImmutableList<IAggregateDependencyDefinition>.Empty;
-    private ImmutableList<Type> MultiProjectionQueryFilterTypes { get; set; } = ImmutableList<Type>.Empty;
-    private ImmutableList<Type> MultiProjectionListQueryFilterTypes { get; set; } = ImmutableList<Type>.Empty;
+    private ImmutableList<Type> MultiProjectionQueryTypes { get; set; } = ImmutableList<Type>.Empty;
+    private ImmutableList<Type> MultiProjectionListQueryTypes { get; set; } = ImmutableList<Type>.Empty;
     public abstract Assembly GetExecutingAssembly();
     public IEnumerable<(Type serviceType, Type? implementationType)> GetCommandDependencies()
     {
@@ -25,22 +25,22 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
     }
     public IEnumerable<Type> GetAggregateQueryTypes()
     {
-        return AggregateDefinitions.SelectMany(s => s.AggregateQueryFilterTypes);
+        return AggregateDefinitions.SelectMany(s => s.AggregateQueryTypes);
     }
     public IEnumerable<Type> GetAggregateListQueryTypes()
     {
-        return AggregateDefinitions.SelectMany(s => s.AggregateListQueryFilterTypes);
+        return AggregateDefinitions.SelectMany(s => s.AggregateListQueryTypes);
     }
     public IEnumerable<Type> GetSingleProjectionQueryTypes()
     {
-        return AggregateDefinitions.SelectMany(s => s.SingleProjectionQueryFilterTypes);
+        return AggregateDefinitions.SelectMany(s => s.SingleProjectionQueryTypes);
     }
     public IEnumerable<Type> GetSingleProjectionListQueryTypes()
     {
-        return AggregateDefinitions.SelectMany(s => s.SingleProjectionListQueryFilterTypes);
+        return AggregateDefinitions.SelectMany(s => s.SingleProjectionListQueryTypes);
     }
-    public IEnumerable<Type> GetMultiProjectionQueryTypes() => MultiProjectionQueryFilterTypes;
-    public IEnumerable<Type> GetMultiProjectionListQueryTypes() => MultiProjectionListQueryFilterTypes;
+    public IEnumerable<Type> GetMultiProjectionQueryTypes() => MultiProjectionQueryTypes;
+    public IEnumerable<Type> GetMultiProjectionListQueryTypes() => MultiProjectionListQueryTypes;
     public IEnumerable<Type> GetSingleProjectionTypes()
     {
         return AggregateDefinitions.SelectMany(s => s.SingleProjectionTypes);
@@ -63,28 +63,28 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
         AggregateDefinitions = AggregateDefinitions.Add(newone);
         return newone;
     }
-    protected void AddMultiProjectionQuery<TQueryFilter>()
+    protected void AddMultiProjectionQuery<TQuery>()
     {
-        var t = typeof(TQueryFilter);
+        var t = typeof(TQuery);
         Action action = t.GetInterfaces()
                 .Where(w => w.IsGenericType)
                 .Select(s => s.GetGenericTypeDefinition()) switch
             {
                 { } gis when gis.Contains(typeof(IMultiProjectionQuery<,,,>)) => () =>
-                    MultiProjectionQueryFilterTypes = MultiProjectionQueryFilterTypes.Add(t),
+                    MultiProjectionQueryTypes = MultiProjectionQueryTypes.Add(t),
                 _ => throw new NotImplementedException()
             };
         action();
     }
-    protected void AddMultiProjectionListQuery<TQueryFilter>()
+    protected void AddMultiProjectionListQuery<TQuery>()
     {
-        var t = typeof(TQueryFilter);
+        var t = typeof(TQuery);
         Action action = t.GetInterfaces()
                 .Where(w => w.IsGenericType)
                 .Select(s => s.GetGenericTypeDefinition()) switch
             {
                 { } gis when gis.Contains(typeof(IMultiProjectionListQuery<,,,>)) => () =>
-                    MultiProjectionListQueryFilterTypes = MultiProjectionListQueryFilterTypes.Add(t),
+                    MultiProjectionListQueryTypes = MultiProjectionListQueryTypes.Add(t),
                 _ => throw new NotImplementedException()
             };
         action();

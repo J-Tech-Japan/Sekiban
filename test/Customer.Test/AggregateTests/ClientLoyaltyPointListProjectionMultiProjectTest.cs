@@ -10,7 +10,7 @@ using System.Collections.Generic;
 using Xunit;
 namespace Customer.Test.AggregateTests;
 
-public class ClientLoyaltyPointListProjectionTest : MultiProjectionTestBase<ClientLoyaltyPointListProjection,
+public class ClientLoyaltyPointListProjectionMultiProjectTest : MultiProjectionMultiProjectTestBase<ClientLoyaltyPointListProjection,
     ClientLoyaltyPointListProjection.PayloadDefinition, CustomerDependency>
 {
 
@@ -23,15 +23,15 @@ public class ClientLoyaltyPointListProjectionTest : MultiProjectionTestBase<Clie
     public Guid _clientId4 = Guid.NewGuid();
     public Guid _clientId5 = Guid.NewGuid();
     public string _clientNameBase = "Client TEST ";
-    public MultiProjectionListQueryTestChecker<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.PayloadDefinition,
+    public MultiProjectionListQueryTest<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.PayloadDefinition,
         ClientLoyaltyPointQuery, ClientLoyaltyPointQuery.QueryParameter,
-        ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> ListQueryTestChecker = new();
+        ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> ListQueryTest = new();
 
     [Fact]
     public void RegularProjection()
     {
 
-        GivenQueryChecker(ListQueryTestChecker)
+        GivenQueryChecker(ListQueryTest)
             .GivenEventsFromFile("TestData1.json")
             .WhenProjection()
             .ThenNotThrowsAnException()
@@ -43,7 +43,7 @@ public class ClientLoyaltyPointListProjectionTest : MultiProjectionTestBase<Clie
     {
         GivenScenario(RegularProjection);
 
-        ListQueryTestChecker.WhenParam(
+        ListQueryTest.WhenParam(
                 new ClientLoyaltyPointQuery.QueryParameter(
                     null,
                     null,
@@ -60,7 +60,7 @@ public class ClientLoyaltyPointListProjectionTest : MultiProjectionTestBase<Clie
     [Fact]
     public void CommandTest1()
     {
-        GivenQueryChecker(ListQueryTestChecker);
+        GivenQueryChecker(ListQueryTest);
         RunCreateCommand(new CreateBranch(_branchName), _branchId);
         RunCreateCommand(new CreateClient(_branchId, _clientNameBase + 1, "test" + 1 + "@example.com"), _clientId1);
         RunCreateCommand(new CreateClient(_branchId, _clientNameBase + 2, "test" + 2 + "@example.com"), _clientId2);
@@ -74,7 +74,7 @@ public class ClientLoyaltyPointListProjectionTest : MultiProjectionTestBase<Clie
     public void QueryBasic1()
     {
         GivenScenario(CommandTest1);
-        ListQueryTestChecker.WhenParam(
+        ListQueryTest.WhenParam(
                 new ClientLoyaltyPointQuery.QueryParameter(
                     null,
                     null,
@@ -103,7 +103,7 @@ public class ClientLoyaltyPointListProjectionTest : MultiProjectionTestBase<Clie
     public void QueryBasicPaging()
     {
         GivenScenario(CommandTest1);
-        ListQueryTestChecker.WhenParam(
+        ListQueryTest.WhenParam(
                 new ClientLoyaltyPointQuery.QueryParameter(
                     null,
                     null,
@@ -130,7 +130,7 @@ public class ClientLoyaltyPointListProjectionTest : MultiProjectionTestBase<Clie
     public void QueryBasicPaging2()
     {
         GivenScenario(CommandTest1);
-        ListQueryTestChecker.WhenParam(
+        ListQueryTest.WhenParam(
                 new ClientLoyaltyPointQuery.QueryParameter(
                     null,
                     null,
@@ -159,7 +159,7 @@ public class ClientLoyaltyPointListProjectionTest : MultiProjectionTestBase<Clie
     public void QueryBasicPaging3()
     {
         GivenScenario(CommandTest1);
-        ListQueryTestChecker.WhenParam(
+        ListQueryTest.WhenParam(
                 new ClientLoyaltyPointQuery.QueryParameter(
                     null,
                     null,
@@ -185,7 +185,7 @@ public class ClientLoyaltyPointListProjectionTest : MultiProjectionTestBase<Clie
     public void QueryBasicPagingRequestOverflowed()
     {
         GivenScenario(CommandTest1);
-        ListQueryTestChecker.WhenParam(
+        ListQueryTest.WhenParam(
                 new ClientLoyaltyPointQuery.QueryParameter(
                     null,
                     null,
@@ -207,7 +207,7 @@ public class ClientLoyaltyPointListProjectionTest : MultiProjectionTestBase<Clie
     public void QueryBasicPagingRequestZero()
     {
         GivenScenario(CommandTest1);
-        ListQueryTestChecker.WhenParam(
+        ListQueryTest.WhenParam(
                 new ClientLoyaltyPointQuery.QueryParameter(
                     null,
                     null,

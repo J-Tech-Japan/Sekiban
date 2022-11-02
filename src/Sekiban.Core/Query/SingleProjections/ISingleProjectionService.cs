@@ -52,10 +52,10 @@ public interface ISingleProjectionService
     /// <typeparam name="TSingleProjection"></typeparam>
     /// <typeparam name="TSingleProjectionPayload"></typeparam>
     /// <returns></returns>
-    public Task<ProjectionState<TSingleProjectionPayload>?>
+    public Task<SingleProjectionState<TSingleProjectionPayload>?>
         GetProjectionAsync<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>(Guid aggregateId, int? toVersion = null)
         where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : ProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
+        where TSingleProjection : MultiProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
         new()
         where TSingleProjectionPayload : ISingleProjectionPayload;
 

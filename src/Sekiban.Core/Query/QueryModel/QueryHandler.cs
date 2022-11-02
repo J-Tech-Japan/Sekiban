@@ -84,8 +84,8 @@ public class QueryHandler
         GetSingleProjectionListQuery<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TQuery,
             TQueryParameter, TQueryResponse>(
             TQueryParameter param,
-            IEnumerable<ProjectionState<TSingleProjectionPayload>> projections) where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : ProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
+            IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections) where TAggregatePayload : IAggregatePayload, new()
+        where TSingleProjection : MultiProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
         new()
         where TSingleProjectionPayload : ISingleProjectionPayload
         where TQuery : ISingleProjectionListQuery<TAggregatePayload, TSingleProjection,
@@ -132,8 +132,8 @@ public class QueryHandler
         GetSingleProjectionQuery<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TQuery,
             TQueryParameter, TQueryResponse>(
             TQueryParameter param,
-            IEnumerable<ProjectionState<TSingleProjectionPayload>> projections) where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : ProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
+            IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections) where TAggregatePayload : IAggregatePayload, new()
+        where TSingleProjection : MultiProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
         new()
         where TSingleProjectionPayload : ISingleProjectionPayload
         where TQuery : ISingleProjectionQuery<TAggregatePayload, TSingleProjection,
