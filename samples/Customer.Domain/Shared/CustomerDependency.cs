@@ -25,7 +25,7 @@ public class CustomerDependency : DomainDependencyDefinitionBase
     protected override void Define()
     {
         AddAggregate<Branch>()
-            .AddCreateCommandHandler<CreateBranch, CreateBranchHandler>()
+            .AddCreateCommandHandler<CreateBranch, CreateBranch.Handler>()
             .AddAggregateQuery<BranchExistsQuery>();
 
         AddAggregate<Client>()
@@ -40,19 +40,19 @@ public class CustomerDependency : DomainDependencyDefinitionBase
             .AddAggregateQuery<ClientEmailExistsQuery>();
 
         AddAggregate<LoyaltyPoint>()
-            .AddCreateCommandHandler<CreateLoyaltyPoint, CreateLoyaltyPointHandler>()
+            .AddCreateCommandHandler<CreateLoyaltyPoint, CreateLoyaltyPoint.Handler>()
             .AddChangeCommandHandler<AddLoyaltyPoint, AddLoyaltyPoint.Handler>()
-            .AddChangeCommandHandler<UseLoyaltyPoint, UseLoyaltyPointHandler>()
-            .AddChangeCommandHandler<DeleteLoyaltyPoint, DeleteLoyaltyPointHandler>();
+            .AddChangeCommandHandler<UseLoyaltyPoint, UseLoyaltyPoint.Handler>()
+            .AddChangeCommandHandler<DeleteLoyaltyPoint, DeleteLoyaltyPoint.Handler>();
 
         AddAggregate<RecentActivity>()
-            .AddCreateCommandHandler<CreateRecentActivity, CreateRecentActivityHandler>()
-            .AddChangeCommandHandler<AddRecentActivity, AddRecentActivityHandler>()
-            .AddChangeCommandHandler<OnlyPublishingAddRecentActivity, OnlyPublishingAddRecentActivityHandler>();
+            .AddCreateCommandHandler<CreateRecentActivity, CreateRecentActivity.Handler>()
+            .AddChangeCommandHandler<AddRecentActivity, AddRecentActivity.Handler>()
+            .AddChangeCommandHandler<OnlyPublishingAddRecentActivity, OnlyPublishingAddRecentActivity.Handler>();
 
         AddAggregate<RecentInMemoryActivity>()
-            .AddCreateCommandHandler<CreateRecentInMemoryActivity, CreateRecentInMemoryActivityHandler>()
-            .AddChangeCommandHandler<AddRecentInMemoryActivity, AddRecentInMemoryActivityHandler>();
+            .AddCreateCommandHandler<CreateRecentInMemoryActivity, CreateRecentInMemoryActivity.Handler>()
+            .AddChangeCommandHandler<AddRecentInMemoryActivity, AddRecentInMemoryActivity.Handler>();
 
         AddMultiProjectionQuery<ClientLoyaltyPointMultipleMultiProjectionQuery>();
         AddMultiProjectionListQuery<ClientLoyaltyPointQuery>();

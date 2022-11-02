@@ -41,7 +41,7 @@ public class ClientSpec : AggregateTestBase<Client, CustomerDependency>
         ThenSingleEventPayloadIs(new ClientCreated(branchId, testClientName, testEmail));
         // 現在の集約のステータスを検証する
         ThenStateIs(
-            new AggregateIdentifierState<Client>
+            new AggregateState<Client>
             {
                 AggregateId = GetAggregateId(), Version = GetCurrentVersion(), Payload = new Client(branchId, testClientName, testEmail)
             });
@@ -52,7 +52,7 @@ public class ClientSpec : AggregateTestBase<Client, CustomerDependency>
         ThenSingleEventPayloadIs(new ClientNameChanged(testClientChangedName));
         // 現在の集約のステータスを検証する
         ThenStateIs(
-            new AggregateIdentifierState<Client>
+            new AggregateState<Client>
             {
                 AggregateId = GetAggregateId(),
                 Version = GetCurrentVersion(),

@@ -11,18 +11,18 @@ public record OnlyPublishingAddRecentActivity(Guid RecentActivityId, string Acti
     {
     }
     public override Guid GetAggregateId() => RecentActivityId;
-}
-public class OnlyPublishingAddRecentActivityHandler : EventPublishOnlyChangeCommandHandlerBase<RecentActivity,
-    OnlyPublishingAddRecentActivity>
-{
-    private readonly ISekibanDateProducer _sekibanDateProducer;
-
-    public OnlyPublishingAddRecentActivityHandler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
-    protected override async IAsyncEnumerable<IChangedEvent<RecentActivity>> ExecCommandAsync(
-        Guid aggregateId,
-        OnlyPublishingAddRecentActivity command)
+    public class Handler : EventPublishOnlyChangeCommandHandlerBase<RecentActivity,
+        OnlyPublishingAddRecentActivity>
     {
-        await Task.CompletedTask;
-        yield return new RecentActivityAdded(new RecentActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
+        private readonly ISekibanDateProducer _sekibanDateProducer;
+
+        public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
+        protected override async IAsyncEnumerable<IChangedEvent<RecentActivity>> ExecCommandAsync(
+            Guid aggregateId,
+            OnlyPublishingAddRecentActivity command)
+        {
+            await Task.CompletedTask;
+            yield return new RecentActivityAdded(new RecentActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
+        }
     }
 }

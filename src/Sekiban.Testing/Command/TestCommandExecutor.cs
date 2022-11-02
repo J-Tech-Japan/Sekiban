@@ -38,7 +38,7 @@ public class TestCommandExecutor
         var commandDocumentBaseType = typeof(CommandDocument<>);
         var commandDocumentType = commandDocumentBaseType.MakeGenericType(command.GetType());
         var commandDocument = Activator.CreateInstance(commandDocumentType, aggregateId, command, typeof(TAggregatePayload), null);
-        var aggregate = new AggregateIdentifier<TAggregatePayload> { AggregateId = aggregateId };
+        var aggregate = new Aggregate<TAggregatePayload> { AggregateId = aggregateId };
         var handlerType = handler.GetType().GetMethods();
         var handleAsyncMethod = handler.GetType().GetMethods().First(m => m.Name == "HandleAsync");
         var result = ((dynamic)handleAsyncMethod.Invoke(handler, new[] { commandDocument, aggregate })!)?.Result;
@@ -63,7 +63,7 @@ public class TestCommandExecutor
         return (latestEvents, aggregateId);
     }
 
-    private AggregateIdentifier<TAggregatePayload> GetAggregate<TAggregatePayload>(Guid aggregateId)
+    private Aggregate<TAggregatePayload> GetAggregate<TAggregatePayload>(Guid aggregateId)
         where TAggregatePayload : IAggregatePayload, new()
     {
 

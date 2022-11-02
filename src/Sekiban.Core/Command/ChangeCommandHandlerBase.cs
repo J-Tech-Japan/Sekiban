@@ -9,18 +9,18 @@ public abstract class ChangeCommandHandlerBase<TAggregatePayload, TCommand> : IC
     where TAggregatePayload : IAggregatePayload, new() where TCommand : ChangeCommandBase<TAggregatePayload>, new()
 {
     private readonly List<IEvent> _events = new();
-    private AggregateIdentifier<TAggregatePayload>? _aggregate;
+    private Aggregate<TAggregatePayload>? _aggregate;
     public async Task<CommandResponse> HandleAsync(
         CommandDocument<TCommand> commandDocument,
-        AggregateIdentifier<TAggregatePayload> aggregateIdentifier)
+        Aggregate<TAggregatePayload> aggregate)
     {
         var command = commandDocument.Payload;
-        _aggregate = aggregateIdentifier;
+        _aggregate = aggregate;
         if (command is IOnlyPublishingCommand)
         {
             throw new SekibanCanNotExecuteOnlyPublishingEventCommand(typeof(TCommand).Name);
         }
-        var state = aggregateIdentifier.ToState();
+        var state = aggregate.ToState();
         // Validate AddAggregate is deleted
         if (state.GetIsDeleted() && command is not ICancelDeletedCommand)
         {
@@ -28,28 +28,28 @@ public abstract class ChangeCommandHandlerBase<TAggregatePayload, TCommand> : IC
         }
 
         // Validate AddAggregate Version
-        if (command is not INoValidateCommand && command.ReferenceVersion != aggregateIdentifier.Version)
+        if (command is not INoValidateCommand && command.ReferenceVersion != aggregate.Version)
         {
             throw new SekibanCommandInconsistentVersionException(
-                aggregateIdentifier.AggregateId,
+                aggregate.AggregateId,
                 command.ReferenceVersion,
-                aggregateIdentifier.Version);
+                aggregate.Version);
         }
 
         // Execute Command
         var eventPayloads = ExecCommandAsync(GetAggregateState, command);
         await foreach (var eventPayload in eventPayloads)
         {
-            _events.Add(EventHandler.HandleEvent(aggregateIdentifier, eventPayload));
+            _events.Add(EventHandler.HandleEvent(aggregate, eventPayload));
         }
-        return await Task.FromResult(new CommandResponse(aggregateIdentifier.AggregateId, _events.ToImmutableList(), aggregateIdentifier.Version));
+        return await Task.FromResult(new CommandResponse(aggregate.AggregateId, _events.ToImmutableList(), aggregate.Version));
     }
     public Task<CommandResponse> HandleForOnlyPublishingCommandAsync(
         CommandDocument<TCommand> commandDocument,
         Guid aggregateId) => throw new SekibanCanNotExecuteOnlyPublishingEventCommand(typeof(TCommand).Name);
     public virtual TCommand CleanupCommandIfNeeded(TCommand command) => command;
 
-    private AggregateIdentifierState<TAggregatePayload> GetAggregateState()
+    private AggregateState<TAggregatePayload> GetAggregateState()
     {
         if (_aggregate is null)
         {
@@ -58,7 +58,7 @@ public abstract class ChangeCommandHandlerBase<TAggregatePayload, TCommand> : IC
         var state = _aggregate.ToState();
         foreach (var ev in _events)
         {
-            var aggregate = new AggregateIdentifier<TAggregatePayload>();
+            var aggregate = new Aggregate<TAggregatePayload>();
             aggregate.ApplySnapshot(state);
             aggregate.ApplyEvent(ev);
             state = aggregate.ToState();
@@ -67,6 +67,6 @@ public abstract class ChangeCommandHandlerBase<TAggregatePayload, TCommand> : IC
     }
 
     protected abstract IAsyncEnumerable<IChangedEvent<TAggregatePayload>> ExecCommandAsync(
-        Func<AggregateIdentifierState<TAggregatePayload>> getAggregateState,
+        Func<AggregateState<TAggregatePayload>> getAggregateState,
         TCommand command);
 }

@@ -14,7 +14,7 @@ public interface ISingleProjectionService
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
     public Task<T?> GetAggregateProjectionFromInitialAsync<T, P>(Guid aggregateId, int? toVersion)
-        where T : IAggregateIdentifier, ISingleProjection
+        where T : IAggregateCommon, ISingleProjection
         where P : ISingleProjector<T>, new();
 
     /// <summary>
@@ -27,7 +27,7 @@ public interface ISingleProjectionService
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Task<AggregateIdentifier<TAggregatePayload>?> GetAggregateFromInitialAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)
+    public Task<Aggregate<TAggregatePayload>?> GetAggregateFromInitialAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)
         where TAggregatePayload : IAggregatePayload, new();
 
     /// <summary>
@@ -39,7 +39,7 @@ public interface ISingleProjectionService
     /// <param name="toVersion"></param>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Task<AggregateIdentifierState<TAggregatePayload>?> GetAggregateStateFromInitialAsync<TAggregatePayload>(
+    public Task<AggregateState<TAggregatePayload>?> GetAggregateStateFromInitialAsync<TAggregatePayload>(
         Guid aggregateId,
         int? toVersion = null)
         where TAggregatePayload : IAggregatePayload, new();
@@ -69,7 +69,7 @@ public interface ISingleProjectionService
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Task<AggregateIdentifier<TAggregatePayload>?> GetAggregateAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)
+    public Task<Aggregate<TAggregatePayload>?> GetAggregateAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)
         where TAggregatePayload : IAggregatePayload, new();
 
     /// <summary>
@@ -80,6 +80,6 @@ public interface ISingleProjectionService
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Task<AggregateIdentifierState<TAggregatePayload>?> GetAggregateStateAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)
+    public Task<AggregateState<TAggregatePayload>?> GetAggregateStateAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)
         where TAggregatePayload : IAggregatePayload, new();
 }

@@ -1,7 +1,7 @@
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Query;
 
-public class AggregateList<T> where T : IAggregateIdentifier
+public class AggregateList<T> where T : IAggregateCommon
 {
     public List<T> List { get; set; } = new();
     public Guid? LastEventId { get; set; } = null;

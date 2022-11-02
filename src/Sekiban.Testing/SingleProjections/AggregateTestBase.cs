@@ -28,7 +28,7 @@ public abstract class AggregateTestBase<TAggregatePayload, TDependencyDefinition
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvent(IEvent ev) => _helper.GivenEnvironmentEvent(ev);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvents(IEnumerable<IEvent> events) => _helper.GivenEnvironmentEvents(events);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFile(string filename) => _helper.GivenEnvironmentEventsFile(filename);
-    public AggregateIdentifierState<TEnvironmentAggregatePayload>
+    public AggregateState<TEnvironmentAggregatePayload>
         GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
         where TEnvironmentAggregatePayload : IAggregatePayload, new() =>
         _helper.GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(aggregateId);
@@ -51,7 +51,7 @@ public abstract class AggregateTestBase<TAggregatePayload, TDependencyDefinition
         _helper.WhenCreate(createCommand);
     public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(C changeCommand) where C : ChangeCommandBase<TAggregatePayload> =>
         _helper.WhenChange(changeCommand);
-    public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(Func<AggregateIdentifierState<TAggregatePayload>, C> commandFunc)
+    public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(Func<AggregateState<TAggregatePayload>, C> commandFunc)
         where C : ChangeCommandBase<TAggregatePayload> => _helper.WhenChange(commandFunc);
 
     public IAggregateTestHelper<TAggregatePayload> ThenGetEvents(Action<List<IEvent>> checkEventsAction) => _helper.ThenGetEvents(checkEventsAction);
@@ -62,10 +62,10 @@ public abstract class AggregateTestBase<TAggregatePayload, TDependencyDefinition
         _helper.ThenSingleEventPayloadIs(payload);
     public IAggregateTestHelper<TAggregatePayload> ThenGetSingleEventPayload<T>(Action<T> checkPayloadAction) where T : class, IEventPayload =>
         _helper.ThenGetSingleEventPayload(checkPayloadAction);
-    public IAggregateTestHelper<TAggregatePayload> ThenGetState(Action<AggregateIdentifierState<TAggregatePayload>> checkStateAction) =>
+    public IAggregateTestHelper<TAggregatePayload> ThenGetState(Action<AggregateState<TAggregatePayload>> checkStateAction) =>
         _helper.ThenGetState(checkStateAction);
-    public IAggregateTestHelper<TAggregatePayload> ThenStateIs(AggregateIdentifierState<TAggregatePayload> expectedIdentifierState) =>
-        _helper.ThenStateIs(expectedIdentifierState);
+    public IAggregateTestHelper<TAggregatePayload> ThenStateIs(AggregateState<TAggregatePayload> expectedState) =>
+        _helper.ThenStateIs(expectedState);
     public IAggregateTestHelper<TAggregatePayload> ThenGetPayload(Action<TAggregatePayload> payloadAction) => _helper.ThenGetPayload(payloadAction);
     public IAggregateTestHelper<TAggregatePayload> ThenPayloadIs(TAggregatePayload payload) => _helper.ThenPayloadIs(payload);
     public IAggregateTestHelper<TAggregatePayload> WriteStateToFile(string filename) => _helper.WriteStateToFile(filename);
@@ -80,8 +80,8 @@ public abstract class AggregateTestBase<TAggregatePayload, TDependencyDefinition
         where TSingleProjectionPayload : ISingleProjectionPayload => _helper.ThenGetSingleProjectionTest(singleProjectionTestAction);
     public Guid GetAggregateId() => _helper.GetAggregateId();
     public int GetCurrentVersion() => _helper.GetCurrentVersion();
-    public AggregateIdentifierState<TAggregatePayload> GetAggregateState() => _helper.GetAggregateState();
-    public AggregateIdentifier<TAggregatePayload> GetAggregate() => _helper.GetAggregate();
+    public AggregateState<TAggregatePayload> GetAggregateState() => _helper.GetAggregateState();
+    public Aggregate<TAggregatePayload> GetAggregate() => _helper.GetAggregate();
 
     public IAggregateTestHelper<TAggregatePayload> ThenThrows<T>() where T : Exception => _helper.ThenThrows<T>();
     public IAggregateTestHelper<TAggregatePayload> ThenGetException<T>(Action<T> checkException) where T : Exception =>

@@ -51,7 +51,7 @@ public class QueryHandler
     public QueryListResult<TQueryResponse>
         GetAggregateListQuery<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
             TQueryParameter param,
-            IEnumerable<AggregateIdentifierState<TAggregatePayload>> list)
+            IEnumerable<AggregateState<TAggregatePayload>> list)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
@@ -69,7 +69,7 @@ public class QueryHandler
     }
     public TQueryResponse GetAggregateQuery<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
         TQueryParameter param,
-        IEnumerable<AggregateIdentifierState<TAggregatePayload>> list)
+        IEnumerable<AggregateState<TAggregatePayload>> list)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter

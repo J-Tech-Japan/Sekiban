@@ -23,8 +23,8 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
     public async Task<T?> GetAggregateAsync<T, Q, P>(Guid aggregateId, int? toVersion = null)
-        where T : IAggregateIdentifier, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<Q>
-        where Q : IAggregateIdentifier
+        where T : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<Q>
+        where Q : IAggregateCommon
         where P : ISingleProjector<T>, new()
     {
         var projector = new P();

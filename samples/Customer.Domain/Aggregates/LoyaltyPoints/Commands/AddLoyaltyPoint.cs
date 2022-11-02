@@ -18,7 +18,7 @@ public record AddLoyaltyPoint(
     public class Handler : ChangeCommandHandlerBase<LoyaltyPoint, AddLoyaltyPoint>
     {
         protected override async IAsyncEnumerable<IChangedEvent<LoyaltyPoint>> ExecCommandAsync(
-            Func<AggregateIdentifierState<LoyaltyPoint>> getAggregateState,
+            Func<AggregateState<LoyaltyPoint>> getAggregateState,
             AddLoyaltyPoint command)
         {
             await Task.CompletedTask;

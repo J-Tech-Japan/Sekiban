@@ -8,14 +8,14 @@ public record CreateLoyaltyPoint(Guid ClientId, int InitialPoint) : ICreateComma
 {
     public CreateLoyaltyPoint() : this(Guid.Empty, 0) { }
     public Guid GetAggregateId() => ClientId;
-}
-public class CreateLoyaltyPointHandler : CreateCommandHandlerBase<LoyaltyPoint, CreateLoyaltyPoint>
-{
-    protected override async IAsyncEnumerable<IApplicableEvent<LoyaltyPoint>> ExecCreateCommandAsync(
-        Func<AggregateIdentifierState<LoyaltyPoint>> getAggregateState,
-        CreateLoyaltyPoint command)
+    public class Handler : CreateCommandHandlerBase<LoyaltyPoint, CreateLoyaltyPoint>
     {
-        await Task.CompletedTask;
-        yield return new LoyaltyPointCreated(command.InitialPoint);
+        protected override async IAsyncEnumerable<IApplicableEvent<LoyaltyPoint>> ExecCreateCommandAsync(
+            Func<AggregateState<LoyaltyPoint>> getAggregateState,
+            CreateLoyaltyPoint command)
+        {
+            await Task.CompletedTask;
+            yield return new LoyaltyPointCreated(command.InitialPoint);
+        }
     }
 }

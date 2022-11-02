@@ -4,7 +4,7 @@ public class SekibanCommandInconsistentVersionException : Exception, ISekibanExc
 {
 
     public SekibanCommandInconsistentVersionException(Guid aggregateId, int passed, int correctVersion) : base(
-        $"for aggregateIdentifier {aggregateId} : {passed} was passed but should be {correctVersion}")
+        $"for aggregate {aggregateId} : {passed} was passed but should be {correctVersion}")
     {
         AggregateId = aggregateId;
         CorrectVersion = correctVersion;

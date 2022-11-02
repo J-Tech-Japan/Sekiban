@@ -6,5 +6,5 @@ public interface IAggregateQuery<TAggregatePayload, in TQueryParameter, out TQue
     where TAggregatePayload : IAggregatePayload, new()
     where TQueryParameter : IQueryParameter
 {
-    public TQueryResponse HandleFilter(TQueryParameter queryParam, IEnumerable<AggregateIdentifierState<TAggregatePayload>> list);
+    public TQueryResponse HandleFilter(TQueryParameter queryParam, IEnumerable<AggregateState<TAggregatePayload>> list);
 }
