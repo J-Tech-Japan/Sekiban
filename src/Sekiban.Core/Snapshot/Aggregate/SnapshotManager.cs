@@ -13,8 +13,6 @@ public record SnapshotManager(ImmutableList<string> Requests, ImmutableList<stri
     {
     }
     public static Guid SharedId { get; } = Guid.NewGuid();
-    internal static string SnapshotKey(string aggregateTypeName, Guid targetAggregateId, int nextSnapshotVersion)
-    {
-        return $"{aggregateTypeName}_{targetAggregateId.ToString()}_{nextSnapshotVersion}";
-    }
+    internal static string SnapshotKey(string aggregateTypeName, Guid targetAggregateId, int nextSnapshotVersion) =>
+        $"{aggregateTypeName}_{targetAggregateId.ToString()}_{nextSnapshotVersion}";
 }

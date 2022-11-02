@@ -3,9 +3,9 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 namespace Sekiban.Core.Query.SingleProjections;
 
-public abstract class SingleProjectionBase<TAggregatePayload, TProjection, TProjectionPayload> : ISingleProjection,
-    ISingleProjectionStateConvertible<SingleProjectionState<TProjectionPayload>>, ISingleAggregate,
-    ISingleProjector<TProjection> where TProjection : SingleProjectionBase<TAggregatePayload, TProjection, TProjectionPayload>, new()
+public abstract class ProjectionBase<TAggregatePayload, TProjection, TProjectionPayload> : ISingleProjection,
+    ISingleProjectionStateConvertible<ProjectionState<TProjectionPayload>>, IAggregateIdentifier,
+    ISingleProjector<TProjection> where TProjection : ProjectionBase<TAggregatePayload, TProjection, TProjectionPayload>, new()
     where TProjectionPayload : ISingleProjectionPayload
     where TAggregatePayload : IAggregatePayload, new()
 {
@@ -33,7 +33,7 @@ public abstract class SingleProjectionBase<TAggregatePayload, TProjection, TProj
         Version++;
     }
     public bool CanApplyEvent(IEvent ev) => GetApplyEventAction(ev, ev.GetPayload()) is not null;
-    public void ApplySnapshot(SingleProjectionState<TProjectionPayload> snapshot)
+    public void ApplySnapshot(ProjectionState<TProjectionPayload> snapshot)
     {
         Version = snapshot.Version;
         LastEventId = snapshot.LastEventId;
@@ -41,14 +41,14 @@ public abstract class SingleProjectionBase<TAggregatePayload, TProjection, TProj
         AppliedSnapshotVersion = snapshot.Version;
         Payload = snapshot.Payload;
     }
-    public SingleProjectionState<TProjectionPayload> ToState() => new(
+    public ProjectionState<TProjectionPayload> ToState() => new ProjectionState<TProjectionPayload>(
         Payload,
         AggregateId,
         LastEventId,
         LastSortableUniqueId,
         AppliedSnapshotVersion,
         Version);
-    public TProjection CreateInitialAggregate(Guid aggregateId) => new()
+    public TProjection CreateInitialAggregate(Guid aggregateId) => new TProjection
         { AggregateId = aggregateId };
 
     public Type OriginalAggregateType() => typeof(TAggregatePayload);

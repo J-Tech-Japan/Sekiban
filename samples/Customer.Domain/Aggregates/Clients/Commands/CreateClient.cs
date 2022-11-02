@@ -51,7 +51,7 @@ public record CreateClient : ICreateCommand<Client>
         }
 
         protected override async IAsyncEnumerable<IApplicableEvent<Client>> ExecCreateCommandAsync(
-            Func<AggregateState<Client>> getAggregateStateState,
+            Func<AggregateIdentifierState<Client>> getAggregateStateState,
             CreateClient command)
         {
             // Check if branch exists

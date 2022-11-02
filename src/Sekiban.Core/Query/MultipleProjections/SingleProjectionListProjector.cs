@@ -3,8 +3,8 @@ using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Query.MultipleProjections;
 
 public class SingleProjectionListProjector<T, Q, P> : IMultiProjector<SingleProjectionListState<Q>>
-    where T : ISingleAggregate, ISingleProjection, ISingleProjectionStateConvertible<Q>
-    where Q : ISingleAggregate
+    where T : IAggregateIdentifier, ISingleProjection, ISingleProjectionStateConvertible<Q>
+    where Q : IAggregateIdentifier
     where P : ISingleProjector<T>, new()
 {
     private T _eventChecker;

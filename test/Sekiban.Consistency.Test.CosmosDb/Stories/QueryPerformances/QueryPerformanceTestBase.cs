@@ -107,7 +107,7 @@ public abstract class QueryPerformanceTestBase : TestBase
                 {
                     _testOutputHelper.WriteLine($"client change name {k + 1}");
                     var aggregate = await ProjectionService.GetAggregateStateAsync<Client>(clientCreateResult.AggregateId!.Value);
-                    _testOutputHelper.WriteLine($"aggregate.version = {aggregate?.Version}");
+                    _testOutputHelper.WriteLine($"aggregateIdentifier.version = {aggregate?.Version}");
                     await CommandExecutor.ExecChangeCommandAsync<Client, ChangeClientName>(
                         new ChangeClientName(clientCreateResult.AggregateId!.Value, $"change{i}-{j}-{k}")
                         {

@@ -27,7 +27,7 @@ public class MultiProjectionCache : IMultiProjectionCache
         _memoryCache.Get<MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>>(
             GetInMemoryKey<TProjection, TProjectionPayload>());
 
-    private static MemoryCacheEntryOptions GetMemoryCacheOptions() => new()
+    private static MemoryCacheEntryOptions GetMemoryCacheOptions() => new MemoryCacheEntryOptions
     {
         AbsoluteExpiration = DateTimeOffset.UtcNow.AddHours(2), SlidingExpiration = TimeSpan.FromMinutes(15)
         // 5分読まれなかったら削除するが、2時間経ったらどちらにしても削除する

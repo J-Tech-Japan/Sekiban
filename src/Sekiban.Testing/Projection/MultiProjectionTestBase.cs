@@ -97,12 +97,12 @@ public class
 
     }
 
-    public AggregateState<TEnvironmentAggregatePayload> GetAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
+    public AggregateIdentifierState<TEnvironmentAggregatePayload> GetAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
         where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
-        var singleAggregateService = _serviceProvider.GetRequiredService(typeof(ISingleProjectionService)) as ISingleProjectionService;
-        if (singleAggregateService is null) { throw new Exception("Failed to get single aggregate service"); }
-        var aggregate = singleAggregateService.GetAggregateStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
+        var singleProjectionService = _serviceProvider.GetRequiredService(typeof(ISingleProjectionService)) as ISingleProjectionService;
+        if (singleProjectionService is null) { throw new Exception("Failed to get single aggregateIdentifier service"); }
+        var aggregate = singleProjectionService.GetAggregateStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name);
     }
     public IReadOnlyCollection<IEvent> GetLatestEvents() => _commandExecutor.LatestEvents;
@@ -110,12 +110,13 @@ public class
     {
         var documentWriter = _serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter;
         if (documentWriter is null) { throw new Exception("Failed to get document writer"); }
-        var sekibanAggregateTypes = _serviceProvider.GetService<SekibanAggregateTypes>() ?? throw new Exception("Failed to get aggregate types");
+        var sekibanAggregateTypes = _serviceProvider.GetService<SekibanAggregateTypes>() ??
+            throw new Exception("Failed to get aggregateIdentifier types");
 
         foreach (var e in events)
         {
             var aggregateType = sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == e.AggregateType);
-            if (aggregateType is null) { throw new Exception($"Failed to find aggregate type {e.AggregateType}"); }
+            if (aggregateType is null) { throw new Exception($"Failed to find aggregateIdentifier type {e.AggregateType}"); }
             documentWriter.SaveAsync(e, aggregateType.Aggregate).Wait();
         }
         return this;
@@ -289,22 +290,22 @@ public class
     }
 
     public MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> ThenGetQueryTest<TQuery, TQueryParameter, TQueryResponse>(
-        Action<ProjectionQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>> queryTestAction)
+        Action<MultiProjectionQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>> queryTestAction)
         where TQueryParameter : IQueryParameter
         where TQuery : IMultiProjectionQuery<TProjection, TProjectionPayload, TQueryParameter, TQueryResponse>, new()
     {
-        var queryChecker = new ProjectionQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>();
+        var queryChecker = new MultiProjectionQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>();
         GivenQueryChecker(queryChecker);
         queryTestAction(queryChecker);
         return this;
     }
     public MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition>
         ThenGetListQueryTest<TQuery, TQueryParameter, TQueryResponse>(
-            Action<ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>> queryTestAction)
+            Action<MultiProjectionListQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>> queryTestAction)
         where TQueryParameter : IQueryParameter
         where TQuery : IMultiProjectionListQuery<TProjection, TProjectionPayload, TQueryParameter, TQueryResponse>, new()
     {
-        var queryChecker = new ProjectionListQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>();
+        var queryChecker = new MultiProjectionListQueryTestChecker<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>();
         GivenQueryChecker(queryChecker);
         queryTestAction(queryChecker);
         return this;

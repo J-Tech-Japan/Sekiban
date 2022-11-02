@@ -8,7 +8,7 @@ public class ClientEmailExistsQuery : IAggregateQuery<Client, ClientEmailExistsQ
 {
     private readonly ISekibanDateProducer _dateProducer;
     public ClientEmailExistsQuery(ISekibanDateProducer dateProducer) => _dateProducer = dateProducer;
-    public bool HandleFilter(QueryParameter queryParam, IEnumerable<AggregateState<Client>> list)
+    public bool HandleFilter(QueryParameter queryParam, IEnumerable<AggregateIdentifierState<Client>> list)
     {
         return list.Any(c => c.Payload.ClientEmail == queryParam.Email);
     }

@@ -10,12 +10,12 @@ using Customer.Test.AggregateTests.CommandsHelpers;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Exceptions;
-using Sekiban.Testing.SingleAggregate;
+using Sekiban.Testing.SingleProjections;
 using System;
 using Xunit;
 namespace Customer.Test.AggregateTests;
 
-public class ClientSpec : SingleAggregateTestBase<Client, CustomerDependency>
+public class ClientSpec : AggregateTestBase<Client, CustomerDependency>
 {
 
     private const string testClientName = "TestName";
@@ -41,7 +41,7 @@ public class ClientSpec : SingleAggregateTestBase<Client, CustomerDependency>
         ThenSingleEventPayloadIs(new ClientCreated(branchId, testClientName, testEmail));
         // 現在の集約のステータスを検証する
         ThenStateIs(
-            new AggregateState<Client>
+            new AggregateIdentifierState<Client>
             {
                 AggregateId = GetAggregateId(), Version = GetCurrentVersion(), Payload = new Client(branchId, testClientName, testEmail)
             });
@@ -52,7 +52,7 @@ public class ClientSpec : SingleAggregateTestBase<Client, CustomerDependency>
         ThenSingleEventPayloadIs(new ClientNameChanged(testClientChangedName));
         // 現在の集約のステータスを検証する
         ThenStateIs(
-            new AggregateState<Client>
+            new AggregateIdentifierState<Client>
             {
                 AggregateId = GetAggregateId(),
                 Version = GetCurrentVersion(),

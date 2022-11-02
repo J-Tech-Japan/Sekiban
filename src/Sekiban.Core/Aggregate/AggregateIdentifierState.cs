@@ -2,28 +2,28 @@ using Sekiban.Core.Query.SingleProjections;
 using System.ComponentModel.DataAnnotations;
 namespace Sekiban.Core.Aggregate;
 
-public record AggregateState<TPayload> : ISingleAggregate where TPayload : IAggregatePayload, new()
+public record AggregateIdentifierState<TPayload> : IAggregateIdentifier where TPayload : IAggregatePayload, new()
 {
 
     /// <summary>
     ///     スナップショットからの再構築用。
     /// </summary>
-    public AggregateState() { }
+    public AggregateIdentifierState() { }
 
     /// <summary>
     ///     一般の構築用。
     /// </summary>
-    /// <param name="aggregate"></param>
-    public AggregateState(IAggregate aggregate)
+    /// <param name="aggregateIdentifier"></param>
+    public AggregateIdentifierState(IAggregateIdentifier aggregateIdentifier)
     {
-        AggregateId = aggregate.AggregateId;
-        Version = aggregate.Version;
-        LastEventId = aggregate.LastEventId;
-        LastSortableUniqueId = aggregate.LastSortableUniqueId;
-        AppliedSnapshotVersion = aggregate.AppliedSnapshotVersion;
+        AggregateId = aggregateIdentifier.AggregateId;
+        Version = aggregateIdentifier.Version;
+        LastEventId = aggregateIdentifier.LastEventId;
+        LastSortableUniqueId = aggregateIdentifier.LastSortableUniqueId;
+        AppliedSnapshotVersion = aggregateIdentifier.AppliedSnapshotVersion;
     }
 
-    public AggregateState(IAggregate aggregate, TPayload payload) : this(aggregate) => Payload = payload;
+    public AggregateIdentifierState(IAggregateIdentifier aggregateIdentifier, TPayload payload) : this(aggregateIdentifier) => Payload = payload;
 
     public TPayload Payload { get; init; } = new();
 
@@ -48,7 +48,7 @@ public record AggregateState<TPayload> : ISingleAggregate where TPayload : IAggr
     public string LastSortableUniqueId { get; init; } = string.Empty;
     public bool GetIsDeleted() => Payload is IDeletable { IsDeleted: true };
 
-    public dynamic GetComparableObject(AggregateState<TPayload> original, bool copyVersion = true) => this with
+    public dynamic GetComparableObject(AggregateIdentifierState<TPayload> original, bool copyVersion = true) => this with
     {
         AggregateId = original.AggregateId,
         Version = copyVersion ? original.Version : Version,

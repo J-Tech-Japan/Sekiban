@@ -13,16 +13,17 @@ public class MultiProjectionService : IMultiProjectionService
         where TProjection : MultiProjectionBase<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayload, new() =>
         _multipleProjection.GetMultipleProjectionAsync<TProjection, TProjectionPayload>();
-    public async Task<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>>
+    public async Task<MultiProjectionState<SingleProjectionListState<AggregateIdentifierState<TAggregatePayload>>>>
         GetAggregateListObject<TAggregatePayload>() where TAggregatePayload : IAggregatePayload, new()
     {
         var list = await _multipleProjection
-            .GetMultipleProjectionAsync<SingleProjectionListProjector<Aggregate<TAggregatePayload>, AggregateState<TAggregatePayload>,
+            .GetMultipleProjectionAsync<SingleProjectionListProjector<AggregateIdentifier<TAggregatePayload>,
+                    AggregateIdentifierState<TAggregatePayload>,
                     DefaultSingleProjector<TAggregatePayload>>
-                , SingleProjectionListState<AggregateState<TAggregatePayload>>>();
+                , SingleProjectionListState<AggregateIdentifierState<TAggregatePayload>>>();
         return list;
     }
-    public async Task<List<AggregateState<TAggregatePayload>>> GetAggregateList<TAggregatePayload>(
+    public async Task<List<AggregateIdentifierState<TAggregatePayload>>> GetAggregateList<TAggregatePayload>(
         QueryListType queryListType = QueryListType.ActiveOnly) where TAggregatePayload : IAggregatePayload, new()
     {
         var projection = await GetAggregateListObject<TAggregatePayload>();
@@ -36,20 +37,20 @@ public class MultiProjectionService : IMultiProjectionService
     }
     public
         Task<MultiProjectionState<
-            SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>
+            SingleProjectionListState<ProjectionState<TSingleProjectionPayload>>>>
         GetSingleProjectionListObject<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>()
         where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
+        where TSingleProjection : ProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
         new()
         where TSingleProjectionPayload : ISingleProjectionPayload => _multipleProjection
         .GetMultipleProjectionAsync<
-            SingleProjectionListProjector<TSingleProjection, SingleProjectionState<TSingleProjectionPayload>,
+            SingleProjectionListProjector<TSingleProjection, ProjectionState<TSingleProjectionPayload>,
                 TSingleProjection>,
-            SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>();
-    public async Task<List<SingleProjectionState<TSingleProjectionPayload>>>
+            SingleProjectionListState<ProjectionState<TSingleProjectionPayload>>>();
+    public async Task<List<ProjectionState<TSingleProjectionPayload>>>
         GetSingleProjectionList<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>(
             QueryListType queryListType = QueryListType.ActiveOnly) where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
+        where TSingleProjection : ProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
         new()
         where TSingleProjectionPayload : ISingleProjectionPayload
     {

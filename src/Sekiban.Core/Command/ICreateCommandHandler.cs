@@ -4,6 +4,6 @@ namespace Sekiban.Core.Command;
 public interface ICreateCommandHandler<T, C> : ICommandHandler
     where T : IAggregatePayload, new() where C : ICreateCommand<T>
 {
-    public Task<CommandResponse> HandleAsync(CommandDocument<C> commandDocument, Aggregate<T> aggregateState);
+    public Task<CommandResponse> HandleAsync(CommandDocument<C> commandDocument, AggregateIdentifier<T> aggregateIdentifierState);
     C CleanupCommandIfNeeded(C command);
 }

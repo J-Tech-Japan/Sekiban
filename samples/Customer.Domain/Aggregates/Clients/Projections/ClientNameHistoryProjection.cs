@@ -6,7 +6,7 @@ using Sekiban.Core.Query.SingleProjections;
 // ReSharper disable NotAccessedPositionalProperty.Global
 namespace Customer.Domain.Aggregates.Clients.Projections;
 
-public class ClientNameHistoryProjection : SingleProjectionBase<Client, ClientNameHistoryProjection,
+public class ClientNameHistoryProjection : ProjectionBase<Client, ClientNameHistoryProjection,
     ClientNameHistoryProjection.PayloadDefinition>
 {
     protected override Func<PayloadDefinition, PayloadDefinition>? GetApplyEventFunc(

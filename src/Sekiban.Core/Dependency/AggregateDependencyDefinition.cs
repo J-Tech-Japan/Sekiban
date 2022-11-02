@@ -53,13 +53,13 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         var singleProjectionBase = singleProjectionType.BaseType;
         if (singleProjectionBase is null ||
             !singleProjectionBase.IsGenericType ||
-            singleProjectionBase.GetGenericTypeDefinition() != typeof(SingleProjectionBase<,,>))
+            singleProjectionBase.GetGenericTypeDefinition() != typeof(ProjectionBase<,,>))
         {
-            throw new ArgumentException($"Single projection {singleProjectionType.Name} must inherit from SingleProjectionBase<,,>");
+            throw new ArgumentException($"Single projection {singleProjectionType.Name} must inherit from ProjectionBase<,,>");
         }
         if (singleProjectionBase.GenericTypeArguments[0] != AggregateType)
         {
-            throw new ArgumentException($"Single projection {singleProjectionType.Name} must be for aggregate {AggregateType.Name}");
+            throw new ArgumentException($"Single projection {singleProjectionType.Name} must be for aggregateIdentifier {AggregateType.Name}");
         }
         SingleProjectionTypes = SingleProjectionTypes.Add(typeof(TSingleProjection));
         return this;

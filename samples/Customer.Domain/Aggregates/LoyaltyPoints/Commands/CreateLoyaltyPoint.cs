@@ -12,7 +12,7 @@ public record CreateLoyaltyPoint(Guid ClientId, int InitialPoint) : ICreateComma
 public class CreateLoyaltyPointHandler : CreateCommandHandlerBase<LoyaltyPoint, CreateLoyaltyPoint>
 {
     protected override async IAsyncEnumerable<IApplicableEvent<LoyaltyPoint>> ExecCreateCommandAsync(
-        Func<AggregateState<LoyaltyPoint>> getAggregateState,
+        Func<AggregateIdentifierState<LoyaltyPoint>> getAggregateState,
         CreateLoyaltyPoint command)
     {
         await Task.CompletedTask;

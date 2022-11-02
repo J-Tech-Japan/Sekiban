@@ -1,6 +1,6 @@
 namespace Sekiban.Core.Query.SingleProjections;
 
-public interface ISingleAggregate : IProjection
+public interface IAggregateIdentifier : IProjection
 {
     Guid AggregateId { get; }
 }

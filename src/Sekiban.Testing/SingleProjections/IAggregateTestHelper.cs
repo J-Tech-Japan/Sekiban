@@ -4,7 +4,7 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
-namespace Sekiban.Testing.SingleAggregate;
+namespace Sekiban.Testing.SingleProjections;
 
 public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload : IAggregatePayload, new()
 {
@@ -14,7 +14,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvent(IEvent ev);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvents(IEnumerable<IEvent> events);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFile(string filename);
-    public AggregateState<TEnvironmentAggregatePayload>
+    public AggregateIdentifierState<TEnvironmentAggregatePayload>
         GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
         where TEnvironmentAggregatePayload : IAggregatePayload, new();
     public Guid RunEnvironmentCreateCommand<TEnvironmentAggregatePayload>(
@@ -29,7 +29,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     #region When
     public IAggregateTestHelper<TAggregatePayload> WhenCreate<C>(C createCommand) where C : ICreateCommand<TAggregatePayload>;
     public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(C changeCommand) where C : ChangeCommandBase<TAggregatePayload>;
-    public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(Func<AggregateState<TAggregatePayload>, C> commandFunc)
+    public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(Func<AggregateIdentifierState<TAggregatePayload>, C> commandFunc)
         where C : ChangeCommandBase<TAggregatePayload>;
     #endregion
 
@@ -39,8 +39,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public IAggregateTestHelper<TAggregatePayload> ThenSingleEventIs<T>(Event<T> @event) where T : IEventPayload;
     public IAggregateTestHelper<TAggregatePayload> ThenSingleEventPayloadIs<T>(T payload) where T : IEventPayload;
     public IAggregateTestHelper<TAggregatePayload> ThenGetSingleEventPayload<T>(Action<T> checkPayloadAction) where T : class, IEventPayload;
-    public IAggregateTestHelper<TAggregatePayload> ThenGetState(Action<AggregateState<TAggregatePayload>> checkStateAction);
-    public IAggregateTestHelper<TAggregatePayload> ThenStateIs(AggregateState<TAggregatePayload> expectedState);
+    public IAggregateTestHelper<TAggregatePayload> ThenGetState(Action<AggregateIdentifierState<TAggregatePayload>> checkStateAction);
+    public IAggregateTestHelper<TAggregatePayload> ThenStateIs(AggregateIdentifierState<TAggregatePayload> expectedIdentifierState);
     public IAggregateTestHelper<TAggregatePayload> ThenGetPayload(Action<TAggregatePayload> payloadAction);
     public IAggregateTestHelper<TAggregatePayload> ThenPayloadIs(TAggregatePayload payload);
     public IAggregateTestHelper<TAggregatePayload> WriteStateToFile(string filename);
@@ -58,15 +58,15 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         IEnumerable<SekibanValidationParameterError> validationParameterErrors);
     public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors();
     public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionTest<TSingleProjection, TSingleProjectionPayload>(
-        Action<SingleProjectionTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>> singleProjectionTestAction)
-        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
+        Action<ProjectionTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>> singleProjectionTestAction)
+        where TSingleProjection : ProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
         where TSingleProjectionPayload : ISingleProjectionPayload;
     #endregion
 
     #region Get
     public Guid GetAggregateId();
     public int GetCurrentVersion();
-    public AggregateState<TAggregatePayload> GetAggregateState();
-    public Aggregate<TAggregatePayload> GetAggregate();
+    public AggregateIdentifierState<TAggregatePayload> GetAggregateState();
+    public AggregateIdentifier<TAggregatePayload> GetAggregate();
     #endregion
 }

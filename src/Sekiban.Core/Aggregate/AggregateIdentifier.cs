@@ -3,13 +3,14 @@ using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Aggregate;
 
-public class Aggregate<TAggregatePayload> : AggregateCommonBase, ISingleProjectionStateConvertible<AggregateState<TAggregatePayload>>
+public class AggregateIdentifier<TAggregatePayload> : AggregateIdentifierCommonBase,
+    ISingleProjectionStateConvertible<AggregateIdentifierState<TAggregatePayload>>
     where TAggregatePayload : IAggregatePayload, new()
 {
     protected TAggregatePayload Payload { get; private set; } = new();
-    public AggregateState<TAggregatePayload> ToState() => new(this, Payload);
+    public AggregateIdentifierState<TAggregatePayload> ToState() => new AggregateIdentifierState<TAggregatePayload>(this, Payload);
 
-    public void ApplySnapshot(AggregateState<TAggregatePayload> snapshot)
+    public void ApplySnapshot(AggregateIdentifierState<TAggregatePayload> snapshot)
     {
         _basicInfo = _basicInfo with
         {
@@ -21,7 +22,7 @@ public class Aggregate<TAggregatePayload> : AggregateCommonBase, ISingleProjecti
         CopyPropertiesFromSnapshot(snapshot);
     }
 
-    public TAggregate Clone<TAggregate>() where TAggregate : Aggregate<TAggregatePayload>, new()
+    public TAggregate Clone<TAggregate>() where TAggregate : AggregateIdentifier<TAggregatePayload>, new()
     {
         var clone = new TAggregate { _basicInfo = _basicInfo, Payload = Payload };
         return clone;
@@ -63,7 +64,7 @@ public class Aggregate<TAggregatePayload> : AggregateCommonBase, ISingleProjecti
         ev = ev with { Version = Version };
         return ev;
     }
-    protected void CopyPropertiesFromSnapshot(AggregateState<TAggregatePayload> snapshot)
+    protected void CopyPropertiesFromSnapshot(AggregateIdentifierState<TAggregatePayload> snapshot)
     {
         Payload = snapshot.Payload;
     }

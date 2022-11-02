@@ -31,8 +31,5 @@ public abstract record class DocumentBase : IDocument
     public DateTime TimeStamp { get; init; }
 
     public string SortableUniqueId { get; init; } = default!;
-    public SortableUniqueIdValue GetSortableUniqueId()
-    {
-        return SortableUniqueId;
-    }
+    public SortableUniqueIdValue GetSortableUniqueId() => SortableUniqueId;
 }

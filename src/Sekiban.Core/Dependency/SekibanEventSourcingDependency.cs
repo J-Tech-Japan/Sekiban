@@ -12,7 +12,7 @@ public static class SekibanEventSourcingDependency
 {
     public static Assembly GetAssembly() => Assembly.GetExecutingAssembly();
 
-    public static IServiceCollection AddSekibanSekibanCoreWithDependency(
+    public static IServiceCollection AddSekibanCoreWithDependency(
         this IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
         ISekibanDateProducer? sekibanDateProducer = null,

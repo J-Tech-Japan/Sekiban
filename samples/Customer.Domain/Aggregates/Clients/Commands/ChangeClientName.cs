@@ -12,7 +12,7 @@ public record ChangeClientName(Guid ClientId, string ClientName) : ChangeCommand
     {
         public override ChangeClientName CleanupCommandIfNeeded(ChangeClientName command) => command with { ClientName = "stripped for security" };
         protected override async IAsyncEnumerable<IChangedEvent<Client>> ExecCommandAsync(
-            Func<AggregateState<Client>> getAggregateState,
+            Func<AggregateIdentifierState<Client>> getAggregateState,
             ChangeClientName command)
         {
             await Task.CompletedTask;

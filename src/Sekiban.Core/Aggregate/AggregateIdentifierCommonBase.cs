@@ -2,7 +2,7 @@
 using Sekiban.Core.Exceptions;
 namespace Sekiban.Core.Aggregate;
 
-public abstract class AggregateCommonBase : IAggregate
+public abstract class AggregateIdentifierCommonBase : IAggregate
 {
     protected AggregateBasicInfo _basicInfo = new();
     public Guid AggregateId
@@ -29,7 +29,7 @@ public abstract class AggregateCommonBase : IAggregate
         action();
         _basicInfo = _basicInfo with { LastEventId = ev.Id, LastSortableUniqueId = ev.SortableUniqueId, Version = Version + 1 };
     }
-    public static UAggregate Create<UAggregate>(Guid aggregateId) where UAggregate : AggregateCommonBase
+    public static UAggregate Create<UAggregate>(Guid aggregateId) where UAggregate : AggregateIdentifierCommonBase
     {
         if (typeof(UAggregate).GetConstructor(Type.EmptyTypes) is not { } c)
         {

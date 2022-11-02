@@ -19,7 +19,7 @@ public class ConfigurationAggregateSettings : AggregateSettings
         var snapshotFrequencyDefault = section?.GetValue<int?>("SnapshotFrequencyDefault") ?? 80;
         var snapshotOffsetDefault = section?.GetValue<int?>("SnapshotOffsetDefault") ?? 15;
         var useUpdateMarker = section?.GetValue<bool?>("UseUpdateMarker") ?? false;
-        var exceptions = section?.GetSection("SingleAggregateExceptions").Get<List<SingleAggregateSetting>>() ?? new List<SingleAggregateSetting>();
+        var exceptions = section?.GetSection("SingleAggregateExceptions").Get<List<AggregateSetting>>() ?? new List<AggregateSetting>();
         Helper = new AggregateSettingHelper(
             takeSnapshotDefault,
             useHybridDefault,

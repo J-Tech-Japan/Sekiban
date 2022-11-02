@@ -6,12 +6,12 @@ namespace Sekiban.Core.Query.SingleProjections.Projections;
 public class SimpleProjectionWithSnapshot : ISingleProjection
 {
     private readonly IDocumentRepository _documentRepository;
-    private readonly ISingleAggregateFromInitial _singleAggregateFromInitial;
+    private readonly ISingleProjectionFromInitial singleProjectionFromInitial;
 
-    public SimpleProjectionWithSnapshot(IDocumentRepository documentRepository, ISingleAggregateFromInitial singleAggregateFromInitial)
+    public SimpleProjectionWithSnapshot(IDocumentRepository documentRepository, ISingleProjectionFromInitial singleProjectionFromInitial)
     {
         _documentRepository = documentRepository;
-        _singleAggregateFromInitial = singleAggregateFromInitial;
+        this.singleProjectionFromInitial = singleProjectionFromInitial;
     }
     /// <summary>
     ///     スナップショット、メモリキャッシュを使用する通常版
@@ -23,8 +23,8 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
     /// <typeparam name="P"></typeparam>
     /// <returns></returns>
     public async Task<T?> GetAggregateAsync<T, Q, P>(Guid aggregateId, int? toVersion = null)
-        where T : ISingleAggregate, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<Q>
-        where Q : ISingleAggregate
+        where T : IAggregateIdentifier, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<Q>
+        where Q : IAggregateIdentifier
         where P : ISingleProjector<T>, new()
     {
         var projector = new P();
@@ -38,7 +38,7 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
         }
         if (toVersion.HasValue && aggregate.Version >= toVersion.Value)
         {
-            return await _singleAggregateFromInitial.GetAggregateFromInitialAsync<T, P>(aggregateId, toVersion.Value);
+            return await singleProjectionFromInitial.GetAggregateFromInitialAsync<T, P>(aggregateId, toVersion.Value);
         }
         await _documentRepository.GetAllEventsForAggregateIdAsync(
             aggregateId,
