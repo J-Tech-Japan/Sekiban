@@ -1,6 +1,6 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.SingleProjections;
-namespace Sekiban.Core.Query.MultipleProjections;
+namespace Sekiban.Core.Query.MultProjections;
 
 public interface IMultiProjectionService
 {

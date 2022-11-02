@@ -1,5 +1,5 @@
-using Sekiban.Core.Query.MultipleProjections;
-using Sekiban.Core.Query.MultipleProjections.Projections;
+using Sekiban.Core.Query.MultProjections;
+using Sekiban.Core.Query.MultProjections.Projections;
 namespace Sekiban.Core.Cache;
 
 public interface IMultiProjectionCache

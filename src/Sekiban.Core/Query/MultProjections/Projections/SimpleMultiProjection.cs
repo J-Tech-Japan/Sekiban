@@ -1,13 +1,13 @@
 using Sekiban.Core.Document;
-namespace Sekiban.Core.Query.MultipleProjections.Projections;
+namespace Sekiban.Core.Query.MultProjections.Projections;
 
-public class SimpleMultipleProjection : IMultipleProjection
+public class SimpleMultiProjection : IMultiProjection
 {
     private readonly IDocumentRepository _documentRepository;
 
-    public SimpleMultipleProjection(IDocumentRepository documentRepository) => _documentRepository = documentRepository;
+    public SimpleMultiProjection(IDocumentRepository documentRepository) => _documentRepository = documentRepository;
 
-    public async Task<MultiProjectionState<TProjectionPayload>> GetMultipleProjectionAsync<TProjection, TProjectionPayload>()
+    public async Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjection, TProjectionPayload>()
         where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayload, new()
     {

@@ -5,11 +5,11 @@ using Customer.Domain.Aggregates.Clients.Events;
 using Customer.Domain.Aggregates.LoyaltyPoints;
 using Customer.Domain.Aggregates.LoyaltyPoints.Events;
 using Sekiban.Core.Event;
-using Sekiban.Core.Query.MultipleProjections;
+using Sekiban.Core.Query.MultProjections;
 using System.Collections.Immutable;
 namespace Customer.Domain.Projections.ClientLoyaltyPointMultiples;
 
-public class ClientLoyaltyPointMultipleProjection : MultiProjectionBase<ClientLoyaltyPointMultipleProjection.PayloadDefinition>
+public class ClientLoyaltyPointMultiProjection : MultiProjectionBase<ClientLoyaltyPointMultiProjection.PayloadDefinition>
 {
     public override IList<string> TargetAggregateNames() => new List<string> { nameof(Branch), nameof(Client), nameof(LoyaltyPoint) };
     protected override Func<PayloadDefinition, PayloadDefinition>? GetApplyEventFunc(IEvent ev, IEventPayload eventPayload)

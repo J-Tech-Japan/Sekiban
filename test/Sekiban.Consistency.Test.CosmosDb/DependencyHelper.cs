@@ -13,7 +13,7 @@ public static class DependencyHelper
         ISekibanTestFixture fixture,
         bool inMemory = false,
         ISekibanDateProducer? sekibanDateProducer = null,
-        ServiceCollectionExtensions.MultipleProjectionType multipleProjectionType = ServiceCollectionExtensions.MultipleProjectionType.MemoryCache)
+        ServiceCollectionExtensions.MultiProjectionType multiProjectionType = ServiceCollectionExtensions.MultiProjectionType.MemoryCache)
     {
         IServiceCollection services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(fixture.Configuration);
@@ -23,7 +23,7 @@ public static class DependencyHelper
         }
         else
         {
-            services.AddSekibanCoreWithDependency(new CustomerDependency(), sekibanDateProducer, multipleProjectionType);
+            services.AddSekibanCoreWithDependency(new CustomerDependency(), sekibanDateProducer, multiProjectionType);
             services.AddSekibanCosmosDB();
         }
         services.AddQueriesFromDependencyDefinition(new CustomerDependency());

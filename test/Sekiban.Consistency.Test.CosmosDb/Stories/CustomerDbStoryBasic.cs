@@ -17,7 +17,7 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Document;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query;
-using Sekiban.Core.Query.MultipleProjections;
+using Sekiban.Core.Query.MultProjections;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Snapshot;
 using Sekiban.Core.Snapshot.Aggregate;
@@ -198,7 +198,7 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Equal(800, loyaltyPoint!.Payload.CurrentPoint);
 
         var p = await multiProjectionService
-            .GetMultiProjectionAsync<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.PayloadDefinition>();
+            .GetMultiProjectionAsync<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultiProjection.PayloadDefinition>();
         Assert.NotNull(p);
         Assert.Equal(3, p.Payload.Branches.Count);
         Assert.Single(p.Payload.Records);
@@ -255,7 +255,7 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Equal("only publish event", recentActivityState?.Payload.LatestActivities.First().Activity);
 
         p = await multiProjectionService
-            .GetMultiProjectionAsync<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.PayloadDefinition>();
+            .GetMultiProjectionAsync<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultiProjection.PayloadDefinition>();
         Assert.NotNull(p);
         Assert.Equal(3, p.Payload.Branches.Count);
         Assert.Empty(p.Payload.Records);

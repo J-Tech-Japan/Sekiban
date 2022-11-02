@@ -81,7 +81,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         resultAction(new List<string>());
     }
     public async Task GetAllEventsAsync(
-        Type multipleProjectionType,
+        Type multiProjectionType,
         IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
         Action<IEnumerable<IEvent>> resultAction)

@@ -1,4 +1,4 @@
-using Sekiban.Core.Query.MultipleProjections;
+using Sekiban.Core.Query.MultProjections;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Shared;
@@ -14,7 +14,7 @@ public class
     where TQueryParameter : IQueryParameter
     where TQuery : IMultiProjectionListQuery<TProjection, TProjectionPayload, TQueryParameter, TQueryResponse>
 {
-    private QueryListResult<TQueryResponse>? _response;
+    private ListQueryResult<TQueryResponse>? _response;
     public IQueryService? QueryService { get; set; } = null;
     public MultiProjectionListQueryTest<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>
         WhenParam(TQueryParameter param)
@@ -41,7 +41,7 @@ public class
         return this;
     }
     public MultiProjectionListQueryTest<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>
-        ThenResponseIs(QueryListResult<TQueryResponse> expectedResponse)
+        ThenResponseIs(ListQueryResult<TQueryResponse> expectedResponse)
     {
         var actual = _response;
         var expected = expectedResponse;
@@ -51,7 +51,7 @@ public class
         return this;
     }
     public MultiProjectionListQueryTest<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>
-        ThenGetResponse(Action<QueryListResult<TQueryResponse>> responseAction)
+        ThenGetResponse(Action<ListQueryResult<TQueryResponse>> responseAction)
     {
         Assert.NotNull(_response);
         responseAction(_response!);
@@ -60,7 +60,7 @@ public class
     public MultiProjectionListQueryTest<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>
         ThenResponseIsFromJson(string responseJson)
     {
-        var response = JsonSerializer.Deserialize<QueryListResult<TQueryResponse>>(responseJson);
+        var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(responseJson);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         ThenResponseIs(response);
         return this;
@@ -69,7 +69,7 @@ public class
         ThenResponseIsFromFile(string responseFilename)
     {
         using var openStream = File.OpenRead(responseFilename);
-        var response = JsonSerializer.Deserialize<QueryListResult<TQueryResponse>>(openStream);
+        var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(openStream);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         ThenResponseIs(response);
         return this;

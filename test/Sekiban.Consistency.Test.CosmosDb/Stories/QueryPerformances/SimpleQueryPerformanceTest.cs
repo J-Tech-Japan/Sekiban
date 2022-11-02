@@ -6,6 +6,6 @@ public class SimpleQueryPerformanceTest : QueryPerformanceTestBase
     public SimpleQueryPerformanceTest(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
         sekibanTestFixture,
         testOutputHelper,
-        ServiceCollectionExtensions.MultipleProjectionType.Simple) { }
+        ServiceCollectionExtensions.MultiProjectionType.Simple) { }
 }
 #endif

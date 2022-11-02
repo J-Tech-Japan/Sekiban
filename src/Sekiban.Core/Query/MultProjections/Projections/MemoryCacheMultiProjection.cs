@@ -4,15 +4,15 @@ using Sekiban.Core.Document;
 using Sekiban.Core.Document.ValueObjects;
 using Sekiban.Core.Query.UpdateNotice;
 using Sekiban.Core.Setting;
-namespace Sekiban.Core.Query.MultipleProjections.Projections;
+namespace Sekiban.Core.Query.MultProjections.Projections;
 
-public class MemoryCacheMultipleProjection : IMultipleProjection
+public class MemoryCacheMultiProjection : IMultiProjection
 {
     private readonly IAggregateSettings _aggregateSettings;
     private readonly IDocumentRepository _documentRepository;
     private readonly IUpdateNotice _updateNotice;
     private readonly IMultiProjectionCache multiProjectionCache;
-    public MemoryCacheMultipleProjection(
+    public MemoryCacheMultiProjection(
         IMemoryCache memoryCache,
         IDocumentRepository documentRepository,
         IServiceProvider serviceProvider,
@@ -25,7 +25,7 @@ public class MemoryCacheMultipleProjection : IMultipleProjection
         _aggregateSettings = aggregateSettings;
         this.multiProjectionCache = multiProjectionCache;
     }
-    public async Task<MultiProjectionState<TProjectionPayload>> GetMultipleProjectionAsync<TProjection, TProjectionPayload>()
+    public async Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjection, TProjectionPayload>()
         where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayload, new()
     {

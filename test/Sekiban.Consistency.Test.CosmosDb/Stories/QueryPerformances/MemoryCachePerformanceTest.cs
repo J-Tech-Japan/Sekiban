@@ -8,7 +8,7 @@ public class MemoryCachePerformanceTest : QueryPerformanceTestBase
     public MemoryCachePerformanceTest(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
         sekibanTestFixture,
         testOutputHelper,
-        ServiceCollectionExtensions.MultipleProjectionType.MemoryCache)
+        ServiceCollectionExtensions.MultiProjectionType.MemoryCache)
     {
     }
 }

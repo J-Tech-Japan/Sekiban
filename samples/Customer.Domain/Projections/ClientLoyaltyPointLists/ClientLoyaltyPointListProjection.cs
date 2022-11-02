@@ -5,7 +5,7 @@ using Customer.Domain.Aggregates.Clients.Events;
 using Customer.Domain.Aggregates.LoyaltyPoints;
 using Customer.Domain.Aggregates.LoyaltyPoints.Events;
 using Sekiban.Core.Event;
-using Sekiban.Core.Query.MultipleProjections;
+using Sekiban.Core.Query.MultProjections;
 using System.Collections.Immutable;
 namespace Customer.Domain.Projections.ClientLoyaltyPointLists;
 

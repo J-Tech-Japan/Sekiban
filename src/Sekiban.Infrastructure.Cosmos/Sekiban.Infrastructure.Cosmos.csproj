@@ -4,13 +4,13 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>JJ_Sekiban.Infrastructure.Cosmos</PackageId>
-        <Version>0.9.10</Version>
+        <Version>0.9.11</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework CosmosInfrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.9.10</PackageVersion>
-        <Description>名称の微調整</Description>
+        <PackageVersion>0.9.11</PackageVersion>
+        <Description>QueryListResult -> ListQueryResult, MultipleProject -> MultiProject</Description>
         <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
         <LangVersion>11</LangVersion>
     </PropertyGroup>

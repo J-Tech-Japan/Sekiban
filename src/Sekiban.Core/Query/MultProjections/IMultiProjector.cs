@@ -1,5 +1,5 @@
 using Sekiban.Core.Event;
-namespace Sekiban.Core.Query.MultipleProjections;
+namespace Sekiban.Core.Query.MultProjections;
 
 public interface IMultiProjector<TProjectionPayload> : IProjection where TProjectionPayload : IMultiProjectionPayload
 {

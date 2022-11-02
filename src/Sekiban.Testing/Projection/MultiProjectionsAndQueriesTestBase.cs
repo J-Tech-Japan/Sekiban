@@ -4,7 +4,7 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
-using Sekiban.Core.Query.MultipleProjections;
+using Sekiban.Core.Query.MultProjections;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleProjections;
@@ -12,13 +12,13 @@ using Sekiban.Testing.Command;
 using Sekiban.Testing.Queries;
 namespace Sekiban.Testing.Projection;
 
-public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> where TDependencyDefinition : IDependencyDefinition, new()
+public abstract class MultiProjectionsAndQueriesTestBase<TDependencyDefinition> where TDependencyDefinition : IDependencyDefinition, new()
 {
     private readonly TestCommandExecutor _commandExecutor;
     protected readonly IServiceProvider _serviceProvider;
 
     // ReSharper disable once PublicConstructorInAbstractClass
-    public MultipleProjectionsAndQueriesTestBase()
+    public MultiProjectionsAndQueriesTestBase()
     {
         var services = new ServiceCollection();
         // ReSharper disable once VirtualMemberCallInConstructor
@@ -30,10 +30,10 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
     }
     protected virtual void SetupDependency(IServiceCollection serviceCollection) { }
 
-    public TMultipleProjectionTest SetupMultiProjectionTest<TMultipleProjectionTest>()
-        where TMultipleProjectionTest : class, IMultiProjectTestBase
+    public TMultiProjectionTest SetupMultiProjectionTest<TMultiProjectionTest>()
+        where TMultiProjectionTest : class, IMultiProjectTestBase
     {
-        var test = Activator.CreateInstance(typeof(TMultipleProjectionTest), _serviceProvider) as TMultipleProjectionTest;
+        var test = Activator.CreateInstance(typeof(TMultiProjectionTest), _serviceProvider) as TMultiProjectionTest;
         if (test is null) { throw new InvalidOperationException("Could not create test"); }
         return test;
     }
@@ -49,19 +49,19 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
     {
         var events = _commandExecutor.ExecuteChangeCommand(command);
     }
-    public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GivenCommandExecutorAction(Action<TestCommandExecutor> action)
+    public MultiProjectionsAndQueriesTestBase<TDependencyDefinition> GivenCommandExecutorAction(Action<TestCommandExecutor> action)
     {
         action(_commandExecutor);
         return this;
     }
 
-    public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GivenScenario(Action initialAction)
+    public MultiProjectionsAndQueriesTestBase<TDependencyDefinition> GivenScenario(Action initialAction)
     {
         initialAction();
         return this;
     }
 
-    public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GivenQueryTest(
+    public MultiProjectionsAndQueriesTestBase<TDependencyDefinition> GivenQueryTest(
         IQueryTest test)
     {
         if (_serviceProvider is null) { throw new Exception("Service provider is null. Please setup service provider."); }
@@ -69,7 +69,7 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         return this;
     }
 
-    public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GetMultipleProjectionTest<TProjection, TProjectionPayload>(
+    public MultiProjectionsAndQueriesTestBase<TDependencyDefinition> GetMultiProjectionTest<TProjection, TProjectionPayload>(
         Action<MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition>> testAction)
         where TProjection : MultiProjectionBase<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayload, new()
@@ -78,7 +78,7 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         testAction(test);
         return this;
     }
-    public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GetAggregateListProjectionTest<TAggregatePayload>(
+    public MultiProjectionsAndQueriesTestBase<TDependencyDefinition> GetAggregateListProjectionTest<TAggregatePayload>(
         Action<AggregateListProjectionTestBase<TAggregatePayload, TDependencyDefinition>> testAction)
         where TAggregatePayload : IAggregatePayload, new()
     {
@@ -86,7 +86,7 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         testAction(test);
         return this;
     }
-    public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GetSingleProjectionListProjectionTest<TAggregatePayload, TSingleProjection,
+    public MultiProjectionsAndQueriesTestBase<TDependencyDefinition> GetSingleProjectionListProjectionTest<TAggregatePayload, TSingleProjection,
         TSingleProjectionPayload>(
         Action<SingleProjectionListTestBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TDependencyDefinition>>
             testAction)
@@ -101,7 +101,7 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         return this;
     }
 
-    public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GetMultiProjectionQueryTest<TProjection, TProjectionPayload, TQuery,
+    public MultiProjectionsAndQueriesTestBase<TDependencyDefinition> GetMultiProjectionQueryTest<TProjection, TProjectionPayload, TQuery,
         TQueryParameter, TQueryResponse>(
         Action<MultiProjectionQueryTest<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>> queryTestAction)
         where TProjection : MultiProjectionBase<TProjectionPayload>, new()
@@ -114,7 +114,7 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         queryTestAction(queryTest);
         return this;
     }
-    public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GetMultiProjectionListQueryTest<TProjection, TProjectionPayload, TQuery,
+    public MultiProjectionsAndQueriesTestBase<TDependencyDefinition> GetMultiProjectionListQueryTest<TProjection, TProjectionPayload, TQuery,
         TQueryParameter, TQueryResponse>(
         Action<MultiProjectionListQueryTest<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>> queryTestAction)
         where TProjection : MultiProjectionBase<TProjectionPayload>, new()
@@ -129,7 +129,7 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
     }
 
 
-    public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GetAggregateQueryTest<TAggregatePayload, TQuery, TQueryParameter,
+    public MultiProjectionsAndQueriesTestBase<TDependencyDefinition> GetAggregateQueryTest<TAggregatePayload, TQuery, TQueryParameter,
         TQueryResponse>(
         Action<AggregateQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>> queryTestAction)
         where TAggregatePayload : IAggregatePayload, new()
@@ -141,7 +141,7 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         queryTestAction(queryTest);
         return this;
     }
-    public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GetAggregateListQueryTest<TAggregatePayload, TQuery, TQueryParameter,
+    public MultiProjectionsAndQueriesTestBase<TDependencyDefinition> GetAggregateListQueryTest<TAggregatePayload, TQuery, TQueryParameter,
         TQueryResponse>(
         Action<AggregateListQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>> queryTestAction)
         where TAggregatePayload : IAggregatePayload, new()
@@ -154,7 +154,7 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         return this;
     }
 
-    public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GetSingleProjectionQueryTest<TAggregatePayload, TSingleProjection,
+    public MultiProjectionsAndQueriesTestBase<TDependencyDefinition> GetSingleProjectionQueryTest<TAggregatePayload, TSingleProjection,
         TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
         Action<SingleProjectionQueryTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TQuery, TQueryParameter,
             TQueryResponse>> queryTestAction)
@@ -171,7 +171,7 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         queryTestAction(queryTest);
         return this;
     }
-    public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GetSingleProjectionListQueryTest<TAggregatePayload, TSingleProjection,
+    public MultiProjectionsAndQueriesTestBase<TDependencyDefinition> GetSingleProjectionListQueryTest<TAggregatePayload, TSingleProjection,
         TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
         Action<SingleProjectionListQueryTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TQuery, TQueryParameter,
             TQueryResponse>> queryTestAction)

@@ -1,23 +1,23 @@
 using Sekiban.Core.Aggregate;
-using Sekiban.Core.Query.MultipleProjections.Projections;
+using Sekiban.Core.Query.MultProjections.Projections;
 using Sekiban.Core.Query.SingleProjections;
-namespace Sekiban.Core.Query.MultipleProjections;
+namespace Sekiban.Core.Query.MultProjections;
 
 public class MultiProjectionService : IMultiProjectionService
 {
-    private readonly IMultipleProjection _multipleProjection;
+    private readonly IMultiProjection multiProjection;
 
-    public MultiProjectionService(IMultipleProjection multipleProjection) => _multipleProjection = multipleProjection;
+    public MultiProjectionService(IMultiProjection multiProjection) => this.multiProjection = multiProjection;
 
     public Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjection, TProjectionPayload>()
         where TProjection : MultiProjectionBase<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayload, new() =>
-        _multipleProjection.GetMultipleProjectionAsync<TProjection, TProjectionPayload>();
+        multiProjection.GetMultiProjectionAsync<TProjection, TProjectionPayload>();
     public async Task<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>>
         GetAggregateListObject<TAggregatePayload>() where TAggregatePayload : IAggregatePayload, new()
     {
-        var list = await _multipleProjection
-            .GetMultipleProjectionAsync<SingleProjectionListProjector<Aggregate<TAggregatePayload>,
+        var list = await multiProjection
+            .GetMultiProjectionAsync<SingleProjectionListProjector<Aggregate<TAggregatePayload>,
                     AggregateState<TAggregatePayload>,
                     DefaultSingleProjector<TAggregatePayload>>
                 , SingleProjectionListState<AggregateState<TAggregatePayload>>>();
@@ -42,8 +42,8 @@ public class MultiProjectionService : IMultiProjectionService
         where TAggregatePayload : IAggregatePayload, new()
         where TSingleProjection : MultiProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
         new()
-        where TSingleProjectionPayload : ISingleProjectionPayload => _multipleProjection
-        .GetMultipleProjectionAsync<
+        where TSingleProjectionPayload : ISingleProjectionPayload => multiProjection
+        .GetMultiProjectionAsync<
             SingleProjectionListProjector<TSingleProjection, SingleProjectionState<TSingleProjectionPayload>,
                 TSingleProjection>,
             SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>();

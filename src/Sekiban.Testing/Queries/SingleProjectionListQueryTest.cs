@@ -18,7 +18,7 @@ public class
         TSingleProjectionPayload, TQueryParameter, TQueryResponse>
     where TQueryParameter : IQueryParameter
 {
-    public QueryListResult<TQueryResponse>? Response { get; set; }
+    public ListQueryResult<TQueryResponse>? Response { get; set; }
     public IQueryService? QueryService { get; set; } = null;
     public SingleProjectionListQueryTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload,
         TQuery, TQueryParameter, TQueryResponse> WhenParam(TQueryParameter param)
@@ -46,7 +46,7 @@ public class
         return this;
     }
     public SingleProjectionListQueryTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload,
-        TQuery, TQueryParameter, TQueryResponse> ThenResponseIs(QueryListResult<TQueryResponse> expectedResponse)
+        TQuery, TQueryParameter, TQueryResponse> ThenResponseIs(ListQueryResult<TQueryResponse> expectedResponse)
     {
         if (Response == null)
         {
@@ -60,7 +60,7 @@ public class
         return this;
     }
     public SingleProjectionListQueryTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload,
-        TQuery, TQueryParameter, TQueryResponse> ThenGetResponse(Action<QueryListResult<TQueryResponse>> responseAction)
+        TQuery, TQueryParameter, TQueryResponse> ThenGetResponse(Action<ListQueryResult<TQueryResponse>> responseAction)
     {
         Assert.NotNull(Response);
         responseAction(Response!);
@@ -70,7 +70,7 @@ public class
     public SingleProjectionListQueryTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload,
         TQuery, TQueryParameter, TQueryResponse> ThenResponseIsFromJson(string responseJson)
     {
-        var response = JsonSerializer.Deserialize<QueryListResult<TQueryResponse>>(responseJson);
+        var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(responseJson);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         ThenResponseIs(response);
         return this;
@@ -79,7 +79,7 @@ public class
         TQuery, TQueryParameter, TQueryResponse> ThenResponseIsFromFile(string responseFilename)
     {
         using var openStream = File.OpenRead(responseFilename);
-        var response = JsonSerializer.Deserialize<QueryListResult<TQueryResponse>>(openStream);
+        var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(openStream);
         if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         ThenResponseIs(response);
         return this;

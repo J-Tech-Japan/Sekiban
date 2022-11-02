@@ -1,4 +1,4 @@
-using Sekiban.Core.Query.MultipleProjections;
+using Sekiban.Core.Query.MultProjections;
 using Sekiban.Core.Query.QueryModel.Parameters;
 namespace Sekiban.Core.Query.QueryModel;
 
