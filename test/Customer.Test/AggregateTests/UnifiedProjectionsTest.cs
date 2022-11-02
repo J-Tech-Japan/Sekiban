@@ -22,23 +22,23 @@ namespace Customer.Test.AggregateTests;
 public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<CustomerDependency>
 {
 
-    private readonly AggregateListProjectionMultiProjectTestBase<Branch, CustomerDependency> branchListProjectionMultiProject;
-    private readonly
-        MultiProjectionMultiProjectTestBase<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.PayloadDefinition,
-            CustomerDependency> clientLoyaltyProjectionMultiProjectTest;
-
-    private readonly
-        MultiProjectionMultiProjectTestBase<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.PayloadDefinition, CustomerDependency>
-        listProjectionMultiProjectTest;
-
     private readonly AggregateQueryTest<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, bool>
         branchExistsQuery = new();
+
+    private readonly AggregateListProjectionTestBase<Branch, CustomerDependency> branchListProjection;
 
 
     private readonly string branchName = "BranchName";
     private readonly string clientEmail = "test@exmple.com";
+    private readonly
+        MultiProjectionTestBase<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.PayloadDefinition,
+            CustomerDependency> clientLoyaltyProjectionTest;
     private readonly string clientName = "Client Name";
     private readonly string clientName2 = "Client Name2";
+
+    private readonly
+        MultiProjectionTestBase<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.PayloadDefinition, CustomerDependency>
+        listProjectionTest;
     private readonly MultiProjectionListQueryTest<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection.PayloadDefinition,
         ClientLoyaltyPointQuery, ClientLoyaltyPointQuery.QueryParameter,
         ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> listQuery = new();
@@ -48,8 +48,8 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
         ClientLoyaltyPointMultipleProjection.PayloadDefinition> multiProjectionQueryTest = new();
 
     private readonly
-        SingleProjectionListMultiProjectTestBase<Client, ClientNameHistoryMultiProjection, ClientNameHistoryMultiProjection.PayloadDefinition,
-            CustomerDependency> singleProjectionListMultiProjectTestBase;
+        SingleProjectionListTestBase<Client, ClientNameHistoryMultiProjection, ClientNameHistoryMultiProjection.PayloadDefinition,
+            CustomerDependency> singleProjectionListTestBase;
 
     private readonly SingleProjectionListQueryTest<Client, ClientNameHistoryMultiProjection,
         ClientNameHistoryMultiProjection.PayloadDefinition, ClientNameHistoryProjectionQuery,
@@ -61,19 +61,19 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
 
     public UnifiedProjectionsTest()
     {
-        clientLoyaltyProjectionMultiProjectTest
-            = SetupMultiProjectionTest<MultiProjectionMultiProjectTestBase<ClientLoyaltyPointMultipleProjection,
+        clientLoyaltyProjectionTest
+            = SetupMultiProjectionTest<MultiProjectionTestBase<ClientLoyaltyPointMultipleProjection,
                 ClientLoyaltyPointMultipleProjection.PayloadDefinition, CustomerDependency>>();
-        clientLoyaltyProjectionMultiProjectTest.GivenQueryChecker(multiProjectionQueryTest);
+        clientLoyaltyProjectionTest.GivenQueryTest(multiProjectionQueryTest);
 
-        listProjectionMultiProjectTest
-            = SetupMultiProjectionTest<MultiProjectionMultiProjectTestBase<ClientLoyaltyPointListProjection,
+        listProjectionTest
+            = SetupMultiProjectionTest<MultiProjectionTestBase<ClientLoyaltyPointListProjection,
                 ClientLoyaltyPointListProjection.PayloadDefinition, CustomerDependency>>();
 
-        branchListProjectionMultiProject = SetupMultiProjectionTest<AggregateListProjectionMultiProjectTestBase<Branch, CustomerDependency>>();
+        branchListProjection = SetupMultiProjectionTest<AggregateListProjectionTestBase<Branch, CustomerDependency>>();
 
-        singleProjectionListMultiProjectTestBase
-            = SetupMultiProjectionTest<SingleProjectionListMultiProjectTestBase<Client, ClientNameHistoryMultiProjection,
+        singleProjectionListTestBase
+            = SetupMultiProjectionTest<SingleProjectionListTestBase<Client, ClientNameHistoryMultiProjection,
                 ClientNameHistoryMultiProjection.PayloadDefinition, CustomerDependency>>();
     }
     protected override void SetupDependency(IServiceCollection serviceCollection)
@@ -92,7 +92,7 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
                 {
                     if (m.GetPayload() is ClientCreated created) { dateNameSet = m.TimeStamp; }
                 });
-        clientLoyaltyProjectionMultiProjectTest.WhenProjection()
+        clientLoyaltyProjectionTest.WhenProjection()
             .ThenNotThrowsAnException()
             .ThenPayloadIs(
                 new ClientLoyaltyPointMultipleProjection.PayloadDefinition(
@@ -117,7 +117,7 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
     public void TestAggregateQuery()
     {
         GivenScenario(Test);
-        branchListProjectionMultiProject.GivenQueryChecker(branchExistsQuery).WhenProjection().ThenNotThrowsAnException();
+        branchListProjection.GivenQueryTest(branchExistsQuery).WhenProjection().ThenNotThrowsAnException();
         branchExistsQuery.WhenParam(new BranchExistsQuery.QueryParameter(_branchId)).ThenResponseIs(true);
         branchExistsQuery.WhenParam(new BranchExistsQuery.QueryParameter(Guid.NewGuid())).ThenResponseIs(false);
     }
@@ -126,7 +126,7 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
     public void TestSingleProjection()
     {
         GivenScenario(Test);
-        singleProjectionListMultiProjectTestBase.GivenQueryChecker(singleProjectionQueryTest)
+        singleProjectionListTestBase.GivenQueryTest(singleProjectionQueryTest)
             .WhenProjection()
             .ThenNotThrowsAnException();
         singleProjectionQueryTest
@@ -149,7 +149,7 @@ public class UnifiedProjectionsTest : MultipleProjectionsAndQueriesTestBase<Cust
     {
         GivenScenario(Test);
         RunChangeCommand(new ChangeClientName(_clientId, clientName2));
-        clientLoyaltyProjectionMultiProjectTest.WhenProjection();
+        clientLoyaltyProjectionTest.WhenProjection();
         multiProjectionQueryTest
             .WhenParam(
                 new ClientLoyaltyPointMultipleMultiProjectionQuery.QueryParameter(

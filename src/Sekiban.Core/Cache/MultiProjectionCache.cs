@@ -32,9 +32,9 @@ public class MultiProjectionCache : IMultiProjectionCache
         AbsoluteExpiration = DateTimeOffset.UtcNow.AddHours(2), SlidingExpiration = TimeSpan.FromMinutes(15)
         // 5分読まれなかったら削除するが、2時間経ったらどちらにしても削除する
     };
-    private string GetInMemoryKey<P, Q>() where P : IMultiProjector<Q>, new() where Q : IMultiProjectionPayload, new()
+    private string GetInMemoryKey<TProjector, TPayload>() where TProjector : IMultiProjector<TPayload>, new() where TPayload : IMultiProjectionPayload, new()
     {
         var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
-        return "MultipleProjection-" + sekibanContext?.SettingGroupIdentifier + "-" + typeof(P).FullName;
+        return "MultipleProjection-" + sekibanContext?.SettingGroupIdentifier + "-" + typeof(TProjector).FullName;
     }
 }

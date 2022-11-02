@@ -18,27 +18,27 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <param name="toVersion"></param>
-    /// <typeparam name="T"></typeparam>
-    /// <typeparam name="Q"></typeparam>
-    /// <typeparam name="P"></typeparam>
+    /// <typeparam name="TProjection"></typeparam>
+    /// <typeparam name="TState"></typeparam>
+    /// <typeparam name="TProjector"></typeparam>
     /// <returns></returns>
-    public async Task<T?> GetAggregateAsync<T, Q, P>(Guid aggregateId, int? toVersion = null)
-        where T : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<Q>
-        where Q : IAggregateCommon
-        where P : ISingleProjector<T>, new()
+    public async Task<TProjection?> GetAggregateAsync<TProjection, TState, TProjector>(Guid aggregateId, int? toVersion = null)
+        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<TState>
+        where TState : IAggregateCommon
+        where TProjector : ISingleProjector<TProjection>, new()
     {
-        var projector = new P();
+        var projector = new TProjector();
         var aggregate = projector.CreateInitialAggregate(aggregateId);
 
-        var snapshotDocument = await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(T));
-        var state = snapshotDocument is null ? default : snapshotDocument.ToState<Q>();
+        var snapshotDocument = await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(TProjection));
+        var state = snapshotDocument is null ? default : snapshotDocument.ToState<TState>();
         if (state is not null)
         {
             aggregate.ApplySnapshot(state);
         }
         if (toVersion.HasValue && aggregate.Version >= toVersion.Value)
         {
-            return await singleProjectionFromInitial.GetAggregateFromInitialAsync<T, P>(aggregateId, toVersion.Value);
+            return await singleProjectionFromInitial.GetAggregateFromInitialAsync<TProjection, TProjector>(aggregateId, toVersion.Value);
         }
         await _documentRepository.GetAllEventsForAggregateIdAsync(
             aggregateId,

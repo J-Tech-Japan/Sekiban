@@ -10,12 +10,12 @@ public interface ISingleProjectionService
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <param name="toVersion"></param>
-    /// <typeparam name="T"></typeparam>
-    /// <typeparam name="P"></typeparam>
+    /// <typeparam name="TProjection"></typeparam>
+    /// <typeparam name="TProjector"></typeparam>
     /// <returns></returns>
-    public Task<T?> GetAggregateProjectionFromInitialAsync<T, P>(Guid aggregateId, int? toVersion)
-        where T : IAggregateCommon, ISingleProjection
-        where P : ISingleProjector<T>, new();
+    public Task<TProjection?> GetAggregateProjectionFromInitialAsync<TProjection, TProjector>(Guid aggregateId, int? toVersion)
+        where TProjection : IAggregateCommon, ISingleProjection
+        where TProjector : ISingleProjector<TProjection>, new();
 
     /// <summary>
     ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。

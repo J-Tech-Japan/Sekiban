@@ -2,20 +2,20 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Query.MultipleProjections;
 
-public class SingleProjectionListProjector<T, Q, P> : IMultiProjector<SingleProjectionListState<Q>>
-    where T : IAggregateCommon, ISingleProjection, ISingleProjectionStateConvertible<Q>
-    where Q : IAggregateCommon
-    where P : ISingleProjector<T>, new()
+public class SingleProjectionListProjector<TProjection, TState, TProjector> : IMultiProjector<SingleProjectionListState<TState>>
+    where TProjection : IAggregateCommon, ISingleProjection, ISingleProjectionStateConvertible<TState>
+    where TState : IAggregateCommon
+    where TProjector : ISingleProjector<TProjection>, new()
 {
-    private T _eventChecker;
-    private P _projector = new();
+    private TProjection _eventChecker;
+    private TProjector _projector = new();
     public SingleProjectionListProjector()
     {
         _eventChecker = _projector.CreateInitialAggregate(Guid.Empty);
-        State = new SingleProjectionListState<Q> { List = List.Select(m => m.ToState()).ToList() };
+        State = new SingleProjectionListState<TState> { List = List.Select(m => m.ToState()).ToList() };
     }
-    private SingleProjectionListState<Q> State { get; set; }
-    public List<T> List
+    private SingleProjectionListState<TState> State { get; set; }
+    public List<TProjection> List
     {
         get;
         private set;
@@ -43,17 +43,17 @@ public class SingleProjectionListProjector<T, Q, P> : IMultiProjector<SingleProj
         LastEventId = ev.Id;
         LastSortableUniqueId = ev.SortableUniqueId;
     }
-    public MultiProjectionState<SingleProjectionListState<Q>> ToState()
+    public MultiProjectionState<SingleProjectionListState<TState>> ToState()
     {
-        State = new SingleProjectionListState<Q> { List = List.Select(m => m.ToState()).ToList() };
-        return new MultiProjectionState<SingleProjectionListState<Q>>(
+        State = new SingleProjectionListState<TState> { List = List.Select(m => m.ToState()).ToList() };
+        return new MultiProjectionState<SingleProjectionListState<TState>>(
             State,
             LastEventId,
             LastSortableUniqueId,
             AppliedSnapshotVersion,
             Version);
     }
-    public void ApplySnapshot(MultiProjectionState<SingleProjectionListState<Q>> snapshot)
+    public void ApplySnapshot(MultiProjectionState<SingleProjectionListState<TState>> snapshot)
     {
         Version = snapshot.Version;
         LastEventId = snapshot.LastEventId;

@@ -17,7 +17,7 @@ using Xunit;
 namespace Sekiban.Testing.Projection;
 
 public class
-    MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> : IMultiProjectTestBase
+    MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> : IMultiProjectTestBase
     where TProjection : MultiProjectionBase<TProjectionPayload>, new()
     where TProjectionPayload : IMultiProjectionPayload, new()
     where TDependencyDefinition : IDependencyDefinition, new()
@@ -25,7 +25,7 @@ public class
     private readonly TestCommandExecutor _commandExecutor;
     protected IServiceProvider _serviceProvider;
 
-    public MultiProjectionMultiProjectTestBase()
+    public MultiProjectionTestBase()
     {
         var services = new ServiceCollection();
         // ReSharper disable once VirtualMemberCallInConstructor
@@ -35,7 +35,7 @@ public class
         _serviceProvider = services.BuildServiceProvider();
         _commandExecutor = new TestCommandExecutor(_serviceProvider);
     }
-    public MultiProjectionMultiProjectTestBase(IServiceProvider serviceProvider)
+    public MultiProjectionTestBase(IServiceProvider serviceProvider)
     {
         _serviceProvider = serviceProvider;
         _commandExecutor = new TestCommandExecutor(_serviceProvider);
@@ -47,7 +47,7 @@ public class
     protected Exception? _latestException { get; set; }
     public Action<IEvent> OnEvent => e => GivenEvents(new List<IEvent> { e });
 
-    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> WhenProjection()
+    public MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> WhenProjection()
     {
         if (_serviceProvider == null)
         {
@@ -71,14 +71,14 @@ public class
     public void Dispose()
     {
     }
-    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> ThenPayloadIsFromFile(string filename)
+    public MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> ThenPayloadIsFromFile(string filename)
     {
         using var openStream = File.OpenRead(filename);
         var projection = JsonSerializer.Deserialize<TProjectionPayload>(openStream);
         if (projection is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         return ThenPayloadIs(projection);
     }
-    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> ThenGetPayload(
+    public MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> ThenGetPayload(
         Action<TProjectionPayload> payloadAction)
     {
         payloadAction(State.Payload);
@@ -107,7 +107,7 @@ public class
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name);
     }
     public IReadOnlyCollection<IEvent> GetLatestEvents() => _commandExecutor.LatestEvents;
-    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> GivenEvents(IEnumerable<IEvent> events)
+    public MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> GivenEvents(IEnumerable<IEvent> events)
     {
         var documentWriter = _serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter;
         if (documentWriter is null) { throw new Exception("Failed to get document writer"); }
@@ -122,9 +122,9 @@ public class
         }
         return this;
     }
-    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> GivenEvents(params IEvent[] events) =>
+    public MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> GivenEvents(params IEvent[] events) =>
         GivenEvents(events.AsEnumerable());
-    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> GivenEventsFromJson(string jsonEvents)
+    public MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> GivenEventsFromJson(string jsonEvents)
     {
         var list = JsonSerializer.Deserialize<List<JsonElement>>(jsonEvents);
         if (list is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
@@ -132,26 +132,26 @@ public class
         return this;
     }
 
-    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> ThenNotThrowsAnException()
+    public MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> ThenNotThrowsAnException()
     {
         var exception = _latestException is AggregateException aggregateException ? aggregateException.InnerExceptions.First() : _latestException;
         Assert.Null(exception);
         return this;
     }
-    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> ThenThrowsAnException()
+    public MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> ThenThrowsAnException()
     {
         var exception = _latestException is AggregateException aggregateException ? aggregateException.InnerExceptions.First() : _latestException;
         Assert.NotNull(exception);
         return this;
     }
 
-    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> ThenGetState(
+    public MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> ThenGetState(
         Action<MultiProjectionState<TProjectionPayload>> stateAction)
     {
         stateAction(State);
         return this;
     }
-    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> ThenStateIs(
+    public MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> ThenStateIs(
         MultiProjectionState<TProjectionPayload> state)
     {
         var actual = State;
@@ -161,7 +161,7 @@ public class
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> ThenPayloadIs(TProjectionPayload payload)
+    public MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> ThenPayloadIs(TProjectionPayload payload)
     {
         var actual = State.Payload;
         var expected = payload;
@@ -170,20 +170,20 @@ public class
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> ThenStateIsFromFile(string filename)
+    public MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> ThenStateIsFromFile(string filename)
     {
         using var openStream = File.OpenRead(filename);
         var projection = JsonSerializer.Deserialize<MultiProjectionState<TProjectionPayload>>(openStream);
         if (projection is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
         return ThenStateIs(projection);
     }
-    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> WriteProjectionToFile(string filename)
+    public MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> WriteProjectionToFile(string filename)
     {
         var json = SekibanJsonHelper.Serialize(State);
         File.WriteAllTextAsync(filename, json);
         return this;
     }
-    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> GivenEventsFromFile(string filename)
+    public MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> GivenEventsFromFile(string filename)
     {
         using var openStream = File.OpenRead(filename);
         var list = JsonSerializer.Deserialize<List<JsonElement>>(openStream);
@@ -192,14 +192,14 @@ public class
         return this;
     }
 
-    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> GivenQueryChecker(
-        IQueryChecker checker)
+    public MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> GivenQueryTest(
+        IQueryTest test)
     {
         if (_serviceProvider is null) { throw new Exception("Service provider is null. Please setup service provider."); }
-        checker.QueryService = _serviceProvider.GetService<IQueryService>();
+        test.QueryService = _serviceProvider.GetService<IQueryService>();
         return this;
     }
-    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> GivenEvents(
+    public MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> GivenEvents(
         params (Guid aggregateId, Type aggregateType, IEventPayload payload)[] eventTouples)
     {
         foreach (var (aggregateId, aggregateType, payload) in eventTouples)
@@ -214,7 +214,7 @@ public class
         }
         return this;
     }
-    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> GivenEvents(
+    public MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> GivenEvents(
         params (Guid aggregateId, IEventPayload payload)[] eventTouples)
     {
         foreach (var (aggregateId, payload) in eventTouples)
@@ -236,12 +236,12 @@ public class
         return this;
     }
 
-    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> GivenScenario(Action initialAction)
+    public MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> GivenScenario(Action initialAction)
     {
         initialAction();
         return this;
     }
-    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> GivenCommandExecutorAction(
+    public MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> GivenCommandExecutorAction(
         Action<TestCommandExecutor> action)
     {
         action(_commandExecutor);
@@ -290,26 +290,26 @@ public class
         _latestException = null;
     }
 
-    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition> ThenGetQueryTest<TQuery, TQueryParameter,
+    public MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> ThenGetQueryTest<TQuery, TQueryParameter,
         TQueryResponse>(
         Action<MultiProjectionQueryTest<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>> queryTestAction)
         where TQueryParameter : IQueryParameter
         where TQuery : IMultiProjectionQuery<TProjection, TProjectionPayload, TQueryParameter, TQueryResponse>, new()
     {
-        var queryChecker = new MultiProjectionQueryTest<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>();
-        GivenQueryChecker(queryChecker);
-        queryTestAction(queryChecker);
+        var queryTest = new MultiProjectionQueryTest<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>();
+        GivenQueryTest(queryTest);
+        queryTestAction(queryTest);
         return this;
     }
-    public MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition>
+    public MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition>
         ThenGetListQueryTest<TQuery, TQueryParameter, TQueryResponse>(
             Action<MultiProjectionListQueryTest<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>> queryTestAction)
         where TQueryParameter : IQueryParameter
         where TQuery : IMultiProjectionListQuery<TProjection, TProjectionPayload, TQueryParameter, TQueryResponse>, new()
     {
-        var queryChecker = new MultiProjectionListQueryTest<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>();
-        GivenQueryChecker(queryChecker);
-        queryTestAction(queryChecker);
+        var queryTest = new MultiProjectionListQueryTest<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>();
+        GivenQueryTest(queryTest);
+        queryTestAction(queryTest);
         return this;
     }
 }

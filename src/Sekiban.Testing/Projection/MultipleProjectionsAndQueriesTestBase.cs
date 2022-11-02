@@ -61,41 +61,41 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         return this;
     }
 
-    public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GivenQueryChecker(
-        IQueryChecker checker)
+    public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GivenQueryTest(
+        IQueryTest test)
     {
         if (_serviceProvider is null) { throw new Exception("Service provider is null. Please setup service provider."); }
-        checker.QueryService = _serviceProvider.GetService<IQueryService>();
+        test.QueryService = _serviceProvider.GetService<IQueryService>();
         return this;
     }
 
     public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GetMultipleProjectionTest<TProjection, TProjectionPayload>(
-        Action<MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition>> testAction)
+        Action<MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition>> testAction)
         where TProjection : MultiProjectionBase<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayload, new()
     {
-        var test = SetupMultiProjectionTest<MultiProjectionMultiProjectTestBase<TProjection, TProjectionPayload, TDependencyDefinition>>();
+        var test = SetupMultiProjectionTest<MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition>>();
         testAction(test);
         return this;
     }
     public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GetAggregateListProjectionTest<TAggregatePayload>(
-        Action<AggregateListProjectionMultiProjectTestBase<TAggregatePayload, TDependencyDefinition>> testAction)
+        Action<AggregateListProjectionTestBase<TAggregatePayload, TDependencyDefinition>> testAction)
         where TAggregatePayload : IAggregatePayload, new()
     {
-        var test = SetupMultiProjectionTest<AggregateListProjectionMultiProjectTestBase<TAggregatePayload, TDependencyDefinition>>();
+        var test = SetupMultiProjectionTest<AggregateListProjectionTestBase<TAggregatePayload, TDependencyDefinition>>();
         testAction(test);
         return this;
     }
     public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GetSingleProjectionListProjectionTest<TAggregatePayload, TSingleProjection,
         TSingleProjectionPayload>(
-        Action<SingleProjectionListMultiProjectTestBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TDependencyDefinition>>
+        Action<SingleProjectionListTestBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TDependencyDefinition>>
             testAction)
         where TAggregatePayload : IAggregatePayload, new()
         where TSingleProjection : MultiProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
         where TSingleProjectionPayload : ISingleProjectionPayload
     {
         var test =
-            SetupMultiProjectionTest<SingleProjectionListMultiProjectTestBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload,
+            SetupMultiProjectionTest<SingleProjectionListTestBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload,
                 TDependencyDefinition>>();
         testAction(test);
         return this;
@@ -109,9 +109,9 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         where TQueryParameter : IQueryParameter
         where TQuery : IMultiProjectionQuery<TProjection, TProjectionPayload, TQueryParameter, TQueryResponse>, new()
     {
-        var queryChecker = new MultiProjectionQueryTest<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>();
-        GivenQueryChecker(queryChecker);
-        queryTestAction(queryChecker);
+        var queryTest = new MultiProjectionQueryTest<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>();
+        GivenQueryTest(queryTest);
+        queryTestAction(queryTest);
         return this;
     }
     public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GetMultiProjectionListQueryTest<TProjection, TProjectionPayload, TQuery,
@@ -122,9 +122,9 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         where TQueryParameter : IQueryParameter
         where TQuery : IMultiProjectionListQuery<TProjection, TProjectionPayload, TQueryParameter, TQueryResponse>, new()
     {
-        var queryChecker = new MultiProjectionListQueryTest<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>();
-        GivenQueryChecker(queryChecker);
-        queryTestAction(queryChecker);
+        var queryTest = new MultiProjectionListQueryTest<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>();
+        GivenQueryTest(queryTest);
+        queryTestAction(queryTest);
         return this;
     }
 
@@ -136,9 +136,9 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
-        var queryChecker = new AggregateQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>();
-        GivenQueryChecker(queryChecker);
-        queryTestAction(queryChecker);
+        var queryTest = new AggregateQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>();
+        GivenQueryTest(queryTest);
+        queryTestAction(queryTest);
         return this;
     }
     public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GetAggregateListQueryTest<TAggregatePayload, TQuery, TQueryParameter,
@@ -148,9 +148,9 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
-        var queryChecker = new AggregateListQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>();
-        GivenQueryChecker(queryChecker);
-        queryTestAction(queryChecker);
+        var queryTest = new AggregateListQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>();
+        GivenQueryTest(queryTest);
+        queryTestAction(queryTest);
         return this;
     }
 
@@ -165,10 +165,10 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
             TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
-        var queryChecker = new SingleProjectionQueryTest<TAggregatePayload, TSingleProjection,
+        var queryTest = new SingleProjectionQueryTest<TAggregatePayload, TSingleProjection,
             TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>();
-        GivenQueryChecker(queryChecker);
-        queryTestAction(queryChecker);
+        GivenQueryTest(queryTest);
+        queryTestAction(queryTest);
         return this;
     }
     public MultipleProjectionsAndQueriesTestBase<TDependencyDefinition> GetSingleProjectionListQueryTest<TAggregatePayload, TSingleProjection,
@@ -182,10 +182,10 @@ public abstract class MultipleProjectionsAndQueriesTestBase<TDependencyDefinitio
             TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
-        var queryChecker = new SingleProjectionListQueryTest<TAggregatePayload, TSingleProjection,
+        var queryTest = new SingleProjectionListQueryTest<TAggregatePayload, TSingleProjection,
             TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>();
-        GivenQueryChecker(queryChecker);
-        queryTestAction(queryChecker);
+        GivenQueryTest(queryTest);
+        queryTestAction(queryTest);
         return this;
     }
 

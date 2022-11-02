@@ -7,7 +7,7 @@ using Xunit;
 namespace Sekiban.Testing.Queries;
 
 public class
-    AggregateListQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> : IQueryChecker
+    AggregateListQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> : IQueryTest
     where TAggregatePayload : IAggregatePayload, new()
     where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
     where TQueryParameter : IQueryParameter

@@ -8,7 +8,7 @@ namespace Sekiban.Testing.Queries;
 
 public class
     MultiProjectionListQueryTest<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse> :
-        IQueryChecker
+        IQueryTest
     where TProjection : MultiProjectionBase<TProjectionPayload>, new()
     where TProjectionPayload : IMultiProjectionPayload, new()
     where TQueryParameter : IQueryParameter

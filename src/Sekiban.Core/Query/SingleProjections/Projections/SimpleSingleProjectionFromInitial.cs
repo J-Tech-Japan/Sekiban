@@ -14,14 +14,14 @@ public class SimpleSingleProjectionFromInitial : ISingleProjectionFromInitial
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <param name="toVersion"></param>
-    /// <typeparam name="T"></typeparam>
-    /// <typeparam name="P"></typeparam>
+    /// <typeparam name="TProjection"></typeparam>
+    /// <typeparam name="TProjector"></typeparam>
     /// <returns></returns>
-    public async Task<T?> GetAggregateFromInitialAsync<T, P>(Guid aggregateId, int? toVersion)
-        where T : IAggregateCommon, SingleProjections.ISingleProjection
-        where P : ISingleProjector<T>, new()
+    public async Task<TProjection?> GetAggregateFromInitialAsync<TProjection, TProjector>(Guid aggregateId, int? toVersion)
+        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection
+        where TProjector : ISingleProjector<TProjection>, new()
     {
-        var projector = new P();
+        var projector = new TProjector();
         var aggregate = projector.CreateInitialAggregate(aggregateId);
         var addFinished = false;
         await _documentRepository.GetAllEventsForAggregateIdAsync(

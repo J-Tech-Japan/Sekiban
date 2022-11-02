@@ -10,7 +10,7 @@ using System.Collections.Generic;
 using Xunit;
 namespace Customer.Test.AggregateTests;
 
-public class ClientLoyaltyPointListProjectionMultiProjectTest : MultiProjectionMultiProjectTestBase<ClientLoyaltyPointListProjection,
+public class ClientLoyaltyPointListProjectionTest : MultiProjectionTestBase<ClientLoyaltyPointListProjection,
     ClientLoyaltyPointListProjection.PayloadDefinition, CustomerDependency>
 {
 
@@ -31,7 +31,7 @@ public class ClientLoyaltyPointListProjectionMultiProjectTest : MultiProjectionM
     public void RegularProjection()
     {
 
-        GivenQueryChecker(ListQueryTest)
+        GivenQueryTest(ListQueryTest)
             .GivenEventsFromFile("TestData1.json")
             .WhenProjection()
             .ThenNotThrowsAnException()
@@ -39,7 +39,7 @@ public class ClientLoyaltyPointListProjectionMultiProjectTest : MultiProjectionM
             .WriteProjectionToFile("TestData1ResultOut.json");
     }
     [Fact]
-    public void QueryCheckerTest()
+    public void QueryTest()
     {
         GivenScenario(RegularProjection);
 
@@ -60,7 +60,7 @@ public class ClientLoyaltyPointListProjectionMultiProjectTest : MultiProjectionM
     [Fact]
     public void CommandTest1()
     {
-        GivenQueryChecker(ListQueryTest);
+        GivenQueryTest(ListQueryTest);
         RunCreateCommand(new CreateBranch(_branchName), _branchId);
         RunCreateCommand(new CreateClient(_branchId, _clientNameBase + 1, "test" + 1 + "@example.com"), _clientId1);
         RunCreateCommand(new CreateClient(_branchId, _clientNameBase + 2, "test" + 2 + "@example.com"), _clientId2);
