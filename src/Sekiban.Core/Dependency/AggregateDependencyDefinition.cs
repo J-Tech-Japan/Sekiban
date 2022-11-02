@@ -15,11 +15,11 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
     public AggregateDependencyDefinition() => AggregateType = typeof(TAggregatePayload);
     public ImmutableList<(Type, Type?)> CommandTypes { get; private set; } = ImmutableList<(Type, Type?)>.Empty;
     public ImmutableList<(Type, Type?)> SubscriberTypes { get; private set; } = ImmutableList<(Type, Type?)>.Empty;
-    public ImmutableList<Type> AggregateQueryFilterTypes { get; private set; } = ImmutableList<Type>.Empty;
-    public ImmutableList<Type> AggregateListQueryFilterTypes { get; private set; } = ImmutableList<Type>.Empty;
+    public ImmutableList<Type> AggregateQueryTypes { get; private set; } = ImmutableList<Type>.Empty;
+    public ImmutableList<Type> AggregateListQueryTypes { get; private set; } = ImmutableList<Type>.Empty;
     public ImmutableList<Type> SingleProjectionTypes { get; private set; } = ImmutableList<Type>.Empty;
-    public ImmutableList<Type> SingleProjectionQueryFilterTypes { get; private set; } = ImmutableList<Type>.Empty;
-    public ImmutableList<Type> SingleProjectionListQueryFilterTypes { get; private set; } = ImmutableList<Type>.Empty;
+    public ImmutableList<Type> SingleProjectionQueryTypes { get; private set; } = ImmutableList<Type>.Empty;
+    public ImmutableList<Type> SingleProjectionListQueryTypes { get; private set; } = ImmutableList<Type>.Empty;
     public Type AggregateType { get; }
 
     public AggregateDependencyDefinition<TAggregatePayload> AddCreateCommandHandler<TCreateCommand, TCommandHandler>()
@@ -53,9 +53,9 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         var singleProjectionBase = singleProjectionType.BaseType;
         if (singleProjectionBase is null ||
             !singleProjectionBase.IsGenericType ||
-            singleProjectionBase.GetGenericTypeDefinition() != typeof(ProjectionBase<,,>))
+            singleProjectionBase.GetGenericTypeDefinition() != typeof(MultiProjectionBase<,,>))
         {
-            throw new ArgumentException($"Single projection {singleProjectionType.Name} must inherit from ProjectionBase<,,>");
+            throw new ArgumentException($"Single projection {singleProjectionType.Name} must inherit from MultiProjectionBase<,,>");
         }
         if (singleProjectionBase.GenericTypeArguments[0] != AggregateType)
         {
@@ -65,83 +65,83 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         return this;
     }
 
-    public AggregateDependencyDefinition<TAggregatePayload> AddAggregateQuery<TQueryFilter>()
+    public AggregateDependencyDefinition<TAggregatePayload> AddAggregateQuery<TQuery>()
     {
-        var t = typeof(TQueryFilter);
+        var t = typeof(TQuery);
         Action action = t.GetInterfaces()
                 .Where(w => w.IsGenericType && w.GenericTypeArguments.Contains(typeof(TAggregatePayload)))
                 .Select(s => s.GetGenericTypeDefinition())
                 .ToArray() switch
             {
                 [..] i when i.Contains(typeof(IAggregateQuery<,,>)) => () =>
-                    AggregateQueryFilterTypes = AggregateQueryFilterTypes.Add(t),
+                    AggregateQueryTypes = AggregateQueryTypes.Add(t),
                 _ => throw new NotImplementedException()
             };
         action();
         return this;
     }
-    public AggregateDependencyDefinition<TAggregatePayload> AddAggregateListQuery<TQueryFilter>()
+    public AggregateDependencyDefinition<TAggregatePayload> AddAggregateListQuery<TQuery>()
     {
-        var t = typeof(TQueryFilter);
+        var t = typeof(TQuery);
         Action action = t.GetInterfaces()
                 .Where(w => w.IsGenericType && w.GenericTypeArguments.Contains(typeof(TAggregatePayload)))
                 .Select(s => s.GetGenericTypeDefinition())
                 .ToArray() switch
             {
                 [..] i when i.Contains(typeof(IAggregateListQuery<,,>)) => () =>
-                    AggregateListQueryFilterTypes = AggregateListQueryFilterTypes.Add(t),
+                    AggregateListQueryTypes = AggregateListQueryTypes.Add(t),
                 _ => throw new NotImplementedException()
             };
         action();
         return this;
     }
-    public AggregateDependencyDefinition<TAggregatePayload> AddSingleProjectionQuery<TQueryFilter>()
+    public AggregateDependencyDefinition<TAggregatePayload> AddSingleProjectionQuery<TQuery>()
     {
-        var t = typeof(TQueryFilter);
+        var t = typeof(TQuery);
         Action action = t.GetInterfaces()
                 .Where(w => w.IsGenericType && w.GenericTypeArguments.Contains(typeof(TAggregatePayload)))
                 .Select(s => s.GetGenericTypeDefinition())
                 .ToArray() switch
             {
                 [..] i when i.Contains(typeof(ISingleProjectionQuery<,,,,>)) => () =>
-                    SingleProjectionQueryFilterTypes = SingleProjectionQueryFilterTypes.Add(t),
+                    SingleProjectionQueryTypes = SingleProjectionQueryTypes.Add(t),
                 _ => throw new NotImplementedException()
             };
         action();
         return this;
     }
-    public AggregateDependencyDefinition<TAggregatePayload> AddSingleProjectionListQuery<TQueryFilter>()
+    public AggregateDependencyDefinition<TAggregatePayload> AddSingleProjectionListQuery<TQuery>()
     {
-        var t = typeof(TQueryFilter);
+        var t = typeof(TQuery);
         Action action = t.GetInterfaces()
                 .Where(w => w.IsGenericType && w.GenericTypeArguments.Contains(typeof(TAggregatePayload)))
                 .Select(s => s.GetGenericTypeDefinition())
                 .ToArray() switch
             {
                 [..] i when i.Contains(typeof(ISingleProjectionListQuery<,,,,>)) => () =>
-                    SingleProjectionListQueryFilterTypes = SingleProjectionListQueryFilterTypes.Add(t),
+                    SingleProjectionListQueryTypes = SingleProjectionListQueryTypes.Add(t),
                 _ => throw new NotImplementedException()
             };
         action();
         return this;
     }
 
-    public AggregateDependencyDefinition<TAggregatePayload> AddQuery<TQueryFilter>()
+    public AggregateDependencyDefinition<TAggregatePayload> AddQuery<TQuery>()
     {
-        var t = typeof(TQueryFilter);
+        var t = typeof(TQuery);
         Action action = t.GetInterfaces()
                 .Where(w => w.IsGenericType && w.GenericTypeArguments.Contains(typeof(TAggregatePayload)))
                 .Select(s => s.GetGenericTypeDefinition())
                 .ToArray() switch
             {
                 [..] i when i.Contains(typeof(IAggregateQuery<,,>)) => () =>
-                    AggregateQueryFilterTypes = AggregateQueryFilterTypes.Add(t),
+                    AggregateQueryTypes = AggregateQueryTypes.Add(t),
                 [..] i when i.Contains(typeof(IAggregateListQuery<,,>)) => () =>
-                    AggregateListQueryFilterTypes = AggregateListQueryFilterTypes.Add(t),
+                    AggregateListQueryTypes = AggregateListQueryTypes.Add(t),
                 [..] i when i.Contains(typeof(ISingleProjectionQuery<,,,,>)) => () =>
-                    SingleProjectionQueryFilterTypes = SingleProjectionQueryFilterTypes.Add(t),
+                    SingleProjectionQueryTypes = SingleProjectionQueryTypes.Add(t),
                 [..] i when i.Contains(typeof(ISingleProjectionListQuery<,,,,>)) => () =>
-                    SingleProjectionListQueryFilterTypes = SingleProjectionListQueryFilterTypes.Add(t),
+                    SingleProjectionListQueryTypes = SingleProjectionListQueryTypes.Add(t),
                 _ => throw new NotImplementedException()
             };
         action();

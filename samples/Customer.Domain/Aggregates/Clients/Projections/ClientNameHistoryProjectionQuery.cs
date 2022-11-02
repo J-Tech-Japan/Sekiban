@@ -11,13 +11,13 @@ public enum ClientNameHistoryProjectionQuerySortKeys
     ClientEmail
 }
 // ReSharper disable once ClassNeverInstantiated.Global
-public class ClientNameHistoryProjectionQuery : ISingleProjectionListQuery<Client, ClientNameHistoryProjection,
-    ClientNameHistoryProjection.PayloadDefinition, ClientNameHistoryProjectionQuery.ClientNameHistoryProjectionParameter,
+public class ClientNameHistoryProjectionQuery : ISingleProjectionListQuery<Client, ClientNameHistoryMultiProjection,
+    ClientNameHistoryMultiProjection.PayloadDefinition, ClientNameHistoryProjectionQuery.ClientNameHistoryProjectionParameter,
     ClientNameHistoryProjectionQuery.ClientNameHistoryProjectionQueryResponse>
 {
     public IEnumerable<ClientNameHistoryProjectionQueryResponse> HandleFilter(
         ClientNameHistoryProjectionParameter queryParam,
-        IEnumerable<ProjectionState<ClientNameHistoryProjection.PayloadDefinition>> list)
+        IEnumerable<SingleProjectionState<ClientNameHistoryMultiProjection.PayloadDefinition>> list)
     {
         return (from projection in list
                 from name in projection.Payload.ClientNames

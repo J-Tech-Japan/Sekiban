@@ -4,7 +4,7 @@ namespace Sekiban.Core.Aggregate;
 
 public class SekibanAggregateTypes
 {
-    private readonly List<ProjectionAggregateType> _registeredCustomProjectorTypes = new();
+    private readonly List<SingleProjectionAggregateType> _registeredCustomProjectorTypes = new();
     private readonly List<DefaultAggregateType> _registeredTypes = new();
     public SekibanAggregateTypes(params Assembly[] assemblies)
     {
@@ -22,7 +22,7 @@ public class SekibanAggregateTypes
                 var p = baseProjector.MakeGenericType(type);
                 _registeredTypes.Add(new DefaultAggregateType(type, p));
             }
-            var projectorBase = typeof(ProjectionBase<,,>);
+            var projectorBase = typeof(MultiProjectionBase<,,>);
             var customProjectors = assembly.DefinedTypes.Where(
                 x => x.IsClass && x.BaseType?.Name == projectorBase.Name && x.BaseType?.Namespace == projectorBase.Namespace);
             foreach (var type in customProjectors)
@@ -33,17 +33,17 @@ public class SekibanAggregateTypes
                 var instance = (dynamic?)Activator.CreateInstance(type);
                 var original = instance?.OriginalAggregateType();
                 if (original is null) { continue; }
-                _registeredCustomProjectorTypes.Add(new ProjectionAggregateType(original, type, projectionPayloadType));
+                _registeredCustomProjectorTypes.Add(new SingleProjectionAggregateType(original, type, projectionPayloadType));
             }
         }
         AggregateTypes = _registeredTypes.AsReadOnly();
-        ProjectionAggregateTypes = _registeredCustomProjectorTypes.AsReadOnly();
+        SingleProjectionTypes = _registeredCustomProjectorTypes.AsReadOnly();
     }
 
     public IReadOnlyCollection<DefaultAggregateType> AggregateTypes { get; }
-    public IReadOnlyCollection<ProjectionAggregateType> ProjectionAggregateTypes { get; }
+    public IReadOnlyCollection<SingleProjectionAggregateType> SingleProjectionTypes { get; }
     public record DefaultAggregateType(Type Aggregate, Type Projection);
-    public record ProjectionAggregateType(Type Aggregate, Type Projection, Type PayloadType) : DefaultAggregateType(
+    public record SingleProjectionAggregateType(Type Aggregate, Type Projection, Type PayloadType) : DefaultAggregateType(
         Aggregate,
         Projection);
 }

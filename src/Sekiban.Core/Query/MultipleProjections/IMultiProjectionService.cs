@@ -15,16 +15,16 @@ public interface IMultiProjectionService
         where TAggregatePayload : IAggregatePayload, new();
     public
         Task<MultiProjectionState<
-            SingleProjectionListState<ProjectionState<TSingleProjectionPayload>>>>
+            SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>
         GetSingleProjectionListObject<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>()
         where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : ProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
+        where TSingleProjection : MultiProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
         new()
         where TSingleProjectionPayload : ISingleProjectionPayload;
-    public Task<List<ProjectionState<TSingleProjectionPayload>>>
+    public Task<List<SingleProjectionState<TSingleProjectionPayload>>>
         GetSingleProjectionList<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>(
             QueryListType queryListType = QueryListType.ActiveOnly) where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : ProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
+        where TSingleProjection : MultiProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
         new()
         where TSingleProjectionPayload : ISingleProjectionPayload;
 }

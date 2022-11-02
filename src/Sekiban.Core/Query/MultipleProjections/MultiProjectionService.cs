@@ -37,20 +37,20 @@ public class MultiProjectionService : IMultiProjectionService
     }
     public
         Task<MultiProjectionState<
-            SingleProjectionListState<ProjectionState<TSingleProjectionPayload>>>>
+            SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>
         GetSingleProjectionListObject<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>()
         where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : ProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
+        where TSingleProjection : MultiProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
         new()
         where TSingleProjectionPayload : ISingleProjectionPayload => _multipleProjection
         .GetMultipleProjectionAsync<
-            SingleProjectionListProjector<TSingleProjection, ProjectionState<TSingleProjectionPayload>,
+            SingleProjectionListProjector<TSingleProjection, SingleProjectionState<TSingleProjectionPayload>,
                 TSingleProjection>,
-            SingleProjectionListState<ProjectionState<TSingleProjectionPayload>>>();
-    public async Task<List<ProjectionState<TSingleProjectionPayload>>>
+            SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>();
+    public async Task<List<SingleProjectionState<TSingleProjectionPayload>>>
         GetSingleProjectionList<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>(
             QueryListType queryListType = QueryListType.ActiveOnly) where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : ProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
+        where TSingleProjection : MultiProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
         new()
         where TSingleProjectionPayload : ISingleProjectionPayload
     {

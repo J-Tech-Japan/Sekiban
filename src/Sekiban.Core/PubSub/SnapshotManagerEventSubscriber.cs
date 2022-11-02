@@ -106,7 +106,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                 }
             }
 
-            foreach (var projection in _sekibanAggregateTypes.ProjectionAggregateTypes.Where(
+            foreach (var projection in _sekibanAggregateTypes.SingleProjectionTypes.Where(
                 m => m.Aggregate.FullName == aggregateType.Aggregate.FullName))
             {
                 if (!_aggregateSettings.ShouldTakeSnapshotForType(projection.Aggregate))

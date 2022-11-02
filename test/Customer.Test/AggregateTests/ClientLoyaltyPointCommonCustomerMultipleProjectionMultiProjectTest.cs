@@ -9,15 +9,15 @@ using System.Collections.Immutable;
 using Xunit;
 namespace Customer.Test.AggregateTests;
 
-public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : MultiProjectionTestBase<ClientLoyaltyPointMultipleProjection
+public class ClientLoyaltyPointCommonCustomerMultipleProjectionMultiProjectTest : MultiProjectionMultiProjectTestBase<ClientLoyaltyPointMultipleProjection
     , ClientLoyaltyPointMultipleProjection.PayloadDefinition, CustomerDependency>
 {
     private static readonly Guid branchId = Guid.Parse("b4a3c2e3-78ca-473b-8afb-f534e5d6d66b");
     private static readonly string branchName = "Test Branch";
 
-    private readonly MultiProjectionQueryTestChecker<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.PayloadDefinition,
+    private readonly MultiProjectionQueryTest<ClientLoyaltyPointMultipleProjection, ClientLoyaltyPointMultipleProjection.PayloadDefinition,
         ClientLoyaltyPointMultipleMultiProjectionQuery, ClientLoyaltyPointMultipleMultiProjectionQuery.QueryParameter,
-        ClientLoyaltyPointMultipleProjection.PayloadDefinition> multiProjectionQueryTestChecker = new();
+        ClientLoyaltyPointMultipleProjection.PayloadDefinition> multiProjectionQueryTest = new();
 
     [Fact]
     public void ProjectionTest()
@@ -618,7 +618,7 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : MultiProje
     [Fact]
     public void JsonFileEventsTest()
     {
-        GivenQueryChecker(multiProjectionQueryTestChecker)
+        GivenQueryChecker(multiProjectionQueryTest)
             .GivenEventsFromFile("TestData1.json")
             .WhenProjection()
             .ThenNotThrowsAnException()
@@ -630,7 +630,7 @@ public class ClientLoyaltyPointCommonCustomerMultipleProjectionTest : MultiProje
     public void QueryTest()
     {
         GivenScenario(JsonFileEventsTest);
-        multiProjectionQueryTestChecker.WhenParam(
+        multiProjectionQueryTest.WhenParam(
                 new ClientLoyaltyPointMultipleMultiProjectionQuery.QueryParameter(
                     branchId,
                     ClientLoyaltyPointMultipleMultiProjectionQuery.QuerySortKeys.ClientName))
