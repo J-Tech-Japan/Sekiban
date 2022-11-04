@@ -59,7 +59,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     {
         var documentWriter = _serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter;
         if (documentWriter is null) { throw new Exception("Failed to get document writer"); }
-        documentWriter.SaveAsync(ev, typeof(TAggregatePayload)).Wait();
+        documentWriter.SaveAndPublishEvent(ev, typeof(TAggregatePayload)).Wait();
         return this;
     }
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvents(IEnumerable<IEvent> events)
