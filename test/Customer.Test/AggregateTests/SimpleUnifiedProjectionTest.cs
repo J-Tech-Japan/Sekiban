@@ -4,6 +4,9 @@ using Customer.Domain.Aggregates.Branches.Queries;
 using Customer.Domain.Aggregates.Clients;
 using Customer.Domain.Aggregates.Clients.Commands;
 using Customer.Domain.Aggregates.Clients.Projections;
+using Customer.Domain.Aggregates.LoyaltyPoints;
+using Customer.Domain.Aggregates.LoyaltyPoints.Commands;
+using Customer.Domain.Aggregates.LoyaltyPoints.Consts;
 using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
 using Customer.Domain.Shared;
 using Sekiban.Testing.Projection;
@@ -97,6 +100,27 @@ public class SimpleUnifiedProjectionTest : UnifiedTestBase<CustomerDependency>
         GetAggregateTestFoeExistingAggregate<Client>(
             clientId,
             test => test.WhenChange(new ChangeClientName(clientId, "Test2") { ReferenceVersion = test.GetCurrentVersion() })
+                .ThenNotThrowsAnException()
+        );
+    }
+    [Fact]
+    public void TestMediatR()
+    {
+        RunCreateCommand(new CreateBranch(branchName), branchId);
+        var clientId = Guid.Empty;
+        GetAggregateTest<Client>(
+            test =>
+            {
+                test.WhenCreate(new CreateClient(branchId, "test", "test@example.com"))
+                    .ThenNotThrowsAnException();
+                clientId = test.GetAggregateId();
+            });
+        // Create Loyalty Point Runs automatically with event Created Client
+        GetAggregateTestFoeExistingAggregate<LoyaltyPoint>(
+            clientId,
+            test => test.WhenChange(
+                    new AddLoyaltyPoint(clientId, new DateTime(2022, 11, 1), LoyaltyPointReceiveTypeKeys.CreditcardUsage, 100, string.Empty)
+                        { ReferenceVersion = test.GetCurrentVersion() })
                 .ThenNotThrowsAnException()
         );
     }
