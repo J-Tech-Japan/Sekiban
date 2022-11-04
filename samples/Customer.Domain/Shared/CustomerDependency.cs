@@ -35,7 +35,7 @@ public class CustomerDependency : DomainDependencyDefinitionBase
             .AddChangeCommandHandler<CancelDeleteClient, CancelDeleteClient.Handler>()
             .AddEventSubscriber<ClientCreated, ClientCreatedSubscriber>()
             .AddEventSubscriber<ClientDeleted, ClientDeletedSubscriber>()
-            .AddSingleProjection<ClientNameHistoryMultiProjection>()
+            .AddSingleProjection<ClientNameHistorySingleProjection>()
             .AddSingleProjectionListQuery<ClientNameHistoryProjectionQuery>()
             .AddAggregateQuery<ClientEmailExistsQuery>();
 

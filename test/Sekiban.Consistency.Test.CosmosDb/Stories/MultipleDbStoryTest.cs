@@ -3,7 +3,7 @@ using Customer.Domain.Aggregates.Branches.Commands;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Document;
-using Sekiban.Core.Query.MultProjections;
+using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Setting;
 using Sekiban.Infrastructure.Cosmos;
 using System.Threading.Tasks;

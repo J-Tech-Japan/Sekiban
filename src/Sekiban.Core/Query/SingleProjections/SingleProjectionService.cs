@@ -51,7 +51,7 @@ public class SingleProjectionService : ISingleProjectionService
     public async Task<SingleProjectionState<TSingleProjectionPayload>?>
         GetProjectionAsync<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>(Guid aggregateId, int? toVersion = null)
         where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : MultiProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
         new()
         where TSingleProjectionPayload : ISingleProjectionPayload
     {

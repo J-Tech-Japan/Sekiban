@@ -5,7 +5,7 @@ using Sekiban.Core.Dependency;
 using Sekiban.Core.Document;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
-using Sekiban.Core.Query.MultProjections;
+using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleProjections;
@@ -21,7 +21,7 @@ public class
     SingleProjectionListTestBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload,
         TDependencyDefinition> : IMultiProjectTestBase
     where TAggregatePayload : IAggregatePayload, new()
-    where TSingleProjection : MultiProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
+    where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
     where TSingleProjectionPayload : ISingleProjectionPayload
     where TDependencyDefinition : IDependencyDefinition, new()
 {

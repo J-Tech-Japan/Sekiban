@@ -1,4 +1,4 @@
-using Sekiban.Core.Query.MultProjections;
+using Sekiban.Core.Query.MultiProjections;
 namespace Sekiban.Core.Aggregate;
 
 [AttributeUsage(AttributeTargets.Class)]

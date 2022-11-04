@@ -1,4 +1,4 @@
-namespace Sekiban.Core.Query.MultProjections;
+namespace Sekiban.Core.Query.MultiProjections;
 
 public record MultiProjectionState<TProjectionPayload>(
     TProjectionPayload Payload,

@@ -8,7 +8,7 @@ public class SimpleSingleProjectionListQuery<TAggregatePayload, TProjection, TSi
     ISingleProjectionListQuery<TAggregatePayload, TProjection, TSingleProjectionPayload,
         SimpleSingleProjectionListQuery<TAggregatePayload, TProjection, TSingleProjectionPayload>.QueryParameter,
         SingleProjectionState<TSingleProjectionPayload>>
-    where TProjection : MultiProjectionBase<TAggregatePayload, TProjection, TSingleProjectionPayload>, new()
+    where TProjection : SingleProjectionBase<TAggregatePayload, TProjection, TSingleProjectionPayload>, new()
     where TSingleProjectionPayload : ISingleProjectionPayload
     where TAggregatePayload : IAggregatePayload, new()
 {

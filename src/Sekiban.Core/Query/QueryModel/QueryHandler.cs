@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Exceptions;
-using Sekiban.Core.Query.MultProjections;
+using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Query.QueryModel;
@@ -85,7 +85,7 @@ public class QueryHandler
             TQueryParameter, TQueryResponse>(
             TQueryParameter param,
             IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections) where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : MultiProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
         new()
         where TSingleProjectionPayload : ISingleProjectionPayload
         where TQuery : ISingleProjectionListQuery<TAggregatePayload, TSingleProjection,
@@ -133,7 +133,7 @@ public class QueryHandler
             TQueryParameter, TQueryResponse>(
             TQueryParameter param,
             IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections) where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : MultiProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
         new()
         where TSingleProjectionPayload : ISingleProjectionPayload
         where TQuery : ISingleProjectionQuery<TAggregatePayload, TSingleProjection,

@@ -76,7 +76,7 @@ public abstract class AggregateTestBase<TAggregatePayload, TDependencyDefinition
     public IAggregateTestHelper<TAggregatePayload> ThenPayloadIsFromFile(string payloadFileName) => _helper.ThenPayloadIsFromFile(payloadFileName);
     public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionTest<TSingleProjection, TSingleProjectionPayload>(
         Action<MultiProjectionTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>> singleProjectionTestAction)
-        where TSingleProjection : MultiProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
         where TSingleProjectionPayload : ISingleProjectionPayload => _helper.ThenGetSingleProjectionTest(singleProjectionTestAction);
     public Guid GetAggregateId() => _helper.GetAggregateId();
     public int GetCurrentVersion() => _helper.GetCurrentVersion();

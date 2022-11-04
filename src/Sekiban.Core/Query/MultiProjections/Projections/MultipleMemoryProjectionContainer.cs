@@ -1,6 +1,6 @@
 using Sekiban.Core.Document.ValueObjects;
 using Sekiban.Core.Event;
-namespace Sekiban.Core.Query.MultProjections.Projections;
+namespace Sekiban.Core.Query.MultiProjections.Projections;
 
 public class MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>
     where TProjection : IMultiProjector<TProjectionPayload>, new()

@@ -4,7 +4,7 @@ using Sekiban.Core.Document;
 using Sekiban.Core.Document.ValueObjects;
 using Sekiban.Core.Query.UpdateNotice;
 using Sekiban.Core.Setting;
-namespace Sekiban.Core.Query.MultProjections.Projections;
+namespace Sekiban.Core.Query.MultiProjections.Projections;
 
 public class MemoryCacheMultiProjection : IMultiProjection
 {
