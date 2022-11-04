@@ -264,14 +264,14 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         return this;
     }
     public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionTest<TSingleProjection, TSingleProjectionPayload>(
-        Action<MultiProjectionTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>> singleProjectionTestAction)
+        Action<SingleProjectionTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>> singleProjectionTestAction)
         where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
         where TSingleProjectionPayload : ISingleProjectionPayload
     {
         var singleProjection =
             Activator.CreateInstance(
-                typeof(MultiProjectionTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>),
-                _serviceProvider) as MultiProjectionTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>;
+                typeof(SingleProjectionTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>),
+                _serviceProvider) as SingleProjectionTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>;
         if (singleProjection == null) { throw new Exception("Could not create single aggregate projection"); }
         singleProjection.AggregateId = GetAggregateId();
         singleProjectionTestAction(singleProjection);

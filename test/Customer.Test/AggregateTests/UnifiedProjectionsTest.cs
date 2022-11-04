@@ -53,8 +53,8 @@ public class UnifiedProjectionsTest : MultiProjectionsAndQueriesTestBase<Custome
 
     private readonly SingleProjectionListQueryTest<Client, ClientNameHistorySingleProjection,
         ClientNameHistorySingleProjection.PayloadDefinition, ClientNameHistoryProjectionQuery,
-        ClientNameHistoryProjectionQuery.ClientNameHistoryProjectionParameter,
-        ClientNameHistoryProjectionQuery.ClientNameHistoryProjectionQueryResponse> singleProjectionQueryTest = new();
+        ClientNameHistoryProjectionQuery.Parameter,
+        ClientNameHistoryProjectionQuery.Response> singleProjectionQueryTest = new();
     private Guid _branchId = Guid.Empty;
     private Guid _clientId = Guid.Empty;
     private DateTime dateNameSet = DateTime.Now;
@@ -130,14 +130,14 @@ public class UnifiedProjectionsTest : MultiProjectionsAndQueriesTestBase<Custome
             .WhenProjection()
             .ThenNotThrowsAnException();
         singleProjectionQueryTest
-            .WhenParam(new ClientNameHistoryProjectionQuery.ClientNameHistoryProjectionParameter(null, null, null, null, null))
+            .WhenParam(new ClientNameHistoryProjectionQuery.Parameter(null, null, null, null, null))
             .ThenResponseIs(
-                new ListQueryResult<ClientNameHistoryProjectionQuery.ClientNameHistoryProjectionQueryResponse>(
+                new ListQueryResult<ClientNameHistoryProjectionQuery.Response>(
                     1,
                     null,
                     null,
                     null,
-                    new List<ClientNameHistoryProjectionQuery.ClientNameHistoryProjectionQueryResponse>
+                    new List<ClientNameHistoryProjectionQuery.Response>
                     {
                         new(_branchId, _clientId, clientName, clientEmail, dateNameSet)
                     }));
