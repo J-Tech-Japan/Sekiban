@@ -8,6 +8,7 @@ using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
+using System.Diagnostics;
 using System.Text.Json;
 using Xunit;
 namespace Sekiban.Testing.SingleProjections;
@@ -23,6 +24,16 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         _serviceProvider = serviceProvider;
         _projector = new DefaultSingleProjector<TAggregatePayload>();
         Aggregate = _projector.CreateInitialAggregate(Guid.Empty);
+        _commandExecutor = new TestCommandExecutor(_serviceProvider);
+    }
+    public AggregateTestHelper(IServiceProvider serviceProvider, Guid aggregateId)
+    {
+        _serviceProvider = serviceProvider;
+        _projector = new DefaultSingleProjector<TAggregatePayload>();
+        var singleProjectionService = serviceProvider.GetService<ISingleProjectionService>();
+        Debug.Assert(singleProjectionService != null, nameof(singleProjectionService) + " != null");
+        Aggregate = singleProjectionService.GetAggregateAsync<TAggregatePayload>(aggregateId).Result ??
+            throw new InvalidOperationException("Aggregate not found for Id" + aggregateId + " and Type " + typeof(TAggregatePayload).Name);
         _commandExecutor = new TestCommandExecutor(_serviceProvider);
     }
     private Aggregate<TAggregatePayload> Aggregate
@@ -304,6 +315,10 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> ThenNotThrowsAnException()
     {
         var exception = _latestException is AggregateException aggregateException ? aggregateException.InnerExceptions.First() : _latestException;
+        if (exception is SekibanCommandInconsistentVersionException)
+        {
+            throw new Exception("Change Command needs to put a reference version");
+        }
         Assert.Null(exception);
 
         Assert.Empty(_latestValidationErrors);

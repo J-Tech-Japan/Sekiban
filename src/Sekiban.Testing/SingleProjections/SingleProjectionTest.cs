@@ -6,7 +6,7 @@ using System.Text.Json;
 using Xunit;
 namespace Sekiban.Testing.SingleProjections;
 
-public class SingleProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> : SingleProjectionTestBase
+public class SingleProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> : SingleProjectionTestCommon
     where TAggregatePayload : IAggregatePayload, new()
     where TProjection : SingleProjectionBase<TAggregatePayload, TProjection, TSingleProjectionPayload>, new()
     where TSingleProjectionPayload : ISingleProjectionPayload

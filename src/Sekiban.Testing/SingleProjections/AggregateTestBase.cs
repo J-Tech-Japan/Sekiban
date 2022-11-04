@@ -8,13 +8,13 @@ using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
 namespace Sekiban.Testing.SingleProjections;
 
-public abstract class AggregateTestBase<TAggregatePayload, TDependencyDefinition> : IDisposable, IAggregateTestHelper<TAggregatePayload>
+public class AggregateTestBase<TAggregatePayload, TDependencyDefinition> : IDisposable, IAggregateTestHelper<TAggregatePayload>
     where TAggregatePayload : IAggregatePayload, new()
     where TDependencyDefinition : IDependencyDefinition, new()
 {
     private readonly IAggregateTestHelper<TAggregatePayload> _helper;
     protected readonly IServiceProvider _serviceProvider;
-    protected AggregateTestBase()
+    public AggregateTestBase()
     {
         var services = new ServiceCollection();
         // ReSharper disable once VirtualMemberCallInConstructor
@@ -24,6 +24,13 @@ public abstract class AggregateTestBase<TAggregatePayload, TDependencyDefinition
         _serviceProvider = services.BuildServiceProvider();
         _helper = new AggregateTestHelper<TAggregatePayload>(_serviceProvider);
     }
+    public AggregateTestBase(IServiceProvider serviceProvider)
+    {
+        _serviceProvider = serviceProvider ?? throw new InvalidOperationException();
+        _helper = new AggregateTestHelper<TAggregatePayload>(_serviceProvider);
+    }
+    public AggregateTestBase(IServiceProvider serviceProvider, Guid aggregateId) : this(serviceProvider) =>
+        _helper = new AggregateTestHelper<TAggregatePayload>(_serviceProvider, aggregateId);
     public IAggregateTestHelper<TAggregatePayload> GivenScenario(Action initialAction) => _helper.GivenScenario(initialAction);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvent(IEvent ev) => _helper.GivenEnvironmentEvent(ev);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvents(IEnumerable<IEvent> events) => _helper.GivenEnvironmentEvents(events);

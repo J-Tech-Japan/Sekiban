@@ -19,7 +19,7 @@ using System.Linq;
 using Xunit;
 namespace Customer.Test.AggregateTests;
 
-public class UnifiedProjectionsTest : MultiProjectionsAndQueriesTestBase<CustomerDependency>
+public class UnifiedProjectionsTest : UnifiedTestBase<CustomerDependency>
 {
 
     private readonly AggregateQueryTest<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, bool>

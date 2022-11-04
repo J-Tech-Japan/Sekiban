@@ -2,6 +2,7 @@ using Customer.Domain.Aggregates.Branches;
 using Customer.Domain.Aggregates.Branches.Commands;
 using Customer.Domain.Aggregates.Branches.Queries;
 using Customer.Domain.Aggregates.Clients;
+using Customer.Domain.Aggregates.Clients.Commands;
 using Customer.Domain.Aggregates.Clients.Projections;
 using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
 using Customer.Domain.Shared;
@@ -11,7 +12,7 @@ using System.Collections.Immutable;
 using Xunit;
 namespace Customer.Test.AggregateTests;
 
-public class SimpleUnifiedProjectionTest : MultiProjectionsAndQueriesTestBase<CustomerDependency>
+public class SimpleUnifiedProjectionTest : UnifiedTestBase<CustomerDependency>
 {
     public Guid branchId = Guid.NewGuid();
     public string branchName = "test";
@@ -58,5 +59,45 @@ public class SimpleUnifiedProjectionTest : MultiProjectionsAndQueriesTestBase<Cu
                 test => test.WhenProjection()
                     .ThenGetPayload(payload => Assert.Empty(payload.List))
             );
+    }
+    [Fact]
+    public void ClientTest()
+    {
+        RunCreateCommand(new CreateBranch(branchName), branchId);
+        GetAggregateTest<Client>(
+            test => test.WhenCreate(new CreateClient(branchId, "test", "test@example.com"))
+                .WhenChange(new ChangeClientName(test.GetAggregateId(), "Test2") { ReferenceVersion = test.GetCurrentVersion() })
+                .ThenNotThrowsAnException()
+        );
+    }
+    [Fact]
+    public void ChangeClientNameTest()
+    {
+        RunCreateCommand(new CreateBranch(branchName), branchId);
+        var clientId = RunCreateCommand(new CreateClient(branchId, "test", "test@example.com"));
+        GetAggregateTestFoeExistingAggregate<Client>(
+            clientId,
+            test => test.WhenChange(new ChangeClientName(clientId, "Test2") { ReferenceVersion = test.GetCurrentVersion() })
+                .ThenNotThrowsAnException()
+        );
+    }
+
+    [Fact]
+    public void ChangeClientNameTest2()
+    {
+        RunCreateCommand(new CreateBranch(branchName), branchId);
+        var clientId = Guid.Empty;
+        GetAggregateTest<Client>(
+            test =>
+            {
+                test.WhenCreate(new CreateClient(branchId, "test", "test@example.com"))
+                    .ThenNotThrowsAnException();
+                clientId = test.GetAggregateId();
+            });
+        GetAggregateTestFoeExistingAggregate<Client>(
+            clientId,
+            test => test.WhenChange(new ChangeClientName(clientId, "Test2") { ReferenceVersion = test.GetCurrentVersion() })
+                .ThenNotThrowsAnException()
+        );
     }
 }
