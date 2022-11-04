@@ -6,12 +6,12 @@ using System.Text.Json;
 using Xunit;
 namespace Sekiban.Testing.SingleProjections;
 
-public class MultiProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> : AggregateTestBase
+public class SingleProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> : SingleProjectionTestBase
     where TAggregatePayload : IAggregatePayload, new()
     where TProjection : SingleProjectionBase<TAggregatePayload, TProjection, TSingleProjectionPayload>, new()
     where TSingleProjectionPayload : ISingleProjectionPayload
 {
-    public MultiProjectionTest(IServiceProvider serviceProvider) : base(serviceProvider)
+    public SingleProjectionTest(IServiceProvider serviceProvider) : base(serviceProvider)
     {
     }
     public TProjection Projection { get; } = new();
@@ -25,7 +25,7 @@ public class MultiProjectionTest<TAggregatePayload, TProjection, TSingleProjecti
         if (projectionState is null) { throw new Exception("Projection not found"); }
         return projectionState;
     }
-    public MultiProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> ThenStateIs(
+    public SingleProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> ThenStateIs(
         SingleProjectionState<TSingleProjectionPayload> state)
     {
         var actual = GetProjectionState();
@@ -41,7 +41,7 @@ public class MultiProjectionTest<TAggregatePayload, TProjection, TSingleProjecti
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public MultiProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> ThenPayloadIs(TSingleProjectionPayload payload)
+    public SingleProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> ThenPayloadIs(TSingleProjectionPayload payload)
     {
         var actual = GetProjectionState().Payload;
         var expected = payload;
@@ -50,19 +50,19 @@ public class MultiProjectionTest<TAggregatePayload, TProjection, TSingleProjecti
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public MultiProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> ThenGetPayload(
+    public SingleProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> ThenGetPayload(
         Action<TSingleProjectionPayload> payloadAction)
     {
         payloadAction(GetProjectionState().Payload);
         return this;
     }
-    public MultiProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> ThenGetState(
+    public SingleProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> ThenGetState(
         Action<SingleProjectionState<TSingleProjectionPayload>> stateAction)
     {
         stateAction(GetProjectionState());
         return this;
     }
-    public MultiProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> ThenPayloadIsFromJson(string payloadJson)
+    public SingleProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> ThenPayloadIsFromJson(string payloadJson)
     {
         var actual = GetProjectionState().Payload;
         var payload = JsonSerializer.Deserialize<TSingleProjectionPayload>(payloadJson);
@@ -73,7 +73,7 @@ public class MultiProjectionTest<TAggregatePayload, TProjection, TSingleProjecti
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public MultiProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> ThenPayloadIsFromFile(string payloadFilename)
+    public SingleProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> ThenPayloadIsFromFile(string payloadFilename)
     {
         using var openStream = File.OpenRead(payloadFilename);
         var actual = GetProjectionState().Payload;
@@ -85,7 +85,7 @@ public class MultiProjectionTest<TAggregatePayload, TProjection, TSingleProjecti
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public MultiProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> WriteProjectionStateToFile(string filename)
+    public SingleProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> WriteProjectionStateToFile(string filename)
     {
         var state = GetProjectionState();
         var json = SekibanJsonHelper.Serialize(state);

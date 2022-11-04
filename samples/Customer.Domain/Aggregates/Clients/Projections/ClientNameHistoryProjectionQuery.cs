@@ -12,16 +12,16 @@ public enum ClientNameHistoryProjectionQuerySortKeys
 }
 // ReSharper disable once ClassNeverInstantiated.Global
 public class ClientNameHistoryProjectionQuery : ISingleProjectionListQuery<Client, ClientNameHistorySingleProjection,
-    ClientNameHistorySingleProjection.PayloadDefinition, ClientNameHistoryProjectionQuery.ClientNameHistoryProjectionParameter,
-    ClientNameHistoryProjectionQuery.ClientNameHistoryProjectionQueryResponse>
+    ClientNameHistorySingleProjection.PayloadDefinition, ClientNameHistoryProjectionQuery.Parameter,
+    ClientNameHistoryProjectionQuery.Response>
 {
-    public IEnumerable<ClientNameHistoryProjectionQueryResponse> HandleFilter(
-        ClientNameHistoryProjectionParameter queryParam,
+    public IEnumerable<Response> HandleFilter(
+        Parameter queryParam,
         IEnumerable<SingleProjectionState<ClientNameHistorySingleProjection.PayloadDefinition>> list)
     {
         return (from projection in list
                 from name in projection.Payload.ClientNames
-                select new ClientNameHistoryProjectionQueryResponse(
+                select new Response(
                     projection.Payload.BranchId,
                     projection.AggregateId,
                     name.Name,
@@ -30,9 +30,9 @@ public class ClientNameHistoryProjectionQuery : ISingleProjectionListQuery<Clien
             m => (queryParam.BranchId == null || m.BranchId == queryParam.BranchId) &&
                 (queryParam.ClientId == null || m.ClientId == queryParam.ClientId));
     }
-    public IEnumerable<ClientNameHistoryProjectionQueryResponse> HandleSort(
-        ClientNameHistoryProjectionParameter queryParam,
-        IEnumerable<ClientNameHistoryProjectionQueryResponse> projections)
+    public IEnumerable<Response> HandleSort(
+        Parameter queryParam,
+        IEnumerable<Response> projections)
     {
         if (queryParam.SortKey == null)
         {
@@ -52,12 +52,12 @@ public class ClientNameHistoryProjectionQuery : ISingleProjectionListQuery<Clien
         }
         return projections;
     }
-    public record ClientNameHistoryProjectionParameter(
+    public record Parameter(
         int? PageSize,
         int? PageNumber,
         Guid? BranchId,
         Guid? ClientId,
         ClientNameHistoryProjectionQuerySortKeys? SortKey,
         bool SortIsAsc = true) : IQueryPagingParameter;
-    public record ClientNameHistoryProjectionQueryResponse(Guid BranchId, Guid ClientId, string ClientName, string ClientEmail, DateTime NameSetAt);
+    public record Response(Guid BranchId, Guid ClientId, string ClientName, string ClientEmail, DateTime NameSetAt);
 }
