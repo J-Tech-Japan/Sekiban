@@ -1,6 +1,6 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.SingleProjections;
-namespace Sekiban.Core.Query.MultProjections;
+namespace Sekiban.Core.Query.MultiProjections;
 
 public interface IMultiProjectionService
 {
@@ -18,13 +18,13 @@ public interface IMultiProjectionService
             SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>
         GetSingleProjectionListObject<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>()
         where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : MultiProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
         new()
         where TSingleProjectionPayload : ISingleProjectionPayload;
     public Task<List<SingleProjectionState<TSingleProjectionPayload>>>
         GetSingleProjectionList<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>(
             QueryListType queryListType = QueryListType.ActiveOnly) where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : MultiProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
         new()
         where TSingleProjectionPayload : ISingleProjectionPayload;
 }

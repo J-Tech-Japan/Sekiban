@@ -1,4 +1,4 @@
-namespace Sekiban.Core.Query.MultProjections.Projections;
+namespace Sekiban.Core.Query.MultiProjections.Projections;
 
 public interface IMultiProjection
 {

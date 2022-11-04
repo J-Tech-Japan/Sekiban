@@ -1,5 +1,5 @@
 using Sekiban.Core.Query.SingleProjections;
-namespace Sekiban.Core.Query.MultProjections;
+namespace Sekiban.Core.Query.MultiProjections;
 
 public record SingleProjectionListState<TAggregateState> : IMultiProjectionPayload where TAggregateState : IAggregateCommon
 {

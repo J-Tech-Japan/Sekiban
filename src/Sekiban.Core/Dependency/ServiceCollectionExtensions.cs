@@ -5,8 +5,8 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Command.UserInformation;
 using Sekiban.Core.Document;
 using Sekiban.Core.PubSub;
-using Sekiban.Core.Query.MultProjections;
-using Sekiban.Core.Query.MultProjections.Projections;
+using Sekiban.Core.Query.MultiProjections;
+using Sekiban.Core.Query.MultiProjections.Projections;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Query.SingleProjections.Projections;
@@ -170,7 +170,7 @@ public static class ServiceCollectionExtensions
         //             new List<AggregateSetting>
         //             {
         //                 new(nameof(Client), true, true),
-        //                 new(nameof(ClientNameHistoryMultiProjection), true, false, 111),
+        //                 new(nameof(ClientNameHistorySingleProjection), true, false, 111),
         //                 new(nameof(RecentActivity), true, true, 82, 10)
         //             })
         //     });

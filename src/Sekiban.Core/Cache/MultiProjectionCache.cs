@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
-using Sekiban.Core.Query.MultProjections;
-using Sekiban.Core.Query.MultProjections.Projections;
+using Sekiban.Core.Query.MultiProjections;
+using Sekiban.Core.Query.MultiProjections.Projections;
 using Sekiban.Core.Setting;
 namespace Sekiban.Core.Cache;
 

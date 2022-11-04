@@ -48,11 +48,11 @@ public class UnifiedProjectionsTest : MultiProjectionsAndQueriesTestBase<Custome
         ClientLoyaltyPointMultiProjection.PayloadDefinition> multiProjectionQueryTest = new();
 
     private readonly
-        SingleProjectionListTestBase<Client, ClientNameHistoryMultiProjection, ClientNameHistoryMultiProjection.PayloadDefinition,
+        SingleProjectionListTestBase<Client, ClientNameHistorySingleProjection, ClientNameHistorySingleProjection.PayloadDefinition,
             CustomerDependency> singleProjectionListTestBase;
 
-    private readonly SingleProjectionListQueryTest<Client, ClientNameHistoryMultiProjection,
-        ClientNameHistoryMultiProjection.PayloadDefinition, ClientNameHistoryProjectionQuery,
+    private readonly SingleProjectionListQueryTest<Client, ClientNameHistorySingleProjection,
+        ClientNameHistorySingleProjection.PayloadDefinition, ClientNameHistoryProjectionQuery,
         ClientNameHistoryProjectionQuery.ClientNameHistoryProjectionParameter,
         ClientNameHistoryProjectionQuery.ClientNameHistoryProjectionQueryResponse> singleProjectionQueryTest = new();
     private Guid _branchId = Guid.Empty;
@@ -73,8 +73,8 @@ public class UnifiedProjectionsTest : MultiProjectionsAndQueriesTestBase<Custome
         branchListProjection = SetupMultiProjectionTest<AggregateListProjectionTestBase<Branch, CustomerDependency>>();
 
         singleProjectionListTestBase
-            = SetupMultiProjectionTest<SingleProjectionListTestBase<Client, ClientNameHistoryMultiProjection,
-                ClientNameHistoryMultiProjection.PayloadDefinition, CustomerDependency>>();
+            = SetupMultiProjectionTest<SingleProjectionListTestBase<Client, ClientNameHistorySingleProjection,
+                ClientNameHistorySingleProjection.PayloadDefinition, CustomerDependency>>();
     }
     protected override void SetupDependency(IServiceCollection serviceCollection)
     {

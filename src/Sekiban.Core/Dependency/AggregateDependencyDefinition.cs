@@ -53,9 +53,9 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         var singleProjectionBase = singleProjectionType.BaseType;
         if (singleProjectionBase is null ||
             !singleProjectionBase.IsGenericType ||
-            singleProjectionBase.GetGenericTypeDefinition() != typeof(MultiProjectionBase<,,>))
+            singleProjectionBase.GetGenericTypeDefinition() != typeof(SingleProjectionBase<,,>))
         {
-            throw new ArgumentException($"Single projection {singleProjectionType.Name} must inherit from MultiProjectionBase<,,>");
+            throw new ArgumentException($"Single projection {singleProjectionType.Name} must inherit from SingleProjectionBase<,,>");
         }
         if (singleProjectionBase.GenericTypeArguments[0] != AggregateType)
         {

@@ -1,7 +1,7 @@
 using Customer.Domain.Aggregates.Branches.Events;
 using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
 using Customer.Domain.Shared;
-using Sekiban.Core.Query.MultProjections;
+using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Testing.Projection;
 using Sekiban.Testing.Queries;
 using System;

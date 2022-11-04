@@ -4,7 +4,7 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
-using Sekiban.Core.Query.MultProjections;
+using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleProjections;
@@ -91,7 +91,7 @@ public abstract class MultiProjectionsAndQueriesTestBase<TDependencyDefinition> 
         Action<SingleProjectionListTestBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TDependencyDefinition>>
             testAction)
         where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : MultiProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
         where TSingleProjectionPayload : ISingleProjectionPayload
     {
         var test =
@@ -159,7 +159,7 @@ public abstract class MultiProjectionsAndQueriesTestBase<TDependencyDefinition> 
         Action<SingleProjectionQueryTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TQuery, TQueryParameter,
             TQueryResponse>> queryTestAction)
         where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : MultiProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
         where TSingleProjectionPayload : ISingleProjectionPayload
         where TQuery : ISingleProjectionQuery<TAggregatePayload, TSingleProjection,
             TSingleProjectionPayload, TQueryParameter, TQueryResponse>
@@ -176,7 +176,7 @@ public abstract class MultiProjectionsAndQueriesTestBase<TDependencyDefinition> 
         Action<SingleProjectionListQueryTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TQuery, TQueryParameter,
             TQueryResponse>> queryTestAction)
         where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : MultiProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
         where TSingleProjectionPayload : ISingleProjectionPayload
         where TQuery : ISingleProjectionListQuery<TAggregatePayload, TSingleProjection,
             TSingleProjectionPayload, TQueryParameter, TQueryResponse>

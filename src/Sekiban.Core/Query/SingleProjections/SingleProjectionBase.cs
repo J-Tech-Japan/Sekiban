@@ -3,9 +3,9 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 namespace Sekiban.Core.Query.SingleProjections;
 
-public abstract class MultiProjectionBase<TAggregatePayload, TProjection, TProjectionPayload> : ISingleProjection,
+public abstract class SingleProjectionBase<TAggregatePayload, TProjection, TProjectionPayload> : ISingleProjection,
     ISingleProjectionStateConvertible<SingleProjectionState<TProjectionPayload>>, IAggregateCommon,
-    ISingleProjector<TProjection> where TProjection : MultiProjectionBase<TAggregatePayload, TProjection, TProjectionPayload>, new()
+    ISingleProjector<TProjection> where TProjection : SingleProjectionBase<TAggregatePayload, TProjection, TProjectionPayload>, new()
     where TProjectionPayload : ISingleProjectionPayload
     where TAggregatePayload : IAggregatePayload, new()
 {

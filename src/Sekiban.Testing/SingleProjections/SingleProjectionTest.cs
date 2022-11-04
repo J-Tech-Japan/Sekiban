@@ -8,7 +8,7 @@ namespace Sekiban.Testing.SingleProjections;
 
 public class MultiProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> : AggregateTestBase
     where TAggregatePayload : IAggregatePayload, new()
-    where TProjection : MultiProjectionBase<TAggregatePayload, TProjection, TSingleProjectionPayload>, new()
+    where TProjection : SingleProjectionBase<TAggregatePayload, TProjection, TSingleProjectionPayload>, new()
     where TSingleProjectionPayload : ISingleProjectionPayload
 {
     public MultiProjectionTest(IServiceProvider serviceProvider) : base(serviceProvider)

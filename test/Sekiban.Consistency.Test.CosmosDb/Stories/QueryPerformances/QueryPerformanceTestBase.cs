@@ -6,7 +6,7 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Document;
-using Sekiban.Core.Query.MultProjections;
+using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Infrastructure.Cosmos;
 using System.Linq;

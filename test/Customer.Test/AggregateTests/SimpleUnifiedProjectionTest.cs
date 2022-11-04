@@ -54,7 +54,7 @@ public class SimpleUnifiedProjectionTest : MultiProjectionsAndQueriesTestBase<Cu
                 test => test.WhenProjection()
                     .ThenGetPayload(payload => Assert.Empty(payload.List))
             )
-            .GetSingleProjectionListProjectionTest<Client, ClientNameHistoryMultiProjection, ClientNameHistoryMultiProjection.PayloadDefinition>(
+            .GetSingleProjectionListProjectionTest<Client, ClientNameHistorySingleProjection, ClientNameHistorySingleProjection.PayloadDefinition>(
                 test => test.WhenProjection()
                     .ThenGetPayload(payload => Assert.Empty(payload.List))
             );

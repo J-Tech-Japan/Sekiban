@@ -1,4 +1,4 @@
-using Sekiban.Core.Query.MultProjections;
+using Sekiban.Core.Query.MultiProjections;
 namespace Sekiban.Core.Query.QueryModel;
 
 public interface
