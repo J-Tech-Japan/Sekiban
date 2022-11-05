@@ -127,7 +127,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
     }
     public AggregateTestBase<TAggregatePayload, TDependencyDefinition> GetAggregateTest<TAggregatePayload>()
         where TAggregatePayload : IAggregatePayload, new() => new(_serviceProvider);
-    public UnifiedTestBase<TDependencyDefinition> ThenGetAggregateTestFoeExistingAggregate<TAggregatePayload>(
+    public UnifiedTestBase<TDependencyDefinition> ThenGetAggregateTest<TAggregatePayload>(
         Guid aggregateId,
         Action<AggregateTestBase<TAggregatePayload, TDependencyDefinition>> aggregateTestAction) where TAggregatePayload : IAggregatePayload, new()
     {
@@ -135,7 +135,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         aggregateTestAction(test);
         return this;
     }
-    public AggregateTestBase<TAggregatePayload, TDependencyDefinition> GetAggregateTestFoeExistingAggregate<TAggregatePayload>(Guid aggregateId)
+    public AggregateTestBase<TAggregatePayload, TDependencyDefinition> GetAggregateTest<TAggregatePayload>(Guid aggregateId)
         where TAggregatePayload : IAggregatePayload, new() => new(_serviceProvider, aggregateId);
     public UnifiedTestBase<TDependencyDefinition> ThenGetMultiProjectionQueryTest<TProjection, TProjectionPayload, TQuery,
         TQueryParameter, TQueryResponse>(
