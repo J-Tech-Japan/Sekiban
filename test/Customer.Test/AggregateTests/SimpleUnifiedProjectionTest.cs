@@ -120,7 +120,7 @@ public class SimpleUnifiedProjectionTest : UnifiedTestBase<CustomerDependency>
     {
         RunCreateCommand(new CreateBranch(branchName), branchId);
         var clientId = RunCreateCommand(new CreateClient(branchId, "test", "test@example.com"));
-        ThenGetAggregateTestFoeExistingAggregate<Client>(
+        ThenGetAggregateTest<Client>(
             clientId,
             test => test.WhenChange(new ChangeClientName(clientId, "Test2") { ReferenceVersion = test.GetCurrentVersion() })
                 .ThenNotThrowsAnException()
@@ -139,12 +139,12 @@ public class SimpleUnifiedProjectionTest : UnifiedTestBase<CustomerDependency>
                     .ThenNotThrowsAnException();
                 clientId = test.GetAggregateId();
             });
-        ThenGetAggregateTestFoeExistingAggregate<Client>(
+        ThenGetAggregateTest<Client>(
             clientId,
             test => test.WhenChange(new ChangeClientName(clientId, "Test2") { ReferenceVersion = test.GetCurrentVersion() })
                 .ThenNotThrowsAnException()
         );
-        var clientTest = GetAggregateTestFoeExistingAggregate<Client>(clientId);
+        var clientTest = GetAggregateTest<Client>(clientId);
         clientTest.WhenChange(new ChangeClientName(clientId, "Test3") { ReferenceVersion = clientTest.GetCurrentVersion() });
     }
     [Fact]
@@ -156,7 +156,7 @@ public class SimpleUnifiedProjectionTest : UnifiedTestBase<CustomerDependency>
             .ThenNotThrowsAnException();
         var clientId = test.GetAggregateId();
         // Create Loyalty Point Runs automatically with event Created Client
-        ThenGetAggregateTestFoeExistingAggregate<LoyaltyPoint>(
+        ThenGetAggregateTest<LoyaltyPoint>(
             clientId,
             test => test.WhenChange(
                     new AddLoyaltyPoint(clientId, new DateTime(2022, 11, 1), LoyaltyPointReceiveTypeKeys.CreditcardUsage, 100, string.Empty)

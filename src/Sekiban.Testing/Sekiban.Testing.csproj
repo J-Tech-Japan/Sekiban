@@ -5,13 +5,13 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>JJ_Sekiban.Testing</PackageId>
-        <Version>0.9.16</Version>
+        <Version>0.9.17</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Testing</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.9.16</PackageVersion>
-        <Description>Action系は ThenGet に統一、Getをreturnで追加</Description>
+        <PackageVersion>0.9.17</PackageVersion>
+        <Description>ThenGetAggregateTestFoeExistingAggregate -> ThenGetAggregateTest</Description>
         <AssemblyName>Sekiban.Testing</AssemblyName>
         <RootNamespace>Sekiban.Testing</RootNamespace>
     </PropertyGroup>
