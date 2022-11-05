@@ -10,6 +10,7 @@ using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
 using Customer.Domain.Shared;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Query.QueryModel;
+using Sekiban.Testing;
 using Sekiban.Testing.Projection;
 using Sekiban.Testing.Queries;
 using System;
