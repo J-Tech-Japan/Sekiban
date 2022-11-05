@@ -9,9 +9,10 @@ using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Testing.Command;
+using Sekiban.Testing.Projection;
 using Sekiban.Testing.Queries;
 using Sekiban.Testing.SingleProjections;
-namespace Sekiban.Testing.Projection;
+namespace Sekiban.Testing;
 
 public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDefinition : IDependencyDefinition, new()
 {
@@ -70,7 +71,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> GetMultiProjectionTest<TProjection, TProjectionPayload>(
+    public UnifiedTestBase<TDependencyDefinition> ThenGetMultiProjectionTest<TProjection, TProjectionPayload>(
         Action<MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition>> testAction)
         where TProjection : MultiProjectionBase<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayload, new()
@@ -79,7 +80,11 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         testAction(test);
         return this;
     }
-    public UnifiedTestBase<TDependencyDefinition> GetAggregateListProjectionTest<TAggregatePayload>(
+    public MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition> GetMultiProjectionTest<TProjection, TProjectionPayload>()
+        where TProjection : MultiProjectionBase<TProjectionPayload>, new()
+        where TProjectionPayload : IMultiProjectionPayload, new() =>
+        SetupMultiProjectionTest<MultiProjectionTestBase<TProjection, TProjectionPayload, TDependencyDefinition>>();
+    public UnifiedTestBase<TDependencyDefinition> ThenGetAggregateListProjectionTest<TAggregatePayload>(
         Action<AggregateListProjectionTestBase<TAggregatePayload, TDependencyDefinition>> testAction)
         where TAggregatePayload : IAggregatePayload, new()
     {
@@ -87,7 +92,10 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         testAction(test);
         return this;
     }
-    public UnifiedTestBase<TDependencyDefinition> GetSingleProjectionListProjectionTest<TAggregatePayload, TSingleProjection,
+    public AggregateListProjectionTestBase<TAggregatePayload, TDependencyDefinition> GetAggregateListProjectionTest<TAggregatePayload>()
+        where TAggregatePayload : IAggregatePayload, new() =>
+        SetupMultiProjectionTest<AggregateListProjectionTestBase<TAggregatePayload, TDependencyDefinition>>();
+    public UnifiedTestBase<TDependencyDefinition> ThenGetSingleProjectionListProjectionTest<TAggregatePayload, TSingleProjection,
         TSingleProjectionPayload>(
         Action<SingleProjectionListTestBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TDependencyDefinition>>
             testAction)
@@ -101,15 +109,25 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         testAction(test);
         return this;
     }
+    public SingleProjectionListTestBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TDependencyDefinition>
+        GetSingleProjectionListProjectionTest<TAggregatePayload, TSingleProjection,
+            TSingleProjectionPayload>()
+        where TAggregatePayload : IAggregatePayload, new()
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
+        where TSingleProjectionPayload : ISingleProjectionPayload =>
+        SetupMultiProjectionTest<SingleProjectionListTestBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload,
+            TDependencyDefinition>>();
 
-    public UnifiedTestBase<TDependencyDefinition> GetAggregateTest<TAggregatePayload>(
+    public UnifiedTestBase<TDependencyDefinition> ThenGetAggregateTest<TAggregatePayload>(
         Action<AggregateTestBase<TAggregatePayload, TDependencyDefinition>> aggregateTestAction) where TAggregatePayload : IAggregatePayload, new()
     {
         var test = new AggregateTestBase<TAggregatePayload, TDependencyDefinition>(_serviceProvider);
         aggregateTestAction(test);
         return this;
     }
-    public UnifiedTestBase<TDependencyDefinition> GetAggregateTestFoeExistingAggregate<TAggregatePayload>(
+    public AggregateTestBase<TAggregatePayload, TDependencyDefinition> GetAggregateTest<TAggregatePayload>()
+        where TAggregatePayload : IAggregatePayload, new() => new(_serviceProvider);
+    public UnifiedTestBase<TDependencyDefinition> ThenGetAggregateTestFoeExistingAggregate<TAggregatePayload>(
         Guid aggregateId,
         Action<AggregateTestBase<TAggregatePayload, TDependencyDefinition>> aggregateTestAction) where TAggregatePayload : IAggregatePayload, new()
     {
@@ -117,7 +135,9 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         aggregateTestAction(test);
         return this;
     }
-    public UnifiedTestBase<TDependencyDefinition> GetMultiProjectionQueryTest<TProjection, TProjectionPayload, TQuery,
+    public AggregateTestBase<TAggregatePayload, TDependencyDefinition> GetAggregateTestFoeExistingAggregate<TAggregatePayload>(Guid aggregateId)
+        where TAggregatePayload : IAggregatePayload, new() => new(_serviceProvider, aggregateId);
+    public UnifiedTestBase<TDependencyDefinition> ThenGetMultiProjectionQueryTest<TProjection, TProjectionPayload, TQuery,
         TQueryParameter, TQueryResponse>(
         Action<MultiProjectionQueryTest<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>> queryTestAction)
         where TProjection : MultiProjectionBase<TProjectionPayload>, new()
@@ -130,7 +150,18 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         queryTestAction(queryTest);
         return this;
     }
-    public UnifiedTestBase<TDependencyDefinition> GetMultiProjectionListQueryTest<TProjection, TProjectionPayload, TQuery,
+    public MultiProjectionQueryTest<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse> GetMultiProjectionQueryTest<TProjection,
+        TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>() where TProjection : MultiProjectionBase<TProjectionPayload>, new()
+        where TProjectionPayload : IMultiProjectionPayload, new()
+        where TQueryParameter : IQueryParameter
+        where TQuery : IMultiProjectionQuery<TProjection, TProjectionPayload, TQueryParameter, TQueryResponse>, new()
+    {
+        var queryTest = new MultiProjectionQueryTest<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>();
+        GivenQueryTest(queryTest);
+        return queryTest;
+    }
+
+    public UnifiedTestBase<TDependencyDefinition> ThenGetMultiProjectionListQueryTest<TProjection, TProjectionPayload, TQuery,
         TQueryParameter, TQueryResponse>(
         Action<MultiProjectionListQueryTest<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>> queryTestAction)
         where TProjection : MultiProjectionBase<TProjectionPayload>, new()
@@ -143,9 +174,21 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         queryTestAction(queryTest);
         return this;
     }
+    public MultiProjectionListQueryTest<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse> GetMultiProjectionListQueryTest<
+        TProjection, TProjectionPayload, TQuery,
+        TQueryParameter, TQueryResponse>()
+        where TProjection : MultiProjectionBase<TProjectionPayload>, new()
+        where TProjectionPayload : IMultiProjectionPayload, new()
+        where TQueryParameter : IQueryParameter
+        where TQuery : IMultiProjectionListQuery<TProjection, TProjectionPayload, TQueryParameter, TQueryResponse>, new()
+    {
+        var queryTest = new MultiProjectionListQueryTest<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>();
+        GivenQueryTest(queryTest);
+        return queryTest;
+    }
 
 
-    public UnifiedTestBase<TDependencyDefinition> GetAggregateQueryTest<TAggregatePayload, TQuery, TQueryParameter,
+    public UnifiedTestBase<TDependencyDefinition> ThenGetAggregateQueryTest<TAggregatePayload, TQuery, TQueryParameter,
         TQueryResponse>(
         Action<AggregateQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>> queryTestAction)
         where TAggregatePayload : IAggregatePayload, new()
@@ -157,7 +200,17 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         queryTestAction(queryTest);
         return this;
     }
-    public UnifiedTestBase<TDependencyDefinition> GetAggregateListQueryTest<TAggregatePayload, TQuery, TQueryParameter,
+    public AggregateQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> GetAggregateQueryTest<TAggregatePayload, TQuery,
+        TQueryParameter, TQueryResponse>() where TAggregatePayload : IAggregatePayload, new()
+        where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter
+    {
+        var queryTest = new AggregateQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>();
+        GivenQueryTest(queryTest);
+        return queryTest;
+    }
+
+    public UnifiedTestBase<TDependencyDefinition> ThenGetAggregateListQueryTest<TAggregatePayload, TQuery, TQueryParameter,
         TQueryResponse>(
         Action<AggregateListQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>> queryTestAction)
         where TAggregatePayload : IAggregatePayload, new()
@@ -169,8 +222,18 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         queryTestAction(queryTest);
         return this;
     }
+    public AggregateListQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> GetAggregateListQueryTest<TAggregatePayload, TQuery,
+        TQueryParameter, TQueryResponse>() where TAggregatePayload : IAggregatePayload, new()
+        where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter
+    {
+        var queryTest = new AggregateListQueryTest<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>();
+        GivenQueryTest(queryTest);
+        return queryTest;
+    }
 
-    public UnifiedTestBase<TDependencyDefinition> GetSingleProjectionQueryTest<TAggregatePayload, TSingleProjection,
+
+    public UnifiedTestBase<TDependencyDefinition> ThenGetSingleProjectionQueryTest<TAggregatePayload, TSingleProjection,
         TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
         Action<SingleProjectionQueryTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TQuery, TQueryParameter,
             TQueryResponse>> queryTestAction)
@@ -187,7 +250,22 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         queryTestAction(queryTest);
         return this;
     }
-    public UnifiedTestBase<TDependencyDefinition> GetSingleProjectionListQueryTest<TAggregatePayload, TSingleProjection,
+    public SingleProjectionQueryTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TQuery, TQueryParameter,
+        TQueryResponse> GetSingleProjectionQueryTest<TAggregatePayload, TSingleProjection,
+        TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>()
+        where TAggregatePayload : IAggregatePayload, new()
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
+        where TSingleProjectionPayload : ISingleProjectionPayload
+        where TQuery : ISingleProjectionQuery<TAggregatePayload, TSingleProjection,
+            TSingleProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter
+    {
+        var queryTest = new SingleProjectionQueryTest<TAggregatePayload, TSingleProjection,
+            TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>();
+        GivenQueryTest(queryTest);
+        return queryTest;
+    }
+    public UnifiedTestBase<TDependencyDefinition> ThenGetSingleProjectionListQueryTest<TAggregatePayload, TSingleProjection,
         TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
         Action<SingleProjectionListQueryTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TQuery, TQueryParameter,
             TQueryResponse>> queryTestAction)
@@ -204,8 +282,21 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         queryTestAction(queryTest);
         return this;
     }
-
-
+    public SingleProjectionListQueryTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload, TQuery, TQueryParameter,
+        TQueryResponse> GetSingleProjectionListQueryTest<TAggregatePayload, TSingleProjection,
+        TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>()
+        where TAggregatePayload : IAggregatePayload, new()
+        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
+        where TSingleProjectionPayload : ISingleProjectionPayload
+        where TQuery : ISingleProjectionListQuery<TAggregatePayload, TSingleProjection,
+            TSingleProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter
+    {
+        var queryTest = new SingleProjectionListQueryTest<TAggregatePayload, TSingleProjection,
+            TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>();
+        GivenQueryTest(queryTest);
+        return queryTest;
+    }
     public AggregateState<TEnvironmentAggregatePayload> GetAggregateState<TEnvironmentAggregatePayload>(
         Guid aggregateId)
         where TEnvironmentAggregatePayload : IAggregatePayload, new()
