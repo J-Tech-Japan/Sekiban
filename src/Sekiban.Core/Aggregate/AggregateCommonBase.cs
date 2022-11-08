@@ -23,7 +23,11 @@ public abstract class AggregateCommonBase : IAggregate
         if (action is null) { return; }
         if (ev.IsAggregateInitialEvent == false && Version == 0)
         {
-            throw new SekibanInvalidEventException();
+            throw new SekibanFirstEventShouldBeCreateEventException(ev.GetPayload().GetType());
+        }
+        if (ev.IsAggregateInitialEvent && Version > 0)
+        {
+            throw new SekibanCreateEventCanOnlyUseInFirstEvent(ev.GetPayload().GetType(), Version);
         }
         if (ev.Id == LastEventId) { return; }
         action();

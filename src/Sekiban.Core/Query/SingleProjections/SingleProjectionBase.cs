@@ -21,7 +21,11 @@ public abstract class SingleProjectionBase<TAggregatePayload, TProjection, TProj
         // IsAggregateInitialEvent == false は V0以外
         if (ev.IsAggregateInitialEvent != (Version == 0))
         {
-            throw new SekibanInvalidEventException();
+            throw new SekibanFirstEventShouldBeCreateEventException(ev.GetPayload().GetType());
+        }
+        if (ev.IsAggregateInitialEvent && Version > 0)
+        {
+            throw new SekibanCreateEventCanOnlyUseInFirstEvent(ev.GetPayload().GetType(), Version);
         }
         if (ev.Id == LastEventId) { return; }
         var action = GetApplyEventAction(ev, ev.GetPayload());
