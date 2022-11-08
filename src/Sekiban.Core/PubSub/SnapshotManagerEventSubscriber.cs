@@ -13,6 +13,8 @@ namespace Sekiban.Core.PubSub;
 
 public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEvent> where TEvent : IEvent
 {
+    private static readonly SemaphoreSlim _semaphoreInMemory = new(1, 1);
+
     private readonly IAggregateSettings _aggregateSettings;
     private readonly IDocumentPersistentRepository _documentPersistentRepository;
     private readonly IDocumentWriter _documentWriter;
@@ -47,12 +49,15 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
 
         if (aggregateContainerGroup != AggregateContainerGroup.InMemoryContainer)
         {
+            await _semaphoreInMemory.WaitAsync();
+
             var aggregate = await singleProjectionService.GetAggregateAsync<SnapshotManager>(SnapshotManager.SharedId);
             if (aggregate is null)
             {
                 await commandExecutor.ExecCreateCommandAsync<SnapshotManager, CreateSnapshotManager>(
                     new CreateSnapshotManager());
             }
+            _semaphoreInMemory.Release();
 
             if (_aggregateSettings.ShouldTakeSnapshotForType(aggregateType.Aggregate))
             {
