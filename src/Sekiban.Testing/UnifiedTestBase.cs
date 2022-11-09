@@ -18,6 +18,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
 {
     private readonly TestCommandExecutor _commandExecutor;
     protected readonly IServiceProvider _serviceProvider;
+    private readonly TestEventHandler _eventHandler;
 
     // ReSharper disable once PublicConstructorInAbstractClass
     public UnifiedTestBase()
@@ -29,6 +30,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         services.AddSekibanCoreForAggregateTestWithDependency(new TDependencyDefinition());
         _serviceProvider = services.BuildServiceProvider();
         _commandExecutor = new TestCommandExecutor(_serviceProvider);
+        _eventHandler = new TestEventHandler(_serviceProvider);
     }
     protected virtual void SetupDependency(IServiceCollection serviceCollection) { }
 
@@ -318,4 +320,66 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name);
     }
     public IReadOnlyCollection<IEvent> GetLatestEvents() => _commandExecutor.LatestEvents;
+    
+       #region GivenEvents
+    public UnifiedTestBase<TDependencyDefinition> GivenEvents(IEnumerable<IEvent> events)
+    {
+        _eventHandler.GivenEvents(events);
+        return this;
+    }
+    public UnifiedTestBase<TDependencyDefinition> GivenEventsWithPublish(IEnumerable<IEvent> events)
+    {
+        _eventHandler.GivenEventsWithPublish(events);
+        return this;
+    }
+    public UnifiedTestBase<TDependencyDefinition> GivenEvents(params IEvent[] events) =>
+        GivenEvents(events.AsEnumerable());
+    public UnifiedTestBase<TDependencyDefinition> GivenEventsWithPublish(params IEvent[] events) =>
+        GivenEventsWithPublish(events.AsEnumerable());
+    public UnifiedTestBase<TDependencyDefinition> GivenEventsFromJson(string jsonEvents)
+    {
+        _eventHandler.GivenEventsFromJson(jsonEvents);
+        return this;
+    }
+    public UnifiedTestBase<TDependencyDefinition> GivenEventsFromJsonWithPublish(string jsonEvents)
+    {
+        _eventHandler.GivenEventsFromJsonWithPublish(jsonEvents);
+        return this;
+    }
+    public UnifiedTestBase<TDependencyDefinition> GivenEvents(
+        params (Guid aggregateId, Type aggregateType, IEventPayload payload)[] eventTouples)
+    {
+        _eventHandler.GivenEvents(eventTouples);
+        return this;
+    }
+    public UnifiedTestBase<TDependencyDefinition> GivenEventsWithPublish(
+        params (Guid aggregateId, Type aggregateType, IEventPayload payload)[] eventTouples)
+    {
+        _eventHandler.GivenEventsWithPublish(eventTouples);
+        return this;
+    }
+    public UnifiedTestBase<TDependencyDefinition> GivenEvents(
+        params (Guid aggregateId, IEventPayload payload)[] eventTouples)
+    {
+        _eventHandler.GivenEvents(eventTouples);
+        return this;
+    }
+    public UnifiedTestBase<TDependencyDefinition> GivenEventsWithPublish(
+        params (Guid aggregateId, IEventPayload payload)[] eventTouples)
+    {
+        _eventHandler.GivenEventsWithPublish(eventTouples);
+        return this;
+    }
+
+    public UnifiedTestBase<TDependencyDefinition> GivenEventsFromFile(string filename)
+    {
+        _eventHandler.GivenEventsFromFile(filename);
+        return this;
+    }
+    public UnifiedTestBase<TDependencyDefinition> GivenEventsFromFileWithPublish(string filename)
+    {
+        _eventHandler.GivenEventsFromFileWithPublish(filename);
+        return this;
+    }
+    #endregion
 }
