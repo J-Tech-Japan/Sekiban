@@ -18,7 +18,16 @@ public class TestCommandExecutor
 
     public (IEnumerable<IEvent>, Guid) ExecuteCreateCommand<TAggregatePayload>(
         ICreateCommand<TAggregatePayload> command,
-        Guid? injectingAggregateId = null) where TAggregatePayload : IAggregatePayload, new()
+        Guid? injectingAggregateId = null) where TAggregatePayload : IAggregatePayload, new() =>
+        ExecuteCreateCommand(command, injectingAggregateId, false);
+    public (IEnumerable<IEvent>, Guid) ExecuteCreateCommandWithPublish<TAggregatePayload>(
+        ICreateCommand<TAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TAggregatePayload : IAggregatePayload, new() =>
+        ExecuteCreateCommand(command, injectingAggregateId, true);
+    private (IEnumerable<IEvent>, Guid) ExecuteCreateCommand<TAggregatePayload>(
+        ICreateCommand<TAggregatePayload> command,
+        Guid? injectingAggregateId,
+        bool withPublish) where TAggregatePayload : IAggregatePayload, new()
     {
         var validationResults = command.TryValidateProperties().ToList();
         if (validationResults.Any())
@@ -57,7 +66,14 @@ public class TestCommandExecutor
         if (documentWriter is null) { throw new Exception("Failed to get document writer"); }
         foreach (var e in latestEvents)
         {
-            documentWriter.SaveAsync(e, typeof(TAggregatePayload)).Wait();
+            if (withPublish)
+            {
+                documentWriter.SaveAndPublishEvent(e, typeof(TAggregatePayload)).Wait();
+            }
+            else
+            {
+                documentWriter.SaveAsync(e, typeof(TAggregatePayload)).Wait();
+            }
         }
         LatestEvents = latestEvents;
         return (latestEvents, aggregateId);
@@ -77,8 +93,12 @@ public class TestCommandExecutor
         var aggregate = aggregateTask.Result;
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TAggregatePayload).Name);
     }
-
     public IEnumerable<IEvent> ExecuteChangeCommand<TAggregatePayload>(ChangeCommandBase<TAggregatePayload> command)
+        where TAggregatePayload : IAggregatePayload, new() => ExecuteChangeCommand(command, false);
+    public IEnumerable<IEvent> ExecuteChangeCommandWithPublish<TAggregatePayload>(ChangeCommandBase<TAggregatePayload> command)
+        where TAggregatePayload : IAggregatePayload, new() => ExecuteChangeCommand(command, true);
+
+    private IEnumerable<IEvent> ExecuteChangeCommand<TAggregatePayload>(ChangeCommandBase<TAggregatePayload> command, bool withPublish)
         where TAggregatePayload : IAggregatePayload, new()
     {
         var validationResults = command.TryValidateProperties().ToList();
@@ -138,7 +158,14 @@ public class TestCommandExecutor
         if (documentWriter is null) { throw new Exception("Failed to get document writer"); }
         foreach (var e in LatestEvents)
         {
-            documentWriter.SaveAsync(e, typeof(TAggregatePayload)).Wait();
+            if (withPublish)
+            {
+                documentWriter.SaveAndPublishEvent(e, typeof(TAggregatePayload)).Wait();
+            }
+            else
+            {
+                documentWriter.SaveAsync(e, typeof(TAggregatePayload)).Wait();
+            }
         }
         return LatestEvents;
     }

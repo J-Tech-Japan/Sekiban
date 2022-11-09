@@ -51,6 +51,17 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
     {
         var events = _commandExecutor.ExecuteChangeCommand(command);
     }
+    public Guid RunCreateCommandWithPublish<TAggregatePayload>(ICreateCommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
+        where TAggregatePayload : IAggregatePayload, new()
+    {
+        var (events, aggregateId) = _commandExecutor.ExecuteCreateCommandWithPublish(command, injectingAggregateId);
+        return aggregateId;
+    }
+    public void RunChangeCommandWithPublish<TAggregatePayload>(ChangeCommandBase<TAggregatePayload> command)
+        where TAggregatePayload : IAggregatePayload, new()
+    {
+        var events = _commandExecutor.ExecuteChangeCommandWithPublish(command);
+    }
     public UnifiedTestBase<TDependencyDefinition> GivenCommandExecutorAction(Action<TestCommandExecutor> action)
     {
         action(_commandExecutor);

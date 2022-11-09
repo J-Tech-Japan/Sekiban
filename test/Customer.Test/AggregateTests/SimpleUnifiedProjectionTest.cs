@@ -152,7 +152,7 @@ public class SimpleUnifiedProjectionTest : UnifiedTestBase<CustomerDependency>
     {
         RunCreateCommand(new CreateBranch(branchName), branchId);
         var test = GetAggregateTest<Client>();
-        test.WhenCreate(new CreateClient(branchId, "test", "test@example.com"))
+        test.WhenCreateWithPublish(new CreateClient(branchId, "test", "test@example.com"))
             .ThenNotThrowsAnException();
         var clientId = test.GetAggregateId();
         // Create Loyalty Point Runs automatically with event Created Client
