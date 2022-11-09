@@ -14,22 +14,31 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvent(IEvent ev);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvents(IEnumerable<IEvent> events);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFile(string filename);
-    public AggregateState<TEnvironmentAggregatePayload>
-        GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
-        where TEnvironmentAggregatePayload : IAggregatePayload, new();
     public Guid RunEnvironmentCreateCommand<TEnvironmentAggregatePayload>(
         ICreateCommand<TEnvironmentAggregatePayload> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayload, new();
     public void RunEnvironmentChangeCommand<TEnvironmentAggregatePayload>(ChangeCommandBase<TEnvironmentAggregatePayload> command)
         where TEnvironmentAggregatePayload : IAggregatePayload, new();
+
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventWithPublish(IEvent ev);
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsWithPublish(IEnumerable<IEvent> events);
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFileWithPublish(string filename);
+    public Guid RunEnvironmentCreateCommandWithPublish<TEnvironmentAggregatePayload>(
+        ICreateCommand<TEnvironmentAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayload, new();
+    public void RunEnvironmentChangeCommandWithPublish<TEnvironmentAggregatePayload>(ChangeCommandBase<TEnvironmentAggregatePayload> command)
+        where TEnvironmentAggregatePayload : IAggregatePayload, new();
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentCommandExecutorAction(Action<TestCommandExecutor> action);
-    public IReadOnlyCollection<IEvent> GetLatestEnvironmentEvents();
     #endregion
 
     #region When
     public IAggregateTestHelper<TAggregatePayload> WhenCreate<C>(C createCommand) where C : ICreateCommand<TAggregatePayload>;
     public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(C changeCommand) where C : ChangeCommandBase<TAggregatePayload>;
     public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(Func<AggregateState<TAggregatePayload>, C> commandFunc)
+        where C : ChangeCommandBase<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> WhenCreateWithPublish<C>(C createCommand) where C : ICreateCommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> WhenChangeWithPublish<C>(C changeCommand) where C : ChangeCommandBase<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> WhenChangeWithPublish<C>(Func<AggregateState<TAggregatePayload>, C> commandFunc)
         where C : ChangeCommandBase<TAggregatePayload>;
     #endregion
 
@@ -68,5 +77,9 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public int GetCurrentVersion();
     public AggregateState<TAggregatePayload> GetAggregateState();
     public Aggregate<TAggregatePayload> GetAggregate();
+    public AggregateState<TEnvironmentAggregatePayload>
+        GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
+        where TEnvironmentAggregatePayload : IAggregatePayload, new();
+    public IReadOnlyCollection<IEvent> GetLatestEnvironmentEvents();
     #endregion
 }
