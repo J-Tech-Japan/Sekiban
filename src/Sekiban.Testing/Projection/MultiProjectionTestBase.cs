@@ -33,13 +33,13 @@ public class
         services.AddSekibanCoreForAggregateTestWithDependency(new TDependencyDefinition());
         _serviceProvider = services.BuildServiceProvider();
         _commandExecutor = new TestCommandExecutor(_serviceProvider);
-        _eventHandler = _serviceProvider.GetService<TestEventHandler>() ?? throw new Exception("Can not get TestEventHandler");
+        _eventHandler = new TestEventHandler(_serviceProvider);
     }
     public MultiProjectionTestBase(IServiceProvider serviceProvider)
     {
         _serviceProvider = serviceProvider;
         _commandExecutor = new TestCommandExecutor(_serviceProvider);
-        _eventHandler = _serviceProvider.GetService<TestEventHandler>() ?? throw new Exception("Can not get TestEventHandler");
+        _eventHandler = new TestEventHandler(_serviceProvider);
     }
 
     public MultiProjectionState<TProjectionPayload> State { get; protected set; }
