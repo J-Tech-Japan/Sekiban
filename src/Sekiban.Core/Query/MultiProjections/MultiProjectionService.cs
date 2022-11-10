@@ -41,8 +41,8 @@ public class MultiProjectionService : IMultiProjectionService
         GetSingleProjectionListObject<TSingleProjectionPayload>()
         where TSingleProjectionPayload : ISingleProjectionPayload, new() => multiProjection
         .GetMultiProjectionAsync<
-            SingleProjectionListProjector<SingleProjectionBase<TSingleProjectionPayload>, SingleProjectionState<TSingleProjectionPayload>,
-                SingleProjectionBase<TSingleProjectionPayload>>,
+            SingleProjectionListProjector<SingleProjection<TSingleProjectionPayload>, SingleProjectionState<TSingleProjectionPayload>,
+                SingleProjection<TSingleProjectionPayload>>,
             SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>();
     public async Task<List<SingleProjectionState<TSingleProjectionPayload>>>
         GetSingleProjectionList<TSingleProjectionPayload>(

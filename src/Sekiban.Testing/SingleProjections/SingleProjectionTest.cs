@@ -11,7 +11,7 @@ public class SingleProjectionTest<TSingleProjectionPayload> : SingleProjectionTe
     public SingleProjectionTest(IServiceProvider serviceProvider) : base(serviceProvider)
     {
     }
-    public SingleProjectionBase<TSingleProjectionPayload> Projection { get; } = new();
+    public SingleProjection<TSingleProjectionPayload> Projection { get; } = new();
 
     public SingleProjectionState<TSingleProjectionPayload> GetProjectionState()
     {

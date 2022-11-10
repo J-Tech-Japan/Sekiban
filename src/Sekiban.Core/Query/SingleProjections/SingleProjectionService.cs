@@ -54,8 +54,8 @@ public class SingleProjectionService : ISingleProjectionService
         where TSingleProjectionPayload : ISingleProjectionPayload, new()
     {
         var aggregate = await _singleProjection
-            .GetAggregateAsync<SingleProjectionBase<TSingleProjectionPayload>, SingleProjectionState<TSingleProjectionPayload>,
-                SingleProjectionBase<TSingleProjectionPayload>>(aggregateId, toVersion);
+            .GetAggregateAsync<SingleProjection<TSingleProjectionPayload>, SingleProjectionState<TSingleProjectionPayload>,
+                SingleProjection<TSingleProjectionPayload>>(aggregateId, toVersion);
         return aggregate?.ToState();
     }
     public async Task<Aggregate<TAggregatePayload>?> GetAggregateAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)

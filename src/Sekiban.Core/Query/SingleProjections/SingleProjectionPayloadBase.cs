@@ -5,7 +5,7 @@ namespace Sekiban.Core.Query.SingleProjections;
 public abstract record
     SingleProjectionPayloadBase<TAggregatePayload, TSingleProjectionPayload> : ISingleProjectionEventApplicable<TSingleProjectionPayload>
     where TAggregatePayload : IAggregatePayload
-    where TSingleProjectionPayload : ISingleProjectionPayload
+    where TSingleProjectionPayload : ISingleProjectionPayload, new()
 {
     public abstract Func<TSingleProjectionPayload, TSingleProjectionPayload>? GetApplyEventFunc(IEvent ev, IEventPayload eventPayload);
 }

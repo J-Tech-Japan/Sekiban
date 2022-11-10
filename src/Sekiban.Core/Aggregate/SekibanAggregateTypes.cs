@@ -29,7 +29,7 @@ public class SekibanAggregateTypes
             {
                 var baseType = type.BaseType;
                 if (baseType is null) { continue; }
-                var singleProjectionBase = typeof(SingleProjectionBase<>);
+                var singleProjectionBase = typeof(SingleProjection<>);
                 var singleProjection = singleProjectionBase.MakeGenericType(type);
                 var original = baseType.GenericTypeArguments[0];
                 _registeredCustomProjectorTypes.Add(new SingleProjectionAggregateType(original, singleProjection, type));

@@ -3,9 +3,9 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 namespace Sekiban.Core.Query.SingleProjections;
 
-public class SingleProjectionBase<TProjectionPayload> : ISingleProjection,
+public class SingleProjection<TProjectionPayload> : ISingleProjection,
     ISingleProjectionStateConvertible<SingleProjectionState<TProjectionPayload>>, IAggregateCommon,
-    ISingleProjector<SingleProjectionBase<TProjectionPayload>>
+    ISingleProjector<SingleProjection<TProjectionPayload>>
     where TProjectionPayload : ISingleProjectionPayload, new()
 {
     public TProjectionPayload Payload { get; set; } = new();
@@ -51,7 +51,7 @@ public class SingleProjectionBase<TProjectionPayload> : ISingleProjection,
         LastSortableUniqueId,
         AppliedSnapshotVersion,
         Version);
-    public SingleProjectionBase<TProjectionPayload> CreateInitialAggregate(Guid aggregateId) => new()
+    public SingleProjection<TProjectionPayload> CreateInitialAggregate(Guid aggregateId) => new()
         { AggregateId = aggregateId };
 
     public Type OriginalAggregateType()
