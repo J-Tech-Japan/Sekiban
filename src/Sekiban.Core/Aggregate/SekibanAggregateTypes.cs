@@ -22,18 +22,17 @@ public class SekibanAggregateTypes
                 var p = baseProjector.MakeGenericType(type);
                 _registeredTypes.Add(new DefaultAggregateType(type, p));
             }
-            var projectorBase = typeof(SingleProjectionBase<,,>);
+            var projectorBase = typeof(SingleProjectionPayloadBase<,>);
             var customProjectors = assembly.DefinedTypes.Where(
                 x => x.IsClass && x.BaseType?.Name == projectorBase.Name && x.BaseType?.Namespace == projectorBase.Namespace);
             foreach (var type in customProjectors)
             {
                 var baseType = type.BaseType;
                 if (baseType is null) { continue; }
-                var projectionPayloadType = baseType.GenericTypeArguments[2];
-                var instance = (dynamic?)Activator.CreateInstance(type);
-                var original = instance?.OriginalAggregateType();
-                if (original is null) { continue; }
-                _registeredCustomProjectorTypes.Add(new SingleProjectionAggregateType(original, type, projectionPayloadType));
+                var singleProjectionBase = typeof(SingleProjection<>);
+                var singleProjection = singleProjectionBase.MakeGenericType(type);
+                var original = baseType.GenericTypeArguments[0];
+                _registeredCustomProjectorTypes.Add(new SingleProjectionAggregateType(original, singleProjection, type));
             }
         }
         AggregateTypes = _registeredTypes.AsReadOnly();

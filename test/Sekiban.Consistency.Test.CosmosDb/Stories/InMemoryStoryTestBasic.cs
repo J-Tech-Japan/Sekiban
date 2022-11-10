@@ -68,8 +68,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         var loyaltyPointList = await multiProjectionService.GetAggregateList<LoyaltyPoint>();
         Assert.Empty(loyaltyPointList);
 
-        var clientNameList = await multiProjectionService
-            .GetSingleProjectionList<Client, ClientNameHistorySingleProjection, ClientNameHistorySingleProjection.PayloadDefinition>();
+        var clientNameList = await multiProjectionService.GetSingleProjectionList<ClientNameHistoryProjection>();
         Assert.Empty(clientNameList);
 
         // create client
@@ -85,15 +84,14 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         Assert.Single(clientList);
 
         // singleAggregateProjection
-        clientNameList = await multiProjectionService
-            .GetSingleProjectionList<Client, ClientNameHistorySingleProjection, ClientNameHistorySingleProjection.PayloadDefinition>();
+        clientNameList = await multiProjectionService.GetSingleProjectionList<ClientNameHistoryProjection>();
         Assert.Single(clientNameList);
         var tanakaProjection = clientNameList.First(m => m.AggregateId == clientId);
         Assert.Single(tanakaProjection.Payload.ClientNames);
         Assert.Equal(originalName, tanakaProjection.Payload.ClientNames.ToList().First().Name);
 
         var clientNameListFromMultiple = await multiProjectionService
-            .GetSingleProjectionList<Client, ClientNameHistorySingleProjection, ClientNameHistorySingleProjection.PayloadDefinition>();
+            .GetSingleProjectionList<ClientNameHistoryProjection>();
         Assert.Single(clientNameListFromMultiple);
         Assert.Equal(clientNameList.First().AggregateId, clientNameListFromMultiple.First().AggregateId);
 
@@ -112,7 +110,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
 
         // change name projection
         clientNameList = await multiProjectionService
-            .GetSingleProjectionList<Client, ClientNameHistorySingleProjection, ClientNameHistorySingleProjection.PayloadDefinition>();
+            .GetSingleProjectionList<ClientNameHistoryProjection>();
         Assert.Single(clientNameList);
         tanakaProjection = clientNameList.First(m => m.AggregateId == clientId);
         Assert.Equal(2, tanakaProjection.Payload.ClientNames.Count);
@@ -132,7 +130,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         // get change name state
         var changeNameProjection
             = await projectionService
-                .GetProjectionAsync<Client, ClientNameHistorySingleProjection, ClientNameHistorySingleProjection.PayloadDefinition>(
+                .GetProjectionAsync<ClientNameHistoryProjection>(
                     clientId!.Value);
         Assert.NotNull(changeNameProjection);
 

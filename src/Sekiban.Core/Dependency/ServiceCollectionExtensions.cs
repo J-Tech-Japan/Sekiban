@@ -170,7 +170,7 @@ public static class ServiceCollectionExtensions
         //             new List<AggregateSetting>
         //             {
         //                 new(nameof(Client), true, true),
-        //                 new(nameof(ClientNameHistorySingleProjection), true, false, 111),
+        //                 new(nameof(ClientNameHistorySingleProjectionPayload), true, false, 111),
         //                 new(nameof(RecentActivity), true, true, 82, 10)
         //             })
         //     });

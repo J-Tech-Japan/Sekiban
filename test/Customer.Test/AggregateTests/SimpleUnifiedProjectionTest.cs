@@ -58,8 +58,7 @@ public class SimpleUnifiedProjectionTest : UnifiedTestBase<CustomerDependency>
                 test => test.WhenProjection()
                     .ThenGetPayload(payload => Assert.Empty(payload.List))
             )
-            .ThenGetSingleProjectionListProjectionTest<Client, ClientNameHistorySingleProjection,
-                ClientNameHistorySingleProjection.PayloadDefinition>(
+            .ThenGetSingleProjectionListProjectionTest<ClientNameHistoryProjection>(
                 test => test.WhenProjection()
                     .ThenGetPayload(payload => Assert.Empty(payload.List))
             );
@@ -99,8 +98,7 @@ public class SimpleUnifiedProjectionTest : UnifiedTestBase<CustomerDependency>
             .WhenProjection()
             .ThenGetPayload(payload => Assert.Empty(payload.List));
 
-        GetSingleProjectionListProjectionTest<Client, ClientNameHistorySingleProjection,
-                ClientNameHistorySingleProjection.PayloadDefinition>()
+        GetSingleProjectionListProjectionTest<ClientNameHistoryProjection>()
             .WhenProjection()
             .ThenGetPayload(payload => Assert.Empty(payload.List));
     }

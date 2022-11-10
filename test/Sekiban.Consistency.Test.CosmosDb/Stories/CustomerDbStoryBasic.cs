@@ -84,7 +84,7 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Empty(loyaltyPointList);
 
         var clientNameList = await multiProjectionService
-            .GetSingleProjectionList<Client, ClientNameHistorySingleProjection, ClientNameHistorySingleProjection.PayloadDefinition>();
+            .GetSingleProjectionList<ClientNameHistoryProjection>();
         Assert.Empty(clientNameList);
 
         // create client
@@ -101,14 +101,14 @@ public class CustomerDbStoryBasic : TestBase
 
         // singleAggregateProjection
         clientNameList = await multiProjectionService
-            .GetSingleProjectionList<Client, ClientNameHistorySingleProjection, ClientNameHistorySingleProjection.PayloadDefinition>();
+            .GetSingleProjectionList<ClientNameHistoryProjection>();
         Assert.Single(clientNameList);
         var tanakaProjection = clientNameList.First(m => m.AggregateId == clientId);
         Assert.Single(tanakaProjection.Payload.ClientNames);
         Assert.Equal(originalName, tanakaProjection.Payload.ClientNames.First().Name);
 
         var clientNameListFromMultiple = await multiProjectionService
-            .GetSingleProjectionList<Client, ClientNameHistorySingleProjection, ClientNameHistorySingleProjection.PayloadDefinition>();
+            .GetSingleProjectionList<ClientNameHistoryProjection>();
         Assert.Single(clientNameListFromMultiple);
         Assert.Equal(clientNameList.First().AggregateId, clientNameListFromMultiple.First().AggregateId);
 
@@ -130,7 +130,7 @@ public class CustomerDbStoryBasic : TestBase
 
         // change name projection
         clientNameList = await multiProjectionService
-            .GetSingleProjectionList<Client, ClientNameHistorySingleProjection, ClientNameHistorySingleProjection.PayloadDefinition>();
+            .GetSingleProjectionList<ClientNameHistoryProjection>();
         Assert.Single(clientNameList);
         tanakaProjection = clientNameList.First(m => m.AggregateId == clientId);
         Assert.Equal(2, tanakaProjection.Payload.ClientNames.Count);
@@ -150,7 +150,7 @@ public class CustomerDbStoryBasic : TestBase
         // get change name state
         var changeNameProjection
             = await projectionService
-                .GetProjectionAsync<Client, ClientNameHistorySingleProjection, ClientNameHistorySingleProjection.PayloadDefinition>(
+                .GetProjectionAsync<ClientNameHistoryProjection>(
                     clientId);
         Assert.NotNull(changeNameProjection);
 

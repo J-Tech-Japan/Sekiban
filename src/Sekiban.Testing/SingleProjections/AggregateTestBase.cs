@@ -101,10 +101,6 @@ public class AggregateTestBase<TAggregatePayload, TDependencyDefinition> : IDisp
     public IAggregateTestHelper<TAggregatePayload> ThenStateIsFromFile(string stateFileName) => _helper.ThenStateIsFromFile(stateFileName);
     public IAggregateTestHelper<TAggregatePayload> ThenPayloadIsFromJson(string payloadJson) => _helper.ThenPayloadIsFromJson(payloadJson);
     public IAggregateTestHelper<TAggregatePayload> ThenPayloadIsFromFile(string payloadFileName) => _helper.ThenPayloadIsFromFile(payloadFileName);
-    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionTest<TSingleProjection, TSingleProjectionPayload>(
-        Action<SingleProjectionTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>> singleProjectionTestAction)
-        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
-        where TSingleProjectionPayload : ISingleProjectionPayload => _helper.ThenGetSingleProjectionTest(singleProjectionTestAction);
     public Guid GetAggregateId() => _helper.GetAggregateId();
     public int GetCurrentVersion() => _helper.GetCurrentVersion();
     public AggregateState<TAggregatePayload> GetAggregateState() => _helper.GetAggregateState();
@@ -119,6 +115,9 @@ public class AggregateTestBase<TAggregatePayload, TDependencyDefinition> : IDisp
     public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors(IEnumerable<SekibanValidationParameterError> validationParameterErrors) =>
         _helper.ThenHasValidationErrors(validationParameterErrors);
     public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors() => _helper.ThenHasValidationErrors();
+    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionTest<TSingleProjectionPayload>(
+        Action<SingleProjectionTest<TSingleProjectionPayload>> singleProjectionTestAction)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new() => _helper.ThenGetSingleProjectionTest(singleProjectionTestAction);
 
     public void Dispose() { }
 

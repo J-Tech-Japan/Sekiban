@@ -1,31 +1,28 @@
 using Microsoft.Extensions.DependencyInjection;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Shared;
 using System.Text.Json;
 using Xunit;
 namespace Sekiban.Testing.SingleProjections;
 
-public class SingleProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> : SingleProjectionTestCommon
-    where TAggregatePayload : IAggregatePayload, new()
-    where TProjection : SingleProjectionBase<TAggregatePayload, TProjection, TSingleProjectionPayload>, new()
-    where TSingleProjectionPayload : ISingleProjectionPayload
+public class SingleProjectionTest<TSingleProjectionPayload> : SingleProjectionTestCommon
+    where TSingleProjectionPayload : ISingleProjectionPayload, new()
 {
     public SingleProjectionTest(IServiceProvider serviceProvider) : base(serviceProvider)
     {
     }
-    public TProjection Projection { get; } = new();
+    public SingleProjection<TSingleProjectionPayload> Projection { get; } = new();
 
     public SingleProjectionState<TSingleProjectionPayload> GetProjectionState()
     {
         var singleProjectionService = _serviceProvider.GetService<ISingleProjectionService>();
         if (singleProjectionService is null) { throw new Exception("ISingleProjectionService not found"); }
-        var projectionResult = singleProjectionService.GetProjectionAsync<TAggregatePayload, TProjection, TSingleProjectionPayload>(AggregateId);
+        var projectionResult = singleProjectionService.GetProjectionAsync<TSingleProjectionPayload>(AggregateId);
         var projectionState = projectionResult.Result;
         if (projectionState is null) { throw new Exception("Projection not found"); }
         return projectionState;
     }
-    public SingleProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> ThenStateIs(
+    public SingleProjectionTest<TSingleProjectionPayload> ThenStateIs(
         SingleProjectionState<TSingleProjectionPayload> state)
     {
         var actual = GetProjectionState();
@@ -41,7 +38,7 @@ public class SingleProjectionTest<TAggregatePayload, TProjection, TSingleProject
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public SingleProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> ThenPayloadIs(TSingleProjectionPayload payload)
+    public SingleProjectionTest<TSingleProjectionPayload> ThenPayloadIs(TSingleProjectionPayload payload)
     {
         var actual = GetProjectionState().Payload;
         var expected = payload;
@@ -50,19 +47,19 @@ public class SingleProjectionTest<TAggregatePayload, TProjection, TSingleProject
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public SingleProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> ThenGetPayload(
+    public SingleProjectionTest<TSingleProjectionPayload> ThenGetPayload(
         Action<TSingleProjectionPayload> payloadAction)
     {
         payloadAction(GetProjectionState().Payload);
         return this;
     }
-    public SingleProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> ThenGetState(
+    public SingleProjectionTest<TSingleProjectionPayload> ThenGetState(
         Action<SingleProjectionState<TSingleProjectionPayload>> stateAction)
     {
         stateAction(GetProjectionState());
         return this;
     }
-    public SingleProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> ThenPayloadIsFromJson(string payloadJson)
+    public SingleProjectionTest<TSingleProjectionPayload> ThenPayloadIsFromJson(string payloadJson)
     {
         var actual = GetProjectionState().Payload;
         var payload = JsonSerializer.Deserialize<TSingleProjectionPayload>(payloadJson);
@@ -73,7 +70,7 @@ public class SingleProjectionTest<TAggregatePayload, TProjection, TSingleProject
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public SingleProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> ThenPayloadIsFromFile(string payloadFilename)
+    public SingleProjectionTest<TSingleProjectionPayload> ThenPayloadIsFromFile(string payloadFilename)
     {
         using var openStream = File.OpenRead(payloadFilename);
         var actual = GetProjectionState().Payload;
@@ -85,7 +82,7 @@ public class SingleProjectionTest<TAggregatePayload, TProjection, TSingleProject
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public SingleProjectionTest<TAggregatePayload, TProjection, TSingleProjectionPayload> WriteProjectionStateToFile(string filename)
+    public SingleProjectionTest<TSingleProjectionPayload> WriteProjectionStateToFile(string filename)
     {
         var state = GetProjectionState();
         var json = SekibanJsonHelper.Serialize(state);

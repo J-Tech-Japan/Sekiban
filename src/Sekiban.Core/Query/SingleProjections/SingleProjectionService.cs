@@ -24,7 +24,8 @@ public class SingleProjectionService : ISingleProjectionService
     /// <returns></returns>
     public async Task<TProjection?> GetAggregateProjectionFromInitialAsync<TProjection, TProjector>(Guid aggregateId, int? toVersion)
         where TProjection : IAggregateCommon, ISingleProjection
-        where TProjector : ISingleProjector<TProjection>, new() => await singleProjectionFromInitial.GetAggregateFromInitialAsync<TProjection, TProjector>(aggregateId, toVersion);
+        where TProjector : ISingleProjector<TProjection>, new() =>
+        await singleProjectionFromInitial.GetAggregateFromInitialAsync<TProjection, TProjector>(aggregateId, toVersion);
     public Task<Aggregate<TAggregatePayload>?> GetAggregateFromInitialAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)
         where TAggregatePayload : IAggregatePayload, new() =>
         GetAggregateProjectionFromInitialAsync<Aggregate<TAggregatePayload>, DefaultSingleProjector<TAggregatePayload>>(
@@ -49,15 +50,12 @@ public class SingleProjectionService : ISingleProjectionService
     }
 
     public async Task<SingleProjectionState<TSingleProjectionPayload>?>
-        GetProjectionAsync<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>(Guid aggregateId, int? toVersion = null)
-        where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
-        new()
-        where TSingleProjectionPayload : ISingleProjectionPayload
+        GetProjectionAsync<TSingleProjectionPayload>(Guid aggregateId, int? toVersion = null)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
     {
         var aggregate = await _singleProjection
-            .GetAggregateAsync<TSingleProjection, SingleProjectionState<TSingleProjectionPayload>,
-                TSingleProjection>(aggregateId, toVersion);
+            .GetAggregateAsync<SingleProjection<TSingleProjectionPayload>, SingleProjectionState<TSingleProjectionPayload>,
+                SingleProjection<TSingleProjectionPayload>>(aggregateId, toVersion);
         return aggregate?.ToState();
     }
     public async Task<Aggregate<TAggregatePayload>?> GetAggregateAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)
