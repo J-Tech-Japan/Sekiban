@@ -53,7 +53,8 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         var singleProjectionBase = singleProjectionType.BaseType;
         if (singleProjectionBase is null ||
             !singleProjectionBase.IsGenericType ||
-            singleProjectionBase.GetGenericTypeDefinition() != typeof(SingleProjectionPayloadBase<,>))
+            !new[] { typeof(SingleProjectionPayloadBase<,>), typeof(DeletableSingleProjectionPayloadBase<,>) }.Contains(
+                singleProjectionBase.GetGenericTypeDefinition()))
         {
             throw new ArgumentException($"Single projection {singleProjectionType.Name} must inherit from SingleProjectionBase<,,>");
         }
@@ -124,7 +125,9 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
                 .FirstOrDefault() ??
             throw new ArgumentException($"Query {t.Name} must implement ISingleProjectionListQuery<,,>");
         var baseType = projection.BaseType ?? throw new NotImplementedException();
-        if (!baseType.IsGenericType || baseType.GetGenericTypeDefinition() != typeof(SingleProjectionPayloadBase<,>))
+        if (!baseType.IsGenericType ||
+            !new[] { typeof(SingleProjectionPayloadBase<,>), typeof(DeletableSingleProjectionPayloadBase<,>) }.Contains(
+                baseType.GetGenericTypeDefinition()))
         {
             throw new ArgumentException($"Projection {t.Name} must implement SingleProjectionPayloadBase<,,>");
         }
