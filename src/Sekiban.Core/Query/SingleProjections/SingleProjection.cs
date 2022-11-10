@@ -58,7 +58,9 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
     {
         var payloadType = typeof(TProjectionPayload);
         var baseType = payloadType.BaseType;
-        if (baseType is null || baseType.GetGenericTypeDefinition() != typeof(SingleProjectionPayloadBase<,>))
+        if (baseType is null ||
+            !new[] { typeof(SingleProjectionPayloadBase<,>), typeof(DeletableSingleProjectionPayloadBase<,>) }.Contains(
+                baseType.GetGenericTypeDefinition()))
         {
             throw new ArgumentException("TProjectionPayload must be derived from SingleProjectionPayloadBase<TAggregate, TAggregateId>");
         }

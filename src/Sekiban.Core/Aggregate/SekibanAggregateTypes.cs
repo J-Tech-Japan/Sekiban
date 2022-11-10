@@ -23,8 +23,12 @@ public class SekibanAggregateTypes
                 _registeredTypes.Add(new DefaultAggregateType(type, p));
             }
             var projectorBase = typeof(SingleProjectionPayloadBase<,>);
+            var projectorBaseDeletable = typeof(DeletableSingleProjectionPayloadBase<,>);
             var customProjectors = assembly.DefinedTypes.Where(
-                x => x.IsClass && x.BaseType?.Name == projectorBase.Name && x.BaseType?.Namespace == projectorBase.Namespace);
+                x => x.IsClass &&
+                    new[] { projectorBase.Name, projectorBaseDeletable.Name }.Contains(x.BaseType?.Name) &&
+                    !x.IsGenericType &&
+                    x.BaseType?.Namespace == projectorBase.Namespace);
             foreach (var type in customProjectors)
             {
                 var baseType = type.BaseType;
