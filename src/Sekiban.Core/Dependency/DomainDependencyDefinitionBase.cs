@@ -70,7 +70,7 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
                 .Where(w => w.IsGenericType)
                 .Select(s => s.GetGenericTypeDefinition()) switch
             {
-                { } gis when gis.Contains(typeof(IMultiProjectionQuery<,,,>)) => () =>
+                { } gis when gis.Contains(typeof(IMultiProjectionQuery<,,>)) => () =>
                     MultiProjectionQueryTypes = MultiProjectionQueryTypes.Add(t),
                 _ => throw new NotImplementedException()
             };
@@ -83,7 +83,7 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
                 .Where(w => w.IsGenericType)
                 .Select(s => s.GetGenericTypeDefinition()) switch
             {
-                { } gis when gis.Contains(typeof(IMultiProjectionListQuery<,,,>)) => () =>
+                { } gis when gis.Contains(typeof(IMultiProjectionListQuery<,,>)) => () =>
                     MultiProjectionListQueryTypes = MultiProjectionListQueryTypes.Add(t),
                 _ => throw new NotImplementedException()
             };

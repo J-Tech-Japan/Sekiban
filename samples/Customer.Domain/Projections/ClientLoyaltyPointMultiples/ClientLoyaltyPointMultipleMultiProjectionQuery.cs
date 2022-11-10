@@ -5,27 +5,25 @@ using System.Collections.Immutable;
 namespace Customer.Domain.Projections.ClientLoyaltyPointMultiples;
 
 public class ClientLoyaltyPointMultipleMultiProjectionQuery : IMultiProjectionQuery<ClientLoyaltyPointMultiProjection,
-    ClientLoyaltyPointMultiProjection.PayloadDefinition, ClientLoyaltyPointMultipleMultiProjectionQuery.QueryParameter,
-    ClientLoyaltyPointMultiProjection.PayloadDefinition>
+    ClientLoyaltyPointMultipleMultiProjectionQuery.QueryParameter,
+    ClientLoyaltyPointMultiProjection>
 {
     public enum QuerySortKeys
     {
         ClientName, Points
     }
-    public ClientLoyaltyPointMultiProjection.PayloadDefinition HandleFilter(
+    public ClientLoyaltyPointMultiProjection HandleFilter(
         QueryParameter queryParam,
-        MultiProjectionState<ClientLoyaltyPointMultiProjection.PayloadDefinition> projection)
+        MultiProjectionState<ClientLoyaltyPointMultiProjection> projection)
     {
         if (queryParam.BranchId is null) { return projection.Payload; }
-        return new ClientLoyaltyPointMultiProjection.PayloadDefinition
-        {
-            Branches = projection.Payload.Branches.Where(x => x.BranchId == queryParam.BranchId).ToImmutableList(),
-            Records = projection.Payload.Records.Where(m => m.BranchId == queryParam.BranchId).ToImmutableList()
-        };
+        return new ClientLoyaltyPointMultiProjection(
+            projection.Payload.Branches.Where(x => x.BranchId == queryParam.BranchId).ToImmutableList(),
+            projection.Payload.Records.Where(m => m.BranchId == queryParam.BranchId).ToImmutableList());
     }
-    public ClientLoyaltyPointMultiProjection.PayloadDefinition HandleSortAndPagingIfNeeded(
+    public ClientLoyaltyPointMultiProjection HandleSortAndPagingIfNeeded(
         QueryParameter queryParam,
-        ClientLoyaltyPointMultiProjection.PayloadDefinition response)
+        ClientLoyaltyPointMultiProjection response)
     {
         if (queryParam.SortKey == QuerySortKeys.ClientName)
         {

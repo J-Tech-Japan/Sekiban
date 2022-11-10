@@ -14,28 +14,28 @@ public class QueryService : IQueryService
         this.queryHandler = queryHandler;
     }
     public async Task<TQueryResponse>
-        GetMultiProjectionQueryAsync<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
-            TQueryParameter param) where TProjection : MultiProjectionBase<TProjectionPayload>, new()
+        GetMultiProjectionQueryAsync<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
+            TQueryParameter param)
         where TProjectionPayload : IMultiProjectionPayload, new()
-        where TQuery : IMultiProjectionQuery<TProjection, TProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQuery : IMultiProjectionQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
-        var allProjection = await multiProjectionService.GetMultiProjectionAsync<TProjection, TProjectionPayload>();
+        var allProjection = await multiProjectionService.GetMultiProjectionAsync<TProjectionPayload>();
         return queryHandler
-            .GetMultiProjectionQuery<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
+            .GetMultiProjectionQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
                 param,
                 allProjection);
     }
     public async Task<ListQueryResult<TQueryResponse>>
-        GetMultiProjectionListQueryAsync<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
-            TQueryParameter param) where TProjection : MultiProjectionBase<TProjectionPayload>, new()
+        GetMultiProjectionListQueryAsync<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
+            TQueryParameter param)
         where TProjectionPayload : IMultiProjectionPayload, new()
-        where TQuery : IMultiProjectionListQuery<TProjection, TProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQuery : IMultiProjectionListQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
-        var allProjection = await multiProjectionService.GetMultiProjectionAsync<TProjection, TProjectionPayload>();
+        var allProjection = await multiProjectionService.GetMultiProjectionAsync<TProjectionPayload>();
         return queryHandler
-            .GetMultiProjectionListQuery<TProjection, TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
+            .GetMultiProjectionListQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
                 param,
                 allProjection);
     }

@@ -178,7 +178,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         Assert.Equal(800, loyaltyPoint!.Payload.CurrentPoint);
 
         var p = await multiProjectionService
-            .GetMultiProjectionAsync<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultiProjection.PayloadDefinition>();
+            .GetMultiProjectionAsync<ClientLoyaltyPointMultiProjection>();
         Assert.NotNull(p);
         Assert.Equal(2, p.Payload.Branches.Count);
         Assert.Single(p.Payload.Records);
@@ -225,7 +225,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         Assert.Equal(count + 1, version);
 
         p = await multiProjectionService
-            .GetMultiProjectionAsync<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultiProjection.PayloadDefinition>();
+            .GetMultiProjectionAsync<ClientLoyaltyPointMultiProjection>();
         Assert.NotNull(p);
         Assert.Equal(2, p.Payload.Branches.Count);
         Assert.Empty(p.Payload.Records);
