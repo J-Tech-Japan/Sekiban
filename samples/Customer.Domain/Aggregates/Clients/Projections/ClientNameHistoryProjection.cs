@@ -11,7 +11,7 @@ public record ClientNameHistoryProjection(
     Guid BranchId,
     IReadOnlyCollection<ClientNameHistoryProjection.ClientNameHistoryProjectionRecord> ClientNames,
     string ClientEmail,
-    bool IsDeleted = false) : SingleProjectionPayloadBase<Client, ClientNameHistoryProjection>, IDeletable
+    bool IsDeleted = false) : DeletableSingleProjectionPayloadBase<Client, ClientNameHistoryProjection>(IsDeleted)
 {
     public ClientNameHistoryProjection() : this(Guid.Empty, new List<ClientNameHistoryProjectionRecord>(), string.Empty) { }
     public override Func<ClientNameHistoryProjection, ClientNameHistoryProjection>? GetApplyEventFunc(
