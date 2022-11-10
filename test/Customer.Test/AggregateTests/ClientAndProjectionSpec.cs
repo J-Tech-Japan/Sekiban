@@ -43,12 +43,13 @@ public class ClientAndProjectionSpec : AggregateTestBase<Client, CustomerDepende
                     }
                 })
             .ThenPayloadIs(new Client(branchId, clientName, clientEmail))
-            .ThenGetSingleProjectionTest<ClientNameHistorySingleProjection, ClientNameHistorySingleProjection.PayloadDefinition>(
+            .ThenGetSingleProjectionTest<ClientNameHistoryProjection>(
                 test =>
                     test.ThenPayloadIs(
-                        new ClientNameHistorySingleProjection.PayloadDefinition(
+                        new ClientNameHistoryProjection(
                             branchId,
-                            new List<ClientNameHistorySingleProjection.ClientNameHistoryProjectionRecord> { new(clientName, FirstEventDatetime) }
+                            new List<ClientNameHistoryProjection.ClientNameHistoryProjectionRecord>
+                                    { new(clientName, FirstEventDatetime) }
                                 .ToImmutableList(),
                             clientEmail))
             );
@@ -68,12 +69,12 @@ public class ClientAndProjectionSpec : AggregateTestBase<Client, CustomerDepende
                     }
                 })
             .ThenPayloadIs(new Client(branchId, clientNameChanged, clientEmail))
-            .ThenGetSingleProjectionTest<ClientNameHistorySingleProjection, ClientNameHistorySingleProjection.PayloadDefinition>(
+            .ThenGetSingleProjectionTest<ClientNameHistoryProjection>(
                 test =>
                     test.ThenPayloadIs(
-                        new ClientNameHistorySingleProjection.PayloadDefinition(
+                        new ClientNameHistoryProjection(
                             branchId,
-                            new List<ClientNameHistorySingleProjection.ClientNameHistoryProjectionRecord>
+                            new List<ClientNameHistoryProjection.ClientNameHistoryProjectionRecord>
                             {
                                 new(clientName, FirstEventDatetime), new(clientNameChanged, ChangedEventDatetime)
                             },
@@ -95,7 +96,7 @@ public class ClientAndProjectionSpec : AggregateTestBase<Client, CustomerDepende
             .ThenPayloadIsFromJson(
                 "{\"BranchId\":\"cdb93f86-8d2f-442c-9f62-b9e791401f5f\",\"ClientName\":\"Test Client Changed\",\"ClientEmail\":\"client@example.com\"}")
             .ThenPayloadIsFromFile("ClientContentsTestResult.json")
-            .ThenGetSingleProjectionTest<ClientNameHistorySingleProjection, ClientNameHistorySingleProjection.PayloadDefinition>(
+            .ThenGetSingleProjectionTest<ClientNameHistoryProjection>(
                 test => test.WriteProjectionStateToFile("ClientProjectionOut.json")
                     .ThenPayloadIsFromJson(
                         "{\"BranchId\":\"cdb93f86-8d2f-442c-9f62-b9e791401f5f\",\"ClientNames\":[{\"Name\":\"Test Client\",\"DateChanged\":\"" +

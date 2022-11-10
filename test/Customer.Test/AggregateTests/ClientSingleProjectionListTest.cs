@@ -1,5 +1,4 @@
 using Customer.Domain.Aggregates.Branches.Commands;
-using Customer.Domain.Aggregates.Clients;
 using Customer.Domain.Aggregates.Clients.Commands;
 using Customer.Domain.Aggregates.Clients.Projections;
 using Customer.Domain.Shared;
@@ -10,8 +9,7 @@ using System.Linq;
 using Xunit;
 namespace Customer.Test.AggregateTests;
 
-public class ClientSingleProjectionListTest : SingleProjectionListTestBase<Client, ClientNameHistorySingleProjection,
-    ClientNameHistorySingleProjection.PayloadDefinition, CustomerDependency>
+public class ClientSingleProjectionListTest : SingleProjectionListTestBase<ClientNameHistoryProjection, CustomerDependency>
 {
     [Fact]
     public void Test()

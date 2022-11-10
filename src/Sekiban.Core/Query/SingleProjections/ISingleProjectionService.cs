@@ -48,16 +48,11 @@ public interface ISingleProjectionService
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <param name="toVersion"></param>
-    /// <typeparam name="TAggregatePayload"></typeparam>
-    /// <typeparam name="TSingleProjection"></typeparam>
     /// <typeparam name="TSingleProjectionPayload"></typeparam>
     /// <returns></returns>
     public Task<SingleProjectionState<TSingleProjectionPayload>?>
-        GetProjectionAsync<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>(Guid aggregateId, int? toVersion = null)
-        where TAggregatePayload : IAggregatePayload, new()
-        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>,
-        new()
-        where TSingleProjectionPayload : ISingleProjectionPayload;
+        GetProjectionAsync<TSingleProjectionPayload>(Guid aggregateId, int? toVersion = null)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new();
 
 
     /// <summary>

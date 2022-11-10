@@ -1,7 +1,6 @@
 using Customer.Domain.Aggregates.Branches;
 using Customer.Domain.Aggregates.Branches.Commands;
 using Customer.Domain.Aggregates.Branches.Queries;
-using Customer.Domain.Aggregates.Clients;
 using Customer.Domain.Aggregates.Clients.Commands;
 using Customer.Domain.Aggregates.Clients.Events;
 using Customer.Domain.Aggregates.Clients.Projections;
@@ -49,11 +48,9 @@ public class UnifiedProjectionsTest : UnifiedTestBase<CustomerDependency>
         ClientLoyaltyPointMultiProjection.PayloadDefinition> multiProjectionQueryTest = new();
 
     private readonly
-        SingleProjectionListTestBase<Client, ClientNameHistorySingleProjection, ClientNameHistorySingleProjection.PayloadDefinition,
-            CustomerDependency> singleProjectionListTestBase;
+        SingleProjectionListTestBase<ClientNameHistoryProjection, CustomerDependency> singleProjectionListTestBase;
 
-    private readonly SingleProjectionListQueryTest<Client, ClientNameHistorySingleProjection,
-        ClientNameHistorySingleProjection.PayloadDefinition, ClientNameHistoryProjectionQuery,
+    private readonly SingleProjectionListQueryTest<ClientNameHistoryProjection, ClientNameHistoryProjectionQuery,
         ClientNameHistoryProjectionQuery.Parameter,
         ClientNameHistoryProjectionQuery.Response> singleProjectionQueryTest = new();
     private Guid _branchId = Guid.Empty;
@@ -74,8 +71,7 @@ public class UnifiedProjectionsTest : UnifiedTestBase<CustomerDependency>
         branchListProjection = SetupMultiProjectionTest<AggregateListProjectionTestBase<Branch, CustomerDependency>>();
 
         singleProjectionListTestBase
-            = SetupMultiProjectionTest<SingleProjectionListTestBase<Client, ClientNameHistorySingleProjection,
-                ClientNameHistorySingleProjection.PayloadDefinition, CustomerDependency>>();
+            = SetupMultiProjectionTest<SingleProjectionListTestBase<ClientNameHistoryProjection, CustomerDependency>>();
     }
     protected override void SetupDependency(IServiceCollection serviceCollection)
     {

@@ -169,15 +169,14 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         File.WriteAllText(filename, actualJson);
         return this;
     }
-    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionTest<TSingleProjection, TSingleProjectionPayload>(
-        Action<SingleProjectionTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>> singleProjectionTestAction)
-        where TSingleProjection : SingleProjectionBase<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>, new()
-        where TSingleProjectionPayload : ISingleProjectionPayload
+    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionTest<TSingleProjectionPayload>(
+        Action<SingleProjectionTest<TSingleProjectionPayload>> singleProjectionTestAction)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
     {
         var singleProjection =
             Activator.CreateInstance(
-                typeof(SingleProjectionTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>),
-                _serviceProvider) as SingleProjectionTest<TAggregatePayload, TSingleProjection, TSingleProjectionPayload>;
+                typeof(SingleProjectionTest<TSingleProjectionPayload>),
+                _serviceProvider) as SingleProjectionTest<TSingleProjectionPayload>;
         if (singleProjection == null) { throw new Exception("Could not create single aggregate projection"); }
         singleProjection.AggregateId = GetAggregateId();
         singleProjectionTestAction(singleProjection);

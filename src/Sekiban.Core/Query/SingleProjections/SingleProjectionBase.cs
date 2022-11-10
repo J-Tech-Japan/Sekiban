@@ -3,13 +3,12 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 namespace Sekiban.Core.Query.SingleProjections;
 
-public abstract class SingleProjectionBase<TAggregatePayload, TProjection, TProjectionPayload> : ISingleProjection,
+public class SingleProjectionBase<TProjectionPayload> : ISingleProjection,
     ISingleProjectionStateConvertible<SingleProjectionState<TProjectionPayload>>, IAggregateCommon,
-    ISingleProjector<TProjection> where TProjection : SingleProjectionBase<TAggregatePayload, TProjection, TProjectionPayload>, new()
-    where TProjectionPayload : ISingleProjectionPayload
-    where TAggregatePayload : IAggregatePayload, new()
+    ISingleProjector<SingleProjectionBase<TProjectionPayload>>
+    where TProjectionPayload : ISingleProjectionPayload, new()
 {
-    public TProjectionPayload Payload { get; set; } = default!;
+    public TProjectionPayload Payload { get; set; } = new();
     public Guid LastEventId { get; set; }
     public string LastSortableUniqueId { get; set; } = string.Empty;
     public int AppliedSnapshotVersion { get; set; }
@@ -52,14 +51,25 @@ public abstract class SingleProjectionBase<TAggregatePayload, TProjection, TProj
         LastSortableUniqueId,
         AppliedSnapshotVersion,
         Version);
-    public TProjection CreateInitialAggregate(Guid aggregateId) => new()
+    public SingleProjectionBase<TProjectionPayload> CreateInitialAggregate(Guid aggregateId) => new()
         { AggregateId = aggregateId };
 
-    public Type OriginalAggregateType() => typeof(TAggregatePayload);
+    public Type OriginalAggregateType()
+    {
+        var payloadType = typeof(TProjectionPayload);
+        var baseType = payloadType.BaseType;
+        if (baseType is null || baseType.GetGenericTypeDefinition() != typeof(SingleProjectionPayloadBase<,>))
+        {
+            throw new ArgumentException("TProjectionPayload must be derived from SingleProjectionPayloadBase<TAggregate, TAggregateId>");
+        }
+        return baseType.GenericTypeArguments[0];
+    }
     public bool GetIsDeleted() => Payload is IDeletable { IsDeleted: true };
     protected Action? GetApplyEventAction(IEvent ev, IEventPayload eventPayload)
     {
-        var func = GetApplyEventFunc(ev, eventPayload);
+        var payload = Payload as ISingleProjectionEventApplicable<TProjectionPayload> ??
+            throw new SekibanSingleProjectionMustInheritISingleProjectionEventApplicable();
+        var func = payload.GetApplyEventFunc(ev, eventPayload);
         return () =>
         {
             if (func == null) { return; }
@@ -67,7 +77,4 @@ public abstract class SingleProjectionBase<TAggregatePayload, TProjection, TProj
             Payload = result;
         };
     }
-    protected abstract Func<TProjectionPayload, TProjectionPayload>? GetApplyEventFunc(
-        IEvent ev,
-        IEventPayload eventPayload);
 }
