@@ -103,6 +103,49 @@ public class ClientAndProjectionSpec : AggregateTestBase<Client, CustomerDepende
                         new BasicClientQueryModel(branchId, clientNameChanged, clientEmail)
                     }));
     }
+
+    [Fact]
+    public void SingleProjectionListQueryTest()
+    {
+        RunEnvironmentCreateCommand(new CreateBranch(branchName), branchId);
+        WhenCreate(new CreateClient(branchId, clientName, clientEmail))
+            .ThenGetSingleEvent<ClientCreated>(ev => FirstEventDatetime = ev.TimeStamp)
+            .WhenChange(client => new ChangeClientName(client.AggregateId, clientNameChanged) { ReferenceVersion = client.Version })
+            .ThenGetSingleEvent<ClientNameChanged>(ev => ChangedEventDatetime = ev.TimeStamp)
+            .ThenSingleProjectionListQueryResponseIs<ClientNameHistoryProjection, ClientNameHistoryProjectionQuery,
+                ClientNameHistoryProjectionQuery.Parameter, ClientNameHistoryProjectionQuery.Response>(
+                new ClientNameHistoryProjectionQuery.Parameter(null, null, branchId, null, null),
+                new ListQueryResult<ClientNameHistoryProjectionQuery.Response>(
+                    2,
+                    null,
+                    null,
+                    null,
+                    new[]
+                    {
+                        new ClientNameHistoryProjectionQuery.Response(branchId, GetAggregateId(), clientName, clientEmail, FirstEventDatetime),
+                        new ClientNameHistoryProjectionQuery.Response(
+                            branchId,
+                            GetAggregateId(),
+                            clientNameChanged,
+                            clientEmail,
+                            ChangedEventDatetime)
+                    }));
+    }
+
+    [Fact]
+    public void SingleProjectionQueryTest()
+    {
+        RunEnvironmentCreateCommand(new CreateBranch(branchName), branchId);
+        WhenCreate(new CreateClient(branchId, clientName, clientEmail))
+            .ThenGetSingleEvent<ClientCreated>(ev => FirstEventDatetime = ev.TimeStamp)
+            .WhenChange(client => new ChangeClientName(client.AggregateId, clientNameChanged) { ReferenceVersion = client.Version })
+            .ThenGetSingleEvent<ClientNameChanged>(ev => ChangedEventDatetime = ev.TimeStamp)
+            .ThenSingleProjectionQueryResponseIs<ClientNameHistoryProjection, ClientNameHistoryProjectionCountQuery,
+                ClientNameHistoryProjectionCountQuery.Parameter, int>(
+                new ClientNameHistoryProjectionCountQuery.Parameter(branchId, GetAggregateId()),
+                2);
+    }
+
     [Fact]
     public void TestWithFile()
     {

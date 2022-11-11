@@ -46,7 +46,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
 
     #region Then
     public IAggregateTestHelper<TAggregatePayload> ThenGetEvents(Action<List<IEvent>> checkEventsAction);
-    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleEvent<T>(Action<T> checkEventAction) where T : IEvent;
+    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleEvent<T>(Action<Event<T>> checkEventAction) where T : IEventPayload;
     public IAggregateTestHelper<TAggregatePayload> ThenSingleEventIs<T>(Event<T> @event) where T : IEventPayload;
     public IAggregateTestHelper<TAggregatePayload> ThenSingleEventPayloadIs<T>(T payload) where T : IEventPayload;
     public IAggregateTestHelper<TAggregatePayload> ThenGetSingleEventPayload<T>(Action<T> checkPayloadAction) where T : class, IEventPayload;
@@ -142,6 +142,82 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public IAggregateTestHelper<TAggregatePayload> ThenAggregateListQueryResponseIsFromFile<TQuery, TQueryParameter, TQueryResponse>(
         TQueryParameter param,
         string responseFilename) where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter;
+    #endregion
+
+    #region SingleProjection Query
+    public IAggregateTestHelper<TAggregatePayload> WriteSingleProjectionQueryResponseToFile<TSingleProjectionPayload, TQuery, TQueryParameter,
+        TQueryResponse>(
+        TQueryParameter param,
+        string filename)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter;
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionQueryResponseIs<TSingleProjectionPayload, TQuery, TQueryParameter,
+        TQueryResponse>(
+        TQueryParameter param,
+        TQueryResponse expectedResponse)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter;
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionQueryGetResponse<TSingleProjectionPayload, TQuery, TQueryParameter,
+        TQueryResponse>(
+        TQueryParameter param,
+        Action<TQueryResponse> responseAction)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter;
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionQueryResponseIsFromJson<TSingleProjectionPayload, TQuery, TQueryParameter,
+        TQueryResponse>(
+        TQueryParameter param,
+        string responseJson)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter;
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionQueryResponseIsFromFile<TSingleProjectionPayload, TQuery, TQueryParameter,
+        TQueryResponse>(
+        TQueryParameter param,
+        string responseFilename)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter;
+    #endregion
+
+    #region SingleProjection　List Query
+    public IAggregateTestHelper<TAggregatePayload> WriteSingleProjectionListQueryResponseToFile<TSingleProjectionPayload, TQuery, TQueryParameter,
+        TQueryResponse>(
+        TQueryParameter param,
+        string filename)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter;
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionListQueryResponseIs<TSingleProjectionPayload, TQuery, TQueryParameter,
+        TQueryResponse>(
+        TQueryParameter param,
+        ListQueryResult<TQueryResponse> expectedResponse)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter;
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionListQueryGetResponse<TSingleProjectionPayload, TQuery, TQueryParameter,
+        TQueryResponse>(
+        TQueryParameter param,
+        Action<ListQueryResult<TQueryResponse>> responseAction)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter;
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionListQueryResponseIsFromJson<TSingleProjectionPayload, TQuery, TQueryParameter,
+        TQueryResponse>(
+        TQueryParameter param,
+        string responseJson)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter;
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionListQueryResponseIsFromFile<TSingleProjectionPayload, TQuery, TQueryParameter,
+        TQueryResponse>(
+        TQueryParameter param,
+        string responseFilename)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter;
     #endregion
 }
