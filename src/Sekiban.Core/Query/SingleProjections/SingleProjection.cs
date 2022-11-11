@@ -74,7 +74,10 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
         var func = payload.GetApplyEventFunc(ev, eventPayload);
         return () =>
         {
-            if (func == null) { return; }
+            if (func == null)
+            {
+                throw new SekibanEventNotImplementedException($"{eventPayload.GetType().Name} Event not implemented on {GetType().Name} Projection");
+            }
             var result = func(Payload);
             Payload = result;
         };
