@@ -2,8 +2,8 @@ using Sekiban.Core.Query.MultiProjections;
 namespace Sekiban.Core.Query.QueryModel;
 
 public interface
-    IMultiProjectionListQuery<TProjection, TProjectionPayload, in TQueryParameter, TQueryResponse> : IMultiProjectionQueryBase<TProjection>
-    where TProjection : MultiProjectionBase<TProjectionPayload> where TProjectionPayload : IMultiProjectionPayload, new()
+    IMultiProjectionListQuery<TProjectionPayload, in TQueryParameter, TQueryResponse>
+    where TProjectionPayload : IMultiProjectionPayload, new()
 {
     public IEnumerable<TQueryResponse> HandleFilter(
         TQueryParameter queryParam,

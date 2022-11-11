@@ -5,8 +5,7 @@ namespace Sekiban.Core.Query.MultiProjections;
 public interface IMultiProjectionService
 {
 
-    public Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjection, TProjectionPayload>()
-        where TProjection : MultiProjectionBase<TProjectionPayload>, new()
+    public Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjectionPayload>()
         where TProjectionPayload : IMultiProjectionPayload, new();
     public Task<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>>
         GetAggregateListObject<TAggregatePayload>() where TAggregatePayload : IAggregatePayload, new();

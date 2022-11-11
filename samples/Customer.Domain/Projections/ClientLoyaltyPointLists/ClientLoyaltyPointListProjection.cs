@@ -9,10 +9,15 @@ using Sekiban.Core.Query.MultiProjections;
 using System.Collections.Immutable;
 namespace Customer.Domain.Projections.ClientLoyaltyPointLists;
 
-public class ClientLoyaltyPointListProjection : MultiProjectionBase<ClientLoyaltyPointListProjection.PayloadDefinition>
+public record ClientLoyaltyPointListProjection(
+    ImmutableList<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> Records,
+    ImmutableList<ClientLoyaltyPointListProjection.ProjectedBranchInternal> Branches) : MultiProjectionPayloadBase<ClientLoyaltyPointListProjection>
 {
+    public ClientLoyaltyPointListProjection() : this(ImmutableList<ClientLoyaltyPointListRecord>.Empty, ImmutableList<ProjectedBranchInternal>.Empty)
+    {
+    }
     public override IList<string> TargetAggregateNames() => new List<string> { nameof(Branch), nameof(Client), nameof(LoyaltyPoint) };
-    protected override Func<PayloadDefinition, PayloadDefinition>? GetApplyEventFunc(IEvent ev, IEventPayload eventPayload)
+    public override Func<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection>? GetApplyEventFunc(IEvent ev, IEventPayload eventPayload)
     {
         return eventPayload switch
         {
@@ -59,14 +64,6 @@ public class ClientLoyaltyPointListProjection : MultiProjectionBase<ClientLoyalt
     }
     public record ClientLoyaltyPointListRecord(Guid BranchId, string BranchName, Guid ClientId, string ClientName, int Point);
 
-    public record PayloadDefinition(
-        ImmutableList<ClientLoyaltyPointListRecord> Records,
-        ImmutableList<ProjectedBranchInternal> Branches) : IMultiProjectionPayload
-    {
-        public PayloadDefinition() : this(ImmutableList<ClientLoyaltyPointListRecord>.Empty, ImmutableList<ProjectedBranchInternal>.Empty)
-        {
-        }
-    }
     public class ProjectedBranchInternal
     {
         public Guid BranchId { get; set; }

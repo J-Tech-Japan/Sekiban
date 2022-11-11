@@ -1,7 +1,8 @@
 using Sekiban.Core.Event;
+using Sekiban.Core.Exceptions;
 namespace Sekiban.Core.Query.MultiProjections;
 
-public abstract class MultiProjectionBase<TProjectionPayload> : IMultiProjector<TProjectionPayload>, IMultiProjectionBase
+public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPayload>, IMultiProjectionBase
     where TProjectionPayload : IMultiProjectionPayload, new()
 {
     private TProjectionPayload Payload { get; set; } = new();
@@ -18,7 +19,7 @@ public abstract class MultiProjectionBase<TProjectionPayload> : IMultiProjector<
         LastEventId = ev.Id;
         LastSortableUniqueId = ev.SortableUniqueId;
     }
-    public MultiProjectionState<TProjectionPayload> ToState() => new MultiProjectionState<TProjectionPayload>(
+    public MultiProjectionState<TProjectionPayload> ToState() => new(
         Payload,
         LastEventId,
         LastSortableUniqueId,
@@ -32,10 +33,17 @@ public abstract class MultiProjectionBase<TProjectionPayload> : IMultiProjector<
         AppliedSnapshotVersion = snapshot.Version;
         Payload = snapshot.Payload;
     }
-    public virtual IList<string> TargetAggregateNames() => new List<string>();
+    public virtual IList<string> TargetAggregateNames()
+    {
+        var projectionPayload = Payload as MultiProjectionPayloadBase<TProjectionPayload> ??
+            throw new SekibanMultiProjectionMustInheritISingleProjectionEventApplicable();
+        return projectionPayload.TargetAggregateNames();
+    }
     protected Action? GetApplyEventAction(IEvent ev, IEventPayload payload)
     {
-        var func = GetApplyEventFunc(ev, payload);
+        var projectionPayload = Payload as MultiProjectionPayloadBase<TProjectionPayload> ??
+            throw new SekibanMultiProjectionMustInheritISingleProjectionEventApplicable();
+        var func = projectionPayload.GetApplyEventFunc(ev, payload);
         return () =>
         {
             if (func == null) { return; }
@@ -43,5 +51,4 @@ public abstract class MultiProjectionBase<TProjectionPayload> : IMultiProjector<
             Payload = result;
         };
     }
-    protected abstract Func<TProjectionPayload, TProjectionPayload>? GetApplyEventFunc(IEvent ev, IEventPayload eventPayload);
 }

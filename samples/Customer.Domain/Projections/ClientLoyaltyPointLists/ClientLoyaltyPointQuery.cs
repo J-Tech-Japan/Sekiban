@@ -4,8 +4,7 @@ using Sekiban.Core.Query.QueryModel.Parameters;
 using System.Collections.Immutable;
 namespace Customer.Domain.Projections.ClientLoyaltyPointLists;
 
-public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPointListProjection,
-    ClientLoyaltyPointListProjection.PayloadDefinition, ClientLoyaltyPointQuery.QueryParameter,
+public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery.QueryParameter,
     ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>
 {
     public enum FilterSortKey
@@ -71,7 +70,7 @@ public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPo
 
     public IEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> HandleFilter(
         QueryParameter queryParam,
-        MultiProjectionState<ClientLoyaltyPointListProjection.PayloadDefinition> projection)
+        MultiProjectionState<ClientLoyaltyPointListProjection> projection)
     {
         var result = projection.Payload.Records;
         if (queryParam.BranchId.HasValue)
