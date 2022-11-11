@@ -105,7 +105,9 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
                 .FirstOrDefault() ??
             throw new ArgumentException($"Query {t.Name} must implement ISingleProjectionQuery<,,>");
         var baseType = projection.BaseType ?? throw new NotImplementedException();
-        if (!baseType.IsGenericType || baseType.GetGenericTypeDefinition() != typeof(SingleProjectionPayloadBase<,>))
+        if (!baseType.IsGenericType ||
+            !new[] { typeof(SingleProjectionPayloadBase<,>), typeof(DeletableSingleProjectionPayloadBase<,>) }.Contains(
+                baseType.GetGenericTypeDefinition()))
         {
             throw new ArgumentException($"Projection {t.Name} must implement SingleProjectionPayloadBase<,,>");
         }

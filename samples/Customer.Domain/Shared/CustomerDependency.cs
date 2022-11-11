@@ -39,7 +39,8 @@ public class CustomerDependency : DomainDependencyDefinitionBase
             .AddSingleProjection<ClientNameHistoryProjection>()
             .AddSingleProjectionListQuery<ClientNameHistoryProjectionQuery>()
             .AddAggregateQuery<ClientEmailExistsQuery>()
-            .AddAggregateListQuery<BasicClientQuery>();
+            .AddAggregateListQuery<BasicClientQuery>()
+            .AddSingleProjectionQuery<ClientNameHistoryProjectionCountQuery>();
 
         AddAggregate<LoyaltyPoint>()
             .AddCreateCommandHandler<CreateLoyaltyPoint, CreateLoyaltyPoint.Handler>()
