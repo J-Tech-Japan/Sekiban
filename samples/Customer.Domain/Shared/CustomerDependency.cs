@@ -6,6 +6,7 @@ using Customer.Domain.Aggregates.Clients.Commands;
 using Customer.Domain.Aggregates.Clients.Events;
 using Customer.Domain.Aggregates.Clients.Projections;
 using Customer.Domain.Aggregates.Clients.Queries;
+using Customer.Domain.Aggregates.Clients.Queries.BasicClientFilters;
 using Customer.Domain.Aggregates.LoyaltyPoints;
 using Customer.Domain.Aggregates.LoyaltyPoints.Commands;
 using Customer.Domain.Aggregates.RecentActivities;
@@ -37,7 +38,8 @@ public class CustomerDependency : DomainDependencyDefinitionBase
             .AddEventSubscriber<ClientDeleted, ClientDeletedSubscriber>()
             .AddSingleProjection<ClientNameHistoryProjection>()
             .AddSingleProjectionListQuery<ClientNameHistoryProjectionQuery>()
-            .AddAggregateQuery<ClientEmailExistsQuery>();
+            .AddAggregateQuery<ClientEmailExistsQuery>()
+            .AddAggregateListQuery<BasicClientQuery>();
 
         AddAggregate<LoyaltyPoint>()
             .AddCreateCommandHandler<CreateLoyaltyPoint, CreateLoyaltyPoint.Handler>()

@@ -5,7 +5,9 @@ using Customer.Domain.Aggregates.Clients.Commands;
 using Customer.Domain.Aggregates.Clients.Events;
 using Customer.Domain.Aggregates.Clients.Projections;
 using Customer.Domain.Aggregates.Clients.Queries;
+using Customer.Domain.Aggregates.Clients.Queries.BasicClientFilters;
 using Customer.Domain.Shared;
+using Sekiban.Core.Query.QueryModel;
 using Sekiban.Testing.SingleProjections;
 using System;
 using System.Collections.Generic;
@@ -81,7 +83,25 @@ public class ClientAndProjectionSpec : AggregateTestBase<Client, CustomerDepende
                 true)
             .ThenAggregateQueryResponseIs<ClientEmailExistsQuery, ClientEmailExistsQuery.QueryParameter, bool>(
                 new ClientEmailExistsQuery.QueryParameter("not" + clientEmail),
-                false);
+                false)
+            .ThenAggregateListQueryResponseIs<BasicClientQuery, BasicClientQueryParameter, BasicClientQueryModel>(
+                new BasicClientQueryParameter(
+                    branchId,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null),
+                new ListQueryResult<BasicClientQueryModel>(
+                    1,
+                    null,
+                    null,
+                    null,
+                    new[]
+                    {
+                        new BasicClientQueryModel(branchId, clientNameChanged, clientEmail)
+                    }));
     }
     [Fact]
     public void TestWithFile()
