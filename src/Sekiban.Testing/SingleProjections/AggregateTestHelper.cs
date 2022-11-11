@@ -610,9 +610,9 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
-        var singleProjection = _serviceProvider.GetService<IQueryService>() ??
+        var queryService = _serviceProvider.GetService<IQueryService>() ??
             throw new Exception("Failed to get Query service");
-        return singleProjection.GetAggregateQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param).Result ??
+        return queryService.GetAggregateQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param).Result ??
             throw new Exception("Failed to get Aggregate Query Response for " + typeof(TQuery).Name);
     }
     public IAggregateTestHelper<TAggregatePayload> WriteAggregateQueryResponseToFile<TQuery, TQueryParameter, TQueryResponse>(
@@ -677,10 +677,10 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
-        var singleProjection = _serviceProvider.GetService<IQueryService>() ??
+        var queryService = _serviceProvider.GetService<IQueryService>() ??
             throw new Exception("Failed to get Query service");
-        return singleProjection.GetAggregateListQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param).Result ??
-            throw new Exception("Failed to get Aggregate Query Response for " + typeof(TQuery).Name);
+        return queryService.GetAggregateListQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param).Result ??
+            throw new Exception("Failed to get Aggregate List Query Response for " + typeof(TQuery).Name);
     }
     public IAggregateTestHelper<TAggregatePayload> WriteAggregateListQueryResponseToFile<TQuery, TQueryParameter, TQueryResponse>(
         TQueryParameter param,
@@ -745,10 +745,10 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
-        var singleProjection = _serviceProvider.GetService<IQueryService>() ??
+        var queryService = _serviceProvider.GetService<IQueryService>() ??
             throw new Exception("Failed to get Query service");
-        return singleProjection.GetSingleProjectionQueryAsync<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param).Result ??
-            throw new Exception("Failed to get Aggregate Query Response for " + typeof(TQuery).Name);
+        return queryService.GetSingleProjectionQueryAsync<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param).Result ??
+            throw new Exception("Failed to get Single Projection Query Response for " + typeof(TQuery).Name);
     }
 
     public IAggregateTestHelper<TAggregatePayload> WriteSingleProjectionQueryResponseToFile<TSingleProjectionPayload, TQuery, TQueryParameter,
@@ -830,10 +830,10 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
-        var singleProjection = _serviceProvider.GetService<IQueryService>() ??
+        var queryService = _serviceProvider.GetService<IQueryService>() ??
             throw new Exception("Failed to get Query service");
-        return singleProjection.GetSingleProjectionListQueryAsync<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param).Result ??
-            throw new Exception("Failed to get Aggregate Query Response for " + typeof(TQuery).Name);
+        return queryService.GetSingleProjectionListQueryAsync<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param).Result ??
+            throw new Exception("Failed to get Single Projection List Query Response for " + typeof(TQuery).Name);
     }
 
     public IAggregateTestHelper<TAggregatePayload> WriteSingleProjectionListQueryResponseToFile<TSingleProjectionPayload, TQuery, TQueryParameter,
