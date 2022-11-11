@@ -56,7 +56,7 @@ public class Aggregate<TAggregatePayload> : AggregateCommonBase,
 
         if (GetApplyEventAction(ev, eventPayload) is null)
         {
-            throw new SekibanEventNotImplementedException();
+            throw new SekibanEventNotImplementedException($"{eventPayload.GetType().Name} Event not implemented on {GetType().Name} Aggregate");
         }
         // バージョンが変わる前に、イベントには現在のバージョンを入れて動かす
         ev = ev with { Version = Version };
