@@ -4,6 +4,8 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Document;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
+using Sekiban.Core.Query.QueryModel;
+using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Validation;
@@ -599,6 +601,73 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var state = GetSingleProjectionState<TSingleProjectionPayload>();
         var json = SekibanJsonHelper.Serialize(state);
         File.WriteAllText(filename, json);
+        return this;
+    }
+    #endregion
+
+    #region Aggregate Query
+    private TQueryResponse GetAggregateQueryResponse<TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
+        where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter
+    {
+        var singleProjection = _serviceProvider.GetService<IQueryService>() ??
+            throw new Exception("Failed to get Query service");
+        return singleProjection.GetAggregateQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param).Result ??
+            throw new Exception("Failed to get Aggregate Query Response for " + typeof(TQuery).Name);
+    }
+    public IAggregateTestHelper<TAggregatePayload> WriteAggregateQueryResponseToFile<TQuery, TQueryParameter, TQueryResponse>(
+        TQueryParameter param,
+        string filename)
+        where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter
+    {
+        var json = SekibanJsonHelper.Serialize(GetAggregateQueryResponse<TQuery, TQueryParameter, TQueryResponse>(param));
+        if (string.IsNullOrEmpty(json))
+        {
+            throw new InvalidDataException("Json is null or empty");
+        }
+        File.WriteAllTextAsync(filename, json);
+        return this;
+    }
+    public IAggregateTestHelper<TAggregatePayload> ThenAggregateQueryResponseIs<TQuery, TQueryParameter, TQueryResponse>(
+        TQueryParameter param,
+        TQueryResponse expectedResponse) where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter
+    {
+        var actual = GetAggregateQueryResponse<TQuery, TQueryParameter, TQueryResponse>(param);
+        var expected = expectedResponse;
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(expectedJson, actualJson);
+        return this;
+    }
+    public IAggregateTestHelper<TAggregatePayload> ThenAggregateQueryGetResponse<TQuery, TQueryParameter, TQueryResponse>(
+        TQueryParameter param,
+        Action<TQueryResponse> responseAction) where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter
+    {
+        responseAction(GetAggregateQueryResponse<TQuery, TQueryParameter, TQueryResponse>(param)!);
+        return this;
+    }
+    public IAggregateTestHelper<TAggregatePayload> ThenAggregateQueryResponseIsFromJson<TQuery, TQueryParameter, TQueryResponse>(
+        TQueryParameter param,
+        string responseJson) where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter
+    {
+        var response = JsonSerializer.Deserialize<TQueryResponse>(responseJson);
+        if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        ThenAggregateQueryResponseIs<TQuery, TQueryParameter, TQueryResponse>(param, response);
+        return this;
+    }
+    public IAggregateTestHelper<TAggregatePayload> ThenAggregateQueryResponseIsFromFile<TQuery, TQueryParameter, TQueryResponse>(
+        TQueryParameter param,
+        string responseFilename) where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter
+    {
+        using var openStream = File.OpenRead(responseFilename);
+        var response = JsonSerializer.Deserialize<TQueryResponse>(openStream);
+        if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        ThenAggregateQueryResponseIs<TQuery, TQueryParameter, TQueryResponse>(param, response);
         return this;
     }
     #endregion
