@@ -169,19 +169,6 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         File.WriteAllText(filename, actualJson);
         return this;
     }
-    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionTest<TSingleProjectionPayload>(
-        Action<SingleProjectionTest<TSingleProjectionPayload>> singleProjectionTestAction)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
-    {
-        var singleProjection =
-            Activator.CreateInstance(
-                typeof(SingleProjectionTest<TSingleProjectionPayload>),
-                _serviceProvider) as SingleProjectionTest<TSingleProjectionPayload>;
-        if (singleProjection == null) { throw new Exception("Could not create single aggregate projection"); }
-        singleProjection.AggregateId = GetAggregateId();
-        singleProjectionTestAction(singleProjection);
-        return this;
-    }
     public Guid GetAggregateId() => Aggregate.AggregateId;
     public int GetCurrentVersion() => Aggregate.Version;
     public AggregateState<TAggregatePayload> GetAggregateState() => Aggregate.ToState();
@@ -533,4 +520,86 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         _latestEvents = new List<IEvent>();
         _latestException = null;
     }
+
+    #region Single Projection
+    private SingleProjectionState<TSingleProjectionPayload> GetSingleProjectionState<TSingleProjectionPayload>()
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+    {
+        var singleProjection = _serviceProvider.GetService<ISingleProjectionService>() ??
+            throw new Exception("Failed to get single projection service");
+        return singleProjection.GetProjectionAsync<TSingleProjectionPayload>(GetAggregateId()).Result ??
+            throw new Exception("Failed to get single projection state for " + typeof(TSingleProjectionPayload).Name + " and " + GetAggregateId());
+    }
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionStateIs<TSingleProjectionPayload>(
+        SingleProjectionState<TSingleProjectionPayload> state) where TSingleProjectionPayload : ISingleProjectionPayload, new()
+    {
+        var actual = GetSingleProjectionState<TSingleProjectionPayload>();
+        var expected = state with
+        {
+            LastEventId = actual.LastEventId,
+            Version = actual.Version,
+            AppliedSnapshotVersion = actual.AppliedSnapshotVersion,
+            LastSortableUniqueId = actual.LastSortableUniqueId
+        };
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(expectedJson, actualJson);
+        return this;
+    }
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIs<TSingleProjectionPayload>(TSingleProjectionPayload payload)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+    {
+        var actual = GetSingleProjectionState<TSingleProjectionPayload>().Payload;
+        var expected = payload;
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(expectedJson, actualJson);
+        return this;
+    }
+    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionPayload<TSingleProjectionPayload>(
+        Action<TSingleProjectionPayload> payloadAction) where TSingleProjectionPayload : ISingleProjectionPayload, new()
+    {
+        payloadAction(GetSingleProjectionState<TSingleProjectionPayload>().Payload);
+        return this;
+    }
+    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionState<TSingleProjectionPayload>(
+        Action<SingleProjectionState<TSingleProjectionPayload>> stateAction) where TSingleProjectionPayload : ISingleProjectionPayload, new()
+    {
+        stateAction(GetSingleProjectionState<TSingleProjectionPayload>());
+        return this;
+    }
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIsFromJson<TSingleProjectionPayload>(string payloadJson)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+    {
+        var actual = GetSingleProjectionState<TSingleProjectionPayload>().Payload;
+        var payload = JsonSerializer.Deserialize<TSingleProjectionPayload>(payloadJson);
+        if (payload is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        var expected = payload;
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(expectedJson, actualJson);
+        return this;
+    }
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIsFromFile<TSingleProjectionPayload>(string payloadFilename)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+    {
+        using var openStream = File.OpenRead(payloadFilename);
+        var actual = GetSingleProjectionState<TSingleProjectionPayload>().Payload;
+        var payload = JsonSerializer.Deserialize<TSingleProjectionPayload>(openStream);
+        if (payload is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        var expected = payload;
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(expectedJson, actualJson);
+        return this;
+    }
+    public IAggregateTestHelper<TAggregatePayload> WriteSingleProjectionStateToFile<TSingleProjectionPayload>(string filename)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+    {
+        var state = GetSingleProjectionState<TSingleProjectionPayload>();
+        var json = SekibanJsonHelper.Serialize(state);
+        File.WriteAllText(filename, json);
+        return this;
+    }
+    #endregion
 }

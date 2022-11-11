@@ -115,10 +115,6 @@ public class AggregateTestBase<TAggregatePayload, TDependencyDefinition> : IDisp
     public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors(IEnumerable<SekibanValidationParameterError> validationParameterErrors) =>
         _helper.ThenHasValidationErrors(validationParameterErrors);
     public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors() => _helper.ThenHasValidationErrors();
-    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionTest<TSingleProjectionPayload>(
-        Action<SingleProjectionTest<TSingleProjectionPayload>> singleProjectionTestAction)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new() => _helper.ThenGetSingleProjectionTest(singleProjectionTestAction);
-
     public void Dispose() { }
 
 
@@ -135,4 +131,26 @@ public class AggregateTestBase<TAggregatePayload, TDependencyDefinition> : IDisp
         }
         return toreturn;
     }
+    #region SingleProjection
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionStateIs<TSingleProjectionPayload>(
+        SingleProjectionState<TSingleProjectionPayload> state) where TSingleProjectionPayload : ISingleProjectionPayload, new() =>
+        _helper.ThenSingleProjectionStateIs(state);
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIs<TSingleProjectionPayload>(TSingleProjectionPayload payload)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new() => _helper.ThenSingleProjectionPayloadIs(payload);
+    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionPayload<TSingleProjectionPayload>(
+        Action<TSingleProjectionPayload> payloadAction) where TSingleProjectionPayload : ISingleProjectionPayload, new() =>
+        _helper.ThenGetSingleProjectionPayload(payloadAction);
+    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionState<TSingleProjectionPayload>(
+        Action<SingleProjectionState<TSingleProjectionPayload>> stateAction) where TSingleProjectionPayload : ISingleProjectionPayload, new() =>
+        _helper.ThenGetSingleProjectionState(stateAction);
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIsFromJson<TSingleProjectionPayload>(string payloadJson)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new() =>
+        _helper.ThenSingleProjectionPayloadIsFromJson<TSingleProjectionPayload>(payloadJson);
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIsFromFile<TSingleProjectionPayload>(string payloadFilename)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new() =>
+        _helper.ThenSingleProjectionPayloadIsFromFile<TSingleProjectionPayload>(payloadFilename);
+    public IAggregateTestHelper<TAggregatePayload> WriteSingleProjectionStateToFile<TSingleProjectionPayload>(string filename)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new() =>
+        _helper.WriteSingleProjectionStateToFile<TSingleProjectionPayload>(filename);
+    #endregion
 }

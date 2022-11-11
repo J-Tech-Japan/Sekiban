@@ -66,9 +66,6 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors(
         IEnumerable<SekibanValidationParameterError> validationParameterErrors);
     public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors();
-    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionTest<TSingleProjectionPayload>(
-        Action<SingleProjectionTest<TSingleProjectionPayload>> singleProjectionTestAction)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new();
     #endregion
 
     #region Get
@@ -80,5 +77,22 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
         where TEnvironmentAggregatePayload : IAggregatePayload, new();
     public IReadOnlyCollection<IEvent> GetLatestEnvironmentEvents();
+    #endregion
+
+    #region Single Projection
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionStateIs<TSingleProjectionPayload>(
+        SingleProjectionState<TSingleProjectionPayload> state) where TSingleProjectionPayload : ISingleProjectionPayload, new();
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIs<TSingleProjectionPayload>(TSingleProjectionPayload payload)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new();
+    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionPayload<TSingleProjectionPayload>(
+        Action<TSingleProjectionPayload> payloadAction) where TSingleProjectionPayload : ISingleProjectionPayload, new();
+    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionState<TSingleProjectionPayload>(
+        Action<SingleProjectionState<TSingleProjectionPayload>> stateAction) where TSingleProjectionPayload : ISingleProjectionPayload, new();
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIsFromJson<TSingleProjectionPayload>(string payloadJson)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new();
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIsFromFile<TSingleProjectionPayload>(string payloadFilename)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new();
+    public IAggregateTestHelper<TAggregatePayload> WriteSingleProjectionStateToFile<TSingleProjectionPayload>(string filename)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new();
     #endregion
 }
