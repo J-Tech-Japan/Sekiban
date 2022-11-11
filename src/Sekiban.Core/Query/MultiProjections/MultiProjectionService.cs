@@ -11,7 +11,7 @@ public class MultiProjectionService : IMultiProjectionService
 
     public Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjectionPayload>()
         where TProjectionPayload : IMultiProjectionPayload, new() =>
-        multiProjection.GetMultiProjectionAsync<MultiProjectionBase<TProjectionPayload>, TProjectionPayload>();
+        multiProjection.GetMultiProjectionAsync<MultiProjection<TProjectionPayload>, TProjectionPayload>();
     public async Task<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>>
         GetAggregateListObject<TAggregatePayload>() where TAggregatePayload : IAggregatePayload, new()
     {

@@ -2,7 +2,7 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 namespace Sekiban.Core.Query.MultiProjections;
 
-public class MultiProjectionBase<TProjectionPayload> : IMultiProjector<TProjectionPayload>, IMultiProjectionBase
+public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPayload>, IMultiProjectionBase
     where TProjectionPayload : IMultiProjectionPayload, new()
 {
     private TProjectionPayload Payload { get; set; } = new();
@@ -33,7 +33,12 @@ public class MultiProjectionBase<TProjectionPayload> : IMultiProjector<TProjecti
         AppliedSnapshotVersion = snapshot.Version;
         Payload = snapshot.Payload;
     }
-    public virtual IList<string> TargetAggregateNames() => new List<string>();
+    public virtual IList<string> TargetAggregateNames()
+    {
+        var projectionPayload = Payload as MultiProjectionPayloadBase<TProjectionPayload> ??
+            throw new SekibanMultiProjectionMustInheritISingleProjectionEventApplicable();
+        return projectionPayload.TargetAggregateNames();
+    }
     protected Action? GetApplyEventAction(IEvent ev, IEventPayload payload)
     {
         var projectionPayload = Payload as MultiProjectionPayloadBase<TProjectionPayload> ??
