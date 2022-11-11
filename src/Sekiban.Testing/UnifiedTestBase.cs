@@ -835,7 +835,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         using var openStream = File.OpenRead(filename);
         var projection = JsonSerializer.Deserialize<SingleProjectionListState<AggregateState<TAggregatePayload>>>(openStream);
         if (projection is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
-        return ThenMultiProjectionPayloadIs(projection);
+        return ThenAggregateListProjectionPayloadIs(projection);
     }
     public UnifiedTestBase<TDependencyDefinition> ThenGetAggregateListProjectionPayload<TAggregatePayload>(
         Action<SingleProjectionListState<AggregateState<TAggregatePayload>>> payloadAction)
@@ -890,8 +890,77 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
     }
     #endregion
 
-
-
+    #region Single Projection List Projection
+    public MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>> GetSingleProjectionListState<
+        TSingleProjectionPayload>()
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+    {
+        var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ??
+            throw new Exception("Failed to get Query service");
+        return multiProjectionService.GetSingleProjectionListObject<TSingleProjectionPayload>().Result ??
+            throw new Exception("Failed to get Single Projection List Projection Response for " + typeof(TSingleProjectionPayload).Name);
+    }
+    public UnifiedTestBase<TDependencyDefinition> ThenSingleProjectionListPayloadIsFromFile<TSingleProjectionPayload>(string filename)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+    {
+        using var openStream = File.OpenRead(filename);
+        var projection = JsonSerializer.Deserialize<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>(openStream);
+        if (projection is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        return ThenSingleProjectionListPayloadIs(projection);
+    }
+    public UnifiedTestBase<TDependencyDefinition> ThenGetSingleProjectionListPayload<TSingleProjectionPayload>(
+        Action<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>> payloadAction)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+    {
+        payloadAction(GetSingleProjectionListState<TSingleProjectionPayload>().Payload);
+        return this;
+    }
+    public UnifiedTestBase<TDependencyDefinition> ThenGetSingleProjectionListState<TSingleProjectionPayload>(
+        Action<MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>> stateAction)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+    {
+        stateAction(GetSingleProjectionListState<TSingleProjectionPayload>());
+        return this;
+    }
+    public UnifiedTestBase<TDependencyDefinition> ThenSingleProjectionListStateIs<TSingleProjectionPayload>(
+        MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>> state)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+    {
+        var actual = GetAggregateListProjectionState<TSingleProjectionPayload>();
+        var expected = state with { LastEventId = actual.LastEventId, LastSortableUniqueId = actual.LastSortableUniqueId, Version = actual.Version };
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(expectedJson, actualJson);
+        return this;
+    }
+    public UnifiedTestBase<TDependencyDefinition> ThenSingleProjectionListPayloadIs<TSingleProjectionPayload>(
+        SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>> payload)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+    {
+        var actual = GetSingleProjectionListState<TSingleProjectionPayload>().Payload;
+        var expected = payload;
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(expectedJson, actualJson);
+        return this;
+    }
+    public UnifiedTestBase<TDependencyDefinition> ThenSingleProjectionListStateIsFromFile<TSingleProjectionPayload>(string filename)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+    {
+        using var openStream = File.OpenRead(filename);
+        var projection =
+            JsonSerializer.Deserialize<MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>(openStream);
+        if (projection is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        return ThenSingleProjectionListStateIs(projection);
+    }
+    public UnifiedTestBase<TDependencyDefinition> WriteSingleProjectionListStateToFile<TSingleProjectionPayload>(string filename)
+        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+    {
+        var json = SekibanJsonHelper.Serialize(GetSingleProjectionListState<TSingleProjectionPayload>());
+        File.WriteAllTextAsync(filename, json);
+        return this;
+    }
+    #endregion
 
     #region Given
     public UnifiedTestBase<TDependencyDefinition> GivenScenario(Action initialAction)
