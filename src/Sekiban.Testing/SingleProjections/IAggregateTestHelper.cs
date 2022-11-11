@@ -1,6 +1,8 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Event;
+using Sekiban.Core.Query.QueryModel;
+using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
@@ -94,5 +96,29 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         where TSingleProjectionPayload : ISingleProjectionPayload, new();
     public IAggregateTestHelper<TAggregatePayload> WriteSingleProjectionStateToFile<TSingleProjectionPayload>(string filename)
         where TSingleProjectionPayload : ISingleProjectionPayload, new();
+    #endregion
+
+    #region Aggregate Query
+    public IAggregateTestHelper<TAggregatePayload> WriteAggregateQueryResponseToFile<TQuery, TQueryParameter, TQueryResponse>(
+        TQueryParameter param,
+        string filename)
+        where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter;
+    public IAggregateTestHelper<TAggregatePayload> ThenAggregateQueryResponseIs<TQuery, TQueryParameter, TQueryResponse>(
+        TQueryParameter param,
+        TQueryResponse expectedResponse) where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter;
+    public IAggregateTestHelper<TAggregatePayload> ThenAggregateQueryGetResponse<TQuery, TQueryParameter, TQueryResponse>(
+        TQueryParameter param,
+        Action<TQueryResponse> responseAction) where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter;
+    public IAggregateTestHelper<TAggregatePayload> ThenAggregateQueryResponseIsFromJson<TQuery, TQueryParameter, TQueryResponse>(
+        TQueryParameter param,
+        string responseJson) where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter;
+    public IAggregateTestHelper<TAggregatePayload> ThenAggregateQueryResponseIsFromFile<TQuery, TQueryParameter, TQueryResponse>(
+        TQueryParameter param,
+        string responseFilename) where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter;
     #endregion
 }

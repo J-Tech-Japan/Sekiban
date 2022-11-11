@@ -4,6 +4,7 @@ using Customer.Domain.Aggregates.Clients;
 using Customer.Domain.Aggregates.Clients.Commands;
 using Customer.Domain.Aggregates.Clients.Events;
 using Customer.Domain.Aggregates.Clients.Projections;
+using Customer.Domain.Aggregates.Clients.Queries;
 using Customer.Domain.Shared;
 using Sekiban.Testing.SingleProjections;
 using System;
@@ -74,7 +75,13 @@ public class ClientAndProjectionSpec : AggregateTestBase<Client, CustomerDepende
                     {
                         new(clientName, FirstEventDatetime), new(clientNameChanged, ChangedEventDatetime)
                     },
-                    clientEmail));
+                    clientEmail))
+            .ThenAggregateQueryResponseIs<ClientEmailExistsQuery, ClientEmailExistsQuery.QueryParameter, bool>(
+                new ClientEmailExistsQuery.QueryParameter(clientEmail),
+                true)
+            .ThenAggregateQueryResponseIs<ClientEmailExistsQuery, ClientEmailExistsQuery.QueryParameter, bool>(
+                new ClientEmailExistsQuery.QueryParameter("not" + clientEmail),
+                false);
     }
     [Fact]
     public void TestWithFile()
