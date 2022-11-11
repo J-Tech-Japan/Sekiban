@@ -2,29 +2,22 @@ using Customer.Domain.Aggregates.Branches.Events;
 using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
 using Customer.Domain.Shared;
 using Sekiban.Core.Query.MultiProjections;
-using Sekiban.Testing.Projection;
-using Sekiban.Testing.Queries;
+using Sekiban.Testing;
 using System;
 using System.Collections.Immutable;
 using Xunit;
 namespace Customer.Test.AggregateTests;
 
-public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : MultiProjectionTestBase<ClientLoyaltyPointMultiProjection, CustomerDependency>
+public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBase<CustomerDependency>
 {
     private static readonly Guid branchId = Guid.Parse("b4a3c2e3-78ca-473b-8afb-f534e5d6d66b");
     private static readonly string branchName = "Test Branch";
-
-    private readonly MultiProjectionQueryTest<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultiProjectionQuery,
-        ClientLoyaltyPointMultiProjectionQuery.QueryParameter,
-        ClientLoyaltyPointMultiProjection> multiProjectionQueryTest = new();
 
     [Fact]
     public void ProjectionTest()
     {
         GivenEvents((branchId, new BranchCreated(branchName)))
-            .WhenProjection()
-            .ThenNotThrowsAnException()
-            .ThenStateIs(
+            .ThenMultiProjectionStateIs(
                 new MultiProjectionState<ClientLoyaltyPointMultiProjection>(
                     new ClientLoyaltyPointMultiProjection(
                         ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty.Add(
@@ -34,18 +27,16 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : MultiProjecti
                     string.Empty,
                     0,
                     0))
-            .ThenGetQueryTest<ClientLoyaltyPointMultiProjectionQuery, ClientLoyaltyPointMultiProjectionQuery.QueryParameter,
+            .ThenMultiProjectionQueryResponseIs<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultiProjectionQuery,
+                ClientLoyaltyPointMultiProjectionQuery.QueryParameter,
                 ClientLoyaltyPointMultiProjection>(
-                test => test.WhenParam(
-                        new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(
-                            null,
-                            ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName))
-                    .ThenResponseIs(
-                        new ClientLoyaltyPointMultiProjection(
-                            ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty.Add(
-                                new ClientLoyaltyPointMultiProjection.ProjectedBranch(branchId, branchName)),
-                            ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty)));
-
+                new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(
+                    null,
+                    ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
+                new ClientLoyaltyPointMultiProjection(
+                    ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty.Add(
+                        new ClientLoyaltyPointMultiProjection.ProjectedBranch(branchId, branchName)),
+                    ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty));
     }
 
     [Fact]
@@ -610,31 +601,28 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : MultiProjecti
 ]
 ")
             #endregion
-            .WhenProjection()
-            .ThenNotThrowsAnException();
+            .ThenGetMultiProjectionPayload<ClientLoyaltyPointMultiProjection>(payload => Assert.NotNull(payload.Branches));
     }
 
     [Fact]
     public void JsonFileEventsTest()
     {
-        GivenQueryTest(multiProjectionQueryTest)
-            .GivenEventsFromFile("TestData1.json")
-            .WhenProjection()
-            .ThenNotThrowsAnException()
+        GivenEventsFromFile("TestData1.json")
+            .ThenGetMultiProjectionPayload<ClientLoyaltyPointMultiProjection>(payload => Assert.NotNull(payload.Branches))
 //        await ThenStateFileAsync("TestData1Result.json");
-            .WriteProjectionToFile("TestData1ResultOut.json");
+            .WriteMultiProjectionStateToFile<ClientLoyaltyPointMultiProjection>("TestData1ResultOut.json");
 
     }
     [Fact]
     public void QueryTest()
     {
-        GivenScenario(JsonFileEventsTest);
-        multiProjectionQueryTest.WhenParam(
+        GivenScenario(JsonFileEventsTest)
+            .ThenMultiProjectionQueryResponseIsFromFile<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultiProjectionQuery,
+                ClientLoyaltyPointMultiProjectionQuery.QueryParameter, ClientLoyaltyPointMultiProjection>(
                 new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(
                     branchId,
-                    ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName))
-            // .WriteResponseToFile("QueryResponseOut.json")
-            .ThenResponseIsFromFile("ClientLoyaltyPointProjectionQueryResponse01.json");
-
+                    ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
+                "ClientLoyaltyPointProjectionQueryResponse01.json"
+            );
     }
 }
