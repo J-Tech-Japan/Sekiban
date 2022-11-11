@@ -585,7 +585,175 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
 
 
 
+    #region SingleProjection Query
+    private TQueryResponse GetMultiProjectionQueryResponse<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
+        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TQuery : IMultiProjectionQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter
+    {
+        var singleProjection = _serviceProvider.GetService<IQueryService>() ??
+            throw new Exception("Failed to get Query service");
+        return singleProjection.GetMultiProjectionQueryAsync<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param).Result ??
+            throw new Exception("Failed to get Aggregate Query Response for " + typeof(TQuery).Name);
+    }
 
+    public UnifiedTestBase<TDependencyDefinition> WriteMultiProjectionQueryResponseToFile<TMultiProjectionPayload, TQuery, TQueryParameter,
+        TQueryResponse>(
+        TQueryParameter param,
+        string filename)
+        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TQuery : IMultiProjectionQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter
+    {
+        var json = SekibanJsonHelper.Serialize(
+            GetMultiProjectionQueryResponse<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param));
+        if (string.IsNullOrEmpty(json))
+        {
+            throw new InvalidDataException("Json is null or empty");
+        }
+        File.WriteAllTextAsync(filename, json);
+        return this;
+    }
+    public UnifiedTestBase<TDependencyDefinition> ThenMultiProjectionQueryResponseIs<TMultiProjectionPayload, TQuery, TQueryParameter,
+        TQueryResponse>(
+        TQueryParameter param,
+        TQueryResponse expectedResponse)
+        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TQuery : IMultiProjectionQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter
+    {
+        var actual = GetMultiProjectionQueryResponse<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param);
+        var expected = expectedResponse;
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(expectedJson, actualJson);
+        return this;
+    }
+    public UnifiedTestBase<TDependencyDefinition> ThenMultiProjectionQueryGetResponse<TMultiProjectionPayload, TQuery, TQueryParameter,
+        TQueryResponse>(
+        TQueryParameter param,
+        Action<TQueryResponse> responseAction)
+        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TQuery : IMultiProjectionQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter
+    {
+        responseAction(GetMultiProjectionQueryResponse<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param));
+        return this;
+    }
+    public UnifiedTestBase<TDependencyDefinition> ThenMultiProjectionQueryResponseIsFromJson<TMultiProjectionPayload, TQuery, TQueryParameter,
+        TQueryResponse>(
+        TQueryParameter param,
+        string responseJson)
+        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TQuery : IMultiProjectionQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter
+    {
+        var response = JsonSerializer.Deserialize<TQueryResponse>(responseJson);
+        if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        ThenMultiProjectionQueryResponseIs<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param, response);
+        return this;
+    }
+    public UnifiedTestBase<TDependencyDefinition> ThenMultiProjectionQueryResponseIsFromFile<TMultiProjectionPayload, TQuery, TQueryParameter,
+        TQueryResponse>(
+        TQueryParameter param,
+        string responseFilename)
+        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TQuery : IMultiProjectionQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter
+    {
+        using var openStream = File.OpenRead(responseFilename);
+        var response = JsonSerializer.Deserialize<TQueryResponse>(openStream);
+
+        if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        ThenMultiProjectionQueryResponseIs<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param, response);
+        return this;
+    }
+    #endregion
+
+    #region SingleProjection　List Query
+    private ListQueryResult<TQueryResponse> GetMultiProjectionListQueryResponse<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
+        TQueryParameter param)
+        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TQuery : IMultiProjectionListQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter
+    {
+        var singleProjection = _serviceProvider.GetService<IQueryService>() ??
+            throw new Exception("Failed to get Query service");
+        return singleProjection.GetMultiProjectionListQueryAsync<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param).Result ??
+            throw new Exception("Failed to get Aggregate Query Response for " + typeof(TQuery).Name);
+    }
+
+    public UnifiedTestBase<TDependencyDefinition> WriteMultiProjectionListQueryResponseToFile<TMultiProjectionPayload, TQuery, TQueryParameter,
+        TQueryResponse>(
+        TQueryParameter param,
+        string filename)
+        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TQuery : IMultiProjectionListQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter
+    {
+        var json = SekibanJsonHelper.Serialize(
+            GetMultiProjectionListQueryResponse<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param));
+        if (string.IsNullOrEmpty(json))
+        {
+            throw new InvalidDataException("Json is null or empty");
+        }
+        File.WriteAllTextAsync(filename, json);
+        return this;
+    }
+    public UnifiedTestBase<TDependencyDefinition> ThenMultiProjectionListQueryResponseIs<TMultiProjectionPayload, TQuery, TQueryParameter,
+        TQueryResponse>(
+        TQueryParameter param,
+        ListQueryResult<TQueryResponse> expectedResponse)
+        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TQuery : IMultiProjectionListQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter
+    {
+        var actual = GetMultiProjectionListQueryResponse<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param);
+        var expected = expectedResponse;
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(expectedJson, actualJson);
+        return this;
+    }
+    public UnifiedTestBase<TDependencyDefinition> ThenMultiProjectionListQueryGetResponse<TMultiProjectionPayload, TQuery, TQueryParameter,
+        TQueryResponse>(
+        TQueryParameter param,
+        Action<ListQueryResult<TQueryResponse>> responseAction)
+        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TQuery : IMultiProjectionListQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter
+    {
+        responseAction(GetMultiProjectionListQueryResponse<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param));
+        return this;
+    }
+    public UnifiedTestBase<TDependencyDefinition> ThenMultiProjectionListQueryResponseIsFromJson<TMultiProjectionPayload, TQuery, TQueryParameter,
+        TQueryResponse>(
+        TQueryParameter param,
+        string responseJson)
+        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TQuery : IMultiProjectionListQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter
+    {
+        var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(responseJson);
+        if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        ThenMultiProjectionListQueryResponseIs<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param, response);
+        return this;
+    }
+    public UnifiedTestBase<TDependencyDefinition> ThenMultiProjectionListQueryResponseIsFromFile<TMultiProjectionPayload, TQuery, TQueryParameter,
+        TQueryResponse>(
+        TQueryParameter param,
+        string responseFilename)
+        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TQuery : IMultiProjectionListQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter
+    {
+        using var openStream = File.OpenRead(responseFilename);
+        var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(openStream);
+        if (response is null) { throw new InvalidDataException("JSON のでシリアライズに失敗しました。"); }
+        ThenMultiProjectionListQueryResponseIs<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param, response);
+        return this;
+    }
+    #endregion
 
     #region Given
     public UnifiedTestBase<TDependencyDefinition> GivenScenario(Action initialAction)
