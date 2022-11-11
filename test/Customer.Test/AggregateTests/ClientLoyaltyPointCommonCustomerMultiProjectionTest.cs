@@ -14,8 +14,8 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : MultiProjecti
     private static readonly Guid branchId = Guid.Parse("b4a3c2e3-78ca-473b-8afb-f534e5d6d66b");
     private static readonly string branchName = "Test Branch";
 
-    private readonly MultiProjectionQueryTest<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultipleMultiProjectionQuery,
-        ClientLoyaltyPointMultipleMultiProjectionQuery.QueryParameter,
+    private readonly MultiProjectionQueryTest<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultiProjectionQuery,
+        ClientLoyaltyPointMultiProjectionQuery.QueryParameter,
         ClientLoyaltyPointMultiProjection> multiProjectionQueryTest = new();
 
     [Fact]
@@ -34,12 +34,12 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : MultiProjecti
                     string.Empty,
                     0,
                     0))
-            .ThenGetQueryTest<ClientLoyaltyPointMultipleMultiProjectionQuery, ClientLoyaltyPointMultipleMultiProjectionQuery.QueryParameter,
+            .ThenGetQueryTest<ClientLoyaltyPointMultiProjectionQuery, ClientLoyaltyPointMultiProjectionQuery.QueryParameter,
                 ClientLoyaltyPointMultiProjection>(
                 test => test.WhenParam(
-                        new ClientLoyaltyPointMultipleMultiProjectionQuery.QueryParameter(
+                        new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(
                             null,
-                            ClientLoyaltyPointMultipleMultiProjectionQuery.QuerySortKeys.ClientName))
+                            ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName))
                     .ThenResponseIs(
                         new ClientLoyaltyPointMultiProjection(
                             ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty.Add(
@@ -630,9 +630,9 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : MultiProjecti
     {
         GivenScenario(JsonFileEventsTest);
         multiProjectionQueryTest.WhenParam(
-                new ClientLoyaltyPointMultipleMultiProjectionQuery.QueryParameter(
+                new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(
                     branchId,
-                    ClientLoyaltyPointMultipleMultiProjectionQuery.QuerySortKeys.ClientName))
+                    ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName))
             // .WriteResponseToFile("QueryResponseOut.json")
             .ThenResponseIsFromFile("ClientLoyaltyPointProjectionQueryResponse01.json");
 

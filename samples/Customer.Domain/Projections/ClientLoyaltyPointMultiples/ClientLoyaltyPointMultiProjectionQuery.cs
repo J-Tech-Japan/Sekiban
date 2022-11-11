@@ -4,8 +4,8 @@ using Sekiban.Core.Query.QueryModel.Parameters;
 using System.Collections.Immutable;
 namespace Customer.Domain.Projections.ClientLoyaltyPointMultiples;
 
-public class ClientLoyaltyPointMultipleMultiProjectionQuery : IMultiProjectionQuery<ClientLoyaltyPointMultiProjection,
-    ClientLoyaltyPointMultipleMultiProjectionQuery.QueryParameter,
+public class ClientLoyaltyPointMultiProjectionQuery : IMultiProjectionQuery<ClientLoyaltyPointMultiProjection,
+    ClientLoyaltyPointMultiProjectionQuery.QueryParameter,
     ClientLoyaltyPointMultiProjection>
 {
     public enum QuerySortKeys

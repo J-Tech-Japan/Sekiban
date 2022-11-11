@@ -57,7 +57,7 @@ public class CustomerDependency : DomainDependencyDefinitionBase
             .AddCreateCommandHandler<CreateRecentInMemoryActivity, CreateRecentInMemoryActivity.Handler>()
             .AddChangeCommandHandler<AddRecentInMemoryActivity, AddRecentInMemoryActivity.Handler>();
 
-        AddMultiProjectionQuery<ClientLoyaltyPointMultipleMultiProjectionQuery>();
+        AddMultiProjectionQuery<ClientLoyaltyPointMultiProjectionQuery>();
         AddMultiProjectionListQuery<ClientLoyaltyPointQuery>();
 
     }
