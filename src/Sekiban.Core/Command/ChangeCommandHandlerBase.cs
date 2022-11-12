@@ -15,7 +15,9 @@ public abstract class ChangeCommandHandlerBase<TAggregatePayload, TCommand> : IC
         Aggregate<TAggregatePayload> aggregate)
     {
         var command = commandDocument.Payload;
-        _aggregate = aggregate;
+        _aggregate = new Aggregate<TAggregatePayload>
+            { AggregateId = aggregate.AggregateId };
+        _aggregate.ApplySnapshot(aggregate.ToState());
         if (command is IOnlyPublishingCommand)
         {
             throw new SekibanCanNotExecuteOnlyPublishingEventCommand(typeof(TCommand).Name);
@@ -56,13 +58,13 @@ public abstract class ChangeCommandHandlerBase<TAggregatePayload, TCommand> : IC
             throw new SekibanCommandHandlerAggregateNullException();
         }
         var state = _aggregate.ToState();
+        var aggregate = new Aggregate<TAggregatePayload>();
+        aggregate.ApplySnapshot(state);
         foreach (var ev in _events)
         {
-            var aggregate = new Aggregate<TAggregatePayload>();
-            aggregate.ApplySnapshot(state);
             aggregate.ApplyEvent(ev);
-            state = aggregate.ToState();
         }
+        state = aggregate.ToState();
         return state;
     }
 

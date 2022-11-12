@@ -17,7 +17,7 @@ public abstract class CreateCommandHandlerBase<TAggregatePayload, TCommand> : IC
         {
             throw new SekibanCanNotExecuteOnlyPublishingEventCommand(typeof(TCommand).Name);
         }
-        _aggregate = aggregate;
+        _aggregate = new Aggregate<TAggregatePayload> { AggregateId = aggregate.AggregateId };
         var eventPayloads = ExecCreateCommandAsync(GetAggregateState, command.Payload);
         await foreach (var eventPayload in eventPayloads)
         {
@@ -38,13 +38,14 @@ public abstract class CreateCommandHandlerBase<TAggregatePayload, TCommand> : IC
             throw new SekibanCommandHandlerAggregateNullException();
         }
         var state = _aggregate.ToState();
+        var aggregate = new Aggregate<TAggregatePayload>
+            { AggregateId = _aggregate.AggregateId };
+        aggregate.ApplySnapshot(state);
         foreach (var ev in _events)
         {
-            var aggregate = new Aggregate<TAggregatePayload>();
-            aggregate.ApplySnapshot(state);
             aggregate.ApplyEvent(ev);
-            state = aggregate.ToState();
         }
+        state = aggregate.ToState();
         return state;
     }
     protected abstract IAsyncEnumerable<IApplicableEvent<TAggregatePayload>> ExecCreateCommandAsync(

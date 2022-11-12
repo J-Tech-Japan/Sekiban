@@ -44,6 +44,7 @@ public class CustomerDependency : DomainDependencyDefinitionBase
 
         AddAggregate<LoyaltyPoint>()
             .AddCreateCommandHandler<CreateLoyaltyPoint, CreateLoyaltyPoint.Handler>()
+            .AddCreateCommandHandler<CreateLoyaltyPointAndAddPoint, CreateLoyaltyPointAndAddPoint.Handler>()
             .AddChangeCommandHandler<AddLoyaltyPoint, AddLoyaltyPoint.Handler>()
             .AddChangeCommandHandler<UseLoyaltyPoint, UseLoyaltyPoint.Handler>()
             .AddChangeCommandHandler<DeleteLoyaltyPoint, DeleteLoyaltyPoint.Handler>();
