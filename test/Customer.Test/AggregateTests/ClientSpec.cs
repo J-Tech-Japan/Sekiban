@@ -38,7 +38,7 @@ public class ClientSpec : AggregateTestBase<Client, CustomerDependency>
         // エラーとならない
         ThenNotThrowsAnException();
         // コマンドによって生成されたイベントを検証する
-        ThenSingleEventPayloadIs(new ClientCreated(branchId, testClientName, testEmail));
+        ThenLastSingleEventPayloadIs(new ClientCreated(branchId, testClientName, testEmail));
         // 現在の集約のステータスを検証する
         ThenStateIs(
             new AggregateState<Client>
@@ -49,7 +49,7 @@ public class ClientSpec : AggregateTestBase<Client, CustomerDependency>
         WhenChange(client => new ChangeClientName(client.AggregateId, testClientChangedName) { ReferenceVersion = client.Version });
         WriteStateToFile("ClientCreateSpec.json");
         // コマンドによって生成されたイベントを検証する
-        ThenSingleEventPayloadIs(new ClientNameChanged(testClientChangedName));
+        ThenLastSingleEventPayloadIs(new ClientNameChanged(testClientChangedName));
         // 現在の集約のステータスを検証する
         ThenStateIs(
             new AggregateState<Client>

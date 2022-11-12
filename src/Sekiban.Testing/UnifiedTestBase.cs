@@ -782,6 +782,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name);
     }
     public IReadOnlyCollection<IEvent> GetLatestEvents() => _commandExecutor.LatestEvents;
+    public IReadOnlyCollection<IEvent> GetAllAggregateEvents<TAggregatePayload>(Guid aggregateId) where TAggregatePayload : IAggregatePayload, new() => _commandExecutor.GetAllAggregateEvents<TAggregatePayload>(aggregateId);
 
     #region GivenEvents
     public UnifiedTestBase<TDependencyDefinition> GivenEvents(IEnumerable<IEvent> events)
