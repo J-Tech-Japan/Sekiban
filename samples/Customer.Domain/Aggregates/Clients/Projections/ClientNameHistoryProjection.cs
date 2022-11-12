@@ -1,5 +1,4 @@
 using Customer.Domain.Aggregates.Clients.Events;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Event;
 using Sekiban.Core.Query.SingleProjections;
 // ReSharper disable UnusedVariable

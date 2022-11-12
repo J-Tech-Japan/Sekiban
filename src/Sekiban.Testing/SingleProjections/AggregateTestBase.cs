@@ -70,6 +70,8 @@ public class AggregateTestBase<TAggregatePayload, TDependencyDefinition> : IDisp
         return this;
     }
     public IReadOnlyCollection<IEvent> GetLatestEnvironmentEvents() => _helper.GetLatestEnvironmentEvents();
+    public List<IEvent> GetLatestEvents() => _helper.GetLatestEvents();
+    public List<IEvent> GetAllAggregateEvents() => _helper.GetAllAggregateEvents();
     public IAggregateTestHelper<TAggregatePayload> WhenCreate<C>(C createCommand) where C : ICreateCommand<TAggregatePayload> =>
         _helper.WhenCreate(createCommand);
     public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(C changeCommand) where C : ChangeCommandBase<TAggregatePayload> =>
@@ -83,14 +85,18 @@ public class AggregateTestBase<TAggregatePayload, TDependencyDefinition> : IDisp
     public IAggregateTestHelper<TAggregatePayload> WhenChangeWithPublish<C>(Func<AggregateState<TAggregatePayload>, C> commandFunc)
         where C : ChangeCommandBase<TAggregatePayload> => _helper.WhenChangeWithPublish(commandFunc);
 
-    public IAggregateTestHelper<TAggregatePayload> ThenGetEvents(Action<List<IEvent>> checkEventsAction) => _helper.ThenGetEvents(checkEventsAction);
-    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleEvent<T>(Action<Event<T>> checkEventAction) where T : IEventPayload =>
-        _helper.ThenGetSingleEvent(checkEventAction);
-    public IAggregateTestHelper<TAggregatePayload> ThenSingleEventIs<T>(Event<T> @event) where T : IEventPayload => _helper.ThenSingleEventIs(@event);
-    public IAggregateTestHelper<TAggregatePayload> ThenSingleEventPayloadIs<T>(T payload) where T : IEventPayload =>
-        _helper.ThenSingleEventPayloadIs(payload);
-    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleEventPayload<T>(Action<T> checkPayloadAction) where T : class, IEventPayload =>
-        _helper.ThenGetSingleEventPayload(checkPayloadAction);
+    public IAggregateTestHelper<TAggregatePayload> ThenGetLatestEvents(Action<List<IEvent>> checkEventsAction) =>
+        _helper.ThenGetLatestEvents(checkEventsAction);
+    public IAggregateTestHelper<TAggregatePayload> ThenGetAllAggregateEvents(Action<List<IEvent>> checkEventsAction) =>
+        _helper.ThenGetAllAggregateEvents(checkEventsAction);
+    public IAggregateTestHelper<TAggregatePayload> ThenGetLatestSingleEvent<T>(Action<Event<T>> checkEventAction) where T : IEventPayload =>
+        _helper.ThenGetLatestSingleEvent(checkEventAction);
+    public IAggregateTestHelper<TAggregatePayload> ThenLastSingleEventIs<T>(Event<T> @event) where T : IEventPayload =>
+        _helper.ThenLastSingleEventIs(@event);
+    public IAggregateTestHelper<TAggregatePayload> ThenLastSingleEventPayloadIs<T>(T payload) where T : IEventPayload =>
+        _helper.ThenLastSingleEventPayloadIs(payload);
+    public IAggregateTestHelper<TAggregatePayload> ThenGetLatestSingleEventPayload<T>(Action<T> checkPayloadAction) where T : class, IEventPayload =>
+        _helper.ThenGetLatestSingleEventPayload(checkPayloadAction);
     public IAggregateTestHelper<TAggregatePayload> ThenGetState(Action<AggregateState<TAggregatePayload>> checkStateAction) =>
         _helper.ThenGetState(checkStateAction);
     public IAggregateTestHelper<TAggregatePayload> ThenStateIs(AggregateState<TAggregatePayload> expectedState) =>

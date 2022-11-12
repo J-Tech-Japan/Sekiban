@@ -4,6 +4,7 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Document;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
+using Sekiban.Core.Partition;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Validation;
 using System.Collections.Immutable;
@@ -168,5 +169,22 @@ public class TestCommandExecutor
             }
         }
         return LatestEvents;
+    }
+    public IReadOnlyCollection<IEvent> GetAllAggregateEvents<TAggregatePayload>(Guid aggregateId) where TAggregatePayload : IAggregatePayload, new()
+    {
+        var toReturn = new List<IEvent>();
+        var documentRepository = _serviceProvider.GetRequiredService(typeof(IDocumentRepository)) as IDocumentRepository ??
+            throw new Exception("Failed to get document repository");
+        documentRepository.GetAllEventsForAggregateIdAsync(
+                aggregateId,
+                typeof(TAggregatePayload),
+                PartitionKeyGenerator.ForEvent(aggregateId, typeof(TAggregatePayload)),
+                null,
+                eventObjects =>
+                {
+                    toReturn.AddRange(eventObjects);
+                })
+            .Wait();
+        return toReturn;
     }
 }

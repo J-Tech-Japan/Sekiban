@@ -19,7 +19,7 @@ public class RecentActivityTest : AggregateTestBase<RecentActivity, CustomerDepe
     {
         WhenCreate(new CreateRecentActivity())
             .ThenNotThrowsAnException()
-            .ThenGetSingleEvent<RecentActivityCreated>(ev => firstRecord = ev.Payload.Activity)
+            .ThenGetLatestSingleEvent<RecentActivityCreated>(ev => firstRecord = ev.Payload.Activity)
             .ThenPayloadIs(new RecentActivity(new List<RecentActivityRecord> { firstRecord }.ToImmutableList()));
     }
     [Fact]
@@ -28,7 +28,7 @@ public class RecentActivityTest : AggregateTestBase<RecentActivity, CustomerDepe
         GivenScenario(CreateRecentActivityTest)
             .WhenChange(new AddRecentActivity(GetAggregateId(), "Regular Event"))
             .ThenNotThrowsAnException()
-            .ThenGetSingleEvent<RecentActivityAdded>(ev => regularRecord = ev.Payload.Record)
+            .ThenGetLatestSingleEvent<RecentActivityAdded>(ev => regularRecord = ev.Payload.Record)
             .ThenPayloadIs(new RecentActivity(new List<RecentActivityRecord> { regularRecord, firstRecord }.ToImmutableList()));
     }
     [Fact]
@@ -37,7 +37,7 @@ public class RecentActivityTest : AggregateTestBase<RecentActivity, CustomerDepe
         GivenScenario(AddRegularEventTest)
             .WhenChange(new OnlyPublishingAddRecentActivity(GetAggregateId(), "Publish Only Event"))
             .ThenNotThrowsAnException()
-            .ThenGetSingleEvent<RecentActivityAdded>(ev => publishOnlyRecord = ev.Payload.Record)
+            .ThenGetLatestSingleEvent<RecentActivityAdded>(ev => publishOnlyRecord = ev.Payload.Record)
             .ThenPayloadIs(new RecentActivity(new List<RecentActivityRecord> { publishOnlyRecord, regularRecord, firstRecord }.ToImmutableList()));
     }
 }
