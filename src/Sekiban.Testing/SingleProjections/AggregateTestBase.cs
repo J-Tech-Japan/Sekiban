@@ -174,11 +174,11 @@ public class AggregateTestBase<TAggregatePayload, TDependencyDefinition> : IDisp
         TQueryResponse expectedResponse) where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter =>
         _helper.ThenAggregateQueryResponseIs<TQuery, TQueryParameter, TQueryResponse>(param, expectedResponse);
-    public IAggregateTestHelper<TAggregatePayload> ThenAggregateQueryGetResponse<TQuery, TQueryParameter, TQueryResponse>(
+    public IAggregateTestHelper<TAggregatePayload> ThenGetAggregateQueryResponse<TQuery, TQueryParameter, TQueryResponse>(
         TQueryParameter param,
         Action<TQueryResponse> responseAction) where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter =>
-        _helper.ThenAggregateQueryGetResponse<TQuery, TQueryParameter, TQueryResponse>(param, responseAction);
+        _helper.ThenGetAggregateQueryResponse<TQuery, TQueryParameter, TQueryResponse>(param, responseAction);
     public IAggregateTestHelper<TAggregatePayload> ThenAggregateQueryResponseIsFromJson<TQuery, TQueryParameter, TQueryResponse>(
         TQueryParameter param,
         string responseJson) where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
@@ -203,11 +203,11 @@ public class AggregateTestBase<TAggregatePayload, TDependencyDefinition> : IDisp
         ListQueryResult<TQueryResponse> expectedResponse) where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter =>
         _helper.ThenAggregateListQueryResponseIs<TQuery, TQueryParameter, TQueryResponse>(param, expectedResponse);
-    public IAggregateTestHelper<TAggregatePayload> ThenAggregateListQueryGetResponse<TQuery, TQueryParameter, TQueryResponse>(
+    public IAggregateTestHelper<TAggregatePayload> ThenGetAggregateListQueryResponse<TQuery, TQueryParameter, TQueryResponse>(
         TQueryParameter param,
         Action<ListQueryResult<TQueryResponse>> responseAction) where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter =>
-        _helper.ThenAggregateListQueryGetResponse<TQuery, TQueryParameter, TQueryResponse>(param, responseAction);
+        _helper.ThenGetAggregateListQueryResponse<TQuery, TQueryParameter, TQueryResponse>(param, responseAction);
     public IAggregateTestHelper<TAggregatePayload> ThenAggregateListQueryResponseIsFromJson<TQuery, TQueryParameter, TQueryResponse>(
         TQueryParameter param,
         string responseJson) where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
@@ -237,14 +237,14 @@ public class AggregateTestBase<TAggregatePayload, TDependencyDefinition> : IDisp
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter =>
         _helper.ThenSingleProjectionQueryResponseIs<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param, expectedResponse);
-    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionQueryGetResponse<TSingleProjectionPayload, TQuery, TQueryParameter,
+    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionQueryResponse<TSingleProjectionPayload, TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
         Action<TQueryResponse> responseAction)
         where TSingleProjectionPayload : ISingleProjectionPayload, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter =>
-        _helper.ThenSingleProjectionQueryGetResponse<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param, responseAction);
+        _helper.ThenGetSingleProjectionQueryResponse<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param, responseAction);
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionQueryResponseIsFromJson<TSingleProjectionPayload, TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
@@ -282,14 +282,14 @@ public class AggregateTestBase<TAggregatePayload, TDependencyDefinition> : IDisp
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter =>
         _helper.ThenSingleProjectionListQueryResponseIs<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param, expectedResponse);
-    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionListQueryGetResponse<TSingleProjectionPayload, TQuery, TQueryParameter,
+    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionListQueryResponse<TSingleProjectionPayload, TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
         Action<ListQueryResult<TQueryResponse>> responseAction)
         where TSingleProjectionPayload : ISingleProjectionPayload, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter =>
-        _helper.ThenSingleProjectionListQueryGetResponse<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param, responseAction);
+        _helper.ThenGetSingleProjectionListQueryResponse<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param, responseAction);
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionListQueryResponseIsFromJson<TSingleProjectionPayload, TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,

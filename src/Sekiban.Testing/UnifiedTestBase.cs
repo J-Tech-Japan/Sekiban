@@ -98,7 +98,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public UnifiedTestBase<TDependencyDefinition> ThenAggregateQueryGetResponse<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
+    public UnifiedTestBase<TDependencyDefinition> ThenGetAggregateQueryResponse<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
         TQueryParameter param,
         Action<TQueryResponse> responseAction)
         where TAggregatePayload : IAggregatePayload, new()
@@ -176,7 +176,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public UnifiedTestBase<TDependencyDefinition> ThenAggregateListQueryGetResponse<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
+    public UnifiedTestBase<TDependencyDefinition> ThenGetAggregateListQueryResponse<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
         TQueryParameter param,
         Action<ListQueryResult<TQueryResponse>> responseAction)
         where TAggregatePayload : IAggregatePayload, new()
@@ -259,7 +259,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public UnifiedTestBase<TDependencyDefinition> ThenSingleProjectionQueryGetResponse<TSingleProjectionPayload, TQuery, TQueryParameter,
+    public UnifiedTestBase<TDependencyDefinition> ThenGetSingleProjectionQueryResponse<TSingleProjectionPayload, TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
         Action<TQueryResponse> responseAction)
@@ -344,7 +344,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public UnifiedTestBase<TDependencyDefinition> ThenSingleProjectionListQueryGetResponse<TSingleProjectionPayload, TQuery, TQueryParameter,
+    public UnifiedTestBase<TDependencyDefinition> ThenGetSingleProjectionListQueryResponse<TSingleProjectionPayload, TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
         Action<ListQueryResult<TQueryResponse>> responseAction)
@@ -428,7 +428,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public UnifiedTestBase<TDependencyDefinition> ThenMultiProjectionQueryGetResponse<TMultiProjectionPayload, TQuery, TQueryParameter,
+    public UnifiedTestBase<TDependencyDefinition> ThenGetMultiProjectionQueryResponse<TMultiProjectionPayload, TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
         Action<TQueryResponse> responseAction)
@@ -514,7 +514,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public UnifiedTestBase<TDependencyDefinition> ThenMultiProjectionListQueryGetResponse<TMultiProjectionPayload, TQuery, TQueryParameter,
+    public UnifiedTestBase<TDependencyDefinition> ThenGetMultiProjectionListQueryResponse<TMultiProjectionPayload, TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
         Action<ListQueryResult<TQueryResponse>> responseAction)
