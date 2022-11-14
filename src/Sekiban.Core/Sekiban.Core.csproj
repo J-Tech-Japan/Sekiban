@@ -6,13 +6,13 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>JJ_Sekiban.Core</PackageId>
-        <Version>0.9.20</Version>
+        <Version>0.9.21</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Core</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.9.20</PackageVersion>
-        <Description>Fix Bug when Create Command return multiple events</Description>
+        <PackageVersion>0.9.21</PackageVersion>
+        <Description>Fix Test name inconsistncy</Description>
         <AssemblyName>Sekiban.Core</AssemblyName>
         <RootNamespace>Sekiban.Core</RootNamespace>
     </PropertyGroup>

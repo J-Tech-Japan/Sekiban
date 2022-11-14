@@ -111,7 +111,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         TQueryParameter param,
         TQueryResponse expectedResponse) where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter;
-    public IAggregateTestHelper<TAggregatePayload> ThenAggregateQueryGetResponse<TQuery, TQueryParameter, TQueryResponse>(
+    public IAggregateTestHelper<TAggregatePayload> ThenGetAggregateQueryResponse<TQuery, TQueryParameter, TQueryResponse>(
         TQueryParameter param,
         Action<TQueryResponse> responseAction) where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter;
@@ -134,7 +134,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         TQueryParameter param,
         ListQueryResult<TQueryResponse> expectedResponse) where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter;
-    public IAggregateTestHelper<TAggregatePayload> ThenAggregateListQueryGetResponse<TQuery, TQueryParameter, TQueryResponse>(
+    public IAggregateTestHelper<TAggregatePayload> ThenGetAggregateListQueryResponse<TQuery, TQueryParameter, TQueryResponse>(
         TQueryParameter param,
         Action<ListQueryResult<TQueryResponse>> responseAction) where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter;
@@ -163,7 +163,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         where TSingleProjectionPayload : ISingleProjectionPayload, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter;
-    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionQueryGetResponse<TSingleProjectionPayload, TQuery, TQueryParameter,
+    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionQueryResponse<TSingleProjectionPayload, TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
         Action<TQueryResponse> responseAction)
@@ -201,7 +201,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         where TSingleProjectionPayload : ISingleProjectionPayload, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter;
-    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionListQueryGetResponse<TSingleProjectionPayload, TQuery, TQueryParameter,
+    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionListQueryResponse<TSingleProjectionPayload, TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
         Action<ListQueryResult<TQueryResponse>> responseAction)
