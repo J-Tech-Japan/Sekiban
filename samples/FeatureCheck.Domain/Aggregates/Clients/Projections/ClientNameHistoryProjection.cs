@@ -9,8 +9,7 @@ namespace Customer.Domain.Aggregates.Clients.Projections;
 public record ClientNameHistoryProjection(
     Guid BranchId,
     IReadOnlyCollection<ClientNameHistoryProjection.ClientNameHistoryProjectionRecord> ClientNames,
-    string ClientEmail,
-    bool IsDeleted = false) : DeletableSingleProjectionPayloadBase<Client, ClientNameHistoryProjection>(IsDeleted)
+    string ClientEmail) : DeletableSingleProjectionPayloadBase<Client, ClientNameHistoryProjection>()
 {
     public ClientNameHistoryProjection() : this(Guid.Empty, new List<ClientNameHistoryProjectionRecord>(), string.Empty) { }
     public override Func<ClientNameHistoryProjection, ClientNameHistoryProjection>? GetApplyEventFunc(
