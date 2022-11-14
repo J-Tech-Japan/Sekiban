@@ -4,6 +4,7 @@ namespace Sekiban.Core.Document;
 
 public class InMemoryDocumentStore
 {
+    private static readonly SemaphoreSlim _semaphoreInMemory = new(1, 1);
     private readonly ConcurrentDictionary<string, InMemoryDocumentContainer<IEvent>> _containerDictionary = new();
     public void ResetInMemoryStore()
     {
@@ -11,6 +12,7 @@ public class InMemoryDocumentStore
     }
     public void SaveEvent(IEvent document, string partition, string sekibanContextIdentifier)
     {
+        _semaphoreInMemory.Wait();
         if (!_containerDictionary.ContainsKey(sekibanContextIdentifier))
         {
             _containerDictionary[sekibanContextIdentifier] = new InMemoryDocumentContainer<IEvent>();
@@ -34,6 +36,7 @@ public class InMemoryDocumentStore
         {
             eventContainer.All.Add(document);
         }
+        _semaphoreInMemory.Release();
     }
     public IEvent[] GetAllEvents(string sekibanContextIdentifier)
     {
