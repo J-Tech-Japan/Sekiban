@@ -12,6 +12,7 @@ using Customer.Domain.Aggregates.RecentInMemoryActivities;
 using Customer.Domain.Aggregates.RecentInMemoryActivities.Commands;
 using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
 using Customer.Domain.Shared.Exceptions;
+using Microsoft.Extensions.Caching.Memory;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Document;
@@ -36,11 +37,13 @@ public class CustomerDbStoryBasic : TestBase
     private readonly IDocumentPersistentRepository _documentPersistentRepository;
     private readonly HybridStoreManager _hybridStoreManager;
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
+    private readonly IMemoryCache _memoryCache;
     private readonly ITestOutputHelper _testOutputHelper;
     private readonly ICommandExecutor commandExecutor;
     private readonly IMultiProjectionService multiProjectionService;
     private readonly ISingleProjectionService projectionService;
-    public CustomerDbStoryBasic(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(sekibanTestFixture)
+    public CustomerDbStoryBasic(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
+        sekibanTestFixture)
     {
         _testOutputHelper = testOutputHelper;
         _cosmosDbFactory = GetService<CosmosDbFactory>();
@@ -50,6 +53,7 @@ public class CustomerDbStoryBasic : TestBase
         multiProjectionService = GetService<IMultiProjectionService>();
         _inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
         _hybridStoreManager = GetService<HybridStoreManager>();
+        _memoryCache = GetService<IMemoryCache>();
     }
     [Fact(DisplayName = "CosmosDb ストーリーテスト 集約の機能のテストではなく、CosmosDbと連携して正しく動くかをテストしています。")]
     public async Task CosmosDbStory()
@@ -356,6 +360,7 @@ public class CustomerDbStoryBasic : TestBase
 
         _inMemoryDocumentStore.ResetInMemoryStore();
         _hybridStoreManager.ClearHybridPartitions();
+        ((MemoryCache)_memoryCache).Compact(1);
         await ContinuousExecutionTestAsync();
     }
 
