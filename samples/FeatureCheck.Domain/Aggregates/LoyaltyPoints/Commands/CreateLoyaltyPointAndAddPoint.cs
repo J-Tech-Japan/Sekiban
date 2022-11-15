@@ -18,17 +18,17 @@ public record CreateLoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : IC
     public class Handler : CreateCommandHandlerBase<LoyaltyPoint, CreateLoyaltyPointAndAddPoint>
     {
         private readonly ISekibanDateProducer _dateProducer;
-        private readonly ISingleProjectionService _singleProjectionService;
-        public Handler(ISingleProjectionService singleProjectionService, ISekibanDateProducer dateProducer)
+        private readonly IAggregateLoader aggregateLoader;
+        public Handler(IAggregateLoader aggregateLoader, ISekibanDateProducer dateProducer)
         {
-            _singleProjectionService = singleProjectionService;
+            this.aggregateLoader = aggregateLoader;
             _dateProducer = dateProducer;
         }
         protected override async IAsyncEnumerable<IApplicableEvent<LoyaltyPoint>> ExecCreateCommandAsync(
             Func<AggregateState<LoyaltyPoint>> getAggregateState,
             CreateLoyaltyPointAndAddPoint command)
         {
-            await _singleProjectionService.GetAggregateAsync<Client>(getAggregateState().AggregateId);
+            await aggregateLoader.AsAggregateAsync<Client>(getAggregateState().AggregateId);
             yield return new LoyaltyPointCreated(0);
             getAggregateState(); // to reproduce the issue;
             yield return new LoyaltyPointAdded(_dateProducer.UtcNow, LoyaltyPointReceiveTypeKeys.InitialGift, command.AddingPoint, string.Empty);

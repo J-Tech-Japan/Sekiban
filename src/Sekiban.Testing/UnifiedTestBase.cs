@@ -64,9 +64,9 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
-        var queryService = _serviceProvider.GetService<IQueryService>() ??
+        var queryService = _serviceProvider.GetService<IQueryExecutor>() ??
             throw new Exception("Failed to get Query service");
-        return queryService.GetAggregateQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param).Result ??
+        return queryService.ForAggregateQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param).Result ??
             throw new Exception("Failed to get Aggregate Query Response for " + typeof(TQuery).Name);
     }
     public UnifiedTestBase<TDependencyDefinition> WriteAggregateQueryResponseToFile<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
@@ -142,9 +142,9 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
-        var queryService = _serviceProvider.GetService<IQueryService>() ??
+        var queryService = _serviceProvider.GetService<IQueryExecutor>() ??
             throw new Exception("Failed to get Query service");
-        return queryService.GetAggregateListQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param).Result ??
+        return queryService.ForAggregateListQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param).Result ??
             throw new Exception("Failed to get Aggregate List Query Response for " + typeof(TQuery).Name);
     }
     public UnifiedTestBase<TDependencyDefinition> WriteAggregateListQueryResponseToFile<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
@@ -221,9 +221,9 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
-        var queryService = _serviceProvider.GetService<IQueryService>() ??
+        var queryService = _serviceProvider.GetService<IQueryExecutor>() ??
             throw new Exception("Failed to get Query service");
-        return queryService.GetSingleProjectionQueryAsync<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param).Result ??
+        return queryService.ForSingleProjectionQueryAsync<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param).Result ??
             throw new Exception("Failed to get Single Projection Query Response for " + typeof(TQuery).Name);
     }
 
@@ -306,9 +306,9 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
-        var singleProjection = _serviceProvider.GetService<IQueryService>() ??
+        var singleProjection = _serviceProvider.GetService<IQueryExecutor>() ??
             throw new Exception("Failed to get Query service");
-        return singleProjection.GetSingleProjectionListQueryAsync<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param).Result ??
+        return singleProjection.ForSingleProjectionListQueryAsync<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param).Result ??
             throw new Exception("Failed to get Single Projection Query Response for " + typeof(TQuery).Name);
     }
 
@@ -390,9 +390,9 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         where TQuery : IMultiProjectionQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
-        var queryService = _serviceProvider.GetService<IQueryService>() ??
+        var queryService = _serviceProvider.GetService<IQueryExecutor>() ??
             throw new Exception("Failed to get Query service");
-        return queryService.GetMultiProjectionQueryAsync<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param).Result ??
+        return queryService.ForMultiProjectionQueryAsync<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param).Result ??
             throw new Exception("Failed to get Multi Projection Query Response for " + typeof(TQuery).Name);
     }
 
@@ -476,9 +476,9 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         where TQuery : IMultiProjectionListQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
-        var queryService = _serviceProvider.GetService<IQueryService>() ??
+        var queryService = _serviceProvider.GetService<IQueryExecutor>() ??
             throw new Exception("Failed to get Query service");
-        return queryService.GetMultiProjectionListQueryAsync<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param).Result ??
+        return queryService.ForMultiProjectionListQueryAsync<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param).Result ??
             throw new Exception("Failed to get Multi Projection List Query Response for " + typeof(TQuery).Name);
     }
 
@@ -776,13 +776,14 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         Guid aggregateId)
         where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
-        var singleProjectionService = _serviceProvider.GetRequiredService(typeof(ISingleProjectionService)) as ISingleProjectionService;
+        var singleProjectionService = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader;
         if (singleProjectionService is null) { throw new Exception("Failed to get single aggregate service"); }
-        var aggregate = singleProjectionService.GetAggregateStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
+        var aggregate = singleProjectionService.AsDefaultStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name);
     }
     public IReadOnlyCollection<IEvent> GetLatestEvents() => _commandExecutor.LatestEvents;
-    public IReadOnlyCollection<IEvent> GetAllAggregateEvents<TAggregatePayload>(Guid aggregateId) where TAggregatePayload : IAggregatePayload, new() => _commandExecutor.GetAllAggregateEvents<TAggregatePayload>(aggregateId);
+    public IReadOnlyCollection<IEvent> GetAllAggregateEvents<TAggregatePayload>(Guid aggregateId)
+        where TAggregatePayload : IAggregatePayload, new() => _commandExecutor.GetAllAggregateEvents<TAggregatePayload>(aggregateId);
 
     #region GivenEvents
     public UnifiedTestBase<TDependencyDefinition> GivenEvents(IEnumerable<IEvent> events)

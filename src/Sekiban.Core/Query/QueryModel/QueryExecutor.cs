@@ -4,17 +4,17 @@ using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Query.QueryModel;
 
-public class QueryService : IQueryService
+public class QueryExecutor : IQueryExecutor
 {
     private readonly IMultiProjectionService multiProjectionService;
     private readonly QueryHandler queryHandler;
-    public QueryService(IMultiProjectionService multiProjectionService, QueryHandler queryHandler)
+    public QueryExecutor(IMultiProjectionService multiProjectionService, QueryHandler queryHandler)
     {
         this.multiProjectionService = multiProjectionService;
         this.queryHandler = queryHandler;
     }
     public async Task<TQueryResponse>
-        GetMultiProjectionQueryAsync<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
+        ForMultiProjectionQueryAsync<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
             TQueryParameter param)
         where TProjectionPayload : IMultiProjectionPayload, new()
         where TQuery : IMultiProjectionQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
@@ -27,7 +27,7 @@ public class QueryService : IQueryService
                 allProjection);
     }
     public async Task<ListQueryResult<TQueryResponse>>
-        GetMultiProjectionListQueryAsync<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
+        ForMultiProjectionListQueryAsync<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
             TQueryParameter param)
         where TProjectionPayload : IMultiProjectionPayload, new()
         where TQuery : IMultiProjectionListQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
@@ -40,7 +40,7 @@ public class QueryService : IQueryService
                 allProjection);
     }
     public async Task<ListQueryResult<TQueryResponse>>
-        GetAggregateListQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
+        ForAggregateListQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
@@ -52,7 +52,7 @@ public class QueryService : IQueryService
                 allProjection);
     }
     public async Task<TQueryResponse>
-        GetAggregateQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
+        ForAggregateQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
@@ -63,7 +63,7 @@ public class QueryService : IQueryService
             allProjection);
     }
     public async Task<ListQueryResult<TQueryResponse>>
-        GetSingleProjectionListQueryAsync<TProjectionPayload, TQuery,
+        ForSingleProjectionListQueryAsync<TProjectionPayload, TQuery,
             TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TProjectionPayload : ISingleProjectionPayload, new()
         where TQuery : ISingleProjectionListQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
@@ -76,7 +76,7 @@ public class QueryService : IQueryService
                 TQueryParameter, TQueryResponse>(param, allProjection);
     }
     public async Task<TQueryResponse>
-        GetSingleProjectionQueryAsync<TSingleProjectionPayload, TQuery,
+        ForSingleProjectionQueryAsync<TSingleProjectionPayload, TQuery,
             TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TSingleProjectionPayload : ISingleProjectionPayload, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>

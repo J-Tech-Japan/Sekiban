@@ -81,7 +81,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         where TEnvironmentAggregatePayload : IAggregatePayload, new();
     public IReadOnlyCollection<IEvent> GetLatestEnvironmentEvents();
     public List<IEvent> GetLatestEvents();
-    public List<IEvent> GetAllAggregateEvents();
+    public List<IEvent> GetAllAggregateEvents(int? toVersion = null);
     #endregion
 
     #region Single Projection

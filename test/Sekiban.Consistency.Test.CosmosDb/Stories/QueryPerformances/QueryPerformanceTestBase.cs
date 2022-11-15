@@ -24,7 +24,7 @@ public abstract class QueryPerformanceTestBase : TestBase
     protected readonly ITestOutputHelper _testOutputHelper;
     protected readonly ICommandExecutor CommandExecutor;
     protected readonly IMultiProjectionService MultiProjectionService;
-    protected readonly ISingleProjectionService ProjectionService;
+    protected readonly IAggregateLoader ProjectionService;
     protected QueryPerformanceTestBase(
         SekibanTestFixture sekibanTestFixture,
         ITestOutputHelper testOutputHelper,
@@ -33,7 +33,7 @@ public abstract class QueryPerformanceTestBase : TestBase
         _testOutputHelper = testOutputHelper;
         _cosmosDbFactory = GetService<CosmosDbFactory>();
         CommandExecutor = GetService<ICommandExecutor>();
-        ProjectionService = GetService<ISingleProjectionService>();
+        ProjectionService = GetService<IAggregateLoader>();
         _documentPersistentRepository = GetService<IDocumentPersistentRepository>();
         _inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
         _hybridStoreManager = GetService<HybridStoreManager>();
@@ -106,7 +106,7 @@ public abstract class QueryPerformanceTestBase : TestBase
                 for (var k = 0; k < changeNameCount; k++)
                 {
                     _testOutputHelper.WriteLine($"client change name {k + 1}");
-                    var aggregate = await ProjectionService.GetAggregateStateAsync<Client>(clientCreateResult.AggregateId!.Value);
+                    var aggregate = await ProjectionService.AsDefaultStateAsync<Client>(clientCreateResult.AggregateId!.Value);
                     _testOutputHelper.WriteLine($"aggregate.version = {aggregate?.Version}");
                     await CommandExecutor.ExecChangeCommandAsync<Client, ChangeClientName>(
                         new ChangeClientName(clientCreateResult.AggregateId!.Value, $"change{i}-{j}-{k}")

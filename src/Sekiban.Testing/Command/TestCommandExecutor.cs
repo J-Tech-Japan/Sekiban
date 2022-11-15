@@ -84,9 +84,9 @@ public class TestCommandExecutor
         where TAggregatePayload : IAggregatePayload, new()
     {
 
-        var singleProjectionService = _serviceProvider.GetRequiredService(typeof(ISingleProjectionService)) as ISingleProjectionService;
+        var singleProjectionService = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader;
         if (singleProjectionService is null) { throw new Exception("Failed to get AddAggregate Service"); }
-        var method = singleProjectionService.GetType().GetMethods().FirstOrDefault(m => m.Name == "GetAggregateAsync");
+        var method = singleProjectionService.GetType().GetMethods().FirstOrDefault(m => m.Name == "AsAggregateAsync");
         if (method is null) { throw new Exception("Failed to get AddAggregate Service"); }
         var genericMethod = method.MakeGenericMethod(typeof(TAggregatePayload));
         var aggregateTask = genericMethod.Invoke(singleProjectionService, new object?[] { aggregateId, null }) as dynamic;

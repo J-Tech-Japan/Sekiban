@@ -71,7 +71,7 @@ public class AggregateTestBase<TAggregatePayload, TDependencyDefinition> : IDisp
     }
     public IReadOnlyCollection<IEvent> GetLatestEnvironmentEvents() => _helper.GetLatestEnvironmentEvents();
     public List<IEvent> GetLatestEvents() => _helper.GetLatestEvents();
-    public List<IEvent> GetAllAggregateEvents() => _helper.GetAllAggregateEvents();
+    public List<IEvent> GetAllAggregateEvents(int? toVersion = null) => _helper.GetAllAggregateEvents(toVersion);
     public IAggregateTestHelper<TAggregatePayload> WhenCreate<C>(C createCommand) where C : ICreateCommand<TAggregatePayload> =>
         _helper.WhenCreate(createCommand);
     public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(C changeCommand) where C : ChangeCommandBase<TAggregatePayload> =>
