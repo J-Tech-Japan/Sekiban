@@ -12,9 +12,9 @@ public class SimpleAggregateListQuery<TAggregatePayload> : IAggregateListQuery<T
         IEnumerable<AggregateState<TAggregatePayload>> list) => list;
     public IEnumerable<AggregateState<TAggregatePayload>> HandleSort(
         QueryParameter queryParam,
-        IEnumerable<AggregateState<TAggregatePayload>> projections)
+        IEnumerable<AggregateState<TAggregatePayload>> filteredList)
     {
-        return projections.OrderByDescending(m => m.LastSortableUniqueId);
+        return filteredList.OrderByDescending(m => m.LastSortableUniqueId);
     }
     public record QueryParameter(int? PageSize, int? PageNumber) : IQueryPagingParameter;
 }

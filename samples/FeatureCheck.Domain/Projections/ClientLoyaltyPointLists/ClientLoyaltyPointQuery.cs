@@ -14,16 +14,16 @@ public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPo
 
     public IEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> HandleSort(
         QueryParameter queryParam,
-        IEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> projections)
+        IEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> filteredList)
     {
         var sort = new Dictionary<FilterSortKey, bool>();
         if (queryParam.SortKey1 != null) { sort.Add(queryParam.SortKey1.Value, queryParam.SortKey1Asc ?? true); }
         if (queryParam.SortKey2 != null) { sort.Add(queryParam.SortKey2.Value, queryParam.SortKey2Asc ?? true); }
         if (sort.Count == 0)
         {
-            return projections.OrderBy(m => m.BranchName).ThenBy(m => m.ClientName);
+            return filteredList.OrderBy(m => m.BranchName).ThenBy(m => m.ClientName);
         }
-        var result = projections;
+        var result = filteredList;
         foreach (var (sortKey, index) in sort.Select((item, index) => (item, index)))
         {
             if (index == 0)

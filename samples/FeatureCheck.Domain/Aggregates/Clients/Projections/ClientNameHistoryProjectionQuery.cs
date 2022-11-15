@@ -31,25 +31,25 @@ public class ClientNameHistoryProjectionQuery : ISingleProjectionListQuery<Clien
     }
     public IEnumerable<Response> HandleSort(
         Parameter queryParam,
-        IEnumerable<Response> projections)
+        IEnumerable<Response> filteredList)
     {
         if (queryParam.SortKey == null)
         {
-            return projections.OrderBy(m => m.BranchId).ThenBy(m => m.ClientEmail);
+            return filteredList.OrderBy(m => m.BranchId).ThenBy(m => m.ClientEmail);
         }
 
         switch (queryParam.SortKey)
         {
             case ClientNameHistoryProjectionQuerySortKeys.BranchId:
-                return queryParam.SortIsAsc ? projections.OrderBy(m => m.BranchId) : projections.OrderByDescending(m => m.BranchId);
+                return queryParam.SortIsAsc ? filteredList.OrderBy(m => m.BranchId) : filteredList.OrderByDescending(m => m.BranchId);
             case ClientNameHistoryProjectionQuerySortKeys.ClientId:
-                return queryParam.SortIsAsc ? projections.OrderBy(m => m.ClientId) : projections.OrderByDescending(m => m.ClientId);
+                return queryParam.SortIsAsc ? filteredList.OrderBy(m => m.ClientId) : filteredList.OrderByDescending(m => m.ClientId);
             case ClientNameHistoryProjectionQuerySortKeys.ClientName:
-                return queryParam.SortIsAsc ? projections.OrderBy(m => m.ClientName) : projections.OrderByDescending(m => m.ClientName);
+                return queryParam.SortIsAsc ? filteredList.OrderBy(m => m.ClientName) : filteredList.OrderByDescending(m => m.ClientName);
             case ClientNameHistoryProjectionQuerySortKeys.ClientEmail:
-                return queryParam.SortIsAsc ? projections.OrderBy(m => m.ClientEmail) : projections.OrderByDescending(m => m.ClientEmail);
+                return queryParam.SortIsAsc ? filteredList.OrderBy(m => m.ClientEmail) : filteredList.OrderByDescending(m => m.ClientEmail);
         }
-        return projections;
+        return filteredList;
     }
     public record Parameter(
         int? PageSize,

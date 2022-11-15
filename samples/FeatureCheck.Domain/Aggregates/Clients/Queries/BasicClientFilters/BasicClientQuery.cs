@@ -25,16 +25,16 @@ public class BasicClientQuery : IAggregateListQuery<Client, BasicClientQueryPara
         return list.Where(m => queryParam.BranchId is null || m.Payload.BranchId == queryParam.BranchId)
             .Select(m => new BasicClientQueryModel(m.Payload.BranchId, m.Payload.ClientName, m.Payload.ClientEmail));
     }
-    public IEnumerable<BasicClientQueryModel> HandleSort(BasicClientQueryParameter queryParam, IEnumerable<BasicClientQueryModel> projections)
+    public IEnumerable<BasicClientQueryModel> HandleSort(BasicClientQueryParameter queryParam, IEnumerable<BasicClientQueryModel> filteredList)
     {
         var sort = new Dictionary<BasicClientQuerySortKey, bool>();
         if (queryParam.SortKey1 != null) { sort.Add(queryParam.SortKey1.Value, queryParam.SortKey1Asc ?? true); }
         if (queryParam.SortKey2 != null) { sort.Add(queryParam.SortKey2.Value, queryParam.SortKey2Asc ?? true); }
         if (sort.Count == 0)
         {
-            return projections.OrderBy(m => m.ClientName).ThenBy(m => m.ClientEmail);
+            return filteredList.OrderBy(m => m.ClientName).ThenBy(m => m.ClientEmail);
         }
-        var result = projections;
+        var result = filteredList;
         foreach (var (sortKey, index) in sort.Select((item, index) => (item, index)))
         {
             if (index == 0)

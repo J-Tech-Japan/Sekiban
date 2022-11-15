@@ -14,9 +14,9 @@ public class SimpleSingleProjectionListQuery<TSingleProjectionPayload> :
         IEnumerable<SingleProjectionState<TSingleProjectionPayload>> list) => list;
     public IEnumerable<SingleProjectionState<TSingleProjectionPayload>> HandleSort(
         QueryParameter queryParam,
-        IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections)
+        IEnumerable<SingleProjectionState<TSingleProjectionPayload>> filteredList)
     {
-        return projections.OrderByDescending(m => m.LastSortableUniqueId);
+        return filteredList.OrderByDescending(m => m.LastSortableUniqueId);
     }
     public record QueryParameter(int? PageSize, int? PageNumber) : IQueryPagingParameter;
 }
