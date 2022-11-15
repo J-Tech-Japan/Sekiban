@@ -33,13 +33,13 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
     private readonly ITestOutputHelper _testOutputHelper;
     private readonly ICommandExecutor commandExecutor;
     private readonly IMultiProjectionService multiProjectionService;
-    private readonly ISingleProjectionService projectionService;
+    private readonly IAggregateLoader projectionService;
 
     public InMemoryStoryTestBasic(ITestOutputHelper testOutputHelper, bool inMemory = true) : base(inMemory)
     {
         _testOutputHelper = testOutputHelper;
         commandExecutor = GetService<ICommandExecutor>();
-        projectionService = GetService<ISingleProjectionService>();
+        projectionService = GetService<IAggregateLoader>();
         multiProjectionService = GetService<IMultiProjectionService>();
     }
     [Fact(DisplayName = "CosmosDb ストーリーテスト インメモリで集約の機能のテストを行う")]
@@ -130,7 +130,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         // get change name state
         var changeNameProjection
             = await projectionService
-                .GetProjectionAsync<ClientNameHistoryProjection>(
+                .AsSingleProjectionStateAsync<ClientNameHistoryProjection>(
                     clientId!.Value);
         Assert.NotNull(changeNameProjection);
 
@@ -138,7 +138,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         loyaltyPointList = await multiProjectionService.GetAggregateList<LoyaltyPoint>();
         Assert.Single(clientList);
         // first point = 0
-        var loyaltyPoint = await projectionService.GetAggregateStateAsync<LoyaltyPoint>(clientId!.Value);
+        var loyaltyPoint = await projectionService.AsDefaultStateAsync<LoyaltyPoint>(clientId!.Value);
         Assert.NotNull(loyaltyPoint);
         Assert.Equal(0, loyaltyPoint!.Payload.CurrentPoint);
 
@@ -151,7 +151,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         Assert.NotNull(addPointResult);
         Assert.NotNull(addPointResult.AggregateId);
 
-        loyaltyPoint = await projectionService.GetAggregateStateAsync<LoyaltyPoint>(clientId!.Value);
+        loyaltyPoint = await projectionService.AsDefaultStateAsync<LoyaltyPoint>(clientId!.Value);
         Assert.NotNull(loyaltyPoint);
         Assert.Equal(1000, loyaltyPoint!.Payload.CurrentPoint);
 
@@ -173,7 +173,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         Assert.NotNull(usePointResult);
         Assert.NotNull(usePointResult.AggregateId);
 
-        loyaltyPoint = await projectionService.GetAggregateStateAsync<LoyaltyPoint>(clientId.Value);
+        loyaltyPoint = await projectionService.AsDefaultStateAsync<LoyaltyPoint>(clientId.Value);
         Assert.NotNull(loyaltyPoint);
         Assert.Equal(800, loyaltyPoint!.Payload.CurrentPoint);
 
@@ -230,7 +230,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         Assert.Equal(2, p.Payload.Branches.Count);
         Assert.Empty(p.Payload.Records);
         var snapshotManager
-            = await projectionService.GetAggregateStateFromInitialAsync<SnapshotManager>(
+            = await projectionService.AsDefaultStateFromInitialAsync<SnapshotManager>(
                 SnapshotManager.SharedId);
         _testOutputHelper.WriteLine("-requests-");
         foreach (var key in snapshotManager!.Payload.Requests)
@@ -278,17 +278,17 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         Assert.Single(recentActivityList);
         // this works
         var aggregateRecentActivity
-            = await projectionService.GetAggregateStateFromInitialAsync<RecentActivity>(
+            = await projectionService.AsDefaultStateFromInitialAsync<RecentActivity>(
                 createRecentActivityResult.AggregateId!.Value);
         var aggregateRecentActivity2
-            = await projectionService.GetAggregateStateAsync<RecentActivity>(createRecentActivityResult.AggregateId!.Value);
+            = await projectionService.AsDefaultStateAsync<RecentActivity>(createRecentActivityResult.AggregateId!.Value);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + 1, aggregateRecentActivity!.Version);
         Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
 
         var snapshotManager
-            = await projectionService.GetAggregateStateFromInitialAsync<SnapshotManager>(
+            = await projectionService.AsDefaultStateFromInitialAsync<SnapshotManager>(
                 SnapshotManager.SharedId);
         _testOutputHelper.WriteLine("-requests-");
         foreach (var key in snapshotManager!.Payload.Requests)
@@ -311,7 +311,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
             {
                 throw new SekibanInvalidArgumentException();
             }
-            var fromInitial = await projectionService.GetAggregateStateFromInitialAsync<TAggregatePayload>(aggregateId, state.Version);
+            var fromInitial = await projectionService.AsDefaultStateFromInitialAsync<TAggregatePayload>(aggregateId, state.Version);
             if (fromInitial is null) { throw new SekibanInvalidArgumentException(); }
             Assert.Equal(fromInitial.Version, state.Version);
             Assert.Equal(fromInitial.LastEventId, state.LastEventId);
@@ -353,10 +353,10 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         Assert.Single(recentActivityList);
 
         var aggregateRecentActivity
-            = await projectionService.GetAggregateStateFromInitialAsync<RecentInMemoryActivity>(
+            = await projectionService.AsDefaultStateFromInitialAsync<RecentInMemoryActivity>(
                 createRecentActivityResult.AggregateId!.Value);
         var aggregateRecentActivity2
-            = await projectionService.GetAggregateStateAsync<RecentInMemoryActivity>(
+            = await projectionService.AsDefaultStateAsync<RecentInMemoryActivity>(
                 createRecentActivityResult.AggregateId!.Value);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);

@@ -1,7 +1,8 @@
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Event;
 namespace Sekiban.Core.Query.SingleProjections;
 
-public interface ISingleProjectionService
+public interface IAggregateLoader
 {
     /// <summary>
     ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
@@ -10,36 +11,9 @@ public interface ISingleProjectionService
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <param name="toVersion"></param>
-    /// <typeparam name="TProjection"></typeparam>
-    /// <typeparam name="TProjector"></typeparam>
-    /// <returns></returns>
-    public Task<TProjection?> GetAggregateProjectionFromInitialAsync<TProjection, TProjector>(Guid aggregateId, int? toVersion)
-        where TProjection : IAggregateCommon, ISingleProjection
-        where TProjector : ISingleProjector<TProjection>, new();
-
-    /// <summary>
-    ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
-    ///     遅いので、通常はキャッシュバージョンを使用ください
-    ///     検証などのためにこちらを残しています。
-    /// </summary>
-    /// <param name="aggregateId"></param>
-    /// <param name="toVersion"></param>
-    /// <typeparam name="T"></typeparam>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Task<Aggregate<TAggregatePayload>?> GetAggregateFromInitialAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)
-        where TAggregatePayload : IAggregatePayload, new();
-
-    /// <summary>
-    ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
-    ///     遅いので、通常はキャッシュバージョンを使用ください
-    ///     検証などのためにこちらを残しています。
-    /// </summary>
-    /// <param name="aggregateId"></param>
-    /// <param name="toVersion"></param>
-    /// <typeparam name="TAggregatePayload"></typeparam>
-    /// <returns></returns>
-    public Task<AggregateState<TAggregatePayload>?> GetAggregateStateFromInitialAsync<TAggregatePayload>(
+    public Task<AggregateState<TAggregatePayload>?> AsDefaultStateFromInitialAsync<TAggregatePayload>(
         Guid aggregateId,
         int? toVersion = null)
         where TAggregatePayload : IAggregatePayload, new();
@@ -51,7 +25,7 @@ public interface ISingleProjectionService
     /// <typeparam name="TSingleProjectionPayload"></typeparam>
     /// <returns></returns>
     public Task<SingleProjectionState<TSingleProjectionPayload>?>
-        GetProjectionAsync<TSingleProjectionPayload>(Guid aggregateId, int? toVersion = null)
+        AsSingleProjectionStateAsync<TSingleProjectionPayload>(Guid aggregateId, int? toVersion = null)
         where TSingleProjectionPayload : ISingleProjectionPayload, new();
 
 
@@ -64,7 +38,7 @@ public interface ISingleProjectionService
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Task<Aggregate<TAggregatePayload>?> GetAggregateAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)
+    public Task<Aggregate<TAggregatePayload>?> AsAggregateAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)
         where TAggregatePayload : IAggregatePayload, new();
 
     /// <summary>
@@ -75,6 +49,10 @@ public interface ISingleProjectionService
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Task<AggregateState<TAggregatePayload>?> GetAggregateStateAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)
+    public Task<AggregateState<TAggregatePayload>?> AsDefaultStateAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)
+        where TAggregatePayload : IAggregatePayload, new();
+
+
+    public Task<IEnumerable<IEvent>?> AllEventsAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)
         where TAggregatePayload : IAggregatePayload, new();
 }

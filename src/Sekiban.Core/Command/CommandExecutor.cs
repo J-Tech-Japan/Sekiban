@@ -15,17 +15,17 @@ public class CommandExecutor : ICommandExecutor
     private readonly IDocumentWriter _documentWriter;
     private readonly IServiceProvider _serviceProvider;
     private readonly IUserInformationFactory _userInformationFactory;
-    private readonly ISingleProjectionService singleProjectionService;
+    private readonly IAggregateLoader aggregateLoader;
 
     public CommandExecutor(
         IDocumentWriter documentWriter,
         IServiceProvider serviceProvider,
-        ISingleProjectionService singleProjectionService,
+        IAggregateLoader aggregateLoader,
         IUserInformationFactory userInformationFactory)
     {
         _documentWriter = documentWriter;
         _serviceProvider = serviceProvider;
-        this.singleProjectionService = singleProjectionService;
+        this.aggregateLoader = aggregateLoader;
         _userInformationFactory = userInformationFactory;
     }
     public async Task<(CommandExecutorResponse, List<IEvent>)> ExecChangeCommandAsync<TAggregatePayload, C>(
@@ -69,7 +69,7 @@ public class CommandExecutor : ICommandExecutor
             }
             if (command is not IOnlyPublishingCommand)
             {
-                var aggregate = await singleProjectionService.GetAggregateAsync<TAggregatePayload>(command.GetAggregateId());
+                var aggregate = await aggregateLoader.AsAggregateAsync<TAggregatePayload>(command.GetAggregateId());
                 if (aggregate is null)
                 {
                     throw new SekibanInvalidArgumentException();

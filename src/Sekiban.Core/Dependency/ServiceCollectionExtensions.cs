@@ -36,7 +36,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<EventPublisher>();
 
         services.AddTransient<ICommandExecutor, CommandExecutor>();
-        services.AddTransient<ISingleProjectionService, SingleProjectionService>();
+        services.AddTransient<IAggregateLoader, AggregateLoader>();
         services.AddTransient<IMultiProjectionService, MultiProjectionService>();
         switch (multiProjectionType)
         {
@@ -60,7 +60,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IDocumentRepository, DocumentRepositorySplitter>();
         services.AddSingleton(new HybridStoreManager(true));
         services.AddScoped<ISekibanContext, SekibanContext>();
-        services.AddTransient<IQueryService, QueryService>();
+        services.AddTransient<IQueryExecutor, QueryExecutor>();
         services.AddTransient<QueryHandler>();
         services.AddTransient<ISingleProjectionCache, SingleProjectionCache>();
         services.AddTransient<IMultiProjectionCache, MultiProjectionCache>();
@@ -74,7 +74,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<EventPublisher>();
 
         services.AddTransient<ICommandExecutor, CommandExecutor>();
-        services.AddTransient<ISingleProjectionService, SingleProjectionService>();
+        services.AddTransient<IAggregateLoader, AggregateLoader>();
         services.AddTransient<IMultiProjectionService, MultiProjectionService>();
         services.AddTransient<IMultiProjection, MemoryCacheMultiProjection>();
         services.AddTransient<ISingleProjection, SimpleProjectionWithSnapshot>();
@@ -93,7 +93,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IDocumentPersistentRepository, InMemoryDocumentRepository>();
         services.AddTransient<IDocumentTemporaryWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentPersistentWriter, InMemoryDocumentWriter>();
-        services.AddTransient<IQueryService, QueryService>();
+        services.AddTransient<IQueryExecutor, QueryExecutor>();
         services.AddTransient<QueryHandler>();
         services.AddTransient<ISingleProjectionCache, SingleProjectionCache>();
         services.AddTransient<IMultiProjectionCache, MultiProjectionCache>();
@@ -108,7 +108,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<EventPublisher>();
 
         services.AddTransient<ICommandExecutor, CommandExecutor>();
-        services.AddTransient<ISingleProjectionService, SingleProjectionService>();
+        services.AddTransient<IAggregateLoader, AggregateLoader>();
         services.AddTransient<IMultiProjectionService, MultiProjectionService>();
         services.AddTransient<IMultiProjection, MemoryCacheMultiProjection>();
         services.AddTransient<ISingleProjection, SimpleProjectionWithSnapshot>();
@@ -127,7 +127,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IDocumentPersistentRepository, InMemoryDocumentRepository>();
         services.AddTransient<IDocumentTemporaryWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentPersistentWriter, InMemoryDocumentWriter>();
-        services.AddTransient<IQueryService, QueryService>();
+        services.AddTransient<IQueryExecutor, QueryExecutor>();
         services.AddTransient<QueryHandler>();
         services.AddTransient<ISingleProjectionCache, SingleProjectionCache>();
         services.AddTransient<IMultiProjectionCache, MultiProjectionCache>();

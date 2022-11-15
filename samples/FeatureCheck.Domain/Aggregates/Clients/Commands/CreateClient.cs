@@ -42,12 +42,12 @@ public record CreateClient : ICreateCommand<Client>
     public Guid GetAggregateId() => Guid.NewGuid();
     public class Handler : CreateCommandHandlerBase<Client, CreateClient>
     {
-        private readonly IQueryService queryService;
-        private readonly ISingleProjectionService singleProjectionService;
-        public Handler(ISingleProjectionService singleProjectionService, IQueryService queryService)
+        private readonly IAggregateLoader aggregateLoader;
+        private readonly IQueryExecutor queryExecutor;
+        public Handler(IAggregateLoader aggregateLoader, IQueryExecutor queryExecutor)
         {
-            this.singleProjectionService = singleProjectionService;
-            this.queryService = queryService;
+            this.aggregateLoader = aggregateLoader;
+            this.queryExecutor = queryExecutor;
         }
 
         protected override async IAsyncEnumerable<IApplicableEvent<Client>> ExecCreateCommandAsync(
@@ -56,8 +56,8 @@ public record CreateClient : ICreateCommand<Client>
         {
             // Check if branch exists
             var branchExists
-                = await queryService
-                    .GetAggregateQueryAsync<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, bool>(
+                = await queryExecutor
+                    .ForAggregateQueryAsync<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, bool>(
                         new BranchExistsQuery.QueryParameter(command.BranchId));
             if (!branchExists)
             {
@@ -66,8 +66,8 @@ public record CreateClient : ICreateCommand<Client>
 
             // Check no email duplicates
             var emailExists
-                = await queryService
-                    .GetAggregateQueryAsync<Client, ClientEmailExistsQuery, ClientEmailExistsQuery.QueryParameter,
+                = await queryExecutor
+                    .ForAggregateQueryAsync<Client, ClientEmailExistsQuery, ClientEmailExistsQuery.QueryParameter,
                         bool>(new ClientEmailExistsQuery.QueryParameter(command.ClientEmail));
             if (emailExists)
             {
