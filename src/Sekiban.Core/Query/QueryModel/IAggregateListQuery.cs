@@ -7,5 +7,5 @@ public interface IAggregateListQuery<TAggregatePayload, in TQueryParameter, TQue
     where TQueryParameter : IQueryParameter
 {
     public IEnumerable<TQueryResponse> HandleFilter(TQueryParameter queryParam, IEnumerable<AggregateState<TAggregatePayload>> list);
-    public IEnumerable<TQueryResponse> HandleSort(TQueryParameter queryParam, IEnumerable<TQueryResponse> projections);
+    public IEnumerable<TQueryResponse> HandleSort(TQueryParameter queryParam, IEnumerable<TQueryResponse> filteredList);
 }

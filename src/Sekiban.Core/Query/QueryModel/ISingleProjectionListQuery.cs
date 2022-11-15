@@ -11,5 +11,5 @@ public interface
     public IEnumerable<TQueryResponse> HandleFilter(
         TQueryParam queryParam,
         IEnumerable<SingleProjectionState<TSingleProjectionPayload>> list);
-    public IEnumerable<TQueryResponse> HandleSort(TQueryParam queryParam, IEnumerable<TQueryResponse> projections);
+    public IEnumerable<TQueryResponse> HandleSort(TQueryParam queryParam, IEnumerable<TQueryResponse> filteredList);
 }
