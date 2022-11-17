@@ -4,7 +4,7 @@ namespace Sekiban.Core.Validation;
 
 public static class ValidationExtensions
 {
-    public static IEnumerable<(int, ValidationResult)> TryValidateEnumerable(this IEnumerable collection)
+    public static IEnumerable<(int, ValidationResult)> ValidateEnumerable(this IEnumerable collection)
     {
         var validationResults = new List<ValidationResult>();
         var list = collection.Cast<object>().ToList();
@@ -15,7 +15,7 @@ public static class ValidationExtensions
                 continue;
             }
             validationResults.Clear();
-            validationResults.AddRange(item.TryValidateProperties());
+            validationResults.AddRange(item.ValidateProperties());
             foreach (var validationResult in validationResults)
             {
                 yield return (index, validationResult);
@@ -23,7 +23,18 @@ public static class ValidationExtensions
         }
     }
 
-    public static IEnumerable<(int, ValidationResult)> TryValidateEnumerable<T>(this IEnumerable<T> collection)
+    public static bool TryValidateEnumerable(this IEnumerable collection, out IEnumerable<(int, ValidationResult)> validationResults)
+    {
+        validationResults = collection.ValidateEnumerable();
+        return !validationResults.Any();
+    }
+    public static bool TryValidateEnumerable<T>(this IEnumerable<T> collection, out IEnumerable<(int, ValidationResult)> validationResults)
+    {
+        validationResults = collection.ValidateEnumerable();
+        return !validationResults.Any();
+    }
+
+    public static IEnumerable<(int, ValidationResult)> ValidateEnumerable<T>(this IEnumerable<T> collection)
     {
         var validationResults = new List<ValidationResult>();
         var list = collection.ToList();
@@ -34,7 +45,7 @@ public static class ValidationExtensions
                 continue;
             }
             validationResults.Clear();
-            validationResults.AddRange(item.TryValidateProperties());
+            validationResults.AddRange(item.ValidateProperties());
             foreach (var validationResult in validationResults)
             {
                 yield return (index, validationResult);
@@ -42,14 +53,20 @@ public static class ValidationExtensions
         }
     }
 
-    public static IEnumerable<ValidationResult> TryValidateProperties(this object targetClass, string baseKeyPath = "")
+    public static bool TryValidateProperties(this object targetClass, out IEnumerable<ValidationResult> validationResults, string baseKeyPath = "")
+    {
+        validationResults = targetClass.ValidateProperties(baseKeyPath);
+        return !validationResults.Any();
+    }
+
+    public static IEnumerable<ValidationResult> ValidateProperties(this object targetClass, string baseKeyPath = "")
     {
         var validationResults = new List<ValidationResult>();
 
         // オブジェクトがコレクションの場合
         if (targetClass is IEnumerable collection)
         {
-            foreach (var (index, validationResult) in collection.TryValidateEnumerable())
+            foreach (var (index, validationResult) in collection.ValidateEnumerable())
             {
                 yield return new ValidationResult(
                     validationResult.ErrorMessage,
@@ -72,11 +89,11 @@ public static class ValidationExtensions
         {
             return type switch
             {
-                Type t when t.IsPrimitive => false,
-                Type t when t.IsEnum => false,
-                Type t when t.IsGenericType && t.GetGenericTypeDefinition() == typeof(Nullable<>) => false,
-                Type t when t == typeof(string) => false,
-                Type t when t == typeof(DateTime) => false,
+                { IsPrimitive: true } => false,
+                { IsEnum: true } => false,
+                { IsGenericType: true } t when t.GetGenericTypeDefinition() == typeof(Nullable<>) => false,
+                { } t when t == typeof(string) => false,
+                { } t when t == typeof(DateTime) => false,
                 _ => true
             };
         }
@@ -101,10 +118,7 @@ public static class ValidationExtensions
             }
 
             validationResults.Clear();
-            if (pvalue is not null)
-            {
-                validationResults.AddRange(pvalue.TryValidateProperties(string.IsNullOrEmpty(baseKeyPath) ? pi.Name : $"{baseKeyPath}.{pi.Name}"));
-            }
+            validationResults.AddRange(pvalue.ValidateProperties(string.IsNullOrEmpty(baseKeyPath) ? pi.Name : $"{baseKeyPath}.{pi.Name}"));
             foreach (var validationResult in validationResults)
             {
                 yield return validationResult;

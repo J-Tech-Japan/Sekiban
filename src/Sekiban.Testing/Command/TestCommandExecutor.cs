@@ -30,7 +30,7 @@ public class TestCommandExecutor
         Guid? injectingAggregateId,
         bool withPublish) where TAggregatePayload : IAggregatePayload, new()
     {
-        var validationResults = command.TryValidateProperties().ToList();
+        var validationResults = command.ValidateProperties().ToList();
         if (validationResults.Any())
         {
             throw new ValidationException("Validation failed " + validationResults);
@@ -102,7 +102,7 @@ public class TestCommandExecutor
     private IEnumerable<IEvent> ExecuteChangeCommand<TAggregatePayload>(ChangeCommandBase<TAggregatePayload> command, bool withPublish)
         where TAggregatePayload : IAggregatePayload, new()
     {
-        var validationResults = command.TryValidateProperties().ToList();
+        var validationResults = command.ValidateProperties().ToList();
         if (validationResults.Any())
         {
             throw new ValidationException("Validation failed " + validationResults);

@@ -33,7 +33,7 @@ public class CommandExecutor : ICommandExecutor
         List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new()
         where C : ChangeCommandBase<TAggregatePayload>
     {
-        var validationResult = command.TryValidateProperties()?.ToList();
+        var validationResult = command.ValidateProperties()?.ToList();
         if (validationResult?.Any() == true)
         {
             return (new CommandExecutorResponse(null, null, 0, validationResult), new List<IEvent>());
@@ -119,7 +119,7 @@ public class CommandExecutor : ICommandExecutor
         List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new()
         where C : ICreateCommand<TAggregatePayload>
     {
-        var validationResult = command.TryValidateProperties()?.ToList();
+        var validationResult = command.ValidateProperties()?.ToList();
         if (validationResult?.Any() == true)
         {
             return (new CommandExecutorResponse(null, null, 0, validationResult), new List<IEvent>());
