@@ -343,7 +343,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     {
         ResetBeforeCommand();
 
-        var validationResults = createCommand.TryValidateProperties().ToList();
+        var validationResults = createCommand.ValidateProperties().ToList();
         if (validationResults.Any())
         {
             _latestValidationErrors = SekibanValidationParameterError.CreateFromValidationResults(validationResults).ToList();
@@ -396,7 +396,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             throw new SekibanCommandNotRegisteredException(typeof(C).Name);
         }
         var command = commandFunc(Aggregate.ToState());
-        var validationResults = command.TryValidateProperties().ToList();
+        var validationResults = command.ValidateProperties().ToList();
         if (validationResults.Any())
         {
             _latestValidationErrors = SekibanValidationParameterError.CreateFromValidationResults(validationResults).ToList();
