@@ -1,6 +1,7 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
+using Sekiban.Core.Types;
 namespace Sekiban.Core.Query.SingleProjections;
 
 public class SingleProjection<TProjectionPayload> : ISingleProjection,
@@ -54,18 +55,7 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
     public SingleProjection<TProjectionPayload> CreateInitialAggregate(Guid aggregateId) => new()
         { AggregateId = aggregateId };
 
-    public Type OriginalAggregateType()
-    {
-        var payloadType = typeof(TProjectionPayload);
-        var baseType = payloadType.BaseType;
-        if (baseType is null ||
-            !new[] { typeof(SingleProjectionPayloadBase<,>), typeof(DeletableSingleProjectionPayloadBase<,>) }.Contains(
-                baseType.GetGenericTypeDefinition()))
-        {
-            throw new ArgumentException("TProjectionPayload must be derived from SingleProjectionPayloadBase<TAggregate, TAggregateId>");
-        }
-        return baseType.GenericTypeArguments[0];
-    }
+    public Type OriginalAggregateType() => GetType().GetOriginalTypeFromSingleProjection();
     public bool GetIsDeleted() => Payload is IDeletable { IsDeleted: true };
     protected Action? GetApplyEventAction(IEvent ev, IEventPayload eventPayload)
     {
