@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Caching.Memory;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Query.SingleProjections.Projections;
+using Sekiban.Core.Types;
 using ISingleProjection = Sekiban.Core.Query.SingleProjections.ISingleProjection;
 namespace Sekiban.Core.Cache;
 
@@ -28,12 +28,12 @@ public class SingleProjectionCache : ISingleProjectionCache
         AbsoluteExpiration = DateTimeOffset.UtcNow.AddHours(2), SlidingExpiration = TimeSpan.FromMinutes(15)
         // 5分読まれなかったら削除するが、2時間経ったらどちらにしても削除する
     };
-    public string GetCacheKeyForSingleProjectionContainer<TAggregate>(Guid aggregateId)
+    public string GetCacheKeyForSingleProjectionContainer<TSingleProjectionOrAggregate>(Guid aggregateId)
     {
-        if (typeof(TAggregate).IsGenericType && typeof(TAggregate).GetGenericTypeDefinition() == typeof(Aggregate<>))
+        if (typeof(TSingleProjectionOrAggregate).IsSingleProjectionType())
         {
-            return $"{typeof(TAggregate).GetGenericArguments()[0].Name}_{aggregateId}";
+            return $"{typeof(TSingleProjectionOrAggregate).GetOriginalTypeFromSingleProjection().Name}_{aggregateId}";
         }
-        return "Aggregate" + typeof(TAggregate).Name + aggregateId;
+        return "Aggregate" + typeof(TSingleProjectionOrAggregate).Name + aggregateId;
     }
 }

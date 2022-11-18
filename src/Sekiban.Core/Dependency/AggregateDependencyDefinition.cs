@@ -3,8 +3,8 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Event;
 using Sekiban.Core.PubSub;
-using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
+using Sekiban.Core.Types;
 using System.Collections.Immutable;
 namespace Sekiban.Core.Dependency;
 
@@ -50,15 +50,11 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         where TSingleProjection : ISingleProjectionPayload
     {
         var singleProjectionType = typeof(TSingleProjection);
-        var singleProjectionBase = singleProjectionType.BaseType;
-        if (singleProjectionBase is null ||
-            !singleProjectionBase.IsGenericType ||
-            !new[] { typeof(SingleProjectionPayloadBase<,>), typeof(DeletableSingleProjectionPayloadBase<,>) }.Contains(
-                singleProjectionBase.GetGenericTypeDefinition()))
+        if (!singleProjectionType.IsSingleProjectionType())
         {
-            throw new ArgumentException($"Single projection {singleProjectionType.Name} must inherit from SingleProjectionBase<,,>");
+            throw new ArgumentException($"Type {singleProjectionType} is not a single projection type");
         }
-        if (singleProjectionBase.GenericTypeArguments[0] != AggregateType)
+        if (singleProjectionType.GetOriginalTypeFromSingleProjection() != AggregateType)
         {
             throw new ArgumentException($"Single projection {singleProjectionType.Name} must be for aggregate {AggregateType.Name}");
         }
@@ -68,98 +64,50 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
 
     public AggregateDependencyDefinition<TAggregatePayload> AddAggregateQuery<TQuery>()
     {
-        var t = typeof(TQuery);
-        Action action = t.GetInterfaces()
-                .Where(w => w.IsGenericType && w.GenericTypeArguments.Contains(typeof(TAggregatePayload)))
-                .Select(s => s.GetGenericTypeDefinition())
-                .ToArray() switch
-            {
-                [..] i when i.Contains(typeof(IAggregateQuery<,,>)) => () =>
-                    AggregateQueryTypes = AggregateQueryTypes.Add(t),
-                _ => throw new NotImplementedException()
-            };
-        action();
+        if (typeof(TQuery).IsAggregateQueryType())
+        {
+            AggregateQueryTypes = AggregateQueryTypes.Add(typeof(TQuery));
+        }
+        else
+        {
+            throw new ArgumentException("Type must implement IAggregateQuery", typeof(TQuery).Name);
+        }
         return this;
     }
     public AggregateDependencyDefinition<TAggregatePayload> AddAggregateListQuery<TQuery>()
     {
-        var t = typeof(TQuery);
-        Action action = t.GetInterfaces()
-                .Where(w => w.IsGenericType && w.GenericTypeArguments.Contains(typeof(TAggregatePayload)))
-                .Select(s => s.GetGenericTypeDefinition())
-                .ToArray() switch
-            {
-                [..] i when i.Contains(typeof(IAggregateListQuery<,,>)) => () =>
-                    AggregateListQueryTypes = AggregateListQueryTypes.Add(t),
-                _ => throw new NotImplementedException()
-            };
-        action();
+        if (typeof(TQuery).IsAggregateListQueryType())
+        {
+            AggregateListQueryTypes = AggregateListQueryTypes.Add(typeof(TQuery));
+        }
+        else
+        {
+            throw new ArgumentException("Type must implement IAggregateListQuery", typeof(TQuery).Name);
+        }
         return this;
     }
     public AggregateDependencyDefinition<TAggregatePayload> AddSingleProjectionQuery<TQuery>()
     {
-        var t = typeof(TQuery);
-        var projection = t.GetInterfaces()
-                .Where(m => m.GetGenericTypeDefinition() == typeof(ISingleProjectionQuery<,,>))
-                .Select(m => m.GenericTypeArguments[0])
-                .FirstOrDefault() ??
-            throw new ArgumentException($"Query {t.Name} must implement ISingleProjectionQuery<,,>");
-        var baseType = projection.BaseType ?? throw new NotImplementedException();
-        if (!baseType.IsGenericType ||
-            !new[] { typeof(SingleProjectionPayloadBase<,>), typeof(DeletableSingleProjectionPayloadBase<,>) }.Contains(
-                baseType.GetGenericTypeDefinition()))
+        if (typeof(TQuery).IsSingleProjectionQueryType())
         {
-            throw new ArgumentException($"Projection {t.Name} must implement SingleProjectionPayloadBase<,,>");
+            SingleProjectionQueryTypes = SingleProjectionQueryTypes.Add(typeof(TQuery));
         }
-        if (baseType.GenericTypeArguments[0] != AggregateType)
+        else
         {
-            throw new ArgumentException($"Query {t.Name} must be for aggregate {AggregateType.Name}");
+            throw new ArgumentException("Type must implement ISingleProjectionQuery", typeof(TQuery).Name);
         }
-        SingleProjectionQueryTypes = SingleProjectionQueryTypes.Add(t);
         return this;
     }
     public AggregateDependencyDefinition<TAggregatePayload> AddSingleProjectionListQuery<TQuery>()
     {
-        var t = typeof(TQuery);
-        var projection = t.GetInterfaces()
-                .Where(m => m.GetGenericTypeDefinition() == typeof(ISingleProjectionListQuery<,,>))
-                .Select(m => m.GenericTypeArguments[0])
-                .FirstOrDefault() ??
-            throw new ArgumentException($"Query {t.Name} must implement ISingleProjectionListQuery<,,>");
-        var baseType = projection.BaseType ?? throw new NotImplementedException();
-        if (!baseType.IsGenericType ||
-            !new[] { typeof(SingleProjectionPayloadBase<,>), typeof(DeletableSingleProjectionPayloadBase<,>) }.Contains(
-                baseType.GetGenericTypeDefinition()))
+        if (typeof(TQuery).IsSingleProjectionListQueryType())
         {
-            throw new ArgumentException($"Projection {t.Name} must implement SingleProjectionPayloadBase<,,>");
+            SingleProjectionListQueryTypes = SingleProjectionListQueryTypes.Add(typeof(TQuery));
         }
-        if (baseType.GenericTypeArguments[0] != AggregateType)
+        else
         {
-            throw new ArgumentException($"Query {t.Name} must be for aggregate {AggregateType.Name}");
+            throw new ArgumentException("Type must implement ISingleProjectionListQuery", typeof(TQuery).Name);
         }
-        SingleProjectionListQueryTypes = SingleProjectionListQueryTypes.Add(t);
-        return this;
-    }
-
-    public AggregateDependencyDefinition<TAggregatePayload> AddQuery<TQuery>()
-    {
-        var t = typeof(TQuery);
-        Action action = t.GetInterfaces()
-                .Where(w => w.IsGenericType && w.GenericTypeArguments.Contains(typeof(TAggregatePayload)))
-                .Select(s => s.GetGenericTypeDefinition())
-                .ToArray() switch
-            {
-                [..] i when i.Contains(typeof(IAggregateQuery<,,>)) => () =>
-                    AggregateQueryTypes = AggregateQueryTypes.Add(t),
-                [..] i when i.Contains(typeof(IAggregateListQuery<,,>)) => () =>
-                    AggregateListQueryTypes = AggregateListQueryTypes.Add(t),
-                [..] i when i.Contains(typeof(ISingleProjectionQuery<,,>)) => () =>
-                    SingleProjectionQueryTypes = SingleProjectionQueryTypes.Add(t),
-                [..] i when i.Contains(typeof(ISingleProjectionListQuery<,,>)) => () =>
-                    SingleProjectionListQueryTypes = SingleProjectionListQueryTypes.Add(t),
-                _ => throw new NotImplementedException()
-            };
-        action();
         return this;
     }
 }

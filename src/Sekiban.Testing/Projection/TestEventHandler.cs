@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Document;
 using Sekiban.Core.Event;
+using Sekiban.Core.Types;
 using System.Text.Json;
 namespace Sekiban.Testing.Projection;
 
@@ -77,12 +78,7 @@ public class TestEventHandler
         {
             var type = payload.GetType();
             var isCreateEvent = payload is ICreatedEventPayload;
-            var interfaces = payload.GetType().GetInterfaces();
-            var interfaceType = payload.GetType()
-                .GetInterfaces()
-                ?.FirstOrDefault(m => m.IsGenericType && m.GetGenericTypeDefinition() == typeof(IApplicableEvent<>));
-            var aggregateType = interfaceType?.GenericTypeArguments?.FirstOrDefault();
-            if (aggregateType is null) { throw new InvalidDataException("イベントの生成に失敗しました。" + payload); }
+            var aggregateType = payload.GetAggregatePayloadType();
             var eventType = typeof(Event<>);
             var genericType = eventType.MakeGenericType(type);
             var ev = Activator.CreateInstance(genericType, aggregateId, aggregateType, payload, isCreateEvent) as IEvent;

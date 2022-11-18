@@ -1,5 +1,5 @@
 using Sekiban.Core.Aggregate;
-using Sekiban.Core.Query.QueryModel;
+using Sekiban.Core.Types;
 using System.Collections.Immutable;
 using System.Reflection;
 namespace Sekiban.Core.Dependency;
@@ -65,28 +65,24 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
     }
     protected void AddMultiProjectionQuery<TQuery>()
     {
-        var t = typeof(TQuery);
-        Action action = t.GetInterfaces()
-                .Where(w => w.IsGenericType)
-                .Select(s => s.GetGenericTypeDefinition()) switch
-            {
-                { } gis when gis.Contains(typeof(IMultiProjectionQuery<,,>)) => () =>
-                    MultiProjectionQueryTypes = MultiProjectionQueryTypes.Add(t),
-                _ => throw new NotImplementedException()
-            };
-        action();
+        if (typeof(TQuery).IsMultiProjectionQueryType())
+        {
+            MultiProjectionQueryTypes = MultiProjectionQueryTypes.Add(typeof(TQuery));
+        }
+        else
+        {
+            throw new ArgumentException("Type must implement MultiProjectionQuery", typeof(TQuery).Name);
+        }
     }
     protected void AddMultiProjectionListQuery<TQuery>()
     {
-        var t = typeof(TQuery);
-        Action action = t.GetInterfaces()
-                .Where(w => w.IsGenericType)
-                .Select(s => s.GetGenericTypeDefinition()) switch
-            {
-                { } gis when gis.Contains(typeof(IMultiProjectionListQuery<,,>)) => () =>
-                    MultiProjectionListQueryTypes = MultiProjectionListQueryTypes.Add(t),
-                _ => throw new NotImplementedException()
-            };
-        action();
+        if (typeof(TQuery).IsMultiProjectionListQueryType())
+        {
+            MultiProjectionListQueryTypes = MultiProjectionListQueryTypes.Add(typeof(TQuery));
+        }
+        else
+        {
+            throw new ArgumentException("Type must implement MultiProjectionListQuery", typeof(TQuery).Name);
+        }
     }
 }
