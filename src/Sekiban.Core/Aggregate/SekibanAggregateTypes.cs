@@ -17,16 +17,19 @@ public class SekibanAggregateTypes
             {
                 var baseProjector = typeof(DefaultSingleProjector<>);
                 var p = baseProjector.MakeGenericType(type);
-                _registeredTypes.Add(new DefaultAggregateType(type, p));
+                var aggregateType = new DefaultAggregateType(type, p);
+                if (_registeredTypes.Contains(aggregateType)) { continue; }
+                _registeredTypes.Add(aggregateType);
             }
             var customProjectors = assembly.DefinedTypes.GetSingleProjectorTypes();
             foreach (var type in customProjectors)
             {
-                _registeredCustomProjectorTypes.Add(
-                    new SingleProjectionAggregateType(
-                        type.GetOriginalTypeFromSingleProjection(),
-                        type.GetProjectionTypeFromSingleProjection(),
-                        type));
+                var projectorType = new SingleProjectionAggregateType(
+                    type.GetOriginalTypeFromSingleProjection(),
+                    type.GetProjectionTypeFromSingleProjection(),
+                    type);
+                if (_registeredCustomProjectorTypes.Contains(projectorType)) { continue; }
+                _registeredCustomProjectorTypes.Add(projectorType);
             }
         }
         AggregateTypes = _registeredTypes.AsReadOnly();

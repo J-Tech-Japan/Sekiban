@@ -17,6 +17,10 @@ public class RegisteredEventTypes
             var decoratedTypes = assembly.DefinedTypes.Where(x => x.IsClass && x.ImplementedInterfaces.Contains(typeof(IEventPayload)));
             foreach (var type in decoratedTypes)
             {
+                if (_registeredTypes.Contains(type))
+                {
+                    continue;
+                }
                 _registeredTypes.Add(type);
             }
         }
