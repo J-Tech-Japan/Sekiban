@@ -101,7 +101,12 @@ public class ClientAndProjectionSpec : AggregateTestBase<Client, CustomerDepende
                     new[]
                     {
                         new BasicClientQueryModel(branchId, clientNameChanged, clientEmail)
-                    }));
+                    }))
+            .ThenGetSingleProjectionListQueryResponse<ClientNameHistoryProjection, ClientNameHistoryProjectionQuery,
+                ClientNameHistoryProjectionQuery.Parameter,
+                ClientNameHistoryProjectionQuery.Response>(
+                new ClientNameHistoryProjectionQuery.Parameter(null, null, null, null, null),
+                value => { });
     }
 
     [Fact]
