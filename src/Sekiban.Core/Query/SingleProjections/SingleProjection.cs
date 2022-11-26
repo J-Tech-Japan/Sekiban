@@ -55,7 +55,7 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
     public SingleProjection<TProjectionPayload> CreateInitialAggregate(Guid aggregateId) => new()
         { AggregateId = aggregateId };
 
-    public Type OriginalAggregateType() => typeof(TProjectionPayload).GetOriginalTypeFromSingleProjection();
+    public Type OriginalAggregateType() => typeof(TProjectionPayload).GetOriginalTypeFromSingleProjectionPayload();
     public bool GetIsDeleted() => Payload is IDeletable { IsDeleted: true };
     protected Action? GetApplyEventAction(IEvent ev, IEventPayload eventPayload)
     {

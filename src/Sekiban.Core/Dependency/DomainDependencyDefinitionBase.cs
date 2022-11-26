@@ -1,4 +1,5 @@
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Event;
 using Sekiban.Core.Types;
 using System.Collections.Immutable;
 using System.Reflection;
@@ -14,6 +15,7 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
     private ImmutableList<IAggregateDependencyDefinition> AggregateDefinitions { get; set; } = ImmutableList<IAggregateDependencyDefinition>.Empty;
     private ImmutableList<Type> MultiProjectionQueryTypes { get; set; } = ImmutableList<Type>.Empty;
     private ImmutableList<Type> MultiProjectionListQueryTypes { get; set; } = ImmutableList<Type>.Empty;
+    private ImmutableList<Assembly> Assemblies { get; set; } = ImmutableList<Assembly>.Empty;
     public abstract Assembly GetExecutingAssembly();
     public IEnumerable<(Type serviceType, Type? implementationType)> GetCommandDependencies()
     {
@@ -41,6 +43,20 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
     }
     public IEnumerable<Type> GetMultiProjectionQueryTypes() => MultiProjectionQueryTypes;
     public IEnumerable<Type> GetMultiProjectionListQueryTypes() => MultiProjectionListQueryTypes;
+
+    public virtual SekibanDependencyOptions GetSekibanDependencyOptions() => new(
+        new RegisteredEventTypes(GetAssembliesForOptions()),
+        new SekibanAggregateTypes(GetAssembliesForOptions()),
+        GetCommandDependencies().Concat(GetSubscriberDependencies()));
+    public DomainDependencyDefinitionBase AddDependency<TDependency>() where TDependency : DomainDependencyDefinitionBase, new()
+    {
+        var toAdd = new TDependency();
+        AggregateDefinitions = AggregateDefinitions.Concat(toAdd.AggregateDefinitions).ToImmutableList();
+        MultiProjectionQueryTypes = MultiProjectionQueryTypes.Concat(toAdd.MultiProjectionQueryTypes).ToImmutableList();
+        MultiProjectionListQueryTypes = MultiProjectionListQueryTypes.Concat(toAdd.MultiProjectionListQueryTypes).ToImmutableList();
+        Assemblies = Assemblies.Concat(toAdd.Assemblies).ToImmutableList();
+        return this;
+    }
     public IEnumerable<Type> GetSingleProjectionTypes()
     {
         return AggregateDefinitions.SelectMany(s => s.SingleProjectionTypes);
@@ -85,4 +101,7 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
             throw new ArgumentException("Type must implement MultiProjectionListQuery", typeof(TQuery).Name);
         }
     }
+
+    private Assembly[] GetAssembliesForOptions() =>
+        Assemblies.Add(GetExecutingAssembly()).Add(SekibanEventSourcingDependency.GetAssembly()).ToArray();
 }

@@ -21,7 +21,7 @@ public class MultiProjectionCache : IMultiProjectionCache
     {
         _memoryCache.Set(GetInMemoryKey<TProjection, TProjectionPayload>(), container, GetMemoryCacheOptions());
     }
-    public MultipleMemoryProjectionContainer<TProjection, TProjectionPayload> Get<TProjection, TProjectionPayload>()
+    public MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>? Get<TProjection, TProjectionPayload>()
         where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayload, new() =>
         _memoryCache.Get<MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>>(

@@ -50,11 +50,11 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         where TSingleProjection : ISingleProjectionPayload
     {
         var singleProjectionType = typeof(TSingleProjection);
-        if (!singleProjectionType.IsSingleProjectionType())
+        if (!singleProjectionType.IsSingleProjectionPayloadType())
         {
             throw new ArgumentException($"Type {singleProjectionType} is not a single projection type");
         }
-        if (singleProjectionType.GetOriginalTypeFromSingleProjection() != AggregateType)
+        if (singleProjectionType.GetOriginalTypeFromSingleProjectionPayload() != AggregateType)
         {
             throw new ArgumentException($"Single projection {singleProjectionType.Name} must be for aggregate {AggregateType.Name}");
         }
