@@ -1,6 +1,7 @@
 using Sekiban.Core.Validation;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics;
 using System.Linq;
 using Xunit;
 namespace SampleProjectStoryXTest.Validations;
@@ -144,6 +145,7 @@ public class ValidationTest
         var vresults = m.ValidateProperties();
         Assert.True(vresults?.Any() ?? false);
         Assert.Equal("Friends[1].Age", vresults?.First()?.MemberNames?.First());
+        Debug.Assert(vresults != null, nameof(vresults) + " != null");
         Assert.Single(vresults);
     }
 }

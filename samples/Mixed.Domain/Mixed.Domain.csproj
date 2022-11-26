@@ -8,7 +8,6 @@
 
     <ItemGroup>
       <ProjectReference Include="..\..\src\Sekiban.Core\Sekiban.Core.csproj" />
-      <ProjectReference Include="..\JJ_Sekiban\src\Sekiban.Core\Sekiban.Core.csproj" />
       <ProjectReference Include="..\Shipping.Domain\Shipping.Domain.csproj" />
       <ProjectReference Include="..\Warehouse.Domain\Warehouse.Domain.csproj" />
     </ItemGroup>

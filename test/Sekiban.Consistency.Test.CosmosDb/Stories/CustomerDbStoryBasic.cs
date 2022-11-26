@@ -423,7 +423,7 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
     }
 
-    public async Task ContinuousExecutionTestAsync()
+    private async Task ContinuousExecutionTestAsync()
     {
         var recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
         Assert.Single(recentActivityList);
