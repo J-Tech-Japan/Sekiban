@@ -8,10 +8,22 @@ public static class SingleProjectionTypesExtensions
     public static IEnumerable<TypeInfo> GetSingleProjectorTypes(this IEnumerable<TypeInfo> types)
     {
         return types.Where(
-            x => x.IsSingleProjectionType());
+            x => x.IsSingleProjectionPayloadType());
     }
-    public static bool IsSingleProjectionType(this Type typeInfo) => IsSingleProjectionType(typeInfo.GetTypeInfo());
-    public static bool IsSingleProjectionType(this TypeInfo typeInfo)
+
+    public static bool IsSingleProjectionType(this TypeInfo type) =>
+        type.IsGenericType && type.GetGenericTypeDefinition() == typeof(SingleProjection<>);
+    public static bool IsSingleProjectionType(this Type type) => type.GetTypeInfo().IsSingleProjectionType();
+    public static Type GetSingleProjectionPayloadFromSingleProjectionType(this Type type)
+    {
+        if (type.IsSingleProjectionType())
+        {
+            return type.GenericTypeArguments[0];
+        }
+        throw new Exception(type.FullName + "is not Single Projection Type");
+    }
+    public static bool IsSingleProjectionPayloadType(this Type typeInfo) => IsSingleProjectionPayloadType(typeInfo.GetTypeInfo());
+    public static bool IsSingleProjectionPayloadType(this TypeInfo typeInfo)
     {
         var projectorBase = typeof(SingleProjectionPayloadBase<,>);
         var projectorBaseDeletable = typeof(DeletableSingleProjectionPayloadBase<,>);
@@ -20,10 +32,10 @@ public static class SingleProjectionTypesExtensions
             !typeInfo.IsGenericType &&
             typeInfo.BaseType?.Namespace == projectorBase.Namespace;
     }
-    public static Type GetOriginalTypeFromSingleProjection(this Type singleProjectionType) =>
-        GetOriginalTypeFromSingleProjection(singleProjectionType.GetTypeInfo());
+    public static Type GetOriginalTypeFromSingleProjectionPayload(this Type singleProjectionType) =>
+        GetOriginalTypeFromSingleProjectionPayload(singleProjectionType.GetTypeInfo());
 
-    public static Type GetOriginalTypeFromSingleProjection(this TypeInfo singleProjectionTypeInfo)
+    public static Type GetOriginalTypeFromSingleProjectionPayload(this TypeInfo singleProjectionTypeInfo)
     {
         var baseType = singleProjectionTypeInfo.BaseType;
         if (baseType is null) { throw new SekibanTypeNotFoundException("Can not find baseType of " + singleProjectionTypeInfo.Name); }

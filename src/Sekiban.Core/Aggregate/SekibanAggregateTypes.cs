@@ -25,7 +25,7 @@ public class SekibanAggregateTypes
             foreach (var type in customProjectors)
             {
                 var projectorType = new SingleProjectionAggregateType(
-                    type.GetOriginalTypeFromSingleProjection(),
+                    type.GetOriginalTypeFromSingleProjectionPayload(),
                     type.GetProjectionTypeFromSingleProjection(),
                     type);
                 if (_registeredCustomProjectorTypes.Contains(projectorType)) { continue; }

@@ -10,8 +10,16 @@ public class AggregateContainerGroupAttribute : Attribute
     {
         if (type.CustomAttributes.All(a => a.AttributeType != typeof(AggregateContainerGroupAttribute)))
         {
-            return type.IsSingleProjectionType() ? FindAggregateContainerGroup(type.GetOriginalTypeFromSingleProjection())
-                : AggregateContainerGroup.Default;
+            if (type.IsSingleProjectionPayloadType())
+            {
+                return FindAggregateContainerGroup(type.GetOriginalTypeFromSingleProjectionPayload());
+            }
+            if (type.IsSingleProjectorType())
+            {
+                return FindAggregateContainerGroup(type.GetOriginalAggregateTypeFromSingleProjectionListProjector());
+            }
+
+            return AggregateContainerGroup.Default;
         }
         var attributes = (AggregateContainerGroupAttribute[])type.GetCustomAttributes(typeof(AggregateContainerGroupAttribute), true);
         var max = attributes.Max(m => m.Group);
