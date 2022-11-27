@@ -27,7 +27,7 @@ public abstract class
         await foreach (var eventPayload in eventPayloads)
         {
             events.Add(
-                EventHandler.GenerateEventToSave<IChangedEvent<TAggregatePayload>, TAggregatePayload>(
+                EventHandler.GenerateEventToSave<IApplicableEvent<TAggregatePayload>, TAggregatePayload>(
                     aggregateId,
                     eventPayload));
         }
@@ -35,5 +35,5 @@ public abstract class
         return new CommandResponse(aggregateId, events.ToImmutableList(), 0);
     }
     public virtual TCommand CleanupCommandIfNeeded(TCommand command) => command;
-    protected abstract IAsyncEnumerable<IChangedEvent<TAggregatePayload>> ExecCommandAsync(Guid aggregateId, TCommand command);
+    protected abstract IAsyncEnumerable<IApplicableEvent<TAggregatePayload>> ExecCommandAsync(Guid aggregateId, TCommand command);
 }

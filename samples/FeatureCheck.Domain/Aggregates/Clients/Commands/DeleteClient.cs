@@ -10,7 +10,7 @@ public record DeleteClient(Guid ClientId) : ChangeCommandBase<Client>
     public override Guid GetAggregateId() => ClientId;
     public class Handler : ChangeCommandHandlerBase<Client, DeleteClient>
     {
-        protected override async IAsyncEnumerable<IChangedEvent<Client>> ExecCommandAsync(
+        protected override async IAsyncEnumerable<IApplicableEvent<Client>> ExecCommandAsync(
             Func<AggregateState<Client>> getAggregateStateState,
             DeleteClient command)
         {

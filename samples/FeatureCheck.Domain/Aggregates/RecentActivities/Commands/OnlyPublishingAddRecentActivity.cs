@@ -17,7 +17,7 @@ public record OnlyPublishingAddRecentActivity(Guid RecentActivityId, string Acti
         private readonly ISekibanDateProducer _sekibanDateProducer;
 
         public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
-        protected override async IAsyncEnumerable<IChangedEvent<RecentActivity>> ExecCommandAsync(
+        protected override async IAsyncEnumerable<IApplicableEvent<RecentActivity>> ExecCommandAsync(
             Guid aggregateId,
             OnlyPublishingAddRecentActivity command)
         {

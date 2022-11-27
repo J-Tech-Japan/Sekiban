@@ -5,7 +5,7 @@ public record SnapshotManagerRequestAdded(
     string AggregateTypeName,
     Guid TargetAggregateId,
     int NextSnapshotVersion,
-    int? SnapshotVersion) : IChangedEvent<SnapshotManager>
+    int? SnapshotVersion) : IApplicableEvent<SnapshotManager>
 {
     public SnapshotManager OnEvent(SnapshotManager payload, IEvent ev) => payload with
     {

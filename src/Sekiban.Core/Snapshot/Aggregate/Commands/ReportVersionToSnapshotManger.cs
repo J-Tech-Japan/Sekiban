@@ -20,7 +20,7 @@ public class ReportVersionToSnapshotMangerHandler : ChangeCommandHandlerBase<Sna
 {
     private readonly IAggregateSettings _aggregateSettings;
     public ReportVersionToSnapshotMangerHandler(IAggregateSettings aggregateSettings) => _aggregateSettings = aggregateSettings;
-    protected override async IAsyncEnumerable<IChangedEvent<SnapshotManager>> ExecCommandAsync(
+    protected override async IAsyncEnumerable<IApplicableEvent<SnapshotManager>> ExecCommandAsync(
         Func<AggregateState<SnapshotManager>> getAggregateState,
         ReportVersionToSnapshotManger command)
     {

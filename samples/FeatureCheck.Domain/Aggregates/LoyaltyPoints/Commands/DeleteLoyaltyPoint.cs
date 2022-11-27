@@ -10,7 +10,7 @@ public record DeleteLoyaltyPoint(Guid ClientId) : ChangeCommandBase<LoyaltyPoint
     public override Guid GetAggregateId() => ClientId;
     public class Handler : ChangeCommandHandlerBase<LoyaltyPoint, DeleteLoyaltyPoint>
     {
-        protected override async IAsyncEnumerable<IChangedEvent<LoyaltyPoint>> ExecCommandAsync(
+        protected override async IAsyncEnumerable<IApplicableEvent<LoyaltyPoint>> ExecCommandAsync(
             Func<AggregateState<LoyaltyPoint>> getAggregateState,
             DeleteLoyaltyPoint command)
         {

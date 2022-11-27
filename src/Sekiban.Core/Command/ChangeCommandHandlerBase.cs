@@ -68,7 +68,7 @@ public abstract class ChangeCommandHandlerBase<TAggregatePayload, TCommand> : IC
         return state;
     }
 
-    protected abstract IAsyncEnumerable<IChangedEvent<TAggregatePayload>> ExecCommandAsync(
+    protected abstract IAsyncEnumerable<IApplicableEvent<TAggregatePayload>> ExecCommandAsync(
         Func<AggregateState<TAggregatePayload>> getAggregateState,
         TCommand command);
 }

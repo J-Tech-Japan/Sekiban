@@ -17,14 +17,13 @@ public static class EventHandler
     }
 
     public static IEvent GenerateEventToSave<TEventPayload, TAggregatePayload>(Guid aggregateId, TEventPayload payload)
-        where TEventPayload : IChangedEvent<TAggregatePayload> where TAggregatePayload : IAggregatePayload, new()
+        where TEventPayload : IApplicableEvent<TAggregatePayload> where TAggregatePayload : IAggregatePayload, new()
     {
         var eventPayloadType = payload.GetType();
         // ReSharper disable once SuspiciousTypeConversion.Global
-        var isCreatedEvent = eventPayloadType is ICreatedEventPayload;
         var eventBaseType = typeof(Event<>);
         var eventType = eventBaseType.MakeGenericType(eventPayloadType);
-        return Activator.CreateInstance(eventType, aggregateId, typeof(TAggregatePayload), payload, isCreatedEvent) as IEvent ??
+        return Activator.CreateInstance(eventType, aggregateId, typeof(TAggregatePayload), payload) as IEvent ??
             throw new SekibanEventFailedToActivateException();
     }
 }

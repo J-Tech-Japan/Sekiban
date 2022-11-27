@@ -58,10 +58,9 @@ public class TestEventHandler
         foreach (var (aggregateId, aggregateType, payload) in eventTouples)
         {
             var type = payload.GetType();
-            var isCreateEvent = payload is ICreatedEventPayload;
             var eventType = typeof(Event<>);
             var genericType = eventType.MakeGenericType(type);
-            var ev = Activator.CreateInstance(genericType, aggregateId, aggregateType, payload, isCreateEvent) as IEvent;
+            var ev = Activator.CreateInstance(genericType, aggregateId, aggregateType, payload) as IEvent;
             if (ev == null) { throw new InvalidDataException("イベントの生成に失敗しました。" + payload); }
             GivenEvents(new[] { ev }, withPublish);
         }
@@ -77,11 +76,10 @@ public class TestEventHandler
         foreach (var (aggregateId, payload) in eventTouples)
         {
             var type = payload.GetType();
-            var isCreateEvent = payload is ICreatedEventPayload;
             var aggregateType = payload.GetAggregatePayloadType();
             var eventType = typeof(Event<>);
             var genericType = eventType.MakeGenericType(type);
-            var ev = Activator.CreateInstance(genericType, aggregateId, aggregateType, payload, isCreateEvent) as IEvent;
+            var ev = Activator.CreateInstance(genericType, aggregateId, aggregateType, payload) as IEvent;
             if (ev == null) { throw new InvalidDataException("イベントの生成に失敗しました。" + payload); }
             GivenEvents(new[] { ev }, withPublish);
         }

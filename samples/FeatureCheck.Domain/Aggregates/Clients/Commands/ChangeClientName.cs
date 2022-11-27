@@ -11,7 +11,7 @@ public record ChangeClientName(Guid ClientId, string ClientName) : ChangeCommand
     public class Handler : ChangeCommandHandlerBase<Client, ChangeClientName>
     {
         public override ChangeClientName CleanupCommandIfNeeded(ChangeClientName command) => command with { ClientName = "stripped for security" };
-        protected override async IAsyncEnumerable<IChangedEvent<Client>> ExecCommandAsync(
+        protected override async IAsyncEnumerable<IApplicableEvent<Client>> ExecCommandAsync(
             Func<AggregateState<Client>> getAggregateState,
             ChangeClientName command)
         {

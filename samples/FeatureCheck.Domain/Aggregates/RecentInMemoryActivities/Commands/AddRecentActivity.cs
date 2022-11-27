@@ -14,7 +14,7 @@ public record AddRecentInMemoryActivity(Guid RecentInMemoryActivityId, string Ac
     {
         private readonly ISekibanDateProducer _sekibanDateProducer;
         public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
-        protected override async IAsyncEnumerable<IChangedEvent<RecentInMemoryActivity>> ExecCommandAsync(
+        protected override async IAsyncEnumerable<IApplicableEvent<RecentInMemoryActivity>> ExecCommandAsync(
             Func<AggregateState<RecentInMemoryActivity>> getAggregateState,
             AddRecentInMemoryActivity command)
         {

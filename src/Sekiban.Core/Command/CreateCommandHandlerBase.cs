@@ -22,11 +22,6 @@ public abstract class CreateCommandHandlerBase<TAggregatePayload, TCommand> : IC
         await foreach (var eventPayload in eventPayloads)
         {
             _events.Add(EventHandler.HandleEvent(aggregate, eventPayload));
-            if (_events.First().GetPayload() is not ICreatedEventPayload) { throw new SekibanCreateCommandShouldSaveCreateEventFirstException(); }
-            if (_events.Count > 1 && _events.Last().GetPayload() is ICreatedEventPayload)
-            {
-                throw new SekibanCreateCommandShouldOnlySaveFirstException();
-            }
         }
         return await Task.FromResult(new CommandResponse(aggregate.AggregateId, _events.ToImmutableList(), aggregate.Version));
     }

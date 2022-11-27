@@ -14,7 +14,7 @@ public record AddRecentActivity(Guid RecentActivityId, string Activity) : Change
         private readonly ISekibanDateProducer _sekibanDateProducer;
         public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
 
-        protected override async IAsyncEnumerable<IChangedEvent<RecentActivity>> ExecCommandAsync(
+        protected override async IAsyncEnumerable<IApplicableEvent<RecentActivity>> ExecCommandAsync(
             Func<AggregateState<RecentActivity>> getAggregateState,
             AddRecentActivity command)
         {

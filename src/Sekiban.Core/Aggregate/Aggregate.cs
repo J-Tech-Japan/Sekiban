@@ -50,9 +50,7 @@ public class Aggregate<TAggregatePayload> : AggregateCommonBase,
     internal IEvent AddAndApplyEvent<TEventPayload>(TEventPayload eventPayload)
         where TEventPayload : IEventPayload, IApplicableEvent<TAggregatePayload>
     {
-        var ev = eventPayload is ICreatedEventPayload
-            ? Event<TEventPayload>.CreatedEvent(AggregateId, typeof(TAggregatePayload), eventPayload)
-            : Event<TEventPayload>.ChangedEvent(AggregateId, typeof(TAggregatePayload), eventPayload);
+        var ev = Event<TEventPayload>.GenerateEvent(AggregateId, typeof(TAggregatePayload), eventPayload);
 
         if (GetApplyEventAction(ev, eventPayload) is null)
         {

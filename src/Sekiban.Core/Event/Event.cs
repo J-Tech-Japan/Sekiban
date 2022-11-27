@@ -11,7 +11,7 @@ public record Event<TEventPayload> : DocumentBase, IEvent where TEventPayload : 
     {
     }
 
-    public Event(Guid aggregateId, Type aggregateType, TEventPayload eventPayload, bool isAggregateInitialEvent = false) : base(
+    public Event(Guid aggregateId, Type aggregateType, TEventPayload eventPayload) : base(
         aggregateId,
         PartitionKeyGenerator.ForEvent(aggregateId, aggregateType),
         DocumentType.Event,
@@ -42,9 +42,6 @@ public record Event<TEventPayload> : DocumentBase, IEvent where TEventPayload : 
         return histories;
     }
 
-    public static Event<TEventPayload> CreatedEvent(Guid aggregateId, Type aggregateType, TEventPayload eventPayload) =>
-        new(aggregateId, aggregateType, eventPayload, true);
-
-    public static Event<TEventPayload> ChangedEvent(Guid aggregateId, Type aggregateType, TEventPayload eventPayload) =>
+    public static Event<TEventPayload> GenerateEvent(Guid aggregateId, Type aggregateType, TEventPayload eventPayload) =>
         new(aggregateId, aggregateType, eventPayload);
 }

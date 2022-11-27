@@ -17,7 +17,7 @@ public record AddLoyaltyPoint(
     public override Guid GetAggregateId() => ClientId;
     public class Handler : ChangeCommandHandlerBase<LoyaltyPoint, AddLoyaltyPoint>
     {
-        protected override async IAsyncEnumerable<IChangedEvent<LoyaltyPoint>> ExecCommandAsync(
+        protected override async IAsyncEnumerable<IApplicableEvent<LoyaltyPoint>> ExecCommandAsync(
             Func<AggregateState<LoyaltyPoint>> getAggregateState,
             AddLoyaltyPoint command)
         {
