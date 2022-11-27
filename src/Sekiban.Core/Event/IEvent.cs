@@ -11,5 +11,4 @@ public interface IEvent : INotification, ICallHistories, IDocument, IEventPayloa
 
     public int Version { get; }
 
-    public dynamic GetComparableObject(IEvent original, bool copyVersion = true);
 }

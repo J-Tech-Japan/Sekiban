@@ -36,16 +36,7 @@ public record Event<TEventPayload> : DocumentBase, IEvent where TEventPayload : 
     public int Version { get; init; }
 
     public List<CallHistory> CallHistories { get; init; } = new();
-
-    public dynamic GetComparableObject(IEvent original, bool copyVersion = true) => this with
-    {
-        Version = copyVersion ? original.Version : Version,
-        SortableUniqueId = original.SortableUniqueId,
-        CallHistories = original.CallHistories,
-        Id = original.Id,
-        TimeStamp = original.TimeStamp
-    };
-
+    
     public IEventPayload GetPayload() => Payload;
     public T? GetPayload<T>() where T : class, IEventPayload => Payload as T;
 
