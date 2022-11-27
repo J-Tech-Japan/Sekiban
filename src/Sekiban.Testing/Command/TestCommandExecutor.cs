@@ -58,11 +58,6 @@ public class TestCommandExecutor
         {
             throw new SekibanCreateHasToMakeEventException();
         }
-        if (latestEvents.Any(
-            ev => (ev == latestEvents.First() && !ev.IsAggregateInitialEvent) || (ev != latestEvents.First() && ev.IsAggregateInitialEvent)))
-        {
-            throw new SekibanCreateCommandShouldSaveCreateEventFirstException();
-        }
         var documentWriter = _serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter;
         if (documentWriter is null) { throw new Exception("Failed to get document writer"); }
         foreach (var e in latestEvents)
@@ -150,10 +145,6 @@ public class TestCommandExecutor
             var result = ((dynamic)handleAsyncMethod.Invoke(handler, new[] { commandDocument, aggregate!.AggregateId })!)?.Result;
             if (result is null) { throw new Exception("Failed to execute change command"); }
             LatestEvents = (ImmutableList<IEvent>)result.Events;
-        }
-        if (LatestEvents.Any(ev => ev.IsAggregateInitialEvent))
-        {
-            throw new SekibanChangeCommandShouldNotSaveCreateEventException();
         }
         var documentWriter = _serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter;
         if (documentWriter is null) { throw new Exception("Failed to get document writer"); }

@@ -19,16 +19,10 @@ public record Event<TEventPayload> : DocumentBase, IEvent where TEventPayload : 
     {
         Payload = eventPayload;
         AggregateType = aggregateType.Name;
-        IsAggregateInitialEvent = isAggregateInitialEvent;
     }
     public TEventPayload Payload { get; init; } = default!;
 
     public string AggregateType { get; init; } = null!;
-
-    /// <summary>
-    ///     集約のスタートイベントの場合はtrueにする。
-    /// </summary>
-    public bool IsAggregateInitialEvent { get; init; }
 
     /// <summary>
     ///     集約のイベント適用後のバージョン
@@ -36,7 +30,7 @@ public record Event<TEventPayload> : DocumentBase, IEvent where TEventPayload : 
     public int Version { get; init; }
 
     public List<CallHistory> CallHistories { get; init; } = new();
-    
+
     public IEventPayload GetPayload() => Payload;
     public T? GetPayload<T>() where T : class, IEventPayload => Payload as T;
 
@@ -49,8 +43,8 @@ public record Event<TEventPayload> : DocumentBase, IEvent where TEventPayload : 
     }
 
     public static Event<TEventPayload> CreatedEvent(Guid aggregateId, Type aggregateType, TEventPayload eventPayload) =>
-        new Event<TEventPayload>(aggregateId, aggregateType, eventPayload, true);
+        new(aggregateId, aggregateType, eventPayload, true);
 
     public static Event<TEventPayload> ChangedEvent(Guid aggregateId, Type aggregateType, TEventPayload eventPayload) =>
-        new Event<TEventPayload>(aggregateId, aggregateType, eventPayload);
+        new(aggregateId, aggregateType, eventPayload);
 }

@@ -166,12 +166,6 @@ public class CommandExecutor : ICommandExecutor
             version = result.Version;
             if (result.Events.Any())
             {
-                if (result.Events.Any(
-                    ev => (ev == result.Events.First() && !ev.IsAggregateInitialEvent) ||
-                        (ev != result.Events.First() && ev.IsAggregateInitialEvent)))
-                {
-                    throw new SekibanCreateCommandShouldSaveCreateEventFirstException();
-                }
                 foreach (var ev in result.Events)
                 {
                     ev.CallHistories.AddRange(commandDocument.GetCallHistoriesIncludesItself());
@@ -219,10 +213,6 @@ public class CommandExecutor : ICommandExecutor
             toReturnEvents.AddRange(events);
             foreach (var ev in events)
             {
-                if (ev.IsAggregateInitialEvent)
-                {
-                    throw new SekibanChangeCommandShouldNotSaveCreateEventException();
-                }
                 await _documentWriter.SaveAndPublishEvent(ev, typeof(TAggregatePayload));
             }
         }

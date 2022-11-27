@@ -1,5 +1,4 @@
 ﻿using Sekiban.Core.Event;
-using Sekiban.Core.Exceptions;
 namespace Sekiban.Core.Aggregate;
 
 public abstract class AggregateCommonBase : IAggregate
@@ -21,14 +20,6 @@ public abstract class AggregateCommonBase : IAggregate
     {
         var action = GetApplyEventAction(ev, ev.GetPayload());
         if (action is null) { return; }
-        if (ev.IsAggregateInitialEvent == false && Version == 0)
-        {
-            throw new SekibanFirstEventShouldBeCreateEventException(ev.GetPayload().GetType());
-        }
-        if (ev.IsAggregateInitialEvent && Version > 0)
-        {
-            throw new SekibanCreateEventCanOnlyUseInFirstEvent(ev.GetPayload().GetType(), Version);
-        }
         if (ev.Id == LastEventId) { return; }
         action();
         _basicInfo = _basicInfo with { LastEventId = ev.Id, LastSortableUniqueId = ev.SortableUniqueId, Version = Version + 1 };

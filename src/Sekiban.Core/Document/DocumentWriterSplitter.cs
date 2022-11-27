@@ -48,23 +48,14 @@ public class DocumentWriterSplitter : IDocumentWriter
         await _documentPersistentWriter.SaveAndPublishEvent(ev, aggregateType);
     }
 
-    private async Task AddToHybridIfPossible(IEvent @event, Type aggregateType)
+    private async Task AddToHybridIfPossible(IEvent ev, Type aggregateType)
     {
         if (!_aggregateSettings.CanUseHybrid(aggregateType)) { return; }
-        if (@event.IsAggregateInitialEvent)
+        if (!_hybridStoreManager.HasPartition(ev.PartitionKey))
         {
-            if (_hybridStoreManager.AddPartitionKey(@event.PartitionKey, string.Empty))
-            {
-                await _documentTemporaryWriter.SaveAsync(@event, aggregateType);
-            }
+            _hybridStoreManager.AddPartitionKey(ev.PartitionKey, string.Empty);
         }
-        else
-        {
-            if (_hybridStoreManager.HasPartition(@event.PartitionKey))
-            {
-                await _documentTemporaryWriter.SaveAsync(@event, aggregateType);
-            }
-        }
+        await _documentTemporaryWriter.SaveAsync(ev, aggregateType);
     }
     private async Task SaveSnapshotToHybridIfPossible(SnapshotDocument snapshot, Type aggregateType)
     {

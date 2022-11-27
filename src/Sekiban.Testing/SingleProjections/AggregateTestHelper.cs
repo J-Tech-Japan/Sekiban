@@ -373,11 +373,6 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         {
             throw new SekibanCreateHasToMakeEventException();
         }
-        if (_latestEvents.Any(
-            ev => (ev == _latestEvents.First() && !ev.IsAggregateInitialEvent) || (ev != _latestEvents.First() && ev.IsAggregateInitialEvent)))
-        {
-            throw new SekibanCreateCommandShouldSaveCreateEventFirstException();
-        }
         SaveEvents(_latestEvents, withPublish);
         CheckCommandJSONSupports(commandDocument);
         CheckStateJSONSupports();
@@ -435,10 +430,6 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
                 return this;
             }
             CheckCommandJSONSupports(commandDocument);
-        }
-        foreach (var ev in _latestEvents)
-        {
-            if (ev.IsAggregateInitialEvent) { throw new SekibanChangeCommandShouldNotSaveCreateEventException(); }
         }
         SaveEvents(_latestEvents, withPublish);
         CheckStateJSONSupports();

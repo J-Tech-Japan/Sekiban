@@ -17,16 +17,6 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
     public Guid AggregateId { get; init; }
     public void ApplyEvent(IEvent ev)
     {
-        // IsAggregateInitialEvent は V0 の時のみ
-        // IsAggregateInitialEvent == false は V0以外
-        if (ev.IsAggregateInitialEvent != (Version == 0))
-        {
-            throw new SekibanFirstEventShouldBeCreateEventException(ev.GetPayload().GetType());
-        }
-        if (ev.IsAggregateInitialEvent && Version > 0)
-        {
-            throw new SekibanCreateEventCanOnlyUseInFirstEvent(ev.GetPayload().GetType(), Version);
-        }
         if (ev.Id == LastEventId) { return; }
         var action = GetApplyEventAction(ev, ev.GetPayload());
         if (action is null) { return; }

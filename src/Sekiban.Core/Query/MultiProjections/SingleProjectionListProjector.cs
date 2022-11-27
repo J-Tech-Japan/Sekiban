@@ -24,7 +24,8 @@ public class SingleProjectionListProjector<TProjection, TState, TProjector> : IM
     {
         if (_eventChecker.CanApplyEvent(ev))
         {
-            if (ev.IsAggregateInitialEvent)
+            var targetAggregate = List.FirstOrDefault(m => m.AggregateId == ev.AggregateId);
+            if (targetAggregate is null)
             {
                 var aggregate = _projector.CreateInitialAggregate(ev.AggregateId);
                 aggregate.ApplyEvent(ev);
@@ -32,11 +33,7 @@ public class SingleProjectionListProjector<TProjection, TState, TProjector> : IM
             }
             else
             {
-                var targetAggregate = List.FirstOrDefault(m => m.AggregateId == ev.AggregateId);
-                if (targetAggregate is not null)
-                {
-                    targetAggregate.ApplyEvent(ev);
-                }
+                targetAggregate.ApplyEvent(ev);
             }
         }
         Version++;
