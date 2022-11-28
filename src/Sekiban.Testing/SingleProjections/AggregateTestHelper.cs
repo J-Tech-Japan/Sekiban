@@ -86,7 +86,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         return aggregateLoader.AllEventsAsync<TAggregatePayload>(GetAggregateId(), toVersion).Result?.ToList() ?? new List<IEvent>();
     }
 
-    public IAggregateTestHelper<TAggregatePayload> WhenCreate<C>(C createCommand) where C : ICreateCommand<TAggregatePayload> =>
+    public IAggregateTestHelper<TAggregatePayload> WhenCreate<C>(C createCommand) where C : ICommandBase<TAggregatePayload> =>
         WhenCreatePrivate(createCommand, false);
 
     public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(C changeCommand) where C : ChangeCommandBase<TAggregatePayload>
@@ -96,7 +96,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(Func<AggregateState<TAggregatePayload>, C> commandFunc)
         where C : ChangeCommandBase<TAggregatePayload> => WhenChangePrivate(commandFunc, false);
 
-    public IAggregateTestHelper<TAggregatePayload> WhenCreateWithPublish<C>(C createCommand) where C : ICreateCommand<TAggregatePayload> =>
+    public IAggregateTestHelper<TAggregatePayload> WhenCreateWithPublish<C>(C createCommand) where C : ICommandBase<TAggregatePayload> =>
         WhenCreatePrivate(createCommand, true);
     public IAggregateTestHelper<TAggregatePayload> WhenChangeWithPublish<C>(C changeCommand) where C : ChangeCommandBase<TAggregatePayload> =>
         WhenChangePrivate(_ => changeCommand, true);
@@ -287,10 +287,10 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         return this;
     }
     public Guid RunEnvironmentCreateCommand<TEnvironmentAggregatePayload>(
-        ICreateCommand<TEnvironmentAggregatePayload> command,
+        ICommandBase<TEnvironmentAggregatePayload> commandBase,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
-        var (events, aggregateId) = _commandExecutor.ExecuteCreateCommand(command, injectingAggregateId);
+        var (events, aggregateId) = _commandExecutor.ExecuteCreateCommand(commandBase, injectingAggregateId);
         var aggregateEvents = events?.ToList() ?? new List<IEvent>();
         return aggregateId;
     }
@@ -304,10 +304,10 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFileWithPublish(string filename) =>
         GivenEnvironmentEventsFile(filename, true);
     public Guid RunEnvironmentCreateCommandWithPublish<TEnvironmentAggregatePayload>(
-        ICreateCommand<TEnvironmentAggregatePayload> command,
+        ICommandBase<TEnvironmentAggregatePayload> commandBase,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
-        var (events, aggregateId) = _commandExecutor.ExecuteCreateCommandWithPublish(command, injectingAggregateId);
+        var (events, aggregateId) = _commandExecutor.ExecuteCreateCommandWithPublish(commandBase, injectingAggregateId);
         var aggregateEvents = events?.ToList() ?? new List<IEvent>();
         return aggregateId;
     }
@@ -339,7 +339,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         return this;
     }
     private IAggregateTestHelper<TAggregatePayload> WhenCreatePrivate<C>(C createCommand, bool withPublish)
-        where C : ICreateCommand<TAggregatePayload>
+        where C : ICommandBase<TAggregatePayload>
     {
         ResetBeforeCommand();
 

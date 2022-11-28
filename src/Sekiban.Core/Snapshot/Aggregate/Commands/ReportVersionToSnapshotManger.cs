@@ -10,18 +10,18 @@ public record ReportVersionToSnapshotManger(
     Type AggregateType,
     Guid TargetAggregateId,
     int Version,
-    int? SnapshotVersion) : ChangeCommandBase<SnapshotManager>, INoValidateCommand
+    int? SnapshotVersion) : ChangeCommandBase<Aggregate.SnapshotManager>, INoValidateCommand
 {
     public ReportVersionToSnapshotManger() : this(Guid.Empty, typeof(object), Guid.Empty, 0, null) { }
     public override Guid GetAggregateId() => SnapshotManagerId;
 }
-public class ReportVersionToSnapshotMangerHandler : ChangeCommandHandlerBase<SnapshotManager,
+public class ReportVersionToSnapshotMangerHandler : ChangeCommandHandlerBase<Aggregate.SnapshotManager,
     ReportVersionToSnapshotManger>
 {
     private readonly IAggregateSettings _aggregateSettings;
     public ReportVersionToSnapshotMangerHandler(IAggregateSettings aggregateSettings) => _aggregateSettings = aggregateSettings;
-    protected override async IAsyncEnumerable<IApplicableEvent<SnapshotManager>> ExecCommandAsync(
-        Func<AggregateState<SnapshotManager>> getAggregateState,
+    protected override async IAsyncEnumerable<IApplicableEvent<Aggregate.SnapshotManager>> ExecCommandAsync(
+        Func<AggregateState<Aggregate.SnapshotManager>> getAggregateState,
         ReportVersionToSnapshotManger command)
     {
         await Task.CompletedTask;
@@ -31,7 +31,7 @@ public class ReportVersionToSnapshotMangerHandler : ChangeCommandHandlerBase<Sna
         var nextSnapshotVersion = command.Version / snapshotFrequency * snapshotFrequency;
         var offset = command.Version - nextSnapshotVersion;
         if (nextSnapshotVersion == 0) { yield break; }
-        var key = SnapshotManager.SnapshotKey(command.AggregateType.Name, command.TargetAggregateId, nextSnapshotVersion);
+        var key = Aggregate.SnapshotManager.SnapshotKey(command.AggregateType.Name, command.TargetAggregateId, nextSnapshotVersion);
         if (!getAggregateState().Payload.Requests.Contains(key) && !getAggregateState().Payload.RequestTakens.Contains(key))
         {
             yield return new SnapshotManagerRequestAdded(

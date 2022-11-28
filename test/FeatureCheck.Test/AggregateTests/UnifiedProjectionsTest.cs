@@ -30,7 +30,7 @@ public class UnifiedProjectionsTest : UnifiedTestBase<CustomerDependency>
     public void Test()
     {
         _branchId = RunCreateCommand(new CreateBranch(branchName));
-        _clientId = RunCreateCommand(new CreateClient(_branchId, clientName, clientEmail));
+        _clientId = RunCreateCommand(new Client(_branchId, clientName, clientEmail));
         GetLatestEvents()
             .ToList()
             .ForEach(

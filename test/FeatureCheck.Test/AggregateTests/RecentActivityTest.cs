@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using Xunit;
+using RecentActivity = Customer.Domain.Aggregates.RecentActivities.RecentActivity;
 namespace Customer.Test.AggregateTests;
 
 public class RecentActivityTest : AggregateTestBase<RecentActivity, CustomerDependency>
@@ -17,7 +18,7 @@ public class RecentActivityTest : AggregateTestBase<RecentActivity, CustomerDepe
     [Fact]
     public void CreateRecentActivityTest()
     {
-        WhenCreate(new CreateRecentActivity())
+        WhenCreate(new Domain.Aggregates.RecentActivities.Commands.RecentActivity())
             .ThenNotThrowsAnException()
             .ThenGetLatestSingleEvent<RecentActivityCreated>(ev => firstRecord = ev.Payload.Activity)
             .ThenPayloadIs(new RecentActivity(new List<RecentActivityRecord> { firstRecord }.ToImmutableList()));

@@ -1,14 +1,10 @@
 using Customer.Domain.Aggregates.Branches;
 using Customer.Domain.Aggregates.Branches.Commands;
-using Customer.Domain.Aggregates.Clients;
 using Customer.Domain.Aggregates.Clients.Commands;
 using Customer.Domain.Aggregates.Clients.Projections;
-using Customer.Domain.Aggregates.LoyaltyPoints;
 using Customer.Domain.Aggregates.LoyaltyPoints.Commands;
 using Customer.Domain.Aggregates.LoyaltyPoints.Consts;
-using Customer.Domain.Aggregates.RecentActivities;
 using Customer.Domain.Aggregates.RecentActivities.Commands;
-using Customer.Domain.Aggregates.RecentInMemoryActivities;
 using Customer.Domain.Aggregates.RecentInMemoryActivities.Commands;
 using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
 using Customer.Domain.Shared.Exceptions;
@@ -26,6 +22,10 @@ using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
+using Client = Customer.Domain.Aggregates.Clients.Client;
+using LoyaltyPoint = Customer.Domain.Aggregates.LoyaltyPoints.LoyaltyPoint;
+using RecentActivity = Customer.Domain.Aggregates.RecentActivities.RecentActivity;
+using RecentInMemoryActivity = Customer.Domain.Aggregates.RecentInMemoryActivities.RecentInMemoryActivity;
 namespace SampleProjectStoryXTest.Stories;
 
 public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
@@ -49,7 +49,8 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         var branchList = await multiProjectionService.GetAggregateList<Branch>();
         Assert.Empty(branchList);
         var (branchResult, events)
-            = await commandExecutor.ExecCreateCommandAsync<Branch, CreateBranch>(new CreateBranch("Japan"));
+            = await commandExecutor.ExecCommandAsync<Branch, CreateBranch>(
+                new CreateBranch("Japan"));
         var branchId = branchResult.AggregateId;
         Assert.NotNull(branchResult);
         Assert.NotNull(branchResult.AggregateId);
@@ -58,7 +59,9 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         var branchFromList = branchList.First(m => m.AggregateId == branchId);
         Assert.NotNull(branchFromList);
 
-        var branchResult2 = await commandExecutor.ExecCreateCommandAsync<Branch, CreateBranch>(new CreateBranch("USA"));
+        var branchResult2 =
+            await commandExecutor.ExecCommandAsync<Branch, CreateBranch>(
+                new CreateBranch("USA"));
         branchList = await multiProjectionService.GetAggregateList<Branch>();
         Assert.Equal(2, branchList.Count);
         var branchListFromMultiple = await multiProjectionService.GetAggregateList<Branch>();
@@ -75,8 +78,8 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         var clientList = await multiProjectionService.GetAggregateList<Client>();
         Assert.Empty(clientList);
         var originalName = "Tanaka Taro";
-        var (createClientResult, events2) = await commandExecutor.ExecCreateCommandAsync<Client, CreateClient>(
-            new CreateClient(branchId!.Value, originalName, "tanaka@example.com"));
+        var (createClientResult, events2) = await commandExecutor.ExecCommandAsync<Client, Customer.Domain.Aggregates.Clients.Commands.Client>(
+            new Customer.Domain.Aggregates.Clients.Commands.Client(branchId!.Value, originalName, "tanaka@example.com"));
         var clientId = createClientResult.AggregateId;
         Assert.NotNull(createClientResult);
         Assert.NotNull(createClientResult.AggregateId);
@@ -205,8 +208,8 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
 
         // create recent activity
         var (createRecentActivityResult, events8)
-            = await commandExecutor.ExecCreateCommandAsync<RecentActivity, CreateRecentActivity>(
-                new CreateRecentActivity());
+            = await commandExecutor.ExecCommandAsync<RecentActivity, Customer.Domain.Aggregates.RecentActivities.Commands.RecentActivity>(
+                new Customer.Domain.Aggregates.RecentActivities.Commands.RecentActivity());
         var recentActivityId = createRecentActivityResult.AggregateId;
 
         var recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
@@ -250,8 +253,8 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         var recentActivityId = Guid.NewGuid();
         // create recent activity
         var (createRecentActivityResult, events)
-            = await commandExecutor.ExecCreateCommandAsync<RecentActivity, CreateRecentActivity>(
-                new CreateRecentActivity());
+            = await commandExecutor.ExecCommandAsync<RecentActivity, Customer.Domain.Aggregates.RecentActivities.Commands.RecentActivity>(
+                new Customer.Domain.Aggregates.RecentActivities.Commands.RecentActivity());
 
         var recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
         Assert.Single(recentActivityList);
@@ -323,8 +326,8 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         // create recent activity
         var (createRecentActivityResult, events)
             = await commandExecutor
-                .ExecCreateCommandAsync<RecentInMemoryActivity, CreateRecentInMemoryActivity>(
-                    new CreateRecentInMemoryActivity());
+                .ExecCommandAsync<RecentInMemoryActivity, Customer.Domain.Aggregates.RecentInMemoryActivities.Commands.RecentInMemoryActivity>(
+                    new Customer.Domain.Aggregates.RecentInMemoryActivities.Commands.RecentInMemoryActivity());
 
         var recentActivityList = await multiProjectionService.GetAggregateList<RecentInMemoryActivity>();
         Assert.Single(recentActivityList);

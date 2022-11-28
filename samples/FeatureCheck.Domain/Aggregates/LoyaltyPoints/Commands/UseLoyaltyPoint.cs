@@ -11,14 +11,14 @@ public record UseLoyaltyPoint(
     DateTime HappenedDate,
     LoyaltyPointUsageTypeKeys Reason,
     int PointAmount,
-    string Note) : ChangeCommandBase<LoyaltyPoint>
+    string Note) : ChangeCommandBase<LoyaltyPoints.LoyaltyPoint>
 {
     public UseLoyaltyPoint() : this(Guid.Empty, DateTime.MinValue, LoyaltyPointUsageTypeKeys.FlightDomestic, 0, string.Empty) { }
     public override Guid GetAggregateId() => ClientId;
-    public class Handler : ChangeCommandHandlerBase<LoyaltyPoint, UseLoyaltyPoint>
+    public class Handler : ChangeCommandHandlerBase<LoyaltyPoints.LoyaltyPoint, UseLoyaltyPoint>
     {
-        protected override async IAsyncEnumerable<IApplicableEvent<LoyaltyPoint>> ExecCommandAsync(
-            Func<AggregateState<LoyaltyPoint>> getAggregateState,
+        protected override async IAsyncEnumerable<IApplicableEvent<LoyaltyPoints.LoyaltyPoint>> ExecCommandAsync(
+            Func<AggregateState<LoyaltyPoints.LoyaltyPoint>> getAggregateState,
             UseLoyaltyPoint command)
         {
             await Task.CompletedTask;

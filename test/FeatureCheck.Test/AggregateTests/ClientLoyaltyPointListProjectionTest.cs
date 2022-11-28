@@ -51,11 +51,11 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTestBase<CustomerDepe
     public void CommandTest1()
     {
         RunCreateCommand(new CreateBranch(_branchName), _branchId);
-        RunCreateCommand(new CreateClient(_branchId, _clientNameBase + 1, "test" + 1 + "@example.com"), _clientId1);
-        RunCreateCommand(new CreateClient(_branchId, _clientNameBase + 2, "test" + 2 + "@example.com"), _clientId2);
-        RunCreateCommand(new CreateClient(_branchId, _clientNameBase + 3, "test" + 3 + "@example.com"), _clientId3);
-        RunCreateCommand(new CreateClient(_branchId, _clientNameBase + 4, "test" + 4 + "@example.com"), _clientId4);
-        RunCreateCommand(new CreateClient(_branchId, _clientNameBase + 5, "test" + 5 + "@example.com"), _clientId5);
+        RunCreateCommand(new Client(_branchId, _clientNameBase + 1, "test" + 1 + "@example.com"), _clientId1);
+        RunCreateCommand(new Client(_branchId, _clientNameBase + 2, "test" + 2 + "@example.com"), _clientId2);
+        RunCreateCommand(new Client(_branchId, _clientNameBase + 3, "test" + 3 + "@example.com"), _clientId3);
+        RunCreateCommand(new Client(_branchId, _clientNameBase + 4, "test" + 4 + "@example.com"), _clientId4);
+        RunCreateCommand(new Client(_branchId, _clientNameBase + 5, "test" + 5 + "@example.com"), _clientId5);
         ThenGetMultiProjectionPayload<ClientLoyaltyPointListProjection>(projection => Assert.NotEmpty(projection.Branches));
     }
     [Fact]

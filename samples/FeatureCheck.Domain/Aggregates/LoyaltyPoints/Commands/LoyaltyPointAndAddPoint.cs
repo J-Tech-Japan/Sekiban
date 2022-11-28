@@ -8,14 +8,14 @@ using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Shared;
 namespace Customer.Domain.Aggregates.LoyaltyPoints.Commands;
 
-public record CreateLoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : ICreateCommand<LoyaltyPoint>
+public record LoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : ICommandBase<LoyaltyPoints.LoyaltyPoint>
 {
-    public CreateLoyaltyPointAndAddPoint() : this(Guid.Empty, 0)
+    public LoyaltyPointAndAddPoint() : this(Guid.Empty, 0)
     {
     }
     public Guid GetAggregateId() => ClientId;
 
-    public class Handler : CreateCommandHandlerBase<LoyaltyPoint, CreateLoyaltyPointAndAddPoint>
+    public class Handler : CreateCommandHandlerBase<LoyaltyPoints.LoyaltyPoint, LoyaltyPointAndAddPoint>
     {
         private readonly ISekibanDateProducer _dateProducer;
         private readonly IAggregateLoader aggregateLoader;
@@ -24,9 +24,9 @@ public record CreateLoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : IC
             this.aggregateLoader = aggregateLoader;
             _dateProducer = dateProducer;
         }
-        protected override async IAsyncEnumerable<IApplicableEvent<LoyaltyPoint>> ExecCreateCommandAsync(
-            Func<AggregateState<LoyaltyPoint>> getAggregateState,
-            CreateLoyaltyPointAndAddPoint command)
+        protected override async IAsyncEnumerable<IApplicableEvent<LoyaltyPoints.LoyaltyPoint>> ExecCreateCommandAsync(
+            Func<AggregateState<LoyaltyPoints.LoyaltyPoint>> getAggregateState,
+            LoyaltyPointAndAddPoint command)
         {
             await aggregateLoader.AsAggregateAsync<Client>(getAggregateState().AggregateId);
             yield return new LoyaltyPointCreated(0);

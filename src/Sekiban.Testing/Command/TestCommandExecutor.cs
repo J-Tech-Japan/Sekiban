@@ -18,41 +18,41 @@ public class TestCommandExecutor
     public ImmutableList<IEvent> LatestEvents { get; set; } = ImmutableList<IEvent>.Empty;
 
     public (IEnumerable<IEvent>, Guid) ExecuteCreateCommand<TAggregatePayload>(
-        ICreateCommand<TAggregatePayload> command,
+        ICommandBase<TAggregatePayload> commandBase,
         Guid? injectingAggregateId = null) where TAggregatePayload : IAggregatePayload, new() =>
-        ExecuteCreateCommand(command, injectingAggregateId, false);
+        ExecuteCreateCommand(commandBase, injectingAggregateId, false);
     public (IEnumerable<IEvent>, Guid) ExecuteCreateCommandWithPublish<TAggregatePayload>(
-        ICreateCommand<TAggregatePayload> command,
+        ICommandBase<TAggregatePayload> commandBase,
         Guid? injectingAggregateId = null) where TAggregatePayload : IAggregatePayload, new() =>
-        ExecuteCreateCommand(command, injectingAggregateId, true);
+        ExecuteCreateCommand(commandBase, injectingAggregateId, true);
     private (IEnumerable<IEvent>, Guid) ExecuteCreateCommand<TAggregatePayload>(
-        ICreateCommand<TAggregatePayload> command,
+        ICommandBase<TAggregatePayload> commandBase,
         Guid? injectingAggregateId,
         bool withPublish) where TAggregatePayload : IAggregatePayload, new()
     {
-        var validationResults = command.ValidateProperties().ToList();
+        var validationResults = commandBase.ValidateProperties().ToList();
         if (validationResults.Any())
         {
             throw new ValidationException("Validation failed " + validationResults);
         }
 
         var baseType = typeof(ICreateCommandHandler<,>);
-        var genericType = baseType.MakeGenericType(typeof(TAggregatePayload), command.GetType());
+        var genericType = baseType.MakeGenericType(typeof(TAggregatePayload), commandBase.GetType());
         var handler = _serviceProvider.GetService(genericType);
         if (handler is null)
         {
-            throw new SekibanCommandNotRegisteredException(command.GetType().Name);
+            throw new SekibanCommandNotRegisteredException(commandBase.GetType().Name);
         }
-        var aggregateId = injectingAggregateId ?? command.GetAggregateId();
+        var aggregateId = injectingAggregateId ?? commandBase.GetAggregateId();
 
         var commandDocumentBaseType = typeof(CommandDocument<>);
-        var commandDocumentType = commandDocumentBaseType.MakeGenericType(command.GetType());
-        var commandDocument = Activator.CreateInstance(commandDocumentType, aggregateId, command, typeof(TAggregatePayload), null);
+        var commandDocumentType = commandDocumentBaseType.MakeGenericType(commandBase.GetType());
+        var commandDocument = Activator.CreateInstance(commandDocumentType, aggregateId, commandBase, typeof(TAggregatePayload), null);
         var aggregate = new Aggregate<TAggregatePayload> { AggregateId = aggregateId };
         var handlerType = handler.GetType().GetMethods();
         var handleAsyncMethod = handler.GetType().GetMethods().First(m => m.Name == "HandleAsync");
         var result = ((dynamic)handleAsyncMethod.Invoke(handler, new[] { commandDocument, aggregate })!)?.Result;
-        if (result is null) { throw new Exception("Failed to execute create command"); }
+        if (result is null) { throw new Exception("Failed to execute create commandBase"); }
         var latestEvents = (ImmutableList<IEvent>)result.Events;
         if (latestEvents.Count == 0)
         {
@@ -126,7 +126,7 @@ public class TestCommandExecutor
 
             var handleAsyncMethod = handler.GetType().GetMethods().First(m => m.Name == "HandleAsync");
             var result = ((dynamic)handleAsyncMethod.Invoke(handler, new[] { commandDocument, aggregate })!)?.Result;
-            if (result is null) { throw new Exception("Failed to execute change command"); }
+            if (result is null) { throw new Exception("Failed to execute change commandBase"); }
             LatestEvents = (ImmutableList<IEvent>)result.Events;
         }
         else
@@ -143,7 +143,7 @@ public class TestCommandExecutor
 
             var handleAsyncMethod = handler.GetType().GetMethods().First(m => m.Name == "HandleForOnlyPublishingCommandAsync");
             var result = ((dynamic)handleAsyncMethod.Invoke(handler, new[] { commandDocument, aggregate!.AggregateId })!)?.Result;
-            if (result is null) { throw new Exception("Failed to execute change command"); }
+            if (result is null) { throw new Exception("Failed to execute change commandBase"); }
             LatestEvents = (ImmutableList<IEvent>)result.Events;
         }
         var documentWriter = _serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter;

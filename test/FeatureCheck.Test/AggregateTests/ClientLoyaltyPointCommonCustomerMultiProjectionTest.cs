@@ -11,7 +11,7 @@ namespace Customer.Test.AggregateTests;
 public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBase<CustomerDependency>
 {
     private static readonly Guid branchId = Guid.Parse("b4a3c2e3-78ca-473b-8afb-f534e5d6d66b");
-    private static readonly string branchName = "Test Branch";
+    private static readonly string branchName = "Test CreateBranch";
 
     [Fact]
     public void ProjectionTest()
@@ -50,7 +50,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
         ""Payload"": {
             ""Name"": ""JAPAN""
         },
-        ""AggregateType"": ""Branch"",
+        ""AggregateType"": ""CreateBranch"",
         ""IsAggregateInitialEvent"": true,
         ""Version"": 1,
         ""CallHistories"": [
@@ -77,7 +77,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
         ""Payload"": {
             ""Name"": ""usa""
         },
-        ""AggregateType"": ""Branch"",
+        ""AggregateType"": ""CreateBranch"",
         ""IsAggregateInitialEvent"": true,
         ""Version"": 1,
         ""CallHistories"": [
@@ -104,7 +104,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
         ""Payload"": {
             ""Name"": ""usa""
         },
-        ""AggregateType"": ""Branch"",
+        ""AggregateType"": ""CreateBranch"",
         ""IsAggregateInitialEvent"": true,
         ""Version"": 1,
         ""CallHistories"": [
@@ -131,7 +131,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
         ""Payload"": {
             ""Name"": ""string""
         },
-        ""AggregateType"": ""Branch"",
+        ""AggregateType"": ""CreateBranch"",
         ""IsAggregateInitialEvent"": true,
         ""Version"": 1,
         ""CallHistories"": [
@@ -158,7 +158,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
         ""Payload"": {
             ""Name"": ""string""
         },
-        ""AggregateType"": ""Branch"",
+        ""AggregateType"": ""CreateBranch"",
         ""IsAggregateInitialEvent"": true,
         ""Version"": 1,
         ""CallHistories"": [
@@ -185,7 +185,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
         ""Payload"": {
             ""Name"": ""string""
         },
-        ""AggregateType"": ""Branch"",
+        ""AggregateType"": ""CreateBranch"",
         ""IsAggregateInitialEvent"": true,
         ""Version"": 1,
         ""CallHistories"": [
@@ -212,7 +212,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
         ""Payload"": {
             ""Name"": ""string""
         },
-        ""AggregateType"": ""Branch"",
+        ""AggregateType"": ""CreateBranch"",
         ""IsAggregateInitialEvent"": true,
         ""Version"": 1,
         ""CallHistories"": [
@@ -247,7 +247,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
         ""CallHistories"": [
             {
                 ""Id"": ""11080ae8-aa23-4e4c-ac2e-86e5491443bf"",
-                ""TypeName"": ""CreateClient"",
+                ""TypeName"": ""Client"",
                 ""ExecutedUser"": ""Unauthenticated User from ::1""
             }
         ],
@@ -274,7 +274,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
         ""CallHistories"": [
             {
                 ""Id"": ""11080ae8-aa23-4e4c-ac2e-86e5491443bf"",
-                ""TypeName"": ""CreateClient"",
+                ""TypeName"": ""Client"",
                 ""ExecutedUser"": ""Unauthenticated User from ::1""
             },
             {
@@ -284,7 +284,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
             },
             {
                 ""Id"": ""e8654fa4-7466-462b-b2dd-388042c92d8f"",
-                ""TypeName"": ""CreateLoyaltyPoint"",
+                ""TypeName"": ""LoyaltyPoint"",
                 ""ExecutedUser"": ""Unauthenticated User from ::1""
             }
         ],
@@ -359,7 +359,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
         ""Payload"": {
             ""Name"": ""3333""
         },
-        ""AggregateType"": ""Branch"",
+        ""AggregateType"": ""CreateBranch"",
         ""IsAggregateInitialEvent"": true,
         ""Version"": 1,
         ""CallHistories"": [
@@ -386,7 +386,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
         ""Payload"": {
             ""Name"": ""string""
         },
-        ""AggregateType"": ""Branch"",
+        ""AggregateType"": ""CreateBranch"",
         ""IsAggregateInitialEvent"": true,
         ""Version"": 1,
         ""CallHistories"": [
@@ -413,7 +413,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
         ""Payload"": {
             ""Name"": ""string""
         },
-        ""AggregateType"": ""Branch"",
+        ""AggregateType"": ""CreateBranch"",
         ""IsAggregateInitialEvent"": true,
         ""Version"": 1,
         ""CallHistories"": [
@@ -440,7 +440,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
         ""Payload"": {
             ""Name"": ""string""
         },
-        ""AggregateType"": ""Branch"",
+        ""AggregateType"": ""CreateBranch"",
         ""IsAggregateInitialEvent"": true,
         ""Version"": 1,
         ""CallHistories"": [
@@ -467,7 +467,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
         ""Payload"": {
             ""Name"": ""string""
         },
-        ""AggregateType"": ""Branch"",
+        ""AggregateType"": ""CreateBranch"",
         ""IsAggregateInitialEvent"": true,
         ""Version"": 1,
         ""CallHistories"": [
@@ -494,7 +494,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
         ""Payload"": {
             ""Name"": ""string22""
         },
-        ""AggregateType"": ""Branch"",
+        ""AggregateType"": ""CreateBranch"",
         ""IsAggregateInitialEvent"": true,
         ""Version"": 1,
         ""CallHistories"": [
@@ -521,7 +521,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
         ""Payload"": {
             ""Name"": ""string""
         },
-        ""AggregateType"": ""Branch"",
+        ""AggregateType"": ""CreateBranch"",
         ""IsAggregateInitialEvent"": true,
         ""Version"": 1,
         ""CallHistories"": [

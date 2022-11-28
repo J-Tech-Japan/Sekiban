@@ -20,6 +20,6 @@ public class BranchClientCommandsHelper
     public static void CreateClient(TestCommandExecutor ex)
     {
         CreateBranches(ex);
-        ex.ExecuteCreateCommand(new CreateClient(BranchId, FirstClientName, FirstClientEmail), Guid.NewGuid());
+        ex.ExecuteCreateCommand(new Client(BranchId, FirstClientName, FirstClientEmail), Guid.NewGuid());
     }
 }

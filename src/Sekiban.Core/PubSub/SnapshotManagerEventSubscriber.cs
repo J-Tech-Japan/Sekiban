@@ -6,9 +6,9 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Snapshot;
-using Sekiban.Core.Snapshot.Aggregate;
 using Sekiban.Core.Snapshot.Aggregate.Commands;
 using Sekiban.Core.Snapshot.Aggregate.Events;
+using SnapshotManager = Sekiban.Core.Snapshot.Aggregate.SnapshotManager;
 namespace Sekiban.Core.PubSub;
 
 public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEvent> where TEvent : IEvent
@@ -54,8 +54,8 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
             var aggregate = await aggregateLoader.AsAggregateAsync<SnapshotManager>(SnapshotManager.SharedId);
             if (aggregate is null)
             {
-                await commandExecutor.ExecCreateCommandAsync<SnapshotManager, CreateSnapshotManager>(
-                    new CreateSnapshotManager());
+                await commandExecutor.ExecCommandAsync<SnapshotManager, Snapshot.Aggregate.Commands.SnapshotManager>(
+                    new Snapshot.Aggregate.Commands.SnapshotManager());
             }
             _semaphoreInMemory.Release();
 
@@ -89,7 +89,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                         if (awaitable is null) { continue; }
                         var aggregateToSnapshot = await awaitable;
                         // var aggregateToSnapshot = await aggregateLoader.AsDefaultStateAsync<T, Q>(
-                        // command.AggregateId,
+                        // commandBase.AggregateId,
                         // taken.NextSnapshotVersion);
                         if (aggregateToSnapshot is null)
                         {

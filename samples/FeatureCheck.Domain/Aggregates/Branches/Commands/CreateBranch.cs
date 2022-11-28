@@ -5,17 +5,17 @@ using Sekiban.Core.Event;
 using System.ComponentModel.DataAnnotations;
 namespace Customer.Domain.Aggregates.Branches.Commands;
 
-public record CreateBranch : ICreateCommand<Branch>
+public record CreateBranch : ICommandBase<Branch>, ICleanupNecessaryCommand<CreateBranch>
 {
     public CreateBranch() : this(string.Empty) { }
     public CreateBranch(string name) => Name = name;
     [Required]
     [MaxLength(20)]
     public string Name { get; init; } = string.Empty;
+    public CreateBranch CleanupCommandIfNeeded(CreateBranch command) => command with { Name = string.Empty };
     public Guid GetAggregateId() => Guid.NewGuid();
     public class Handler : CreateCommandHandlerBase<Branch, CreateBranch>
     {
-        public override CreateBranch CleanupCommandIfNeeded(CreateBranch command) => command with { Name = string.Empty };
         protected override async IAsyncEnumerable<IApplicableEvent<Branch>> ExecCreateCommandAsync(
             Func<AggregateState<Branch>> getAggregateState,
             CreateBranch command)

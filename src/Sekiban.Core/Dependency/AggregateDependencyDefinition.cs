@@ -23,7 +23,7 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
     public Type AggregateType { get; }
 
     public AggregateDependencyDefinition<TAggregatePayload> AddCreateCommandHandler<TCreateCommand, TCommandHandler>()
-        where TCreateCommand : ICreateCommand<TAggregatePayload>, new()
+        where TCreateCommand : ICommandBase<TAggregatePayload>, new()
         where TCommandHandler : CreateCommandHandlerBase<TAggregatePayload, TCreateCommand>
     {
         CommandTypes = CommandTypes.Add((typeof(ICreateCommandHandler<TAggregatePayload, TCreateCommand>), typeof(TCommandHandler)));

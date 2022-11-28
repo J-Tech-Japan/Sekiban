@@ -3,9 +3,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Command;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
-using Sekiban.Core.Snapshot.Aggregate;
 using Sekiban.Core.Snapshot.Aggregate.Commands;
 using System.Reflection;
+using SnapshotManager = Sekiban.Core.Snapshot.Aggregate.SnapshotManager;
 namespace Sekiban.Core.Dependency;
 
 public static class SekibanEventSourcingDependency
@@ -25,7 +25,8 @@ public static class SekibanEventSourcingDependency
     public static IEnumerable<(Type serviceType, Type? implementationType)> GetDependencies()
     {
         // AddAggregate: RecentInMemoryActivity
-        yield return (typeof(ICreateCommandHandler<SnapshotManager, CreateSnapshotManager>), typeof(CreateSnapshotManagerHandler));
+        yield return (typeof(ICreateCommandHandler<SnapshotManager, Snapshot.Aggregate.Commands.SnapshotManager>),
+            typeof(CreateSnapshotManagerHandler));
         yield return (typeof(IChangeCommandHandler<SnapshotManager, ReportVersionToSnapshotManger>),
             typeof(ReportVersionToSnapshotMangerHandler));
     }

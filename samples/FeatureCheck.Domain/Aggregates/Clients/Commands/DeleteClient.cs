@@ -4,14 +4,14 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Event;
 namespace Customer.Domain.Aggregates.Clients.Commands;
 
-public record DeleteClient(Guid ClientId) : ChangeCommandBase<Client>
+public record DeleteClient(Guid ClientId) : ChangeCommandBase<Clients.Client>
 {
     public DeleteClient() : this(Guid.Empty) { }
     public override Guid GetAggregateId() => ClientId;
-    public class Handler : ChangeCommandHandlerBase<Client, DeleteClient>
+    public class Handler : ChangeCommandHandlerBase<Clients.Client, DeleteClient>
     {
-        protected override async IAsyncEnumerable<IApplicableEvent<Client>> ExecCommandAsync(
-            Func<AggregateState<Client>> getAggregateStateState,
+        protected override async IAsyncEnumerable<IApplicableEvent<Clients.Client>> ExecCommandAsync(
+            Func<AggregateState<Clients.Client>> getAggregateStateState,
             DeleteClient command)
         {
             await Task.CompletedTask;

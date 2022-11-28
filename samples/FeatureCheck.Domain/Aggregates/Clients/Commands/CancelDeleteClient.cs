@@ -5,16 +5,16 @@ using Sekiban.Core.Event;
 using System.ComponentModel.DataAnnotations;
 namespace Customer.Domain.Aggregates.Clients.Commands;
 
-public record CancelDeleteClient : ChangeCommandBase<Client>, ICancelDeletedCommand
+public record CancelDeleteClient : ChangeCommandBase<Clients.Client>, ICancelDeletedCommand
 {
     public Guid ClientId { get; init; }
     [Required]
     public string Reason { get; init; } = string.Empty;
     public override Guid GetAggregateId() => ClientId;
-    public class Handler : ChangeCommandHandlerBase<Client, CancelDeleteClient>
+    public class Handler : ChangeCommandHandlerBase<Clients.Client, CancelDeleteClient>
     {
-        protected override async IAsyncEnumerable<IApplicableEvent<Client>> ExecCommandAsync(
-            Func<AggregateState<Client>> getAggregateState,
+        protected override async IAsyncEnumerable<IApplicableEvent<Clients.Client>> ExecCommandAsync(
+            Func<AggregateState<Clients.Client>> getAggregateState,
             CancelDeleteClient command)
         {
             await Task.CompletedTask;

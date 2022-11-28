@@ -1,6 +1,5 @@
 using Customer.Domain.Aggregates.Branches;
 using Customer.Domain.Aggregates.Branches.Commands;
-using Customer.Domain.Aggregates.Clients;
 using Customer.Domain.Aggregates.Clients.Commands;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
@@ -13,6 +12,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
+using Client = Customer.Domain.Aggregates.Clients.Client;
 namespace SampleProjectStoryXTest.Stories.QueryPerformances;
 
 public abstract class QueryPerformanceTestBase : TestBase
@@ -79,7 +79,8 @@ public abstract class QueryPerformanceTestBase : TestBase
 
             var firstcount = branchList.Count;
             var (branchResult, events)
-                = await CommandExecutor.ExecCreateCommandAsync<Branch, CreateBranch>(new CreateBranch($"Branch {i}"));
+                = await CommandExecutor.ExecCommandAsync<Branch, CreateBranch>(
+                    new CreateBranch($"CreateBranch {i}"));
             var commandDocument = branchResult.CommandId;
             if (commandDocument == null)
             {
@@ -98,8 +99,12 @@ public abstract class QueryPerformanceTestBase : TestBase
                 var clientList = await MultiProjectionService.GetAggregateList<Client>();
                 _testOutputHelper.WriteLine($"create client {clientList.Count}");
                 var firstClientCount = clientList.Count;
-                var (clientCreateResult, events2) = await CommandExecutor.ExecCreateCommandAsync<Client, CreateClient>(
-                    new CreateClient(branchId!.Value, $"clientname {i}-{j}", $"test{i}.{j}.{id}@example.com"));
+                var (clientCreateResult, events2) =
+                    await CommandExecutor.ExecCommandAsync<Client, Customer.Domain.Aggregates.Clients.Commands.Client>(
+                        new Customer.Domain.Aggregates.Clients.Commands.Client(
+                            branchId!.Value,
+                            $"clientname {i}-{j}",
+                            $"test{i}.{j}.{id}@example.com"));
                 clientList = await MultiProjectionService.GetAggregateList<Client>();
                 _testOutputHelper.WriteLine($"client created {clientList.Count}");
                 Assert.Equal(firstClientCount + 1, clientList.Count);

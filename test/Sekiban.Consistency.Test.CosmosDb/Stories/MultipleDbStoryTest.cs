@@ -47,7 +47,8 @@ public class MultipleDbStoryTest : TestBase
             DefaultDb,
             async () =>
             {
-                await commandExecutor.ExecCreateCommandAsync<Branch, CreateBranch>(new CreateBranch("TEST"));
+                await commandExecutor.ExecCommandAsync<Branch, CreateBranch>(
+                    new CreateBranch("TEST"));
             });
 
         // Default で Listを取得すると1件取得
@@ -71,9 +72,12 @@ public class MultipleDbStoryTest : TestBase
             SecondaryDb,
             async () =>
             {
-                await commandExecutor.ExecCreateCommandAsync<Branch, CreateBranch>(new CreateBranch("JAPAN"));
-                await commandExecutor.ExecCreateCommandAsync<Branch, CreateBranch>(new CreateBranch("USA"));
-                await commandExecutor.ExecCreateCommandAsync<Branch, CreateBranch>(new CreateBranch("MEXICO"));
+                await commandExecutor.ExecCommandAsync<Branch, CreateBranch>(
+                    new CreateBranch("JAPAN"));
+                await commandExecutor.ExecCommandAsync<Branch, CreateBranch>(
+                    new CreateBranch("USA"));
+                await commandExecutor.ExecCommandAsync<Branch, CreateBranch>(
+                    new CreateBranch("MEXICO"));
             });
 
         // Default で Listを取得すると1件取得

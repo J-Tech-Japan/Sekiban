@@ -1,10 +1,8 @@
 using Customer.Domain.Aggregates.Branches;
 using Customer.Domain.Aggregates.Branches.Commands;
 using Customer.Domain.Aggregates.Branches.Queries;
-using Customer.Domain.Aggregates.Clients;
 using Customer.Domain.Aggregates.Clients.Commands;
 using Customer.Domain.Aggregates.Clients.Projections;
-using Customer.Domain.Aggregates.LoyaltyPoints;
 using Customer.Domain.Aggregates.LoyaltyPoints.Commands;
 using Customer.Domain.Aggregates.LoyaltyPoints.Consts;
 using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
@@ -13,6 +11,8 @@ using Sekiban.Testing;
 using System;
 using System.Collections.Immutable;
 using Xunit;
+using Client = Customer.Domain.Aggregates.Clients.Client;
+using LoyaltyPoint = Customer.Domain.Aggregates.LoyaltyPoints.LoyaltyPoint;
 namespace Customer.Test.AggregateTests;
 
 public class SimpleUnifiedProjectionTest : UnifiedTestBase<CustomerDependency>
@@ -83,7 +83,7 @@ public class SimpleUnifiedProjectionTest : UnifiedTestBase<CustomerDependency>
     {
         RunCreateCommand(new CreateBranch(branchName), branchId);
         ThenGetAggregateTest<Client>(
-            test => test.WhenCreate(new CreateClient(branchId, "test", "test@example.com"))
+            test => test.WhenCreate(new Domain.Aggregates.Clients.Commands.Client(branchId, "test", "test@example.com"))
                 .WhenChange(new ChangeClientName(test.GetAggregateId(), "Test2") { ReferenceVersion = test.GetCurrentVersion() })
                 .ThenNotThrowsAnException()
         );
@@ -92,7 +92,7 @@ public class SimpleUnifiedProjectionTest : UnifiedTestBase<CustomerDependency>
     public void ChangeClientNameTest()
     {
         RunCreateCommand(new CreateBranch(branchName), branchId);
-        var clientId = RunCreateCommand(new CreateClient(branchId, "test", "test@example.com"));
+        var clientId = RunCreateCommand(new Domain.Aggregates.Clients.Commands.Client(branchId, "test", "test@example.com"));
         ThenGetAggregateTest<Client>(
             clientId,
             test => test.WhenChange(new ChangeClientName(clientId, "Test2") { ReferenceVersion = test.GetCurrentVersion() })
@@ -108,7 +108,7 @@ public class SimpleUnifiedProjectionTest : UnifiedTestBase<CustomerDependency>
         ThenGetAggregateTest<Client>(
             test =>
             {
-                test.WhenCreate(new CreateClient(branchId, "test", "test@example.com"))
+                test.WhenCreate(new Domain.Aggregates.Clients.Commands.Client(branchId, "test", "test@example.com"))
                     .ThenNotThrowsAnException();
                 clientId = test.GetAggregateId();
             });
@@ -125,7 +125,7 @@ public class SimpleUnifiedProjectionTest : UnifiedTestBase<CustomerDependency>
     {
         RunCreateCommand(new CreateBranch(branchName), branchId);
         var test = GetAggregateTest<Client>();
-        test.WhenCreateWithPublish(new CreateClient(branchId, "test", "test@example.com"))
+        test.WhenCreateWithPublish(new Domain.Aggregates.Clients.Commands.Client(branchId, "test", "test@example.com"))
             .ThenNotThrowsAnException();
         var clientId = test.GetAggregateId();
         // Create Loyalty Point Runs automatically with event Created Client

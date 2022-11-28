@@ -5,17 +5,17 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Shared;
 namespace Customer.Domain.Aggregates.RecentInMemoryActivities.Commands;
 
-public record CreateRecentInMemoryActivity : ICreateCommand<RecentInMemoryActivity>
+public record RecentInMemoryActivity : ICommandBase<RecentInMemoryActivities.RecentInMemoryActivity>
 {
     public Guid GetAggregateId() => Guid.NewGuid();
-    public class Handler : CreateCommandHandlerBase<RecentInMemoryActivity, CreateRecentInMemoryActivity>
+    public class Handler : CreateCommandHandlerBase<RecentInMemoryActivities.RecentInMemoryActivity, RecentInMemoryActivity>
     {
         private readonly ISekibanDateProducer _sekibanDateProducer;
         public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
 
-        protected override async IAsyncEnumerable<IApplicableEvent<RecentInMemoryActivity>> ExecCreateCommandAsync(
-            Func<AggregateState<RecentInMemoryActivity>> getAggregateState,
-            CreateRecentInMemoryActivity command)
+        protected override async IAsyncEnumerable<IApplicableEvent<RecentInMemoryActivities.RecentInMemoryActivity>> ExecCreateCommandAsync(
+            Func<AggregateState<RecentInMemoryActivities.RecentInMemoryActivity>> getAggregateState,
+            RecentInMemoryActivity command)
         {
             await Task.CompletedTask;
             yield return new RecentInMemoryActivityCreated(new RecentInMemoryActivityRecord("First Event Created", _sekibanDateProducer.UtcNow));

@@ -42,9 +42,9 @@ public class AggregateTestBase<TAggregatePayload, TDependencyDefinition> : IDisp
         where TEnvironmentAggregatePayload : IAggregatePayload, new() =>
         _helper.GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(aggregateId);
     public Guid RunEnvironmentCreateCommand<TEnvironmentAggregatePayload>(
-        ICreateCommand<TEnvironmentAggregatePayload> command,
+        ICommandBase<TEnvironmentAggregatePayload> commandBase,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayload, new() =>
-        _helper.RunEnvironmentCreateCommand(command, injectingAggregateId);
+        _helper.RunEnvironmentCreateCommand(commandBase, injectingAggregateId);
     public void RunEnvironmentChangeCommand<TEnvironmentAggregatePayload>(ChangeCommandBase<TEnvironmentAggregatePayload> command)
         where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
@@ -56,9 +56,9 @@ public class AggregateTestBase<TAggregatePayload, TDependencyDefinition> : IDisp
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFileWithPublish(string filename) =>
         _helper.GivenEnvironmentEventsFileWithPublish(filename);
     public Guid RunEnvironmentCreateCommandWithPublish<TEnvironmentAggregatePayload>(
-        ICreateCommand<TEnvironmentAggregatePayload> command,
+        ICommandBase<TEnvironmentAggregatePayload> commandBase,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayload, new() =>
-        _helper.RunEnvironmentCreateCommandWithPublish(command, injectingAggregateId);
+        _helper.RunEnvironmentCreateCommandWithPublish(commandBase, injectingAggregateId);
     public void RunEnvironmentChangeCommandWithPublish<TEnvironmentAggregatePayload>(ChangeCommandBase<TEnvironmentAggregatePayload> command)
         where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
@@ -72,13 +72,13 @@ public class AggregateTestBase<TAggregatePayload, TDependencyDefinition> : IDisp
     public IReadOnlyCollection<IEvent> GetLatestEnvironmentEvents() => _helper.GetLatestEnvironmentEvents();
     public List<IEvent> GetLatestEvents() => _helper.GetLatestEvents();
     public List<IEvent> GetAllAggregateEvents(int? toVersion = null) => _helper.GetAllAggregateEvents(toVersion);
-    public IAggregateTestHelper<TAggregatePayload> WhenCreate<C>(C createCommand) where C : ICreateCommand<TAggregatePayload> =>
+    public IAggregateTestHelper<TAggregatePayload> WhenCreate<C>(C createCommand) where C : ICommandBase<TAggregatePayload> =>
         _helper.WhenCreate(createCommand);
     public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(C changeCommand) where C : ChangeCommandBase<TAggregatePayload> =>
         _helper.WhenChange(changeCommand);
     public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(Func<AggregateState<TAggregatePayload>, C> commandFunc)
         where C : ChangeCommandBase<TAggregatePayload> => _helper.WhenChange(commandFunc);
-    public IAggregateTestHelper<TAggregatePayload> WhenCreateWithPublish<C>(C createCommand) where C : ICreateCommand<TAggregatePayload> =>
+    public IAggregateTestHelper<TAggregatePayload> WhenCreateWithPublish<C>(C createCommand) where C : ICommandBase<TAggregatePayload> =>
         _helper.WhenCreateWithPublish(createCommand);
     public IAggregateTestHelper<TAggregatePayload> WhenChangeWithPublish<C>(C changeCommand) where C : ChangeCommandBase<TAggregatePayload> =>
         _helper.WhenChangeWithPublish(changeCommand);

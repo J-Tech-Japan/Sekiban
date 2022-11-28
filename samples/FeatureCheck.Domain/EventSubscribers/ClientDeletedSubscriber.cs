@@ -1,9 +1,9 @@
 ﻿using Customer.Domain.Aggregates.Clients.Events;
-using Customer.Domain.Aggregates.LoyaltyPoints;
 using Customer.Domain.Aggregates.LoyaltyPoints.Commands;
 using Sekiban.Core.Command;
 using Sekiban.Core.Event;
 using Sekiban.Core.PubSub;
+using LoyaltyPoint = Customer.Domain.Aggregates.LoyaltyPoints.LoyaltyPoint;
 namespace Customer.Domain.EventSubscribers;
 
 public class ClientDeletedSubscriber : EventSubscriberBase<ClientDeleted>

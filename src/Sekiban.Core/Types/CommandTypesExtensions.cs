@@ -6,7 +6,7 @@ public static class CommandTypesExtensions
     public static bool IsCommandType(this Type eventPayloadType) =>
         eventPayloadType.IsCreateCommandType() || eventPayloadType.IsChangeCommandType();
     public static bool IsCreateCommandType(this Type eventPayloadType) =>
-        eventPayloadType.DoesImplementingFromGenericInterfaceType(typeof(ICreateCommand<>));
+        eventPayloadType.DoesImplementingFromGenericInterfaceType(typeof(ICommandBase<>));
     public static bool IsChangeCommandType(this Type eventPayloadType) =>
         eventPayloadType.DoesInheritFromGenericType(typeof(ChangeCommandBase<>));
 
@@ -27,7 +27,7 @@ public static class CommandTypesExtensions
             var baseType = commandHandlerType.GetImplementingFromGenericInterfaceType(typeof(IChangeCommandHandler<,>));
             return baseType.GetGenericArguments()[0];
         }
-        throw new ArgumentException("Command type is not a command type", commandHandlerType.Name);
+        throw new ArgumentException("Command type is not a commandBase type", commandHandlerType.Name);
     }
     public static Type GetCommandTypeFromCommandHandlerType(this Type commandHandlerType)
     {
@@ -41,7 +41,7 @@ public static class CommandTypesExtensions
             var baseType = commandHandlerType.GetImplementingFromGenericInterfaceType(typeof(IChangeCommandHandler<,>));
             return baseType.GetGenericArguments()[1];
         }
-        throw new ArgumentException("Command type is not a command type", commandHandlerType.Name);
+        throw new ArgumentException("Command type is not a commandBase type", commandHandlerType.Name);
     }
     public static Type GetAggregatePayloadTypeFromCommandType(this Type commandType)
     {
@@ -52,9 +52,9 @@ public static class CommandTypesExtensions
         }
         if (commandType.IsCreateCommandType())
         {
-            var baseType = commandType.GetImplementingFromGenericInterfaceType(typeof(ICreateCommand<>));
+            var baseType = commandType.GetImplementingFromGenericInterfaceType(typeof(ICommandBase<>));
             return baseType.GetGenericArguments()[0];
         }
-        throw new ArgumentException("Command type is not a command type", commandType.Name);
+        throw new ArgumentException("Command type is not a commandBase type", commandType.Name);
     }
 }

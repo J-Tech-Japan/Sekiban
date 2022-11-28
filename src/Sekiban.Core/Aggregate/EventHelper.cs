@@ -3,7 +3,7 @@ using Sekiban.Core.Exceptions;
 using System.Reflection;
 namespace Sekiban.Core.Aggregate;
 
-public static class EventHandler
+public static class EventHelper
 {
     public static IEvent HandleEvent<TAggregatePayload>(Aggregate<TAggregatePayload> aggregate, IEventPayload eventPayload)
         where TAggregatePayload : IAggregatePayload, new()
