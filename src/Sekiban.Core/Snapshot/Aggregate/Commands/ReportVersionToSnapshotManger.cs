@@ -3,6 +3,7 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Event;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Snapshot.Aggregate.Events;
+using Sekiban.Core.Snapshot.Aggregate;
 namespace Sekiban.Core.Snapshot.Aggregate.Commands;
 
 public record ReportVersionToSnapshotManger(
@@ -10,17 +11,17 @@ public record ReportVersionToSnapshotManger(
     Type AggregateType,
     Guid TargetAggregateId,
     int Version,
-    int? SnapshotVersion) : ChangeCommandBase<Aggregate.SnapshotManager>, INoValidateCommand
+    int? SnapshotVersion) : ICommandBase<SnapshotManager>, INoValidateCommand
 {
     public ReportVersionToSnapshotManger() : this(Guid.Empty, typeof(object), Guid.Empty, 0, null) { }
-    public override Guid GetAggregateId() => SnapshotManagerId;
+    public Guid GetAggregateId() => SnapshotManagerId;
 }
-public class ReportVersionToSnapshotMangerHandler : ChangeCommandHandlerBase<Aggregate.SnapshotManager,
+public class ReportVersionToSnapshotMangerHandler : ICommandHandlerBase<Aggregate.SnapshotManager,
     ReportVersionToSnapshotManger>
 {
     private readonly IAggregateSettings _aggregateSettings;
-    public ReportVersionToSnapshotMangerHandler(IAggregateSettings aggregateSettings) => _aggregateSettings = aggregateSettings;
-    protected override async IAsyncEnumerable<IApplicableEvent<Aggregate.SnapshotManager>> ExecCommandAsync(
+    public ReportVersionToSnapshotMangerHandler(IAggregateSettings aggregateSettings) => _aggregateSettings = aggregateSettings; 
+    public async IAsyncEnumerable<IApplicableEvent<Aggregate.SnapshotManager>> HandleCommandAsync(
         Func<AggregateState<Aggregate.SnapshotManager>> getAggregateState,
         ReportVersionToSnapshotManger command)
     {

@@ -22,22 +22,13 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
     public ImmutableList<Type> SingleProjectionListQueryTypes { get; private set; } = ImmutableList<Type>.Empty;
     public Type AggregateType { get; }
 
-    public AggregateDependencyDefinition<TAggregatePayload> AddCreateCommandHandler<TCreateCommand, TCommandHandler>()
+    public AggregateDependencyDefinition<TAggregatePayload> AddCommandHandler<TCreateCommand, TCommandHandler>()
         where TCreateCommand : ICommandBase<TAggregatePayload>, new()
-        where TCommandHandler : CreateCommandHandlerBase<TAggregatePayload, TCreateCommand>
+        where TCommandHandler : ICommandHandler<TAggregatePayload, TCreateCommand>
     {
-        CommandTypes = CommandTypes.Add((typeof(ICreateCommandHandler<TAggregatePayload, TCreateCommand>), typeof(TCommandHandler)));
+        CommandTypes = CommandTypes.Add((typeof(ICommandHandler<TAggregatePayload, TCreateCommand>), typeof(TCommandHandler)));
         return this;
     }
-
-    public AggregateDependencyDefinition<TAggregatePayload> AddChangeCommandHandler<TChangeCommand, TCommandHandler>()
-        where TChangeCommand : ChangeCommandBase<TAggregatePayload>, new()
-        where TCommandHandler : IChangeCommandHandler<TAggregatePayload, TChangeCommand>
-    {
-        CommandTypes = CommandTypes.Add((typeof(IChangeCommandHandler<TAggregatePayload, TChangeCommand>), typeof(TCommandHandler)));
-        return this;
-    }
-
     public AggregateDependencyDefinition<TAggregatePayload> AddEventSubscriber<TEvent, TEventSubscriber>()
         where TEvent : IApplicableEvent<TAggregatePayload>
         where TEventSubscriber : EventSubscriberBase<TEvent>

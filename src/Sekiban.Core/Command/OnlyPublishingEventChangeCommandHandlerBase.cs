@@ -6,7 +6,7 @@
 // namespace Sekiban.Core.Command;
 //
 // public abstract class
-//     EventPublishOnlyChangeCommandHandlerBase<TAggregatePayload, TCommand> : IChangeCommandHandler<TAggregatePayload, TCommand>
+//     EventPublishOnlyIVersionValidationCommandHandlerBase<TAggregatePayload, TCommand> : IChangeCommandHandler<TAggregatePayload, TCommand>
 //     where TAggregatePayload : IAggregatePayload, new()
 //     where TCommand : IOnlyPublishingCommandBase<TAggregatePayload>, new()
 // {

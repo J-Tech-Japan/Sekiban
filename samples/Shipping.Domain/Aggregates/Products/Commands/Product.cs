@@ -11,9 +11,9 @@ public record Product : ICommandBase<Products.Product>
 
     public Guid GetAggregateId() => Guid.NewGuid();
 
-    public class Handler : CreateCommandHandlerBase<Products.Product, Product>
+    public class Handler : ICommandHandlerBase<Products.Product, Product>
     {
-        protected override IAsyncEnumerable<IApplicableEvent<Products.Product>> ExecCreateCommandAsync(
+        public IAsyncEnumerable<IApplicableEvent<Products.Product>> HandleCommandAsync(
             Func<AggregateState<Products.Product>> getAggregateState,
             Product command) => throw new NotImplementedException();
     }

@@ -8,9 +8,9 @@ public record LoyaltyPoint(Guid ClientId, int InitialPoint) : ICommandBase<Loyal
 {
     public LoyaltyPoint() : this(Guid.Empty, 0) { }
     public Guid GetAggregateId() => ClientId;
-    public class Handler : CreateCommandHandlerBase<LoyaltyPoints.LoyaltyPoint, LoyaltyPoint>
+    public class Handler : ICommandHandlerBase<LoyaltyPoints.LoyaltyPoint, LoyaltyPoint>
     {
-        protected override async IAsyncEnumerable<IApplicableEvent<LoyaltyPoints.LoyaltyPoint>> ExecCreateCommandAsync(
+        public async IAsyncEnumerable<IApplicableEvent<LoyaltyPoints.LoyaltyPoint>> HandleCommandAsync(
             Func<AggregateState<LoyaltyPoints.LoyaltyPoint>> getAggregateState,
             LoyaltyPoint command)
         {

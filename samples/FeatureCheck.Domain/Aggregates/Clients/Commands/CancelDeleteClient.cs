@@ -5,15 +5,17 @@ using Sekiban.Core.Event;
 using System.ComponentModel.DataAnnotations;
 namespace Customer.Domain.Aggregates.Clients.Commands;
 
-public record CancelDeleteClient : ChangeCommandBase<Clients.Client>, ICancelDeletedCommand
+public record CancelDeleteClient : IVersionValidationCommandBase<Clients.Client>, ICancelDeletedCommand
 {
     public Guid ClientId { get; init; }
     [Required]
     public string Reason { get; init; } = string.Empty;
-    public override Guid GetAggregateId() => ClientId;
-    public class Handler : ChangeCommandHandlerBase<Clients.Client, CancelDeleteClient>
+    public int ReferenceVersion { get; init; }
+
+    public Guid GetAggregateId() => ClientId;
+    public class Handler : IVersionValidationCommandHandlerBase<Clients.Client, CancelDeleteClient>
     {
-        protected override async IAsyncEnumerable<IApplicableEvent<Clients.Client>> ExecCommandAsync(
+        public async IAsyncEnumerable<IApplicableEvent<Clients.Client>> HandleCommandAsync(
             Func<AggregateState<Clients.Client>> getAggregateState,
             CancelDeleteClient command)
         {

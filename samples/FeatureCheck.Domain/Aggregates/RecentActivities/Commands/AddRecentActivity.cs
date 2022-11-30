@@ -5,16 +5,18 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Shared;
 namespace Customer.Domain.Aggregates.RecentActivities.Commands;
 
-public record AddRecentActivity(Guid RecentActivityId, string Activity) : ChangeCommandBase<RecentActivities.RecentActivity>, INoValidateCommand
+public record AddRecentActivity(Guid RecentActivityId, string Activity) : IVersionValidationCommandBase<RecentActivities.RecentActivity>, INoValidateCommand
 {
     public AddRecentActivity() : this(Guid.Empty, string.Empty) { }
-    public override Guid GetAggregateId() => RecentActivityId;
-    public class Handler : ChangeCommandHandlerBase<RecentActivities.RecentActivity, AddRecentActivity>
+    public int ReferenceVersion { get; init; }
+
+    public Guid GetAggregateId() => RecentActivityId;
+    public class Handler : IVersionValidationCommandHandlerBase<RecentActivities.RecentActivity, AddRecentActivity>
     {
         private readonly ISekibanDateProducer _sekibanDateProducer;
         public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
 
-        protected override async IAsyncEnumerable<IApplicableEvent<RecentActivities.RecentActivity>> ExecCommandAsync(
+        public async IAsyncEnumerable<IApplicableEvent<RecentActivities.RecentActivity>> HandleCommandAsync(
             Func<AggregateState<RecentActivities.RecentActivity>> getAggregateState,
             AddRecentActivity command)
         {

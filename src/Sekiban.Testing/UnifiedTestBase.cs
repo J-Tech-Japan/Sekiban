@@ -849,27 +849,15 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
 
 
     #region Run Commands
-    public Guid RunCreateCommand<TAggregatePayload>(ICommandBase<TAggregatePayload> commandBase, Guid? injectingAggregateId = null)
+    public Guid RunCommand<TAggregatePayload>(ICommandBase<TAggregatePayload> commandBase, Guid? injectingAggregateId = null)
         where TAggregatePayload : IAggregatePayload, new()
     {
-        var (events, aggregateId) = _commandExecutor.ExecuteCreateCommand(commandBase, injectingAggregateId);
-        return aggregateId;
+        return _commandExecutor.ExecuteCommand(commandBase, injectingAggregateId);
     }
-    public void RunChangeCommand<TAggregatePayload>(ChangeCommandBase<TAggregatePayload> command)
+    public Guid RunCommandWithPublish<TAggregatePayload>(ICommandBase<TAggregatePayload> commandBase, Guid? injectingAggregateId = null)
         where TAggregatePayload : IAggregatePayload, new()
     {
-        var events = _commandExecutor.ExecuteChangeCommand(command);
-    }
-    public Guid RunCreateCommandWithPublish<TAggregatePayload>(ICommandBase<TAggregatePayload> commandBase, Guid? injectingAggregateId = null)
-        where TAggregatePayload : IAggregatePayload, new()
-    {
-        var (events, aggregateId) = _commandExecutor.ExecuteCreateCommandWithPublish(commandBase, injectingAggregateId);
-        return aggregateId;
-    }
-    public void RunChangeCommandWithPublish<TAggregatePayload>(ChangeCommandBase<TAggregatePayload> command)
-        where TAggregatePayload : IAggregatePayload, new()
-    {
-        var events = _commandExecutor.ExecuteChangeCommandWithPublish(command);
+        return _commandExecutor.ExecuteCommandWithPublish(commandBase, injectingAggregateId);
     }
     public UnifiedTestBase<TDependencyDefinition> GivenCommandExecutorAction(Action<TestCommandExecutor> action)
     {

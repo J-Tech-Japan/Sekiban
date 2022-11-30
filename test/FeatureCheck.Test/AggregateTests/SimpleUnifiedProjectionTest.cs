@@ -23,7 +23,7 @@ public class SimpleUnifiedProjectionTest : UnifiedTestBase<CustomerDependency>
     public void CreateBranch()
     {
 
-        RunCreateCommand(new CreateBranch(branchName), branchId);
+        RunCommand(new CreateBranch(branchName), branchId);
 
         ThenMultiProjectionQueryResponseIs<ClientLoyaltyPointMultiProjection,
                 ClientLoyaltyPointMultiProjectionQuery, ClientLoyaltyPointMultiProjectionQuery.QueryParameter,
@@ -52,7 +52,7 @@ public class SimpleUnifiedProjectionTest : UnifiedTestBase<CustomerDependency>
     [Fact]
     public void CreateBranchWithoutAction()
     {
-        RunCreateCommand(new CreateBranch(branchName), branchId);
+        RunCommand(new CreateBranch(branchName), branchId);
         ThenMultiProjectionQueryResponseIs<ClientLoyaltyPointMultiProjection,
                 ClientLoyaltyPointMultiProjectionQuery, ClientLoyaltyPointMultiProjectionQuery.QueryParameter,
                 ClientLoyaltyPointMultiProjection>(
@@ -81,21 +81,21 @@ public class SimpleUnifiedProjectionTest : UnifiedTestBase<CustomerDependency>
     [Fact]
     public void ClientTest()
     {
-        RunCreateCommand(new CreateBranch(branchName), branchId);
+        RunCommand(new CreateBranch(branchName), branchId);
         ThenGetAggregateTest<Client>(
-            test => test.WhenCreate(new Domain.Aggregates.Clients.Commands.Client(branchId, "test", "test@example.com"))
-                .WhenChange(new ChangeClientName(test.GetAggregateId(), "Test2") { ReferenceVersion = test.GetCurrentVersion() })
+            test => test.WhenCommand(new Domain.Aggregates.Clients.Commands.CreateClient(branchId, "test", "test@example.com"))
+                .WhenCommand(new ChangeClientName(test.GetAggregateId(), "Test2") { ReferenceVersion = test.GetCurrentVersion() })
                 .ThenNotThrowsAnException()
         );
     }
     [Fact]
     public void ChangeClientNameTest()
     {
-        RunCreateCommand(new CreateBranch(branchName), branchId);
-        var clientId = RunCreateCommand(new Domain.Aggregates.Clients.Commands.Client(branchId, "test", "test@example.com"));
+        RunCommand(new CreateBranch(branchName), branchId);
+        var clientId = RunCommand(new Domain.Aggregates.Clients.Commands.CreateClient(branchId, "test", "test@example.com"));
         ThenGetAggregateTest<Client>(
             clientId,
-            test => test.WhenChange(new ChangeClientName(clientId, "Test2") { ReferenceVersion = test.GetCurrentVersion() })
+            test => test.WhenCommand(new ChangeClientName(clientId, "Test2") { ReferenceVersion = test.GetCurrentVersion() })
                 .ThenNotThrowsAnException()
         );
     }
@@ -103,35 +103,35 @@ public class SimpleUnifiedProjectionTest : UnifiedTestBase<CustomerDependency>
     [Fact]
     public void ChangeClientNameTest2()
     {
-        RunCreateCommand(new CreateBranch(branchName), branchId);
+        RunCommand(new CreateBranch(branchName), branchId);
         var clientId = Guid.Empty;
         ThenGetAggregateTest<Client>(
             test =>
             {
-                test.WhenCreate(new Domain.Aggregates.Clients.Commands.Client(branchId, "test", "test@example.com"))
+                test.WhenCommand(new Domain.Aggregates.Clients.Commands.CreateClient(branchId, "test", "test@example.com"))
                     .ThenNotThrowsAnException();
                 clientId = test.GetAggregateId();
             });
         ThenGetAggregateTest<Client>(
             clientId,
-            test => test.WhenChange(new ChangeClientName(clientId, "Test2") { ReferenceVersion = test.GetCurrentVersion() })
+            test => test.WhenCommand(new ChangeClientName(clientId, "Test2") { ReferenceVersion = test.GetCurrentVersion() })
                 .ThenNotThrowsAnException()
         );
         var clientTest = GetAggregateTest<Client>(clientId);
-        clientTest.WhenChange(new ChangeClientName(clientId, "Test3") { ReferenceVersion = clientTest.GetCurrentVersion() });
+        clientTest.WhenCommand(new ChangeClientName(clientId, "Test3") { ReferenceVersion = clientTest.GetCurrentVersion() });
     }
     [Fact]
     public void TestMediatR()
     {
-        RunCreateCommand(new CreateBranch(branchName), branchId);
+        RunCommand(new CreateBranch(branchName), branchId);
         var test = GetAggregateTest<Client>();
-        test.WhenCreateWithPublish(new Domain.Aggregates.Clients.Commands.Client(branchId, "test", "test@example.com"))
+        test.WhenCommandWithPublish(new Domain.Aggregates.Clients.Commands.CreateClient(branchId, "test", "test@example.com"))
             .ThenNotThrowsAnException();
         var clientId = test.GetAggregateId();
-        // Create Loyalty Point Runs automatically with event Created Client
+        // Create Loyalty Point Runs automatically with event Created CreateClient
         ThenGetAggregateTest<LoyaltyPoint>(
             clientId,
-            test => test.WhenChange(
+            test => test.WhenCommand(
                     new AddLoyaltyPoint(clientId, new DateTime(2022, 11, 1), LoyaltyPointReceiveTypeKeys.CreditcardUsage, 100, string.Empty)
                         { ReferenceVersion = test.GetCurrentVersion() })
                 .ThenNotThrowsAnException()

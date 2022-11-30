@@ -4,22 +4,22 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Shared;
 namespace Customer.Domain.Aggregates.RecentActivities.Commands;
 
-public record OnlyPublishingAddRecentActivity(Guid RecentActivityId, string Activity) : ChangeCommandBase<RecentActivities.RecentActivity>,
+public record OnlyPublishingAddRecentActivity(Guid RecentActivityId, string Activity) : IOnlyPublishingCommandBase<RecentActivities.RecentActivity>,
     IOnlyPublishingCommand
 {
     public OnlyPublishingAddRecentActivity() : this(Guid.Empty, string.Empty)
     {
     }
-    public override Guid GetAggregateId() => RecentActivityId;
-    public class Handler : EventPublishOnlyChangeCommandHandlerBase<RecentActivities.RecentActivity,
+    public Guid GetAggregateId() => RecentActivityId;
+    public int ReferenceVersion { get; init; }
+
+    public class Handler : IOnlyPublishingCommandHandlerBase<RecentActivities.RecentActivity,
         OnlyPublishingAddRecentActivity>
     {
         private readonly ISekibanDateProducer _sekibanDateProducer;
 
         public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
-        protected override async IAsyncEnumerable<IApplicableEvent<RecentActivities.RecentActivity>> ExecCommandAsync(
-            Guid aggregateId,
-            OnlyPublishingAddRecentActivity command)
+        public async IAsyncEnumerable<IApplicableEvent<RecentActivities.RecentActivity>> HandleCommandAsync(Guid aggregateId, OnlyPublishingAddRecentActivity command)
         {
             await Task.CompletedTask;
             yield return new RecentActivityAdded(new RecentActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));

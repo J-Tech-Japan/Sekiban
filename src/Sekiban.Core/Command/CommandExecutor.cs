@@ -31,7 +31,7 @@ public class CommandExecutor : ICommandExecutor
     // public async Task<(CommandExecutorResponse, List<IEvent>)> ExecChangeCommandAsync<TAggregatePayload, C>(
     //     C command,
     //     List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new()
-    //     where C : ChangeCommandBase<TAggregatePayload>
+    //     where C : IVersionValidationCommandBaseTAggregatePayload>
     // {
     //     var validationResult = command.ValidateProperties()?.ToList();
     //     if (validationResult?.Any() == true)
@@ -43,7 +43,7 @@ public class CommandExecutor : ICommandExecutor
     // public async Task<(CommandExecutorResponse, List<IEvent>)> ExecChangeCommandWithoutValidationAsync<TAggregatePayload, C>(
     //     C command,
     //     List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new()
-    //     where C : ChangeCommandBase<TAggregatePayload>
+    //     where C : IVersionValidationCommandBaseTAggregatePayload>
     // {
     //     var commandDocument = new CommandDocument<C>(command.GetAggregateId(), command, typeof(TAggregatePayload), callHistories)
     //     {
@@ -164,9 +164,9 @@ public class CommandExecutor : ICommandExecutor
                 var baseClass = typeof(OnlyPublishingCommandHandlerAdapter<,>);
                 var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), typeof(TCommand));
                 var adapter = Activator.CreateInstance(adapterClass) ?? throw new Exception("Method not found");
-                var method = adapterClass.GetMethod("HandleCommandAsync");
+                var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new Exception("HandleCommandAsync not found");
                 var commandResponse =
-                    (CommandResponse)await (dynamic)method.Invoke(adapter, new object?[] { commandDocument, handler, aggregateId }) ??
+                    (CommandResponse)await ((dynamic?)method.Invoke(adapter, new object?[] { commandDocument, handler, aggregateId }) ??
                     throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
                 await HandleEventsAsync<TAggregatePayload, TCommand>(commandResponse.Events, commandDocument);
                 version = commandResponse.Version;
@@ -174,7 +174,7 @@ public class CommandExecutor : ICommandExecutor
             else
             {
                 var adapter = new CommandHandlerAdapter<TAggregatePayload, TCommand>(aggregateLoader);
-                var commandResponse = await adapter.HandleRegularCommandAsync(commandDocument, handler, aggregateId);
+                var commandResponse = await adapter.HandleCommandAsync(commandDocument, handler, aggregateId);
                 await HandleEventsAsync<TAggregatePayload, TCommand>(commandResponse.Events, commandDocument);
                 version = commandResponse.Version;
             }

@@ -13,9 +13,9 @@ public class LoyaltyPointTest : AggregateTestBase<LoyaltyPoint>
     [Fact]
     public void CreateAndAddTest()
     {
-        var branchId = RunEnvironmentCreateCommand(new CreateBranch("Test"));
-        var clientId = RunEnvironmentCreateCommand(new Client(branchId, "Test Name", "test@example.com"));
-        WhenCreate(new LoyaltyPointAndAddPoint(clientId, 1000));
+        var branchId = RunEnvironmentCommand(new CreateBranch("Test"));
+        var clientId = RunEnvironmentCommand(new CreateClient(branchId, "Test Name", "test@example.com"));
+        WhenCommand(new LoyaltyPointAndAddPoint(clientId, 1000));
         ThenNotThrowsAnException();
         var eventTime = GetLatestEvents()
             .Where(m => m.GetPayload() is LoyaltyPointAdded)

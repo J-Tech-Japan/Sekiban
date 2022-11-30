@@ -11,13 +11,14 @@ public record AddLoyaltyPoint(
     DateTime HappenedDate,
     LoyaltyPointReceiveTypeKeys Reason,
     int PointAmount,
-    string Note) : ChangeCommandBase<LoyaltyPoints.LoyaltyPoint>
+    string Note) : IVersionValidationCommandBase<LoyaltyPoints.LoyaltyPoint>
 {
     public AddLoyaltyPoint() : this(Guid.Empty, DateTime.MinValue, LoyaltyPointReceiveTypeKeys.CreditcardUsage, 0, string.Empty) { }
-    public override Guid GetAggregateId() => ClientId;
-    public class Handler : ChangeCommandHandlerBase<LoyaltyPoints.LoyaltyPoint, AddLoyaltyPoint>
+    public int ReferenceVersion { get; init; }
+    public Guid GetAggregateId() => ClientId;
+    public class Handler : IVersionValidationCommandHandlerBase<LoyaltyPoints.LoyaltyPoint, AddLoyaltyPoint>
     {
-        protected override async IAsyncEnumerable<IApplicableEvent<LoyaltyPoints.LoyaltyPoint>> ExecCommandAsync(
+        public async IAsyncEnumerable<IApplicableEvent<LoyaltyPoints.LoyaltyPoint>> HandleCommandAsync(
             Func<AggregateState<LoyaltyPoints.LoyaltyPoint>> getAggregateState,
             AddLoyaltyPoint command)
         {

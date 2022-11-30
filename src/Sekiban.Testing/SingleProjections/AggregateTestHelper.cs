@@ -12,6 +12,7 @@ using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Xunit;
 namespace Sekiban.Testing.SingleProjections;
 
@@ -86,22 +87,17 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         return aggregateLoader.AllEventsAsync<TAggregatePayload>(GetAggregateId(), toVersion).Result?.ToList() ?? new List<IEvent>();
     }
 
-    public IAggregateTestHelper<TAggregatePayload> WhenCreate<C>(C createCommand) where C : ICommandBase<TAggregatePayload> =>
-        WhenCreatePrivate(createCommand, false);
-
-    public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(C changeCommand) where C : ChangeCommandBase<TAggregatePayload>
+    public IAggregateTestHelper<TAggregatePayload> WhenCommand<C>(C changeCommand) where C : ICommandBase<TAggregatePayload>
     {
-        return WhenChange(_ => changeCommand);
+        return WhenCommand(_ => changeCommand);
     }
-    public IAggregateTestHelper<TAggregatePayload> WhenChange<C>(Func<AggregateState<TAggregatePayload>, C> commandFunc)
-        where C : ChangeCommandBase<TAggregatePayload> => WhenChangePrivate(commandFunc, false);
+    public IAggregateTestHelper<TAggregatePayload> WhenCommand<C>(Func<AggregateState<TAggregatePayload>, C> commandFunc)
+        where C : ICommandBase<TAggregatePayload> => WhenCommandPrivate(commandFunc, false);
 
-    public IAggregateTestHelper<TAggregatePayload> WhenCreateWithPublish<C>(C createCommand) where C : ICommandBase<TAggregatePayload> =>
-        WhenCreatePrivate(createCommand, true);
-    public IAggregateTestHelper<TAggregatePayload> WhenChangeWithPublish<C>(C changeCommand) where C : ChangeCommandBase<TAggregatePayload> =>
-        WhenChangePrivate(_ => changeCommand, true);
-    public IAggregateTestHelper<TAggregatePayload> WhenChangeWithPublish<C>(Func<AggregateState<TAggregatePayload>, C> commandFunc)
-        where C : ChangeCommandBase<TAggregatePayload> => WhenChangePrivate(commandFunc, true);
+    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<C>(C changeCommand) where C : ICommandBase<TAggregatePayload> =>
+        WhenCommandPrivate(_ => changeCommand, true);
+    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<C>(Func<AggregateState<TAggregatePayload>, C> commandFunc)
+        where C : ICommandBase<TAggregatePayload> => WhenCommandPrivate(commandFunc, true);
     public IAggregateTestHelper<TAggregatePayload> ThenGetLatestEvents(Action<List<IEvent>> checkEventsAction)
     {
         checkEventsAction(_latestEvents);
@@ -286,36 +282,21 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public Guid RunEnvironmentCreateCommand<TEnvironmentAggregatePayload>(
+    public Guid RunEnvironmentCommand<TEnvironmentAggregatePayload>(
         ICommandBase<TEnvironmentAggregatePayload> commandBase,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
-        var (events, aggregateId) = _commandExecutor.ExecuteCreateCommand(commandBase, injectingAggregateId);
-        var aggregateEvents = events?.ToList() ?? new List<IEvent>();
-        return aggregateId;
-    }
-    public void RunEnvironmentChangeCommand<TEnvironmentAggregatePayload>(ChangeCommandBase<TEnvironmentAggregatePayload> command)
-        where TEnvironmentAggregatePayload : IAggregatePayload, new()
-    {
-        var _ = _commandExecutor.ExecuteChangeCommand(command);
+        return _commandExecutor.ExecuteCommand(commandBase, injectingAggregateId);
     }
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventWithPublish(IEvent ev) => SaveEvent(ev, true);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsWithPublish(IEnumerable<IEvent> events) => SaveEvents(events, true);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFileWithPublish(string filename) =>
         GivenEnvironmentEventsFile(filename, true);
-    public Guid RunEnvironmentCreateCommandWithPublish<TEnvironmentAggregatePayload>(
+    public Guid RunEnvironmentCommandWithPublish<TEnvironmentAggregatePayload>(
         ICommandBase<TEnvironmentAggregatePayload> commandBase,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
-        var (events, aggregateId) = _commandExecutor.ExecuteCreateCommandWithPublish(commandBase, injectingAggregateId);
-        var aggregateEvents = events?.ToList() ?? new List<IEvent>();
-        return aggregateId;
-    }
-
-    public void RunEnvironmentChangeCommandWithPublish<TEnvironmentAggregatePayload>(ChangeCommandBase<TEnvironmentAggregatePayload> command)
-        where TEnvironmentAggregatePayload : IAggregatePayload, new()
-    {
-        var _ = _commandExecutor.ExecuteChangeCommandWithPublish(command);
+        return _commandExecutor.ExecuteCommandWithPublish(commandBase, injectingAggregateId);
     }
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentCommandExecutorAction(Action<TestCommandExecutor> action)
     {
@@ -338,54 +319,14 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         AddEventsFromList(list, withPublish);
         return this;
     }
-    private IAggregateTestHelper<TAggregatePayload> WhenCreatePrivate<C>(C createCommand, bool withPublish)
+
+    private IAggregateTestHelper<TAggregatePayload> WhenCommandPrivate<C>(Func<AggregateState<TAggregatePayload>, C> commandFunc, bool withPublish)
         where C : ICommandBase<TAggregatePayload>
     {
         ResetBeforeCommand();
-
-        var validationResults = createCommand.ValidateProperties().ToList();
-        if (validationResults.Any())
-        {
-            _latestValidationErrors = SekibanValidationParameterError.CreateFromValidationResults(validationResults).ToList();
-            return this;
-        }
         var handler
-            = _serviceProvider.GetService(typeof(ICreateCommandHandler<TAggregatePayload, C>)) as
-                ICreateCommandHandler<TAggregatePayload, C>;
-        if (handler is null)
-        {
-            throw new SekibanCommandNotRegisteredException(typeof(C).Name);
-        }
-        var aggregateId = createCommand.GetAggregateId();
-        var commandDocument = new CommandDocument<C>(aggregateId, createCommand, typeof(TAggregatePayload));
-        try
-        {
-            Aggregate = new Aggregate<TAggregatePayload> { AggregateId = aggregateId };
-            var result = handler.HandleAsync(commandDocument, Aggregate).Result;
-            _latestEvents = result.Events.ToList();
-        }
-        catch (Exception ex)
-        {
-            _latestException = ex;
-            return this;
-        }
-        if (_latestEvents.Count == 0)
-        {
-            throw new SekibanCreateHasToMakeEventException();
-        }
-        SaveEvents(_latestEvents, withPublish);
-        CheckCommandJSONSupports(commandDocument);
-        CheckStateJSONSupports();
-        return this;
-    }
-
-    private IAggregateTestHelper<TAggregatePayload> WhenChangePrivate<C>(Func<AggregateState<TAggregatePayload>, C> commandFunc, bool withPublish)
-        where C : ChangeCommandBase<TAggregatePayload>
-    {
-        ResetBeforeCommand();
-        var handler
-            = _serviceProvider.GetService(typeof(IChangeCommandHandler<TAggregatePayload, C>)) as
-                IChangeCommandHandler<TAggregatePayload, C>;
+            = _serviceProvider.GetService(typeof(ICommandHandler<TAggregatePayload, C>)) as
+                ICommandHandler<TAggregatePayload, C>;
         if (handler is null)
         {
             throw new SekibanCommandNotRegisteredException(typeof(C).Name);
@@ -398,41 +339,42 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             return this;
         }
         var commandDocument = new CommandDocument<C>(Aggregate.AggregateId, command, typeof(TAggregatePayload));
-        if (command is not IOnlyPublishingCommand)
-        {
-            try
-            {
-                var response = handler.HandleAsync(commandDocument, Aggregate).Result;
-                _latestEvents = response.Events.ToList();
-            }
-            catch (Exception ex)
-            {
-                _latestException = ex;
-                return this;
-            }
-            CheckCommandJSONSupports(commandDocument);
+        CheckCommandJSONSupports(commandDocument);
 
+        var aggregateId = command.GetAggregateId();
+
+        var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader;
+        if (aggregateLoader is null) { throw new Exception("Failed to get AddAggregate Service"); }
+
+        if (command is IOnlyPublishingCommand)
+        {
+            var baseClass = typeof(OnlyPublishingCommandHandlerAdapter<,>);
+            var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), command.GetType());
+            var adapter = Activator.CreateInstance(adapterClass) ?? throw new Exception("Method not found");
+            var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new Exception("HandleCommandAsync not found");
+            var commandResponse =
+                (CommandResponse)((dynamic?)method.Invoke(adapter, new object?[] { commandDocument, handler, aggregateId }) ??
+                                       throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
+            _latestEvents = commandResponse.Events.ToList();
         }
         else
         {
-            try
-            {
-                var result = handler.HandleForOnlyPublishingCommandAsync(commandDocument, Aggregate.AggregateId).Result;
-                _latestEvents = result.Events.ToList();
-                foreach (var ev in _latestEvents)
-                {
-                    Aggregate.ApplyEvent(ev);
-                }
-            }
-            catch (Exception ex)
-            {
-                _latestException = ex;
-                return this;
-            }
-            CheckCommandJSONSupports(commandDocument);
+
+            var baseClass = typeof(CommandHandlerAdapter<,>);
+            var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), command.GetType());
+            var adapter = Activator.CreateInstance(adapterClass, new object?[] { aggregateLoader, false }) ?? throw new Exception("Adapter not found");
+
+            var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new Exception("HandleCommandAsync not found");
+
+            var commandResponse =
+                (CommandResponse)(((dynamic?)method.Invoke(adapter, new object?[] { commandDocument, handler, aggregateId }) ??
+                                   throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result);
+            _latestEvents = commandResponse.Events.ToList();
+
         }
         SaveEvents(_latestEvents, withPublish);
         CheckStateJSONSupports();
+        Aggregate = aggregateLoader.AsAggregateAsync<TAggregatePayload>(aggregateId).Result ?? throw new Exception("Aggregate not found");
         return this;
     }
     private IAggregateTestHelper<TAggregatePayload> SaveEvent(IEvent ev, bool withPublish)

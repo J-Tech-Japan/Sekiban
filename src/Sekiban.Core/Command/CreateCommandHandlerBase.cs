@@ -5,7 +5,7 @@
 // using EventHelper = Sekiban.Core.Aggregate.EventHelper;
 // namespace Sekiban.Core.Command;
 //
-// public abstract class CreateCommandHandlerBase<TAggregatePayload, TCommand> : ICreateCommandHandler<TAggregatePayload, TCommand>
+// public abstract class ICommandHandlerBase<TAggregatePayload, TCommand> : ICreateCommandHandler<TAggregatePayload, TCommand>
 //     where TAggregatePayload : IAggregatePayload, new() where TCommand : ICommandBase<TAggregatePayload>, new()
 // {
 //     private readonly List<IEvent> _events = new();
@@ -18,7 +18,7 @@
 //             throw new SekibanCanNotExecuteOnlyPublishingEventCommand(typeof(TCommand).Name);
 //         }
 //         _aggregate = new Aggregate<TAggregatePayload> { AggregateId = aggregate.AggregateId };
-//         var eventPayloads = ExecCreateCommandAsync(GetAggregateState, command.Payload);
+//         var eventPayloads = HandleCommandAsync(GetAggregateState, command.Payload);
 //         await foreach (var eventPayload in eventPayloads)
 //         {
 //             _events.Add(EventHelper.HandleEvent(aggregate, eventPayload));
@@ -43,7 +43,7 @@
 //         state = aggregate.ToState();
 //         return state;
 //     }
-//     protected abstract IAsyncEnumerable<IApplicableEvent<TAggregatePayload>> ExecCreateCommandAsync(
+//     protected abstract IAsyncEnumerable<IApplicableEvent<TAggregatePayload>> HandleCommandAsync(
 //         Func<AggregateState<TAggregatePayload>> getAggregateState,
 //         TCommand command);
 // }

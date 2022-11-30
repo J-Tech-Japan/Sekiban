@@ -241,13 +241,13 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
             ""ClientName"": ""Tomo"",
             ""ClientEmail"": ""tomo@jtechs.com""
         },
-        ""AggregateType"": ""Client"",
+        ""AggregateType"": ""CreateClient"",
         ""IsAggregateInitialEvent"": true,
         ""Version"": 1,
         ""CallHistories"": [
             {
                 ""Id"": ""11080ae8-aa23-4e4c-ac2e-86e5491443bf"",
-                ""TypeName"": ""Client"",
+                ""TypeName"": ""CreateClient"",
                 ""ExecutedUser"": ""Unauthenticated User from ::1""
             }
         ],
@@ -274,7 +274,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
         ""CallHistories"": [
             {
                 ""Id"": ""11080ae8-aa23-4e4c-ac2e-86e5491443bf"",
-                ""TypeName"": ""Client"",
+                ""TypeName"": ""CreateClient"",
                 ""ExecutedUser"": ""Unauthenticated User from ::1""
             },
             {
@@ -305,7 +305,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
         ""Payload"": {
             ""ClientName"": ""new name""
         },
-        ""AggregateType"": ""Client"",
+        ""AggregateType"": ""CreateClient"",
         ""IsAggregateInitialEvent"": false,
         ""Version"": 2,
         ""CallHistories"": [
@@ -332,7 +332,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
         ""Payload"": {
             ""ClientName"": ""V3""
         },
-        ""AggregateType"": ""Client"",
+        ""AggregateType"": ""CreateClient"",
         ""IsAggregateInitialEvent"": false,
         ""Version"": 3,
         ""CallHistories"": [
@@ -548,7 +548,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
         ""Payload"": {
             ""ClientName"": ""v4 name""
         },
-        ""AggregateType"": ""Client"",
+        ""AggregateType"": ""CreateClient"",
         ""IsAggregateInitialEvent"": false,
         ""Version"": 4,
         ""CallHistories"": [
@@ -575,7 +575,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
         ""Payload"": {
             ""ClientName"": ""new name 5""
         },
-        ""AggregateType"": ""Client"",
+        ""AggregateType"": ""CreateClient"",
         ""IsAggregateInitialEvent"": false,
         ""Version"": 5,
         ""CallHistories"": [

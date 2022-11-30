@@ -12,10 +12,10 @@ using Sekiban.Core.Query.SingleProjections;
 using System.ComponentModel.DataAnnotations;
 namespace Customer.Domain.Aggregates.Clients.Commands;
 
-public record Client : ICommandBase<Clients.Client>
+public record CreateClient : ICommandBase<Clients.Client>
 {
-    public Client() : this(Guid.Empty, string.Empty, string.Empty) { }
-    public Client(Guid branchId, string clientName, string clientEmail)
+    public CreateClient() : this(Guid.Empty, string.Empty, string.Empty) { }
+    public CreateClient(Guid branchId, string clientName, string clientEmail)
     {
         BranchId = branchId;
         ClientName = clientName;
@@ -40,7 +40,7 @@ public record Client : ICommandBase<Clients.Client>
         init;
     }
     public Guid GetAggregateId() => Guid.NewGuid();
-    public class Handler : CreateCommandHandlerBase<Clients.Client, Client>
+    public class Handler : ICommandHandlerBase<Clients.Client, CreateClient>
     {
         private readonly IAggregateLoader aggregateLoader;
         private readonly IQueryExecutor queryExecutor;
@@ -50,9 +50,9 @@ public record Client : ICommandBase<Clients.Client>
             this.queryExecutor = queryExecutor;
         }
 
-        protected override async IAsyncEnumerable<IApplicableEvent<Clients.Client>> ExecCreateCommandAsync(
+        public async IAsyncEnumerable<IApplicableEvent<Clients.Client>> HandleCommandAsync(
             Func<AggregateState<Clients.Client>> getAggregateStateState,
-            Client command)
+            CreateClient command)
         {
             // Check if branch exists
             var branchExists

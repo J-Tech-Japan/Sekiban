@@ -20,7 +20,7 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTestBase<CustomerDepe
     public Guid _clientId3 = Guid.NewGuid();
     public Guid _clientId4 = Guid.NewGuid();
     public Guid _clientId5 = Guid.NewGuid();
-    public string _clientNameBase = "Client TEST ";
+    public string _clientNameBase = "CreateClient TEST ";
     [Fact]
     public void RegularProjection()
     {
@@ -50,12 +50,12 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTestBase<CustomerDepe
     [Fact]
     public void CommandTest1()
     {
-        RunCreateCommand(new CreateBranch(_branchName), _branchId);
-        RunCreateCommand(new Client(_branchId, _clientNameBase + 1, "test" + 1 + "@example.com"), _clientId1);
-        RunCreateCommand(new Client(_branchId, _clientNameBase + 2, "test" + 2 + "@example.com"), _clientId2);
-        RunCreateCommand(new Client(_branchId, _clientNameBase + 3, "test" + 3 + "@example.com"), _clientId3);
-        RunCreateCommand(new Client(_branchId, _clientNameBase + 4, "test" + 4 + "@example.com"), _clientId4);
-        RunCreateCommand(new Client(_branchId, _clientNameBase + 5, "test" + 5 + "@example.com"), _clientId5);
+        RunCommand(new CreateBranch(_branchName), _branchId);
+        RunCommand(new CreateClient(_branchId, _clientNameBase + 1, "test" + 1 + "@example.com"), _clientId1);
+        RunCommand(new CreateClient(_branchId, _clientNameBase + 2, "test" + 2 + "@example.com"), _clientId2);
+        RunCommand(new CreateClient(_branchId, _clientNameBase + 3, "test" + 3 + "@example.com"), _clientId3);
+        RunCommand(new CreateClient(_branchId, _clientNameBase + 4, "test" + 4 + "@example.com"), _clientId4);
+        RunCommand(new CreateClient(_branchId, _clientNameBase + 5, "test" + 5 + "@example.com"), _clientId5);
         ThenGetMultiProjectionPayload<ClientLoyaltyPointListProjection>(projection => Assert.NotEmpty(projection.Branches));
     }
     [Fact]

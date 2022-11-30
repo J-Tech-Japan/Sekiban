@@ -22,14 +22,14 @@ public class CustomerDependency : DomainDependencyDefinitionBase
     protected override void Define()
     {
         AddAggregate<Branch>()
-            .AddCreateCommandHandler<CreateBranch, CreateBranch.Handler>()
+            .AddCommandHandler<CreateBranch, CreateBranch.Handler>()
             .AddAggregateQuery<BranchExistsQuery>();
 
         AddAggregate<Aggregates.Clients.Client>()
-            .AddCreateCommandHandler<Client, Client.Handler>()
-            .AddChangeCommandHandler<ChangeClientName, ChangeClientName.Handler>()
-            .AddChangeCommandHandler<DeleteClient, DeleteClient.Handler>()
-            .AddChangeCommandHandler<CancelDeleteClient, CancelDeleteClient.Handler>()
+            .AddCommandHandler<CreateClient, CreateClient.Handler>()
+            .AddCommandHandler<ChangeClientName, ChangeClientName.Handler>()
+            .AddCommandHandler<DeleteClient, DeleteClient.Handler>()
+            .AddCommandHandler<CancelDeleteClient, CancelDeleteClient.Handler>()
             .AddEventSubscriber<ClientCreated, ClientCreatedSubscriber>()
             .AddEventSubscriber<ClientDeleted, ClientDeletedSubscriber>()
             .AddSingleProjection<ClientNameHistoryProjection>()
@@ -39,20 +39,20 @@ public class CustomerDependency : DomainDependencyDefinitionBase
             .AddSingleProjectionQuery<ClientNameHistoryProjectionCountQuery>();
 
         AddAggregate<Aggregates.LoyaltyPoints.LoyaltyPoint>()
-            .AddCreateCommandHandler<LoyaltyPoint, LoyaltyPoint.Handler>()
-            .AddCreateCommandHandler<LoyaltyPointAndAddPoint, LoyaltyPointAndAddPoint.Handler>()
-            .AddChangeCommandHandler<AddLoyaltyPoint, AddLoyaltyPoint.Handler>()
-            .AddChangeCommandHandler<UseLoyaltyPoint, UseLoyaltyPoint.Handler>()
-            .AddChangeCommandHandler<DeleteLoyaltyPoint, DeleteLoyaltyPoint.Handler>();
+            .AddCommandHandler<LoyaltyPoint, LoyaltyPoint.Handler>()
+            .AddCommandHandler<LoyaltyPointAndAddPoint, LoyaltyPointAndAddPoint.Handler>()
+            .AddCommandHandler<AddLoyaltyPoint, AddLoyaltyPoint.Handler>()
+            .AddCommandHandler<UseLoyaltyPoint, UseLoyaltyPoint.Handler>()
+            .AddCommandHandler<DeleteLoyaltyPoint, DeleteLoyaltyPoint.Handler>();
 
         AddAggregate<Aggregates.RecentActivities.RecentActivity>()
-            .AddCreateCommandHandler<RecentActivity, RecentActivity.Handler>()
-            .AddChangeCommandHandler<AddRecentActivity, AddRecentActivity.Handler>()
-            .AddChangeCommandHandler<OnlyPublishingAddRecentActivity, OnlyPublishingAddRecentActivity.Handler>();
-
+            .AddCommandHandler<RecentActivity, RecentActivity.Handler>()
+            .AddCommandHandler<AddRecentActivity, AddRecentActivity.Handler>()
+            .AddCommandHandler<OnlyPublishingAddRecentActivity, OnlyPublishingAddRecentActivity.Handler>();
+        
         AddAggregate<Aggregates.RecentInMemoryActivities.RecentInMemoryActivity>()
-            .AddCreateCommandHandler<RecentInMemoryActivity, RecentInMemoryActivity.Handler>()
-            .AddChangeCommandHandler<AddRecentInMemoryActivity, AddRecentInMemoryActivity.Handler>();
+            .AddCommandHandler<CreateRecentInMemoryActivity, CreateRecentInMemoryActivity.Handler>()
+            .AddCommandHandler<AddRecentInMemoryActivity, AddRecentInMemoryActivity.Handler>();
 
         AddMultiProjectionQuery<ClientLoyaltyPointMultiProjectionQuery>();
         AddMultiProjectionListQuery<ClientLoyaltyPointQuery>();

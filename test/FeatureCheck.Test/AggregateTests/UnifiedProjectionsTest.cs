@@ -19,8 +19,8 @@ public class UnifiedProjectionsTest : UnifiedTestBase<CustomerDependency>
 {
     private readonly string branchName = "BranchName";
     private readonly string clientEmail = "test@exmple.com";
-    private readonly string clientName = "Client Name";
-    private readonly string clientName2 = "Client Name2";
+    private readonly string clientName = "CreateClient Name";
+    private readonly string clientName2 = "CreateClient Name2";
 
     private Guid _branchId = Guid.Empty;
     private Guid _clientId = Guid.Empty;
@@ -29,8 +29,8 @@ public class UnifiedProjectionsTest : UnifiedTestBase<CustomerDependency>
     [Fact]
     public void Test()
     {
-        _branchId = RunCreateCommand(new CreateBranch(branchName));
-        _clientId = RunCreateCommand(new Client(_branchId, clientName, clientEmail));
+        _branchId = RunCommand(new CreateBranch(branchName));
+        _clientId = RunCommand(new CreateClient(_branchId, clientName, clientEmail));
         GetLatestEvents()
             .ToList()
             .ForEach(
@@ -91,7 +91,7 @@ public class UnifiedProjectionsTest : UnifiedTestBase<CustomerDependency>
     public void WhenChangeName()
     {
         GivenScenario(Test);
-        RunChangeCommand(new ChangeClientName(_clientId, clientName2));
+        RunCommand(new ChangeClientName(_clientId, clientName2));
         ThenMultiProjectionQueryResponseIs<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultiProjectionQuery,
             ClientLoyaltyPointMultiProjectionQuery.QueryParameter, ClientLoyaltyPointMultiProjection>(
             new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(

@@ -6,16 +6,17 @@ using Sekiban.Core.Shared;
 namespace Customer.Domain.Aggregates.RecentInMemoryActivities.Commands;
 
 public record AddRecentInMemoryActivity(Guid RecentInMemoryActivityId, string Activity) :
-    ChangeCommandBase<RecentInMemoryActivities.RecentInMemoryActivity>,
+    IVersionValidationCommandBase<RecentInMemoryActivities.RecentInMemoryActivity>,
     INoValidateCommand
 {
     public AddRecentInMemoryActivity() : this(Guid.Empty, string.Empty) { }
-    public override Guid GetAggregateId() => RecentInMemoryActivityId;
-    public class Handler : ChangeCommandHandlerBase<RecentInMemoryActivities.RecentInMemoryActivity, AddRecentInMemoryActivity>
+    public int ReferenceVersion { get; init; }
+    public Guid GetAggregateId() => RecentInMemoryActivityId;
+    public class Handler : IVersionValidationCommandHandlerBase<RecentInMemoryActivities.RecentInMemoryActivity, AddRecentInMemoryActivity>
     {
         private readonly ISekibanDateProducer _sekibanDateProducer;
         public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
-        protected override async IAsyncEnumerable<IApplicableEvent<RecentInMemoryActivities.RecentInMemoryActivity>> ExecCommandAsync(
+        public async IAsyncEnumerable<IApplicableEvent<RecentInMemoryActivities.RecentInMemoryActivity>> HandleCommandAsync(
             Func<AggregateState<RecentInMemoryActivities.RecentInMemoryActivity>> getAggregateState,
             AddRecentInMemoryActivity command)
         {

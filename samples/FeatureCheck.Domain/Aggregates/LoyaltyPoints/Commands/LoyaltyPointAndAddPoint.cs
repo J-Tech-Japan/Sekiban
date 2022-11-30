@@ -15,7 +15,7 @@ public record LoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : ICommand
     }
     public Guid GetAggregateId() => ClientId;
 
-    public class Handler : CreateCommandHandlerBase<LoyaltyPoints.LoyaltyPoint, LoyaltyPointAndAddPoint>
+    public class Handler : ICommandHandlerBase<LoyaltyPoints.LoyaltyPoint, LoyaltyPointAndAddPoint>
     {
         private readonly ISekibanDateProducer _dateProducer;
         private readonly IAggregateLoader aggregateLoader;
@@ -24,7 +24,7 @@ public record LoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : ICommand
             this.aggregateLoader = aggregateLoader;
             _dateProducer = dateProducer;
         }
-        protected override async IAsyncEnumerable<IApplicableEvent<LoyaltyPoints.LoyaltyPoint>> ExecCreateCommandAsync(
+        public async IAsyncEnumerable<IApplicableEvent<LoyaltyPoints.LoyaltyPoint>> HandleCommandAsync(
             Func<AggregateState<LoyaltyPoints.LoyaltyPoint>> getAggregateState,
             LoyaltyPointAndAddPoint command)
         {

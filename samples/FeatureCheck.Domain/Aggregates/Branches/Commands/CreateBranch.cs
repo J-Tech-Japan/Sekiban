@@ -14,9 +14,9 @@ public record CreateBranch : ICommandBase<Branch>, ICleanupNecessaryCommand<Crea
     public string Name { get; init; } = string.Empty;
     public CreateBranch CleanupCommandIfNeeded(CreateBranch command) => command with { Name = string.Empty };
     public Guid GetAggregateId() => Guid.NewGuid();
-    public class Handler : CreateCommandHandlerBase<Branch, CreateBranch>
+    public class Handler : ICommandHandlerBase<Branch, CreateBranch>
     {
-        protected override async IAsyncEnumerable<IApplicableEvent<Branch>> ExecCreateCommandAsync(
+        public async IAsyncEnumerable<IApplicableEvent<Branch>> HandleCommandAsync(
             Func<AggregateState<Branch>> getAggregateState,
             CreateBranch command)
         {

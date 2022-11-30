@@ -98,8 +98,8 @@ public class CustomerDbStoryBasic : TestBase
         var clientList = await multiProjectionService.GetAggregateList<Client>();
         Assert.Empty(clientList);
         var originalName = "Tanaka Taro";
-        var (createClientResult, _) = await commandExecutor.ExecCommandAsync<Client, Customer.Domain.Aggregates.Clients.Commands.Client>(
-            new Customer.Domain.Aggregates.Clients.Commands.Client(branchId, originalName, "tanaka@example.com"));
+        var (createClientResult, _) = await commandExecutor.ExecCommandAsync<Client, Customer.Domain.Aggregates.Clients.Commands.CreateClient>(
+            new Customer.Domain.Aggregates.Clients.Commands.CreateClient(branchId, originalName, "tanaka@example.com"));
         var clientId = createClientResult.AggregateId!.Value;
         Assert.NotNull(createClientResult);
         Assert.NotNull(createClientResult.AggregateId);
@@ -129,11 +129,11 @@ public class CustomerDbStoryBasic : TestBase
         await Assert.ThrowsAsync<SekibanCommandInconsistentVersionException>(
             async () =>
             {
-                await commandExecutor.ExecChangeCommandAsync<Client, ChangeClientName>(
+                await commandExecutor.ExecCommandAsync<Client, ChangeClientName>(
                     new ChangeClientName(clientId, secondName));
             });
         // change name
-        var (changeNameResult, _) = await commandExecutor.ExecChangeCommandAsync<Client, ChangeClientName>(
+        var (changeNameResult, _) = await commandExecutor.ExecCommandAsync<Client, ChangeClientName>(
             new ChangeClientName(clientId, secondName) { ReferenceVersion = createClientResult.Version });
 
         // change name projection
@@ -150,7 +150,7 @@ public class CustomerDbStoryBasic : TestBase
         var countChangeName = 160;
         foreach (var i in Enumerable.Range(0, countChangeName))
         {
-            var (changeNameResult2, _) = await commandExecutor.ExecChangeCommandAsync<Client, ChangeClientName>(
+            var (changeNameResult2, _) = await commandExecutor.ExecCommandAsync<Client, ChangeClientName>(
                 new ChangeClientName(clientId, $"newname - {i + 1}") { ReferenceVersion = versionCN });
             versionCN = changeNameResult2.Version;
         }
@@ -171,7 +171,7 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Equal(0, loyaltyPoint!.Payload.CurrentPoint);
 
         var datetimeFirst = DateTime.Now;
-        var (addPointResult, _) = await commandExecutor.ExecChangeCommandAsync<LoyaltyPoint, AddLoyaltyPoint>(
+        var (addPointResult, _) = await commandExecutor.ExecCommandAsync<LoyaltyPoint, AddLoyaltyPoint>(
             new AddLoyaltyPoint(clientId, datetimeFirst, LoyaltyPointReceiveTypeKeys.FlightDomestic, 1000, "")
             {
                 ReferenceVersion = loyaltyPoint.Version
@@ -187,13 +187,13 @@ public class CustomerDbStoryBasic : TestBase
         await Assert.ThrowsAsync<SekibanLoyaltyPointNotEnoughException>(
             async () =>
             {
-                await commandExecutor.ExecChangeCommandAsync<LoyaltyPoint, UseLoyaltyPoint>(
+                await commandExecutor.ExecCommandAsync<LoyaltyPoint, UseLoyaltyPoint>(
                     new UseLoyaltyPoint(clientId, datetimeFirst.AddSeconds(1), LoyaltyPointUsageTypeKeys.FlightUpgrade, 2000, "")
                     {
                         ReferenceVersion = addPointResult.Version
                     });
             });
-        var (usePointResult, _) = await commandExecutor.ExecChangeCommandAsync<LoyaltyPoint, UseLoyaltyPoint>(
+        var (usePointResult, _) = await commandExecutor.ExecCommandAsync<LoyaltyPoint, UseLoyaltyPoint>(
             new UseLoyaltyPoint(clientId, DateTime.Now, LoyaltyPointUsageTypeKeys.FlightUpgrade, 200, "")
             {
                 ReferenceVersion = addPointResult.Version
@@ -212,7 +212,7 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Single(p.Payload.Records);
 
         // delete client
-        var (deleteClientResult, _) = await commandExecutor.ExecChangeCommandAsync<Client, DeleteClient>(
+        var (deleteClientResult, _) = await commandExecutor.ExecCommandAsync<Client, DeleteClient>(
             new DeleteClient(clientId) { ReferenceVersion = versionCN });
         Assert.NotNull(deleteClientResult);
         Assert.NotNull(deleteClientResult.AggregateId);
@@ -243,7 +243,7 @@ public class CustomerDbStoryBasic : TestBase
         foreach (var i in Enumerable.Range(0, count))
         {
             var (recentActivityAddedResult, _)
-                = await commandExecutor.ExecChangeCommandAsync<RecentActivity, AddRecentActivity>(
+                = await commandExecutor.ExecCommandAsync<RecentActivity, AddRecentActivity>(
                     new AddRecentActivity(createRecentActivityResult.AggregateId!.Value, $"Message - {i + 1}") { ReferenceVersion = version });
             version = recentActivityAddedResult.Version;
         }
@@ -255,7 +255,7 @@ public class CustomerDbStoryBasic : TestBase
 
         var recentActivityId = createRecentActivityResult.AggregateId!.Value;
 
-        await commandExecutor.ExecChangeCommandAsync<RecentActivity, OnlyPublishingAddRecentActivity>(
+        await commandExecutor.ExecCommandAsync<RecentActivity, OnlyPublishingAddRecentActivity>(
             new OnlyPublishingAddRecentActivity(recentActivityId, "only publish event"));
 
         // get single aggregate and applied event
@@ -320,7 +320,7 @@ public class CustomerDbStoryBasic : TestBase
                     async () =>
                     {
                         var (recentActivityAddedResult, _)
-                            = await commandExecutor.ExecChangeCommandAsync<RecentActivity, AddRecentActivity>(
+                            = await commandExecutor.ExecCommandAsync<RecentActivity, AddRecentActivity>(
                                 new AddRecentActivity(createRecentActivityResult.AggregateId!.Value, $"Message - {i + 1}")
                                 {
                                     ReferenceVersion = version
@@ -386,8 +386,8 @@ public class CustomerDbStoryBasic : TestBase
         // create recent activity
         var (createRecentActivityResult, _)
             = await commandExecutor
-                .ExecCommandAsync<RecentInMemoryActivity, Customer.Domain.Aggregates.RecentInMemoryActivities.Commands.RecentInMemoryActivity>(
-                    new Customer.Domain.Aggregates.RecentInMemoryActivities.Commands.RecentInMemoryActivity());
+                .ExecCommandAsync<RecentInMemoryActivity, Customer.Domain.Aggregates.RecentInMemoryActivities.Commands.CreateRecentInMemoryActivity>(
+                    new Customer.Domain.Aggregates.RecentInMemoryActivities.Commands.CreateRecentInMemoryActivity());
 
         var recentActivityList = await multiProjectionService.GetAggregateList<RecentInMemoryActivity>();
         Assert.Single(recentActivityList);
@@ -402,7 +402,7 @@ public class CustomerDbStoryBasic : TestBase
                     {
                         var (recentActivityAddedResult, _)
                             = await commandExecutor
-                                .ExecChangeCommandAsync<RecentInMemoryActivity, AddRecentInMemoryActivity>(
+                                .ExecCommandAsync<RecentInMemoryActivity, AddRecentInMemoryActivity>(
                                     new AddRecentInMemoryActivity(createRecentActivityResult.AggregateId!.Value, $"Message - {i + 1}")
                                     {
                                         ReferenceVersion = version
@@ -456,7 +456,7 @@ public class CustomerDbStoryBasic : TestBase
                     async () =>
                     {
                         var (recentActivityAddedResult, _)
-                            = await commandExecutor.ExecChangeCommandAsync<RecentActivity, AddRecentActivity>(
+                            = await commandExecutor.ExecCommandAsync<RecentActivity, AddRecentActivity>(
                                 new AddRecentActivity(aggregateId, $"Message - {i + 1}") { ReferenceVersion = version });
                         version = recentActivityAddedResult.Version;
                     }));

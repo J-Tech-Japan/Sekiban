@@ -100,8 +100,8 @@ public abstract class QueryPerformanceTestBase : TestBase
                 _testOutputHelper.WriteLine($"create client {clientList.Count}");
                 var firstClientCount = clientList.Count;
                 var (clientCreateResult, events2) =
-                    await CommandExecutor.ExecCommandAsync<Client, Customer.Domain.Aggregates.Clients.Commands.Client>(
-                        new Customer.Domain.Aggregates.Clients.Commands.Client(
+                    await CommandExecutor.ExecCommandAsync<Client, Customer.Domain.Aggregates.Clients.Commands.CreateClient>(
+                        new Customer.Domain.Aggregates.Clients.Commands.CreateClient(
                             branchId!.Value,
                             $"clientname {i}-{j}",
                             $"test{i}.{j}.{id}@example.com"));
@@ -113,7 +113,7 @@ public abstract class QueryPerformanceTestBase : TestBase
                     _testOutputHelper.WriteLine($"client change name {k + 1}");
                     var aggregate = await ProjectionService.AsDefaultStateAsync<Client>(clientCreateResult.AggregateId!.Value);
                     _testOutputHelper.WriteLine($"aggregate.version = {aggregate?.Version}");
-                    await CommandExecutor.ExecChangeCommandAsync<Client, ChangeClientName>(
+                    await CommandExecutor.ExecCommandAsync<Client, ChangeClientName>(
                         new ChangeClientName(clientCreateResult.AggregateId!.Value, $"change{i}-{j}-{k}")
                         {
                             ReferenceVersion = aggregate?.Version ?? 0

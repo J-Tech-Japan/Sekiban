@@ -18,7 +18,7 @@ public interface ICommandExecutor
     //     C command,
     //     List<CallHistory>? callHistories = null)
     //     where TAggregatePayload : IAggregatePayload, new()
-    //     where C : ChangeCommandBase<TAggregatePayload>;
+    //     where C : IVersionValidationCommandBaseTAggregatePayload>;
     //
     // /// <summary>
     // ///     集約コマンドを実行する
@@ -33,7 +33,7 @@ public interface ICommandExecutor
     //     C command,
     //     List<CallHistory>? callHistories = null)
     //     where TAggregatePayload : IAggregatePayload, new()
-    //     where C : ChangeCommandBase<TAggregatePayload>;
+    //     where C : IVersionValidationCommandBaseTAggregatePayload>;
     /// <summary>
     ///     集約コマンドを実行する
     ///     こちらのメソッドは集約の新規作成機能のメソッドとなります。

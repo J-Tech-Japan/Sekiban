@@ -18,7 +18,7 @@ public class CommandHandlerAdapter<TAggregatePayload, TCommand> where TAggregate
         _checkVersion = checkVersion;
     }
 
-    public async Task<CommandResponse> HandleRegularCommandAsync(
+    public async Task<CommandResponse> HandleCommandAsync(
         CommandDocument<TCommand> commandDocument,
         ICommandHandler<TAggregatePayload, TCommand> handler,
         Guid aggregateId)

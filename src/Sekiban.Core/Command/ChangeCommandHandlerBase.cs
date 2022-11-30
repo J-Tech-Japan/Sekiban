@@ -5,8 +5,8 @@
 // using EventHelper = Sekiban.Core.Aggregate.EventHelper;
 // namespace Sekiban.Core.Command;
 //
-// public abstract class ChangeCommandHandlerBase<TAggregatePayload, TCommand> : IChangeCommandHandler<TAggregatePayload, TCommand>
-//     where TAggregatePayload : IAggregatePayload, new() where TCommand : ChangeCommandBase<TAggregatePayload>, new()
+// public abstract class IVersionValidationCommandHandlerBase<TAggregatePayload, TCommand> : IChangeCommandHandler<TAggregatePayload, TCommand>
+//     where TAggregatePayload : IAggregatePayload, new() where TCommand : IVersionValidationCommandBaseTAggregatePayload>, new()
 // {
 //     private readonly List<IEvent> _events = new();
 //     private Aggregate<TAggregatePayload>? _aggregate;

@@ -3,56 +3,35 @@ namespace Sekiban.Core.Types;
 
 public static class CommandTypesExtensions
 {
-    public static bool IsCommandType(this Type eventPayloadType) =>
-        eventPayloadType.IsCreateCommandType() || eventPayloadType.IsChangeCommandType();
-    public static bool IsCreateCommandType(this Type eventPayloadType) =>
-        eventPayloadType.DoesImplementingFromGenericInterfaceType(typeof(ICommandBase<>));
-    public static bool IsChangeCommandType(this Type eventPayloadType) =>
-        eventPayloadType.DoesInheritFromGenericType(typeof(ChangeCommandBase<>));
+    public static bool IsCommandType(this Type commandType) =>
+        commandType.DoesImplementingFromGenericInterfaceType(typeof(ICommandBase<>)); 
 
-    public static bool IsCreateCommandHandlerType(this Type eventPayloadType) =>
-        eventPayloadType.DoesImplementingFromGenericInterfaceType(typeof(ICreateCommandHandler<,>));
-    public static bool IsChangeCommandHandlerType(this Type eventPayloadType) =>
-        eventPayloadType.DoesImplementingFromGenericInterfaceType(typeof(IChangeCommandHandler<,>));
-
+    public static bool IsCommandHandlerType(this Type eventPayloadType) =>
+        eventPayloadType.DoesImplementingFromGenericInterfaceType(typeof(ICommandHandler<,>));
+  
     public static Type GetAggregatePayloadTypeFromCommandHandlerType(this Type commandHandlerType)
     {
-        if (commandHandlerType.IsCreateCommandHandlerType())
+        if (commandHandlerType.IsCommandHandlerType())
         {
-            var baseType = commandHandlerType.GetImplementingFromGenericInterfaceType(typeof(ICreateCommandHandler<,>));
-            return baseType.GetGenericArguments()[0];
-        }
-        if (commandHandlerType.IsChangeCommandHandlerType())
-        {
-            var baseType = commandHandlerType.GetImplementingFromGenericInterfaceType(typeof(IChangeCommandHandler<,>));
+            var baseType = commandHandlerType.GetImplementingFromGenericInterfaceType(typeof(ICommandHandler<,>));
             return baseType.GetGenericArguments()[0];
         }
         throw new ArgumentException("Command type is not a commandBase type", commandHandlerType.Name);
     }
     public static Type GetCommandTypeFromCommandHandlerType(this Type commandHandlerType)
     {
-        if (commandHandlerType.IsCreateCommandHandlerType())
+        if (commandHandlerType.IsCommandHandlerType())
         {
-            var baseType = commandHandlerType.GetImplementingFromGenericInterfaceType(typeof(ICreateCommandHandler<,>));
-            return baseType.GetGenericArguments()[1];
-        }
-        if (commandHandlerType.IsChangeCommandHandlerType())
-        {
-            var baseType = commandHandlerType.GetImplementingFromGenericInterfaceType(typeof(IChangeCommandHandler<,>));
+            var baseType = commandHandlerType.GetImplementingFromGenericInterfaceType(typeof(ICommandHandler<,>));
             return baseType.GetGenericArguments()[1];
         }
         throw new ArgumentException("Command type is not a commandBase type", commandHandlerType.Name);
     }
     public static Type GetAggregatePayloadTypeFromCommandType(this Type commandType)
     {
-        if (commandType.IsChangeCommandType())
+        if (commandType.IsCommandType())
         {
-            var baseType = commandType.GetInheritFromGenericType(typeof(ChangeCommandBase<>));
-            return baseType.GetGenericArguments()[0];
-        }
-        if (commandType.IsCreateCommandType())
-        {
-            var baseType = commandType.GetImplementingFromGenericInterfaceType(typeof(ICommandBase<>));
+            var baseType = commandType.GetInheritFromGenericType(typeof(ICommandBase<>));
             return baseType.GetGenericArguments()[0];
         }
         throw new ArgumentException("Command type is not a commandBase type", commandType.Name);

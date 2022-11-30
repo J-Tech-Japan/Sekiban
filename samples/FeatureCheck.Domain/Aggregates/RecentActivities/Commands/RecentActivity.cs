@@ -8,12 +8,12 @@ namespace Customer.Domain.Aggregates.RecentActivities.Commands;
 public record RecentActivity : ICommandBase<RecentActivities.RecentActivity>
 {
     public Guid GetAggregateId() => Guid.NewGuid();
-    public class Handler : CreateCommandHandlerBase<RecentActivities.RecentActivity, RecentActivity>
+    public class Handler : ICommandHandlerBase<RecentActivities.RecentActivity, RecentActivity>
     {
         private readonly ISekibanDateProducer _sekibanDateProducer;
         public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
 
-        protected override async IAsyncEnumerable<IApplicableEvent<RecentActivities.RecentActivity>> ExecCreateCommandAsync(
+        public async IAsyncEnumerable<IApplicableEvent<RecentActivities.RecentActivity>> HandleCommandAsync(
             Func<AggregateState<RecentActivities.RecentActivity>> getAggregateState,
             RecentActivity command)
         {

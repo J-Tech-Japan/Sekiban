@@ -14,7 +14,7 @@ public class ClientDeletedSubscriber : EventSubscriberBase<ClientDeleted>
 
     public override async Task SubscribeEventAsync(Event<ClientDeleted> ev)
     {
-        await commandExecutor.ExecChangeCommandAsync<LoyaltyPoint, DeleteLoyaltyPoint>(
+        await commandExecutor.ExecCommandAsync<LoyaltyPoint, DeleteLoyaltyPoint>(
             new DeleteLoyaltyPoint(ev.AggregateId),
             ev.GetCallHistoriesIncludesItself());
     }

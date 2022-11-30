@@ -54,8 +54,8 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
             var aggregate = await aggregateLoader.AsAggregateAsync<SnapshotManager>(SnapshotManager.SharedId);
             if (aggregate is null)
             {
-                await commandExecutor.ExecCommandAsync<SnapshotManager, Snapshot.Aggregate.Commands.SnapshotManager>(
-                    new Snapshot.Aggregate.Commands.SnapshotManager());
+                await commandExecutor.ExecCommandAsync<SnapshotManager, CreateSnapshotManager>(
+                    new CreateSnapshotManager());
             }
             _semaphoreInMemory.Release();
 
@@ -63,7 +63,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
             {
                 var (snapshotManagerResponse, events)
                     = await commandExecutor
-                        .ExecChangeCommandAsync<SnapshotManager, ReportVersionToSnapshotManger>(
+                        .ExecCommandAsync<SnapshotManager, ReportVersionToSnapshotManger>(
                             new ReportVersionToSnapshotManger(
                                 SnapshotManager.SharedId,
                                 aggregateType.Aggregate,
@@ -120,7 +120,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                 }
                 var (snapshotManagerResponseP, eventsP)
                     = await commandExecutor
-                        .ExecChangeCommandAsync<SnapshotManager, ReportVersionToSnapshotManger>(
+                        .ExecCommandAsync<SnapshotManager, ReportVersionToSnapshotManger>(
                             new ReportVersionToSnapshotManger(
                                 SnapshotManager.SharedId,
                                 projection.Aggregate,
