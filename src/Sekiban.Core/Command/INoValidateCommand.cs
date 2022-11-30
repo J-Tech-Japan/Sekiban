@@ -1,5 +1,5 @@
-﻿namespace Sekiban.Core.Command;
+﻿//namespace Sekiban.Core.Command;
 
-public interface INoValidateCommand
-{
-}
+//public interface INoValidateCommand
+//{
+//}

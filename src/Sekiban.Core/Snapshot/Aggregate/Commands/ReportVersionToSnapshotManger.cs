@@ -11,7 +11,7 @@ public record ReportVersionToSnapshotManger(
     Type AggregateType,
     Guid TargetAggregateId,
     int Version,
-    int? SnapshotVersion) : ICommandBase<SnapshotManager>, INoValidateCommand
+    int? SnapshotVersion) : ICommandBase<SnapshotManager>
 {
     public ReportVersionToSnapshotManger() : this(Guid.Empty, typeof(object), Guid.Empty, 0, null) { }
     public Guid GetAggregateId() => SnapshotManagerId;

@@ -5,14 +5,12 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Shared;
 namespace Customer.Domain.Aggregates.RecentInMemoryActivities.Commands;
 
-public record AddRecentInMemoryActivity(Guid RecentInMemoryActivityId, string Activity) :
-    IVersionValidationCommandBase<RecentInMemoryActivities.RecentInMemoryActivity>,
-    INoValidateCommand
+public record AddRecentInMemoryActivity(Guid RecentInMemoryActivityId, string Activity) :ICommandBase<RecentInMemoryActivities.RecentInMemoryActivity>
 {
     public AddRecentInMemoryActivity() : this(Guid.Empty, string.Empty) { }
     public int ReferenceVersion { get; init; }
     public Guid GetAggregateId() => RecentInMemoryActivityId;
-    public class Handler : IVersionValidationCommandHandlerBase<RecentInMemoryActivities.RecentInMemoryActivity, AddRecentInMemoryActivity>
+    public class Handler : ICommandHandlerBase<RecentInMemoryActivities.RecentInMemoryActivity, AddRecentInMemoryActivity>
     {
         private readonly ISekibanDateProducer _sekibanDateProducer;
         public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
