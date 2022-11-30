@@ -21,7 +21,7 @@ public class ReportVersionToSnapshotMangerHandler : ICommandHandlerBase<Aggregat
 {
     private readonly IAggregateSettings _aggregateSettings;
     public ReportVersionToSnapshotMangerHandler(IAggregateSettings aggregateSettings) => _aggregateSettings = aggregateSettings; 
-    public async IAsyncEnumerable<IApplicableEvent<Aggregate.SnapshotManager>> HandleCommandAsync(
+    public async IAsyncEnumerable<IEventPayload<Aggregate.SnapshotManager>> HandleCommandAsync(
         Func<AggregateState<Aggregate.SnapshotManager>> getAggregateState,
         ReportVersionToSnapshotManger command)
     {

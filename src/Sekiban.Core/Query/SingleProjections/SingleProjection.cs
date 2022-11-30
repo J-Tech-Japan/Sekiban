@@ -47,7 +47,7 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
 
     public Type OriginalAggregateType() => typeof(TProjectionPayload).GetOriginalTypeFromSingleProjectionPayload();
     public bool GetIsDeleted() => Payload is IDeletable { IsDeleted: true };
-    protected Action? GetApplyEventAction(IEvent ev, IEventPayload eventPayload)
+    protected Action? GetApplyEventAction(IEvent ev, IEventPayloadCommon eventPayload)
     {
         var payload = Payload as ISingleProjectionEventApplicable<TProjectionPayload> ??
             throw new SekibanSingleProjectionMustInheritISingleProjectionEventApplicable();

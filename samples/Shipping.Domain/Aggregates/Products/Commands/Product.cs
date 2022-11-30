@@ -13,7 +13,7 @@ public record Product : ICommandBase<Products.Product>
 
     public class Handler : ICommandHandlerBase<Products.Product, Product>
     {
-        public IAsyncEnumerable<IApplicableEvent<Products.Product>> HandleCommandAsync(
+        public IAsyncEnumerable<IEventPayload<Products.Product>> HandleCommandAsync(
             Func<AggregateState<Products.Product>> getAggregateState,
             Product command) => throw new NotImplementedException();
     }

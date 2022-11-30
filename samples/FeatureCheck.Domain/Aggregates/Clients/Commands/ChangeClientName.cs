@@ -14,7 +14,7 @@ public record ChangeClientName(Guid ClientId, string ClientName) : IVersionValid
     public Guid GetAggregateId() => ClientId;
     public class Handler : IVersionValidationCommandHandlerBase<Clients.Client, ChangeClientName>
     {
-        public async IAsyncEnumerable<IApplicableEvent<Clients.Client>> HandleCommandAsync(
+        public async IAsyncEnumerable<IEventPayload<Clients.Client>> HandleCommandAsync(
             Func<AggregateState<Clients.Client>> getAggregateState,
             ChangeClientName command)
         {

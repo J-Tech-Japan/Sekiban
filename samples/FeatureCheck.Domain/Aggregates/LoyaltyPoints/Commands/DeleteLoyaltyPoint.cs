@@ -12,7 +12,7 @@ public record DeleteLoyaltyPoint(Guid ClientId) : ICommandBase<LoyaltyPoints.Loy
     public Guid GetAggregateId() => ClientId;
     public class Handler : ICommandHandlerBase<LoyaltyPoints.LoyaltyPoint, DeleteLoyaltyPoint>
     {
-        public async IAsyncEnumerable<IApplicableEvent<LoyaltyPoints.LoyaltyPoint>> HandleCommandAsync(
+        public async IAsyncEnumerable<IEventPayload<LoyaltyPoints.LoyaltyPoint>> HandleCommandAsync(
             Func<AggregateState<LoyaltyPoints.LoyaltyPoint>> getAggregateState,
             DeleteLoyaltyPoint command)
         {

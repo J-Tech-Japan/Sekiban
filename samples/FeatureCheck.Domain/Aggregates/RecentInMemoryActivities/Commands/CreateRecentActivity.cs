@@ -13,7 +13,7 @@ public record CreateRecentInMemoryActivity : ICommandBase<RecentInMemoryActiviti
         private readonly ISekibanDateProducer _sekibanDateProducer;
         public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
 
-        public async IAsyncEnumerable<IApplicableEvent<RecentInMemoryActivities.RecentInMemoryActivity>> HandleCommandAsync(
+        public async IAsyncEnumerable<IEventPayload<RecentInMemoryActivities.RecentInMemoryActivity>> HandleCommandAsync(
             Func<AggregateState<RecentInMemoryActivities.RecentInMemoryActivity>> getAggregateState,
             CreateRecentInMemoryActivity command)
         {

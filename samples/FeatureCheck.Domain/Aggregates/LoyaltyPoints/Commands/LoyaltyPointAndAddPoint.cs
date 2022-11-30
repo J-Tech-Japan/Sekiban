@@ -24,7 +24,7 @@ public record LoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : ICommand
             this.aggregateLoader = aggregateLoader;
             _dateProducer = dateProducer;
         }
-        public async IAsyncEnumerable<IApplicableEvent<LoyaltyPoints.LoyaltyPoint>> HandleCommandAsync(
+        public async IAsyncEnumerable<IEventPayload<LoyaltyPoints.LoyaltyPoint>> HandleCommandAsync(
             Func<AggregateState<LoyaltyPoints.LoyaltyPoint>> getAggregateState,
             LoyaltyPointAndAddPoint command)
         {

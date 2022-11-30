@@ -19,7 +19,7 @@ public record OnlyPublishingAddRecentActivity(Guid RecentActivityId, string Acti
         private readonly ISekibanDateProducer _sekibanDateProducer;
 
         public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
-        public async IAsyncEnumerable<IApplicableEvent<RecentActivities.RecentActivity>> HandleCommandAsync(Guid aggregateId, OnlyPublishingAddRecentActivity command)
+        public async IAsyncEnumerable<IEventPayload<RecentActivities.RecentActivity>> HandleCommandAsync(Guid aggregateId, OnlyPublishingAddRecentActivity command)
         {
             await Task.CompletedTask;
             yield return new RecentActivityAdded(new RecentActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));

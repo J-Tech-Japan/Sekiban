@@ -7,5 +7,5 @@ public abstract record
     where TAggregatePayload : IAggregatePayload
     where TSingleProjectionPayload : ISingleProjectionPayload, new()
 {
-    public abstract Func<TSingleProjectionPayload, TSingleProjectionPayload>? GetApplyEventFunc(IEvent ev, IEventPayload eventPayload);
+    public abstract Func<TSingleProjectionPayload, TSingleProjectionPayload>? GetApplyEventFunc(IEvent ev, IEventPayloadCommon eventPayload);
 }

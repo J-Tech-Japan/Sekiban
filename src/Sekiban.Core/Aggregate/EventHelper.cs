@@ -5,7 +5,7 @@ namespace Sekiban.Core.Aggregate;
 
 public static class EventHelper
 {
-    public static IEvent HandleEvent<TAggregatePayload>(Aggregate<TAggregatePayload> aggregate, IEventPayload eventPayload)
+    public static IEvent HandleEvent<TAggregatePayload>(Aggregate<TAggregatePayload> aggregate, IEventPayloadCommon eventPayload)
         where TAggregatePayload : IAggregatePayload, new()
     {
         var aggregateType = aggregate.GetType();
@@ -17,7 +17,7 @@ public static class EventHelper
     }
 
     public static IEvent GenerateEventToSave<TEventPayload, TAggregatePayload>(Guid aggregateId, TEventPayload payload)
-        where TEventPayload : IApplicableEvent<TAggregatePayload> where TAggregatePayload : IAggregatePayload, new()
+        where TEventPayload : IEventPayload<TAggregatePayload> where TAggregatePayload : IAggregatePayload, new()
     {
         var eventPayloadType = payload.GetType();
         // ReSharper disable once SuspiciousTypeConversion.Global

@@ -28,92 +28,6 @@ public class CommandExecutor : ICommandExecutor
         this.aggregateLoader = aggregateLoader;
         _userInformationFactory = userInformationFactory;
     }
-    // public async Task<(CommandExecutorResponse, List<IEvent>)> ExecChangeCommandAsync<TAggregatePayload, C>(
-    //     C command,
-    //     List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new()
-    //     where C : IVersionValidationCommandBaseTAggregatePayload>
-    // {
-    //     var validationResult = command.ValidateProperties()?.ToList();
-    //     if (validationResult?.Any() == true)
-    //     {
-    //         return (new CommandExecutorResponse(null, null, 0, validationResult), new List<IEvent>());
-    //     }
-    //     return await ExecChangeCommandWithoutValidationAsync<TAggregatePayload, C>(command, callHistories);
-    // }
-    // public async Task<(CommandExecutorResponse, List<IEvent>)> ExecChangeCommandWithoutValidationAsync<TAggregatePayload, C>(
-    //     C command,
-    //     List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new()
-    //     where C : IVersionValidationCommandBaseTAggregatePayload>
-    // {
-    //     var commandDocument = new CommandDocument<C>(command.GetAggregateId(), command, typeof(TAggregatePayload), callHistories)
-    //     {
-    //         ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
-    //     };
-    //
-    //     List<IEvent> events;
-    //     var version = 0;
-    //     var commandToSave = command;
-    //     var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(TAggregatePayload));
-    //     if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
-    //     {
-    //         await _semaphoreInMemory.WaitAsync();
-    //     }
-    //     try
-    //     {
-    //         var handler =
-    //             _serviceProvider.GetService(typeof(IChangeCommandHandler<TAggregatePayload, C>)) as
-    //                 IChangeCommandHandler<TAggregatePayload, C>;
-    //         if (handler is null)
-    //         {
-    //             throw new SekibanCommandNotRegisteredException(typeof(C).Name);
-    //         }
-    //         if (command is not IOnlyPublishingCommand)
-    //         {
-    //             var aggregate = await aggregateLoader.AsAggregateAsync<TAggregatePayload>(command.GetAggregateId());
-    //             if (aggregate is null)
-    //             {
-    //                 throw new SekibanInvalidArgumentException();
-    //             }
-    //             commandToSave = handler.CleanupCommandIfNeeded(commandToSave);
-    //             var result = await handler.HandleAsync(commandDocument, aggregate);
-    //             version = result.Version;
-    //             commandDocument = commandDocument with { AggregateId = result.AggregateId };
-    //
-    //             events = await HandleEventsAsync<TAggregatePayload, C>(result.Events, commandDocument);
-    //             if (result is null)
-    //             {
-    //                 throw new SekibanInvalidArgumentException();
-    //             }
-    //         }
-    //         else
-    //         {
-    //             commandToSave = handler.CleanupCommandIfNeeded(commandToSave);
-    //             var result = await handler.HandleForOnlyPublishingCommandAsync(commandDocument, command.GetAggregateId());
-    //             version = result.Version;
-    //             commandDocument = commandDocument with { AggregateId = result.AggregateId };
-    //
-    //             events = await HandleEventsAsync<TAggregatePayload, C>(result.Events, commandDocument);
-    //             if (result is null)
-    //             {
-    //                 throw new SekibanInvalidArgumentException();
-    //             }
-    //         }
-    //     }
-    //     catch (Exception e)
-    //     {
-    //         commandDocument = commandDocument with { Exception = SekibanJsonHelper.Serialize(e) };
-    //         throw;
-    //     }
-    //     finally
-    //     {
-    //         await _documentWriter.SaveAsync(commandDocument with { Payload = commandToSave }, typeof(TAggregatePayload));
-    //         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
-    //         {
-    //             _semaphoreInMemory.Release();
-    //         }
-    //     }
-    //     return (new CommandExecutorResponse(commandDocument.AggregateId, commandDocument.Id, version, null), events);
-    // }
     public async Task<(CommandExecutorResponse, List<IEvent>)> ExecCommandAsync<TAggregatePayload, C>(
         C command,
         List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new()
@@ -194,7 +108,6 @@ public class CommandExecutor : ICommandExecutor
         }
         return (new CommandExecutorResponse(commandDocument.AggregateId, commandDocument.Id, version, null), events);
     }
-
 
     private async Task<List<IEvent>> HandleEventsAsync<TAggregatePayload, TCommand>(
         IReadOnlyCollection<IEvent> events,

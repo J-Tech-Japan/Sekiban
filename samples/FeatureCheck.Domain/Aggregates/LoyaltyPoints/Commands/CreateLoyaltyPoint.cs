@@ -10,7 +10,7 @@ public record CreateLoyaltyPoint(Guid ClientId, int InitialPoint) : ICommandBase
     public Guid GetAggregateId() => ClientId;
     public class Handler : ICommandHandlerBase<LoyaltyPoints.LoyaltyPoint, CreateLoyaltyPoint>
     {
-        public async IAsyncEnumerable<IApplicableEvent<LoyaltyPoints.LoyaltyPoint>> HandleCommandAsync(
+        public async IAsyncEnumerable<IEventPayload<LoyaltyPoints.LoyaltyPoint>> HandleCommandAsync(
             Func<AggregateState<LoyaltyPoints.LoyaltyPoint>> getAggregateState,
             CreateLoyaltyPoint command)
         {

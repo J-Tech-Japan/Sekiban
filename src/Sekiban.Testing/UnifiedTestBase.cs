@@ -811,25 +811,25 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
     public UnifiedTestBase<TDependencyDefinition> GivenEvents(
-        params (Guid aggregateId, Type aggregateType, IEventPayload payload)[] eventTouples)
+        params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTouples)
     {
         _eventHandler.GivenEvents(eventTouples);
         return this;
     }
     public UnifiedTestBase<TDependencyDefinition> GivenEventsWithPublish(
-        params (Guid aggregateId, Type aggregateType, IEventPayload payload)[] eventTouples)
+        params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTouples)
     {
         _eventHandler.GivenEventsWithPublish(eventTouples);
         return this;
     }
     public UnifiedTestBase<TDependencyDefinition> GivenEvents(
-        params (Guid aggregateId, IEventPayload payload)[] eventTouples)
+        params (Guid aggregateId, IEventPayloadCommon payload)[] eventTouples)
     {
         _eventHandler.GivenEvents(eventTouples);
         return this;
     }
     public UnifiedTestBase<TDependencyDefinition> GivenEventsWithPublish(
-        params (Guid aggregateId, IEventPayload payload)[] eventTouples)
+        params (Guid aggregateId, IEventPayloadCommon payload)[] eventTouples)
     {
         _eventHandler.GivenEventsWithPublish(eventTouples);
         return this;

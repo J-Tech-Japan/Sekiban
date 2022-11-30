@@ -37,5 +37,5 @@ public abstract class AggregateCommonBase : IAggregate
         // C#の将来の正式バージョンで、インターフェースに静的メソッドを定義できるようになったら、書き換える。
     }
 
-    protected abstract Action? GetApplyEventAction(IEvent ev, IEventPayload payload);
+    protected abstract Action? GetApplyEventAction(IEvent ev, IEventPayloadCommon payload);
 }

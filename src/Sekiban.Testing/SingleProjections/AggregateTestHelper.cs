@@ -108,7 +108,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         checkEventsAction(GetAllAggregateEvents());
         return this;
     }
-    public IAggregateTestHelper<TAggregatePayload> ThenLastSingleEventIs<T>(Event<T> @event) where T : IEventPayload
+    public IAggregateTestHelper<TAggregatePayload> ThenLastSingleEventIs<T>(Event<T> @event) where T : IEventPayloadCommon
     {
         if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
         Assert.IsType<T>(_latestEvents.First());
@@ -119,7 +119,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public IAggregateTestHelper<TAggregatePayload> ThenLastSingleEventPayloadIs<T>(T payload) where T : IEventPayload
+    public IAggregateTestHelper<TAggregatePayload> ThenLastSingleEventPayloadIs<T>(T payload) where T : IEventPayloadCommon
     {
         if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
         Assert.IsType<Event<T>>(_latestEvents.First());
@@ -129,7 +129,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public IAggregateTestHelper<TAggregatePayload> ThenGetLatestSingleEventPayload<T>(Action<T> checkPayloadAction) where T : class, IEventPayload
+    public IAggregateTestHelper<TAggregatePayload> ThenGetLatestSingleEventPayload<T>(Action<T> checkPayloadAction) where T : class, IEventPayloadCommon
     {
         if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
         Assert.IsType<T>(_latestEvents.First().GetPayload());
@@ -304,7 +304,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         return this;
     }
 
-    public IAggregateTestHelper<TAggregatePayload> ThenGetLatestSingleEvent<T>(Action<Event<T>> checkEventAction) where T : IEventPayload
+    public IAggregateTestHelper<TAggregatePayload> ThenGetLatestSingleEvent<T>(Action<Event<T>> checkEventAction) where T : IEventPayloadCommon
     {
         if (_latestEvents.Count != 1) { throw new SekibanInvalidArgumentException(); }
         Assert.IsType<Event<T>>(_latestEvents.First());
@@ -429,7 +429,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             {
                 throw new InvalidDataException($"イベント {documentTypeName} のデシリアライズに失敗しました。");
             }
-            SaveEvent((Event<IEventPayload>)eventInstance, withPublish);
+            SaveEvent((Event<IEventPayloadCommon>)eventInstance, withPublish);
         }
     }
 

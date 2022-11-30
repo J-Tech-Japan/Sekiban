@@ -3,8 +3,7 @@ using Sekiban.Core.History;
 using Sekiban.Core.Partition;
 namespace Sekiban.Core.Event;
 
-[SekibanEventType]
-public record Event<TEventPayload> : DocumentBase, IEvent where TEventPayload : IEventPayload
+public record Event<TEventPayload> : DocumentBase, IEvent where TEventPayload : IEventPayloadCommon
 {
 
     public Event()
@@ -31,8 +30,8 @@ public record Event<TEventPayload> : DocumentBase, IEvent where TEventPayload : 
 
     public List<CallHistory> CallHistories { get; init; } = new();
 
-    public IEventPayload GetPayload() => Payload;
-    public T? GetPayload<T>() where T : class, IEventPayload => Payload as T;
+    public IEventPayloadCommon GetPayload() => Payload;
+    public T? GetPayload<T>() where T : class, IEventPayloadCommon => Payload as T;
 
     public List<CallHistory> GetCallHistoriesIncludesItself()
     {

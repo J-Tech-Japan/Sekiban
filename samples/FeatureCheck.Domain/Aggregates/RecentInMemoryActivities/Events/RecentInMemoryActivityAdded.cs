@@ -2,7 +2,7 @@ using Sekiban.Core.Event;
 using System.Collections.Immutable;
 namespace Customer.Domain.Aggregates.RecentInMemoryActivities.Events;
 
-public record RecentInMemoryActivityAdded(RecentInMemoryActivityRecord Record) : IApplicableEvent<RecentInMemoryActivity>
+public record RecentInMemoryActivityAdded(RecentInMemoryActivityRecord Record) : IEventPayload<RecentInMemoryActivity>
 {
     public RecentInMemoryActivity OnEvent(RecentInMemoryActivity payload, IEvent ev)
     {

@@ -48,12 +48,12 @@ public class TestEventHandler
         AddEventsFromList(list, withPublish);
     }
     public void GivenEvents(
-        params (Guid aggregateId, Type aggregateType, IEventPayload payload)[] eventTouples) => GivenEvents(false, eventTouples);
+        params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTouples) => GivenEvents(false, eventTouples);
     public void GivenEventsWithPublish(
-        params (Guid aggregateId, Type aggregateType, IEventPayload payload)[] eventTouples) => GivenEvents(true, eventTouples);
+        params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTouples) => GivenEvents(true, eventTouples);
     private void GivenEvents(
         bool withPublish,
-        params (Guid aggregateId, Type aggregateType, IEventPayload payload)[] eventTouples)
+        params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTouples)
     {
         foreach (var (aggregateId, aggregateType, payload) in eventTouples)
         {
@@ -66,12 +66,12 @@ public class TestEventHandler
         }
     }
     public void GivenEvents(
-        params (Guid aggregateId, IEventPayload payload)[] eventTouples) => GivenEvents(false, eventTouples);
+        params (Guid aggregateId, IEventPayloadCommon payload)[] eventTouples) => GivenEvents(false, eventTouples);
     public void GivenEventsWithPublish(
-        params (Guid aggregateId, IEventPayload payload)[] eventTouples) => GivenEvents(true, eventTouples);
+        params (Guid aggregateId, IEventPayloadCommon payload)[] eventTouples) => GivenEvents(true, eventTouples);
     private void GivenEvents(
         bool withPublish,
-        params (Guid aggregateId, IEventPayload payload)[] eventTouples)
+        params (Guid aggregateId, IEventPayloadCommon payload)[] eventTouples)
     {
         foreach (var (aggregateId, payload) in eventTouples)
         {

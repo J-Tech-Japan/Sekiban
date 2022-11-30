@@ -12,7 +12,7 @@ public record DeleteClient(Guid ClientId) : IVersionValidationCommandBase<Client
     public Guid GetAggregateId() => ClientId;
     public class Handler : IVersionValidationCommandHandlerBase<Clients.Client, DeleteClient>
     {
-        public async IAsyncEnumerable<IApplicableEvent<Clients.Client>> HandleCommandAsync(
+        public async IAsyncEnumerable<IEventPayload<Clients.Client>> HandleCommandAsync(
             Func<AggregateState<Clients.Client>> getAggregateStateState,
             DeleteClient command)
         {

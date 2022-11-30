@@ -50,7 +50,7 @@ public record CreateClient : ICommandBase<Clients.Client>
             this.queryExecutor = queryExecutor;
         }
 
-        public async IAsyncEnumerable<IApplicableEvent<Clients.Client>> HandleCommandAsync(
+        public async IAsyncEnumerable<IEventPayload<Clients.Client>> HandleCommandAsync(
             Func<AggregateState<Clients.Client>> getAggregateStateState,
             CreateClient command)
         {

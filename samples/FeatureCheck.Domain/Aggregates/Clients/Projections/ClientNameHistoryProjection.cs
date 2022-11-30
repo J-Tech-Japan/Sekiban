@@ -14,7 +14,7 @@ public record ClientNameHistoryProjection(
     public ClientNameHistoryProjection() : this(Guid.Empty, new List<ClientNameHistoryProjectionRecord>(), string.Empty) { }
     public override Func<ClientNameHistoryProjection, ClientNameHistoryProjection>? GetApplyEventFunc(
         IEvent ev,
-        IEventPayload eventPayload)
+        IEventPayloadCommon eventPayload)
     {
         return eventPayload switch
         {

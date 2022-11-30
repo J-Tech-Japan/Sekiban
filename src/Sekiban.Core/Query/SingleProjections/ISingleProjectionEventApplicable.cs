@@ -6,5 +6,5 @@ public interface ISingleProjectionEventApplicable<TProjectionPayload> : ISingleP
 {
     Func<TProjectionPayload, TProjectionPayload>? GetApplyEventFunc(
         IEvent ev,
-        IEventPayload eventPayload);
+        IEventPayloadCommon eventPayload);
 }

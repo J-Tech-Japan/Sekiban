@@ -28,7 +28,7 @@ public class Aggregate<TAggregatePayload> : AggregateCommonBase,
         return clone;
     }
 
-    protected override Action? GetApplyEventAction(IEvent ev, IEventPayload payload)
+    protected override Action? GetApplyEventAction(IEvent ev, IEventPayloadCommon payload)
     {
         var func = GetApplyEventFunc(ev, payload);
         return () =>
@@ -38,9 +38,9 @@ public class Aggregate<TAggregatePayload> : AggregateCommonBase,
             Payload = result;
         };
     }
-    protected Func<TAggregatePayload, IEvent, TAggregatePayload>? GetApplyEventFunc(IEvent ev, IEventPayload payload)
+    protected Func<TAggregatePayload, IEvent, TAggregatePayload>? GetApplyEventFunc(IEvent ev, IEventPayloadCommon payload)
     {
-        if (payload is IApplicableEvent<TAggregatePayload> applicableEvent)
+        if (payload is IEventPayload<TAggregatePayload> applicableEvent)
         {
             return applicableEvent.OnEvent;
         }
@@ -48,7 +48,7 @@ public class Aggregate<TAggregatePayload> : AggregateCommonBase,
     }
 
     internal IEvent AddAndApplyEvent<TEventPayload>(TEventPayload eventPayload)
-        where TEventPayload : IEventPayload, IApplicableEvent<TAggregatePayload>
+        where TEventPayload : IEventPayloadCommon, IEventPayload<TAggregatePayload>
     {
         var ev = Event<TEventPayload>.GenerateEvent(AggregateId, typeof(TAggregatePayload), eventPayload);
 

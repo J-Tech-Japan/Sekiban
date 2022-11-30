@@ -5,7 +5,7 @@ namespace Sekiban.Core.Command;
 public interface ICommandHandlerBase<TAggregatePayload, TCommand> : ICommandHandler<TAggregatePayload, TCommand>
     where TAggregatePayload : IAggregatePayload, new() where TCommand : ICommandBase<TAggregatePayload>
 {
-    public IAsyncEnumerable<IApplicableEvent<TAggregatePayload>> HandleCommandAsync(
+    public IAsyncEnumerable<IEventPayload<TAggregatePayload>> HandleCommandAsync(
         Func<AggregateState<TAggregatePayload>> getAggregateState,
         TCommand command);
 }

@@ -16,7 +16,7 @@ public record CreateBranch : ICommandBase<Branch>, ICleanupNecessaryCommand<Crea
     public Guid GetAggregateId() => Guid.NewGuid();
     public class Handler : ICommandHandlerBase<Branch, CreateBranch>
     {
-        public async IAsyncEnumerable<IApplicableEvent<Branch>> HandleCommandAsync(
+        public async IAsyncEnumerable<IEventPayload<Branch>> HandleCommandAsync(
             Func<AggregateState<Branch>> getAggregateState,
             CreateBranch command)
         {

@@ -17,7 +17,7 @@ public record ClientLoyaltyPointListProjection(
     {
     }
     public override IList<string> TargetAggregateNames() => new List<string> { nameof(Branch), nameof(Client), nameof(LoyaltyPoint) };
-    public override Func<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection>? GetApplyEventFunc(IEvent ev, IEventPayload eventPayload)
+    public override Func<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection>? GetApplyEventFunc(IEvent ev, IEventPayloadCommon eventPayload)
     {
         return eventPayload switch
         {

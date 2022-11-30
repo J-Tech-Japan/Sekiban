@@ -18,7 +18,7 @@ public record AddLoyaltyPoint(
     public Guid GetAggregateId() => ClientId;
     public class Handler : IVersionValidationCommandHandlerBase<LoyaltyPoints.LoyaltyPoint, AddLoyaltyPoint>
     {
-        public async IAsyncEnumerable<IApplicableEvent<LoyaltyPoints.LoyaltyPoint>> HandleCommandAsync(
+        public async IAsyncEnumerable<IEventPayload<LoyaltyPoints.LoyaltyPoint>> HandleCommandAsync(
             Func<AggregateState<LoyaltyPoints.LoyaltyPoint>> getAggregateState,
             AddLoyaltyPoint command)
         {
