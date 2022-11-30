@@ -98,7 +98,7 @@ public class ClientSpec : AggregateTestBase<Client, CustomerDependency>
                 { BranchId = branchId, ClientName = "NameFirst", ClientEmail = "test@example.com" },
             otherClientId);
         RunEnvironmentCommand(new ChangeClientName(otherClientId, "Other CreateClient Name"));
-        RunEnvironmentCommand(new LoyaltyPoint(otherClientId, 100));
+        RunEnvironmentCommand(new CreateLoyaltyPoint(otherClientId, 100));
         RunEnvironmentCommand(new UseLoyaltyPoint(otherClientId, DateTime.Today, LoyaltyPointUsageTypeKeys.TravelCarRental, 30, "test"));
     }
 

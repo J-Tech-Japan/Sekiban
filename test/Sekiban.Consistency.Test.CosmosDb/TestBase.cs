@@ -1,10 +1,10 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.PlatformAbstractions;
 using Sekiban.Core.Dependency;
 using Sekiban.Testing.Story;
 using System;
 using System.Reflection;
+using Microsoft.DotNet.PlatformAbstractions;
 using Xunit;
 namespace SampleProjectStoryXTest;
 
@@ -45,7 +45,7 @@ public class TestBase : IClassFixture<TestBase.SekibanTestFixture>, IDisposable
     {
         public SekibanTestFixture()
         {
-            var builder = new ConfigurationBuilder().SetBasePath(PlatformServices.Default.Application.ApplicationBasePath)
+            var builder = new ConfigurationBuilder().SetBasePath(ApplicationEnvironment.ApplicationBasePath)
                 .AddJsonFile("appsettings.json", false, false)
                 .AddEnvironmentVariables()
                 .AddUserSecrets(Assembly.GetExecutingAssembly());

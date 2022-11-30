@@ -20,8 +20,8 @@ public class ClientAndProjectionSpec : AggregateTestBase<Client, CustomerDepende
 {
     public readonly string branchName = "BranchName";
     public readonly string clientEmail = "client@example.com";
-    public readonly string clientName = "Test CreateClient";
-    public readonly string clientNameChanged = "Test CreateClient Changed";
+    public readonly string clientName = "Test Client";
+    public readonly string clientNameChanged = "Test Client Changed";
     public Guid branchId = Guid.Parse("cdb93f86-8d2f-442c-9f62-b9e791401f5f");
     public DateTime FirstEventDatetime { get; set; } = DateTime.Now;
     public DateTime ChangedEventDatetime { get; set; } = DateTime.Now;
@@ -175,19 +175,19 @@ public class ClientAndProjectionSpec : AggregateTestBase<Client, CustomerDepende
             .WriteStateToFile("ClientTestOut.json")
             .WritePayloadToFile("ClientContentsTestOut.json")
             .ThenStateIsFromJson(
-                "{\"Payload\":{\"BranchId\":\"cdb93f86-8d2f-442c-9f62-b9e791401f5f\",\"ClientName\":\"Test CreateClient Changed\",\"ClientEmail\":\"client@example.com\"},\"IsDeleted\":false,\"AggregateId\":\"9cfa698b-fda7-44a1-86c0-1f167914bb47\",\"Version\":2,\"LastEventId\":\"19c7e148-550f-4954-b0d5-e05ef93cb32a\",\"AppliedSnapshotVersion\":0,\"LastSortableUniqueId\":\"638002628133105260000616586510\"}");
+                "{\"Payload\":{\"BranchId\":\"cdb93f86-8d2f-442c-9f62-b9e791401f5f\",\"ClientName\":\"Test Client Changed\",\"ClientEmail\":\"client@example.com\"},\"IsDeleted\":false,\"AggregateId\":\"9cfa698b-fda7-44a1-86c0-1f167914bb47\",\"Version\":2,\"LastEventId\":\"19c7e148-550f-4954-b0d5-e05ef93cb32a\",\"AppliedSnapshotVersion\":0,\"LastSortableUniqueId\":\"638002628133105260000616586510\"}");
 
         WriteStateToFile("TEMPTEST.json");
 
         ThenStateIsFromFile("ClientTestResult.json")
             .ThenPayloadIsFromJson(
-                "{\"BranchId\":\"cdb93f86-8d2f-442c-9f62-b9e791401f5f\",\"ClientName\":\"Test CreateClient Changed\",\"ClientEmail\":\"client@example.com\"}")
+                "{\"BranchId\":\"cdb93f86-8d2f-442c-9f62-b9e791401f5f\",\"ClientName\":\"Test Client Changed\",\"ClientEmail\":\"client@example.com\"}")
             .ThenPayloadIsFromFile("ClientContentsTestResult.json")
             .WriteSingleProjectionStateToFile<ClientNameHistoryProjection>("ClientProjectionOut.json")
             .ThenSingleProjectionPayloadIsFromJson<ClientNameHistoryProjection>(
-                "{\"BranchId\":\"cdb93f86-8d2f-442c-9f62-b9e791401f5f\",\"ClientNames\":[{\"Name\":\"Test CreateClient\",\"DateChanged\":\"" +
+                "{\"BranchId\":\"cdb93f86-8d2f-442c-9f62-b9e791401f5f\",\"ClientNames\":[{\"Name\":\"Test Client\",\"DateChanged\":\"" +
                 FirstEventDatetime.ToString("O") +
-                "\"},{\"Name\":\"Test CreateClient Changed\",\"DateChanged\":\"" +
+                "\"},{\"Name\":\"Test Client Changed\",\"DateChanged\":\"" +
                 ChangedEventDatetime.ToString("O") +
                 "\"}],\"ClientEmail\":\"client@example.com\"}");
     }

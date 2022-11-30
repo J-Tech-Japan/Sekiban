@@ -346,31 +346,39 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader;
         if (aggregateLoader is null) { throw new Exception("Failed to get AddAggregate Service"); }
 
-        if (command is IOnlyPublishingCommand)
+        try
         {
-            var baseClass = typeof(OnlyPublishingCommandHandlerAdapter<,>);
-            var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), command.GetType());
-            var adapter = Activator.CreateInstance(adapterClass) ?? throw new Exception("Method not found");
-            var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new Exception("HandleCommandAsync not found");
-            var commandResponse =
-                (CommandResponse)((dynamic?)method.Invoke(adapter, new object?[] { commandDocument, handler, aggregateId }) ??
-                                       throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
-            _latestEvents = commandResponse.Events.ToList();
+            if (command is IOnlyPublishingCommand)
+            {
+                var baseClass = typeof(OnlyPublishingCommandHandlerAdapter<,>);
+                var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), command.GetType());
+                var adapter = Activator.CreateInstance(adapterClass) ?? throw new Exception("Method not found");
+                var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new Exception("HandleCommandAsync not found");
+                var commandResponse =
+                    (CommandResponse)((dynamic?)method.Invoke(adapter, new object?[] { commandDocument, handler, aggregateId }) ??
+                                      throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
+                _latestEvents = commandResponse.Events.ToList();
+            }
+            else
+            {
+
+                var baseClass = typeof(CommandHandlerAdapter<,>);
+                var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), command.GetType());
+                var adapter = Activator.CreateInstance(adapterClass, new object?[] { aggregateLoader, false }) ?? throw new Exception("Adapter not found");
+
+                var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new Exception("HandleCommandAsync not found");
+
+                var commandResponse =
+                    (CommandResponse)(((dynamic?)method.Invoke(adapter, new object?[] { commandDocument, handler, aggregateId }) ??
+                                       throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result);
+                _latestEvents = commandResponse.Events.ToList();
+
+            }
         }
-        else
+        catch (Exception ex)
         {
-
-            var baseClass = typeof(CommandHandlerAdapter<,>);
-            var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), command.GetType());
-            var adapter = Activator.CreateInstance(adapterClass, new object?[] { aggregateLoader, false }) ?? throw new Exception("Adapter not found");
-
-            var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new Exception("HandleCommandAsync not found");
-
-            var commandResponse =
-                (CommandResponse)(((dynamic?)method.Invoke(adapter, new object?[] { commandDocument, handler, aggregateId }) ??
-                                   throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result);
-            _latestEvents = commandResponse.Events.ToList();
-
+            _latestException = ex;
+            return this;
         }
         SaveEvents(_latestEvents, withPublish);
         CheckStateJSONSupports();
