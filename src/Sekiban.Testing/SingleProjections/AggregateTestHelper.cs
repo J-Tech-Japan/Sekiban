@@ -87,17 +87,17 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         return aggregateLoader.AllEventsAsync<TAggregatePayload>(GetAggregateId(), toVersion).Result?.ToList() ?? new List<IEvent>();
     }
 
-    public IAggregateTestHelper<TAggregatePayload> WhenCommand<C>(C changeCommand) where C : ICommandBase<TAggregatePayload>
+    public IAggregateTestHelper<TAggregatePayload> WhenCommand<C>(C changeCommand) where C : ICommand<TAggregatePayload>
     {
         return WhenCommand(_ => changeCommand);
     }
     public IAggregateTestHelper<TAggregatePayload> WhenCommand<C>(Func<AggregateState<TAggregatePayload>, C> commandFunc)
-        where C : ICommandBase<TAggregatePayload> => WhenCommandPrivate(commandFunc, false);
+        where C : ICommand<TAggregatePayload> => WhenCommandPrivate(commandFunc, false);
 
-    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<C>(C changeCommand) where C : ICommandBase<TAggregatePayload> =>
+    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<C>(C changeCommand) where C : ICommand<TAggregatePayload> =>
         WhenCommandPrivate(_ => changeCommand, true);
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<C>(Func<AggregateState<TAggregatePayload>, C> commandFunc)
-        where C : ICommandBase<TAggregatePayload> => WhenCommandPrivate(commandFunc, true);
+        where C : ICommand<TAggregatePayload> => WhenCommandPrivate(commandFunc, true);
     public IAggregateTestHelper<TAggregatePayload> ThenGetLatestEvents(Action<List<IEvent>> checkEventsAction)
     {
         checkEventsAction(_latestEvents);
@@ -283,20 +283,20 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         return this;
     }
     public Guid RunEnvironmentCommand<TEnvironmentAggregatePayload>(
-        ICommandBase<TEnvironmentAggregatePayload> commandBase,
+        ICommand<TEnvironmentAggregatePayload> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
-        return _commandExecutor.ExecuteCommand(commandBase, injectingAggregateId);
+        return _commandExecutor.ExecuteCommand(command, injectingAggregateId);
     }
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventWithPublish(IEvent ev) => SaveEvent(ev, true);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsWithPublish(IEnumerable<IEvent> events) => SaveEvents(events, true);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFileWithPublish(string filename) =>
         GivenEnvironmentEventsFile(filename, true);
     public Guid RunEnvironmentCommandWithPublish<TEnvironmentAggregatePayload>(
-        ICommandBase<TEnvironmentAggregatePayload> commandBase,
+        ICommand<TEnvironmentAggregatePayload> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
-        return _commandExecutor.ExecuteCommandWithPublish(commandBase, injectingAggregateId);
+        return _commandExecutor.ExecuteCommandWithPublish(command, injectingAggregateId);
     }
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentCommandExecutorAction(Action<TestCommandExecutor> action)
     {
@@ -321,7 +321,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     }
 
     private IAggregateTestHelper<TAggregatePayload> WhenCommandPrivate<C>(Func<AggregateState<TAggregatePayload>, C> commandFunc, bool withPublish)
-        where C : ICommandBase<TAggregatePayload>
+        where C : ICommand<TAggregatePayload>
     {
         ResetBeforeCommand();
         var handler
@@ -348,7 +348,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
         try
         {
-            if (command is IOnlyPublishingCommand)
+            if (command is IOnlyPublishingCommandCommon)
             {
                 var baseClass = typeof(OnlyPublishingCommandHandlerAdapter<,>);
                 var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), command.GetType());

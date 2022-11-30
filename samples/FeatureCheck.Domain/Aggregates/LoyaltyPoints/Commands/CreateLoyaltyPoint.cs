@@ -4,7 +4,7 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Event;
 namespace Customer.Domain.Aggregates.LoyaltyPoints.Commands;
 
-public record CreateLoyaltyPoint(Guid ClientId, int InitialPoint) : ICommandBase<LoyaltyPoints.LoyaltyPoint>
+public record CreateLoyaltyPoint(Guid ClientId, int InitialPoint) : ICommand<LoyaltyPoints.LoyaltyPoint>
 {
     public CreateLoyaltyPoint() : this(Guid.Empty, 0) { }
     public Guid GetAggregateId() => ClientId;

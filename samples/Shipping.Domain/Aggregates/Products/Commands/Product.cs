@@ -3,7 +3,7 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Event;
 namespace ShippingContext.Aggregates.Products.Commands;
 
-public record Product : ICommandBase<Products.Product>
+public record Product : ICommand<Products.Product>
 {
     public string Name { get; init; } = string.Empty;
     public string Code { get; init; } = string.Empty;

@@ -5,7 +5,7 @@ using Sekiban.Core.Event;
 using System.ComponentModel.DataAnnotations;
 namespace Customer.Domain.Aggregates.Clients.Commands;
 
-public record CancelDeleteClient : IVersionValidationCommandBase<Clients.Client>, ICancelDeletedCommand
+public record CancelDeleteClient : IVersionValidationCommand<Clients.Client>, ICancelDeletedCommand
 {
     public Guid ClientId { get; init; }
     [Required]

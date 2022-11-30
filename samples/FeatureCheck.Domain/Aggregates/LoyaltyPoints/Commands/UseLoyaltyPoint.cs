@@ -11,7 +11,7 @@ public record UseLoyaltyPoint(
     DateTime HappenedDate,
     LoyaltyPointUsageTypeKeys Reason,
     int PointAmount,
-    string Note) : IVersionValidationCommandBase<LoyaltyPoints.LoyaltyPoint>
+    string Note) : IVersionValidationCommand<LoyaltyPoints.LoyaltyPoint>
 {
     public UseLoyaltyPoint() : this(Guid.Empty, DateTime.MinValue, LoyaltyPointUsageTypeKeys.FlightDomestic, 0, string.Empty) { }
     public int ReferenceVersion { get; init; }

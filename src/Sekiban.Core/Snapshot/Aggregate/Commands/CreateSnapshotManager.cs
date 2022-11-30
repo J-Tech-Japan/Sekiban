@@ -5,7 +5,7 @@ using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot.Aggregate.Events;
 namespace Sekiban.Core.Snapshot.Aggregate.Commands;
 
-public record CreateSnapshotManager : ICommandBase<SnapshotManager>
+public record CreateSnapshotManager : ICommand<SnapshotManager>
 {
     public Guid GetAggregateId() => Aggregate.SnapshotManager.SharedId;
 }

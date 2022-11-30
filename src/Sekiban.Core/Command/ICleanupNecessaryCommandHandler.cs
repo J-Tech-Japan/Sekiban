@@ -1,6 +1,6 @@
 namespace Sekiban.Core.Command;
 
-public interface ICleanupNecessaryCommand<TCommand> : ICommand
+public interface ICleanupNecessaryCommand<TCommand> : ICommandCommon
 {
     TCommand CleanupCommandIfNeeded(TCommand command);
 }

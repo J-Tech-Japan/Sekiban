@@ -31,7 +31,7 @@ public class CommandExecutor : ICommandExecutor
     public async Task<(CommandExecutorResponse, List<IEvent>)> ExecCommandAsync<TAggregatePayload, C>(
         C command,
         List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new()
-        where C : ICommandBase<TAggregatePayload>
+        where C : ICommand<TAggregatePayload>
     {
         var validationResult = command.ValidateProperties()?.ToList();
         if (validationResult?.Any() == true)
@@ -43,7 +43,7 @@ public class CommandExecutor : ICommandExecutor
     public async Task<(CommandExecutorResponse, List<IEvent>)> ExecCommandWithoutValidationAsync<TAggregatePayload, TCommand>(
         TCommand command,
         List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new()
-        where TCommand : ICommandBase<TAggregatePayload>
+        where TCommand : ICommand<TAggregatePayload>
     {
         var commandDocument
             = new CommandDocument<TCommand>(Guid.Empty, command, typeof(TAggregatePayload), callHistories)
@@ -73,7 +73,7 @@ public class CommandExecutor : ICommandExecutor
                 {
                     ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
                 };
-            if (command is IOnlyPublishingCommand)
+            if (command is IOnlyPublishingCommandCommon)
             {
                 var baseClass = typeof(OnlyPublishingCommandHandlerAdapter<,>);
                 var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), typeof(TCommand));
@@ -113,7 +113,7 @@ public class CommandExecutor : ICommandExecutor
         IReadOnlyCollection<IEvent> events,
         CommandDocument<TCommand> commandDocument)
         where TAggregatePayload : IAggregatePayload, new()
-        where TCommand : ICommandBase<TAggregatePayload>
+        where TCommand : ICommand<TAggregatePayload>
     {
         var toReturnEvents = new List<IEvent>();
         if (events.Any())

@@ -11,7 +11,7 @@ public record AddLoyaltyPoint(
     DateTime HappenedDate,
     LoyaltyPointReceiveTypeKeys Reason,
     int PointAmount,
-    string Note) : IVersionValidationCommandBase<LoyaltyPoints.LoyaltyPoint>
+    string Note) : IVersionValidationCommand<LoyaltyPoints.LoyaltyPoint>
 {
     public AddLoyaltyPoint() : this(Guid.Empty, DateTime.MinValue, LoyaltyPointReceiveTypeKeys.CreditcardUsage, 0, string.Empty) { }
     public int ReferenceVersion { get; init; }

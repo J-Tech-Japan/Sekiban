@@ -4,7 +4,7 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Event;
 namespace Customer.Domain.Aggregates.Clients.Commands;
 
-public record DeleteClient(Guid ClientId) : IVersionValidationCommandBase<Clients.Client>
+public record DeleteClient(Guid ClientId) : IVersionValidationCommand<Clients.Client>
 {
     public DeleteClient() : this(Guid.Empty) { }
     public int ReferenceVersion { get; init; }

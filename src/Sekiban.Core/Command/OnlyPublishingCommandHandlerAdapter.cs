@@ -5,7 +5,7 @@ using System.Collections.Immutable;
 namespace Sekiban.Core.Command;
 
 public class OnlyPublishingCommandHandlerAdapter<TAggregatePayload, TCommand> where TAggregatePayload : IAggregatePayload, new()
-    where TCommand : IOnlyPublishingCommandBase<TAggregatePayload>
+    where TCommand : IOnlyPublishingCommand<TAggregatePayload>
 {
     public async Task<CommandResponse> HandleCommandAsync(
         CommandDocument<TCommand> commandDocument,

@@ -4,7 +4,7 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Event;
 namespace Customer.Domain.Aggregates.Clients.Commands;
 
-public record ChangeClientName(Guid ClientId, string ClientName) : IVersionValidationCommandBase<Clients.Client>, ICleanupNecessaryCommand<ChangeClientName>
+public record ChangeClientName(Guid ClientId, string ClientName) : IVersionValidationCommand<Clients.Client>, ICleanupNecessaryCommand<ChangeClientName>
 {
 
 

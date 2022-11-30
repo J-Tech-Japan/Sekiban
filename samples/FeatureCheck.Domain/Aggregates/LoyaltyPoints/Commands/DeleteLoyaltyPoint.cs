@@ -4,7 +4,7 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Event;
 namespace Customer.Domain.Aggregates.LoyaltyPoints.Commands;
 
-public record DeleteLoyaltyPoint(Guid ClientId) : ICommandBase<LoyaltyPoints.LoyaltyPoint>
+public record DeleteLoyaltyPoint(Guid ClientId) : ICommand<LoyaltyPoints.LoyaltyPoint>
 {
     public DeleteLoyaltyPoint() : this(Guid.Empty) { }
     public int ReferenceVersion { get; init; }

@@ -849,15 +849,15 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
 
 
     #region Run Commands
-    public Guid RunCommand<TAggregatePayload>(ICommandBase<TAggregatePayload> commandBase, Guid? injectingAggregateId = null)
+    public Guid RunCommand<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
         where TAggregatePayload : IAggregatePayload, new()
     {
-        return _commandExecutor.ExecuteCommand(commandBase, injectingAggregateId);
+        return _commandExecutor.ExecuteCommand(command, injectingAggregateId);
     }
-    public Guid RunCommandWithPublish<TAggregatePayload>(ICommandBase<TAggregatePayload> commandBase, Guid? injectingAggregateId = null)
+    public Guid RunCommandWithPublish<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
         where TAggregatePayload : IAggregatePayload, new()
     {
-        return _commandExecutor.ExecuteCommandWithPublish(commandBase, injectingAggregateId);
+        return _commandExecutor.ExecuteCommandWithPublish(command, injectingAggregateId);
     }
     public UnifiedTestBase<TDependencyDefinition> GivenCommandExecutorAction(Action<TestCommandExecutor> action)
     {

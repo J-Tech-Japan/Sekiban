@@ -6,7 +6,7 @@ using System.Collections.Immutable;
 namespace Sekiban.Core.Command;
 
 public class CommandHandlerAdapter<TAggregatePayload, TCommand> where TAggregatePayload : IAggregatePayload, new()
-    where TCommand : ICommandBase<TAggregatePayload>
+    where TCommand : ICommand<TAggregatePayload>
 {
     private Aggregate<TAggregatePayload>? _aggregate = null;
     private readonly IAggregateLoader _aggregateLoader;
@@ -40,7 +40,7 @@ public class CommandHandlerAdapter<TAggregatePayload, TCommand> where TAggregate
         }
 
         // Validate AddAggregate Version
-        if (_checkVersion && command is IVersionValidationCommand validationCommand && validationCommand.ReferenceVersion != _aggregate.Version)
+        if (_checkVersion && command is IVersionValidationCommandCommon validationCommand && validationCommand.ReferenceVersion != _aggregate.Version)
         {
             throw new SekibanCommandInconsistentVersionException(
                 _aggregate.AggregateId,

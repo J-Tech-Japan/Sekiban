@@ -5,7 +5,7 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Shared;
 namespace Customer.Domain.Aggregates.RecentActivities.Commands;
 
-public record AddRecentActivity(Guid RecentActivityId, string Activity) : ICommandBase<RecentActivities.RecentActivity>
+public record AddRecentActivity(Guid RecentActivityId, string Activity) : ICommand<RecentActivities.RecentActivity>
 {
     public AddRecentActivity() : this(Guid.Empty, string.Empty) { }
     public int ReferenceVersion { get; init; }

@@ -19,41 +19,41 @@ public class TestCommandExecutor
     public ImmutableList<IEvent> LatestEvents { get; set; } = ImmutableList<IEvent>.Empty;
 
     //public (IEnumerable<IEvent>, Guid) ExecuteCreateCommand<TAggregatePayload>(
-    //    ICommandBase<TAggregatePayload> commandBase,
+    //    ICommand<TAggregatePayload> command,
     //    Guid? injectingAggregateId = null) where TAggregatePayload : IAggregatePayload, new() =>
-    //    ExecuteCreateCommand(commandBase, injectingAggregateId, false);
+    //    ExecuteCreateCommand(command, injectingAggregateId, false);
     //public (IEnumerable<IEvent>, Guid) ExecuteCreateCommandWithPublish<TAggregatePayload>(
-    //    ICommandBase<TAggregatePayload> commandBase,
+    //    ICommand<TAggregatePayload> command,
     //    Guid? injectingAggregateId = null) where TAggregatePayload : IAggregatePayload, new() =>
-    //    ExecuteCreateCommand(commandBase, injectingAggregateId, true);
+    //    ExecuteCreateCommand(command, injectingAggregateId, true);
     //private (IEnumerable<IEvent>, Guid) ExecuteCreateCommand<TAggregatePayload>(
-    //    ICommandBase<TAggregatePayload> commandBase,
+    //    ICommand<TAggregatePayload> command,
     //    Guid? injectingAggregateId,
     //    bool withPublish) where TAggregatePayload : IAggregatePayload, new()
     //{
-    //    var validationResults = commandBase.ValidateProperties().ToList();
+    //    var validationResults = command.ValidateProperties().ToList();
     //    if (validationResults.Any())
     //    {
     //        throw new ValidationException("Validation failed " + validationResults);
     //    }
 
     //    var baseType = typeof(ICommandHandler<,>);
-    //    var genericType = baseType.MakeGenericType(typeof(TAggregatePayload), commandBase.GetType());
+    //    var genericType = baseType.MakeGenericType(typeof(TAggregatePayload), command.GetType());
     //    var handler = _serviceProvider.GetService(genericType);
     //    if (handler is null)
     //    {
-    //        throw new SekibanCommandNotRegisteredException(commandBase.GetType().Name);
+    //        throw new SekibanCommandNotRegisteredException(command.GetType().Name);
     //    }
-    //    var aggregateId = injectingAggregateId ?? commandBase.GetAggregateId();
+    //    var aggregateId = injectingAggregateId ?? command.GetAggregateId();
 
     //    var commandDocumentBaseType = typeof(CommandDocument<>);
-    //    var commandDocumentType = commandDocumentBaseType.MakeGenericType(commandBase.GetType());
-    //    var commandDocument = Activator.CreateInstance(commandDocumentType, aggregateId, commandBase, typeof(TAggregatePayload), null);
+    //    var commandDocumentType = commandDocumentBaseType.MakeGenericType(command.GetType());
+    //    var commandDocument = Activator.CreateInstance(commandDocumentType, aggregateId, command, typeof(TAggregatePayload), null);
     //    var aggregate = new Aggregate<TAggregatePayload> { AggregateId = aggregateId };
     //    var handlerType = handler.GetType().GetMethods();
     //    var handleAsyncMethod = handler.GetType().GetMethods().First(m => m.Name == "HandleAsync");
     //    var result = ((dynamic)handleAsyncMethod.Invoke(handler, new[] { commandDocument, aggregate })!)?.Result;
-    //    if (result is null) { throw new Exception("Failed to execute create commandBase"); }
+    //    if (result is null) { throw new Exception("Failed to execute create command"); }
     //    var latestEvents = (ImmutableList<IEvent>)result.Events;
     //    if (latestEvents.Count == 0)
     //    {
@@ -90,12 +90,12 @@ public class TestCommandExecutor
         var aggregate = aggregateTask.Result;
         return aggregate;
     }
-    public Guid ExecuteCommand<TAggregatePayload>(ICommandBase<TAggregatePayload> command, Guid? injectingAggregateId = null)
+    public Guid ExecuteCommand<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
         where TAggregatePayload : IAggregatePayload, new() => ExecuteCommand(command,injectingAggregateId, false);
-    public Guid ExecuteCommandWithPublish<TAggregatePayload>(ICommandBase<TAggregatePayload> command, Guid? injectingAggregateId = null)
+    public Guid ExecuteCommandWithPublish<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
         where TAggregatePayload : IAggregatePayload, new() => ExecuteCommand(command,injectingAggregateId, true);
 
-    private Guid ExecuteCommand<TAggregatePayload>(ICommandBase<TAggregatePayload> command, Guid? injectingAggregateId, bool withPublish)
+    private Guid ExecuteCommand<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId, bool withPublish)
         where TAggregatePayload : IAggregatePayload, new()
     {
         var validationResults = command.ValidateProperties().ToList();
@@ -113,7 +113,7 @@ public class TestCommandExecutor
         }
         var aggregateId = injectingAggregateId ?? command.GetAggregateId();
 
-        if (command is not IOnlyPublishingCommand)
+        if (command is not IOnlyPublishingCommandCommon)
         {
             var commandDocumentBaseType = typeof(CommandDocument<>);
             var commandDocumentType = commandDocumentBaseType.MakeGenericType(command.GetType());

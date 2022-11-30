@@ -5,7 +5,7 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Shared;
 namespace Customer.Domain.Aggregates.RecentInMemoryActivities.Commands;
 
-public record CreateRecentInMemoryActivity : ICommandBase<RecentInMemoryActivities.RecentInMemoryActivity>
+public record CreateRecentInMemoryActivity : ICommand<RecentInMemoryActivities.RecentInMemoryActivity>
 {
     public Guid GetAggregateId() => Guid.NewGuid();
     public class Handler : ICommandHandlerBase<RecentInMemoryActivities.RecentInMemoryActivity, CreateRecentInMemoryActivity>

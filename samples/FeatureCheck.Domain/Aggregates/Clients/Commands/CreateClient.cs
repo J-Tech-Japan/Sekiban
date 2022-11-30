@@ -12,7 +12,7 @@ using Sekiban.Core.Query.SingleProjections;
 using System.ComponentModel.DataAnnotations;
 namespace Customer.Domain.Aggregates.Clients.Commands;
 
-public record CreateClient : ICommandBase<Clients.Client>
+public record CreateClient : ICommand<Clients.Client>
 {
     public CreateClient() : this(Guid.Empty, string.Empty, string.Empty) { }
     public CreateClient(Guid branchId, string clientName, string clientEmail)

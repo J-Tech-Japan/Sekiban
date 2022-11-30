@@ -17,25 +17,25 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvents(IEnumerable<IEvent> events);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFile(string filename);
     public Guid RunEnvironmentCommand<TEnvironmentAggregatePayload>(
-        ICommandBase<TEnvironmentAggregatePayload> commandBase,
+        ICommand<TEnvironmentAggregatePayload> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayload, new();
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventWithPublish(IEvent ev);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsWithPublish(IEnumerable<IEvent> events);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFileWithPublish(string filename);
     public Guid RunEnvironmentCommandWithPublish<TEnvironmentAggregatePayload>(
-        ICommandBase<TEnvironmentAggregatePayload> commandBase,
+        ICommand<TEnvironmentAggregatePayload> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayload, new();
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentCommandExecutorAction(Action<TestCommandExecutor> action);
     #endregion
 
     #region When
-    public IAggregateTestHelper<TAggregatePayload> WhenCommand<C>(C changeCommand) where C : ICommandBase<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> WhenCommand<C>(C changeCommand) where C : ICommand<TAggregatePayload>;
     public IAggregateTestHelper<TAggregatePayload> WhenCommand<C>(Func<AggregateState<TAggregatePayload>, C> commandFunc)
-        where C : ICommandBase<TAggregatePayload>;
-    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<C>(C changeCommand) where C : ICommandBase<TAggregatePayload>;
+        where C : ICommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<C>(C changeCommand) where C : ICommand<TAggregatePayload>;
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<C>(Func<AggregateState<TAggregatePayload>, C> commandFunc)
-        where C : ICommandBase<TAggregatePayload>;
+        where C : ICommand<TAggregatePayload>;
     #endregion
 
     #region Then

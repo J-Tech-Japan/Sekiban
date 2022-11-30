@@ -4,8 +4,8 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Shared;
 namespace Customer.Domain.Aggregates.RecentActivities.Commands;
 
-public record OnlyPublishingAddRecentActivity(Guid RecentActivityId, string Activity) : IOnlyPublishingCommandBase<RecentActivities.RecentActivity>,
-    IOnlyPublishingCommand
+public record OnlyPublishingAddRecentActivity(Guid RecentActivityId, string Activity) : IOnlyPublishingCommand<RecentActivities.RecentActivity>,
+    IOnlyPublishingCommandCommon
 {
     public OnlyPublishingAddRecentActivity() : this(Guid.Empty, string.Empty)
     {

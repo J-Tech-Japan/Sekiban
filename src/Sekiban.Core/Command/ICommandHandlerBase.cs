@@ -3,7 +3,7 @@ using Sekiban.Core.Event;
 namespace Sekiban.Core.Command;
 
 public interface ICommandHandlerBase<TAggregatePayload, TCommand> : ICommandHandler<TAggregatePayload, TCommand>
-    where TAggregatePayload : IAggregatePayload, new() where TCommand : ICommandBase<TAggregatePayload>
+    where TAggregatePayload : IAggregatePayload, new() where TCommand : ICommand<TAggregatePayload>
 {
     public IAsyncEnumerable<IEventPayload<TAggregatePayload>> HandleCommandAsync(
         Func<AggregateState<TAggregatePayload>> getAggregateState,

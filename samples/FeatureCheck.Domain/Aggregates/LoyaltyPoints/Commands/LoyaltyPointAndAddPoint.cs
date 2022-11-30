@@ -8,7 +8,7 @@ using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Shared;
 namespace Customer.Domain.Aggregates.LoyaltyPoints.Commands;
 
-public record LoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : ICommandBase<LoyaltyPoints.LoyaltyPoint>
+public record LoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : ICommand<LoyaltyPoints.LoyaltyPoint>
 {
     public LoyaltyPointAndAddPoint() : this(Guid.Empty, 0)
     {

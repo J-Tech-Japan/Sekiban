@@ -89,7 +89,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                         if (awaitable is null) { continue; }
                         var aggregateToSnapshot = await awaitable;
                         // var aggregateToSnapshot = await aggregateLoader.AsDefaultStateAsync<T, Q>(
-                        // commandBase.AggregateId,
+                        // command.AggregateId,
                         // taken.NextSnapshotVersion);
                         if (aggregateToSnapshot is null)
                         {

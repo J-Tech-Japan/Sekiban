@@ -5,7 +5,7 @@ using Sekiban.Core.Event;
 using System.ComponentModel.DataAnnotations;
 namespace Customer.Domain.Aggregates.Branches.Commands;
 
-public record CreateBranch : ICommandBase<Branch>, ICleanupNecessaryCommand<CreateBranch>
+public record CreateBranch : ICommand<Branch>, ICleanupNecessaryCommand<CreateBranch>
 {
     public CreateBranch() : this(string.Empty) { }
     public CreateBranch(string name) => Name = name;
