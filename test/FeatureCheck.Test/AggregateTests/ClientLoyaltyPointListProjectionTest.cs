@@ -1,17 +1,17 @@
+using System;
+using System.Collections.Generic;
 using Customer.Domain.Aggregates.Branches.Commands;
 using Customer.Domain.Aggregates.Clients.Commands;
 using Customer.Domain.Projections.ClientLoyaltyPointLists;
 using Customer.Domain.Shared;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Testing;
-using System;
-using System.Collections.Generic;
 using Xunit;
+
 namespace Customer.Test.AggregateTests;
 
 public class ClientLoyaltyPointListProjectionTest : UnifiedTestBase<CustomerDependency>
 {
-
     public Guid _branchId = Guid.NewGuid();
     public string _branchName = "TESTBRANCH";
 
@@ -20,18 +20,21 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTestBase<CustomerDepe
     public Guid _clientId3 = Guid.NewGuid();
     public Guid _clientId4 = Guid.NewGuid();
     public Guid _clientId5 = Guid.NewGuid();
-    public string _clientNameBase = "Client TEST ";
+    public string _clientNameBase = "CreateClient TEST ";
+
     [Fact]
     public void RegularProjection()
     {
         GivenEventsFromFile("TestData1.json")
             .WriteMultiProjectionStateToFile<ClientLoyaltyPointListProjection>("TestData1ResultOut.json");
     }
+
     [Fact]
     public void QueryTest()
     {
         GivenScenario(RegularProjection);
-        WriteMultiProjectionListQueryResponseToFile<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery, ClientLoyaltyPointQuery.QueryParameter,
+        WriteMultiProjectionListQueryResponseToFile<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery,
+            ClientLoyaltyPointQuery.QueryParameter,
             ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
             new ClientLoyaltyPointQuery.QueryParameter(
                 null,
@@ -50,19 +53,22 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTestBase<CustomerDepe
     [Fact]
     public void CommandTest1()
     {
-        RunCreateCommand(new CreateBranch(_branchName), _branchId);
-        RunCreateCommand(new CreateClient(_branchId, _clientNameBase + 1, "test" + 1 + "@example.com"), _clientId1);
-        RunCreateCommand(new CreateClient(_branchId, _clientNameBase + 2, "test" + 2 + "@example.com"), _clientId2);
-        RunCreateCommand(new CreateClient(_branchId, _clientNameBase + 3, "test" + 3 + "@example.com"), _clientId3);
-        RunCreateCommand(new CreateClient(_branchId, _clientNameBase + 4, "test" + 4 + "@example.com"), _clientId4);
-        RunCreateCommand(new CreateClient(_branchId, _clientNameBase + 5, "test" + 5 + "@example.com"), _clientId5);
-        ThenGetMultiProjectionPayload<ClientLoyaltyPointListProjection>(projection => Assert.NotEmpty(projection.Branches));
+        RunCommand(new CreateBranch(_branchName), _branchId);
+        RunCommand(new CreateClient(_branchId, _clientNameBase + 1, "test" + 1 + "@example.com"), _clientId1);
+        RunCommand(new CreateClient(_branchId, _clientNameBase + 2, "test" + 2 + "@example.com"), _clientId2);
+        RunCommand(new CreateClient(_branchId, _clientNameBase + 3, "test" + 3 + "@example.com"), _clientId3);
+        RunCommand(new CreateClient(_branchId, _clientNameBase + 4, "test" + 4 + "@example.com"), _clientId4);
+        RunCommand(new CreateClient(_branchId, _clientNameBase + 5, "test" + 5 + "@example.com"), _clientId5);
+        ThenGetMultiProjectionPayload<ClientLoyaltyPointListProjection>(projection =>
+            Assert.NotEmpty(projection.Branches));
     }
+
     [Fact]
     public void QueryBasic1()
     {
         GivenScenario(CommandTest1);
-        ThenMultiProjectionListQueryResponseIs<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery, ClientLoyaltyPointQuery.QueryParameter,
+        ThenMultiProjectionListQueryResponseIs<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery,
+            ClientLoyaltyPointQuery.QueryParameter,
             ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
             new ClientLoyaltyPointQuery.QueryParameter(
                 null,
@@ -87,11 +93,13 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTestBase<CustomerDepe
                     new(_branchId, _branchName, _clientId5, _clientNameBase + "5", 0)
                 }));
     }
+
     [Fact]
     public void QueryBasicPaging()
     {
         GivenScenario(CommandTest1);
-        ThenMultiProjectionListQueryResponseIs<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery, ClientLoyaltyPointQuery.QueryParameter,
+        ThenMultiProjectionListQueryResponseIs<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery,
+            ClientLoyaltyPointQuery.QueryParameter,
             ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
             new ClientLoyaltyPointQuery.QueryParameter(
                 null,
@@ -114,11 +122,13 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTestBase<CustomerDepe
                     new(_branchId, _branchName, _clientId3, _clientNameBase + "3", 0)
                 }));
     }
+
     [Fact]
     public void QueryBasicPaging2()
     {
         GivenScenario(CommandTest1);
-        ThenMultiProjectionListQueryResponseIs<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery, ClientLoyaltyPointQuery.QueryParameter,
+        ThenMultiProjectionListQueryResponseIs<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery,
+            ClientLoyaltyPointQuery.QueryParameter,
             ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
             new ClientLoyaltyPointQuery.QueryParameter(
                 null,
@@ -143,11 +153,13 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTestBase<CustomerDepe
                     new(_branchId, _branchName, _clientId5, _clientNameBase + "5", 0)
                 }));
     }
+
     [Fact]
     public void QueryBasicPaging3()
     {
         GivenScenario(CommandTest1);
-        ThenMultiProjectionListQueryResponseIs<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery, ClientLoyaltyPointQuery.QueryParameter,
+        ThenMultiProjectionListQueryResponseIs<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery,
+            ClientLoyaltyPointQuery.QueryParameter,
             ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
             new ClientLoyaltyPointQuery.QueryParameter(
                 null,
@@ -169,11 +181,13 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTestBase<CustomerDepe
                     new(_branchId, _branchName, _clientId5, _clientNameBase + "5", 0)
                 }));
     }
+
     [Fact]
     public void QueryBasicPagingRequestOverflowed()
     {
         GivenScenario(CommandTest1);
-        ThenMultiProjectionListQueryResponseIs<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery, ClientLoyaltyPointQuery.QueryParameter,
+        ThenMultiProjectionListQueryResponseIs<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery,
+            ClientLoyaltyPointQuery.QueryParameter,
             ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
             new ClientLoyaltyPointQuery.QueryParameter(
                 null,
@@ -191,11 +205,13 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTestBase<CustomerDepe
                 3,
                 new List<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>()));
     }
+
     [Fact]
     public void QueryBasicPagingRequestZero()
     {
         GivenScenario(CommandTest1);
-        ThenMultiProjectionListQueryResponseIs<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery, ClientLoyaltyPointQuery.QueryParameter,
+        ThenMultiProjectionListQueryResponseIs<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery,
+            ClientLoyaltyPointQuery.QueryParameter,
             ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>(
             new ClientLoyaltyPointQuery.QueryParameter(
                 null,

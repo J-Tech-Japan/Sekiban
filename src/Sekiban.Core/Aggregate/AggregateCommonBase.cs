@@ -1,10 +1,11 @@
 ﻿using Sekiban.Core.Event;
-using Sekiban.Core.Exceptions;
+
 namespace Sekiban.Core.Aggregate;
 
 public abstract class AggregateCommonBase : IAggregate
 {
     protected AggregateBasicInfo _basicInfo = new();
+
     public Guid AggregateId
     {
         get => _basicInfo.AggregateId;
@@ -15,30 +16,27 @@ public abstract class AggregateCommonBase : IAggregate
     public string LastSortableUniqueId => _basicInfo.LastSortableUniqueId;
     public int AppliedSnapshotVersion => _basicInfo.AppliedSnapshotVersion;
     public int Version => _basicInfo.Version;
-    public bool CanApplyEvent(IEvent ev) => GetApplyEventAction(ev, ev.GetPayload()) is not null;
+
+    public bool CanApplyEvent(IEvent ev)
+    {
+        return GetApplyEventAction(ev, ev.GetPayload()) is not null;
+    }
 
     public void ApplyEvent(IEvent ev)
     {
         var action = GetApplyEventAction(ev, ev.GetPayload());
-        if (action is null) { return; }
-        if (ev.IsAggregateInitialEvent == false && Version == 0)
-        {
-            throw new SekibanFirstEventShouldBeCreateEventException(ev.GetPayload().GetType());
-        }
-        if (ev.IsAggregateInitialEvent && Version > 0)
-        {
-            throw new SekibanCreateEventCanOnlyUseInFirstEvent(ev.GetPayload().GetType(), Version);
-        }
-        if (ev.Id == LastEventId) { return; }
+        if (action is null) return;
+        if (ev.Id == LastEventId) return;
         action();
-        _basicInfo = _basicInfo with { LastEventId = ev.Id, LastSortableUniqueId = ev.SortableUniqueId, Version = Version + 1 };
+        _basicInfo = _basicInfo with
+        {
+            LastEventId = ev.Id, LastSortableUniqueId = ev.SortableUniqueId, Version = Version + 1
+        };
     }
+
     public static UAggregate Create<UAggregate>(Guid aggregateId) where UAggregate : AggregateCommonBase
     {
-        if (typeof(UAggregate).GetConstructor(Type.EmptyTypes) is not { } c)
-        {
-            throw new InvalidProgramException();
-        }
+        if (typeof(UAggregate).GetConstructor(Type.EmptyTypes) is not { } c) throw new InvalidProgramException();
         var aggregate = c.Invoke(new object[] { }) as UAggregate ?? throw new InvalidProgramException();
         aggregate._basicInfo = aggregate._basicInfo with { AggregateId = aggregateId };
         return aggregate;
@@ -46,5 +44,5 @@ public abstract class AggregateCommonBase : IAggregate
         // C#の将来の正式バージョンで、インターフェースに静的メソッドを定義できるようになったら、書き換える。
     }
 
-    protected abstract Action? GetApplyEventAction(IEvent ev, IEventPayload payload);
+    protected abstract Action? GetApplyEventAction(IEvent ev, IEventPayloadCommon payload);
 }

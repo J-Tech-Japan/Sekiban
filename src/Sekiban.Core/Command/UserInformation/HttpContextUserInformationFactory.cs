@@ -1,12 +1,17 @@
-using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
+
 namespace Sekiban.Core.Command.UserInformation;
 
 public class HttpContextUserInformationFactory : IUserInformationFactory
 {
     private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public HttpContextUserInformationFactory(IHttpContextAccessor httpContextAccessor) => _httpContextAccessor = httpContextAccessor;
+    public HttpContextUserInformationFactory(IHttpContextAccessor httpContextAccessor)
+    {
+        _httpContextAccessor = httpContextAccessor;
+    }
+
     public string GetCurrentUserInformation()
     {
         var ip = _httpContextAccessor.HttpContext?.Connection?.RemoteIpAddress?.ToString();
@@ -14,7 +19,8 @@ public class HttpContextUserInformationFactory : IUserInformationFactory
         var identity = _httpContextAccessor?.HttpContext?.User?.Identity;
         var userId = identity is null || identity.IsAuthenticated == false
             ? null
-            : (identity as ClaimsIdentity)?.Claims.FirstOrDefault(m => m.Properties.FirstOrDefault().Value == "sub")?.Value;
+            : (identity as ClaimsIdentity)?.Claims.FirstOrDefault(m => m.Properties.FirstOrDefault().Value == "sub")
+            ?.Value;
         return $"{userId ?? "Unauthenticated User"} from {ip ?? "ip address not found"}";
     }
 }

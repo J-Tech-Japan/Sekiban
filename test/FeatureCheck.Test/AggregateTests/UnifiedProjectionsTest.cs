@@ -1,3 +1,7 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
 using Customer.Domain.Aggregates.Branches;
 using Customer.Domain.Aggregates.Branches.Commands;
 using Customer.Domain.Aggregates.Branches.Queries;
@@ -8,19 +12,16 @@ using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
 using Customer.Domain.Shared;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Testing;
-using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
 using Xunit;
+
 namespace Customer.Test.AggregateTests;
 
 public class UnifiedProjectionsTest : UnifiedTestBase<CustomerDependency>
 {
     private readonly string branchName = "BranchName";
     private readonly string clientEmail = "test@exmple.com";
-    private readonly string clientName = "Client Name";
-    private readonly string clientName2 = "Client Name2";
+    private readonly string clientName = "CreateClient Name";
+    private readonly string clientName2 = "CreateClient Name2";
 
     private Guid _branchId = Guid.Empty;
     private Guid _clientId = Guid.Empty;
@@ -29,22 +30,24 @@ public class UnifiedProjectionsTest : UnifiedTestBase<CustomerDependency>
     [Fact]
     public void Test()
     {
-        _branchId = RunCreateCommand(new CreateBranch(branchName));
-        _clientId = RunCreateCommand(new CreateClient(_branchId, clientName, clientEmail));
+        _branchId = RunCommand(new CreateBranch(branchName));
+        _clientId = RunCommand(new CreateClient(_branchId, clientName, clientEmail));
         GetLatestEvents()
             .ToList()
             .ForEach(
                 m =>
                 {
-                    if (m.GetPayload() is ClientCreated created) { dateNameSet = m.TimeStamp; }
+                    if (m.GetPayload() is ClientCreated created) dateNameSet = m.TimeStamp;
                 });
         ThenMultiProjectionPayloadIs(
                 new ClientLoyaltyPointMultiProjection(
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty.Add(
                         new ClientLoyaltyPointMultiProjection.ProjectedBranch(_branchId, branchName)),
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty.Add(
-                        new ClientLoyaltyPointMultiProjection.ProjectedRecord(_branchId, branchName, _clientId, clientName, 0))))
-            .ThenMultiProjectionQueryResponseIs<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultiProjectionQuery,
+                        new ClientLoyaltyPointMultiProjection.ProjectedRecord(_branchId, branchName, _clientId,
+                            clientName, 0))))
+            .ThenMultiProjectionQueryResponseIs<ClientLoyaltyPointMultiProjection,
+                ClientLoyaltyPointMultiProjectionQuery,
                 ClientLoyaltyPointMultiProjectionQuery.QueryParameter, ClientLoyaltyPointMultiProjection>(
                 new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(
                     null,
@@ -53,7 +56,8 @@ public class UnifiedProjectionsTest : UnifiedTestBase<CustomerDependency>
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty.Add(
                         new ClientLoyaltyPointMultiProjection.ProjectedBranch(_branchId, branchName)),
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty.Add(
-                        new ClientLoyaltyPointMultiProjection.ProjectedRecord(_branchId, branchName, _clientId, clientName, 0))));
+                        new ClientLoyaltyPointMultiProjection.ProjectedRecord(_branchId, branchName, _clientId,
+                            clientName, 0))));
     }
 
     [Fact]
@@ -91,7 +95,7 @@ public class UnifiedProjectionsTest : UnifiedTestBase<CustomerDependency>
     public void WhenChangeName()
     {
         GivenScenario(Test);
-        RunChangeCommand(new ChangeClientName(_clientId, clientName2));
+        RunCommand(new ChangeClientName(_clientId, clientName2));
         ThenMultiProjectionQueryResponseIs<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultiProjectionQuery,
             ClientLoyaltyPointMultiProjectionQuery.QueryParameter, ClientLoyaltyPointMultiProjection>(
             new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(
@@ -101,6 +105,7 @@ public class UnifiedProjectionsTest : UnifiedTestBase<CustomerDependency>
                 ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty.Add(
                     new ClientLoyaltyPointMultiProjection.ProjectedBranch(_branchId, branchName)),
                 ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty.Add(
-                    new ClientLoyaltyPointMultiProjection.ProjectedRecord(_branchId, branchName, _clientId, clientName2, 0))));
+                    new ClientLoyaltyPointMultiProjection.ProjectedRecord(_branchId, branchName, _clientId, clientName2,
+                        0))));
     }
 }

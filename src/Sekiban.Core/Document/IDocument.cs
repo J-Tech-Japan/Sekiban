@@ -1,4 +1,5 @@
 using Sekiban.Core.Document.ValueObjects;
+
 namespace Sekiban.Core.Document;
 
 public interface IDocument

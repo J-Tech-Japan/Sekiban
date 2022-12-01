@@ -1,9 +1,13 @@
-using Sekiban.Core.Event;
 using System.Collections.Immutable;
+using Sekiban.Core.Event;
+
 namespace Customer.Domain.Aggregates.RecentInMemoryActivities.Events;
 
-public record RecentInMemoryActivityCreated(RecentInMemoryActivityRecord Activity) : ICreatedEvent<RecentInMemoryActivity>
+public record RecentInMemoryActivityCreated
+    (RecentInMemoryActivityRecord Activity) : IEventPayload<RecentInMemoryActivity>
 {
-    public RecentInMemoryActivity OnEvent(RecentInMemoryActivity payload, IEvent ev) =>
-        new RecentInMemoryActivity(ImmutableList<RecentInMemoryActivityRecord>.Empty.Add(Activity));
+    public RecentInMemoryActivity OnEvent(RecentInMemoryActivity payload, IEvent ev)
+    {
+        return new(ImmutableList<RecentInMemoryActivityRecord>.Empty.Add(Activity));
+    }
 }

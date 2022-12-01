@@ -2,11 +2,11 @@ using Sekiban.Core.Document;
 using Sekiban.Core.Partition;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Shared;
+
 namespace Sekiban.Core.Snapshot;
 
 public record SnapshotDocument : DocumentBase, IDocument
 {
-
     public SnapshotDocument()
     {
     }
@@ -29,6 +29,7 @@ public record SnapshotDocument : DocumentBase, IDocument
         LastSortableUniqueId = lastSortableUniqueId;
         SavedVersion = savedVersion;
     }
+
     public dynamic? Snapshot { get; init; }
 
     public Guid LastEventId { get; init; }
@@ -37,5 +38,8 @@ public record SnapshotDocument : DocumentBase, IDocument
 
     public int SavedVersion { get; init; }
 
-    public T? ToState<T>() where T : IAggregateCommon => SekibanJsonHelper.ConvertTo<T>(Snapshot);
+    public T? ToState<T>() where T : IAggregateCommon
+    {
+        return SekibanJsonHelper.ConvertTo<T>(Snapshot);
+    }
 }

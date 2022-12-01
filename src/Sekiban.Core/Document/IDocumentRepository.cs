@@ -1,5 +1,6 @@
 using Sekiban.Core.Event;
 using Sekiban.Core.Snapshot;
+
 namespace Sekiban.Core.Document;
 
 public interface IDocumentRepository
@@ -17,6 +18,7 @@ public interface IDocumentRepository
         string? partitionKey,
         string? sinceSortableUniqueId,
         Action<IEnumerable<string>> resultAction);
+
     Task GetAllCommandStringsForAggregateIdAsync(
         Guid aggregateId,
         Type originalType,
@@ -40,10 +42,12 @@ public interface IDocumentRepository
 
     Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type originalType, string partitionKey);
 }
+
 public interface IDocumentPersistentRepository : IDocumentRepository
 {
     Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(Guid aggregateId, Type originalType);
 }
+
 public interface IDocumentTemporaryRepository : IDocumentRepository
 {
     Task<bool> EventsForAggregateIdHasSortableUniqueIdAsync(

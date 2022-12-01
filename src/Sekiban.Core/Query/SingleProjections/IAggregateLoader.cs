@@ -1,5 +1,6 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Event;
+
 namespace Sekiban.Core.Query.SingleProjections;
 
 public interface IAggregateLoader
@@ -17,6 +18,7 @@ public interface IAggregateLoader
         Guid aggregateId,
         int? toVersion = null)
         where TAggregatePayload : IAggregatePayload, new();
+
     /// <summary>
     ///     カスタムプロジェククションを取得
     /// </summary>
@@ -38,7 +40,8 @@ public interface IAggregateLoader
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Task<Aggregate<TAggregatePayload>?> AsAggregateAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)
+    public Task<Aggregate<TAggregatePayload>?> AsAggregateAsync<TAggregatePayload>(Guid aggregateId,
+        int? toVersion = null)
         where TAggregatePayload : IAggregatePayload, new();
 
     /// <summary>
@@ -49,7 +52,8 @@ public interface IAggregateLoader
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Task<AggregateState<TAggregatePayload>?> AsDefaultStateAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)
+    public Task<AggregateState<TAggregatePayload>?> AsDefaultStateAsync<TAggregatePayload>(Guid aggregateId,
+        int? toVersion = null)
         where TAggregatePayload : IAggregatePayload, new();
 
 

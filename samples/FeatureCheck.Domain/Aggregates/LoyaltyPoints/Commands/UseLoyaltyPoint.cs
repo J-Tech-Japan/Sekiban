@@ -4,6 +4,7 @@ using Customer.Domain.Shared.Exceptions;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Event;
+
 namespace Customer.Domain.Aggregates.LoyaltyPoints.Commands;
 
 public record UseLoyaltyPoint(
@@ -11,25 +12,31 @@ public record UseLoyaltyPoint(
     DateTime HappenedDate,
     LoyaltyPointUsageTypeKeys Reason,
     int PointAmount,
-    string Note) : ChangeCommandBase<LoyaltyPoint>
+    string Note) : IVersionValidationCommand<LoyaltyPoint>
 {
-    public UseLoyaltyPoint() : this(Guid.Empty, DateTime.MinValue, LoyaltyPointUsageTypeKeys.FlightDomestic, 0, string.Empty) { }
-    public override Guid GetAggregateId() => ClientId;
-    public class Handler : ChangeCommandHandlerBase<LoyaltyPoint, UseLoyaltyPoint>
+    public UseLoyaltyPoint() : this(Guid.Empty, DateTime.MinValue, LoyaltyPointUsageTypeKeys.FlightDomestic, 0,
+        string.Empty)
     {
-        protected override async IAsyncEnumerable<IChangedEvent<LoyaltyPoint>> ExecCommandAsync(
+    }
+
+    public int ReferenceVersion { get; init; }
+
+    public Guid GetAggregateId()
+    {
+        return ClientId;
+    }
+
+    public class Handler : IVersionValidationCommandHandlerBase<LoyaltyPoint, UseLoyaltyPoint>
+    {
+        public async IAsyncEnumerable<IEventPayload<LoyaltyPoint>> HandleCommandAsync(
             Func<AggregateState<LoyaltyPoint>> getAggregateState,
             UseLoyaltyPoint command)
         {
             await Task.CompletedTask;
             if (getAggregateState().Payload.LastOccuredTime > command.HappenedDate)
-            {
                 throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
-            }
             if (getAggregateState().Payload.CurrentPoint - command.PointAmount < 0)
-            {
                 throw new SekibanLoyaltyPointNotEnoughException();
-            }
             yield return new LoyaltyPointUsed(command.HappenedDate, command.Reason, command.PointAmount, command.Note);
         }
     }

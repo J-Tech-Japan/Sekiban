@@ -1,11 +1,13 @@
 using Sekiban.Core.Document.ValueObjects;
 using Sekiban.Core.Shared;
+
 namespace Sekiban.Core.Document;
 
 public abstract record class DocumentBase : IDocument
 {
-
-    public DocumentBase() { }
+    public DocumentBase()
+    {
+    }
 
     public DocumentBase(Guid aggregateId, string partitionKey, DocumentType documentType, string documentTypeName)
     {
@@ -17,8 +19,8 @@ public abstract record class DocumentBase : IDocument
         TimeStamp = SekibanDateProducer.GetRegistered().UtcNow;
         SortableUniqueId = SortableUniqueIdValue.Generate(TimeStamp, Id);
     }
-    [JsonPropertyName("id")]
-    public Guid Id { get; init; }
+
+    [JsonPropertyName("id")] public Guid Id { get; init; }
 
     public Guid AggregateId { get; init; }
 
@@ -31,5 +33,9 @@ public abstract record class DocumentBase : IDocument
     public DateTime TimeStamp { get; init; }
 
     public string SortableUniqueId { get; init; } = default!;
-    public SortableUniqueIdValue GetSortableUniqueId() => SortableUniqueId;
+
+    public SortableUniqueIdValue GetSortableUniqueId()
+    {
+        return SortableUniqueId;
+    }
 }

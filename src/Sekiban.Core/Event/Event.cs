@@ -1,17 +1,16 @@
 using Sekiban.Core.Document;
 using Sekiban.Core.History;
 using Sekiban.Core.Partition;
+
 namespace Sekiban.Core.Event;
 
-[SekibanEventType]
-public record Event<TEventPayload> : DocumentBase, IEvent where TEventPayload : IEventPayload
+public record Event<TEventPayload> : DocumentBase, IEvent where TEventPayload : IEventPayloadCommon
 {
-
     public Event()
     {
     }
 
-    public Event(Guid aggregateId, Type aggregateType, TEventPayload eventPayload, bool isAggregateInitialEvent = false) : base(
+    public Event(Guid aggregateId, Type aggregateType, TEventPayload eventPayload) : base(
         aggregateId,
         PartitionKeyGenerator.ForEvent(aggregateId, aggregateType),
         DocumentType.Event,
@@ -19,16 +18,11 @@ public record Event<TEventPayload> : DocumentBase, IEvent where TEventPayload : 
     {
         Payload = eventPayload;
         AggregateType = aggregateType.Name;
-        IsAggregateInitialEvent = isAggregateInitialEvent;
     }
+
     public TEventPayload Payload { get; init; } = default!;
 
     public string AggregateType { get; init; } = null!;
-
-    /// <summary>
-    ///     集約のスタートイベントの場合はtrueにする。
-    /// </summary>
-    public bool IsAggregateInitialEvent { get; init; }
 
     /// <summary>
     ///     集約のイベント適用後のバージョン
@@ -37,17 +31,15 @@ public record Event<TEventPayload> : DocumentBase, IEvent where TEventPayload : 
 
     public List<CallHistory> CallHistories { get; init; } = new();
 
-    public dynamic GetComparableObject(IEvent original, bool copyVersion = true) => this with
+    public IEventPayloadCommon GetPayload()
     {
-        Version = copyVersion ? original.Version : Version,
-        SortableUniqueId = original.SortableUniqueId,
-        CallHistories = original.CallHistories,
-        Id = original.Id,
-        TimeStamp = original.TimeStamp
-    };
+        return Payload;
+    }
 
-    public IEventPayload GetPayload() => Payload;
-    public T? GetPayload<T>() where T : class, IEventPayload => Payload as T;
+    public T? GetPayload<T>() where T : class, IEventPayloadCommon
+    {
+        return Payload as T;
+    }
 
     public List<CallHistory> GetCallHistoriesIncludesItself()
     {
@@ -57,9 +49,8 @@ public record Event<TEventPayload> : DocumentBase, IEvent where TEventPayload : 
         return histories;
     }
 
-    public static Event<TEventPayload> CreatedEvent(Guid aggregateId, Type aggregateType, TEventPayload eventPayload) =>
-        new Event<TEventPayload>(aggregateId, aggregateType, eventPayload, true);
-
-    public static Event<TEventPayload> ChangedEvent(Guid aggregateId, Type aggregateType, TEventPayload eventPayload) =>
-        new Event<TEventPayload>(aggregateId, aggregateType, eventPayload);
+    public static Event<TEventPayload> GenerateEvent(Guid aggregateId, Type aggregateType, TEventPayload eventPayload)
+    {
+        return new(aggregateId, aggregateType, eventPayload);
+    }
 }

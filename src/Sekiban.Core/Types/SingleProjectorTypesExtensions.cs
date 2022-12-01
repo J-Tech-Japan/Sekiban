@@ -1,12 +1,19 @@
-using Sekiban.Core.Query.MultiProjections;
 using System.Reflection;
+using Sekiban.Core.Query.MultiProjections;
+
 namespace Sekiban.Core.Types;
 
 public static class SingleProjectorTypesExtensions
 {
-    public static bool IsSingleProjectorType(this TypeInfo typeInfo) =>
-        typeInfo.DoesInheritFromGenericType(typeof(SingleProjectionListProjector<,,>));
-    public static bool IsSingleProjectorType(this Type typeInfo) => typeInfo.DoesInheritFromGenericType(typeof(SingleProjectionListProjector<,,>));
+    public static bool IsSingleProjectorType(this TypeInfo typeInfo)
+    {
+        return typeInfo.DoesInheritFromGenericType(typeof(SingleProjectionListProjector<,,>));
+    }
+
+    public static bool IsSingleProjectorType(this Type typeInfo)
+    {
+        return typeInfo.DoesInheritFromGenericType(typeof(SingleProjectionListProjector<,,>));
+    }
 
     public static Type GetOriginalAggregateTypeFromSingleProjectionListProjector(this Type type)
     {

@@ -14,18 +14,23 @@ using Sekiban.Core.Query.UpdateNotice;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using ISingleProjection = Sekiban.Core.Query.SingleProjections.Projections.ISingleProjection;
+
 namespace Sekiban.Core.Dependency;
 
 public static class ServiceCollectionExtensions
 {
     public enum HttpContextType
     {
-        Local = 1, Azure = 2
+        Local = 1,
+        Azure = 2
     }
+
     public enum MultiProjectionType
     {
-        Simple = 1, MemoryCache = 2
+        Simple = 1,
+        MemoryCache = 2
     }
+
     public static IServiceCollection AddSekibanCore(
         this IServiceCollection services,
         ISekibanDateProducer? sekibanDateProducer = null,
@@ -47,6 +52,7 @@ public static class ServiceCollectionExtensions
                 services.AddTransient<IMultiProjection, MemoryCacheMultiProjection>();
                 break;
         }
+
         var sekibanDateProducer1 = sekibanDateProducer ?? new SekibanDateProducer();
         services.AddSingleton(sekibanDateProducer1);
         services.AddSingleton<IUpdateNotice>(new SekibanUpdateNoticeManager(sekibanDateProducer1));
@@ -67,7 +73,9 @@ public static class ServiceCollectionExtensions
         services.AddTransient<ISnapshotDocumentCache, SnapshotDocumentCache>();
         return services;
     }
-    public static IServiceCollection AddSekibanCoreInMemory(this IServiceCollection services, ISekibanDateProducer? sekibanDateProducer = null)
+
+    public static IServiceCollection AddSekibanCoreInMemory(this IServiceCollection services,
+        ISekibanDateProducer? sekibanDateProducer = null)
     {
         services.AddMemoryCache();
 
@@ -100,7 +108,9 @@ public static class ServiceCollectionExtensions
         services.AddTransient<ISnapshotDocumentCache, SnapshotDocumentCache>();
         return services;
     }
-    public static IServiceCollection AddSekibanCoreAggregateTest(this IServiceCollection services, ISekibanDateProducer? sekibanDateProducer = null)
+
+    public static IServiceCollection AddSekibanCoreAggregateTest(this IServiceCollection services,
+        ISekibanDateProducer? sekibanDateProducer = null)
     {
         services.AddMemoryCache();
 
@@ -135,7 +145,8 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    public static IServiceCollection AddSekibanHTTPUser(this IServiceCollection services, HttpContextType contextType = HttpContextType.Local)
+    public static IServiceCollection AddSekibanHTTPUser(this IServiceCollection services,
+        HttpContextType contextType = HttpContextType.Local)
     {
         // ユーザー情報
         services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
@@ -148,15 +159,19 @@ public static class ServiceCollectionExtensions
                 services.AddTransient<IUserInformationFactory, AzureAdUserInformationFactory>();
                 break;
         }
+
         return services;
     }
+
     public static IServiceCollection AddSekibanSettingsFromAppSettings(this IServiceCollection services)
     {
         // 設定はConfigurationから指定することもできる、設定オブジェクトをnewで生成することも可能
         services.AddTransient<IAggregateSettings, ConfigurationAggregateSettings>();
         return services;
     }
-    public static IServiceCollection AddSekibanAppSettingsFromObject(this IServiceCollection services, AggregateSettings settings)
+
+    public static IServiceCollection AddSekibanAppSettingsFromObject(this IServiceCollection services,
+        AggregateSettings settings)
     {
         // 例
         // services.AddSingleton<IAggregateSettings>(

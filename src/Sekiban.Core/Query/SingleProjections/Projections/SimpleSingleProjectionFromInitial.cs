@@ -1,12 +1,18 @@
 using Sekiban.Core.Document;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Partition;
+
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
 public class SimpleSingleProjectionFromInitial : ISingleProjectionFromInitial
 {
     private readonly IDocumentRepository _documentRepository;
-    public SimpleSingleProjectionFromInitial(IDocumentRepository documentRepository) => _documentRepository = documentRepository;
+
+    public SimpleSingleProjectionFromInitial(IDocumentRepository documentRepository)
+    {
+        _documentRepository = documentRepository;
+    }
+
     /// <summary>
     ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
     ///     遅いので、通常はキャッシュバージョンを使用ください
@@ -17,7 +23,8 @@ public class SimpleSingleProjectionFromInitial : ISingleProjectionFromInitial
     /// <typeparam name="TProjection"></typeparam>
     /// <typeparam name="TProjector"></typeparam>
     /// <returns></returns>
-    public async Task<TProjection?> GetAggregateFromInitialAsync<TProjection, TProjector>(Guid aggregateId, int? toVersion)
+    public async Task<TProjection?> GetAggregateFromInitialAsync<TProjection, TProjector>(Guid aggregateId,
+        int? toVersion)
         where TProjection : IAggregateCommon, SingleProjections.ISingleProjection
         where TProjector : ISingleProjector<TProjection>, new()
     {
@@ -32,10 +39,8 @@ public class SimpleSingleProjectionFromInitial : ISingleProjectionFromInitial
             events =>
             {
                 if (events.Count() != events.Select(m => m.Id).Distinct().Count())
-                {
                     throw new SekibanEventDuplicateException();
-                }
-                if (addFinished) { return; }
+                if (addFinished) return;
                 foreach (var e in events)
                 {
                     aggregate.ApplyEvent(e);
@@ -46,7 +51,7 @@ public class SimpleSingleProjectionFromInitial : ISingleProjectionFromInitial
                     }
                 }
             });
-        if (aggregate.Version == 0) { return default; }
+        if (aggregate.Version == 0) return default;
         return aggregate;
     }
 }

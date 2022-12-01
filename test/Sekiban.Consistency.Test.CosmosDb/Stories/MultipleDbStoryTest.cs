@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using Customer.Domain.Aggregates.Branches;
 using Customer.Domain.Aggregates.Branches.Commands;
 using Sekiban.Core.Aggregate;
@@ -6,9 +7,9 @@ using Sekiban.Core.Document;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Setting;
 using Sekiban.Infrastructure.Cosmos;
-using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
+
 namespace SampleProjectStoryXTest.Stories;
 
 public class MultipleDbStoryTest : TestBase
@@ -17,8 +18,11 @@ public class MultipleDbStoryTest : TestBase
     private const string DefaultDb = "Default";
     private readonly ISekibanContext _sekibanContext;
 
-    public MultipleDbStoryTest(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(sekibanTestFixture) =>
+    public MultipleDbStoryTest(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
+        sekibanTestFixture)
+    {
         _sekibanContext = GetService<ISekibanContext>();
+    }
 
     [Fact(DisplayName = "CosmosDb ストーリーテスト 複数データベースでの動作を検証する")]
     public async Task CosmosDbStory()
@@ -31,7 +35,8 @@ public class MultipleDbStoryTest : TestBase
         // 先に全データを削除する
         await cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default);
         await cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Dissolvable);
-        await cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command, AggregateContainerGroup.Dissolvable);
+        await cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command,
+            AggregateContainerGroup.Dissolvable);
         await cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command);
 
         // Secondary の設定ないで実行する
@@ -47,7 +52,8 @@ public class MultipleDbStoryTest : TestBase
             DefaultDb,
             async () =>
             {
-                await commandExecutor.ExecCreateCommandAsync<Branch, CreateBranch>(new CreateBranch("TEST"));
+                await commandExecutor.ExecCommandAsync<Branch, CreateBranch>(
+                    new CreateBranch("TEST"));
             });
 
         // Default で Listを取得すると1件取得
@@ -71,9 +77,12 @@ public class MultipleDbStoryTest : TestBase
             SecondaryDb,
             async () =>
             {
-                await commandExecutor.ExecCreateCommandAsync<Branch, CreateBranch>(new CreateBranch("JAPAN"));
-                await commandExecutor.ExecCreateCommandAsync<Branch, CreateBranch>(new CreateBranch("USA"));
-                await commandExecutor.ExecCreateCommandAsync<Branch, CreateBranch>(new CreateBranch("MEXICO"));
+                await commandExecutor.ExecCommandAsync<Branch, CreateBranch>(
+                    new CreateBranch("JAPAN"));
+                await commandExecutor.ExecCommandAsync<Branch, CreateBranch>(
+                    new CreateBranch("USA"));
+                await commandExecutor.ExecCommandAsync<Branch, CreateBranch>(
+                    new CreateBranch("MEXICO"));
             });
 
         // Default で Listを取得すると1件取得

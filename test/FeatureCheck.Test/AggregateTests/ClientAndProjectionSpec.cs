@@ -1,3 +1,7 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
 using Customer.Domain.Aggregates.Branches;
 using Customer.Domain.Aggregates.Branches.Commands;
 using Customer.Domain.Aggregates.Clients;
@@ -9,11 +13,8 @@ using Customer.Domain.Aggregates.Clients.Queries.BasicClientFilters;
 using Customer.Domain.Shared;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Testing.SingleProjections;
-using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
 using Xunit;
+
 namespace Customer.Test.AggregateTests;
 
 public class ClientAndProjectionSpec : AggregateTestBase<Client, CustomerDependency>
@@ -30,20 +31,18 @@ public class ClientAndProjectionSpec : AggregateTestBase<Client, CustomerDepende
     [Fact]
     public void CreateTest()
     {
-        RunEnvironmentCreateCommand(new CreateBranch(branchName), branchId);
+        RunEnvironmentCommand(new CreateBranch(branchName), branchId);
         // GetEnvironmentAggregateStateのテスト
         var branch = GetEnvironmentAggregateState<Branch>(branchId);
         Assert.Equal(branchName, branch.Payload.Name);
 
-        WhenCreate(new CreateClient(branchId, clientName, clientEmail))
+        WhenCommand(new CreateClient(branchId, clientName, clientEmail))
             .ThenNotThrowsAnException()
             .ThenGetLatestEvents(
                 events =>
                 {
                     foreach (var ev in events.Where(m => m.GetPayload().GetType() == typeof(ClientCreated)))
-                    {
                         FirstEventDatetime = ev.TimeStamp;
-                    }
                 })
             .ThenPayloadIs(new Client(branchId, clientName, clientEmail))
             .ThenSingleProjectionPayloadIs(
@@ -55,19 +54,19 @@ public class ClientAndProjectionSpec : AggregateTestBase<Client, CustomerDepende
                     clientEmail)
             );
     }
+
     [Fact]
     public void ChangeNameTest()
     {
         GivenScenario(CreateTest)
-            .WhenChange(client => new ChangeClientName(client.AggregateId, clientNameChanged) { ReferenceVersion = client.Version })
+            .WhenCommand(client => new ChangeClientName(client.AggregateId, clientNameChanged)
+                { ReferenceVersion = client.Version })
             .ThenNotThrowsAnException()
             .ThenGetLatestEvents(
                 events =>
                 {
                     foreach (var ev in events.Where(e => e.GetPayload().GetType().Name == nameof(ClientNameChanged)))
-                    {
                         ChangedEventDatetime = ev.TimeStamp;
-                    }
                 })
             .ThenPayloadIs(new Client(branchId, clientNameChanged, clientEmail))
             .ThenSingleProjectionPayloadIs(
@@ -112,10 +111,11 @@ public class ClientAndProjectionSpec : AggregateTestBase<Client, CustomerDepende
     [Fact]
     public void SingleProjectionListQueryTest()
     {
-        RunEnvironmentCreateCommand(new CreateBranch(branchName), branchId);
-        WhenCreate(new CreateClient(branchId, clientName, clientEmail))
+        RunEnvironmentCommand(new CreateBranch(branchName), branchId);
+        WhenCommand(new CreateClient(branchId, clientName, clientEmail))
             .ThenGetLatestSingleEvent<ClientCreated>(ev => FirstEventDatetime = ev.TimeStamp)
-            .WhenChange(client => new ChangeClientName(client.AggregateId, clientNameChanged) { ReferenceVersion = client.Version })
+            .WhenCommand(client => new ChangeClientName(client.AggregateId, clientNameChanged)
+                { ReferenceVersion = client.Version })
             .ThenGetLatestSingleEvent<ClientNameChanged>(ev => ChangedEventDatetime = ev.TimeStamp)
             .ThenSingleProjectionListQueryResponseIs<ClientNameHistoryProjection, ClientNameHistoryProjectionQuery,
                 ClientNameHistoryProjectionQuery.Parameter, ClientNameHistoryProjectionQuery.Response>(
@@ -127,7 +127,8 @@ public class ClientAndProjectionSpec : AggregateTestBase<Client, CustomerDepende
                     null,
                     new[]
                     {
-                        new ClientNameHistoryProjectionQuery.Response(branchId, GetAggregateId(), clientName, clientEmail, FirstEventDatetime),
+                        new ClientNameHistoryProjectionQuery.Response(branchId, GetAggregateId(), clientName,
+                            clientEmail, FirstEventDatetime),
                         new ClientNameHistoryProjectionQuery.Response(
                             branchId,
                             GetAggregateId(),
@@ -140,22 +141,25 @@ public class ClientAndProjectionSpec : AggregateTestBase<Client, CustomerDepende
     [Fact]
     public void SingleProjectionQueryTest()
     {
-        RunEnvironmentCreateCommand(new CreateBranch(branchName), branchId);
-        WhenCreate(new CreateClient(branchId, clientName, clientEmail))
+        RunEnvironmentCommand(new CreateBranch(branchName), branchId);
+        WhenCommand(new CreateClient(branchId, clientName, clientEmail))
             .ThenGetLatestSingleEvent<ClientCreated>(ev => FirstEventDatetime = ev.TimeStamp)
-            .WhenChange(client => new ChangeClientName(client.AggregateId, clientNameChanged) { ReferenceVersion = client.Version })
+            .WhenCommand(client => new ChangeClientName(client.AggregateId, clientNameChanged)
+                { ReferenceVersion = client.Version })
             .ThenGetLatestSingleEvent<ClientNameChanged>(ev => ChangedEventDatetime = ev.TimeStamp)
             .ThenSingleProjectionQueryResponseIs<ClientNameHistoryProjection, ClientNameHistoryProjectionCountQuery,
                 ClientNameHistoryProjectionCountQuery.Parameter, int>(
                 new ClientNameHistoryProjectionCountQuery.Parameter(branchId, GetAggregateId()),
                 2);
     }
+
     [Fact]
     public void CheckGetAllAggregateEvent()
     {
-        RunEnvironmentCreateCommand(new CreateBranch(branchName), branchId);
-        WhenCreate(new CreateClient(branchId, clientName, clientEmail))
-            .WhenChange(new ChangeClientName(GetAggregateId(), clientNameChanged) { ReferenceVersion = GetCurrentVersion() })
+        RunEnvironmentCommand(new CreateBranch(branchName), branchId);
+        WhenCommand(new CreateClient(branchId, clientName, clientEmail))
+            .WhenCommand(new ChangeClientName(GetAggregateId(), clientNameChanged)
+                { ReferenceVersion = GetCurrentVersion() })
             .ThenGetAllAggregateEvents(
                 events =>
                 {
@@ -163,8 +167,6 @@ public class ClientAndProjectionSpec : AggregateTestBase<Client, CustomerDepende
                     Assert.Equal(typeof(ClientCreated), events[0].GetPayload().GetType());
                     Assert.Equal(typeof(ClientNameChanged), events[1].GetPayload().GetType());
                 });
-
-
     }
 
     [Fact]

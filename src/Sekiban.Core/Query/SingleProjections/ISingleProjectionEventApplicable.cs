@@ -1,4 +1,5 @@
 using Sekiban.Core.Event;
+
 namespace Sekiban.Core.Query.SingleProjections;
 
 public interface ISingleProjectionEventApplicable<TProjectionPayload> : ISingleProjectionPayload
@@ -6,5 +7,5 @@ public interface ISingleProjectionEventApplicable<TProjectionPayload> : ISingleP
 {
     Func<TProjectionPayload, TProjectionPayload>? GetApplyEventFunc(
         IEvent ev,
-        IEventPayload eventPayload);
+        IEventPayloadCommon eventPayload);
 }

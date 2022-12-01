@@ -4,13 +4,17 @@ using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleProjections;
+
 namespace Sekiban.Core.Query.QueryModel;
 
 public class QueryHandler
 {
     private readonly IServiceProvider _serviceProvider;
 
-    public QueryHandler(IServiceProvider serviceProvider) => _serviceProvider = serviceProvider;
+    public QueryHandler(IServiceProvider serviceProvider)
+    {
+        _serviceProvider = serviceProvider;
+    }
 
     public ListQueryResult<TQueryResponse>
         GetMultiProjectionListQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
@@ -21,14 +25,13 @@ public class QueryHandler
         where TQueryParameter : IQueryParameter
     {
         var query = _serviceProvider.GetService<TQuery>();
-        if (query is null) { throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection"); }
+        if (query is null)
+            throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
         var filtered = query.HandleFilter(param, projection);
         var sorted = query.HandleSort(param, filtered);
         var queryResponses = sorted.ToList();
         if (param is IQueryPagingParameter { PageNumber: { }, PageSize: { } } pagingParam)
-        {
             return makeQueryListResult(pagingParam, queryResponses);
-        }
         return new ListQueryResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
     }
 
@@ -40,7 +43,8 @@ public class QueryHandler
         where TQueryParameter : IQueryParameter
     {
         var query = _serviceProvider.GetService<TQuery>();
-        if (query is null) { throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection"); }
+        if (query is null)
+            throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
         var filtered = query.HandleFilter(param, projection);
         return filtered;
     }
@@ -55,16 +59,16 @@ public class QueryHandler
         where TQueryParameter : IQueryParameter
     {
         var query = _serviceProvider.GetService<TQuery>();
-        if (query is null) { throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection"); }
+        if (query is null)
+            throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
         var filtered = query.HandleFilter(param, list);
         var sorted = query.HandleSort(param, filtered);
         var queryResponses = sorted.ToList();
         if (param is IQueryPagingParameter { PageNumber: { }, PageSize: { } } pagingParam)
-        {
             return makeQueryListResult(pagingParam, queryResponses);
-        }
         return new ListQueryResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
     }
+
     public TQueryResponse GetAggregateQuery<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
         TQueryParameter param,
         IEnumerable<AggregateState<TAggregatePayload>> list)
@@ -73,7 +77,8 @@ public class QueryHandler
         where TQueryParameter : IQueryParameter
     {
         var query = _serviceProvider.GetService<TQuery>();
-        if (query is null) { throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection"); }
+        if (query is null)
+            throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
         var filtered = query.HandleFilter(param, list);
         return filtered;
     }
@@ -88,14 +93,13 @@ public class QueryHandler
         where TQueryParameter : IQueryParameter
     {
         var query = _serviceProvider.GetService<TQuery>();
-        if (query is null) { throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection"); }
+        if (query is null)
+            throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
         var filtered = query.HandleFilter(param, projections);
         var sorted = query.HandleSort(param, filtered);
         var queryResponses = sorted.ToList();
         if (param is IQueryPagingParameter { PageNumber: { }, PageSize: { } } pagingParam)
-        {
             return makeQueryListResult(pagingParam, queryResponses);
-        }
         return new ListQueryResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
     }
 
@@ -103,18 +107,14 @@ public class QueryHandler
         IQueryPagingParameter pagingParam,
         List<TQueryResponse> queryResponses)
     {
-        if (pagingParam.PageNumber == null || pagingParam.PageSize == null)
-        {
-            throw new SekibanQueryPagingError();
-        }
+        if (pagingParam.PageNumber == null || pagingParam.PageSize == null) throw new SekibanQueryPagingError();
         var pageNumber = pagingParam.PageNumber.Value;
         var pageSize = pagingParam.PageSize.Value;
         var total = queryResponses.ToList().Count;
         var totalPages = total / pagingParam.PageSize.Value + (total % pagingParam.PageSize.Value > 0 ? 1 : 0);
         if (pageNumber < 1 || pageNumber > totalPages)
-        {
-            return new ListQueryResult<TQueryResponse>(total, totalPages, pageNumber, pageSize, new List<TQueryResponse>());
-        }
+            return new ListQueryResult<TQueryResponse>(total, totalPages, pageNumber, pageSize,
+                new List<TQueryResponse>());
         return new ListQueryResult<TQueryResponse>(
             total,
             totalPages,
@@ -133,7 +133,8 @@ public class QueryHandler
         where TQueryParameter : IQueryParameter
     {
         var query = _serviceProvider.GetService<TQuery>();
-        if (query is null) { throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection"); }
+        if (query is null)
+            throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
         var filtered = query.HandleFilter(param, projections);
         return filtered;
     }

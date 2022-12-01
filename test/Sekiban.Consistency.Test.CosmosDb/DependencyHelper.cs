@@ -5,6 +5,7 @@ using Sekiban.Core.Dependency;
 using Sekiban.Core.Shared;
 using Sekiban.Infrastructure.Cosmos;
 using Sekiban.Testing.Story;
+
 namespace SampleProjectStoryXTest;
 
 public static class DependencyHelper
@@ -13,7 +14,8 @@ public static class DependencyHelper
         ISekibanTestFixture fixture,
         bool inMemory = false,
         ISekibanDateProducer? sekibanDateProducer = null,
-        ServiceCollectionExtensions.MultiProjectionType multiProjectionType = ServiceCollectionExtensions.MultiProjectionType.MemoryCache)
+        ServiceCollectionExtensions.MultiProjectionType multiProjectionType =
+            ServiceCollectionExtensions.MultiProjectionType.MemoryCache)
     {
         IServiceCollection services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(fixture.Configuration);
@@ -26,9 +28,11 @@ public static class DependencyHelper
             services.AddSekibanCoreWithDependency(new CustomerDependency(), sekibanDateProducer, multiProjectionType);
             services.AddSekibanCosmosDB();
         }
+
         services.AddQueriesFromDependencyDefinition(new CustomerDependency());
         return services.BuildServiceProvider();
     }
+
     public static class LoginType
     {
         public const int Admin = 1;

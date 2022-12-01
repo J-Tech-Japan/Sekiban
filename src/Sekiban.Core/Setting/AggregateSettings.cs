@@ -6,23 +6,31 @@ public class AggregateSettings : IAggregateSettings
 
     public bool ShouldTakeSnapshotForType(Type originalType)
     {
-        return Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == originalType.Name)?.MakeSnapshots ?? Helper.TakeSnapshotDefault;
+        return Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == originalType.Name)?.MakeSnapshots ??
+               Helper.TakeSnapshotDefault;
     }
 
     public bool CanUseHybrid(Type originalType)
     {
-        return Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == originalType.Name)?.UseHybrid ?? Helper.UseHybridDefault;
+        return Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == originalType.Name)?.UseHybrid ??
+               Helper.UseHybridDefault;
     }
+
     public int SnapshotFrequencyForType(Type originalType)
     {
-        return Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == originalType.Name)?.SnapshotFrequency ?? Helper.SnapshotFrequencyDefault;
+        return Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == originalType.Name)?.SnapshotFrequency ??
+               Helper.SnapshotFrequencyDefault;
     }
+
     public int SnapshotOffsetForType(Type originalType)
     {
-        return Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == originalType.Name)?.SnapshotOffset ?? Helper.SnapshotOffsetDefault;
+        return Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == originalType.Name)?.SnapshotOffset ??
+               Helper.SnapshotOffsetDefault;
     }
+
     public bool UseUpdateMarkerForType(string originalType)
     {
-        return Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == originalType)?.UseUpdateMarker ?? Helper.UseUpdateMarker;
+        return Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == originalType)?.UseUpdateMarker ??
+               Helper.UseUpdateMarker;
     }
 }

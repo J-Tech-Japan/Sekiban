@@ -2,7 +2,9 @@ namespace Sekiban.Core.Setting;
 
 public class AggregateSetting
 {
-    public AggregateSetting() { }
+    public AggregateSetting()
+    {
+    }
 
     public AggregateSetting(
         string aggregateClassName,
@@ -19,6 +21,7 @@ public class AggregateSetting
         SnapshotOffset = snapshotOffset;
         UseUpdateMarker = useUpdateMarker;
     }
+
     public string AggregateClassName { get; init; } = string.Empty;
     public bool? MakeSnapshots { get; init; }
     public bool? UseHybrid { get; init; }

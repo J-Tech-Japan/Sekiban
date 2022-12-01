@@ -8,12 +8,12 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <Folder Include="Aggregates\Orders" />
-      <Folder Include="Aggregates\Products\Events" />
+        <Folder Include="Aggregates\Orders"/>
+        <Folder Include="Aggregates\Products\Events"/>
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\src\Sekiban.Core\Sekiban.Core.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Core\Sekiban.Core.csproj"/>
     </ItemGroup>
 
 </Project>

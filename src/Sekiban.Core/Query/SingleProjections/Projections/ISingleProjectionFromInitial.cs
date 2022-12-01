@@ -12,6 +12,7 @@ public interface ISingleProjectionFromInitial
     /// <typeparam name="TProjection"></typeparam>
     /// <typeparam name="TProjector"></typeparam>
     /// <returns></returns>
-    Task<TProjection?> GetAggregateFromInitialAsync<TProjection, TProjector>(Guid aggregateId, int? toVersion) where TProjection : IAggregateCommon, SingleProjections.ISingleProjection
+    Task<TProjection?> GetAggregateFromInitialAsync<TProjection, TProjector>(Guid aggregateId, int? toVersion)
+        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection
         where TProjector : ISingleProjector<TProjection>, new();
 }

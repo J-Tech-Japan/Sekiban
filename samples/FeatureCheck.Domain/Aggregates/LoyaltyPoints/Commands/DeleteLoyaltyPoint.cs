@@ -2,15 +2,25 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Event;
+
 namespace Customer.Domain.Aggregates.LoyaltyPoints.Commands;
 
-public record DeleteLoyaltyPoint(Guid ClientId) : ChangeCommandBase<LoyaltyPoint>, INoValidateCommand
+public record DeleteLoyaltyPoint(Guid ClientId) : ICommand<LoyaltyPoint>
 {
-    public DeleteLoyaltyPoint() : this(Guid.Empty) { }
-    public override Guid GetAggregateId() => ClientId;
-    public class Handler : ChangeCommandHandlerBase<LoyaltyPoint, DeleteLoyaltyPoint>
+    public DeleteLoyaltyPoint() : this(Guid.Empty)
     {
-        protected override async IAsyncEnumerable<IChangedEvent<LoyaltyPoint>> ExecCommandAsync(
+    }
+
+    public int ReferenceVersion { get; init; }
+
+    public Guid GetAggregateId()
+    {
+        return ClientId;
+    }
+
+    public class Handler : ICommandHandlerBase<LoyaltyPoint, DeleteLoyaltyPoint>
+    {
+        public async IAsyncEnumerable<IEventPayload<LoyaltyPoint>> HandleCommandAsync(
             Func<AggregateState<LoyaltyPoint>> getAggregateState,
             DeleteLoyaltyPoint command)
         {

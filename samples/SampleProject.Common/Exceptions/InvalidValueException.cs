@@ -2,5 +2,7 @@
 
 public class InvalidValueException : ApplicationException, IValidationNotice
 {
-    public InvalidValueException(string message) : base(message) { }
+    public InvalidValueException(string message) : base(message)
+    {
+    }
 }

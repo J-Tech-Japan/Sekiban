@@ -1,5 +1,6 @@
 using System.Collections;
 using System.ComponentModel.DataAnnotations;
+
 namespace Sekiban.Core.Validation;
 
 public static class ValidationExtensions
@@ -10,25 +11,22 @@ public static class ValidationExtensions
         var list = collection.Cast<object>().ToList();
         foreach (var (item, index) in list.Select((item, index) => (item, index)))
         {
-            if (item is null)
-            {
-                continue;
-            }
+            if (item is null) continue;
             validationResults.Clear();
             validationResults.AddRange(item.ValidateProperties());
-            foreach (var validationResult in validationResults)
-            {
-                yield return (index, validationResult);
-            }
+            foreach (var validationResult in validationResults) yield return (index, validationResult);
         }
     }
 
-    public static bool TryValidateEnumerable(this IEnumerable collection, out IEnumerable<(int, ValidationResult)> validationResults)
+    public static bool TryValidateEnumerable(this IEnumerable collection,
+        out IEnumerable<(int, ValidationResult)> validationResults)
     {
         validationResults = collection.ValidateEnumerable();
         return !validationResults.Any();
     }
-    public static bool TryValidateEnumerable<T>(this IEnumerable<T> collection, out IEnumerable<(int, ValidationResult)> validationResults)
+
+    public static bool TryValidateEnumerable<T>(this IEnumerable<T> collection,
+        out IEnumerable<(int, ValidationResult)> validationResults)
     {
         validationResults = collection.ValidateEnumerable();
         return !validationResults.Any();
@@ -40,20 +38,15 @@ public static class ValidationExtensions
         var list = collection.ToList();
         foreach (var (item, index) in list.Select((item, index) => (item, index)))
         {
-            if (item is null)
-            {
-                continue;
-            }
+            if (item is null) continue;
             validationResults.Clear();
             validationResults.AddRange(item.ValidateProperties());
-            foreach (var validationResult in validationResults)
-            {
-                yield return (index, validationResult);
-            }
+            foreach (var validationResult in validationResults) yield return (index, validationResult);
         }
     }
 
-    public static bool TryValidateProperties(this object targetClass, out IEnumerable<ValidationResult> validationResults, string baseKeyPath = "")
+    public static bool TryValidateProperties(this object targetClass,
+        out IEnumerable<ValidationResult> validationResults, string baseKeyPath = "")
     {
         validationResults = targetClass.ValidateProperties(baseKeyPath);
         return !validationResults.Any();
@@ -67,11 +60,10 @@ public static class ValidationExtensions
         if (targetClass is IEnumerable collection)
         {
             foreach (var (index, validationResult) in collection.ValidateEnumerable())
-            {
                 yield return new ValidationResult(
                     validationResult.ErrorMessage,
-                    validationResult.MemberNames.Select(m => string.IsNullOrEmpty(baseKeyPath) ? m : $"{baseKeyPath}[{index}].{m}").ToArray());
-            }
+                    validationResult.MemberNames
+                        .Select(m => string.IsNullOrEmpty(baseKeyPath) ? m : $"{baseKeyPath}[{index}].{m}").ToArray());
 
             yield break;
         }
@@ -79,11 +71,10 @@ public static class ValidationExtensions
         // 一般的なプロパティの検証
         Validator.TryValidateObject(targetClass, new ValidationContext(targetClass), validationResults, true);
         foreach (var validationResult in validationResults)
-        {
             yield return new ValidationResult(
                 validationResult.ErrorMessage,
-                validationResult.MemberNames.Select(m => string.IsNullOrEmpty(baseKeyPath) ? m : $"{baseKeyPath}.{m}").ToArray());
-        }
+                validationResult.MemberNames.Select(m => string.IsNullOrEmpty(baseKeyPath) ? m : $"{baseKeyPath}.{m}")
+                    .ToArray());
 
         static bool isReferenceType(Type type)
         {
@@ -101,28 +92,17 @@ public static class ValidationExtensions
         // 参照型のプロパティがあるかどうかをチェックする
         foreach (var pi in targetClass.GetType().GetProperties())
         {
-            if (!isReferenceType(pi.PropertyType))
-            {
-                continue;
-            }
+            if (!isReferenceType(pi.PropertyType)) continue;
 
-            if (pi.PropertyType == typeof(Type))
-            {
-                continue;
-            }
+            if (pi.PropertyType == typeof(Type)) continue;
 
             var pvalue = pi.GetValue(targetClass);
-            if (pvalue is null)
-            {
-                continue;
-            }
+            if (pvalue is null) continue;
 
             validationResults.Clear();
-            validationResults.AddRange(pvalue.ValidateProperties(string.IsNullOrEmpty(baseKeyPath) ? pi.Name : $"{baseKeyPath}.{pi.Name}"));
-            foreach (var validationResult in validationResults)
-            {
-                yield return validationResult;
-            }
+            validationResults.AddRange(
+                pvalue.ValidateProperties(string.IsNullOrEmpty(baseKeyPath) ? pi.Name : $"{baseKeyPath}.{pi.Name}"));
+            foreach (var validationResult in validationResults) yield return validationResult;
         }
     }
 }

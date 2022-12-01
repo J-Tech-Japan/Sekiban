@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+
 namespace Sekiban.Core.Dependency;
 
 public interface IAggregateDependencyDefinition

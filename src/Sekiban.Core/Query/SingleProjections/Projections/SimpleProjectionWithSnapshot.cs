@@ -1,6 +1,7 @@
 using Sekiban.Core.Document;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Partition;
+
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
 public class SimpleProjectionWithSnapshot : ISingleProjection
@@ -8,11 +9,13 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
     private readonly IDocumentRepository _documentRepository;
     private readonly ISingleProjectionFromInitial singleProjectionFromInitial;
 
-    public SimpleProjectionWithSnapshot(IDocumentRepository documentRepository, ISingleProjectionFromInitial singleProjectionFromInitial)
+    public SimpleProjectionWithSnapshot(IDocumentRepository documentRepository,
+        ISingleProjectionFromInitial singleProjectionFromInitial)
     {
         _documentRepository = documentRepository;
         this.singleProjectionFromInitial = singleProjectionFromInitial;
     }
+
     /// <summary>
     ///     スナップショット、メモリキャッシュを使用する通常版
     /// </summary>
@@ -22,24 +25,23 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
     /// <typeparam name="TState"></typeparam>
     /// <typeparam name="TProjector"></typeparam>
     /// <returns></returns>
-    public async Task<TProjection?> GetAggregateAsync<TProjection, TState, TProjector>(Guid aggregateId, int? toVersion = null)
-        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<TState>
+    public async Task<TProjection?> GetAggregateAsync<TProjection, TState, TProjector>(Guid aggregateId,
+        int? toVersion = null)
+        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection,
+        ISingleProjectionStateConvertible<TState>
         where TState : IAggregateCommon
         where TProjector : ISingleProjector<TProjection>, new()
     {
         var projector = new TProjector();
         var aggregate = projector.CreateInitialAggregate(aggregateId);
 
-        var snapshotDocument = await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(TProjection));
+        var snapshotDocument =
+            await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(TProjection));
         var state = snapshotDocument is null ? default : snapshotDocument.ToState<TState>();
-        if (state is not null)
-        {
-            aggregate.ApplySnapshot(state);
-        }
+        if (state is not null) aggregate.ApplySnapshot(state);
         if (toVersion.HasValue && aggregate.Version >= toVersion.Value)
-        {
-            return await singleProjectionFromInitial.GetAggregateFromInitialAsync<TProjection, TProjector>(aggregateId, toVersion.Value);
-        }
+            return await singleProjectionFromInitial.GetAggregateFromInitialAsync<TProjection, TProjector>(aggregateId,
+                toVersion.Value);
         await _documentRepository.GetAllEventsForAggregateIdAsync(
             aggregateId,
             projector.OriginalAggregateType(),
@@ -51,21 +53,14 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
                 {
                     if (!string.IsNullOrWhiteSpace(state?.LastSortableUniqueId) &&
                         string.CompareOrdinal(state?.LastSortableUniqueId, e.SortableUniqueId) > 0)
-                    {
                         throw new SekibanEventDuplicateException();
-                    }
                     aggregate.ApplyEvent(e);
-                    if (toVersion.HasValue && aggregate.Version == toVersion.Value)
-                    {
-                        break;
-                    }
+                    if (toVersion.HasValue && aggregate.Version == toVersion.Value) break;
                 }
             });
-        if (aggregate.Version == 0) { return default; }
+        if (aggregate.Version == 0) return default;
         if (toVersion.HasValue && aggregate.Version < toVersion.Value)
-        {
             throw new SekibanVersionNotReachToSpecificVersion();
-        }
         return aggregate;
     }
 }

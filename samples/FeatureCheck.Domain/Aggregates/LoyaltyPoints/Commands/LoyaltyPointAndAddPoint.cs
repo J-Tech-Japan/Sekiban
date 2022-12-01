@@ -6,32 +6,40 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Event;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Shared;
+
 namespace Customer.Domain.Aggregates.LoyaltyPoints.Commands;
 
-public record CreateLoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : ICreateCommand<LoyaltyPoint>
+public record LoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : ICommand<LoyaltyPoint>
 {
-    public CreateLoyaltyPointAndAddPoint() : this(Guid.Empty, 0)
+    public LoyaltyPointAndAddPoint() : this(Guid.Empty, 0)
     {
     }
-    public Guid GetAggregateId() => ClientId;
 
-    public class Handler : CreateCommandHandlerBase<LoyaltyPoint, CreateLoyaltyPointAndAddPoint>
+    public Guid GetAggregateId()
+    {
+        return ClientId;
+    }
+
+    public class Handler : ICommandHandlerBase<LoyaltyPoint, LoyaltyPointAndAddPoint>
     {
         private readonly ISekibanDateProducer _dateProducer;
         private readonly IAggregateLoader aggregateLoader;
+
         public Handler(IAggregateLoader aggregateLoader, ISekibanDateProducer dateProducer)
         {
             this.aggregateLoader = aggregateLoader;
             _dateProducer = dateProducer;
         }
-        protected override async IAsyncEnumerable<IApplicableEvent<LoyaltyPoint>> ExecCreateCommandAsync(
+
+        public async IAsyncEnumerable<IEventPayload<LoyaltyPoint>> HandleCommandAsync(
             Func<AggregateState<LoyaltyPoint>> getAggregateState,
-            CreateLoyaltyPointAndAddPoint command)
+            LoyaltyPointAndAddPoint command)
         {
             await aggregateLoader.AsAggregateAsync<Client>(getAggregateState().AggregateId);
             yield return new LoyaltyPointCreated(0);
             getAggregateState(); // to reproduce the issue;
-            yield return new LoyaltyPointAdded(_dateProducer.UtcNow, LoyaltyPointReceiveTypeKeys.InitialGift, command.AddingPoint, string.Empty);
+            yield return new LoyaltyPointAdded(_dateProducer.UtcNow, LoyaltyPointReceiveTypeKeys.InitialGift,
+                command.AddingPoint, string.Empty);
         }
     }
 }

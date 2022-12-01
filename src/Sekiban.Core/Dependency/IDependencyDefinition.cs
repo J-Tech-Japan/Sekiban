@@ -1,14 +1,19 @@
+using System.Reflection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Event;
-using System.Reflection;
+
 namespace Sekiban.Core.Dependency;
 
 public interface IDependencyDefinition
 {
-    public virtual SekibanDependencyOptions GetSekibanDependencyOptions() => new SekibanDependencyOptions(
-        new RegisteredEventTypes(GetExecutingAssembly(), SekibanEventSourcingDependency.GetAssembly()),
-        new SekibanAggregateTypes(GetExecutingAssembly(), SekibanEventSourcingDependency.GetAssembly()),
-        GetCommandDependencies().Concat(GetSubscriberDependencies()));
+    public SekibanDependencyOptions GetSekibanDependencyOptions()
+    {
+        return new(
+            new RegisteredEventTypes(GetExecutingAssembly(), SekibanEventSourcingDependency.GetAssembly()),
+            new SekibanAggregateTypes(GetExecutingAssembly(), SekibanEventSourcingDependency.GetAssembly()),
+            GetCommandDependencies().Concat(GetSubscriberDependencies()));
+    }
+
     Assembly GetExecutingAssembly();
     public IEnumerable<Type> GetAggregateListQueryTypes();
     public IEnumerable<Type> GetAggregateQueryTypes();

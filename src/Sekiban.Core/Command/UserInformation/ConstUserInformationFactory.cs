@@ -7,7 +7,14 @@ namespace Sekiban.Core.Command.UserInformation;
 public class ConstUserInformationFactory : IUserInformationFactory
 {
     private readonly string _userInfo;
-    public ConstUserInformationFactory(string userInfo) => _userInfo = userInfo;
 
-    public string GetCurrentUserInformation() => _userInfo ?? string.Empty;
+    public ConstUserInformationFactory(string userInfo)
+    {
+        _userInfo = userInfo;
+    }
+
+    public string GetCurrentUserInformation()
+    {
+        return _userInfo ?? string.Empty;
+    }
 }

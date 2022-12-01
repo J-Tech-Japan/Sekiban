@@ -1,8 +1,9 @@
-using Sekiban.Core.Event;
 using System.Collections.Immutable;
+using Sekiban.Core.Event;
+
 namespace Customer.Domain.Aggregates.RecentActivities.Events;
 
-public record RecentActivityAdded(RecentActivityRecord Record) : IChangedEvent<RecentActivity>
+public record RecentActivityAdded(RecentActivityRecord Record) : IEventPayload<RecentActivity>
 {
     public RecentActivity OnEvent(RecentActivity payload, IEvent ev)
     {
