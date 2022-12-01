@@ -1,31 +1,39 @@
+using System.Reflection;
 using Customer.Domain.Aggregates.Branches;
 using Customer.Domain.Aggregates.Branches.Commands;
 using Customer.Domain.Aggregates.Branches.Queries;
+using Customer.Domain.Aggregates.Clients;
 using Customer.Domain.Aggregates.Clients.Commands;
 using Customer.Domain.Aggregates.Clients.Events;
 using Customer.Domain.Aggregates.Clients.Projections;
 using Customer.Domain.Aggregates.Clients.Queries;
 using Customer.Domain.Aggregates.Clients.Queries.BasicClientFilters;
+using Customer.Domain.Aggregates.LoyaltyPoints;
 using Customer.Domain.Aggregates.LoyaltyPoints.Commands;
 using Customer.Domain.Aggregates.RecentActivities.Commands;
+using Customer.Domain.Aggregates.RecentInMemoryActivities;
 using Customer.Domain.Aggregates.RecentInMemoryActivities.Commands;
 using Customer.Domain.EventSubscribers;
 using Customer.Domain.Projections.ClientLoyaltyPointLists;
 using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
 using Sekiban.Core.Dependency;
-using System.Reflection;
+
 namespace Customer.Domain.Shared;
 
 public class CustomerDependency : DomainDependencyDefinitionBase
 {
-    public override Assembly GetExecutingAssembly() => Assembly.GetExecutingAssembly();
+    public override Assembly GetExecutingAssembly()
+    {
+        return Assembly.GetExecutingAssembly();
+    }
+
     protected override void Define()
     {
         AddAggregate<Branch>()
             .AddCommandHandler<CreateBranch, CreateBranch.Handler>()
             .AddAggregateQuery<BranchExistsQuery>();
 
-        AddAggregate<Aggregates.Clients.Client>()
+        AddAggregate<Client>()
             .AddCommandHandler<CreateClient, CreateClient.Handler>()
             .AddCommandHandler<ChangeClientName, ChangeClientName.Handler>()
             .AddCommandHandler<DeleteClient, DeleteClient.Handler>()
@@ -38,7 +46,7 @@ public class CustomerDependency : DomainDependencyDefinitionBase
             .AddAggregateListQuery<BasicClientQuery>()
             .AddSingleProjectionQuery<ClientNameHistoryProjectionCountQuery>();
 
-        AddAggregate<Aggregates.LoyaltyPoints.LoyaltyPoint>()
+        AddAggregate<LoyaltyPoint>()
             .AddCommandHandler<CreateLoyaltyPoint, CreateLoyaltyPoint.Handler>()
             .AddCommandHandler<LoyaltyPointAndAddPoint, LoyaltyPointAndAddPoint.Handler>()
             .AddCommandHandler<AddLoyaltyPoint, AddLoyaltyPoint.Handler>()
@@ -50,12 +58,11 @@ public class CustomerDependency : DomainDependencyDefinitionBase
             .AddCommandHandler<AddRecentActivity, AddRecentActivity.Handler>()
             .AddCommandHandler<OnlyPublishingAddRecentActivity, OnlyPublishingAddRecentActivity.Handler>();
 
-        AddAggregate<Aggregates.RecentInMemoryActivities.RecentInMemoryActivity>()
+        AddAggregate<RecentInMemoryActivity>()
             .AddCommandHandler<CreateRecentInMemoryActivity, CreateRecentInMemoryActivity.Handler>()
             .AddCommandHandler<AddRecentInMemoryActivity, AddRecentInMemoryActivity.Handler>();
 
         AddMultiProjectionQuery<ClientLoyaltyPointMultiProjectionQuery>();
         AddMultiProjectionListQuery<ClientLoyaltyPointQuery>();
-
     }
 }

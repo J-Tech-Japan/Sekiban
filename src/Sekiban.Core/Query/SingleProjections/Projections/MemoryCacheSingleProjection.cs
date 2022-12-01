@@ -6,6 +6,7 @@ using Sekiban.Core.Partition;
 using Sekiban.Core.Query.UpdateNotice;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
+
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
 public class MemoryCacheSingleProjection : ISingleProjection
@@ -14,6 +15,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
     private readonly IDocumentRepository _documentRepository;
     private readonly IUpdateNotice _updateNotice;
     private readonly ISingleProjectionCache singleProjectionCache;
+
     public MemoryCacheSingleProjection(
         IDocumentRepository documentRepository,
         IUpdateNotice updateNotice,
@@ -25,21 +27,20 @@ public class MemoryCacheSingleProjection : ISingleProjection
         _aggregateSettings = aggregateSettings;
         this.singleProjectionCache = singleProjectionCache;
     }
-    public async Task<TProjection?> GetAggregateAsync<TProjection, TState, TProjector>(Guid aggregateId, int? toVersion = null)
-        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<TState>
+
+    public async Task<TProjection?> GetAggregateAsync<TProjection, TState, TProjector>(Guid aggregateId,
+        int? toVersion = null)
+        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection,
+        ISingleProjectionStateConvertible<TState>
         where TState : IAggregateCommon
         where TProjector : ISingleProjector<TProjection>, new()
     {
         var savedContainer = singleProjectionCache.GetContainer<TProjection, TState>(aggregateId);
         if (savedContainer == null)
-        {
             return await GetAggregateWithoutCacheAsync<TProjection, TState, TProjector>(aggregateId, toVersion);
-        }
         var projector = new TProjector();
         if (savedContainer.SafeState is null && savedContainer?.SafeSortableUniqueId?.Value is null)
-        {
             return await GetAggregateWithoutCacheAsync<TProjection, TState, TProjector>(aggregateId, toVersion);
-        }
         var aggregate = projector.CreateInitialAggregate(aggregateId);
         aggregate.ApplySnapshot(savedContainer.SafeState!);
 
@@ -49,11 +50,9 @@ public class MemoryCacheSingleProjection : ISingleProjection
                 projector.OriginalAggregateType().Name,
                 aggregateId,
                 savedContainer.SafeSortableUniqueId!);
-            if (!updated)
-            {
-                return aggregate;
-            }
+            if (!updated) return aggregate;
         }
+
         var container = new SingleMemoryCacheProjectionContainer<TProjection, TState>(aggregateId);
         await _documentRepository.GetAllEventsForAggregateIdAsync(
             aggregateId,
@@ -67,31 +66,23 @@ public class MemoryCacheSingleProjection : ISingleProjection
                 {
                     if (!string.IsNullOrWhiteSpace(savedContainer?.SafeSortableUniqueId?.Value) &&
                         string.CompareOrdinal(savedContainer?.SafeSortableUniqueId?.Value, e.SortableUniqueId) > 0)
-                    {
                         throw new SekibanEventDuplicateException();
-                    }
-                    if (container.LastSortableUniqueId == null && e.GetSortableUniqueId().LaterThan(targetSafeId) && aggregate.Version > 0)
+                    if (container.LastSortableUniqueId == null && e.GetSortableUniqueId().LaterThan(targetSafeId) &&
+                        aggregate.Version > 0)
                     {
                         container.SafeState = aggregate.ToState();
                         container.SafeSortableUniqueId = container.SafeState.LastSortableUniqueId;
                     }
+
                     aggregate.ApplyEvent(e);
                     container.LastSortableUniqueId = e.SortableUniqueId;
-                    if (e.GetSortableUniqueId().LaterThan(targetSafeId))
-                    {
-                        container.UnsafeEvents.Add(e);
-                    }
-                    if (toVersion.HasValue && aggregate.Version == toVersion.Value)
-                    {
-                        break;
-                    }
+                    if (e.GetSortableUniqueId().LaterThan(targetSafeId)) container.UnsafeEvents.Add(e);
+                    if (toVersion.HasValue && aggregate.Version == toVersion.Value) break;
                 }
             });
-        if (aggregate.Version == 0) { return default; }
+        if (aggregate.Version == 0) return default;
         if (toVersion.HasValue && aggregate.Version < toVersion.Value)
-        {
             throw new SekibanVersionNotReachToSpecificVersion();
-        }
         container.State = aggregate.ToState();
         if (container.LastSortableUniqueId != null &&
             container.SafeSortableUniqueId == null &&
@@ -100,15 +91,15 @@ public class MemoryCacheSingleProjection : ISingleProjection
             container.SafeState = container.State;
             container.SafeSortableUniqueId = container.LastSortableUniqueId;
         }
-        if (container.SafeState is not null)
-        {
-            singleProjectionCache.SetContainer(aggregateId, container);
-        }
+
+        if (container.SafeState is not null) singleProjectionCache.SetContainer(aggregateId, container);
         return aggregate;
     }
 
-    private async Task<TProjection?> GetAggregateWithoutCacheAsync<TProjection, TState, TProjector>(Guid aggregateId, int? toVersion = null)
-        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<TState>
+    private async Task<TProjection?> GetAggregateWithoutCacheAsync<TProjection, TState, TProjector>(Guid aggregateId,
+        int? toVersion = null)
+        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection,
+        ISingleProjectionStateConvertible<TState>
         where TState : IAggregateCommon
         where TProjector : ISingleProjector<TProjection>, new()
     {
@@ -116,16 +107,12 @@ public class MemoryCacheSingleProjection : ISingleProjection
         var aggregate = projector.CreateInitialAggregate(aggregateId);
         var container = new SingleMemoryCacheProjectionContainer<TProjection, TState>(aggregateId);
 
-        var snapshotDocument = await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(TProjection));
+        var snapshotDocument =
+            await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(TProjection));
         var state = snapshotDocument is null ? default : snapshotDocument.ToState<TState>();
-        if (state is not null)
-        {
-            aggregate.ApplySnapshot(state);
-        }
+        if (state is not null) aggregate.ApplySnapshot(state);
         if (toVersion.HasValue && aggregate.Version >= toVersion.Value)
-        {
             return await GetAggregateFromInitialAsync<TProjection, TState, TProjector>(aggregateId, toVersion.Value);
-        }
 
         await _documentRepository.GetAllEventsForAggregateIdAsync(
             aggregateId,
@@ -140,31 +127,23 @@ public class MemoryCacheSingleProjection : ISingleProjection
                 {
                     if (!string.IsNullOrWhiteSpace(state?.LastSortableUniqueId) &&
                         string.CompareOrdinal(state?.LastSortableUniqueId, e.SortableUniqueId) > 0)
-                    {
                         throw new SekibanEventDuplicateException();
-                    }
-                    if (container.LastSortableUniqueId == null && e.GetSortableUniqueId().EarlierThan(targetSafeId) && aggregate.Version > 0)
+                    if (container.LastSortableUniqueId == null && e.GetSortableUniqueId().EarlierThan(targetSafeId) &&
+                        aggregate.Version > 0)
                     {
                         container.SafeState = aggregate.ToState();
                         container.SafeSortableUniqueId = container.SafeState.LastSortableUniqueId;
                     }
+
                     aggregate.ApplyEvent(e);
                     container.LastSortableUniqueId = e.GetSortableUniqueId();
-                    if (e.GetSortableUniqueId().LaterThan(targetSafeId))
-                    {
-                        container.UnsafeEvents.Add(e);
-                    }
-                    if (toVersion.HasValue && aggregate.Version == toVersion.Value)
-                    {
-                        break;
-                    }
+                    if (e.GetSortableUniqueId().LaterThan(targetSafeId)) container.UnsafeEvents.Add(e);
+                    if (toVersion.HasValue && aggregate.Version == toVersion.Value) break;
                 }
             });
-        if (aggregate.Version == 0) { return default; }
+        if (aggregate.Version == 0) return default;
         if (toVersion.HasValue && aggregate.Version < toVersion.Value)
-        {
             throw new SekibanVersionNotReachToSpecificVersion();
-        }
         container.State = aggregate.ToState();
         if (container.LastSortableUniqueId != null &&
             container.SafeSortableUniqueId == null &&
@@ -173,15 +152,15 @@ public class MemoryCacheSingleProjection : ISingleProjection
             container.SafeState = container.State;
             container.SafeSortableUniqueId = container.LastSortableUniqueId;
         }
-        if (container.SafeState is not null)
-        {
-            singleProjectionCache.SetContainer(aggregateId, container);
-        }
+
+        if (container.SafeState is not null) singleProjectionCache.SetContainer(aggregateId, container);
         return aggregate;
     }
 
-    public async Task<TProjection?> GetAggregateFromInitialAsync<TProjection, TState, TProjector>(Guid aggregateId, int? toVersion)
-        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<TState>
+    public async Task<TProjection?> GetAggregateFromInitialAsync<TProjection, TState, TProjector>(Guid aggregateId,
+        int? toVersion)
+        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection,
+        ISingleProjectionStateConvertible<TState>
         where TState : IAggregateCommon
         where TProjector : ISingleProjector<TProjection>, new()
     {
@@ -197,25 +176,22 @@ public class MemoryCacheSingleProjection : ISingleProjection
             events =>
             {
                 if (events.Count() != events.Select(m => m.Id).Distinct().Count())
-                {
                     throw new SekibanEventDuplicateException();
-                }
-                if (addFinished) { return; }
+                if (addFinished) return;
                 var someSafeId = SortableUniqueIdValue.Generate(SekibanDateProducer.GetRegistered().UtcNow, Guid.Empty);
                 var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
                 foreach (var e in events)
                 {
-                    if (container.LastSortableUniqueId == null && e.GetSortableUniqueId().EarlierThan(targetSafeId) && aggregate.Version > 0)
+                    if (container.LastSortableUniqueId == null && e.GetSortableUniqueId().EarlierThan(targetSafeId) &&
+                        aggregate.Version > 0)
                     {
                         container.SafeState = aggregate.ToState();
                         container.SafeSortableUniqueId = container.SafeState.LastSortableUniqueId;
                     }
+
                     aggregate.ApplyEvent(e);
                     container.LastSortableUniqueId = e.GetSortableUniqueId();
-                    if (e.GetSortableUniqueId().LaterThan(targetSafeId))
-                    {
-                        container.UnsafeEvents.Add(e);
-                    }
+                    if (e.GetSortableUniqueId().LaterThan(targetSafeId)) container.UnsafeEvents.Add(e);
                     if (toVersion.HasValue && toVersion.Value == aggregate.Version)
                     {
                         addFinished = true;
@@ -223,7 +199,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
                     }
                 }
             });
-        if (aggregate.Version == 0) { return default; }
+        if (aggregate.Version == 0) return default;
 
         container.State = aggregate.ToState();
         if (container.LastSortableUniqueId != null &&
@@ -233,10 +209,8 @@ public class MemoryCacheSingleProjection : ISingleProjection
             container.SafeState = container.State;
             container.SafeSortableUniqueId = container.LastSortableUniqueId;
         }
-        if (container.SafeState is not null)
-        {
-            singleProjectionCache.SetContainer(aggregateId, container);
-        }
+
+        if (container.SafeState is not null) singleProjectionCache.SetContainer(aggregateId, container);
         return aggregate;
     }
 }

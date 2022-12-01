@@ -7,7 +7,11 @@ public class SekibanDateProducer : ISekibanDateProducer
     public DateTime UtcNow => DateTime.UtcNow;
     public DateTime Today => DateTime.Today;
 
-    public static ISekibanDateProducer GetRegistered() => _registered;
+    public static ISekibanDateProducer GetRegistered()
+    {
+        return _registered;
+    }
+
     public static void Register(ISekibanDateProducer sekibanDateProducer)
     {
         _registered = sekibanDateProducer;

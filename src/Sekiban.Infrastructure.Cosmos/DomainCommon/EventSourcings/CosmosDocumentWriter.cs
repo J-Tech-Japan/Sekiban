@@ -2,6 +2,7 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Document;
 using Sekiban.Core.Event;
 using Sekiban.Core.PubSub;
+
 namespace Sekiban.Infrastructure.Cosmos.DomainCommon.EventSourcings;
 
 public class CosmosDocumentWriter : IDocumentPersistentWriter
@@ -19,7 +20,6 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
         if (document.DocumentType == DocumentType.Event)
-        {
             await _cosmosDbFactory.CosmosActionAsync(
                 document.DocumentType,
                 aggregateContainerGroup,
@@ -27,9 +27,7 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
                 {
                     await container.CreateItemAsync(document, new PartitionKey(document.PartitionKey));
                 });
-        }
         else
-        {
             await _cosmosDbFactory.CosmosActionAsync(
                 document.DocumentType,
                 aggregateContainerGroup,
@@ -37,7 +35,6 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
                 {
                     await container.CreateItemAsync(document, new PartitionKey(document.PartitionKey));
                 });
-        }
     }
 
     public async Task SaveAndPublishEvent<TEvent>(TEvent ev, Type aggregateType)
@@ -47,10 +44,7 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
         await _cosmosDbFactory.CosmosActionAsync(
             DocumentType.Event,
             aggregateContainerGroup,
-            async container =>
-            {
-                await container.UpsertItemAsync<dynamic>(ev, new PartitionKey(ev.PartitionKey));
-            });
+            async container => { await container.UpsertItemAsync<dynamic>(ev, new PartitionKey(ev.PartitionKey)); });
         await _eventPublisher.PublishAsync(ev);
     }
 }

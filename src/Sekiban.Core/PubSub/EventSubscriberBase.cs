@@ -1,5 +1,6 @@
 using MediatR;
 using Sekiban.Core.Event;
+
 namespace Sekiban.Core.PubSub;
 
 public abstract class EventSubscriberBase<TEventPayload> : INotificationHandler<Event<TEventPayload>>

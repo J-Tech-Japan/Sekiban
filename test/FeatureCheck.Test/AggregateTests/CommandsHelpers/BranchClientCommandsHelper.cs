@@ -1,7 +1,8 @@
+using System;
 using Customer.Domain.Aggregates.Branches.Commands;
 using Customer.Domain.Aggregates.Clients.Commands;
 using Sekiban.Testing.Command;
-using System;
+
 namespace Customer.Test.AggregateTests.CommandsHelpers;
 
 public class BranchClientCommandsHelper
@@ -17,6 +18,7 @@ public class BranchClientCommandsHelper
     {
         ex.ExecuteCommand(new CreateBranch(BranchName), BranchId);
     }
+
     public static void CreateClient(TestCommandExecutor ex)
     {
         CreateBranches(ex);

@@ -1,11 +1,12 @@
-using Customer.Domain.Aggregates.Branches.Commands;
-using Customer.Domain.Aggregates.Clients.Commands;
-using Customer.Domain.Aggregates.LoyaltyPoints.Commands;
-using Customer.Domain.Aggregates.LoyaltyPoints.Events;
 using System;
 using System.Linq;
+using Customer.Domain.Aggregates.Branches.Commands;
+using Customer.Domain.Aggregates.Clients.Commands;
+using Customer.Domain.Aggregates.LoyaltyPoints;
+using Customer.Domain.Aggregates.LoyaltyPoints.Commands;
+using Customer.Domain.Aggregates.LoyaltyPoints.Events;
 using Xunit;
-using LoyaltyPoint = Customer.Domain.Aggregates.LoyaltyPoints.LoyaltyPoint;
+
 namespace Customer.Test.AggregateTests;
 
 public class LoyaltyPointTest : AggregateTestBase<LoyaltyPoint>
@@ -22,8 +23,5 @@ public class LoyaltyPointTest : AggregateTestBase<LoyaltyPoint>
             .Select(m => m.GetPayload() is LoyaltyPointAdded added ? added.HappenedDate : DateTime.Now)
             .First();
         ThenPayloadIs(new LoyaltyPoint(1000, eventTime, false));
-
-
-
     }
 }

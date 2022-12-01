@@ -1,11 +1,11 @@
 using Sekiban.Core.Document;
 using Sekiban.Core.History;
 using Sekiban.Core.Partition;
+
 namespace Sekiban.Core.Event;
 
 public record Event<TEventPayload> : DocumentBase, IEvent where TEventPayload : IEventPayloadCommon
 {
-
     public Event()
     {
     }
@@ -19,6 +19,7 @@ public record Event<TEventPayload> : DocumentBase, IEvent where TEventPayload : 
         Payload = eventPayload;
         AggregateType = aggregateType.Name;
     }
+
     public TEventPayload Payload { get; init; } = default!;
 
     public string AggregateType { get; init; } = null!;
@@ -30,8 +31,15 @@ public record Event<TEventPayload> : DocumentBase, IEvent where TEventPayload : 
 
     public List<CallHistory> CallHistories { get; init; } = new();
 
-    public IEventPayloadCommon GetPayload() => Payload;
-    public T? GetPayload<T>() where T : class, IEventPayloadCommon => Payload as T;
+    public IEventPayloadCommon GetPayload()
+    {
+        return Payload;
+    }
+
+    public T? GetPayload<T>() where T : class, IEventPayloadCommon
+    {
+        return Payload as T;
+    }
 
     public List<CallHistory> GetCallHistoriesIncludesItself()
     {
@@ -41,6 +49,8 @@ public record Event<TEventPayload> : DocumentBase, IEvent where TEventPayload : 
         return histories;
     }
 
-    public static Event<TEventPayload> GenerateEvent(Guid aggregateId, Type aggregateType, TEventPayload eventPayload) =>
-        new(aggregateId, aggregateType, eventPayload);
+    public static Event<TEventPayload> GenerateEvent(Guid aggregateId, Type aggregateType, TEventPayload eventPayload)
+    {
+        return new(aggregateId, aggregateType, eventPayload);
+    }
 }

@@ -1,14 +1,17 @@
 using Sekiban.Core.Document;
 using Sekiban.Core.History;
 using Sekiban.Core.Partition;
+
 namespace Sekiban.Core.Command;
 
 public record CommandDocument<T> : DocumentBase, IDocument, ICallHistories where T : ICommandCommon
 {
+    public CommandDocument()
+    {
+    }
 
-    public CommandDocument() { }
-
-    public CommandDocument(Guid aggregateId, T commandPayload, Type aggregateType, List<CallHistory>? callHistories = null) : base(
+    public CommandDocument(Guid aggregateId, T commandPayload, Type aggregateType,
+        List<CallHistory>? callHistories = null) : base(
         aggregateId,
         PartitionKeyGenerator.ForCommand(aggregateId, aggregateType),
         DocumentType.Command,
@@ -17,6 +20,7 @@ public record CommandDocument<T> : DocumentBase, IDocument, ICallHistories where
         Payload = commandPayload;
         CallHistories = callHistories ?? new List<CallHistory>();
     }
+
     /// <summary>
     ///     コマンド内容
     /// </summary>

@@ -2,12 +2,11 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Xunit;
+
 namespace Customer.Test;
 
 public class ListTest
 {
-
-
     [Fact]
     public void AppendImmutableTest()
     {
@@ -17,7 +16,6 @@ public class ListTest
 
         Assert.Empty(immutable);
         Assert.Single(second);
-
     }
 
     [Fact]
@@ -29,7 +27,7 @@ public class ListTest
 
         Assert.Empty(list);
         Assert.Single(second);
-
     }
+
     public record Record(string Name, int Age);
 }

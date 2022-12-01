@@ -1,4 +1,5 @@
 using Sekiban.Core.Aggregate;
+
 namespace Sekiban.Core.Query.SingleProjections;
 
 public record SingleProjectionState<TPayload>(
@@ -9,5 +10,8 @@ public record SingleProjectionState<TPayload>(
     int AppliedSnapshotVersion,
     int Version) : ISingleProjectionPayload, IAggregateCommon where TPayload : ISingleProjectionPayload
 {
-    public bool GetIsDeleted() => Payload is IDeletable { IsDeleted: true };
+    public bool GetIsDeleted()
+    {
+        return Payload is IDeletable { IsDeleted: true };
+    }
 }

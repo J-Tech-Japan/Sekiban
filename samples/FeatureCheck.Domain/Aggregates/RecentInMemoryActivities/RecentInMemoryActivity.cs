@@ -1,5 +1,6 @@
-using Sekiban.Core.Aggregate;
 using System.Collections.Immutable;
+using Sekiban.Core.Aggregate;
+
 namespace Customer.Domain.Aggregates.RecentInMemoryActivities;
 
 [AggregateContainerGroup(AggregateContainerGroup.InMemoryContainer)]

@@ -1,4 +1,5 @@
 using Customer.Domain.Aggregates.LoyaltyPoints.Consts;
+
 namespace Customer.Domain.Aggregates.LoyaltyPoints.ValueObjects;
 
 public record LoyaltyPointUsageType : IValueObject<LoyaltyPointUsageTypeKeys>
@@ -13,16 +14,23 @@ public record LoyaltyPointUsageType : IValueObject<LoyaltyPointUsageTypeKeys>
         { (int)LoyaltyPointUsageTypeKeys.PointExchange, "ポイント交換" },
         { (int)LoyaltyPointUsageTypeKeys.RestaurantCoupon, "レストラン利用券" }
     };
+
     public LoyaltyPointUsageType(LoyaltyPointUsageTypeKeys receiveType)
     {
         if (!Enum.IsDefined(typeof(LoyaltyPointUsageTypeKeys), receiveType))
-        {
             throw new InvalidValueException("登録されていないポイント使用区分です。");
-        }
         Value = receiveType;
     }
+
     public LoyaltyPointUsageTypeKeys Value { get; }
 
-    public static implicit operator LoyaltyPointUsageTypeKeys(LoyaltyPointUsageType vo) => vo.Value;
-    public static implicit operator LoyaltyPointUsageType(LoyaltyPointUsageTypeKeys v) => new LoyaltyPointUsageType(v);
+    public static implicit operator LoyaltyPointUsageTypeKeys(LoyaltyPointUsageType vo)
+    {
+        return vo.Value;
+    }
+
+    public static implicit operator LoyaltyPointUsageType(LoyaltyPointUsageTypeKeys v)
+    {
+        return new(v);
+    }
 }

@@ -1,14 +1,16 @@
-using Sekiban.Core.Query.SingleProjections;
 using System.ComponentModel.DataAnnotations;
+using Sekiban.Core.Query.SingleProjections;
+
 namespace Sekiban.Core.Aggregate;
 
 public record AggregateState<TPayload> : IAggregateCommon where TPayload : IAggregatePayload, new()
 {
-
     /// <summary>
     ///     スナップショットからの再構築用。
     /// </summary>
-    public AggregateState() { }
+    public AggregateState()
+    {
+    }
 
     /// <summary>
     ///     一般の構築用。
@@ -23,13 +25,14 @@ public record AggregateState<TPayload> : IAggregateCommon where TPayload : IAggr
         AppliedSnapshotVersion = aggregateCommon.AppliedSnapshotVersion;
     }
 
-    public AggregateState(IAggregateCommon aggregateCommon, TPayload payload) : this(aggregateCommon) => Payload = payload;
+    public AggregateState(IAggregateCommon aggregateCommon, TPayload payload) : this(aggregateCommon)
+    {
+        Payload = payload;
+    }
 
     public TPayload Payload { get; init; } = new();
 
-    [Required]
-    [Description("集約ID")]
-    public Guid AggregateId { get; init; }
+    [Required] [Description("集約ID")] public Guid AggregateId { get; init; }
 
     [Required]
     [Description("集約の現在のバージョン")]
@@ -46,14 +49,21 @@ public record AggregateState<TPayload> : IAggregateCommon where TPayload : IAggr
     [Required]
     [Description("並べ替え可能なユニークID（自動付与）、このIDの順番でイベントは常に順番を決定する")]
     public string LastSortableUniqueId { get; init; } = string.Empty;
-    public bool GetIsDeleted() => Payload is IDeletable { IsDeleted: true };
 
-    public dynamic GetComparableObject(AggregateState<TPayload> original, bool copyVersion = true) => this with
+    public bool GetIsDeleted()
     {
-        AggregateId = original.AggregateId,
-        Version = copyVersion ? original.Version : Version,
-        LastEventId = original.LastEventId,
-        AppliedSnapshotVersion = original.AppliedSnapshotVersion,
-        LastSortableUniqueId = original.LastSortableUniqueId
-    };
+        return Payload is IDeletable { IsDeleted: true };
+    }
+
+    public dynamic GetComparableObject(AggregateState<TPayload> original, bool copyVersion = true)
+    {
+        return this with
+        {
+            AggregateId = original.AggregateId,
+            Version = copyVersion ? original.Version : Version,
+            LastEventId = original.LastEventId,
+            AppliedSnapshotVersion = original.AppliedSnapshotVersion,
+            LastSortableUniqueId = original.LastSortableUniqueId
+        };
+    }
 }

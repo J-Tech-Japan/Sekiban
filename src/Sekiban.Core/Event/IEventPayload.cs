@@ -1,4 +1,5 @@
 using Sekiban.Core.Aggregate;
+
 namespace Sekiban.Core.Event;
 
 public interface IEventPayload<TAggregatePayload> : IEventPayloadCommon where TAggregatePayload : IAggregatePayload

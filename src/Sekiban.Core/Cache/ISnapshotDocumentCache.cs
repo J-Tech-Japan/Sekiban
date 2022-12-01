@@ -1,4 +1,5 @@
 using Sekiban.Core.Snapshot;
+
 namespace Sekiban.Core.Cache;
 
 public interface ISnapshotDocumentCache

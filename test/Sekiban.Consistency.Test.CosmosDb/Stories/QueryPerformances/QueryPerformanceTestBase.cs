@@ -1,5 +1,8 @@
+using System.Linq;
+using System.Threading.Tasks;
 using Customer.Domain.Aggregates.Branches;
 using Customer.Domain.Aggregates.Branches.Commands;
+using Customer.Domain.Aggregates.Clients;
 using Customer.Domain.Aggregates.Clients.Commands;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
@@ -8,11 +11,9 @@ using Sekiban.Core.Document;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Infrastructure.Cosmos;
-using System.Linq;
-using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
-using Client = Customer.Domain.Aggregates.Clients.Client;
+
 namespace SampleProjectStoryXTest.Stories.QueryPerformances;
 
 public abstract class QueryPerformanceTestBase : TestBase
@@ -25,10 +26,12 @@ public abstract class QueryPerformanceTestBase : TestBase
     protected readonly ICommandExecutor CommandExecutor;
     protected readonly IMultiProjectionService MultiProjectionService;
     protected readonly IAggregateLoader ProjectionService;
+
     protected QueryPerformanceTestBase(
         SekibanTestFixture sekibanTestFixture,
         ITestOutputHelper testOutputHelper,
-        ServiceCollectionExtensions.MultiProjectionType multiProjectionType) : base(sekibanTestFixture, false, multiProjectionType)
+        ServiceCollectionExtensions.MultiProjectionType multiProjectionType) : base(sekibanTestFixture, false,
+        multiProjectionType)
     {
         _testOutputHelper = testOutputHelper;
         _cosmosDbFactory = GetService<CosmosDbFactory>();
@@ -39,13 +42,16 @@ public abstract class QueryPerformanceTestBase : TestBase
         _hybridStoreManager = GetService<HybridStoreManager>();
         MultiProjectionService = GetService<IMultiProjectionService>();
     }
+
     [Fact]
     public void TestQuery1()
     {
         // 先に全データを削除する
         _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default).Wait();
         _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Dissolvable).Wait();
-        _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command, AggregateContainerGroup.Dissolvable).Wait();
+        _cosmosDbFactory
+            .DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command, AggregateContainerGroup.Dissolvable)
+            .Wait();
         _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command).Wait();
     }
 
@@ -82,10 +88,7 @@ public abstract class QueryPerformanceTestBase : TestBase
                 = await CommandExecutor.ExecCommandAsync<Branch, CreateBranch>(
                     new CreateBranch($"CreateBranch {i}"));
             var commandDocument = branchResult.CommandId;
-            if (commandDocument == null)
-            {
-                continue;
-            }
+            if (commandDocument == null) continue;
             var branchId = branchResult.AggregateId;
             Assert.NotNull(branchResult);
             Assert.NotNull(branchResult.AggregateId);
@@ -100,8 +103,8 @@ public abstract class QueryPerformanceTestBase : TestBase
                 _testOutputHelper.WriteLine($"create client {clientList.Count}");
                 var firstClientCount = clientList.Count;
                 var (clientCreateResult, events2) =
-                    await CommandExecutor.ExecCommandAsync<Client, Customer.Domain.Aggregates.Clients.Commands.CreateClient>(
-                        new Customer.Domain.Aggregates.Clients.Commands.CreateClient(
+                    await CommandExecutor.ExecCommandAsync<Client, CreateClient>(
+                        new CreateClient(
                             branchId!.Value,
                             $"clientname {i}-{j}",
                             $"test{i}.{j}.{id}@example.com"));
@@ -111,7 +114,8 @@ public abstract class QueryPerformanceTestBase : TestBase
                 for (var k = 0; k < changeNameCount; k++)
                 {
                     _testOutputHelper.WriteLine($"client change name {k + 1}");
-                    var aggregate = await ProjectionService.AsDefaultStateAsync<Client>(clientCreateResult.AggregateId!.Value);
+                    var aggregate =
+                        await ProjectionService.AsDefaultStateAsync<Client>(clientCreateResult.AggregateId!.Value);
                     _testOutputHelper.WriteLine($"aggregate.version = {aggregate?.Version}");
                     await CommandExecutor.ExecCommandAsync<Client, ChangeClientName>(
                         new ChangeClientName(clientCreateResult.AggregateId!.Value, $"change{i}-{j}-{k}")

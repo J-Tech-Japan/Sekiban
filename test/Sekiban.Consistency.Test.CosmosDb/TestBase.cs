@@ -1,11 +1,12 @@
+using System;
+using System.Reflection;
 using Microsoft.DotNet.PlatformAbstractions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Dependency;
 using Sekiban.Testing.Story;
-using System;
-using System.Reflection;
 using Xunit;
+
 namespace SampleProjectStoryXTest;
 
 [Collection("Sequential")]
@@ -17,27 +18,31 @@ public class TestBase : IClassFixture<TestBase.SekibanTestFixture>, IDisposable
     public TestBase(
         SekibanTestFixture sekibanTestFixture,
         bool inMemory = false,
-        ServiceCollectionExtensions.MultiProjectionType multiProjectionType = ServiceCollectionExtensions.MultiProjectionType.MemoryCache)
+        ServiceCollectionExtensions.MultiProjectionType multiProjectionType =
+            ServiceCollectionExtensions.MultiProjectionType.MemoryCache)
     {
         _sekibanTestFixture = sekibanTestFixture;
-        _serviceProvider = DependencyHelper.CreateDefaultProvider(sekibanTestFixture, inMemory, null, multiProjectionType);
+        _serviceProvider =
+            DependencyHelper.CreateDefaultProvider(sekibanTestFixture, inMemory, null, multiProjectionType);
     }
+
     public void Dispose()
     {
         Dispose(true);
         GC.SuppressFinalize(this);
     }
+
     protected virtual void Dispose(bool disposing)
     {
-        if (disposing) { }
+        if (disposing)
+        {
+        }
     }
+
     public T GetService<T>()
     {
         var toreturn = _serviceProvider.GetService<T>();
-        if (toreturn is null)
-        {
-            throw new Exception("オブジェクトが登録されていません。" + typeof(T));
-        }
+        if (toreturn is null) throw new Exception("オブジェクトが登録されていません。" + typeof(T));
         return toreturn;
     }
 
@@ -51,6 +56,7 @@ public class TestBase : IClassFixture<TestBase.SekibanTestFixture>, IDisposable
                 .AddUserSecrets(Assembly.GetExecutingAssembly());
             Configuration = builder.Build();
         }
+
         public IConfigurationRoot Configuration { get; set; }
     }
 }

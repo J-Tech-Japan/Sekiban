@@ -1,4 +1,5 @@
 using Sekiban.Core.Aggregate;
+
 namespace ShippingContext.Aggregates.Products;
 
 public record Product(string Name, string Code, decimal Price) : IAggregatePayload

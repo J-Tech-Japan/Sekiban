@@ -2,7 +2,6 @@ namespace Sekiban.Core.Setting;
 
 public class AggregateSettingHelper
 {
-
     public AggregateSettingHelper()
     {
         UseHybridDefault = false;
@@ -27,6 +26,7 @@ public class AggregateSettingHelper
         UseUpdateMarker = useUpdateMarker;
         Exceptions = exceptions;
     }
+
     public bool UseHybridDefault { get; }
     public bool TakeSnapshotDefault { get; }
     public int SnapshotFrequencyDefault { get; }

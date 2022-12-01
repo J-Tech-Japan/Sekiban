@@ -1,5 +1,6 @@
 using Sekiban.Core.Shared;
 using Xunit;
+
 namespace SampleProjectStoryXTest;
 
 public class VersioningTest
@@ -14,9 +15,12 @@ public class VersioningTest
         Assert.Equal("Location", v2?.Location);
         Assert.Equal(10, v2?.Point);
     }
+
     public record TestV1(string Name, string Location);
+
     public record TestV2(string Name, string Location, int Point = 10);
 }
+
 public class VersioningTest2
 {
     [Fact]
@@ -29,9 +33,12 @@ public class VersioningTest2
         Assert.Equal("Location", v2?.Location);
         Assert.Equal(0, v2?.Point);
     }
+
     public record TestV1(string Name, string Location);
+
     public record TestV2(string Name, string Location, int Point);
 }
+
 public class VersioningTest3
 {
     [Fact]
@@ -44,7 +51,9 @@ public class VersioningTest3
         Assert.Equal("Location", v2?.Location);
         Assert.Equal(10, v2?.Point);
     }
+
     public record TestV1(string Name, string Location);
+
     public record TestV2(string Name, string Location)
     {
         public int Point { get; init; } = 10;

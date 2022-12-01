@@ -1,12 +1,13 @@
+using System.Collections.Generic;
+using System.Linq;
 using Customer.Domain.Aggregates.Branches.Commands;
 using Customer.Domain.Aggregates.Clients.Commands;
 using Customer.Domain.Aggregates.Clients.Projections;
 using Customer.Domain.Shared;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Testing;
-using System.Collections.Generic;
-using System.Linq;
 using Xunit;
+
 namespace Customer.Test.AggregateTests;
 
 public class ClientSingleProjectionListTest : UnifiedTestBase<CustomerDependency>

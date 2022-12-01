@@ -4,11 +4,8 @@ public class SekibanContext : ISekibanContext
 {
     public const string Default = "Default";
 
-    public string SettingGroupIdentifier
-    {
-        get;
-        set;
-    } = Default;
+    public string SettingGroupIdentifier { get; set; } = Default;
+
     public async Task<T> SekibanActionAsync<T>(string sekibanIdentifier, Func<Task<T>> action)
     {
         var identifierToRestore = SettingGroupIdentifier;
@@ -17,6 +14,7 @@ public class SekibanContext : ISekibanContext
         SettingGroupIdentifier = identifierToRestore;
         return returnValue;
     }
+
     public async Task SekibanActionAsync(string sekibanIdentifier, Func<Task> action)
     {
         var identifierToRestore = SettingGroupIdentifier;

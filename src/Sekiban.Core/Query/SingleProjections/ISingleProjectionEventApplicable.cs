@@ -1,4 +1,5 @@
 using Sekiban.Core.Event;
+
 namespace Sekiban.Core.Query.SingleProjections;
 
 public interface ISingleProjectionEventApplicable<TProjectionPayload> : ISingleProjectionPayload

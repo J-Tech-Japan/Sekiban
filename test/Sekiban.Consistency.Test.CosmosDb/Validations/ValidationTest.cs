@@ -1,20 +1,17 @@
-using Sekiban.Core.Validation;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using System.Linq;
+using Sekiban.Core.Validation;
 using Xunit;
+
 namespace SampleProjectStoryXTest.Validations;
 
 public class Member
 {
-    [Required]
-    [MaxLength(20)]
-    public string Name { get; init; } = default!;
+    [Required] [MaxLength(20)] public string Name { get; init; } = default!;
 
-    [Required]
-    [Range(18, 75)]
-    public int Age { get; init; }
+    [Required] [Range(18, 75)] public int Age { get; init; }
 
     public int? No { get; init; }
 
@@ -32,6 +29,7 @@ public class Member
 
     public List<Member> Friends { get; init; } = new();
 }
+
 public class ValidationTest
 {
     [Fact(DisplayName = "検証成功")]
@@ -54,7 +52,8 @@ public class ValidationTest
     [Fact(DisplayName = "検証失敗_名前の桁あふれ")]
     public void Test3()
     {
-        var m = new Member { Name = "YAMADA Taroooooooooooooooo", Age = 25, Tel = "090-1111-2222", Email = "hoge@example.com" };
+        var m = new Member
+            { Name = "YAMADA Taroooooooooooooooo", Age = 25, Tel = "090-1111-2222", Email = "hoge@example.com" };
         var vresults = m.ValidateProperties();
         Assert.True(vresults?.Any() ?? false);
     }
@@ -107,7 +106,8 @@ public class ValidationTest
             Age = 25,
             Tel = "090-1111-2222",
             Email = "hoge@example.com",
-            Partner = new Member { Name = "YAMADA Hanakoooooooooooooo", Age = 25, Tel = "080-1111-2222", Email = "hana@example.com" }
+            Partner = new Member
+                { Name = "YAMADA Hanakoooooooooooooo", Age = 25, Tel = "080-1111-2222", Email = "hana@example.com" }
         };
         var vresults = m.ValidateProperties();
         Assert.True(vresults?.Any() ?? false);
@@ -123,8 +123,10 @@ public class ValidationTest
             Age = 25,
             Tel = "090-1111-2222",
             Email = "hoge@example.com",
-            Partner = new Member { Name = "YAMADA Hanako", Age = 25, Tel = "080-1111-2222", Email = "hana@example.com" },
-            Friends = new List<Member> { new() { Name = "SUZUKI Ichiro", Age = 30 }, new() { Name = "Nakata Hidetoshi", Age = 28 } }
+            Partner =
+                new Member { Name = "YAMADA Hanako", Age = 25, Tel = "080-1111-2222", Email = "hana@example.com" },
+            Friends = new List<Member>
+                { new() { Name = "SUZUKI Ichiro", Age = 30 }, new() { Name = "Nakata Hidetoshi", Age = 28 } }
         };
         var vresults = m.ValidateProperties();
         Assert.False(vresults?.Any() ?? false);
@@ -139,8 +141,10 @@ public class ValidationTest
             Age = 25,
             Tel = "090-1111-2222",
             Email = "hoge@example.com",
-            Partner = new Member { Name = "YAMADA Hanako", Age = 25, Tel = "080-1111-2222", Email = "hana@example.com" },
-            Friends = new List<Member> { new() { Name = "SUZUKI Ichiro", Age = 30 }, new() { Name = "Nakata Hidetoshi", Age = 90 } }
+            Partner =
+                new Member { Name = "YAMADA Hanako", Age = 25, Tel = "080-1111-2222", Email = "hana@example.com" },
+            Friends = new List<Member>
+                { new() { Name = "SUZUKI Ichiro", Age = 30 }, new() { Name = "Nakata Hidetoshi", Age = 90 } }
         };
         var vresults = m.ValidateProperties();
         Assert.True(vresults?.Any() ?? false);

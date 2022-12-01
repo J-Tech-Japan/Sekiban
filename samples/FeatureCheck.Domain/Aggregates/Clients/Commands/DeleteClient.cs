@@ -2,18 +2,26 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Event;
+
 namespace Customer.Domain.Aggregates.Clients.Commands;
 
-public record DeleteClient(Guid ClientId) : IVersionValidationCommand<Clients.Client>
+public record DeleteClient(Guid ClientId) : IVersionValidationCommand<Client>
 {
-    public DeleteClient() : this(Guid.Empty) { }
+    public DeleteClient() : this(Guid.Empty)
+    {
+    }
+
     public int ReferenceVersion { get; init; }
 
-    public Guid GetAggregateId() => ClientId;
-    public class Handler : IVersionValidationCommandHandlerBase<Clients.Client, DeleteClient>
+    public Guid GetAggregateId()
     {
-        public async IAsyncEnumerable<IEventPayload<Clients.Client>> HandleCommandAsync(
-            Func<AggregateState<Clients.Client>> getAggregateStateState,
+        return ClientId;
+    }
+
+    public class Handler : IVersionValidationCommandHandlerBase<Client, DeleteClient>
+    {
+        public async IAsyncEnumerable<IEventPayload<Client>> HandleCommandAsync(
+            Func<AggregateState<Client>> getAggregateStateState,
             DeleteClient command)
         {
             await Task.CompletedTask;

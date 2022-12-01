@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Document;
 using Sekiban.Infrastructure.Cosmos.DomainCommon.EventSourcings;
+
 namespace Sekiban.Infrastructure.Cosmos;
 
 public static class CosmosDbServiceCollectionExtensions

@@ -1,6 +1,7 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Event;
 using Sekiban.Core.History;
+
 namespace Sekiban.Core.Command;
 
 public interface ICommandExecutor
@@ -19,6 +20,7 @@ public interface ICommandExecutor
         List<CallHistory>? callHistories = null)
         where TAggregatePayload : IAggregatePayload, new()
         where C : ICommand<TAggregatePayload>;
+
     /// <summary>
     ///     集約コマンドを実行する
     ///     こちらのメソッドは集約の新規作成機能のメソッドとなります。

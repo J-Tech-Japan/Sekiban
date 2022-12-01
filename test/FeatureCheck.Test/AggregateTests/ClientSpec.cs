@@ -1,4 +1,6 @@
+using System;
 using Customer.Domain.Aggregates.Branches.Commands;
+using Customer.Domain.Aggregates.Clients;
 using Customer.Domain.Aggregates.Clients.Commands;
 using Customer.Domain.Aggregates.Clients.Events;
 using Customer.Domain.Aggregates.LoyaltyPoints.Commands;
@@ -10,23 +12,23 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Exceptions;
 using Sekiban.Testing.SingleProjections;
-using System;
 using Xunit;
-using Client = Customer.Domain.Aggregates.Clients.Client;
+
 namespace Customer.Test.AggregateTests;
 
 public class ClientSpec : AggregateTestBase<Client, CustomerDependency>
 {
-
     private const string testClientName = "TestName";
     private const string testClientChangedName = "TestName2";
     private const string testEmail = "test@example.com";
     private const string testClientChangedNameV3 = "TestName3";
     private static readonly Guid clientId = Guid.NewGuid();
+
     protected override void SetupDependency(IServiceCollection serviceCollection)
     {
         base.SetupDependency(serviceCollection);
     }
+
     [Fact(DisplayName = "集約コマンドを実行してテストする")]
     public void ClientCreateSpec()
     {
@@ -34,7 +36,7 @@ public class ClientSpec : AggregateTestBase<Client, CustomerDependency>
         var branchId = RunEnvironmentCommand(new CreateBranch("TEST"));
 
         // CreateClient コマンドを実行する
-        WhenCommand(new Domain.Aggregates.Clients.Commands.CreateClient(branchId, testClientName, testEmail));
+        WhenCommand(new CreateClient(branchId, testClientName, testEmail));
         // エラーとならない
         ThenNotThrowsAnException();
         // コマンドによって生成されたイベントを検証する
@@ -48,7 +50,8 @@ public class ClientSpec : AggregateTestBase<Client, CustomerDependency>
                 Payload = new Client(branchId, testClientName, testEmail)
             });
         // 名前変更コマンドを実行する
-        WhenCommand(client => new ChangeClientName(client.AggregateId, testClientChangedName) { ReferenceVersion = client.Version });
+        WhenCommand(client => new ChangeClientName(client.AggregateId, testClientChangedName)
+            { ReferenceVersion = client.Version });
         WriteStateToFile("ClientCreateSpec.json");
         // コマンドによって生成されたイベントを検証する
         ThenLastSingleEventPayloadIs(new ClientNameChanged(testClientChangedName));
@@ -61,72 +64,80 @@ public class ClientSpec : AggregateTestBase<Client, CustomerDependency>
                 Payload = new Client(branchId, testClientChangedName, testEmail)
             });
     }
+
     [Fact(DisplayName = "重複したメールアドレスが存在する場合、作成失敗する")]
     public void ClientCreateDuplicateEmailSpec()
     {
         var branchId = RunEnvironmentCommand(new CreateBranch("TEST"));
-        RunEnvironmentCommand(new Domain.Aggregates.Clients.Commands.CreateClient(branchId, "NOT DUPLICATED NAME", testEmail));
-        WhenCommand(new Domain.Aggregates.Clients.Commands.CreateClient(branchId, testClientName, testEmail)).ThenThrows<SekibanEmailAlreadyRegistered>();
+        RunEnvironmentCommand(new CreateClient(branchId, "NOT DUPLICATED NAME", testEmail));
+        WhenCommand(new CreateClient(branchId, testClientName, testEmail)).ThenThrows<SekibanEmailAlreadyRegistered>();
     }
+
     [Fact]
     public void UseCommandExecutor()
     {
         GivenEnvironmentCommandExecutorAction(BranchClientCommandsHelper.CreateClient)
             .WhenCommand(
-                new Domain.Aggregates.Clients.Commands.CreateClient(
+                new CreateClient(
                     BranchClientCommandsHelper.BranchId,
                     "CreateClient Name New",
                     BranchClientCommandsHelper.FirstClientEmail))
             .ThenThrows<SekibanEmailAlreadyRegistered>();
     }
+
     [Fact]
     public void UseCommandExecutorSimpleThrows()
     {
         GivenEnvironmentCommandExecutorAction(BranchClientCommandsHelper.CreateClient)
             .WhenCommand(
-                new Domain.Aggregates.Clients.Commands.CreateClient(
+                new CreateClient(
                     BranchClientCommandsHelper.BranchId,
                     "CreateClient Name New",
                     BranchClientCommandsHelper.FirstClientEmail))
             .ThenThrowsAnException();
     }
+
     [Fact]
     public void EnvironmentChangeCommandTest()
     {
         var branchId = RunEnvironmentCommand(new CreateBranch("TEST"));
         var otherClientId = Guid.NewGuid();
         RunEnvironmentCommand(
-            new Domain.Aggregates.Clients.Commands.CreateClient
-            { BranchId = branchId, ClientName = "NameFirst", ClientEmail = "test@example.com" },
+            new CreateClient
+                { BranchId = branchId, ClientName = "NameFirst", ClientEmail = "test@example.com" },
             otherClientId);
         RunEnvironmentCommand(new ChangeClientName(otherClientId, "Other CreateClient Name"));
         RunEnvironmentCommand(new CreateLoyaltyPoint(otherClientId, 100));
-        RunEnvironmentCommand(new UseLoyaltyPoint(otherClientId, DateTime.Today, LoyaltyPointUsageTypeKeys.TravelCarRental, 30, "test"));
+        RunEnvironmentCommand(new UseLoyaltyPoint(otherClientId, DateTime.Today,
+            LoyaltyPointUsageTypeKeys.TravelCarRental, 30, "test"));
     }
 
     [Fact(DisplayName = "Can not delete client twice")]
     public void CanNotDeleteClientTwice()
     {
         var branchId = RunEnvironmentCommand(new CreateBranch("TEST"));
-        WhenCommand(new Domain.Aggregates.Clients.Commands.CreateClient(branchId, "client", "client@example.com"))
+        WhenCommand(new CreateClient(branchId, "client", "client@example.com"))
             .ThenNotThrowsAnException()
             .WhenCommand(new DeleteClient(GetAggregateId()) { ReferenceVersion = GetCurrentVersion() })
             .ThenNotThrowsAnException()
             .WhenCommand(new DeleteClient(GetAggregateId()) { ReferenceVersion = GetCurrentVersion() })
             .ThenThrows<SekibanAggregateAlreadyDeletedException>();
     }
+
     [Fact(DisplayName = "Can Cancel Delete")]
     public void CanCancelClientDelete()
     {
         var branchId = RunEnvironmentCommand(new CreateBranch("TEST"));
-        WhenCommand(new Domain.Aggregates.Clients.Commands.CreateClient(branchId, "client", "client@example.com"))
+        WhenCommand(new CreateClient(branchId, "client", "client@example.com"))
             .ThenNotThrowsAnException()
             .WhenCommand(new DeleteClient(GetAggregateId()) { ReferenceVersion = GetCurrentVersion() })
             .ThenNotThrowsAnException()
             .ThenGetPayload(payload => Assert.True(payload.IsDeleted))
             .WhenCommand(
                 new CancelDeleteClient
-                { ReferenceVersion = GetCurrentVersion(), ClientId = GetAggregateId(), Reason = "Deleted by mistake" })
+                {
+                    ReferenceVersion = GetCurrentVersion(), ClientId = GetAggregateId(), Reason = "Deleted by mistake"
+                })
             .ThenNotThrowsAnException()
             .ThenGetPayload(payload => Assert.False(payload.IsDeleted));
     }
