@@ -12,7 +12,6 @@ using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
 using System.Diagnostics;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Xunit;
 namespace Sekiban.Testing.SingleProjections;
 

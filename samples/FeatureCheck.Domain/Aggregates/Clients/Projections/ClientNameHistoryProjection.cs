@@ -29,7 +29,8 @@ public record ClientNameHistoryProjection(
                 var list = p.ClientNames.ToList();
                 list.Add(new ClientNameHistoryProjectionRecord(clientNameChanged.ClientName, ev.TimeStamp));
                 return p with { ClientNames = list };
-            },
+            }
+            ,
             ClientDeleted => p => p with { IsDeleted = true },
             _ => null
         };

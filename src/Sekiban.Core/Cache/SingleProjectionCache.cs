@@ -25,7 +25,8 @@ public class SingleProjectionCache : ISingleProjectionCache
 
     private static MemoryCacheEntryOptions GetMemoryCacheOptionsForSingleProjectionContainer() => new()
     {
-        AbsoluteExpiration = DateTimeOffset.UtcNow.AddHours(2), SlidingExpiration = TimeSpan.FromMinutes(15)
+        AbsoluteExpiration = DateTimeOffset.UtcNow.AddHours(2),
+        SlidingExpiration = TimeSpan.FromMinutes(15)
         // 5分読まれなかったら削除するが、2時間経ったらどちらにしても削除する
     };
     public string GetCacheKeyForSingleProjectionContainer<TSingleProjectionOrAggregate>(Guid aggregateId)

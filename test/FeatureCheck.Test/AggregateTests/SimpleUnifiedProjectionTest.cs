@@ -133,7 +133,7 @@ public class SimpleUnifiedProjectionTest : UnifiedTestBase<CustomerDependency>
             clientId,
             test => test.WhenCommand(
                     new AddLoyaltyPoint(clientId, new DateTime(2022, 11, 1), LoyaltyPointReceiveTypeKeys.CreditcardUsage, 100, string.Empty)
-                        { ReferenceVersion = test.GetCurrentVersion() })
+                    { ReferenceVersion = test.GetCurrentVersion() })
                 .ThenNotThrowsAnException()
         );
     }

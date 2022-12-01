@@ -43,7 +43,9 @@ public class ClientSpec : AggregateTestBase<Client, CustomerDependency>
         ThenStateIs(
             new AggregateState<Client>
             {
-                AggregateId = GetAggregateId(), Version = GetCurrentVersion(), Payload = new Client(branchId, testClientName, testEmail)
+                AggregateId = GetAggregateId(),
+                Version = GetCurrentVersion(),
+                Payload = new Client(branchId, testClientName, testEmail)
             });
         // 名前変更コマンドを実行する
         WhenCommand(client => new ChangeClientName(client.AggregateId, testClientChangedName) { ReferenceVersion = client.Version });
@@ -95,7 +97,7 @@ public class ClientSpec : AggregateTestBase<Client, CustomerDependency>
         var otherClientId = Guid.NewGuid();
         RunEnvironmentCommand(
             new Domain.Aggregates.Clients.Commands.CreateClient
-                { BranchId = branchId, ClientName = "NameFirst", ClientEmail = "test@example.com" },
+            { BranchId = branchId, ClientName = "NameFirst", ClientEmail = "test@example.com" },
             otherClientId);
         RunEnvironmentCommand(new ChangeClientName(otherClientId, "Other CreateClient Name"));
         RunEnvironmentCommand(new CreateLoyaltyPoint(otherClientId, 100));
@@ -124,7 +126,7 @@ public class ClientSpec : AggregateTestBase<Client, CustomerDependency>
             .ThenGetPayload(payload => Assert.True(payload.IsDeleted))
             .WhenCommand(
                 new CancelDeleteClient
-                    { ReferenceVersion = GetCurrentVersion(), ClientId = GetAggregateId(), Reason = "Deleted by mistake" })
+                { ReferenceVersion = GetCurrentVersion(), ClientId = GetAggregateId(), Reason = "Deleted by mistake" })
             .ThenNotThrowsAnException()
             .ThenGetPayload(payload => Assert.False(payload.IsDeleted));
     }

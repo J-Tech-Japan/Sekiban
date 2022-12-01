@@ -3,7 +3,7 @@
 public static class SekibanJsonHelper
 {
     public static JsonSerializerOptions GetDefaultJsonSerializerOptions() => new JsonSerializerOptions
-        { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, PropertyNameCaseInsensitive = true };
+    { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, PropertyNameCaseInsensitive = true };
 
     public static string? Serialize(dynamic? obj)
     {

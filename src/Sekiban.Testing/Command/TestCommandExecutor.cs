@@ -7,7 +7,6 @@ using Sekiban.Core.Exceptions;
 using Sekiban.Core.Partition;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Validation;
-using System;
 using System.Collections.Immutable;
 using System.ComponentModel.DataAnnotations;
 namespace Sekiban.Testing.Command;
@@ -91,9 +90,9 @@ public class TestCommandExecutor
         return aggregate;
     }
     public Guid ExecuteCommand<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
-        where TAggregatePayload : IAggregatePayload, new() => ExecuteCommand(command,injectingAggregateId, false);
+        where TAggregatePayload : IAggregatePayload, new() => ExecuteCommand(command, injectingAggregateId, false);
     public Guid ExecuteCommandWithPublish<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
-        where TAggregatePayload : IAggregatePayload, new() => ExecuteCommand(command,injectingAggregateId, true);
+        where TAggregatePayload : IAggregatePayload, new() => ExecuteCommand(command, injectingAggregateId, true);
 
     private Guid ExecuteCommand<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId, bool withPublish)
         where TAggregatePayload : IAggregatePayload, new()
@@ -124,7 +123,7 @@ public class TestCommandExecutor
 
             var baseClass = typeof(CommandHandlerAdapter<,>);
             var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), command.GetType());
-            var adapter = Activator.CreateInstance(adapterClass, new object?[]{aggregateLoader,false}) ?? throw new Exception("Adapter not found");
+            var adapter = Activator.CreateInstance(adapterClass, new object?[] { aggregateLoader, false }) ?? throw new Exception("Adapter not found");
 
             var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new Exception("HandleCommandAsync not found");
 

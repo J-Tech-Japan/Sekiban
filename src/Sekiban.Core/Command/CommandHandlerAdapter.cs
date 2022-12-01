@@ -26,7 +26,7 @@ public class CommandHandlerAdapter<TAggregatePayload, TCommand> where TAggregate
         var command = commandDocument.Payload;
         _aggregate = await _aggregateLoader.AsAggregateAsync<TAggregatePayload>(aggregateId) ??
             new Aggregate<TAggregatePayload>
-                { AggregateId = aggregateId };
+            { AggregateId = aggregateId };
         if (handler is not ICommandHandlerBase<TAggregatePayload, TCommand> regularHandler)
         {
             throw new SekibanCommandHandlerNotMatchException(

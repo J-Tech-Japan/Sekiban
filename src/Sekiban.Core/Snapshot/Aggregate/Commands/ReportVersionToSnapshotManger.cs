@@ -2,8 +2,13 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Event;
 using Sekiban.Core.Setting;
-using Sekiban.Core.Snapshot.Aggregate.Events;
+
+/* Unmerged change from project 'Sekiban.Core (net6.0)'
+Before:
 using Sekiban.Core.Snapshot.Aggregate;
+After:
+using Sekiban.Core.Snapshot.Aggregate.Events;
+*/
 namespace Sekiban.Core.Snapshot.Aggregate.Commands;
 
 public record ReportVersionToSnapshotManger(
@@ -20,7 +25,7 @@ public class ReportVersionToSnapshotMangerHandler : ICommandHandlerBase<Aggregat
     ReportVersionToSnapshotManger>
 {
     private readonly IAggregateSettings _aggregateSettings;
-    public ReportVersionToSnapshotMangerHandler(IAggregateSettings aggregateSettings) => _aggregateSettings = aggregateSettings; 
+    public ReportVersionToSnapshotMangerHandler(IAggregateSettings aggregateSettings) => _aggregateSettings = aggregateSettings;
     public async IAsyncEnumerable<IEventPayload<Aggregate.SnapshotManager>> HandleCommandAsync(
         Func<AggregateState<Aggregate.SnapshotManager>> getAggregateState,
         ReportVersionToSnapshotManger command)

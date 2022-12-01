@@ -49,7 +49,7 @@ public class CustomerDependency : DomainDependencyDefinitionBase
             .AddCommandHandler<RecentActivity, RecentActivity.Handler>()
             .AddCommandHandler<AddRecentActivity, AddRecentActivity.Handler>()
             .AddCommandHandler<OnlyPublishingAddRecentActivity, OnlyPublishingAddRecentActivity.Handler>();
-        
+
         AddAggregate<Aggregates.RecentInMemoryActivities.RecentInMemoryActivity>()
             .AddCommandHandler<CreateRecentInMemoryActivity, CreateRecentInMemoryActivity.Handler>()
             .AddCommandHandler<AddRecentInMemoryActivity, AddRecentInMemoryActivity.Handler>();

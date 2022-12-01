@@ -600,7 +600,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
     }
 ]
 ")
-            #endregion
+        #endregion
             .ThenGetMultiProjectionPayload<ClientLoyaltyPointMultiProjection>(payload => Assert.NotNull(payload.Branches));
     }
 
@@ -609,7 +609,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBa
     {
         GivenEventsFromFile("TestData1.json")
             .ThenGetMultiProjectionPayload<ClientLoyaltyPointMultiProjection>(payload => Assert.NotNull(payload.Branches))
-//        await ThenStateFileAsync("TestData1Result.json");
+            //        await ThenStateFileAsync("TestData1Result.json");
             .WriteMultiProjectionStateToFile<ClientLoyaltyPointMultiProjection>("TestData1ResultOut.json");
 
     }

@@ -1,10 +1,10 @@
+using Microsoft.DotNet.PlatformAbstractions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Dependency;
 using Sekiban.Testing.Story;
 using System;
 using System.Reflection;
-using Microsoft.DotNet.PlatformAbstractions;
 using Xunit;
 namespace SampleProjectStoryXTest;
 

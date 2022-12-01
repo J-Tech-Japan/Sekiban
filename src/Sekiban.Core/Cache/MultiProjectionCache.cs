@@ -29,7 +29,8 @@ public class MultiProjectionCache : IMultiProjectionCache
 
     private static MemoryCacheEntryOptions GetMemoryCacheOptions() => new MemoryCacheEntryOptions
     {
-        AbsoluteExpiration = DateTimeOffset.UtcNow.AddHours(2), SlidingExpiration = TimeSpan.FromMinutes(15)
+        AbsoluteExpiration = DateTimeOffset.UtcNow.AddHours(2),
+        SlidingExpiration = TimeSpan.FromMinutes(15)
         // 5分読まれなかったら削除するが、2時間経ったらどちらにしても削除する
     };
     private string GetInMemoryKey<TProjector, TPayload>() where TProjector : IMultiProjector<TPayload>, new() where TPayload : IMultiProjectionPayload, new()
