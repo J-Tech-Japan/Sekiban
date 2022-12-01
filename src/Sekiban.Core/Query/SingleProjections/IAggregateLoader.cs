@@ -28,7 +28,7 @@ public interface IAggregateLoader
     /// <returns></returns>
     public Task<SingleProjectionState<TSingleProjectionPayload>?>
         AsSingleProjectionStateAsync<TSingleProjectionPayload>(Guid aggregateId, int? toVersion = null)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new();
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new();
 
 
     /// <summary>

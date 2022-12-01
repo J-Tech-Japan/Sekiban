@@ -19,10 +19,10 @@ public interface IMultiProjectionService
         Task<MultiProjectionState<
             SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>
         GetSingleProjectionListObject<TSingleProjectionPayload>()
-        where TSingleProjectionPayload : ISingleProjectionPayload, new();
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new();
 
     public Task<List<SingleProjectionState<TSingleProjectionPayload>>>
         GetSingleProjectionList<TSingleProjectionPayload>(
             QueryListType queryListType = QueryListType.ActiveOnly)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new();
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new();
 }

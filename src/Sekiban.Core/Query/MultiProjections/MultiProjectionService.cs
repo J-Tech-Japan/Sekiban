@@ -47,7 +47,7 @@ public class MultiProjectionService : IMultiProjectionService
         Task<MultiProjectionState<
             SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>
         GetSingleProjectionListObject<TSingleProjectionPayload>()
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
         return multiProjection
             .GetMultiProjectionAsync<
@@ -60,7 +60,7 @@ public class MultiProjectionService : IMultiProjectionService
     public async Task<List<SingleProjectionState<TSingleProjectionPayload>>>
         GetSingleProjectionList<TSingleProjectionPayload>(
             QueryListType queryListType = QueryListType.ActiveOnly)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
         var projection = await GetSingleProjectionListObject<TSingleProjectionPayload>();
         return queryListType switch

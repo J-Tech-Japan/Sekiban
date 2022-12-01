@@ -88,7 +88,7 @@ public class QueryHandler
             TQueryParameter, TQueryResponse>(
             TQueryParameter param,
             IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections)
-        where TSingleProjectionPayload : ISingleProjectionPayload
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -128,7 +128,7 @@ public class QueryHandler
             TQueryParameter, TQueryResponse>(
             TQueryParameter param,
             IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections)
-        where TSingleProjectionPayload : ISingleProjectionPayload
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {

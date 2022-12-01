@@ -2,8 +2,8 @@ using Sekiban.Core.Event;
 
 namespace Sekiban.Core.Query.SingleProjections;
 
-public interface ISingleProjectionEventApplicable<TProjectionPayload> : ISingleProjectionPayload
-    where TProjectionPayload : ISingleProjectionPayload
+public interface ISingleProjectionEventApplicable<TProjectionPayload> : ISingleProjectionPayloadCommon
+    where TProjectionPayload : ISingleProjectionPayloadCommon
 {
     Func<TProjectionPayload, TProjectionPayload>? GetApplyEventFunc(
         IEvent ev,

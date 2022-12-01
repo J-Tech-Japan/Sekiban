@@ -8,7 +8,7 @@ public class SimpleSingleProjectionListQuery<TSingleProjectionPayload> :
     ISingleProjectionListQuery<TSingleProjectionPayload,
         SimpleSingleProjectionListQuery<TSingleProjectionPayload>.QueryParameter,
         SingleProjectionState<TSingleProjectionPayload>>
-    where TSingleProjectionPayload : ISingleProjectionPayload
+    where TSingleProjectionPayload : ISingleProjectionPayloadCommon
 {
     public IEnumerable<SingleProjectionState<TSingleProjectionPayload>> HandleFilter(
         QueryParameter queryParam,

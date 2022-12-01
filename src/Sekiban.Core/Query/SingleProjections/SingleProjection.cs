@@ -8,7 +8,7 @@ namespace Sekiban.Core.Query.SingleProjections;
 public class SingleProjection<TProjectionPayload> : ISingleProjection,
     ISingleProjectionStateConvertible<SingleProjectionState<TProjectionPayload>>, IAggregateCommon,
     ISingleProjector<SingleProjection<TProjectionPayload>>
-    where TProjectionPayload : ISingleProjectionPayload, new()
+    where TProjectionPayload : ISingleProjectionPayloadCommon, new()
 {
     public TProjectionPayload Payload { get; set; } = new();
     public Guid LastEventId { get; set; }

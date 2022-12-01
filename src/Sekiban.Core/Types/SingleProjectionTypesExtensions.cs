@@ -35,12 +35,7 @@ public static class SingleProjectionTypesExtensions
 
     public static bool IsSingleProjectionPayloadType(this TypeInfo typeInfo)
     {
-        var projectorBase = typeof(SingleProjectionPayloadBase<,>);
-        var projectorBaseDeletable = typeof(DeletableSingleProjectionPayloadBase<,>);
-        return typeInfo.IsClass &&
-               new[] { projectorBase.Name, projectorBaseDeletable.Name }.Contains(typeInfo.BaseType?.Name) &&
-               !typeInfo.IsGenericType &&
-               typeInfo.BaseType?.Namespace == projectorBase.Namespace;
+        return typeInfo.DoesImplementingFromGenericInterfaceType(typeof(ISingleProjectionPayload<,>));
     }
 
     public static Type GetOriginalTypeFromSingleProjectionPayload(this Type singleProjectionType)
@@ -50,26 +45,21 @@ public static class SingleProjectionTypesExtensions
 
     public static Type GetOriginalTypeFromSingleProjectionPayload(this TypeInfo singleProjectionTypeInfo)
     {
-        var baseType = singleProjectionTypeInfo.BaseType;
-        if (baseType is null)
-            throw new SekibanTypeNotFoundException("Can not find baseType of " + singleProjectionTypeInfo.Name);
-        if (baseType.IsGenericType &&
-            new[] { typeof(SingleProjectionPayloadBase<,>), typeof(DeletableSingleProjectionPayloadBase<,>) }.Contains(
-                baseType.GetGenericTypeDefinition()))
-            return baseType.GenericTypeArguments[0];
+        if (singleProjectionTypeInfo.IsSingleProjectionPayloadType())
+        {
+            var implementedType = singleProjectionTypeInfo.GetImplementingFromGenericInterfaceType(typeof(ISingleProjectionPayload<,>));
+            return implementedType.GenericTypeArguments[0];
+        }
         throw new SekibanTypeNotFoundException("Can not find original type of " + singleProjectionTypeInfo.Name);
     }
 
     public static Type GetProjectionTypeFromSingleProjection(this TypeInfo singleProjectionTypeInfo)
     {
-        var baseType = singleProjectionTypeInfo.BaseType;
-        if (baseType is null)
-            throw new SekibanTypeNotFoundException("Can not find baseType of " + singleProjectionTypeInfo.Name);
-        if (!baseType.IsGenericType ||
-            !new[] { typeof(SingleProjectionPayloadBase<,>), typeof(DeletableSingleProjectionPayloadBase<,>) }.Contains(
-                baseType.GetGenericTypeDefinition()))
-            throw new SekibanTypeNotFoundException("Can not find Projection type of " + singleProjectionTypeInfo.Name);
-        var singleProjectionBase = typeof(SingleProjection<>);
-        return singleProjectionBase.MakeGenericType(singleProjectionTypeInfo);
+        if (singleProjectionTypeInfo.IsSingleProjectionPayloadType())
+        {
+            var implementedType = singleProjectionTypeInfo.GetImplementingFromGenericInterfaceType(typeof(ISingleProjectionPayload<,>));
+            return implementedType.GenericTypeArguments[1];
+        }
+        throw new SekibanTypeNotFoundException("Can not find original type of " + singleProjectionTypeInfo.Name);
     }
 }

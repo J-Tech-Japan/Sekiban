@@ -8,7 +8,7 @@ public record SingleProjectionState<TPayload>(
     Guid LastEventId,
     string LastSortableUniqueId,
     int AppliedSnapshotVersion,
-    int Version) : ISingleProjectionPayload, IAggregateCommon where TPayload : ISingleProjectionPayload
+    int Version) : ISingleProjectionPayloadCommon, IAggregateCommon where TPayload : ISingleProjectionPayloadCommon
 {
     public bool GetIsDeleted()
     {

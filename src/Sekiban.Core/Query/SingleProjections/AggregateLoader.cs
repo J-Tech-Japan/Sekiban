@@ -41,7 +41,7 @@ public class AggregateLoader : IAggregateLoader
 
     public async Task<SingleProjectionState<TSingleProjectionPayload>?>
         AsSingleProjectionStateAsync<TSingleProjectionPayload>(Guid aggregateId, int? toVersion = null)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
         var aggregate = await _singleProjection
             .GetAggregateAsync<SingleProjection<TSingleProjectionPayload>,

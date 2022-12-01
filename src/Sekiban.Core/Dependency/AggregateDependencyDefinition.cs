@@ -45,7 +45,7 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
     }
 
     public AggregateDependencyDefinition<TAggregatePayload> AddSingleProjection<TSingleProjection>()
-        where TSingleProjection : ISingleProjectionPayload
+        where TSingleProjection : ISingleProjectionPayloadCommon
     {
         var singleProjectionType = typeof(TSingleProjection);
         if (!singleProjectionType.IsSingleProjectionPayloadType())

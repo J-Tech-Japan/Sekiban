@@ -37,14 +37,14 @@ public interface IQueryExecutor
     public Task<ListQueryResult<TQueryResponse>>
         ForSingleProjectionListQueryAsync<TSingleProjectionPayload, TQuery,
             TQueryParameter, TQueryResponse>(TQueryParameter param)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter;
 
     public Task<TQueryResponse>
         ForSingleProjectionQueryAsync<TSingleProjectionPayload, TQuery,
             TQueryParameter, TQueryResponse>(TQueryParameter param)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter;
 }
