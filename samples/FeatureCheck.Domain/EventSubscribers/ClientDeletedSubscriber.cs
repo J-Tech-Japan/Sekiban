@@ -7,7 +7,7 @@ using Sekiban.Core.PubSub;
 
 namespace Customer.Domain.EventSubscribers;
 
-public class ClientDeletedSubscriber : EventSubscriberBase<ClientDeleted>
+public class ClientDeletedSubscriber : IEventSubscriber<ClientDeleted>
 {
     private readonly ICommandExecutor commandExecutor;
 
@@ -16,7 +16,7 @@ public class ClientDeletedSubscriber : EventSubscriberBase<ClientDeleted>
         this.commandExecutor = commandExecutor;
     }
 
-    public override async Task SubscribeEventAsync(Event<ClientDeleted> ev)
+    public async Task HandleEventAsync(Event<ClientDeleted> ev)
     {
         await commandExecutor.ExecCommandAsync(
             new DeleteLoyaltyPoint(ev.AggregateId),
