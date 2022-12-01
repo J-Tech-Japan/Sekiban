@@ -8,5 +8,4 @@ public interface
     where TAggregatePayload : IAggregatePayload
     where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
 {
-    public bool IsDeleted { get; init; }
 }

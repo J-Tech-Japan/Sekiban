@@ -9,6 +9,4 @@ public interface
     where TAggregatePayload : IAggregatePayload
     where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
 {
-    public Func<TSingleProjectionPayload, TSingleProjectionPayload>? GetApplyEventFunc(IEvent ev,
-        IEventPayloadCommon eventPayload);
 }

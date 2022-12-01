@@ -565,7 +565,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     #region Single Projection
 
     private SingleProjectionState<TSingleProjectionPayload> GetSingleProjectionState<TSingleProjectionPayload>()
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
         var singleProjection = _serviceProvider.GetService<IAggregateLoader>() ??
                                throw new Exception("Failed to get single projection service");
@@ -576,7 +576,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionStateIs<TSingleProjectionPayload>(
         SingleProjectionState<TSingleProjectionPayload> state)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
         var actual = GetSingleProjectionState<TSingleProjectionPayload>();
         var expected = state with
@@ -594,7 +594,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIs<TSingleProjectionPayload>(
         TSingleProjectionPayload payload)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
         var actual = GetSingleProjectionState<TSingleProjectionPayload>().Payload;
         var expected = payload;
@@ -605,7 +605,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     }
 
     public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionPayload<TSingleProjectionPayload>(
-        Action<TSingleProjectionPayload> payloadAction) where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        Action<TSingleProjectionPayload> payloadAction) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
         payloadAction(GetSingleProjectionState<TSingleProjectionPayload>().Payload);
         return this;
@@ -613,7 +613,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionState<TSingleProjectionPayload>(
         Action<SingleProjectionState<TSingleProjectionPayload>> stateAction)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
         stateAction(GetSingleProjectionState<TSingleProjectionPayload>());
         return this;
@@ -621,7 +621,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIsFromJson<TSingleProjectionPayload>(
         string payloadJson)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
         var actual = GetSingleProjectionState<TSingleProjectionPayload>().Payload;
         var payload = JsonSerializer.Deserialize<TSingleProjectionPayload>(payloadJson);
@@ -635,7 +635,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIsFromFile<TSingleProjectionPayload>(
         string payloadFilename)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
         using var openStream = File.OpenRead(payloadFilename);
         var actual = GetSingleProjectionState<TSingleProjectionPayload>().Payload;
@@ -650,7 +650,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public IAggregateTestHelper<TAggregatePayload> WriteSingleProjectionStateToFile<TSingleProjectionPayload>(
         string filename)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
         var state = GetSingleProjectionState<TSingleProjectionPayload>();
         var json = SekibanJsonHelper.Serialize(state);
@@ -826,7 +826,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     private TQueryResponse GetSingleProjectionQueryResponse<TSingleProjectionPayload, TQuery, TQueryParameter,
         TQueryResponse>(TQueryParameter param)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -843,7 +843,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         TQueryResponse>(
         TQueryParameter param,
         string filename)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -859,7 +859,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         TQueryResponse>(
         TQueryParameter param,
         TQueryResponse expectedResponse)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -877,7 +877,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         TQueryResponse>(
         TQueryParameter param,
         Action<TQueryResponse> responseAction)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -891,7 +891,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         TQueryResponse>(
         TQueryParameter param,
         string responseJson)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -907,7 +907,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         TQueryResponse>(
         TQueryParameter param,
         string responseFilename)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -926,7 +926,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     private ListQueryResult<TQueryResponse> GetSingleProjectionListQueryResponse<TSingleProjectionPayload, TQuery,
         TQueryParameter, TQueryResponse>(
         TQueryParameter param)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -943,7 +943,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         TQueryResponse>(
         TQueryParameter param,
         string filename)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -960,7 +960,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         TQueryResponse>(
         TQueryParameter param,
         ListQueryResult<TQueryResponse> expectedResponse)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -979,7 +979,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         TQueryResponse>(
         TQueryParameter param,
         Action<ListQueryResult<TQueryResponse>> responseAction)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -994,7 +994,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         TQueryResponse>(
         TQueryParameter param,
         string responseJson)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -1010,7 +1010,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         TQueryResponse>(
         TQueryParameter param,
         string responseFilename)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
