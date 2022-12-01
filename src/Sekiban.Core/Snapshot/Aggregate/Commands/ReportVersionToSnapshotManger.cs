@@ -29,7 +29,7 @@ public record ReportVersionToSnapshotManger(
     }
 }
 
-public class ReportVersionToSnapshotMangerHandler : ICommandHandlerBase<SnapshotManager,
+public class ReportVersionToSnapshotMangerHandler : ICommandHandler<SnapshotManager,
     ReportVersionToSnapshotManger>
 {
     private readonly IAggregateSettings _aggregateSettings;

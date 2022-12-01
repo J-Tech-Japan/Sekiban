@@ -417,8 +417,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     {
         ResetBeforeCommand();
         var handler
-            = _serviceProvider.GetService(typeof(ICommandHandler<TAggregatePayload, C>)) as
-                ICommandHandler<TAggregatePayload, C>;
+            = _serviceProvider.GetService(typeof(ICommandHandlerCommon<TAggregatePayload, C>)) as
+                ICommandHandlerCommon<TAggregatePayload, C>;
         if (handler is null) throw new SekibanCommandNotRegisteredException(typeof(C).Name);
         var command = commandFunc(Aggregate.ToState());
         var validationResults = command.ValidateProperties().ToList();

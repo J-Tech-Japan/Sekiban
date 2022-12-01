@@ -19,7 +19,7 @@ public record AddRecentActivity(Guid RecentActivityId, string Activity) : IComma
         return RecentActivityId;
     }
 
-    public class Handler : ICommandHandlerBase<RecentActivities.RecentActivity, AddRecentActivity>
+    public class Handler : ICommandHandler<RecentActivities.RecentActivity, AddRecentActivity>
     {
         private readonly ISekibanDateProducer _sekibanDateProducer;
 

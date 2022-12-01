@@ -29,7 +29,7 @@ public record CreateBranch : ICommand<Branch>, ICleanupNecessaryCommand<CreateBr
         return Guid.NewGuid();
     }
 
-    public class Handler : ICommandHandlerBase<Branch, CreateBranch>
+    public class Handler : ICommandHandler<Branch, CreateBranch>
     {
         public async IAsyncEnumerable<IEventPayload<Branch>> HandleCommandAsync(
             Func<AggregateState<Branch>> getAggregateState,

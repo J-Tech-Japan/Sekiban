@@ -15,7 +15,7 @@ public record Product : ICommand<Products.Product>
         return Guid.NewGuid();
     }
 
-    public class Handler : ICommandHandlerBase<Products.Product, Product>
+    public class Handler : ICommandHandler<Products.Product, Product>
     {
         public IAsyncEnumerable<IEventPayload<Products.Product>> HandleCommandAsync(
             Func<AggregateState<Products.Product>> getAggregateState,

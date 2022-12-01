@@ -11,7 +11,7 @@ public class OnlyPublishingCommandHandlerAdapter<TAggregatePayload, TCommand>
 {
     public async Task<CommandResponse> HandleCommandAsync(
         CommandDocument<TCommand> commandDocument,
-        ICommandHandler<TAggregatePayload, TCommand> handler,
+        ICommandHandlerCommon<TAggregatePayload, TCommand> handler,
         Guid aggregateId)
     {
         if (handler is not IOnlyPublishingCommandHandlerBase<TAggregatePayload, TCommand> publishHandler)

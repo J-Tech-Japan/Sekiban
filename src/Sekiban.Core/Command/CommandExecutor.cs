@@ -63,8 +63,8 @@ public class CommandExecutor : ICommandExecutor
         try
         {
             var handler =
-                _serviceProvider.GetService(typeof(ICommandHandler<TAggregatePayload, TCommand>)) as
-                    ICommandHandler<TAggregatePayload, TCommand>;
+                _serviceProvider.GetService(typeof(ICommandHandlerCommon<TAggregatePayload, TCommand>)) as
+                    ICommandHandlerCommon<TAggregatePayload, TCommand>;
             if (handler is null) throw new SekibanCommandNotRegisteredException(typeof(TCommand).Name);
             var aggregateId = command.GetAggregateId();
             commandDocument

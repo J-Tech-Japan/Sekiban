@@ -20,7 +20,7 @@ public record LoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : ICommand
         return ClientId;
     }
 
-    public class Handler : ICommandHandlerBase<LoyaltyPoint, LoyaltyPointAndAddPoint>
+    public class Handler : ICommandHandler<LoyaltyPoint, LoyaltyPointAndAddPoint>
     {
         private readonly ISekibanDateProducer _dateProducer;
         private readonly IAggregateLoader aggregateLoader;

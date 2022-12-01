@@ -13,7 +13,7 @@ public record RecentActivity : ICommand<RecentActivities.RecentActivity>
         return Guid.NewGuid();
     }
 
-    public class Handler : ICommandHandlerBase<RecentActivities.RecentActivity, RecentActivity>
+    public class Handler : ICommandHandler<RecentActivities.RecentActivity, RecentActivity>
     {
         private readonly ISekibanDateProducer _sekibanDateProducer;
 

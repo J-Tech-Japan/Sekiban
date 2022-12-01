@@ -11,14 +11,14 @@ public static class CommandTypesExtensions
 
     public static bool IsCommandHandlerType(this Type eventPayloadType)
     {
-        return eventPayloadType.DoesImplementingFromGenericInterfaceType(typeof(ICommandHandler<,>));
+        return eventPayloadType.DoesImplementingFromGenericInterfaceType(typeof(ICommandHandlerCommon<,>));
     }
 
     public static Type GetAggregatePayloadTypeFromCommandHandlerType(this Type commandHandlerType)
     {
         if (commandHandlerType.IsCommandHandlerType())
         {
-            var baseType = commandHandlerType.GetImplementingFromGenericInterfaceType(typeof(ICommandHandler<,>));
+            var baseType = commandHandlerType.GetImplementingFromGenericInterfaceType(typeof(ICommandHandlerCommon<,>));
             return baseType.GetGenericArguments()[0];
         }
 
@@ -29,7 +29,7 @@ public static class CommandTypesExtensions
     {
         if (commandHandlerType.IsCommandHandlerType())
         {
-            var baseType = commandHandlerType.GetImplementingFromGenericInterfaceType(typeof(ICommandHandler<,>));
+            var baseType = commandHandlerType.GetImplementingFromGenericInterfaceType(typeof(ICommandHandlerCommon<,>));
             return baseType.GetGenericArguments()[1];
         }
 
