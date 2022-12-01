@@ -29,9 +29,9 @@ public class CommandHandlerAdapter<TAggregatePayload, TCommand> where TAggregate
         _aggregate = await _aggregateLoader.AsAggregateAsync<TAggregatePayload>(aggregateId) ??
                      new Aggregate<TAggregatePayload>
                          { AggregateId = aggregateId };
-        if (handler is not ICommandHandlerBase<TAggregatePayload, TCommand> regularHandler)
+        if (handler is not ICommandHandler<TAggregatePayload, TCommand> regularHandler)
             throw new SekibanCommandHandlerNotMatchException(
-                handler.GetType().Name + "handler should inherit " + typeof(ICommandHandlerBase<,>).Name);
+                handler.GetType().Name + "handler should inherit " + typeof(ICommandHandler<,>).Name);
         var state = _aggregate.ToState();
         // Validate AddAggregate is deleted
         if (state.GetIsDeleted() && command is not ICancelDeletedCommand)

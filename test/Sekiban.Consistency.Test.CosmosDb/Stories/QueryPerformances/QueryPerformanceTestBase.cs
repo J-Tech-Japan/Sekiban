@@ -84,8 +84,8 @@ public abstract class QueryPerformanceTestBase : TestBase
             _testOutputHelper.WriteLine($"create branch {branchList.Count}");
 
             var firstcount = branchList.Count;
-            var (branchResult, events)
-                = await CommandExecutor.ExecCommandAsync<Branch, CreateBranch>(
+            var branchResult
+                = await CommandExecutor.ExecCommandAsync(
                     new CreateBranch($"CreateBranch {i}"));
             var commandDocument = branchResult.CommandId;
             if (commandDocument == null) continue;
@@ -102,8 +102,8 @@ public abstract class QueryPerformanceTestBase : TestBase
                 var clientList = await MultiProjectionService.GetAggregateList<Client>();
                 _testOutputHelper.WriteLine($"create client {clientList.Count}");
                 var firstClientCount = clientList.Count;
-                var (clientCreateResult, events2) =
-                    await CommandExecutor.ExecCommandAsync<Client, CreateClient>(
+                var clientCreateResult =
+                    await CommandExecutor.ExecCommandAsync(
                         new CreateClient(
                             branchId!.Value,
                             $"clientname {i}-{j}",
@@ -117,7 +117,7 @@ public abstract class QueryPerformanceTestBase : TestBase
                     var aggregate =
                         await ProjectionService.AsDefaultStateAsync<Client>(clientCreateResult.AggregateId!.Value);
                     _testOutputHelper.WriteLine($"aggregate.version = {aggregate?.Version}");
-                    await CommandExecutor.ExecCommandAsync<Client, ChangeClientName>(
+                    await CommandExecutor.ExecCommandAsync(
                         new ChangeClientName(clientCreateResult.AggregateId!.Value, $"change{i}-{j}-{k}")
                         {
                             ReferenceVersion = aggregate?.Version ?? 0

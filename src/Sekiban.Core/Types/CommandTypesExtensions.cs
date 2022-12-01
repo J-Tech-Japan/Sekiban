@@ -40,7 +40,7 @@ public static class CommandTypesExtensions
     {
         if (commandType.IsCommandType())
         {
-            var baseType = commandType.GetInheritFromGenericType(typeof(ICommand<>));
+            var baseType = commandType.GetImplementingFromGenericInterfaceType(typeof(ICommand<>));
             return baseType.GetGenericArguments()[0];
         }
 

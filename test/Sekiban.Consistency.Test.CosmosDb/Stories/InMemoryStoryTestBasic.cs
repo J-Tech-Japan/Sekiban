@@ -50,9 +50,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         // create list branch
         var branchList = await multiProjectionService.GetAggregateList<Branch>();
         Assert.Empty(branchList);
-        var (branchResult, events)
-            = await commandExecutor.ExecCommandAsync<Branch, CreateBranch>(
-                new CreateBranch("Japan"));
+        var branchResult = await commandExecutor.ExecCommandAsync(new CreateBranch("Japan"));
         var branchId = branchResult.AggregateId;
         Assert.NotNull(branchResult);
         Assert.NotNull(branchResult.AggregateId);
@@ -62,7 +60,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         Assert.NotNull(branchFromList);
 
         var branchResult2 =
-            await commandExecutor.ExecCommandAsync<Branch, CreateBranch>(
+            await commandExecutor.ExecCommandAsync(
                 new CreateBranch("USA"));
         branchList = await multiProjectionService.GetAggregateList<Branch>();
         Assert.Equal(2, branchList.Count);
@@ -80,8 +78,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         var clientList = await multiProjectionService.GetAggregateList<Client>();
         Assert.Empty(clientList);
         var originalName = "Tanaka Taro";
-        var (createClientResult, events2) = await commandExecutor.ExecCommandAsync<Client, CreateClient>(
-            new CreateClient(branchId!.Value, originalName, "tanaka@example.com"));
+        var createClientResult = await commandExecutor.ExecCommandAsync(new CreateClient(branchId!.Value, originalName, "tanaka@example.com"));
         var clientId = createClientResult.AggregateId;
         Assert.NotNull(createClientResult);
         Assert.NotNull(createClientResult.AggregateId);
@@ -106,12 +103,11 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         await Assert.ThrowsAsync<SekibanCommandInconsistentVersionException>(
             async () =>
             {
-                await commandExecutor.ExecCommandAsync<Client, ChangeClientName>(
+                await commandExecutor.ExecCommandAsync(
                     new ChangeClientName(clientId!.Value, secondName));
             });
         // change name
-        var (changeNameResult, events3) = await commandExecutor.ExecCommandAsync<Client, ChangeClientName>(
-            new ChangeClientName(clientId!.Value, secondName) { ReferenceVersion = createClientResult.Version });
+        var changeNameResult = await commandExecutor.ExecCommandAsync(new ChangeClientName(clientId!.Value, secondName) { ReferenceVersion = createClientResult.Version });
 
         // change name projection
         clientNameList = await multiProjectionService
@@ -127,8 +123,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         var countChangeName = 60;
         foreach (var i in Enumerable.Range(0, countChangeName))
         {
-            var (changeNameResult2, events4) = await commandExecutor.ExecCommandAsync<Client, ChangeClientName>(
-                new ChangeClientName(clientId!.Value, $"newname - {i + 1}") { ReferenceVersion = versionCN });
+            var changeNameResult2 = await commandExecutor.ExecCommandAsync(new ChangeClientName(clientId!.Value, $"newname - {i + 1}") { ReferenceVersion = versionCN });
             versionCN = changeNameResult2.Version;
         }
 
@@ -148,11 +143,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         Assert.Equal(0, loyaltyPoint!.Payload.CurrentPoint);
 
         var datetimeFirst = DateTime.Now;
-        var (addPointResult, events5) = await commandExecutor.ExecCommandAsync<LoyaltyPoint, AddLoyaltyPoint>(
-            new AddLoyaltyPoint(clientId!.Value, datetimeFirst, LoyaltyPointReceiveTypeKeys.FlightDomestic, 1000, "")
-            {
-                ReferenceVersion = loyaltyPoint.Version
-            });
+        var addPointResult = await commandExecutor.ExecCommandAsync(new AddLoyaltyPoint(clientId!.Value, datetimeFirst, LoyaltyPointReceiveTypeKeys.FlightDomestic, 1000, "") { ReferenceVersion = loyaltyPoint.Version });
         Assert.NotNull(addPointResult);
         Assert.NotNull(addPointResult.AggregateId);
 
@@ -164,18 +155,14 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         await Assert.ThrowsAsync<SekibanLoyaltyPointNotEnoughException>(
             async () =>
             {
-                await commandExecutor.ExecCommandAsync<LoyaltyPoint, UseLoyaltyPoint>(
+                await commandExecutor.ExecCommandAsync(
                     new UseLoyaltyPoint(clientId!.Value, datetimeFirst.AddSeconds(1),
                         LoyaltyPointUsageTypeKeys.FlightUpgrade, 2000, "")
                     {
                         ReferenceVersion = addPointResult.Version
                     });
             });
-        var (usePointResult, events6) = await commandExecutor.ExecCommandAsync<LoyaltyPoint, UseLoyaltyPoint>(
-            new UseLoyaltyPoint(clientId.Value, DateTime.Now, LoyaltyPointUsageTypeKeys.FlightUpgrade, 200, "")
-            {
-                ReferenceVersion = addPointResult.Version
-            });
+        var usePointResult = await commandExecutor.ExecCommandAsync(new UseLoyaltyPoint(clientId.Value, DateTime.Now, LoyaltyPointUsageTypeKeys.FlightUpgrade, 200, "") { ReferenceVersion = addPointResult.Version });
         Assert.NotNull(usePointResult);
         Assert.NotNull(usePointResult.AggregateId);
 
@@ -190,8 +177,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         Assert.Single(p.Payload.Records);
 
         // delete client
-        var (deleteClientResult, events7) = await commandExecutor.ExecCommandAsync<Client, DeleteClient>(
-            new DeleteClient(clientId.Value) { ReferenceVersion = versionCN });
+        var deleteClientResult = await commandExecutor.ExecCommandAsync(new DeleteClient(clientId.Value) { ReferenceVersion = versionCN });
         Assert.NotNull(deleteClientResult);
         Assert.NotNull(deleteClientResult.AggregateId);
         // client deleted
@@ -210,9 +196,9 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         Assert.Single(loyaltyPointList);
 
         // create recent activity
-        var (createRecentActivityResult, events8)
+        var createRecentActivityResult
             = await commandExecutor
-                .ExecCommandAsync<RecentActivity, Customer.Domain.Aggregates.RecentActivities.Commands.RecentActivity>(
+                .ExecCommandAsync(
                     new Customer.Domain.Aggregates.RecentActivities.Commands.RecentActivity());
         var recentActivityId = createRecentActivityResult.AggregateId;
 
@@ -222,8 +208,8 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         var count = 60;
         foreach (var i in Enumerable.Range(0, count))
         {
-            var (recentActivityAddedResult, events9)
-                = await commandExecutor.ExecCommandAsync<RecentActivity, AddRecentActivity>(
+            var recentActivityAddedResult
+                = await commandExecutor.ExecCommandAsync(
                     new AddRecentActivity(createRecentActivityResult.AggregateId!.Value, $"Message - {i + 1}")
                         { ReferenceVersion = version });
             version = recentActivityAddedResult.Version;
@@ -252,9 +238,9 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
     {
         var recentActivityId = Guid.NewGuid();
         // create recent activity
-        var (createRecentActivityResult, events)
+        var createRecentActivityResult
             = await commandExecutor
-                .ExecCommandAsync<RecentActivity, Customer.Domain.Aggregates.RecentActivities.Commands.RecentActivity>(
+                .ExecCommandAsync(
                     new Customer.Domain.Aggregates.RecentActivities.Commands.RecentActivity());
 
         var recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
@@ -267,8 +253,8 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
                 Task.Run(
                     async () =>
                     {
-                        var (recentActivityAddedResult, events2)
-                            = await commandExecutor.ExecCommandAsync<RecentActivity, AddRecentActivity>(
+                        var recentActivityAddedResult
+                            = await commandExecutor.ExecCommandAsync(
                                 new AddRecentActivity(createRecentActivityResult.AggregateId!.Value,
                                     $"Message - {i + 1}")
                                 {
@@ -318,9 +304,9 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
     public async Task AsynchronousInMemoryExecutionTestAsync()
     {
         // create recent activity
-        var (createRecentActivityResult, events)
+        var createRecentActivityResult
             = await commandExecutor
-                .ExecCommandAsync<RecentInMemoryActivity, CreateRecentInMemoryActivity>(
+                .ExecCommandAsync(
                     new CreateRecentInMemoryActivity());
 
         var recentActivityList = await multiProjectionService.GetAggregateList<RecentInMemoryActivity>();
@@ -333,9 +319,9 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
                 Task.Run(
                     async () =>
                     {
-                        var (recentActivityAddedResult, _)
+                        var recentActivityAddedResult
                             = await commandExecutor
-                                .ExecCommandAsync<RecentInMemoryActivity, AddRecentInMemoryActivity>(
+                                .ExecCommandAsync(
                                     new AddRecentInMemoryActivity(createRecentActivityResult!.AggregateId!.Value,
                                         $"Message - {i + 1}")
                                     {
