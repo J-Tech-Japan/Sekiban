@@ -13,13 +13,13 @@ public interface ICommandExecutor
     /// <param name="command">対象集約コマンド</param>
     /// <param name="callHistories">呼び出し履歴 APIなどから直接コマンドを呼ぶ場合はnullで良い。他のイベントやコマンドからコマンドを呼ぶ際に、呼出履歴をつける</param>
     /// <typeparam name="TAggregatePayload">集約クラス</typeparam>
-    /// <typeparam name="C">コマンドクラス</typeparam>
+    /// <typeparam name="TCommand">コマンドクラス</typeparam>
     /// <returns></returns>
-    Task<(CommandExecutorResponse, List<IEvent>)> ExecCommandAsync<TAggregatePayload, C>(
-        C command,
+    Task<(CommandExecutorResponse, List<IEvent>)> ExecCommandAsync<TAggregatePayload, TCommand>(
+        TCommand command,
         List<CallHistory>? callHistories = null)
         where TAggregatePayload : IAggregatePayload, new()
-        where C : ICommand<TAggregatePayload>;
+        where TCommand : ICommand<TAggregatePayload>;
 
     /// <summary>
     ///     集約コマンドを実行する
@@ -28,11 +28,11 @@ public interface ICommandExecutor
     /// <param name="command">対象集約コマンド</param>
     /// <param name="callHistories">呼び出し履歴 APIなどから直接コマンドを呼ぶ場合はnullで良い。他のイベントやコマンドからコマンドを呼ぶ際に、呼出履歴をつける</param>
     /// <typeparam name="TAggregatePayload">Payloadクラス</typeparam>
-    /// <typeparam name="C">コマンドクラス</typeparam>
+    /// <typeparam name="TCommand">コマンドクラス</typeparam>
     /// <returns></returns>
-    Task<(CommandExecutorResponse, List<IEvent>)> ExecCommandWithoutValidationAsync<TAggregatePayload, C>(
-        C command,
+    Task<(CommandExecutorResponse, List<IEvent>)> ExecCommandWithoutValidationAsync<TAggregatePayload, TCommand>(
+        TCommand command,
         List<CallHistory>? callHistories = null)
         where TAggregatePayload : IAggregatePayload, new()
-        where C : ICommand<TAggregatePayload>;
+        where TCommand : ICommand<TAggregatePayload>;
 }
