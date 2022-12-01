@@ -7,7 +7,7 @@ using Sekiban.Core.PubSub;
 
 namespace Customer.Domain.EventSubscribers;
 
-public class ClientCreatedSubscriber : EventSubscriberBase<ClientCreated>
+public class ClientCreatedSubscriber : IEventSubscriber<ClientCreated>
 {
     private readonly ICommandExecutor commandExecutor;
 
@@ -16,7 +16,7 @@ public class ClientCreatedSubscriber : EventSubscriberBase<ClientCreated>
         this.commandExecutor = commandExecutor;
     }
 
-    public override async Task SubscribeEventAsync(Event<ClientCreated> ev)
+    public async Task HandleEventAsync(Event<ClientCreated> ev)
     {
         await commandExecutor.ExecCommandAsync(new CreateLoyaltyPoint(ev.AggregateId, 0), ev.GetCallHistoriesIncludesItself());
     }

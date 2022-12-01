@@ -3,13 +3,19 @@ using Sekiban.Core.Event;
 
 namespace Sekiban.Core.PubSub;
 
-public abstract class EventSubscriberBase<TEventPayload> : INotificationHandler<Event<TEventPayload>>
+public class EventSubscriberBase<TEventPayload, TEventSubscriber> : INotificationHandler<Event<TEventPayload>>
     where TEventPayload : IEventPayloadCommon
+    where TEventSubscriber : IEventSubscriber<TEventPayload>
 {
-    public async Task Handle(Event<TEventPayload> ev, CancellationToken cancellationToken)
+    private readonly IEventSubscriber<TEventPayload> _eventSubscriber;
+    public EventSubscriberBase(IEventSubscriber<TEventPayload> eventSubscriber)
     {
-        await SubscribeEventAsync(ev);
+        _eventSubscriber = eventSubscriber;
     }
 
-    public abstract Task SubscribeEventAsync(Event<TEventPayload> ev);
+    public async Task Handle(Event<TEventPayload> ev, CancellationToken cancellationToken)
+    {
+        await _eventSubscriber.HandleEventAsync(ev);
+    }
+
 }
