@@ -62,17 +62,17 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
 
             if (_aggregateSettings.ShouldTakeSnapshotForType(aggregateType.Aggregate))
             {
-                var (snapshotManagerResponse, events)
+                var snapshotManagerResponse
                     = await commandExecutor
-                        .ExecCommandAsync(
+                        .ExecCommandWithEventsAsync(
                             new ReportVersionToSnapshotManger(
                                 SnapshotManager.SharedId,
                                 aggregateType.Aggregate,
                                 notification.AggregateId,
                                 notification.Version,
                                 null));
-                if (events.Any(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken)))
-                    foreach (var taken in events.Where(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken))
+                if (snapshotManagerResponse.Events.Any(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken)))
+                    foreach (var taken in snapshotManagerResponse.Events.Where(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken))
                                  .Select(m => (Event<SnapshotManagerSnapshotTaken>)m))
                     {
                         if (await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
@@ -107,18 +107,18 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                          m => m.Aggregate.FullName == aggregateType.Aggregate.FullName))
             {
                 if (!_aggregateSettings.ShouldTakeSnapshotForType(projection.Aggregate)) continue;
-                var (snapshotManagerResponseP, eventsP)
+                var snapshotManagerResponseP
                     = await commandExecutor
-                        .ExecCommandAsync(
+                        .ExecCommandWithEventsAsync(
                             new ReportVersionToSnapshotManger(
                                 SnapshotManager.SharedId,
                                 projection.Aggregate,
                                 notification.AggregateId,
                                 notification.Version,
                                 null));
-                if (eventsP.All(m => m.DocumentTypeName != nameof(SnapshotManagerSnapshotTaken))) continue;
+                if (snapshotManagerResponseP.Events.All(m => m.DocumentTypeName != nameof(SnapshotManagerSnapshotTaken))) continue;
 
-                foreach (var taken in eventsP.Where(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken))
+                foreach (var taken in snapshotManagerResponseP.Events.Where(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken))
                              .Select(m => (Event<SnapshotManagerSnapshotTaken>)m))
                 {
                     if (await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(

@@ -84,7 +84,7 @@ public abstract class QueryPerformanceTestBase : TestBase
             _testOutputHelper.WriteLine($"create branch {branchList.Count}");
 
             var firstcount = branchList.Count;
-            var (branchResult, events)
+            var branchResult
                 = await CommandExecutor.ExecCommandAsync(
                     new CreateBranch($"CreateBranch {i}"));
             var commandDocument = branchResult.CommandId;
@@ -102,7 +102,7 @@ public abstract class QueryPerformanceTestBase : TestBase
                 var clientList = await MultiProjectionService.GetAggregateList<Client>();
                 _testOutputHelper.WriteLine($"create client {clientList.Count}");
                 var firstClientCount = clientList.Count;
-                var (clientCreateResult, events2) =
+                var clientCreateResult =
                     await CommandExecutor.ExecCommandAsync(
                         new CreateClient(
                             branchId!.Value,

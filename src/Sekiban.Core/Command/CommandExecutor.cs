@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command.UserInformation;
 using Sekiban.Core.Document;
@@ -128,20 +129,41 @@ public class CommandExecutor : ICommandExecutor
 
         return toReturnEvents;
     }
+    public async Task<CommandExecutorResponse> ExecCommandAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null) where TCommand : ICommandCommon
+    {
+        if (!command.GetType().IsCommandType()) { throw new SekibanCommandNotRegisteredException(command.GetType().Name); }
+        var method = GetType().GetMethod(nameof(ExecCommandAsyncTyped)) ?? throw new Exception("Method not found");
+        var genericMethod = method.MakeGenericMethod(command.GetType().GetAggregatePayloadTypeFromCommandType(), command.GetType()); 
+         var (response, generatedEvents)  = ((CommandExecutorResponse, List<IEvent>)) await (dynamic)(genericMethod.Invoke(this, new object?[] { command, callHistories }) ?? throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
+        return response;
+    }
 
-    public async Task<(CommandExecutorResponse, List<IEvent>)> ExecCommandAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null) where TCommand : ICommandCommon
+    public async Task<CommandExecutorResponseWithEvents> ExecCommandWithEventsAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null) where TCommand : ICommandCommon
     {
         if (!command.GetType().IsCommandType()) { throw new SekibanCommandNotRegisteredException(command.GetType().Name); }
         var method = GetType().GetMethod(nameof(ExecCommandAsyncTyped)) ?? throw new Exception("Method not found");
         var genericMethod = method.MakeGenericMethod(command.GetType().GetAggregatePayloadTypeFromCommandType(), command.GetType());
-        return await (dynamic)(genericMethod.Invoke(this, new object?[] { command, callHistories }) ?? throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
+        var (response, generatedEvents) = ((CommandExecutorResponse, List<IEvent>))await(dynamic)(genericMethod.Invoke(this, new object?[] { command, callHistories }) ?? throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
+        return new CommandExecutorResponseWithEvents(response, generatedEvents.ToImmutableList());
     }
 
-    public async Task<(CommandExecutorResponse, List<IEvent>)> ExecCommandWithoutValidationAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null) where TCommand : ICommandCommon
+
+    public async Task<CommandExecutorResponse> ExecCommandWithoutValidationAsync<TCommand>(TCommand command,
+        List<CallHistory>? callHistories = null) where TCommand : ICommandCommon
     {
         if (!command.GetType().IsCommandType()) { throw new SekibanCommandNotRegisteredException(command.GetType().Name); }
         var method = GetType().GetMethod(nameof(ExecCommandWithoutValidationAsyncTyped)) ?? throw new Exception("Method not found");
         var genericMethod = method.MakeGenericMethod(command.GetType().GetAggregatePayloadTypeFromCommandType(), command.GetType());
-        return await(dynamic)(genericMethod.Invoke(this, new object?[] { command, callHistories }) ?? throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
+        var (response, generatedEvents) = ((CommandExecutorResponse, List<IEvent>))await (dynamic)(genericMethod.Invoke(this, new object?[] { command, callHistories }) ?? throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
+        return response;
+    }
+
+    public async Task<CommandExecutorResponseWithEvents> ExecCommandWithoutValidationWithEventsAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null) where TCommand : ICommandCommon
+    {
+        if (!command.GetType().IsCommandType()) { throw new SekibanCommandNotRegisteredException(command.GetType().Name); }
+        var method = GetType().GetMethod(nameof(ExecCommandWithoutValidationAsyncTyped)) ?? throw new Exception("Method not found");
+        var genericMethod = method.MakeGenericMethod(command.GetType().GetAggregatePayloadTypeFromCommandType(), command.GetType());
+        var (response, generatedEvents) = ((CommandExecutorResponse, List<IEvent>))await(dynamic)(genericMethod.Invoke(this, new object?[] { command, callHistories }) ?? throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
+        return new CommandExecutorResponseWithEvents(response, generatedEvents.ToImmutableList());
     }
 }
