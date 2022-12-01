@@ -37,7 +37,7 @@ public record CreateClient : ICommand<Client>
         return Guid.NewGuid();
     }
 
-    public class Handler : ICommandHandlerBase<Client, CreateClient>
+    public class Handler : ICommandHandler<Client, CreateClient>
     {
         private readonly IAggregateLoader aggregateLoader;
         private readonly IQueryExecutor queryExecutor;

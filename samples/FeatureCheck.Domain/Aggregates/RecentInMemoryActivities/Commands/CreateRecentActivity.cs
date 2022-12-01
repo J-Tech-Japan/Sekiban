@@ -13,7 +13,7 @@ public record CreateRecentInMemoryActivity : ICommand<RecentInMemoryActivity>
         return Guid.NewGuid();
     }
 
-    public class Handler : ICommandHandlerBase<RecentInMemoryActivity, CreateRecentInMemoryActivity>
+    public class Handler : ICommandHandler<RecentInMemoryActivity, CreateRecentInMemoryActivity>
     {
         private readonly ISekibanDateProducer _sekibanDateProducer;
 

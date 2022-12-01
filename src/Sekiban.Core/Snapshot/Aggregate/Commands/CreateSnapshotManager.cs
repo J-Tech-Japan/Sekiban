@@ -14,7 +14,7 @@ public record CreateSnapshotManager : ICommand<SnapshotManager>
     }
 }
 
-public class CreateSnapshotManagerHandler : ICommandHandlerBase<SnapshotManager, CreateSnapshotManager>
+public class CreateSnapshotManagerHandler : ICommandHandler<SnapshotManager, CreateSnapshotManager>
 {
     private readonly ISekibanDateProducer _sekibanDateProducer;
 

@@ -20,7 +20,7 @@ public record AddRecentInMemoryActivity
         return RecentInMemoryActivityId;
     }
 
-    public class Handler : ICommandHandlerBase<RecentInMemoryActivity, AddRecentInMemoryActivity>
+    public class Handler : ICommandHandler<RecentInMemoryActivity, AddRecentInMemoryActivity>
     {
         private readonly ISekibanDateProducer _sekibanDateProducer;
 

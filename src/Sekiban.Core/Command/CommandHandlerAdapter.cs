@@ -22,7 +22,7 @@ public class CommandHandlerAdapter<TAggregatePayload, TCommand> where TAggregate
 
     public async Task<CommandResponse> HandleCommandAsync(
         CommandDocument<TCommand> commandDocument,
-        ICommandHandler<TAggregatePayload, TCommand> handler,
+        ICommandHandlerCommon<TAggregatePayload, TCommand> handler,
         Guid aggregateId)
     {
         var command = commandDocument.Payload;

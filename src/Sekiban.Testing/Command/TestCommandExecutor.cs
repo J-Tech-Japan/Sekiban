@@ -117,7 +117,7 @@ public class TestCommandExecutor
         var validationResults = command.ValidateProperties().ToList();
         if (validationResults.Any()) throw new ValidationException("Validation failed " + validationResults);
 
-        var baseType = typeof(ICommandHandler<,>);
+        var baseType = typeof(ICommandHandlerCommon<,>);
         var genericType = baseType.MakeGenericType(typeof(TAggregatePayload), command.GetType());
         var handler = _serviceProvider.GetService(genericType);
         if (handler is null) throw new SekibanCommandNotRegisteredException(command.GetType().Name);
