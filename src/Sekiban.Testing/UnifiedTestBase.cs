@@ -259,7 +259,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
 
     private TQueryResponse GetSingleProjectionQueryResponse<TSingleProjectionPayload, TQuery, TQueryParameter,
         TQueryResponse>(TQueryParameter param)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -276,7 +276,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         TQueryResponse>(
         TQueryParameter param,
         string filename)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -292,7 +292,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         TQueryResponse>(
         TQueryParameter param,
         TQueryResponse expectedResponse)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -310,7 +310,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         TQueryResponse>(
         TQueryParameter param,
         Action<TQueryResponse> responseAction)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -324,7 +324,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         TQueryResponse>(
         TQueryParameter param,
         string responseJson)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -340,7 +340,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         TQueryResponse>(
         TQueryParameter param,
         string responseFilename)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -359,7 +359,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
     private ListQueryResult<TQueryResponse> GetSingleProjectionListQueryResponse<TSingleProjectionPayload, TQuery,
         TQueryParameter, TQueryResponse>(
         TQueryParameter param)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -376,7 +376,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         TQueryResponse>(
         TQueryParameter param,
         string filename)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -393,7 +393,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         TQueryResponse>(
         TQueryParameter param,
         ListQueryResult<TQueryResponse> expectedResponse)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -412,7 +412,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         TQueryResponse>(
         TQueryParameter param,
         Action<ListQueryResult<TQueryResponse>> responseAction)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -427,7 +427,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         TQueryResponse>(
         TQueryParameter param,
         string responseJson)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -443,7 +443,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         TQueryResponse>(
         TQueryParameter param,
         string responseFilename)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -844,7 +844,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
     public MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>
         GetSingleProjectionListState<
             TSingleProjectionPayload>()
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
         var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ??
                                      throw new Exception("Failed to get Query service");
@@ -855,7 +855,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
 
     public UnifiedTestBase<TDependencyDefinition> ThenSingleProjectionListPayloadIsFromFile<TSingleProjectionPayload>(
         string filename)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
         using var openStream = File.OpenRead(filename);
         var projection =
@@ -867,7 +867,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
 
     public UnifiedTestBase<TDependencyDefinition> ThenGetSingleProjectionListPayload<TSingleProjectionPayload>(
         Action<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>> payloadAction)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
         payloadAction(GetSingleProjectionListState<TSingleProjectionPayload>().Payload);
         return this;
@@ -876,7 +876,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
     public UnifiedTestBase<TDependencyDefinition> ThenGetSingleProjectionListState<TSingleProjectionPayload>(
         Action<MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>
             stateAction)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
         stateAction(GetSingleProjectionListState<TSingleProjectionPayload>());
         return this;
@@ -884,7 +884,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
 
     public UnifiedTestBase<TDependencyDefinition> ThenSingleProjectionListStateIs<TSingleProjectionPayload>(
         MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>> state)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
         var actual = GetAggregateListProjectionState<TSingleProjectionPayload>();
         var expected = state with
@@ -900,7 +900,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
 
     public UnifiedTestBase<TDependencyDefinition> ThenSingleProjectionListPayloadIs<TSingleProjectionPayload>(
         SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>> payload)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
         var actual = GetSingleProjectionListState<TSingleProjectionPayload>().Payload;
         var expected = payload;
@@ -912,7 +912,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
 
     public UnifiedTestBase<TDependencyDefinition> ThenSingleProjectionListStateIsFromFile<TSingleProjectionPayload>(
         string filename)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
         using var openStream = File.OpenRead(filename);
         var projection =
@@ -926,7 +926,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
 
     public UnifiedTestBase<TDependencyDefinition> WriteSingleProjectionListStateToFile<TSingleProjectionPayload>(
         string filename)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
         var json = SekibanJsonHelper.Serialize(GetSingleProjectionListState<TSingleProjectionPayload>());
         File.WriteAllTextAsync(filename, json);

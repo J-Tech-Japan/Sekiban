@@ -6,7 +6,7 @@ namespace Sekiban.Core.Query.QueryModel;
 public interface
     ISingleProjectionListQuery<TSingleProjectionPayload, in TQueryParam,
         TQueryResponse>
-    where TSingleProjectionPayload : ISingleProjectionPayload
+    where TSingleProjectionPayload : ISingleProjectionPayloadCommon
     where TQueryParam : IQueryParameter
 {
     public IEnumerable<TQueryResponse> HandleFilter(

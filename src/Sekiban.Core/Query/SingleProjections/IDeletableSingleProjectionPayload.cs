@@ -1,11 +1,10 @@
 using Sekiban.Core.Aggregate;
-using Sekiban.Core.Event;
 
 namespace Sekiban.Core.Query.SingleProjections;
 
-public interface
-    ISingleProjectionPayload<TAggregatePayload, TSingleProjectionPayload> : ISingleProjectionEventApplicable<
-        TSingleProjectionPayload>
+public interface 
+    IDeletableSingleProjectionPayload<TAggregatePayload, TSingleProjectionPayload> :
+        ISingleProjectionPayload<TAggregatePayload, TSingleProjectionPayload>, IDeletable
     where TAggregatePayload : IAggregatePayload
     where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
 {

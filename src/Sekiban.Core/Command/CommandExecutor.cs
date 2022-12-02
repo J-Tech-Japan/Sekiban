@@ -14,13 +14,11 @@ namespace Sekiban.Core.Command;
 
 public class CommandExecutor : ICommandExecutor
 {
-    private static readonly SemaphoreSlim _semaphoreInMemory = new(1, 1);
+    private static readonly SemaphoreSlim SemaphoreInMemory = new(1, 1);
     private readonly IDocumentWriter _documentWriter;
     private readonly IServiceProvider _serviceProvider;
     private readonly IUserInformationFactory _userInformationFactory;
-    private readonly IAggregateLoader aggregateLoader;
-    private ICommandExecutor _commandExecutorImplementation;
-
+    private readonly IAggregateLoader _aggregateLoader;
     public CommandExecutor(
         IDocumentWriter documentWriter,
         IServiceProvider serviceProvider,
@@ -29,7 +27,7 @@ public class CommandExecutor : ICommandExecutor
     {
         _documentWriter = documentWriter;
         _serviceProvider = serviceProvider;
-        this.aggregateLoader = aggregateLoader;
+        this._aggregateLoader = aggregateLoader;
         _userInformationFactory = userInformationFactory;
     }
 
@@ -62,7 +60,7 @@ public class CommandExecutor : ICommandExecutor
         var version = 0;
         var aggregateContainerGroup =
             AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(TAggregatePayload));
-        if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer) await _semaphoreInMemory.WaitAsync();
+        if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer) await SemaphoreInMemory.WaitAsync();
         try
         {
             var handler =
@@ -92,7 +90,7 @@ public class CommandExecutor : ICommandExecutor
             }
             else
             {
-                var adapter = new CommandHandlerAdapter<TAggregatePayload, TCommand>(aggregateLoader);
+                var adapter = new CommandHandlerAdapter<TAggregatePayload, TCommand>(_aggregateLoader);
                 var commandResponse = await adapter.HandleCommandAsync(commandDocument, handler, aggregateId);
                 await HandleEventsAsync<TAggregatePayload, TCommand>(commandResponse.Events, commandDocument);
                 version = commandResponse.Version;
@@ -107,7 +105,7 @@ public class CommandExecutor : ICommandExecutor
         {
             await _documentWriter.SaveAsync(commandDocument with { Payload = commandToSave },
                 typeof(TAggregatePayload));
-            if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer) _semaphoreInMemory.Release();
+            if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer) SemaphoreInMemory.Release();
         }
 
         return (new CommandExecutorResponse(commandDocument.AggregateId, commandDocument.Id, version, null), events);

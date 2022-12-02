@@ -16,7 +16,7 @@ public static class AggregateTypesExtensions
     {
         return type.IsClass &&
                type.ImplementedInterfaces.Contains(typeof(IAggregatePayload)) &&
-               !type.ImplementedInterfaces.Contains(typeof(ISingleProjectionPayload));
+               !type.ImplementedInterfaces.Contains(typeof(ISingleProjectionPayloadCommon));
     }
 
     public static Type GetAggregatePayloadTypeFromAggregate(this Type aggregateType)

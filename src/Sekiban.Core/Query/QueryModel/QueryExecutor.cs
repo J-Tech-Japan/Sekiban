@@ -72,7 +72,7 @@ public class QueryExecutor : IQueryExecutor
     public async Task<ListQueryResult<TQueryResponse>>
         ForSingleProjectionListQueryAsync<TProjectionPayload, TQuery,
             TQueryParameter, TQueryResponse>(TQueryParameter param)
-        where TProjectionPayload : ISingleProjectionPayload, new()
+        where TProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -86,7 +86,7 @@ public class QueryExecutor : IQueryExecutor
     public async Task<TQueryResponse>
         ForSingleProjectionQueryAsync<TSingleProjectionPayload, TQuery,
             TQueryParameter, TQueryResponse>(TQueryParameter param)
-        where TSingleProjectionPayload : ISingleProjectionPayload, new()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
