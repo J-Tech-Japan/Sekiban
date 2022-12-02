@@ -10,7 +10,7 @@
         <PackageDescription>Sekiban - Event Sourcing Framework CosmosInfrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
         <PackageVersion>0.9.24</PackageVersion>
-        <Description>Hotfix : bug for single projection</Description>
+        <Description>Merge Create and Change Commands and Events</Description>
         <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
         <LangVersion>11</LangVersion>
     </PropertyGroup>
