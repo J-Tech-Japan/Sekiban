@@ -7,7 +7,7 @@ public class DefaultSingleProjector<TAggregatePayload> : ISingleProjector<Aggreg
 {
     public Aggregate<TAggregatePayload> CreateInitialAggregate(Guid aggregateId)
     {
-        return AggregateCommonBase.Create<Aggregate<TAggregatePayload>>(aggregateId);
+        return AggregateCommon.Create<Aggregate<TAggregatePayload>>(aggregateId);
     }
 
     public Type OriginalAggregateType()

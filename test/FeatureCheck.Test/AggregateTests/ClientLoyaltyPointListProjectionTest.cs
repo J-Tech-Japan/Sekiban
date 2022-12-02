@@ -10,7 +10,7 @@ using Xunit;
 
 namespace Customer.Test.AggregateTests;
 
-public class ClientLoyaltyPointListProjectionTest : UnifiedTestBase<CustomerDependency>
+public class ClientLoyaltyPointListProjectionTest : UnifiedTest<CustomerDependency>
 {
     public Guid _branchId = Guid.NewGuid();
     public string _branchName = "TESTBRANCH";

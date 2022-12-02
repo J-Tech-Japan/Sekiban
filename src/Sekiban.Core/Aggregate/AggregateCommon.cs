@@ -2,7 +2,7 @@
 
 namespace Sekiban.Core.Aggregate;
 
-public abstract class AggregateCommonBase : IAggregate
+public abstract class AggregateCommon : IAggregate
 {
     protected AggregateBasicInfo _basicInfo = new();
 
@@ -34,7 +34,7 @@ public abstract class AggregateCommonBase : IAggregate
         };
     }
 
-    public static UAggregate Create<UAggregate>(Guid aggregateId) where UAggregate : AggregateCommonBase
+    public static UAggregate Create<UAggregate>(Guid aggregateId) where UAggregate : AggregateCommon
     {
         if (typeof(UAggregate).GetConstructor(Type.EmptyTypes) is not { } c) throw new InvalidProgramException();
         var aggregate = c.Invoke(new object[] { }) as UAggregate ?? throw new InvalidProgramException();

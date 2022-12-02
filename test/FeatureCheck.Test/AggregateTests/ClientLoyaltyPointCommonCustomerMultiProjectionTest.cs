@@ -9,7 +9,7 @@ using Xunit;
 
 namespace Customer.Test.AggregateTests;
 
-public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTestBase<CustomerDependency>
+public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTest<CustomerDependency>
 {
     private static readonly Guid branchId = Guid.Parse("b4a3c2e3-78ca-473b-8afb-f534e5d6d66b");
     private static readonly string branchName = "Test Branch";

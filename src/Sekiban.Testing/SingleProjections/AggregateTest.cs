@@ -11,7 +11,7 @@ using Sekiban.Testing.Command;
 
 namespace Sekiban.Testing.SingleProjections;
 
-public class AggregateTestBase<TAggregatePayload, TDependencyDefinition> : IDisposable,
+public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposable,
     IAggregateTestHelper<TAggregatePayload>
     where TAggregatePayload : IAggregatePayload, new()
     where TDependencyDefinition : IDependencyDefinition, new()
@@ -19,7 +19,7 @@ public class AggregateTestBase<TAggregatePayload, TDependencyDefinition> : IDisp
     private readonly IAggregateTestHelper<TAggregatePayload> _helper;
     protected readonly IServiceProvider _serviceProvider;
 
-    public AggregateTestBase()
+    public AggregateTest()
     {
         var services = new ServiceCollection();
         // ReSharper disable once VirtualMemberCallInConstructor
@@ -30,13 +30,13 @@ public class AggregateTestBase<TAggregatePayload, TDependencyDefinition> : IDisp
         _helper = new AggregateTestHelper<TAggregatePayload>(_serviceProvider);
     }
 
-    public AggregateTestBase(IServiceProvider serviceProvider)
+    public AggregateTest(IServiceProvider serviceProvider)
     {
         _serviceProvider = serviceProvider ?? throw new InvalidOperationException();
         _helper = new AggregateTestHelper<TAggregatePayload>(_serviceProvider);
     }
 
-    public AggregateTestBase(IServiceProvider serviceProvider, Guid aggregateId) : this(serviceProvider)
+    public AggregateTest(IServiceProvider serviceProvider, Guid aggregateId) : this(serviceProvider)
     {
         _helper = new AggregateTestHelper<TAggregatePayload>(_serviceProvider, aggregateId);
     }

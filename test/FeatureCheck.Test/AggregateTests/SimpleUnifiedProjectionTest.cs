@@ -16,7 +16,7 @@ using Xunit;
 
 namespace Customer.Test.AggregateTests;
 
-public class SimpleUnifiedProjectionTest : UnifiedTestBase<CustomerDependency>
+public class SimpleUnifiedProjectionTest : UnifiedTest<CustomerDependency>
 {
     public Guid branchId = Guid.NewGuid();
     public string branchName = "test";

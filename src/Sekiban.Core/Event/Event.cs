@@ -4,7 +4,7 @@ using Sekiban.Core.Partition;
 
 namespace Sekiban.Core.Event;
 
-public record Event<TEventPayload> : DocumentBase, IEvent where TEventPayload : IEventPayloadCommon
+public record Event<TEventPayload> : Document.Document, IEvent where TEventPayload : IEventPayloadCommon
 {
     public Event()
     {

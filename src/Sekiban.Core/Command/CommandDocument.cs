@@ -4,7 +4,7 @@ using Sekiban.Core.Partition;
 
 namespace Sekiban.Core.Command;
 
-public record CommandDocument<T> : DocumentBase, IDocument, ICallHistories where T : ICommandCommon
+public record CommandDocument<T> : Document.Document, IDocument, ICallHistories where T : ICommandCommon
 {
     public CommandDocument()
     {

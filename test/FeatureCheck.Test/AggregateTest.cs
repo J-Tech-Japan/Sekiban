@@ -4,7 +4,7 @@ using Sekiban.Testing.SingleProjections;
 
 namespace Customer.Test;
 
-public class AggregateTestBase<TAggregatePayload> : AggregateTestBase<TAggregatePayload, CustomerDependency>
+public class AggregateTest<TAggregatePayload> : AggregateTest<TAggregatePayload, CustomerDependency>
     where TAggregatePayload : IAggregatePayload, new()
 {
 }

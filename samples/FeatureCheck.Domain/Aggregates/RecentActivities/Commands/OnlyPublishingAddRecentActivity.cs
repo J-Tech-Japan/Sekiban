@@ -20,7 +20,7 @@ public record OnlyPublishingAddRecentActivity(Guid RecentActivityId, string Acti
         return RecentActivityId;
     }
 
-    public class Handler : IOnlyPublishingCommandHandlerBase<RecentActivities.RecentActivity,
+    public class Handler : IOnlyPublishingCommandHandler<RecentActivities.RecentActivity,
         OnlyPublishingAddRecentActivity>
     {
         private readonly ISekibanDateProducer _sekibanDateProducer;

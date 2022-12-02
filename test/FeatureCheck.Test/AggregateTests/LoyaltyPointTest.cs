@@ -9,7 +9,7 @@ using Xunit;
 
 namespace Customer.Test.AggregateTests;
 
-public class LoyaltyPointTest : AggregateTestBase<LoyaltyPoint>
+public class LoyaltyPointTest : AggregateTest<LoyaltyPoint>
 {
     [Fact]
     public void CreateAndAddTest()
