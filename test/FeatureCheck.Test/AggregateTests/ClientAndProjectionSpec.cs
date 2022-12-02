@@ -17,7 +17,7 @@ using Xunit;
 
 namespace Customer.Test.AggregateTests;
 
-public class ClientAndProjectionSpec : AggregateTestBase<Client, CustomerDependency>
+public class ClientAndProjectionSpec : AggregateTest<Client, CustomerDependency>
 {
     public readonly string branchName = "BranchName";
     public readonly string clientEmail = "client@example.com";

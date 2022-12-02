@@ -11,7 +11,7 @@ using RecentActivity = Customer.Domain.Aggregates.RecentActivities.RecentActivit
 
 namespace Customer.Test.AggregateTests;
 
-public class RecentActivityTest : AggregateTestBase<RecentActivity, CustomerDependency>
+public class RecentActivityTest : AggregateTest<RecentActivity, CustomerDependency>
 {
     private RecentActivityRecord firstRecord = new("first", DateTime.UtcNow);
     private RecentActivityRecord publishOnlyRecord = new("publish only", DateTime.UtcNow);

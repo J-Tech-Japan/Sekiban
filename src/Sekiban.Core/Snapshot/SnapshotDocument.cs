@@ -5,7 +5,7 @@ using Sekiban.Core.Shared;
 
 namespace Sekiban.Core.Snapshot;
 
-public record SnapshotDocument : DocumentBase, IDocument
+public record SnapshotDocument : Document.Document, IDocument
 {
     public SnapshotDocument()
     {

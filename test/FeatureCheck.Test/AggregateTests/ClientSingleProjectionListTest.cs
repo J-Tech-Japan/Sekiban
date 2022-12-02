@@ -10,7 +10,7 @@ using Xunit;
 
 namespace Customer.Test.AggregateTests;
 
-public class ClientSingleProjectionListTest : UnifiedTestBase<CustomerDependency>
+public class ClientSingleProjectionListTest : UnifiedTest<CustomerDependency>
 {
     [Fact]
     public void Test()

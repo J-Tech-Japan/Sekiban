@@ -3,13 +3,13 @@ using Sekiban.Core.Shared;
 
 namespace Sekiban.Core.Document;
 
-public abstract record class DocumentBase : IDocument
+public abstract record class Document : IDocument
 {
-    public DocumentBase()
+    public Document()
     {
     }
 
-    public DocumentBase(Guid aggregateId, string partitionKey, DocumentType documentType, string documentTypeName)
+    public Document(Guid aggregateId, string partitionKey, DocumentType documentType, string documentTypeName)
     {
         Id = Guid.NewGuid();
         AggregateId = aggregateId;

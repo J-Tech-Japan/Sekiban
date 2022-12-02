@@ -4,7 +4,7 @@ using Sekiban.Core.Query.SingleProjections;
 
 namespace Sekiban.Core.Aggregate;
 
-public class Aggregate<TAggregatePayload> : AggregateCommonBase,
+public class Aggregate<TAggregatePayload> : AggregateCommon,
     ISingleProjectionStateConvertible<AggregateState<TAggregatePayload>>
     where TAggregatePayload : IAggregatePayload, new()
 {

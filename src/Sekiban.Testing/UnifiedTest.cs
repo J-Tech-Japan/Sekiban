@@ -17,14 +17,14 @@ using Xunit;
 
 namespace Sekiban.Testing;
 
-public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDefinition : IDependencyDefinition, new()
+public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefinition : IDependencyDefinition, new()
 {
     private readonly TestCommandExecutor _commandExecutor;
     private readonly TestEventHandler _eventHandler;
     protected readonly IServiceProvider _serviceProvider;
 
     // ReSharper disable once PublicConstructorInAbstractClass
-    public UnifiedTestBase()
+    public UnifiedTest()
     {
         var services = new ServiceCollection();
         // ReSharper disable once VirtualMemberCallInConstructor
@@ -42,33 +42,33 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
 
     #region Get Aggregate Test
 
-    public AggregateTestBase<TAggregatePayload, TDependencyDefinition> GetAggregateTest<TAggregatePayload>(
+    public AggregateTest<TAggregatePayload, TDependencyDefinition> GetAggregateTest<TAggregatePayload>(
         Guid aggregateId)
         where TAggregatePayload : IAggregatePayload, new()
     {
         return new(_serviceProvider, aggregateId);
     }
 
-    public AggregateTestBase<TAggregatePayload, TDependencyDefinition> GetAggregateTest<TAggregatePayload>()
+    public AggregateTest<TAggregatePayload, TDependencyDefinition> GetAggregateTest<TAggregatePayload>()
         where TAggregatePayload : IAggregatePayload, new()
     {
         return new(_serviceProvider);
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenGetAggregateTest<TAggregatePayload>(
+    public UnifiedTest<TDependencyDefinition> ThenGetAggregateTest<TAggregatePayload>(
         Guid aggregateId,
-        Action<AggregateTestBase<TAggregatePayload, TDependencyDefinition>> testAction)
+        Action<AggregateTest<TAggregatePayload, TDependencyDefinition>> testAction)
         where TAggregatePayload : IAggregatePayload, new()
     {
-        testAction(new AggregateTestBase<TAggregatePayload, TDependencyDefinition>(_serviceProvider, aggregateId));
+        testAction(new AggregateTest<TAggregatePayload, TDependencyDefinition>(_serviceProvider, aggregateId));
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenGetAggregateTest<TAggregatePayload>(
-        Action<AggregateTestBase<TAggregatePayload, TDependencyDefinition>> testAction)
+    public UnifiedTest<TDependencyDefinition> ThenGetAggregateTest<TAggregatePayload>(
+        Action<AggregateTest<TAggregatePayload, TDependencyDefinition>> testAction)
         where TAggregatePayload : IAggregatePayload, new()
     {
-        testAction(new AggregateTestBase<TAggregatePayload, TDependencyDefinition>(_serviceProvider));
+        testAction(new AggregateTest<TAggregatePayload, TDependencyDefinition>(_serviceProvider));
         return this;
     }
 
@@ -89,7 +89,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
                throw new Exception("Failed to get Aggregate Query Response for " + typeof(TQuery).Name);
     }
 
-    public UnifiedTestBase<TDependencyDefinition> WriteAggregateQueryResponseToFile<TAggregatePayload, TQuery,
+    public UnifiedTest<TDependencyDefinition> WriteAggregateQueryResponseToFile<TAggregatePayload, TQuery,
         TQueryParameter, TQueryResponse>(
         TQueryParameter param,
         string filename)
@@ -104,7 +104,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenAggregateQueryResponseIs<TAggregatePayload, TQuery,
+    public UnifiedTest<TDependencyDefinition> ThenAggregateQueryResponseIs<TAggregatePayload, TQuery,
         TQueryParameter, TQueryResponse>(
         TQueryParameter param,
         TQueryResponse expectedResponse)
@@ -120,7 +120,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenGetAggregateQueryResponse<TAggregatePayload, TQuery,
+    public UnifiedTest<TDependencyDefinition> ThenGetAggregateQueryResponse<TAggregatePayload, TQuery,
         TQueryParameter, TQueryResponse>(
         TQueryParameter param,
         Action<TQueryResponse> responseAction)
@@ -132,7 +132,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenAggregateQueryResponseIsFromJson<TAggregatePayload, TQuery,
+    public UnifiedTest<TDependencyDefinition> ThenAggregateQueryResponseIsFromJson<TAggregatePayload, TQuery,
         TQueryParameter, TQueryResponse>(
         TQueryParameter param,
         string responseJson)
@@ -146,7 +146,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenAggregateQueryResponseIsFromFile<TAggregatePayload, TQuery,
+    public UnifiedTest<TDependencyDefinition> ThenAggregateQueryResponseIsFromFile<TAggregatePayload, TQuery,
         TQueryParameter, TQueryResponse>(
         TQueryParameter param,
         string responseFilename)
@@ -180,7 +180,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
                throw new Exception("Failed to get Aggregate List Query Response for " + typeof(TQuery).Name);
     }
 
-    public UnifiedTestBase<TDependencyDefinition> WriteAggregateListQueryResponseToFile<TAggregatePayload, TQuery,
+    public UnifiedTest<TDependencyDefinition> WriteAggregateListQueryResponseToFile<TAggregatePayload, TQuery,
         TQueryParameter, TQueryResponse>(
         TQueryParameter param,
         string filename)
@@ -195,7 +195,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenAggregateListQueryResponseIs<TAggregatePayload, TQuery,
+    public UnifiedTest<TDependencyDefinition> ThenAggregateListQueryResponseIs<TAggregatePayload, TQuery,
         TQueryParameter, TQueryResponse>(
         TQueryParameter param,
         ListQueryResult<TQueryResponse> expectedResponse)
@@ -211,7 +211,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenGetAggregateListQueryResponse<TAggregatePayload, TQuery,
+    public UnifiedTest<TDependencyDefinition> ThenGetAggregateListQueryResponse<TAggregatePayload, TQuery,
         TQueryParameter, TQueryResponse>(
         TQueryParameter param,
         Action<ListQueryResult<TQueryResponse>> responseAction)
@@ -224,7 +224,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition>
+    public UnifiedTest<TDependencyDefinition>
         ThenAggregateListQueryResponseIsFromJson<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
             TQueryParameter param,
             string responseJson)
@@ -238,7 +238,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition>
+    public UnifiedTest<TDependencyDefinition>
         ThenAggregateListQueryResponseIsFromFile<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
             TQueryParameter param,
             string responseFilename)
@@ -271,7 +271,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
                throw new Exception("Failed to get Single Projection Query Response for " + typeof(TQuery).Name);
     }
 
-    public UnifiedTestBase<TDependencyDefinition> WriteSingleProjectionQueryResponseToFile<TSingleProjectionPayload,
+    public UnifiedTest<TDependencyDefinition> WriteSingleProjectionQueryResponseToFile<TSingleProjectionPayload,
         TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
@@ -287,7 +287,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenSingleProjectionQueryResponseIs<TSingleProjectionPayload, TQuery,
+    public UnifiedTest<TDependencyDefinition> ThenSingleProjectionQueryResponseIs<TSingleProjectionPayload, TQuery,
         TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
@@ -305,7 +305,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenGetSingleProjectionQueryResponse<TSingleProjectionPayload, TQuery,
+    public UnifiedTest<TDependencyDefinition> ThenGetSingleProjectionQueryResponse<TSingleProjectionPayload, TQuery,
         TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
@@ -319,7 +319,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenSingleProjectionQueryResponseIsFromJson<TSingleProjectionPayload,
+    public UnifiedTest<TDependencyDefinition> ThenSingleProjectionQueryResponseIsFromJson<TSingleProjectionPayload,
         TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
@@ -335,7 +335,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenSingleProjectionQueryResponseIsFromFile<TSingleProjectionPayload,
+    public UnifiedTest<TDependencyDefinition> ThenSingleProjectionQueryResponseIsFromFile<TSingleProjectionPayload,
         TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
@@ -371,7 +371,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
                throw new Exception("Failed to get Single Projection Query Response for " + typeof(TQuery).Name);
     }
 
-    public UnifiedTestBase<TDependencyDefinition> WriteSingleProjectionListQueryResponseToFile<TSingleProjectionPayload,
+    public UnifiedTest<TDependencyDefinition> WriteSingleProjectionListQueryResponseToFile<TSingleProjectionPayload,
         TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
@@ -388,7 +388,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenSingleProjectionListQueryResponseIs<TSingleProjectionPayload,
+    public UnifiedTest<TDependencyDefinition> ThenSingleProjectionListQueryResponseIs<TSingleProjectionPayload,
         TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
@@ -407,7 +407,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenGetSingleProjectionListQueryResponse<TSingleProjectionPayload,
+    public UnifiedTest<TDependencyDefinition> ThenGetSingleProjectionListQueryResponse<TSingleProjectionPayload,
         TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
@@ -422,7 +422,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenSingleProjectionListQueryResponseIsFromJson<
+    public UnifiedTest<TDependencyDefinition> ThenSingleProjectionListQueryResponseIsFromJson<
         TSingleProjectionPayload, TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
@@ -438,7 +438,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenSingleProjectionListQueryResponseIsFromFile<
+    public UnifiedTest<TDependencyDefinition> ThenSingleProjectionListQueryResponseIsFromFile<
         TSingleProjectionPayload, TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
@@ -473,7 +473,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
                throw new Exception("Failed to get Multi Projection Query Response for " + typeof(TQuery).Name);
     }
 
-    public UnifiedTestBase<TDependencyDefinition> WriteMultiProjectionQueryResponseToFile<TMultiProjectionPayload,
+    public UnifiedTest<TDependencyDefinition> WriteMultiProjectionQueryResponseToFile<TMultiProjectionPayload,
         TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
@@ -489,7 +489,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenMultiProjectionQueryResponseIs<TMultiProjectionPayload, TQuery,
+    public UnifiedTest<TDependencyDefinition> ThenMultiProjectionQueryResponseIs<TMultiProjectionPayload, TQuery,
         TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
@@ -507,7 +507,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenGetMultiProjectionQueryResponse<TMultiProjectionPayload, TQuery,
+    public UnifiedTest<TDependencyDefinition> ThenGetMultiProjectionQueryResponse<TMultiProjectionPayload, TQuery,
         TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
@@ -521,7 +521,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenMultiProjectionQueryResponseIsFromJson<TMultiProjectionPayload,
+    public UnifiedTest<TDependencyDefinition> ThenMultiProjectionQueryResponseIsFromJson<TMultiProjectionPayload,
         TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
@@ -537,7 +537,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenMultiProjectionQueryResponseIsFromFile<TMultiProjectionPayload,
+    public UnifiedTest<TDependencyDefinition> ThenMultiProjectionQueryResponseIsFromFile<TMultiProjectionPayload,
         TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
@@ -574,7 +574,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
                throw new Exception("Failed to get Multi Projection List Query Response for " + typeof(TQuery).Name);
     }
 
-    public UnifiedTestBase<TDependencyDefinition> WriteMultiProjectionListQueryResponseToFile<TMultiProjectionPayload,
+    public UnifiedTest<TDependencyDefinition> WriteMultiProjectionListQueryResponseToFile<TMultiProjectionPayload,
         TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
@@ -591,7 +591,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenMultiProjectionListQueryResponseIs<TMultiProjectionPayload,
+    public UnifiedTest<TDependencyDefinition> ThenMultiProjectionListQueryResponseIs<TMultiProjectionPayload,
         TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
@@ -610,7 +610,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenGetMultiProjectionListQueryResponse<TMultiProjectionPayload,
+    public UnifiedTest<TDependencyDefinition> ThenGetMultiProjectionListQueryResponse<TMultiProjectionPayload,
         TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
@@ -625,7 +625,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenMultiProjectionListQueryResponseIsFromJson<
+    public UnifiedTest<TDependencyDefinition> ThenMultiProjectionListQueryResponseIsFromJson<
         TMultiProjectionPayload, TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
@@ -641,7 +641,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenMultiProjectionListQueryResponseIsFromFile<
+    public UnifiedTest<TDependencyDefinition> ThenMultiProjectionListQueryResponseIsFromFile<
         TMultiProjectionPayload, TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
@@ -672,7 +672,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
                    "Failed to get Multi Projection Response for " + typeof(TMultiProjectionPayload).Name);
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenMultiProjectionPayloadIsFromFile<TMultiProjectionPayload>(
+    public UnifiedTest<TDependencyDefinition> ThenMultiProjectionPayloadIsFromFile<TMultiProjectionPayload>(
         string filename)
         where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
@@ -682,7 +682,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return ThenMultiProjectionPayloadIs(projection);
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenGetMultiProjectionPayload<TMultiProjectionPayload>(
+    public UnifiedTest<TDependencyDefinition> ThenGetMultiProjectionPayload<TMultiProjectionPayload>(
         Action<TMultiProjectionPayload> payloadAction)
         where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
@@ -690,7 +690,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenGetMultiProjectionState<TMultiProjectionPayload>(
+    public UnifiedTest<TDependencyDefinition> ThenGetMultiProjectionState<TMultiProjectionPayload>(
         Action<MultiProjectionState<TMultiProjectionPayload>> stateAction)
         where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
@@ -698,7 +698,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenMultiProjectionStateIs<TMultiProjectionPayload>(
+    public UnifiedTest<TDependencyDefinition> ThenMultiProjectionStateIs<TMultiProjectionPayload>(
         MultiProjectionState<TMultiProjectionPayload> state)
         where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
@@ -714,7 +714,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenMultiProjectionPayloadIs<TMultiProjectionPayload>(
+    public UnifiedTest<TDependencyDefinition> ThenMultiProjectionPayloadIs<TMultiProjectionPayload>(
         TMultiProjectionPayload payload)
         where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
@@ -726,7 +726,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenMultiProjectionStateIsFromFile<TMultiProjectionPayload>(
+    public UnifiedTest<TDependencyDefinition> ThenMultiProjectionStateIsFromFile<TMultiProjectionPayload>(
         string filename)
         where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
@@ -736,7 +736,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return ThenMultiProjectionStateIs(projection);
     }
 
-    public UnifiedTestBase<TDependencyDefinition> WriteMultiProjectionStateToFile<TMultiProjectionPayload>(
+    public UnifiedTest<TDependencyDefinition> WriteMultiProjectionStateToFile<TMultiProjectionPayload>(
         string filename)
         where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
@@ -760,7 +760,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
                                    typeof(TAggregatePayload).Name);
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenAggregateListProjectionPayloadIsFromFile<TAggregatePayload>(
+    public UnifiedTest<TDependencyDefinition> ThenAggregateListProjectionPayloadIsFromFile<TAggregatePayload>(
         string filename)
         where TAggregatePayload : IAggregatePayload, new()
     {
@@ -771,7 +771,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return ThenAggregateListProjectionPayloadIs(projection);
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenGetAggregateListProjectionPayload<TAggregatePayload>(
+    public UnifiedTest<TDependencyDefinition> ThenGetAggregateListProjectionPayload<TAggregatePayload>(
         Action<SingleProjectionListState<AggregateState<TAggregatePayload>>> payloadAction)
         where TAggregatePayload : IAggregatePayload, new()
     {
@@ -779,7 +779,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenGetAggregateListProjectionState<TAggregatePayload>(
+    public UnifiedTest<TDependencyDefinition> ThenGetAggregateListProjectionState<TAggregatePayload>(
         Action<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>> stateAction)
         where TAggregatePayload : IAggregatePayload, new()
     {
@@ -787,7 +787,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenAggregateListProjectionStateIs<TAggregatePayload>(
+    public UnifiedTest<TDependencyDefinition> ThenAggregateListProjectionStateIs<TAggregatePayload>(
         MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>> state)
         where TAggregatePayload : IAggregatePayload, new()
     {
@@ -803,7 +803,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenAggregateListProjectionPayloadIs<TAggregatePayload>(
+    public UnifiedTest<TDependencyDefinition> ThenAggregateListProjectionPayloadIs<TAggregatePayload>(
         SingleProjectionListState<AggregateState<TAggregatePayload>> payload)
         where TAggregatePayload : IAggregatePayload, new()
     {
@@ -815,7 +815,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenAggregateListProjectionStateIsFromFile<TAggregatePayload>(
+    public UnifiedTest<TDependencyDefinition> ThenAggregateListProjectionStateIsFromFile<TAggregatePayload>(
         string filename)
         where TAggregatePayload : IAggregatePayload, new()
     {
@@ -828,7 +828,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return ThenAggregateListProjectionStateIs(projection);
     }
 
-    public UnifiedTestBase<TDependencyDefinition> WriteAggregateListProjectionStateToFile<TAggregatePayload>(
+    public UnifiedTest<TDependencyDefinition> WriteAggregateListProjectionStateToFile<TAggregatePayload>(
         string filename)
         where TAggregatePayload : IAggregatePayload, new()
     {
@@ -853,7 +853,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
                                    typeof(TSingleProjectionPayload).Name);
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenSingleProjectionListPayloadIsFromFile<TSingleProjectionPayload>(
+    public UnifiedTest<TDependencyDefinition> ThenSingleProjectionListPayloadIsFromFile<TSingleProjectionPayload>(
         string filename)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
@@ -865,7 +865,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return ThenSingleProjectionListPayloadIs(projection);
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenGetSingleProjectionListPayload<TSingleProjectionPayload>(
+    public UnifiedTest<TDependencyDefinition> ThenGetSingleProjectionListPayload<TSingleProjectionPayload>(
         Action<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>> payloadAction)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
@@ -873,7 +873,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenGetSingleProjectionListState<TSingleProjectionPayload>(
+    public UnifiedTest<TDependencyDefinition> ThenGetSingleProjectionListState<TSingleProjectionPayload>(
         Action<MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>
             stateAction)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
@@ -882,7 +882,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenSingleProjectionListStateIs<TSingleProjectionPayload>(
+    public UnifiedTest<TDependencyDefinition> ThenSingleProjectionListStateIs<TSingleProjectionPayload>(
         MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>> state)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
@@ -898,7 +898,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenSingleProjectionListPayloadIs<TSingleProjectionPayload>(
+    public UnifiedTest<TDependencyDefinition> ThenSingleProjectionListPayloadIs<TSingleProjectionPayload>(
         SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>> payload)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
@@ -910,7 +910,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> ThenSingleProjectionListStateIsFromFile<TSingleProjectionPayload>(
+    public UnifiedTest<TDependencyDefinition> ThenSingleProjectionListStateIsFromFile<TSingleProjectionPayload>(
         string filename)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
@@ -924,7 +924,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return ThenSingleProjectionListStateIs(projection);
     }
 
-    public UnifiedTestBase<TDependencyDefinition> WriteSingleProjectionListStateToFile<TSingleProjectionPayload>(
+    public UnifiedTest<TDependencyDefinition> WriteSingleProjectionListStateToFile<TSingleProjectionPayload>(
         string filename)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
@@ -937,7 +937,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
 
     #region Given
 
-    public UnifiedTestBase<TDependencyDefinition> GivenScenario(Action initialAction)
+    public UnifiedTest<TDependencyDefinition> GivenScenario(Action initialAction)
     {
         initialAction();
         return this;
@@ -967,75 +967,75 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
 
     #region GivenEvents
 
-    public UnifiedTestBase<TDependencyDefinition> GivenEvents(IEnumerable<IEvent> events)
+    public UnifiedTest<TDependencyDefinition> GivenEvents(IEnumerable<IEvent> events)
     {
         _eventHandler.GivenEvents(events);
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> GivenEventsWithPublish(IEnumerable<IEvent> events)
+    public UnifiedTest<TDependencyDefinition> GivenEventsWithPublish(IEnumerable<IEvent> events)
     {
         _eventHandler.GivenEventsWithPublish(events);
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> GivenEvents(params IEvent[] events)
+    public UnifiedTest<TDependencyDefinition> GivenEvents(params IEvent[] events)
     {
         return GivenEvents(events.AsEnumerable());
     }
 
-    public UnifiedTestBase<TDependencyDefinition> GivenEventsWithPublish(params IEvent[] events)
+    public UnifiedTest<TDependencyDefinition> GivenEventsWithPublish(params IEvent[] events)
     {
         return GivenEventsWithPublish(events.AsEnumerable());
     }
 
-    public UnifiedTestBase<TDependencyDefinition> GivenEventsFromJson(string jsonEvents)
+    public UnifiedTest<TDependencyDefinition> GivenEventsFromJson(string jsonEvents)
     {
         _eventHandler.GivenEventsFromJson(jsonEvents);
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> GivenEventsFromJsonWithPublish(string jsonEvents)
+    public UnifiedTest<TDependencyDefinition> GivenEventsFromJsonWithPublish(string jsonEvents)
     {
         _eventHandler.GivenEventsFromJsonWithPublish(jsonEvents);
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> GivenEvents(
+    public UnifiedTest<TDependencyDefinition> GivenEvents(
         params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTouples)
     {
         _eventHandler.GivenEvents(eventTouples);
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> GivenEventsWithPublish(
+    public UnifiedTest<TDependencyDefinition> GivenEventsWithPublish(
         params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTouples)
     {
         _eventHandler.GivenEventsWithPublish(eventTouples);
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> GivenEvents(
+    public UnifiedTest<TDependencyDefinition> GivenEvents(
         params (Guid aggregateId, IEventPayloadCommon payload)[] eventTouples)
     {
         _eventHandler.GivenEvents(eventTouples);
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> GivenEventsWithPublish(
+    public UnifiedTest<TDependencyDefinition> GivenEventsWithPublish(
         params (Guid aggregateId, IEventPayloadCommon payload)[] eventTouples)
     {
         _eventHandler.GivenEventsWithPublish(eventTouples);
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> GivenEventsFromFile(string filename)
+    public UnifiedTest<TDependencyDefinition> GivenEventsFromFile(string filename)
     {
         _eventHandler.GivenEventsFromFile(filename);
         return this;
     }
 
-    public UnifiedTestBase<TDependencyDefinition> GivenEventsFromFileWithPublish(string filename)
+    public UnifiedTest<TDependencyDefinition> GivenEventsFromFileWithPublish(string filename)
     {
         _eventHandler.GivenEventsFromFileWithPublish(filename);
         return this;
@@ -1059,7 +1059,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         return _commandExecutor.ExecuteCommandWithPublish(command, injectingAggregateId);
     }
 
-    public UnifiedTestBase<TDependencyDefinition> GivenCommandExecutorAction(Action<TestCommandExecutor> action)
+    public UnifiedTest<TDependencyDefinition> GivenCommandExecutorAction(Action<TestCommandExecutor> action)
     {
         action(_commandExecutor);
         return this;

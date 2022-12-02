@@ -14,9 +14,9 @@ public class OnlyPublishingCommandHandlerAdapter<TAggregatePayload, TCommand>
         ICommandHandlerCommon<TAggregatePayload, TCommand> handler,
         Guid aggregateId)
     {
-        if (handler is not IOnlyPublishingCommandHandlerBase<TAggregatePayload, TCommand> publishHandler)
+        if (handler is not IOnlyPublishingCommandHandler<TAggregatePayload, TCommand> publishHandler)
             throw new SekibanCommandHandlerNotMatchException(
-                handler.GetType().Name + "handler should inherit " + typeof(IOnlyPublishingCommandHandlerBase<,>).Name);
+                handler.GetType().Name + "handler should inherit " + typeof(IOnlyPublishingCommandHandler<,>).Name);
         var events = new List<IEvent>();
         await foreach (var eventPayload in publishHandler.HandleCommandAsync(aggregateId, commandDocument.Payload))
             events.Add(

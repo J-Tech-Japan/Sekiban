@@ -4,7 +4,7 @@ using Sekiban.Core.Event;
 namespace Sekiban.Core.Command;
 
 public interface
-    IOnlyPublishingCommandHandlerBase<TAggregatePayload, TCommand> : ICommandHandlerCommon<TAggregatePayload, TCommand>
+    IOnlyPublishingCommandHandler<TAggregatePayload, TCommand> : ICommandHandlerCommon<TAggregatePayload, TCommand>
     where TAggregatePayload : IAggregatePayload, new() where TCommand : IOnlyPublishingCommand<TAggregatePayload>
 {
     public IAsyncEnumerable<IEventPayload<TAggregatePayload>> HandleCommandAsync(Guid aggregateId, TCommand command);

@@ -16,7 +16,7 @@ using Xunit;
 
 namespace Customer.Test.AggregateTests;
 
-public class ClientSpec : AggregateTestBase<Client, CustomerDependency>
+public class ClientSpec : AggregateTest<Client, CustomerDependency>
 {
     private const string testClientName = "TestName";
     private const string testClientChangedName = "TestName2";
