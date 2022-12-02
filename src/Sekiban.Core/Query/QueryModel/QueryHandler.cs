@@ -20,7 +20,7 @@ public class QueryHandler
         GetMultiProjectionListQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
             TQueryParameter param,
             MultiProjectionState<TProjectionPayload> projection)
-        where TProjectionPayload : IMultiProjectionPayload, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionListQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -38,7 +38,7 @@ public class QueryHandler
     public TQueryResponse GetMultiProjectionQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
         TQueryParameter param,
         MultiProjectionState<TProjectionPayload> projection)
-        where TProjectionPayload : IMultiProjectionPayload, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {

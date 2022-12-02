@@ -5,7 +5,7 @@ namespace Sekiban.Core.Query.QueryModel;
 
 public interface
     IMultiProjectionListQuery<TProjectionPayload, in TQueryParameter, TQueryResponse>
-    where TProjectionPayload : IMultiProjectionPayload, new()
+    where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     where TQueryParameter : IQueryParameter
 {
     public IEnumerable<TQueryResponse> HandleFilter(

@@ -5,7 +5,7 @@ namespace Sekiban.Core.Query.MultiProjections.Projections;
 
 public class MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>
     where TProjection : IMultiProjector<TProjectionPayload>, new()
-    where TProjectionPayload : IMultiProjectionPayload, new()
+    where TProjectionPayload : IMultiProjectionPayloadCommon, new()
 {
     public List<IEvent> UnsafeEvents { get; set; } = new();
     public MultiProjectionState<TProjectionPayload>? State { get; set; } = default;

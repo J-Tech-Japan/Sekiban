@@ -10,14 +10,14 @@ public interface IQueryExecutor
     public Task<TQueryResponse>
         ForMultiProjectionQueryAsync<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
             TQueryParameter param)
-        where TProjectionPayload : IMultiProjectionPayload, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter;
 
     public Task<ListQueryResult<TQueryResponse>>
         ForMultiProjectionListQueryAsync<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
             TQueryParameter param)
-        where TProjectionPayload : IMultiProjectionPayload, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionListQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter;
 

@@ -14,7 +14,7 @@ public class SimpleMultiProjection : IMultiProjection
     public async Task<MultiProjectionState<TProjectionPayload>>
         GetMultiProjectionAsync<TProjection, TProjectionPayload>()
         where TProjection : IMultiProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultiProjectionPayload, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         var projector = new TProjection();
         await _documentRepository.GetAllEventsAsync(

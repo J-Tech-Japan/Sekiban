@@ -31,7 +31,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
     public async Task<MultiProjectionState<TProjectionPayload>>
         GetMultiProjectionAsync<TProjection, TProjectionPayload>()
         where TProjection : IMultiProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultiProjectionPayload, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         var savedContainer = multiProjectionCache.Get<TProjection, TProjectionPayload>();
         if (savedContainer == null) return await GetInitialProjection<TProjection, TProjectionPayload>();
@@ -98,7 +98,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
 
     private async Task<MultiProjectionState<TProjectionPayload>> GetInitialProjection<TProjection, TProjectionPayload>()
         where TProjection : IMultiProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultiProjectionPayload, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         var projector = new TProjection();
         var container = new MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>();

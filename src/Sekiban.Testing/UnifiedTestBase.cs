@@ -461,7 +461,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
 
     private TQueryResponse GetMultiProjectionQueryResponse<TMultiProjectionPayload, TQuery, TQueryParameter,
         TQueryResponse>(TQueryParameter param)
-        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -478,7 +478,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         TQueryResponse>(
         TQueryParameter param,
         string filename)
-        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -494,7 +494,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         TQueryResponse>(
         TQueryParameter param,
         TQueryResponse expectedResponse)
-        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -512,7 +512,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         TQueryResponse>(
         TQueryParameter param,
         Action<TQueryResponse> responseAction)
-        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -526,7 +526,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         TQueryResponse>(
         TQueryParameter param,
         string responseJson)
-        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -542,7 +542,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         TQueryResponse>(
         TQueryParameter param,
         string responseFilename)
-        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -562,7 +562,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
     private ListQueryResult<TQueryResponse> GetMultiProjectionListQueryResponse<TMultiProjectionPayload, TQuery,
         TQueryParameter, TQueryResponse>(
         TQueryParameter param)
-        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionListQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -579,7 +579,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         TQueryResponse>(
         TQueryParameter param,
         string filename)
-        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionListQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -596,7 +596,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         TQueryResponse>(
         TQueryParameter param,
         ListQueryResult<TQueryResponse> expectedResponse)
-        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionListQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -615,7 +615,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         TQueryResponse>(
         TQueryParameter param,
         Action<ListQueryResult<TQueryResponse>> responseAction)
-        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionListQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -630,7 +630,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         TQueryResponse>(
         TQueryParameter param,
         string responseJson)
-        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionListQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -646,7 +646,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
         TQueryResponse>(
         TQueryParameter param,
         string responseFilename)
-        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionListQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter
     {
@@ -663,7 +663,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
     #region Multi Projection
 
     public MultiProjectionState<TMultiProjectionPayload> GetMultiProjectionState<TMultiProjectionPayload>()
-        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ??
                                      throw new Exception("Failed to get Query service");
@@ -674,7 +674,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
 
     public UnifiedTestBase<TDependencyDefinition> ThenMultiProjectionPayloadIsFromFile<TMultiProjectionPayload>(
         string filename)
-        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         using var openStream = File.OpenRead(filename);
         var projection = JsonSerializer.Deserialize<TMultiProjectionPayload>(openStream);
@@ -684,7 +684,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
 
     public UnifiedTestBase<TDependencyDefinition> ThenGetMultiProjectionPayload<TMultiProjectionPayload>(
         Action<TMultiProjectionPayload> payloadAction)
-        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         payloadAction(GetMultiProjectionState<TMultiProjectionPayload>().Payload);
         return this;
@@ -692,7 +692,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
 
     public UnifiedTestBase<TDependencyDefinition> ThenGetMultiProjectionState<TMultiProjectionPayload>(
         Action<MultiProjectionState<TMultiProjectionPayload>> stateAction)
-        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         stateAction(GetMultiProjectionState<TMultiProjectionPayload>());
         return this;
@@ -700,7 +700,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
 
     public UnifiedTestBase<TDependencyDefinition> ThenMultiProjectionStateIs<TMultiProjectionPayload>(
         MultiProjectionState<TMultiProjectionPayload> state)
-        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         var actual = GetMultiProjectionState<TMultiProjectionPayload>();
         var expected = state with
@@ -716,7 +716,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
 
     public UnifiedTestBase<TDependencyDefinition> ThenMultiProjectionPayloadIs<TMultiProjectionPayload>(
         TMultiProjectionPayload payload)
-        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         var actual = GetMultiProjectionState<TMultiProjectionPayload>().Payload;
         var expected = payload;
@@ -728,7 +728,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
 
     public UnifiedTestBase<TDependencyDefinition> ThenMultiProjectionStateIsFromFile<TMultiProjectionPayload>(
         string filename)
-        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         using var openStream = File.OpenRead(filename);
         var projection = JsonSerializer.Deserialize<MultiProjectionState<TMultiProjectionPayload>>(openStream);
@@ -738,7 +738,7 @@ public abstract class UnifiedTestBase<TDependencyDefinition> where TDependencyDe
 
     public UnifiedTestBase<TDependencyDefinition> WriteMultiProjectionStateToFile<TMultiProjectionPayload>(
         string filename)
-        where TMultiProjectionPayload : IMultiProjectionPayload, new()
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         var json = SekibanJsonHelper.Serialize(GetMultiProjectionState<TMultiProjectionPayload>());
         File.WriteAllTextAsync(filename, json);
