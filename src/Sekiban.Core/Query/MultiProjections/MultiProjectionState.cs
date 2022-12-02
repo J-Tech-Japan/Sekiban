@@ -5,6 +5,6 @@ public record MultiProjectionState<TProjectionPayload>(
     Guid LastEventId,
     string LastSortableUniqueId,
     int AppliedSnapshotVersion,
-    int Version) : IProjection where TProjectionPayload : IMultiProjectionPayload
+    int Version) : IProjection where TProjectionPayload : IMultiProjectionPayloadCommon
 {
 }

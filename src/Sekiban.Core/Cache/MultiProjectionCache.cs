@@ -20,14 +20,14 @@ public class MultiProjectionCache : IMultiProjectionCache
     public void Set<TProjection, TProjectionPayload>(
         MultipleMemoryProjectionContainer<TProjection, TProjectionPayload> container)
         where TProjection : IMultiProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultiProjectionPayload, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         _memoryCache.Set(GetInMemoryKey<TProjection, TProjectionPayload>(), container, GetMemoryCacheOptions());
     }
 
     public MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>? Get<TProjection, TProjectionPayload>()
         where TProjection : IMultiProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultiProjectionPayload, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         return _memoryCache.Get<MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>>(
             GetInMemoryKey<TProjection, TProjectionPayload>());
@@ -44,7 +44,7 @@ public class MultiProjectionCache : IMultiProjectionCache
     }
 
     private string GetInMemoryKey<TProjector, TPayload>() where TProjector : IMultiProjector<TPayload>, new()
-        where TPayload : IMultiProjectionPayload, new()
+        where TPayload : IMultiProjectionPayloadCommon, new()
     {
         var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
         return "MultiProjection-" + sekibanContext?.SettingGroupIdentifier + "-" + typeof(TProjector).FullName;

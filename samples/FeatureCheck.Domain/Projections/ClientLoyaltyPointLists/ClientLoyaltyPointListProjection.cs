@@ -12,7 +12,7 @@ namespace Customer.Domain.Projections.ClientLoyaltyPointLists;
 
 public record ClientLoyaltyPointListProjection(
     ImmutableList<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> Records,
-    ImmutableList<ClientLoyaltyPointListProjection.ProjectedBranchInternal> Branches) : MultiProjectionPayloadBase<
+    ImmutableList<ClientLoyaltyPointListProjection.ProjectedBranchInternal> Branches) : IMultiProjectionPayload<
     ClientLoyaltyPointListProjection>
 {
     public ClientLoyaltyPointListProjection() : this(ImmutableList<ClientLoyaltyPointListRecord>.Empty,
@@ -20,12 +20,12 @@ public record ClientLoyaltyPointListProjection(
     {
     }
 
-    public override IList<string> TargetAggregateNames()
+    public IList<string> TargetAggregateNames()
     {
         return new List<string> { nameof(Branch), nameof(Client), nameof(LoyaltyPoint) };
     }
 
-    public override Func<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection>? GetApplyEventFunc(
+    public Func<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection>? GetApplyEventFunc(
         IEvent ev, IEventPayloadCommon eventPayload)
     {
         return eventPayload switch

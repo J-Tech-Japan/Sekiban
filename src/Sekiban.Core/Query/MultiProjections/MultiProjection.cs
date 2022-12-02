@@ -4,7 +4,7 @@ using Sekiban.Core.Exceptions;
 namespace Sekiban.Core.Query.MultiProjections;
 
 public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPayload>, IMultiProjectionBase
-    where TProjectionPayload : IMultiProjectionPayload, new()
+    where TProjectionPayload : IMultiProjectionPayloadCommon, new()
 {
     private TProjectionPayload Payload { get; set; } = new();
     public Guid LastEventId { get; set; }
@@ -43,14 +43,14 @@ public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPa
 
     public virtual IList<string> TargetAggregateNames()
     {
-        var projectionPayload = Payload as MultiProjectionPayloadBase<TProjectionPayload> ??
+        var projectionPayload = Payload as IMultiProjectionPayload<TProjectionPayload> ??
                                 throw new SekibanMultiProjectionMustInheritISingleProjectionEventApplicable();
         return projectionPayload.TargetAggregateNames();
     }
 
     protected Action? GetApplyEventAction(IEvent ev, IEventPayloadCommon payload)
     {
-        var projectionPayload = Payload as MultiProjectionPayloadBase<TProjectionPayload> ??
+        var projectionPayload = Payload as IMultiProjectionPayload<TProjectionPayload> ??
                                 throw new SekibanMultiProjectionMustInheritISingleProjectionEventApplicable();
         var func = projectionPayload.GetApplyEventFunc(ev, payload);
         return () =>
