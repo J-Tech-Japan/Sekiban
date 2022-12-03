@@ -2,7 +2,6 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleProjections;
-
 namespace Sekiban.Core.Query.QueryModel;
 
 public class QueryExecutor : IQueryExecutor
@@ -48,7 +47,8 @@ public class QueryExecutor : IQueryExecutor
         ForAggregateListQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameter, IQueryInput<TQueryResponse>
+        where TQueryResponse : IQueryOutput
     {
         var allProjection = await multiProjectionService.GetAggregateList<TAggregatePayload>();
         return queryHandler
@@ -96,4 +96,5 @@ public class QueryExecutor : IQueryExecutor
             .GetSingleProjectionQuery<TSingleProjectionPayload, TQuery,
                 TQueryParameter, TQueryResponse>(param, allProjection);
     }
+    public Task<ListQueryResult<TOutput>> Execute<TOutput>(IQueryInput<TOutput> param) where TOutput : IQueryOutput => throw new NotImplementedException();
 }
