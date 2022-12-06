@@ -48,5 +48,5 @@ public interface IQueryExecutor
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter;
 
-    public Task<ListQueryResult<TOutput>> Execute<TOutput>(IQueryInput<TOutput> param) where TOutput : IQueryOutput;
+    public Task<ListQueryResult<TOutput>> ExecuteAsync<TOutput>(IQueryInput<TOutput> param) where TOutput : IQueryOutput;
 }

@@ -26,7 +26,7 @@ public class SimpleQueryTest : TestBase
     public async Task QueryTestAsync()
     {
 
-        var result = await _queryExecutor.Execute(
+        var result = await _queryExecutor.ExecuteAsync(
             new BasicClientQueryParameter(
                 null,
                 null,

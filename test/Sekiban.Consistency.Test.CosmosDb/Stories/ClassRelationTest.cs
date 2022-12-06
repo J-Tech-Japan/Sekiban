@@ -1,38 +1,65 @@
-using System;
 namespace SampleProjectStoryXTest.Stories;
 
-public interface IQueryExecutor<in TInput, out TOutput>
-    where TInput : IInput<TOutput>
-{
-    TOutput Execute(TInput input);
-}
-public class QueryExecutor<TInput, TOutput> : IQueryExecutor<TInput, TOutput>
-    where TInput : IInput<TOutput>
-{
-    public TOutput Execute(TInput input) =>
-        throw new NotImplementedException("This is a dummy implementation. Please replace it with your own implementation.");
-}
-public interface IInput<out T>
-{
-}
-public record Input(int Value) : IInput<bool>
-{
-}
-public interface IQuery<in TInput, out TOutput>
-{
-    TOutput Execute(TInput input);
-}
-public class Query : IQuery<Input, bool>
-{
-    public bool Execute(Input input) => throw new NotImplementedException();
-}
-public class ClassRelationTest
-{
-
-    public void Test()
-    {
-        var query = new Query();
-        var input = new Input(1);
-        var result = query.Execute(input);
-    }
-}
+// public interface IQueryExecutor
+// {
+//     Task<ListQueryResult<TOutput>> ExecuteListQueryAsync<TOutput>(IInput<TOutput> input)
+//         where TOutput : IOutput;
+//     Task<TOutput> ExecuteQueryAsync<TOutput>(IInput<TOutput> input)
+//         where TOutput : IOutput;
+// }
+// public class QueryExecutor : IQueryExecutor
+// {
+//     public Task<ListQueryResult<TOutput>> ExecuteListQueryAsync<TOutput>(IInput<TOutput> input) where TOutput : IOutput =>
+//         throw new NotImplementedException();
+//     public Task<TOutput> ExecuteQueryAsync<TOutput>(IInput<TOutput> input) where TOutput : IOutput => throw new NotImplementedException();
+// }
+// public interface IOutput
+// {
+// }
+// public interface IInput<TOutput> where TOutput : IOutput
+// {
+// }
+// public record Input(int Value) : IInput<Output1>
+// {
+// }
+// public record Output1 : IOutput
+// {
+// }
+// public interface IQueryHandler<TInput>
+// {
+// }
+// public interface IQuery<TAggregatePayload, TInput, TOutput> : IQueryHandler<TInput>
+//     where TAggregatePayload : IAggregatePayload, new()
+//     where TInput : IInput<TOutput>
+//     where TOutput : IOutput
+// {
+//     public IEnumerable<TOutput> HandleFilter(
+//         TInput queryParam,
+//         IEnumerable<AggregateState<TAggregatePayload>> list);
+//
+//     public IEnumerable<TOutput> HandleSort(TInput queryParam, IEnumerable<TOutput> filteredList);
+// }
+// public class Query : IQuery<Client, Input, Output1>
+// {
+//     public IEnumerable<Output1> HandleFilter(Input queryParam, IEnumerable<AggregateState<Client>> list) => throw new NotImplementedException();
+//     public IEnumerable<Output1> HandleSort(Input queryParam, IEnumerable<Output1> filteredList) => throw new NotImplementedException();
+//     public Task<Output1> ExecuteAsync(Input input) => throw new NotImplementedException();
+// }
+// public class ClassRelationTest
+// {
+//
+//     public void Test()
+//     {
+//         var query = new Query();
+//         var input = new Input(1);
+//         var result = query.ExecuteAsync(input);
+//     }
+//     public async Task Test2()
+//     {
+//         var executor = new QueryExecutor();
+//
+//         var input = new Input(1);
+//         var result1 = await executor.ExecuteQueryAsync(input);
+//         var result2 = await executor.ExecuteListQueryAsync(input);
+//     }
+// }

@@ -96,5 +96,5 @@ public class QueryExecutor : IQueryExecutor
             .GetSingleProjectionQuery<TSingleProjectionPayload, TQuery,
                 TQueryParameter, TQueryResponse>(param, allProjection);
     }
-    public Task<ListQueryResult<TOutput>> Execute<TOutput>(IQueryInput<TOutput> param) where TOutput : IQueryOutput => throw new NotImplementedException();
+    public Task<ListQueryResult<TOutput>> ExecuteAsync<TOutput>(IQueryInput<TOutput> param) where TOutput : IQueryOutput => throw new NotImplementedException();
 }
