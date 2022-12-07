@@ -1,4 +1,4 @@
-namespace Customer.Domain.Aggregates.RecentActivities;
+namespace FeatureCheck.Domain.Aggregates.RecentActivities;
 
 public record RecentActivityRecord(string Activity, DateTime OccuredAt)
 {

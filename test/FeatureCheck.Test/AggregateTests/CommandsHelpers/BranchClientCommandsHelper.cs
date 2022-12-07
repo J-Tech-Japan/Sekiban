@@ -1,9 +1,8 @@
-using System;
-using Customer.Domain.Aggregates.Branches.Commands;
-using Customer.Domain.Aggregates.Clients.Commands;
+using FeatureCheck.Domain.Aggregates.Branches.Commands;
+using FeatureCheck.Domain.Aggregates.Clients.Commands;
 using Sekiban.Testing.Command;
-
-namespace Customer.Test.AggregateTests.CommandsHelpers;
+using System;
+namespace FeatureCheck.Test.AggregateTests.CommandsHelpers;
 
 public class BranchClientCommandsHelper
 {

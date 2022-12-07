@@ -1,14 +1,13 @@
-using System.Collections.Immutable;
-using Customer.Domain.Aggregates.Branches;
-using Customer.Domain.Aggregates.Branches.Events;
-using Customer.Domain.Aggregates.Clients;
-using Customer.Domain.Aggregates.Clients.Events;
-using Customer.Domain.Aggregates.LoyaltyPoints;
-using Customer.Domain.Aggregates.LoyaltyPoints.Events;
+using FeatureCheck.Domain.Aggregates.Branches;
+using FeatureCheck.Domain.Aggregates.Branches.Events;
+using FeatureCheck.Domain.Aggregates.Clients;
+using FeatureCheck.Domain.Aggregates.Clients.Events;
+using FeatureCheck.Domain.Aggregates.LoyaltyPoints;
+using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Events;
 using Sekiban.Core.Event;
 using Sekiban.Core.Query.MultiProjections;
-
-namespace Customer.Domain.Projections.ClientLoyaltyPointMultiples;
+using System.Collections.Immutable;
+namespace FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
 
 public record ClientLoyaltyPointMultiProjection(
     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch> Branches,

@@ -1,20 +1,21 @@
+using FeatureCheck.Domain.Aggregates.Branches;
+using FeatureCheck.Domain.Aggregates.Branches.Commands;
+using FeatureCheck.Domain.Aggregates.Clients;
+using FeatureCheck.Domain.Aggregates.Clients.Commands;
+using FeatureCheck.Domain.Aggregates.Clients.Projections;
+using FeatureCheck.Domain.Aggregates.LoyaltyPoints;
+using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
+using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Consts;
+using FeatureCheck.Domain.Aggregates.RecentActivities;
+using FeatureCheck.Domain.Aggregates.RecentActivities.Commands;
+using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities;
+using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Commands;
+using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
+using FeatureCheck.Domain.Shared.Exceptions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Customer.Domain.Aggregates.Branches;
-using Customer.Domain.Aggregates.Branches.Commands;
-using Customer.Domain.Aggregates.Clients;
-using Customer.Domain.Aggregates.Clients.Commands;
-using Customer.Domain.Aggregates.Clients.Projections;
-using Customer.Domain.Aggregates.LoyaltyPoints;
-using Customer.Domain.Aggregates.LoyaltyPoints.Commands;
-using Customer.Domain.Aggregates.LoyaltyPoints.Consts;
-using Customer.Domain.Aggregates.RecentActivities.Commands;
-using Customer.Domain.Aggregates.RecentInMemoryActivities;
-using Customer.Domain.Aggregates.RecentInMemoryActivities.Commands;
-using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
-using Customer.Domain.Shared.Exceptions;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Exceptions;
@@ -25,7 +26,6 @@ using Sekiban.Core.Snapshot;
 using Sekiban.Core.Snapshot.Aggregate;
 using Xunit;
 using Xunit.Abstractions;
-using RecentActivity = Customer.Domain.Aggregates.RecentActivities.RecentActivity;
 
 namespace SampleProjectStoryXTest.Stories;
 
@@ -199,7 +199,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         var createRecentActivityResult
             = await commandExecutor
                 .ExecCommandAsync(
-                    new Customer.Domain.Aggregates.RecentActivities.Commands.RecentActivity());
+                    new CreateRecentActivity());
         var recentActivityId = createRecentActivityResult.AggregateId;
 
         var recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
@@ -241,7 +241,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         var createRecentActivityResult
             = await commandExecutor
                 .ExecCommandAsync(
-                    new Customer.Domain.Aggregates.RecentActivities.Commands.RecentActivity());
+                    new CreateRecentActivity());
 
         var recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
         Assert.Single(recentActivityList);

@@ -1,20 +1,19 @@
+using FeatureCheck.Domain.Aggregates.Branches;
+using FeatureCheck.Domain.Aggregates.Branches.Commands;
+using FeatureCheck.Domain.Aggregates.Branches.Queries;
+using FeatureCheck.Domain.Aggregates.Clients.Commands;
+using FeatureCheck.Domain.Aggregates.Clients.Events;
+using FeatureCheck.Domain.Aggregates.Clients.Projections;
+using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
+using FeatureCheck.Domain.Shared;
+using Sekiban.Core.Query.QueryModel;
+using Sekiban.Testing;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using Customer.Domain.Aggregates.Branches;
-using Customer.Domain.Aggregates.Branches.Commands;
-using Customer.Domain.Aggregates.Branches.Queries;
-using Customer.Domain.Aggregates.Clients.Commands;
-using Customer.Domain.Aggregates.Clients.Events;
-using Customer.Domain.Aggregates.Clients.Projections;
-using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
-using Customer.Domain.Shared;
-using Sekiban.Core.Query.QueryModel;
-using Sekiban.Testing;
 using Xunit;
-
-namespace Customer.Test.AggregateTests;
+namespace FeatureCheck.Test.AggregateTests;
 
 public class UnifiedProjectionsTest : UnifiedTest<CustomerDependency>
 {
@@ -37,39 +36,50 @@ public class UnifiedProjectionsTest : UnifiedTest<CustomerDependency>
             .ForEach(
                 m =>
                 {
-                    if (m.GetPayload() is ClientCreated created) dateNameSet = m.TimeStamp;
+                    if (m.GetPayload() is ClientCreated created)
+                    {
+                        dateNameSet = m.TimeStamp;
+                    }
                 });
         ThenMultiProjectionPayloadIs(
                 new ClientLoyaltyPointMultiProjection(
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty.Add(
                         new ClientLoyaltyPointMultiProjection.ProjectedBranch(_branchId, branchName)),
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty.Add(
-                        new ClientLoyaltyPointMultiProjection.ProjectedRecord(_branchId, branchName, _clientId,
-                            clientName, 0))))
+                        new ClientLoyaltyPointMultiProjection.ProjectedRecord(
+                            _branchId,
+                            branchName,
+                            _clientId,
+                            clientName,
+                            0))))
             .ThenMultiProjectionQueryResponseIs<ClientLoyaltyPointMultiProjection,
                 ClientLoyaltyPointMultiProjectionQuery,
-                ClientLoyaltyPointMultiProjectionQuery.QueryParameter, ClientLoyaltyPointMultiProjection>(
+                ClientLoyaltyPointMultiProjectionQuery.QueryParameter, ClientLoyaltyPointMultiProjectionQuery.Response>(
                 new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(
                     null,
                     ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
-                new ClientLoyaltyPointMultiProjection(
+                new ClientLoyaltyPointMultiProjectionQuery.Response(
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty.Add(
                         new ClientLoyaltyPointMultiProjection.ProjectedBranch(_branchId, branchName)),
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty.Add(
-                        new ClientLoyaltyPointMultiProjection.ProjectedRecord(_branchId, branchName, _clientId,
-                            clientName, 0))));
+                        new ClientLoyaltyPointMultiProjection.ProjectedRecord(
+                            _branchId,
+                            branchName,
+                            _clientId,
+                            clientName,
+                            0))));
     }
 
     [Fact]
     public void TestAggregateQuery()
     {
         GivenScenario(Test)
-            .ThenAggregateQueryResponseIs<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, bool>(
+            .ThenAggregateQueryResponseIs<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, BranchExistsQuery.Response>(
                 new BranchExistsQuery.QueryParameter(_branchId),
-                true)
-            .ThenAggregateQueryResponseIs<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, bool>(
+                new BranchExistsQuery.Response(true))
+            .ThenAggregateQueryResponseIs<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, BranchExistsQuery.Response>(
                 new BranchExistsQuery.QueryParameter(Guid.NewGuid()),
-                false);
+                new BranchExistsQuery.Response(false));
     }
 
     [Fact]
@@ -97,15 +107,19 @@ public class UnifiedProjectionsTest : UnifiedTest<CustomerDependency>
         GivenScenario(Test);
         RunCommand(new ChangeClientName(_clientId, clientName2));
         ThenMultiProjectionQueryResponseIs<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultiProjectionQuery,
-            ClientLoyaltyPointMultiProjectionQuery.QueryParameter, ClientLoyaltyPointMultiProjection>(
+            ClientLoyaltyPointMultiProjectionQuery.QueryParameter, ClientLoyaltyPointMultiProjectionQuery.Response>(
             new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(
                 null,
                 ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
-            new ClientLoyaltyPointMultiProjection(
+            new ClientLoyaltyPointMultiProjectionQuery.Response(
                 ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty.Add(
                     new ClientLoyaltyPointMultiProjection.ProjectedBranch(_branchId, branchName)),
                 ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty.Add(
-                    new ClientLoyaltyPointMultiProjection.ProjectedRecord(_branchId, branchName, _clientId, clientName2,
+                    new ClientLoyaltyPointMultiProjection.ProjectedRecord(
+                        _branchId,
+                        branchName,
+                        _clientId,
+                        clientName2,
                         0))));
     }
 }

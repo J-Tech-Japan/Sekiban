@@ -1,9 +1,8 @@
-using Customer.Domain.Aggregates.RecentActivities.Events;
+using FeatureCheck.Domain.Aggregates.RecentActivities.Events;
 using Sekiban.Core.Command;
 using Sekiban.Core.Event;
 using Sekiban.Core.Shared;
-
-namespace Customer.Domain.Aggregates.RecentActivities.Commands;
+namespace FeatureCheck.Domain.Aggregates.RecentActivities.Commands;
 
 public record OnlyPublishingAddRecentActivity(Guid RecentActivityId, string Activity) :
     IOnlyPublishingCommand<RecentActivities.RecentActivity>,

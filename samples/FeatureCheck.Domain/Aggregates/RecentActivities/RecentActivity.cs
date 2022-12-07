@@ -1,7 +1,6 @@
-using System.Collections.Immutable;
 using Sekiban.Core.Aggregate;
-
-namespace Customer.Domain.Aggregates.RecentActivities;
+using System.Collections.Immutable;
+namespace FeatureCheck.Domain.Aggregates.RecentActivities;
 
 [AggregateContainerGroup(AggregateContainerGroup.Dissolvable)]
 public record RecentActivity(ImmutableList<RecentActivityRecord> LatestActivities) : IAggregatePayload

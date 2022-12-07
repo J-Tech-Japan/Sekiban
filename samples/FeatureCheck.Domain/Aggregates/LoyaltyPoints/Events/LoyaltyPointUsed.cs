@@ -1,7 +1,6 @@
-using Customer.Domain.Aggregates.LoyaltyPoints.Consts;
+using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Consts;
 using Sekiban.Core.Event;
-
-namespace Customer.Domain.Aggregates.LoyaltyPoints.Events;
+namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Events;
 
 public record LoyaltyPointUsed
 (DateTime HappenedDate, LoyaltyPointUsageTypeKeys Reason, int PointAmount,

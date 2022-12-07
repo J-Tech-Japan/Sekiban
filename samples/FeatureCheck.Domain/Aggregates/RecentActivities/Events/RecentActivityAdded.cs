@@ -1,7 +1,6 @@
-using System.Collections.Immutable;
 using Sekiban.Core.Event;
-
-namespace Customer.Domain.Aggregates.RecentActivities.Events;
+using System.Collections.Immutable;
+namespace FeatureCheck.Domain.Aggregates.RecentActivities.Events;
 
 public record RecentActivityAdded(RecentActivityRecord Record) : IEventPayload<RecentActivity>
 {

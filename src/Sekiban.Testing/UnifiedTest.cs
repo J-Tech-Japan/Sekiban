@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
@@ -13,8 +12,8 @@ using Sekiban.Core.Shared;
 using Sekiban.Testing.Command;
 using Sekiban.Testing.Projection;
 using Sekiban.Testing.SingleProjections;
+using System.Text.Json;
 using Xunit;
-
 namespace Sekiban.Testing;
 
 public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefinition : IDependencyDefinition, new()
@@ -41,19 +40,11 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     }
 
     #region Get Aggregate Test
-
-    public AggregateTest<TAggregatePayload, TDependencyDefinition> GetAggregateTest<TAggregatePayload>(
-        Guid aggregateId)
-        where TAggregatePayload : IAggregatePayload, new()
-    {
-        return new(_serviceProvider, aggregateId);
-    }
+    public AggregateTest<TAggregatePayload, TDependencyDefinition> GetAggregateTest<TAggregatePayload>(Guid aggregateId)
+        where TAggregatePayload : IAggregatePayload, new() => new(_serviceProvider, aggregateId);
 
     public AggregateTest<TAggregatePayload, TDependencyDefinition> GetAggregateTest<TAggregatePayload>()
-        where TAggregatePayload : IAggregatePayload, new()
-    {
-        return new(_serviceProvider);
-    }
+        where TAggregatePayload : IAggregatePayload, new() => new(_serviceProvider);
 
     public UnifiedTest<TDependencyDefinition> ThenGetAggregateTest<TAggregatePayload>(
         Guid aggregateId,
@@ -71,22 +62,21 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         testAction(new AggregateTest<TAggregatePayload, TDependencyDefinition>(_serviceProvider));
         return this;
     }
-
     #endregion
 
     #region Aggregate Query
-
     private TQueryResponse GetAggregateQueryResponse<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
         TQueryParameter param)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var queryService = _serviceProvider.GetService<IQueryExecutor>() ??
-                           throw new Exception("Failed to get Query service");
+            throw new Exception("Failed to get Query service");
         return queryService.ForAggregateQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param)
-                   .Result ??
-               throw new Exception("Failed to get Aggregate Query Response for " + typeof(TQuery).Name);
+                .Result ??
+            throw new Exception("Failed to get Aggregate Query Response for " + typeof(TQuery).Name);
     }
 
     public UnifiedTest<TDependencyDefinition> WriteAggregateQueryResponseToFile<TAggregatePayload, TQuery,
@@ -95,11 +85,15 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         string filename)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var json = SekibanJsonHelper.Serialize(
             GetAggregateQueryResponse<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param));
-        if (string.IsNullOrEmpty(json)) throw new InvalidDataException("Json is null or empty");
+        if (string.IsNullOrEmpty(json))
+        {
+            throw new InvalidDataException("Json is null or empty");
+        }
         File.WriteAllTextAsync(filename, json);
         return this;
     }
@@ -110,7 +104,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         TQueryResponse expectedResponse)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var actual = GetAggregateQueryResponse<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param);
         var expected = expectedResponse;
@@ -126,7 +121,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         Action<TQueryResponse> responseAction)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         responseAction(GetAggregateQueryResponse<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param)!);
         return this;
@@ -138,10 +134,14 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         string responseJson)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var response = JsonSerializer.Deserialize<TQueryResponse>(responseJson);
-        if (response is null) throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        if (response is null)
+        {
+            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        }
         ThenAggregateQueryResponseIs<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param, response);
         return this;
     }
@@ -152,32 +152,35 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         string responseFilename)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         using var openStream = File.OpenRead(responseFilename);
         var response = JsonSerializer.Deserialize<TQueryResponse>(openStream);
-        if (response is null) throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        if (response is null)
+        {
+            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        }
         ThenAggregateQueryResponseIs<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param, response);
         return this;
     }
-
     #endregion
 
     #region Aggregate　List Query
-
     private ListQueryResult<TQueryResponse> GetAggregateListQueryResponse<TAggregatePayload, TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var queryService = _serviceProvider.GetService<IQueryExecutor>() ??
-                           throw new Exception("Failed to get Query service");
+            throw new Exception("Failed to get Query service");
         return queryService
-                   .ForAggregateListQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param)
-                   .Result ??
-               throw new Exception("Failed to get Aggregate List Query Response for " + typeof(TQuery).Name);
+                .ForAggregateListQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param)
+                .Result ??
+            throw new Exception("Failed to get Aggregate List Query Response for " + typeof(TQuery).Name);
     }
 
     public UnifiedTest<TDependencyDefinition> WriteAggregateListQueryResponseToFile<TAggregatePayload, TQuery,
@@ -186,11 +189,15 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         string filename)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var json = SekibanJsonHelper.Serialize(
             GetAggregateListQueryResponse<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param));
-        if (string.IsNullOrEmpty(json)) throw new InvalidDataException("Json is null or empty");
+        if (string.IsNullOrEmpty(json))
+        {
+            throw new InvalidDataException("Json is null or empty");
+        }
         File.WriteAllTextAsync(filename, json);
         return this;
     }
@@ -201,7 +208,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         ListQueryResult<TQueryResponse> expectedResponse)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var actual = GetAggregateListQueryResponse<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param);
         var expected = expectedResponse;
@@ -217,7 +225,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         Action<ListQueryResult<TQueryResponse>> responseAction)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         responseAction(
             GetAggregateListQueryResponse<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param)!);
@@ -230,10 +239,14 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
             string responseJson)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(responseJson);
-        if (response is null) throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        if (response is null)
+        {
+            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        }
         ThenAggregateListQueryResponseIs<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param, response);
         return this;
     }
@@ -244,31 +257,35 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
             string responseFilename)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         using var openStream = File.OpenRead(responseFilename);
         var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(openStream);
-        if (response is null) throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        if (response is null)
+        {
+            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        }
         ThenAggregateListQueryResponseIs<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param, response);
         return this;
     }
-
     #endregion
 
     #region SingleProjection Query
-
     private TQueryResponse GetSingleProjectionQueryResponse<TSingleProjectionPayload, TQuery, TQueryParameter,
         TQueryResponse>(TQueryParameter param)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var queryService = _serviceProvider.GetService<IQueryExecutor>() ??
-                           throw new Exception("Failed to get Query service");
+            throw new Exception("Failed to get Query service");
         return queryService
-                   .ForSingleProjectionQueryAsync<TSingleProjectionPayload, TQuery, TQueryParameter,
-                       TQueryResponse>(param).Result ??
-               throw new Exception("Failed to get Single Projection Query Response for " + typeof(TQuery).Name);
+                .ForSingleProjectionQueryAsync<TSingleProjectionPayload, TQuery, TQueryParameter,
+                    TQueryResponse>(param)
+                .Result ??
+            throw new Exception("Failed to get Single Projection Query Response for " + typeof(TQuery).Name);
     }
 
     public UnifiedTest<TDependencyDefinition> WriteSingleProjectionQueryResponseToFile<TSingleProjectionPayload,
@@ -278,11 +295,15 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         string filename)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var json = SekibanJsonHelper.Serialize(
             GetSingleProjectionQueryResponse<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param));
-        if (string.IsNullOrEmpty(json)) throw new InvalidDataException("Json is null or empty");
+        if (string.IsNullOrEmpty(json))
+        {
+            throw new InvalidDataException("Json is null or empty");
+        }
         File.WriteAllTextAsync(filename, json);
         return this;
     }
@@ -294,7 +315,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         TQueryResponse expectedResponse)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var actual =
             GetSingleProjectionQueryResponse<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param);
@@ -312,7 +334,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         Action<TQueryResponse> responseAction)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         responseAction(
             GetSingleProjectionQueryResponse<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param));
@@ -326,11 +349,16 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         string responseJson)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var response = JsonSerializer.Deserialize<TQueryResponse>(responseJson);
-        if (response is null) throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
-        ThenSingleProjectionQueryResponseIs<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param,
+        if (response is null)
+        {
+            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        }
+        ThenSingleProjectionQueryResponseIs<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
+            param,
             response);
         return this;
     }
@@ -342,33 +370,38 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         string responseFilename)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         using var openStream = File.OpenRead(responseFilename);
         var response = JsonSerializer.Deserialize<TQueryResponse>(openStream);
-        if (response is null) throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
-        ThenSingleProjectionQueryResponseIs<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param,
+        if (response is null)
+        {
+            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        }
+        ThenSingleProjectionQueryResponseIs<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
+            param,
             response);
         return this;
     }
-
     #endregion
 
     #region SingleProjection　List Query
-
     private ListQueryResult<TQueryResponse> GetSingleProjectionListQueryResponse<TSingleProjectionPayload, TQuery,
         TQueryParameter, TQueryResponse>(
         TQueryParameter param)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var singleProjection = _serviceProvider.GetService<IQueryExecutor>() ??
-                               throw new Exception("Failed to get Query service");
+            throw new Exception("Failed to get Query service");
         return singleProjection
-                   .ForSingleProjectionListQueryAsync<TSingleProjectionPayload, TQuery, TQueryParameter,
-                       TQueryResponse>(param).Result ??
-               throw new Exception("Failed to get Single Projection Query Response for " + typeof(TQuery).Name);
+                .ForSingleProjectionListQueryAsync<TSingleProjectionPayload, TQuery, TQueryParameter,
+                    TQueryResponse>(param)
+                .Result ??
+            throw new Exception("Failed to get Single Projection Query Response for " + typeof(TQuery).Name);
     }
 
     public UnifiedTest<TDependencyDefinition> WriteSingleProjectionListQueryResponseToFile<TSingleProjectionPayload,
@@ -378,12 +411,16 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         string filename)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var json = SekibanJsonHelper.Serialize(
             GetSingleProjectionListQueryResponse<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
                 param));
-        if (string.IsNullOrEmpty(json)) throw new InvalidDataException("Json is null or empty");
+        if (string.IsNullOrEmpty(json))
+        {
+            throw new InvalidDataException("Json is null or empty");
+        }
         File.WriteAllTextAsync(filename, json);
         return this;
     }
@@ -395,7 +432,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         ListQueryResult<TQueryResponse> expectedResponse)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var actual =
             GetSingleProjectionListQueryResponse<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
@@ -414,7 +452,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         Action<ListQueryResult<TQueryResponse>> responseAction)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         responseAction(
             GetSingleProjectionListQueryResponse<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
@@ -429,12 +468,17 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         string responseJson)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(responseJson);
-        if (response is null) throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        if (response is null)
+        {
+            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        }
         ThenSingleProjectionListQueryResponseIs<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
-            param, response);
+            param,
+            response);
         return this;
     }
 
@@ -445,32 +489,37 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         string responseFilename)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         using var openStream = File.OpenRead(responseFilename);
         var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(openStream);
-        if (response is null) throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        if (response is null)
+        {
+            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        }
         ThenSingleProjectionListQueryResponseIs<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
-            param, response);
+            param,
+            response);
         return this;
     }
-
     #endregion
 
     #region Multi Projection Query
-
     private TQueryResponse GetMultiProjectionQueryResponse<TMultiProjectionPayload, TQuery, TQueryParameter,
         TQueryResponse>(TQueryParameter param)
         where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var queryService = _serviceProvider.GetService<IQueryExecutor>() ??
-                           throw new Exception("Failed to get Query service");
+            throw new Exception("Failed to get Query service");
         return queryService
-                   .ForMultiProjectionQueryAsync<TMultiProjectionPayload, TQuery, TQueryParameter,
-                       TQueryResponse>(param).Result ??
-               throw new Exception("Failed to get Multi Projection Query Response for " + typeof(TQuery).Name);
+                .ForMultiProjectionQueryAsync<TMultiProjectionPayload, TQuery, TQueryParameter,
+                    TQueryResponse>(param)
+                .Result ??
+            throw new Exception("Failed to get Multi Projection Query Response for " + typeof(TQuery).Name);
     }
 
     public UnifiedTest<TDependencyDefinition> WriteMultiProjectionQueryResponseToFile<TMultiProjectionPayload,
@@ -480,11 +529,15 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         string filename)
         where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var json = SekibanJsonHelper.Serialize(
             GetMultiProjectionQueryResponse<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param));
-        if (string.IsNullOrEmpty(json)) throw new InvalidDataException("Json is null or empty");
+        if (string.IsNullOrEmpty(json))
+        {
+            throw new InvalidDataException("Json is null or empty");
+        }
         File.WriteAllTextAsync(filename, json);
         return this;
     }
@@ -496,7 +549,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         TQueryResponse expectedResponse)
         where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var actual =
             GetMultiProjectionQueryResponse<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param);
@@ -514,7 +568,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         Action<TQueryResponse> responseAction)
         where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         responseAction(
             GetMultiProjectionQueryResponse<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param));
@@ -528,11 +583,16 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         string responseJson)
         where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var response = JsonSerializer.Deserialize<TQueryResponse>(responseJson);
-        if (response is null) throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
-        ThenMultiProjectionQueryResponseIs<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param,
+        if (response is null)
+        {
+            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        }
+        ThenMultiProjectionQueryResponseIs<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
+            param,
             response);
         return this;
     }
@@ -544,34 +604,39 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         string responseFilename)
         where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         using var openStream = File.OpenRead(responseFilename);
         var response = JsonSerializer.Deserialize<TQueryResponse>(openStream);
 
-        if (response is null) throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
-        ThenMultiProjectionQueryResponseIs<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param,
+        if (response is null)
+        {
+            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        }
+        ThenMultiProjectionQueryResponseIs<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
+            param,
             response);
         return this;
     }
-
     #endregion
 
     #region Multi Projection　List Query
-
     private ListQueryResult<TQueryResponse> GetMultiProjectionListQueryResponse<TMultiProjectionPayload, TQuery,
         TQueryParameter, TQueryResponse>(
         TQueryParameter param)
         where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionListQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var queryService = _serviceProvider.GetService<IQueryExecutor>() ??
-                           throw new Exception("Failed to get Query service");
+            throw new Exception("Failed to get Query service");
         return queryService
-                   .ForMultiProjectionListQueryAsync<TMultiProjectionPayload, TQuery, TQueryParameter,
-                       TQueryResponse>(param).Result ??
-               throw new Exception("Failed to get Multi Projection List Query Response for " + typeof(TQuery).Name);
+                .ForMultiProjectionListQueryAsync<TMultiProjectionPayload, TQuery, TQueryParameter,
+                    TQueryResponse>(param)
+                .Result ??
+            throw new Exception("Failed to get Multi Projection List Query Response for " + typeof(TQuery).Name);
     }
 
     public UnifiedTest<TDependencyDefinition> WriteMultiProjectionListQueryResponseToFile<TMultiProjectionPayload,
@@ -581,12 +646,16 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         string filename)
         where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionListQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var json = SekibanJsonHelper.Serialize(
             GetMultiProjectionListQueryResponse<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
                 param));
-        if (string.IsNullOrEmpty(json)) throw new InvalidDataException("Json is null or empty");
+        if (string.IsNullOrEmpty(json))
+        {
+            throw new InvalidDataException("Json is null or empty");
+        }
         File.WriteAllTextAsync(filename, json);
         return this;
     }
@@ -598,7 +667,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         ListQueryResult<TQueryResponse> expectedResponse)
         where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionListQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var actual =
             GetMultiProjectionListQueryResponse<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
@@ -617,7 +687,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         Action<ListQueryResult<TQueryResponse>> responseAction)
         where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionListQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         responseAction(
             GetMultiProjectionListQueryResponse<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
@@ -632,11 +703,16 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         string responseJson)
         where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionListQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(responseJson);
-        if (response is null) throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
-        ThenMultiProjectionListQueryResponseIs<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param,
+        if (response is null)
+        {
+            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        }
+        ThenMultiProjectionListQueryResponseIs<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
+            param,
             response);
         return this;
     }
@@ -648,28 +724,31 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         string responseFilename)
         where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionListQuery<TMultiProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         using var openStream = File.OpenRead(responseFilename);
         var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(openStream);
-        if (response is null) throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
-        ThenMultiProjectionListQueryResponseIs<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param,
+        if (response is null)
+        {
+            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        }
+        ThenMultiProjectionListQueryResponseIs<TMultiProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
+            param,
             response);
         return this;
     }
-
     #endregion
 
     #region Multi Projection
-
     public MultiProjectionState<TMultiProjectionPayload> GetMultiProjectionState<TMultiProjectionPayload>()
         where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ??
-                                     throw new Exception("Failed to get Query service");
+            throw new Exception("Failed to get Query service");
         return multiProjectionService.GetMultiProjectionAsync<TMultiProjectionPayload>().Result ??
-               throw new Exception(
-                   "Failed to get Multi Projection Response for " + typeof(TMultiProjectionPayload).Name);
+            throw new Exception(
+                "Failed to get Multi Projection Response for " + typeof(TMultiProjectionPayload).Name);
     }
 
     public UnifiedTest<TDependencyDefinition> ThenMultiProjectionPayloadIsFromFile<TMultiProjectionPayload>(
@@ -678,7 +757,10 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     {
         using var openStream = File.OpenRead(filename);
         var projection = JsonSerializer.Deserialize<TMultiProjectionPayload>(openStream);
-        if (projection is null) throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        if (projection is null)
+        {
+            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        }
         return ThenMultiProjectionPayloadIs(projection);
     }
 
@@ -732,7 +814,10 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     {
         using var openStream = File.OpenRead(filename);
         var projection = JsonSerializer.Deserialize<MultiProjectionState<TMultiProjectionPayload>>(openStream);
-        if (projection is null) throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        if (projection is null)
+        {
+            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        }
         return ThenMultiProjectionStateIs(projection);
     }
 
@@ -744,20 +829,19 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         File.WriteAllTextAsync(filename, json);
         return this;
     }
-
     #endregion
 
     #region Aggregate List Projection
-
     public MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>
         GetAggregateListProjectionState<TAggregatePayload>()
         where TAggregatePayload : IAggregatePayload, new()
     {
         var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ??
-                                     throw new Exception("Failed to get Query service");
+            throw new Exception("Failed to get Query service");
         return multiProjectionService.GetAggregateListObject<TAggregatePayload>().Result ??
-               throw new Exception("Failed to get Aggregate List Projection Response for " +
-                                   typeof(TAggregatePayload).Name);
+            throw new Exception(
+                "Failed to get Aggregate List Projection Response for " +
+                typeof(TAggregatePayload).Name);
     }
 
     public UnifiedTest<TDependencyDefinition> ThenAggregateListProjectionPayloadIsFromFile<TAggregatePayload>(
@@ -767,7 +851,10 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         using var openStream = File.OpenRead(filename);
         var projection =
             JsonSerializer.Deserialize<SingleProjectionListState<AggregateState<TAggregatePayload>>>(openStream);
-        if (projection is null) throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        if (projection is null)
+        {
+            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        }
         return ThenAggregateListProjectionPayloadIs(projection);
     }
 
@@ -824,7 +911,10 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
             JsonSerializer
                 .Deserialize<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>>(
                     openStream);
-        if (projection is null) throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        if (projection is null)
+        {
+            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        }
         return ThenAggregateListProjectionStateIs(projection);
     }
 
@@ -836,21 +926,20 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         File.WriteAllTextAsync(filename, json);
         return this;
     }
-
     #endregion
 
     #region Single Projection List Projection
-
     public MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>
         GetSingleProjectionListState<
             TSingleProjectionPayload>()
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
         var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ??
-                                     throw new Exception("Failed to get Query service");
+            throw new Exception("Failed to get Query service");
         return multiProjectionService.GetSingleProjectionListObject<TSingleProjectionPayload>().Result ??
-               throw new Exception("Failed to get Single Projection List Projection Response for " +
-                                   typeof(TSingleProjectionPayload).Name);
+            throw new Exception(
+                "Failed to get Single Projection List Projection Response for " +
+                typeof(TSingleProjectionPayload).Name);
     }
 
     public UnifiedTest<TDependencyDefinition> ThenSingleProjectionListPayloadIsFromFile<TSingleProjectionPayload>(
@@ -861,7 +950,10 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         var projection =
             JsonSerializer.Deserialize<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>(
                 openStream);
-        if (projection is null) throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        if (projection is null)
+        {
+            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        }
         return ThenSingleProjectionListPayloadIs(projection);
     }
 
@@ -920,7 +1012,10 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
                 .Deserialize<
                     MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>(
                     openStream);
-        if (projection is null) throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        if (projection is null)
+        {
+            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+        }
         return ThenSingleProjectionListStateIs(projection);
     }
 
@@ -932,11 +1027,9 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         File.WriteAllTextAsync(filename, json);
         return this;
     }
-
     #endregion
 
     #region Given
-
     public UnifiedTest<TDependencyDefinition> GivenScenario(Action initialAction)
     {
         initialAction();
@@ -948,25 +1041,21 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
         var singleProjectionService = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader;
-        if (singleProjectionService is null) throw new Exception("Failed to get single aggregate service");
+        if (singleProjectionService is null)
+        {
+            throw new Exception("Failed to get single aggregate service");
+        }
         var aggregate = singleProjectionService.AsDefaultStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
         return aggregate ??
-               throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name);
+            throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name);
     }
 
-    public IReadOnlyCollection<IEvent> GetLatestEvents()
-    {
-        return _commandExecutor.LatestEvents;
-    }
+    public IReadOnlyCollection<IEvent> GetLatestEvents() => _commandExecutor.LatestEvents;
 
     public IReadOnlyCollection<IEvent> GetAllAggregateEvents<TAggregatePayload>(Guid aggregateId)
-        where TAggregatePayload : IAggregatePayload, new()
-    {
-        return _commandExecutor.GetAllAggregateEvents<TAggregatePayload>(aggregateId);
-    }
+        where TAggregatePayload : IAggregatePayload, new() => _commandExecutor.GetAllAggregateEvents<TAggregatePayload>(aggregateId);
 
     #region GivenEvents
-
     public UnifiedTest<TDependencyDefinition> GivenEvents(IEnumerable<IEvent> events)
     {
         _eventHandler.GivenEvents(events);
@@ -979,15 +1068,9 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         return this;
     }
 
-    public UnifiedTest<TDependencyDefinition> GivenEvents(params IEvent[] events)
-    {
-        return GivenEvents(events.AsEnumerable());
-    }
+    public UnifiedTest<TDependencyDefinition> GivenEvents(params IEvent[] events) => GivenEvents(events.AsEnumerable());
 
-    public UnifiedTest<TDependencyDefinition> GivenEventsWithPublish(params IEvent[] events)
-    {
-        return GivenEventsWithPublish(events.AsEnumerable());
-    }
+    public UnifiedTest<TDependencyDefinition> GivenEventsWithPublish(params IEvent[] events) => GivenEventsWithPublish(events.AsEnumerable());
 
     public UnifiedTest<TDependencyDefinition> GivenEventsFromJson(string jsonEvents)
     {
@@ -1040,32 +1123,23 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         _eventHandler.GivenEventsFromFileWithPublish(filename);
         return this;
     }
-
     #endregion
 
 
     #region Run Commands
-
     public Guid RunCommand<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
-        where TAggregatePayload : IAggregatePayload, new()
-    {
-        return _commandExecutor.ExecuteCommand(command, injectingAggregateId);
-    }
+        where TAggregatePayload : IAggregatePayload, new() => _commandExecutor.ExecuteCommand(command, injectingAggregateId);
 
-    public Guid RunCommandWithPublish<TAggregatePayload>(ICommand<TAggregatePayload> command,
+    public Guid RunCommandWithPublish<TAggregatePayload>(
+        ICommand<TAggregatePayload> command,
         Guid? injectingAggregateId = null)
-        where TAggregatePayload : IAggregatePayload, new()
-    {
-        return _commandExecutor.ExecuteCommandWithPublish(command, injectingAggregateId);
-    }
+        where TAggregatePayload : IAggregatePayload, new() => _commandExecutor.ExecuteCommandWithPublish(command, injectingAggregateId);
 
     public UnifiedTest<TDependencyDefinition> GivenCommandExecutorAction(Action<TestCommandExecutor> action)
     {
         action(_commandExecutor);
         return this;
     }
-
     #endregion
-
     #endregion
 }

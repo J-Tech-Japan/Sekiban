@@ -1,6 +1,5 @@
 using Sekiban.Core.Aggregate;
-
-namespace Customer.Domain.Aggregates.Branches;
+namespace FeatureCheck.Domain.Aggregates.Branches;
 
 public record Branch(string Name) : IAggregatePayload
 {

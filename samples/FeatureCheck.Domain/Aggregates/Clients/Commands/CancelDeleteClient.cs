@@ -1,10 +1,9 @@
-using System.ComponentModel.DataAnnotations;
-using Customer.Domain.Aggregates.Clients.Events;
+using FeatureCheck.Domain.Aggregates.Clients.Events;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Event;
-
-namespace Customer.Domain.Aggregates.Clients.Commands;
+using System.ComponentModel.DataAnnotations;
+namespace FeatureCheck.Domain.Aggregates.Clients.Commands;
 
 public record CancelDeleteClient : IVersionValidationCommand<Client>, ICancelDeletedCommand
 {

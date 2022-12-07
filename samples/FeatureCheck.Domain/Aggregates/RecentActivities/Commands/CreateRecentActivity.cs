@@ -1,19 +1,18 @@
-using Customer.Domain.Aggregates.RecentActivities.Events;
+using FeatureCheck.Domain.Aggregates.RecentActivities.Events;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Event;
 using Sekiban.Core.Shared;
+namespace FeatureCheck.Domain.Aggregates.RecentActivities.Commands;
 
-namespace Customer.Domain.Aggregates.RecentActivities.Commands;
-
-public record RecentActivity : ICommand<RecentActivities.RecentActivity>
+public record CreateRecentActivity : ICommand<RecentActivities.RecentActivity>
 {
     public Guid GetAggregateId()
     {
         return Guid.NewGuid();
     }
 
-    public class Handler : ICommandHandler<RecentActivities.RecentActivity, RecentActivity>
+    public class Handler : ICommandHandler<RecentActivities.RecentActivity, CreateRecentActivity>
     {
         private readonly ISekibanDateProducer _sekibanDateProducer;
 
@@ -24,7 +23,7 @@ public record RecentActivity : ICommand<RecentActivities.RecentActivity>
 
         public async IAsyncEnumerable<IEventPayload<RecentActivities.RecentActivity>> HandleCommandAsync(
             Func<AggregateState<RecentActivities.RecentActivity>> getAggregateState,
-            RecentActivity command)
+            CreateRecentActivity command)
         {
             await Task.CompletedTask;
             yield return new RecentActivityCreated(new RecentActivityRecord("First Event Created",

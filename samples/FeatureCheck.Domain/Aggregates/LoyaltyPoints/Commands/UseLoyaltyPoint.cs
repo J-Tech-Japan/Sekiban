@@ -1,11 +1,10 @@
-using Customer.Domain.Aggregates.LoyaltyPoints.Consts;
-using Customer.Domain.Aggregates.LoyaltyPoints.Events;
-using Customer.Domain.Shared.Exceptions;
+using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Consts;
+using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Events;
+using FeatureCheck.Domain.Shared.Exceptions;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Event;
-
-namespace Customer.Domain.Aggregates.LoyaltyPoints.Commands;
+namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
 
 public record UseLoyaltyPoint(
     Guid ClientId,

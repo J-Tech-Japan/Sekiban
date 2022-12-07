@@ -1,11 +1,11 @@
-using Customer.Domain.Aggregates.Clients.Events;
+using FeatureCheck.Domain.Aggregates.Clients.Events;
 using Sekiban.Core.Event;
 using Sekiban.Core.Query.SingleProjections;
 
 // ReSharper disable UnusedVariable
 // ReSharper disable CollectionNeverQueried.Global
 // ReSharper disable NotAccessedPositionalProperty.Global
-namespace Customer.Domain.Aggregates.Clients.Projections;
+namespace FeatureCheck.Domain.Aggregates.Clients.Projections;
 
 public record ClientNameHistoryProjection(
     Guid BranchId,
