@@ -1,10 +1,9 @@
-using Customer.Domain.Aggregates.RecentInMemoryActivities.Events;
+using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Events;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Event;
 using Sekiban.Core.Shared;
-
-namespace Customer.Domain.Aggregates.RecentInMemoryActivities.Commands;
+namespace FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Commands;
 
 public record AddRecentInMemoryActivity
     (Guid RecentInMemoryActivityId, string Activity) : ICommand<RecentInMemoryActivity>

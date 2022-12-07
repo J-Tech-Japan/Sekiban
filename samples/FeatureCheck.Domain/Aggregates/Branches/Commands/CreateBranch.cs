@@ -1,10 +1,9 @@
-using System.ComponentModel.DataAnnotations;
-using Customer.Domain.Aggregates.Branches.Events;
+using FeatureCheck.Domain.Aggregates.Branches.Events;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Event;
-
-namespace Customer.Domain.Aggregates.Branches.Commands;
+using System.ComponentModel.DataAnnotations;
+namespace FeatureCheck.Domain.Aggregates.Branches.Commands;
 
 public record CreateBranch : ICommand<Branch>, ICleanupNecessaryCommand<CreateBranch>
 {

@@ -1,4 +1,4 @@
-using Customer.Domain.Aggregates.Clients.Queries.BasicClientFilters;
+using FeatureCheck.Domain.Aggregates.Clients.Queries.BasicClientFilters;
 using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Query.QueryModel;

@@ -1,11 +1,9 @@
-﻿using Customer.Domain.Aggregates.Clients.Events;
-using Customer.Domain.Aggregates.LoyaltyPoints;
-using Customer.Domain.Aggregates.LoyaltyPoints.Commands;
+﻿using FeatureCheck.Domain.Aggregates.Clients.Events;
+using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
 using Sekiban.Core.Command;
 using Sekiban.Core.Event;
 using Sekiban.Core.PubSub;
-
-namespace Customer.Domain.EventSubscribers;
+namespace FeatureCheck.Domain.EventSubscribers;
 
 public class ClientDeletedSubscriber : IEventSubscriber<ClientDeleted>
 {

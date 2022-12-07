@@ -1,19 +1,19 @@
-using Customer.Domain.Aggregates.Branches;
-using Customer.Domain.Aggregates.Branches.Commands;
-using Customer.Domain.Aggregates.Branches.Queries;
-using Customer.Domain.Aggregates.Clients;
-using Customer.Domain.Aggregates.Clients.Commands;
-using Customer.Domain.Aggregates.Clients.Projections;
-using Customer.Domain.Aggregates.LoyaltyPoints;
-using Customer.Domain.Aggregates.LoyaltyPoints.Commands;
-using Customer.Domain.Aggregates.LoyaltyPoints.Consts;
-using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
-using Customer.Domain.Shared;
+using FeatureCheck.Domain.Aggregates.Branches;
+using FeatureCheck.Domain.Aggregates.Branches.Commands;
+using FeatureCheck.Domain.Aggregates.Branches.Queries;
+using FeatureCheck.Domain.Aggregates.Clients;
+using FeatureCheck.Domain.Aggregates.Clients.Commands;
+using FeatureCheck.Domain.Aggregates.Clients.Projections;
+using FeatureCheck.Domain.Aggregates.LoyaltyPoints;
+using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
+using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Consts;
+using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
+using FeatureCheck.Domain.Shared;
 using Sekiban.Testing;
 using System;
 using System.Collections.Immutable;
 using Xunit;
-namespace Customer.Test.AggregateTests;
+namespace FeatureCheck.Test.AggregateTests;
 
 public class SimpleUnifiedProjectionTest : UnifiedTest<CustomerDependency>
 {

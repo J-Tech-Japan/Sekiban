@@ -1,8 +1,8 @@
-﻿using Customer.Domain.Aggregates.Branches;
-using Customer.Domain.Aggregates.Branches.Queries;
-using Customer.Domain.Aggregates.Clients.Events;
-using Customer.Domain.Aggregates.Clients.Queries;
-using Customer.Domain.Shared.Exceptions;
+﻿using FeatureCheck.Domain.Aggregates.Branches;
+using FeatureCheck.Domain.Aggregates.Branches.Queries;
+using FeatureCheck.Domain.Aggregates.Clients.Events;
+using FeatureCheck.Domain.Aggregates.Clients.Queries;
+using FeatureCheck.Domain.Shared.Exceptions;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Event;
@@ -10,7 +10,7 @@ using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
 using System.ComponentModel.DataAnnotations;
-namespace Customer.Domain.Aggregates.Clients.Commands;
+namespace FeatureCheck.Domain.Aggregates.Clients.Commands;
 
 public record CreateClient : ICommand<Client>
 {

@@ -1,14 +1,13 @@
-using System;
-using System.Collections.Generic;
-using Customer.Domain.Aggregates.Branches.Commands;
-using Customer.Domain.Aggregates.Clients.Commands;
-using Customer.Domain.Projections.ClientLoyaltyPointLists;
-using Customer.Domain.Shared;
+using FeatureCheck.Domain.Aggregates.Branches.Commands;
+using FeatureCheck.Domain.Aggregates.Clients.Commands;
+using FeatureCheck.Domain.Projections.ClientLoyaltyPointLists;
+using FeatureCheck.Domain.Shared;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Testing;
+using System;
+using System.Collections.Generic;
 using Xunit;
-
-namespace Customer.Test.AggregateTests;
+namespace FeatureCheck.Test.AggregateTests;
 
 public class ClientLoyaltyPointListProjectionTest : UnifiedTest<CustomerDependency>
 {

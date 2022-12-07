@@ -216,7 +216,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         TQueryParameter param,
         string filename)
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter, IQueryInput<TQueryResponse>
+        where TQueryParameter : IQueryParameterCommon, IQueryInput<TQueryResponse>
         where TQueryResponse : IQueryOutput =>
         _helper.WriteAggregateQueryResponseToFile<TQuery, TQueryParameter, TQueryResponse>(param, filename);
 
@@ -225,7 +225,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
             TQueryParameter param,
             TQueryResponse expectedResponse)
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter, IQueryInput<TQueryResponse>
+        where TQueryParameter : IQueryParameterCommon, IQueryInput<TQueryResponse>
         where TQueryResponse : IQueryOutput =>
         _helper.ThenAggregateQueryResponseIs<TQuery, TQueryParameter, TQueryResponse>(param, expectedResponse);
 
@@ -234,7 +234,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         TQueryParameter param,
         Action<TQueryResponse> responseAction)
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter, IQueryInput<TQueryResponse>
+        where TQueryParameter : IQueryParameterCommon, IQueryInput<TQueryResponse>
         where TQueryResponse : IQueryOutput =>
         _helper.ThenGetAggregateQueryResponse<TQuery, TQueryParameter, TQueryResponse>(param, responseAction);
 
@@ -242,7 +242,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         TQueryResponse>(
         TQueryParameter param,
         string responseJson) where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter, IQueryInput<TQueryResponse>
+        where TQueryParameter : IQueryParameterCommon, IQueryInput<TQueryResponse>
         where TQueryResponse : IQueryOutput => _helper.ThenAggregateQueryResponseIsFromJson<TQuery, TQueryParameter, TQueryResponse>(
         param,
         responseJson);
@@ -251,7 +251,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         TQueryResponse>(
         TQueryParameter param,
         string responseFilename) where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter, IQueryInput<TQueryResponse>
+        where TQueryParameter : IQueryParameterCommon, IQueryInput<TQueryResponse>
         where TQueryResponse : IQueryOutput => _helper.ThenAggregateQueryResponseIsFromFile<TQuery, TQueryParameter, TQueryResponse>(
         param,
         responseFilename);
@@ -263,7 +263,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         TQueryParameter param,
         string filename)
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter, IListQueryInput<TQueryResponse>
+        where TQueryParameter : IQueryParameterCommon, IListQueryInput<TQueryResponse>
         where TQueryResponse : IQueryOutput
         =>
             _helper.WriteAggregateListQueryResponseToFile<TQuery, TQueryParameter, TQueryResponse>(param, filename);
@@ -273,7 +273,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         TQueryParameter param,
         ListQueryResult<TQueryResponse> expectedResponse)
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter, IListQueryInput<TQueryResponse>
+        where TQueryParameter : IQueryParameterCommon, IListQueryInput<TQueryResponse>
         where TQueryResponse : IQueryOutput
         =>
             _helper.ThenAggregateListQueryResponseIs<TQuery, TQueryParameter, TQueryResponse>(
@@ -285,7 +285,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         TQueryParameter param,
         Action<ListQueryResult<TQueryResponse>> responseAction)
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter, IListQueryInput<TQueryResponse>
+        where TQueryParameter : IQueryParameterCommon, IListQueryInput<TQueryResponse>
         where TQueryResponse : IQueryOutput
         => _helper
             .ThenGetAggregateListQueryResponse<TQuery, TQueryParameter, TQueryResponse>(param, responseAction);
@@ -294,7 +294,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         TQueryResponse>(
         TQueryParameter param,
         string responseJson) where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter, IListQueryInput<TQueryResponse>
+        where TQueryParameter : IQueryParameterCommon, IListQueryInput<TQueryResponse>
         where TQueryResponse : IQueryOutput
         =>
             _helper.ThenAggregateListQueryResponseIsFromJson<TQuery, TQueryParameter, TQueryResponse>(
@@ -305,7 +305,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         TQueryResponse>(
         TQueryParameter param,
         string responseFilename) where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter, IListQueryInput<TQueryResponse>
+        where TQueryParameter : IQueryParameterCommon, IListQueryInput<TQueryResponse>
         where TQueryResponse : IQueryOutput
         =>
             _helper.ThenAggregateListQueryResponseIsFromFile<TQuery, TQueryParameter, TQueryResponse>(
@@ -321,7 +321,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         string filename)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter => _helper
+        where TQueryParameter : IQueryParameterCommon => _helper
         .WriteSingleProjectionQueryResponseToFile<TSingleProjectionPayload, TQuery, TQueryParameter,
             TQueryResponse>(param, filename);
 
@@ -332,7 +332,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         TQueryResponse expectedResponse)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter => _helper
+        where TQueryParameter : IQueryParameterCommon => _helper
         .ThenSingleProjectionQueryResponseIs<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
             param,
             expectedResponse);
@@ -344,7 +344,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         Action<TQueryResponse> responseAction)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter => _helper
+        where TQueryParameter : IQueryParameterCommon => _helper
         .ThenGetSingleProjectionQueryResponse<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
             param,
             responseAction);
@@ -356,7 +356,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         string responseJson)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter => _helper
+        where TQueryParameter : IQueryParameterCommon => _helper
         .ThenSingleProjectionQueryResponseIsFromJson<TSingleProjectionPayload, TQuery, TQueryParameter,
             TQueryResponse>(param, responseJson);
 
@@ -367,7 +367,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         string responseFilename)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter => _helper
+        where TQueryParameter : IQueryParameterCommon => _helper
         .ThenSingleProjectionQueryResponseIsFromFile<TSingleProjectionPayload, TQuery, TQueryParameter,
             TQueryResponse>(
             param,
@@ -382,7 +382,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         string filename)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter => _helper
+        where TQueryParameter : IQueryParameterCommon => _helper
         .WriteSingleProjectionListQueryResponseToFile<TSingleProjectionPayload, TQuery, TQueryParameter,
             TQueryResponse>(param, filename);
 
@@ -393,7 +393,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         ListQueryResult<TQueryResponse> expectedResponse)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter => _helper
+        where TQueryParameter : IQueryParameterCommon => _helper
         .ThenSingleProjectionListQueryResponseIs<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
             param,
             expectedResponse);
@@ -405,7 +405,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         Action<ListQueryResult<TQueryResponse>> responseAction)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter => _helper
+        where TQueryParameter : IQueryParameterCommon => _helper
         .ThenGetSingleProjectionListQueryResponse<TSingleProjectionPayload, TQuery, TQueryParameter,
             TQueryResponse>(param, responseAction);
 
@@ -416,7 +416,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         string responseJson)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter => _helper
+        where TQueryParameter : IQueryParameterCommon => _helper
         .ThenSingleProjectionListQueryResponseIsFromJson<TSingleProjectionPayload, TQuery, TQueryParameter,
             TQueryResponse>(
             param,
@@ -429,7 +429,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         string responseFilename)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter => _helper
+        where TQueryParameter : IQueryParameterCommon => _helper
         .ThenSingleProjectionListQueryResponseIsFromFile<TSingleProjectionPayload, TQuery, TQueryParameter,
             TQueryResponse>(
             param,

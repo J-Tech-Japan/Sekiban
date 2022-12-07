@@ -1,6 +1,5 @@
 ﻿using Sekiban.Core.Event;
-
-namespace Customer.Domain.Aggregates.LoyaltyPoints.Events;
+namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Events;
 
 public record LoyaltyPointCreated(int InitialPoint) : IEventPayload<LoyaltyPoint>
 {

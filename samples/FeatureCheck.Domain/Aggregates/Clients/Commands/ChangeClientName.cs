@@ -1,9 +1,8 @@
-﻿using Customer.Domain.Aggregates.Clients.Events;
+﻿using FeatureCheck.Domain.Aggregates.Clients.Events;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Event;
-
-namespace Customer.Domain.Aggregates.Clients.Commands;
+namespace FeatureCheck.Domain.Aggregates.Clients.Commands;
 
 public record ChangeClientName(Guid ClientId, string ClientName) : IVersionValidationCommand<Client>,
     ICleanupNecessaryCommand<ChangeClientName>

@@ -1,13 +1,12 @@
-using Customer.Domain.Aggregates.Clients;
-using Customer.Domain.Aggregates.LoyaltyPoints.Consts;
-using Customer.Domain.Aggregates.LoyaltyPoints.Events;
+using FeatureCheck.Domain.Aggregates.Clients;
+using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Consts;
+using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Events;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Event;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Shared;
-
-namespace Customer.Domain.Aggregates.LoyaltyPoints.Commands;
+namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
 
 public record LoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : ICommand<LoyaltyPoint>
 {

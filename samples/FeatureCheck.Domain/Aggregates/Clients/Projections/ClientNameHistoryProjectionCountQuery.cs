@@ -1,8 +1,7 @@
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleProjections;
-
-namespace Customer.Domain.Aggregates.Clients.Projections;
+namespace FeatureCheck.Domain.Aggregates.Clients.Projections;
 
 public class ClientNameHistoryProjectionCountQuery : ISingleProjectionQuery<ClientNameHistoryProjection,
     ClientNameHistoryProjectionCountQuery.Parameter, int>
@@ -15,5 +14,5 @@ public class ClientNameHistoryProjectionCountQuery : ISingleProjectionQuery<Clie
             .Sum(m => m.Payload.ClientNames.Count);
     }
 
-    public record Parameter(Guid? BranchId, Guid? ClientId) : IQueryParameter;
+    public record Parameter(Guid? BranchId, Guid? ClientId) : IQueryParameterCommon;
 }

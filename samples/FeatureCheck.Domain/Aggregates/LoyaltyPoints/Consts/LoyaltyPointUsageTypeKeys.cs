@@ -1,4 +1,4 @@
-namespace Customer.Domain.Aggregates.LoyaltyPoints.Consts;
+namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Consts;
 
 public enum LoyaltyPointUsageTypeKeys
 {

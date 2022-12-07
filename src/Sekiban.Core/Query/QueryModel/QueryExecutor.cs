@@ -23,7 +23,7 @@ public class QueryExecutor : IQueryExecutor
             TQueryParameter param)
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameterCommon
     {
         var allProjection = await multiProjectionService.GetMultiProjectionAsync<TProjectionPayload>();
         return queryHandler
@@ -37,7 +37,7 @@ public class QueryExecutor : IQueryExecutor
             TQueryParameter param)
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionListQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameterCommon
     {
         var allProjection = await multiProjectionService.GetMultiProjectionAsync<TProjectionPayload>();
         return queryHandler
@@ -50,7 +50,7 @@ public class QueryExecutor : IQueryExecutor
         ForAggregateListQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter, IListQueryInput<TQueryResponse>
+        where TQueryParameter : IQueryParameterCommon, IListQueryInput<TQueryResponse>
         where TQueryResponse : IQueryOutput
     {
         var allProjection = await multiProjectionService.GetAggregateList<TAggregatePayload>();
@@ -64,7 +64,7 @@ public class QueryExecutor : IQueryExecutor
         ForAggregateQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter, IQueryInput<TQueryResponse>
+        where TQueryParameter : IQueryParameterCommon, IQueryInput<TQueryResponse>
         where TQueryResponse : IQueryOutput
     {
         var allProjection = await multiProjectionService.GetAggregateList<TAggregatePayload>();
@@ -78,7 +78,7 @@ public class QueryExecutor : IQueryExecutor
             TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameterCommon
     {
         var allProjection = await multiProjectionService
             .GetSingleProjectionList<TProjectionPayload>();
@@ -92,7 +92,7 @@ public class QueryExecutor : IQueryExecutor
             TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameterCommon
     {
         var allProjection = await multiProjectionService
             .GetSingleProjectionList<TSingleProjectionPayload>();

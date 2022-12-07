@@ -1,20 +1,19 @@
-using System;
-using Customer.Domain.Aggregates.Branches.Commands;
-using Customer.Domain.Aggregates.Clients;
-using Customer.Domain.Aggregates.Clients.Commands;
-using Customer.Domain.Aggregates.Clients.Events;
-using Customer.Domain.Aggregates.LoyaltyPoints.Commands;
-using Customer.Domain.Aggregates.LoyaltyPoints.Consts;
-using Customer.Domain.Shared;
-using Customer.Domain.Shared.Exceptions;
-using Customer.Test.AggregateTests.CommandsHelpers;
+using FeatureCheck.Domain.Aggregates.Branches.Commands;
+using FeatureCheck.Domain.Aggregates.Clients;
+using FeatureCheck.Domain.Aggregates.Clients.Commands;
+using FeatureCheck.Domain.Aggregates.Clients.Events;
+using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
+using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Consts;
+using FeatureCheck.Domain.Shared;
+using FeatureCheck.Domain.Shared.Exceptions;
+using FeatureCheck.Test.AggregateTests.CommandsHelpers;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Exceptions;
 using Sekiban.Testing.SingleProjections;
+using System;
 using Xunit;
-
-namespace Customer.Test.AggregateTests;
+namespace FeatureCheck.Test.AggregateTests;
 
 public class ClientSpec : AggregateTest<Client, CustomerDependency>
 {

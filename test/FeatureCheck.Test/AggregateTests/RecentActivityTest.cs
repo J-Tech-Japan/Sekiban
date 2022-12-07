@@ -1,15 +1,13 @@
+using FeatureCheck.Domain.Aggregates.RecentActivities;
+using FeatureCheck.Domain.Aggregates.RecentActivities.Commands;
+using FeatureCheck.Domain.Aggregates.RecentActivities.Events;
+using FeatureCheck.Domain.Shared;
+using Sekiban.Testing.SingleProjections;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using Customer.Domain.Aggregates.RecentActivities;
-using Customer.Domain.Aggregates.RecentActivities.Commands;
-using Customer.Domain.Aggregates.RecentActivities.Events;
-using Customer.Domain.Shared;
-using Sekiban.Testing.SingleProjections;
 using Xunit;
-using RecentActivity = Customer.Domain.Aggregates.RecentActivities.RecentActivity;
-
-namespace Customer.Test.AggregateTests;
+namespace FeatureCheck.Test.AggregateTests;
 
 public class RecentActivityTest : AggregateTest<RecentActivity, CustomerDependency>
 {
@@ -20,7 +18,7 @@ public class RecentActivityTest : AggregateTest<RecentActivity, CustomerDependen
     [Fact]
     public void CreateRecentActivityTest()
     {
-        WhenCommand(new Domain.Aggregates.RecentActivities.Commands.RecentActivity())
+        WhenCommand(new CreateRecentActivity())
             .ThenNotThrowsAnException()
             .ThenGetLatestSingleEvent<RecentActivityCreated>(ev => firstRecord = ev.Payload.Activity)
             .ThenPayloadIs(new RecentActivity(new List<RecentActivityRecord> { firstRecord }.ToImmutableList()));

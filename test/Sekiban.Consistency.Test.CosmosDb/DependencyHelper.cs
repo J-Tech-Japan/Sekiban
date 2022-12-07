@@ -1,4 +1,4 @@
-using Customer.Domain.Shared;
+using FeatureCheck.Domain.Shared;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Dependency;

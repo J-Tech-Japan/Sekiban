@@ -1,13 +1,12 @@
-using System;
-using System.Collections.Immutable;
-using Customer.Domain.Aggregates.Branches.Events;
-using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
-using Customer.Domain.Shared;
+using FeatureCheck.Domain.Aggregates.Branches.Events;
+using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
+using FeatureCheck.Domain.Shared;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Testing;
+using System;
+using System.Collections.Immutable;
 using Xunit;
-
-namespace Customer.Test.AggregateTests;
+namespace FeatureCheck.Test.AggregateTests;
 
 public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTest<CustomerDependency>
 {

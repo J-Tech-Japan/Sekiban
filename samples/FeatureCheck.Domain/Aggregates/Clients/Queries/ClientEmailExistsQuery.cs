@@ -2,7 +2,7 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Shared;
-namespace Customer.Domain.Aggregates.Clients.Queries;
+namespace FeatureCheck.Domain.Aggregates.Clients.Queries;
 
 public class ClientEmailExistsQuery : IAggregateQuery<Client, ClientEmailExistsQuery.QueryParameter, ClientEmailExistsQuery.Output>
 {
@@ -15,6 +15,6 @@ public class ClientEmailExistsQuery : IAggregateQuery<Client, ClientEmailExistsQ
         return new Output(list.Any(c => c.Payload.ClientEmail == queryParam.Email));
     }
 
-    public record QueryParameter(string Email) : IQueryParameter, IQueryInput<Output>;
+    public record QueryParameter(string Email) : IQueryParameter<Output>;
     public record Output(bool Exists) : IQueryOutput;
 }

@@ -1,11 +1,11 @@
-using Customer.Domain.Aggregates.Branches;
-using Customer.Domain.Aggregates.Branches.Commands;
-using Customer.Domain.Aggregates.Branches.Queries;
-using Customer.Domain.Aggregates.Clients.Commands;
-using Customer.Domain.Aggregates.Clients.Events;
-using Customer.Domain.Aggregates.Clients.Projections;
-using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
-using Customer.Domain.Shared;
+using FeatureCheck.Domain.Aggregates.Branches;
+using FeatureCheck.Domain.Aggregates.Branches.Commands;
+using FeatureCheck.Domain.Aggregates.Branches.Queries;
+using FeatureCheck.Domain.Aggregates.Clients.Commands;
+using FeatureCheck.Domain.Aggregates.Clients.Events;
+using FeatureCheck.Domain.Aggregates.Clients.Projections;
+using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
+using FeatureCheck.Domain.Shared;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Testing;
 using System;
@@ -13,7 +13,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Xunit;
-namespace Customer.Test.AggregateTests;
+namespace FeatureCheck.Test.AggregateTests;
 
 public class UnifiedProjectionsTest : UnifiedTest<CustomerDependency>
 {

@@ -2,7 +2,7 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Shared;
-namespace Customer.Domain.Aggregates.Branches.Queries;
+namespace FeatureCheck.Domain.Aggregates.Branches.Queries;
 
 public class BranchExistsQuery : IAggregateQuery<Branch, BranchExistsQuery.QueryParameter, BranchExistsQuery.Output>
 {
@@ -14,7 +14,7 @@ public class BranchExistsQuery : IAggregateQuery<Branch, BranchExistsQuery.Query
     {
         return new Output(list.Any(b => b.AggregateId == queryParam.BranchId));
     }
-    public record QueryParameter(Guid BranchId) : IQueryParameter, IQueryInput<Output>;
+    public record QueryParameter(Guid BranchId) : IQueryParameterCommon, IQueryInput<Output>;
 
     public record Output(bool Exists) : IQueryOutput;
 }

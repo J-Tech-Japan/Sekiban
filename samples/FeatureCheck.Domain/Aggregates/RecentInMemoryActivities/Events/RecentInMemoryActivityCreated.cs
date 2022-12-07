@@ -1,7 +1,6 @@
-using System.Collections.Immutable;
 using Sekiban.Core.Event;
-
-namespace Customer.Domain.Aggregates.RecentInMemoryActivities.Events;
+using System.Collections.Immutable;
+namespace FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Events;
 
 public record RecentInMemoryActivityCreated
     (RecentInMemoryActivityRecord Activity) : IEventPayload<RecentInMemoryActivity>

@@ -1,6 +1,5 @@
 using Sekiban.Core.Aggregate;
-
-namespace Customer.Domain.Aggregates.Clients;
+namespace FeatureCheck.Domain.Aggregates.Clients;
 
 public record Client
     (Guid BranchId, string ClientName, string ClientEmail, bool IsDeleted = false) : IDeletableAggregatePayload

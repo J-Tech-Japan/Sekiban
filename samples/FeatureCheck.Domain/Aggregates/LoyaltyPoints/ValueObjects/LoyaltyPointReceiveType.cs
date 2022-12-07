@@ -1,6 +1,5 @@
-using Customer.Domain.Aggregates.LoyaltyPoints.Consts;
-
-namespace Customer.Domain.Aggregates.LoyaltyPoints.ValueObjects;
+using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Consts;
+namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.ValueObjects;
 
 public record LoyaltyPointReceiveType : IValueObject<LoyaltyPointReceiveTypeKeys>
 {

@@ -5,7 +5,7 @@ namespace Sekiban.Core.Query.QueryModel;
 public interface
     IAggregateListQuery<TAggregatePayload, in TQueryParameter, TQueryResponse> : IListHandlerCommon<TQueryParameter, TQueryResponse>
     where TAggregatePayload : IAggregatePayload, new()
-    where TQueryParameter : IQueryParameter, IListQueryInput<TQueryResponse>
+    where TQueryParameter : IQueryParameterCommon, IListQueryInput<TQueryResponse>
     where TQueryResponse : IQueryOutput
 {
     public IEnumerable<TQueryResponse> HandleFilter(

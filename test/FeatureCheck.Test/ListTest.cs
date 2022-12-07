@@ -2,8 +2,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Xunit;
-
-namespace Customer.Test;
+namespace FeatureCheck.Test;
 
 public class ListTest
 {

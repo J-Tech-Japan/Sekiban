@@ -1,24 +1,23 @@
-using System.Reflection;
-using Customer.Domain.Aggregates.Branches;
-using Customer.Domain.Aggregates.Branches.Commands;
-using Customer.Domain.Aggregates.Branches.Queries;
-using Customer.Domain.Aggregates.Clients;
-using Customer.Domain.Aggregates.Clients.Commands;
-using Customer.Domain.Aggregates.Clients.Events;
-using Customer.Domain.Aggregates.Clients.Projections;
-using Customer.Domain.Aggregates.Clients.Queries;
-using Customer.Domain.Aggregates.Clients.Queries.BasicClientFilters;
-using Customer.Domain.Aggregates.LoyaltyPoints;
-using Customer.Domain.Aggregates.LoyaltyPoints.Commands;
-using Customer.Domain.Aggregates.RecentActivities.Commands;
-using Customer.Domain.Aggregates.RecentInMemoryActivities;
-using Customer.Domain.Aggregates.RecentInMemoryActivities.Commands;
-using Customer.Domain.EventSubscribers;
-using Customer.Domain.Projections.ClientLoyaltyPointLists;
-using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
+using FeatureCheck.Domain.Aggregates.Branches;
+using FeatureCheck.Domain.Aggregates.Branches.Commands;
+using FeatureCheck.Domain.Aggregates.Branches.Queries;
+using FeatureCheck.Domain.Aggregates.Clients;
+using FeatureCheck.Domain.Aggregates.Clients.Commands;
+using FeatureCheck.Domain.Aggregates.Clients.Events;
+using FeatureCheck.Domain.Aggregates.Clients.Projections;
+using FeatureCheck.Domain.Aggregates.Clients.Queries;
+using FeatureCheck.Domain.Aggregates.Clients.Queries.BasicClientFilters;
+using FeatureCheck.Domain.Aggregates.LoyaltyPoints;
+using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
+using FeatureCheck.Domain.Aggregates.RecentActivities.Commands;
+using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities;
+using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Commands;
+using FeatureCheck.Domain.EventSubscribers;
+using FeatureCheck.Domain.Projections.ClientLoyaltyPointLists;
+using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
 using Sekiban.Core.Dependency;
-
-namespace Customer.Domain.Shared;
+using System.Reflection;
+namespace FeatureCheck.Domain.Shared;
 
 public class CustomerDependency : DomainDependencyDefinitionBase
 {
@@ -54,7 +53,7 @@ public class CustomerDependency : DomainDependencyDefinitionBase
             .AddCommandHandler<DeleteLoyaltyPoint, DeleteLoyaltyPoint.Handler>();
 
         AddAggregate<Aggregates.RecentActivities.RecentActivity>()
-            .AddCommandHandler<RecentActivity, RecentActivity.Handler>()
+            .AddCommandHandler<CreateRecentActivity, CreateRecentActivity.Handler>()
             .AddCommandHandler<AddRecentActivity, AddRecentActivity.Handler>()
             .AddCommandHandler<OnlyPublishingAddRecentActivity, OnlyPublishingAddRecentActivity.Handler>();
 

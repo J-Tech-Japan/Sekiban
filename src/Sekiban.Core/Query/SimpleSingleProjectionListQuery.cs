@@ -1,7 +1,6 @@
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleProjections;
-
 namespace Sekiban.Core.Query;
 
 public class SimpleSingleProjectionListQuery<TSingleProjectionPayload> :
@@ -12,10 +11,7 @@ public class SimpleSingleProjectionListQuery<TSingleProjectionPayload> :
 {
     public IEnumerable<SingleProjectionState<TSingleProjectionPayload>> HandleFilter(
         QueryParameter queryParam,
-        IEnumerable<SingleProjectionState<TSingleProjectionPayload>> list)
-    {
-        return list;
-    }
+        IEnumerable<SingleProjectionState<TSingleProjectionPayload>> list) => list;
 
     public IEnumerable<SingleProjectionState<TSingleProjectionPayload>> HandleSort(
         QueryParameter queryParam,
@@ -24,5 +20,5 @@ public class SimpleSingleProjectionListQuery<TSingleProjectionPayload> :
         return filteredList.OrderByDescending(m => m.LastSortableUniqueId);
     }
 
-    public record QueryParameter(int? PageSize, int? PageNumber) : IQueryPagingParameter;
+    public record QueryParameter(int? PageSize, int? PageNumber) : IQueryPagingParameterCommon;
 }

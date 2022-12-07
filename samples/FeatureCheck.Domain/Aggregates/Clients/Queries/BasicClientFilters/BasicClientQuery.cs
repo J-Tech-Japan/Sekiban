@@ -1,7 +1,7 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.QueryModel.Parameters;
-namespace Customer.Domain.Aggregates.Clients.Queries.BasicClientFilters;
+namespace FeatureCheck.Domain.Aggregates.Clients.Queries.BasicClientFilters;
 
 public enum BasicClientQuerySortKey
 {
@@ -16,7 +16,7 @@ public record BasicClientQueryParameter(
     BasicClientQuerySortKey? SortKey1,
     BasicClientQuerySortKey? SortKey2,
     bool? SortKey1Asc,
-    bool? SortKey2Asc) : IQueryPagingParameter, IListQueryInput<BasicClientQueryModel>;
+    bool? SortKey2Asc) : IQueryPagingParameterCommon, IListQueryInput<BasicClientQueryModel>;
 public record BasicClientQueryModel(Guid BranchId, string ClientName, string ClientEmail) : IQueryOutput;
 public class BasicClientQuery : IAggregateListQuery<Client, BasicClientQueryParameter,
     BasicClientQueryModel>
