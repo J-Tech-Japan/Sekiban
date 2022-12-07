@@ -81,13 +81,13 @@ public class ClientAndProjectionSpec : AggregateTest<Client, CustomerDependency>
                         new(clientName, FirstEventDatetime), new(clientNameChanged, ChangedEventDatetime)
                     },
                     clientEmail))
-            .ThenAggregateQueryResponseIs<ClientEmailExistsQuery, ClientEmailExistsQuery.QueryParameter, ClientEmailExistsQuery.Response>(
+            .ThenQueryResponseIs(
                 new ClientEmailExistsQuery.QueryParameter(clientEmail),
                 new ClientEmailExistsQuery.Response(true))
-            .ThenAggregateQueryResponseIs<ClientEmailExistsQuery, ClientEmailExistsQuery.QueryParameter, ClientEmailExistsQuery.Response>(
+            .ThenQueryResponseIs(
                 new ClientEmailExistsQuery.QueryParameter("not" + clientEmail),
                 new ClientEmailExistsQuery.Response(false))
-            .ThenAggregateListQueryResponseIs<BasicClientQuery, BasicClientQueryParameter, BasicClientQueryModel>(
+            .ThenQueryResponseIs(
                 new BasicClientQueryParameter(
                     branchId,
                     null,
@@ -105,9 +105,7 @@ public class ClientAndProjectionSpec : AggregateTest<Client, CustomerDependency>
                     {
                         new BasicClientQueryModel(branchId, clientNameChanged, clientEmail)
                     }))
-            .ThenGetSingleProjectionListQueryResponse<ClientNameHistoryProjection, ClientNameHistoryProjectionQuery,
-                ClientNameHistoryProjectionQuery.Parameter,
-                ClientNameHistoryProjectionQuery.Response>(
+            .ThenGetQueryResponse(
                 new ClientNameHistoryProjectionQuery.Parameter(null, null, null, null, null),
                 value => { });
     }
@@ -122,8 +120,7 @@ public class ClientAndProjectionSpec : AggregateTest<Client, CustomerDependency>
                 client => new ChangeClientName(client.AggregateId, clientNameChanged)
                     { ReferenceVersion = client.Version })
             .ThenGetLatestSingleEvent<ClientNameChanged>(ev => ChangedEventDatetime = ev.TimeStamp)
-            .ThenSingleProjectionListQueryResponseIs<ClientNameHistoryProjection, ClientNameHistoryProjectionQuery,
-                ClientNameHistoryProjectionQuery.Parameter, ClientNameHistoryProjectionQuery.Response>(
+            .ThenQueryResponseIs(
                 new ClientNameHistoryProjectionQuery.Parameter(null, null, branchId, null, null),
                 new ListQueryResult<ClientNameHistoryProjectionQuery.Response>(
                     2,
@@ -157,8 +154,7 @@ public class ClientAndProjectionSpec : AggregateTest<Client, CustomerDependency>
                 client => new ChangeClientName(client.AggregateId, clientNameChanged)
                     { ReferenceVersion = client.Version })
             .ThenGetLatestSingleEvent<ClientNameChanged>(ev => ChangedEventDatetime = ev.TimeStamp)
-            .ThenSingleProjectionQueryResponseIs<ClientNameHistoryProjection, ClientNameHistoryProjectionCountQuery,
-                ClientNameHistoryProjectionCountQuery.Parameter, ClientNameHistoryProjectionCountQuery.Response>(
+            .ThenQueryResponseIs(
                 new ClientNameHistoryProjectionCountQuery.Parameter(branchId, GetAggregateId()),
                 new ClientNameHistoryProjectionCountQuery.Response(2));
     }

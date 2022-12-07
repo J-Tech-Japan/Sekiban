@@ -52,9 +52,7 @@ public class UnifiedProjectionsTest : UnifiedTest<CustomerDependency>
                             _clientId,
                             clientName,
                             0))))
-            .ThenMultiProjectionQueryResponseIs<ClientLoyaltyPointMultiProjection,
-                ClientLoyaltyPointMultiProjectionQuery,
-                ClientLoyaltyPointMultiProjectionQuery.QueryParameter, ClientLoyaltyPointMultiProjectionQuery.Response>(
+            .ThenQueryResponseIs(
                 new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(
                     null,
                     ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
@@ -74,20 +72,46 @@ public class UnifiedProjectionsTest : UnifiedTest<CustomerDependency>
     public void TestAggregateQuery()
     {
         GivenScenario(Test)
-            .ThenAggregateQueryResponseIs<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, BranchExistsQuery.Response>(
+            .ThenQueryResponseIs(
                 new BranchExistsQuery.QueryParameter(_branchId),
                 new BranchExistsQuery.Response(true))
-            .ThenAggregateQueryResponseIs<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, BranchExistsQuery.Response>(
+            .ThenQueryResponseIs(
                 new BranchExistsQuery.QueryParameter(Guid.NewGuid()),
                 new BranchExistsQuery.Response(false));
     }
-
+    [Fact]
+    public void TestAggregateQuery2()
+    {
+        GivenScenario(Test)
+            .ThenQueryResponseIs(
+                new BranchExistsQuery.QueryParameter(_branchId),
+                new BranchExistsQuery.Response(true))
+            .ThenQueryResponseIs(
+                new BranchExistsQuery.QueryParameter(Guid.NewGuid()),
+                new BranchExistsQuery.Response(false));
+    }
     [Fact]
     public void TestSingleProjection()
     {
         GivenScenario(Test)
-            .ThenSingleProjectionListQueryResponseIs<ClientNameHistoryProjection, ClientNameHistoryProjectionQuery,
-                ClientNameHistoryProjectionQuery.Parameter, ClientNameHistoryProjectionQuery.Response>(
+            .ThenQueryResponseIs(
+                new ClientNameHistoryProjectionQuery.Parameter(null, null, null, null, null),
+                new ListQueryResult<ClientNameHistoryProjectionQuery.Response>(
+                    1,
+                    null,
+                    null,
+                    null,
+                    new List<ClientNameHistoryProjectionQuery.Response>
+                    {
+                        new(_branchId, _clientId, clientName, clientEmail, dateNameSet)
+                    }));
+    }
+
+    [Fact]
+    public void TestSingleProjection2()
+    {
+        GivenScenario(Test)
+            .ThenQueryResponseIs(
                 new ClientNameHistoryProjectionQuery.Parameter(null, null, null, null, null),
                 new ListQueryResult<ClientNameHistoryProjectionQuery.Response>(
                     1,
@@ -106,8 +130,7 @@ public class UnifiedProjectionsTest : UnifiedTest<CustomerDependency>
     {
         GivenScenario(Test);
         RunCommand(new ChangeClientName(_clientId, clientName2));
-        ThenMultiProjectionQueryResponseIs<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultiProjectionQuery,
-            ClientLoyaltyPointMultiProjectionQuery.QueryParameter, ClientLoyaltyPointMultiProjectionQuery.Response>(
+        ThenQueryResponseIs(
             new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(
                 null,
                 ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),

@@ -32,9 +32,7 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<CustomerDependen
     public void QueryTest()
     {
         GivenScenario(RegularProjection);
-        WriteMultiProjectionListQueryResponseToFile<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery,
-            ClientLoyaltyPointQuery.QueryParameter,
-            ClientLoyaltyPointQuery.Response>(
+        WriteQueryResponseToFile(
             new ClientLoyaltyPointQuery.QueryParameter(
                 null,
                 null,
@@ -67,9 +65,7 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<CustomerDependen
     public void QueryBasic1()
     {
         GivenScenario(CommandTest1);
-        ThenMultiProjectionListQueryResponseIs<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery,
-            ClientLoyaltyPointQuery.QueryParameter,
-            ClientLoyaltyPointQuery.Response>(
+        ThenQueryResponseIs(
             new ClientLoyaltyPointQuery.QueryParameter(
                 null,
                 null,
@@ -98,9 +94,7 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<CustomerDependen
     public void QueryBasicPaging()
     {
         GivenScenario(CommandTest1);
-        ThenMultiProjectionListQueryResponseIs<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery,
-            ClientLoyaltyPointQuery.QueryParameter,
-            ClientLoyaltyPointQuery.Response>(
+        ThenQueryResponseIs(
             new ClientLoyaltyPointQuery.QueryParameter(
                 null,
                 null,
@@ -127,9 +121,7 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<CustomerDependen
     public void QueryBasicPaging2()
     {
         GivenScenario(CommandTest1);
-        ThenMultiProjectionListQueryResponseIs<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery,
-            ClientLoyaltyPointQuery.QueryParameter,
-            ClientLoyaltyPointQuery.Response>(
+        ThenQueryResponseIs(
             new ClientLoyaltyPointQuery.QueryParameter(
                 null,
                 null,
@@ -158,9 +150,7 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<CustomerDependen
     public void QueryBasicPaging3()
     {
         GivenScenario(CommandTest1);
-        ThenMultiProjectionListQueryResponseIs<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery,
-            ClientLoyaltyPointQuery.QueryParameter,
-            ClientLoyaltyPointQuery.Response>(
+        ThenQueryResponseIs(
             new ClientLoyaltyPointQuery.QueryParameter(
                 null,
                 null,
@@ -186,9 +176,7 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<CustomerDependen
     public void QueryBasicPagingRequestOverflowed()
     {
         GivenScenario(CommandTest1);
-        ThenMultiProjectionListQueryResponseIs<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery,
-            ClientLoyaltyPointQuery.QueryParameter,
-            ClientLoyaltyPointQuery.Response>(
+        ThenQueryResponseIs(
             new ClientLoyaltyPointQuery.QueryParameter(
                 null,
                 null,
@@ -210,9 +198,7 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<CustomerDependen
     public void QueryBasicPagingRequestZero()
     {
         GivenScenario(CommandTest1);
-        ThenMultiProjectionListQueryResponseIs<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery,
-            ClientLoyaltyPointQuery.QueryParameter,
-            ClientLoyaltyPointQuery.Response>(
+        ThenQueryResponseIs(
             new ClientLoyaltyPointQuery.QueryParameter(
                 null,
                 null,

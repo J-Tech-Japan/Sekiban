@@ -2,7 +2,6 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Event;
 using Sekiban.Core.Query.QueryModel;
-using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
@@ -134,188 +133,53 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new();
     #endregion
 
-    #region Aggregate Query
-    public IAggregateTestHelper<TAggregatePayload> WriteAggregateQueryResponseToFile<TQuery, TQueryParameter,
-        TQueryResponse>(
-        TQueryParameter param,
-        string filename)
-        where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter<TQueryResponse>
-        where TQueryResponse : IQueryResponse;
-
-    public IAggregateTestHelper<TAggregatePayload>
-        ThenAggregateQueryResponseIs<TQuery, TQueryParameter, TQueryResponse>(
-            TQueryParameter param,
-            TQueryResponse expectedResponse)
-        where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter<TQueryResponse>
-        where TQueryResponse : IQueryResponse;
-
-    public IAggregateTestHelper<TAggregatePayload> ThenGetAggregateQueryResponse<TQuery, TQueryParameter,
-        TQueryResponse>(
-        TQueryParameter param,
-        Action<TQueryResponse> responseAction)
-        where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter<TQueryResponse>
-        where TQueryResponse : IQueryResponse;
-
-    public IAggregateTestHelper<TAggregatePayload> ThenAggregateQueryResponseIsFromJson<TQuery, TQueryParameter,
-        TQueryResponse>(
-        TQueryParameter param,
-        string responseJson) where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter<TQueryResponse>
-        where TQueryResponse : IQueryResponse;
-
-    public IAggregateTestHelper<TAggregatePayload> ThenAggregateQueryResponseIsFromFile<TQuery, TQueryParameter,
-        TQueryResponse>(
-        TQueryParameter param,
-        string responseFilename) where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter<TQueryResponse>
-        where TQueryResponse : IQueryResponse;
-    #endregion
-
-    #region Aggregate　List Query
-    public IAggregateTestHelper<TAggregatePayload> WriteAggregateListQueryResponseToFile<TQuery, TQueryParameter,
-        TQueryResponse>(
-        TQueryParameter param,
-        string filename)
-        where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IListQueryParameter<TQueryResponse>
-        where TQueryResponse : IQueryResponse;
-
-    public IAggregateTestHelper<TAggregatePayload> ThenAggregateListQueryResponseIs<TQuery, TQueryParameter,
-        TQueryResponse>(
-        TQueryParameter param,
+    #region General List Query Test
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIs<TQueryResponse>(
+        IListQueryInput<TQueryResponse> param,
         ListQueryResult<TQueryResponse> expectedResponse)
-        where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IListQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse;
-
-    public IAggregateTestHelper<TAggregatePayload> ThenGetAggregateListQueryResponse<TQuery, TQueryParameter,
-        TQueryResponse>(
-        TQueryParameter param,
+    public IAggregateTestHelper<TAggregatePayload> WriteQueryResponseToFile<TQueryResponse>(
+        IListQueryInput<TQueryResponse> param,
+        string filename)
+        where TQueryResponse : IQueryResponse;
+    public IAggregateTestHelper<TAggregatePayload> ThenGetQueryResponse<TQueryResponse>(
+        IListQueryInput<TQueryResponse> param,
         Action<ListQueryResult<TQueryResponse>> responseAction)
-        where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IListQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse;
 
-    public IAggregateTestHelper<TAggregatePayload> ThenAggregateListQueryResponseIsFromJson<TQuery, TQueryParameter,
-        TQueryResponse>(
-        TQueryParameter param,
-        string responseJson) where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IListQueryParameter<TQueryResponse>
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(
+        IListQueryInput<TQueryResponse> param,
+        string responseJson)
         where TQueryResponse : IQueryResponse;
 
-
-    public IAggregateTestHelper<TAggregatePayload> ThenAggregateListQueryResponseIsFromFile<TQuery, TQueryParameter,
-        TQueryResponse>(
-        TQueryParameter param,
-        string responseFilename) where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IListQueryParameter<TQueryResponse>
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromFile<TQueryResponse>(
+        IListQueryInput<TQueryResponse> param,
+        string responseFilename)
         where TQueryResponse : IQueryResponse;
     #endregion
 
-    #region SingleProjection Query
-    public IAggregateTestHelper<TAggregatePayload> WriteSingleProjectionQueryResponseToFile<TSingleProjectionPayload,
-        TQuery, TQueryParameter,
-        TQueryResponse>(
-        TQueryParameter param,
-        string filename)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
-        where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter<TQueryResponse>
-        where TQueryResponse : IQueryResponse;
-
-    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionQueryResponseIs<TSingleProjectionPayload, TQuery,
-        TQueryParameter,
-        TQueryResponse>(
-        TQueryParameter param,
+    #region Query Test (not list)
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIs<TQueryResponse>(
+        IQueryInput<TQueryResponse> param,
         TQueryResponse expectedResponse)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
-        where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse;
-
-    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionQueryResponse<TSingleProjectionPayload,
-        TQuery, TQueryParameter,
-        TQueryResponse>(
-        TQueryParameter param,
-        Action<TQueryResponse> responseAction)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
-        where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter<TQueryResponse>
-        where TQueryResponse : IQueryResponse;
-
-    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionQueryResponseIsFromJson<TSingleProjectionPayload,
-        TQuery, TQueryParameter,
-        TQueryResponse>(
-        TQueryParameter param,
-        string responseJson)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
-        where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter<TQueryResponse>
-        where TQueryResponse : IQueryResponse;
-
-    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionQueryResponseIsFromFile<TSingleProjectionPayload,
-        TQuery, TQueryParameter,
-        TQueryResponse>(
-        TQueryParameter param,
-        string responseFilename)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
-        where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter<TQueryResponse>
-        where TQueryResponse : IQueryResponse;
-    #endregion
-
-    #region SingleProjection　List Query
-    public IAggregateTestHelper<TAggregatePayload> WriteSingleProjectionListQueryResponseToFile<
-        TSingleProjectionPayload, TQuery, TQueryParameter,
-        TQueryResponse>(
-        TQueryParameter param,
+    public IAggregateTestHelper<TAggregatePayload> WriteQueryResponseToFile<TQueryResponse>(
+        IQueryInput<TQueryResponse> param,
         string filename)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
-        where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse;
+    public IAggregateTestHelper<TAggregatePayload> ThenGetQueryResponse<TQueryResponse>(
+        IQueryInput<TQueryResponse> param,
+        Action<TQueryResponse> responseAction)
         where TQueryResponse : IQueryResponse;
 
-    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionListQueryResponseIs<TSingleProjectionPayload,
-        TQuery, TQueryParameter,
-        TQueryResponse>(
-        TQueryParameter param,
-        ListQueryResult<TQueryResponse> expectedResponse)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
-        where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IListQueryParameter<TQueryResponse>
-        where TQueryResponse : IQueryResponse;
-
-    public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionListQueryResponse<TSingleProjectionPayload,
-        TQuery, TQueryParameter,
-        TQueryResponse>(
-        TQueryParameter param,
-        Action<ListQueryResult<TQueryResponse>> responseAction)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
-        where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IListQueryParameter<TQueryResponse>
-        where TQueryResponse : IQueryResponse;
-
-    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionListQueryResponseIsFromJson<
-        TSingleProjectionPayload, TQuery, TQueryParameter,
-        TQueryResponse>(
-        TQueryParameter param,
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(
+        IQueryInput<TQueryResponse> param,
         string responseJson)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
-        where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IListQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse;
 
-    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionListQueryResponseIsFromFile<
-        TSingleProjectionPayload, TQuery, TQueryParameter,
-        TQueryResponse>(
-        TQueryParameter param,
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromFile<TQueryResponse>(
+        IQueryInput<TQueryResponse> param,
         string responseFilename)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
-        where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IListQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse;
     #endregion
 }
