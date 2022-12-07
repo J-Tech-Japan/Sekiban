@@ -17,19 +17,38 @@ public static class QueryInjections
             {
                 var input = type.GetParamTypeFromAggregateListQueryType();
                 var output = type.GetResponseTypeFromAggregateListQueryType();
-                services.AddTransient(typeof(IListHandlerCommon<,>).MakeGenericType(input, output), type);
+                services.AddTransient(typeof(IListQueryHandlerCommon<,>).MakeGenericType(input, output), type);
             }
             if (type.IsSingleProjectionListQueryType())
             {
                 var input = type.GetParamTypeFromSingleProjectionListQueryType();
                 var output = type.GetResponseTypeFromSingleProjectionListQueryType();
-                services.AddTransient(typeof(IListHandlerCommon<,>).MakeGenericType(input, output), type);
+                services.AddTransient(typeof(IListQueryHandlerCommon<,>).MakeGenericType(input, output), type);
             }
             if (type.IsMultiProjectionListQueryType())
             {
                 var input = type.GetParamTypeFromMultiProjectionListQueryType();
                 var output = type.GetResponseTypeFromMultiProjectionListQueryType();
-                services.AddTransient(typeof(IListHandlerCommon<,>).MakeGenericType(input, output), type);
+                services.AddTransient(typeof(IListQueryHandlerCommon<,>).MakeGenericType(input, output), type);
+            }
+
+            if (type.IsAggregateQueryType())
+            {
+                var input = type.GetParamTypeFromAggregateQueryType();
+                var output = type.GetResponseTypeFromAggregateQueryType();
+                services.AddTransient(typeof(IQueryHandlerCommon<,>).MakeGenericType(input, output), type);
+            }
+            if (type.IsSingleProjectionQueryType())
+            {
+                var input = type.GetParamTypeFromSingleProjectionQueryType();
+                var output = type.GetResponseTypeFromSingleProjectionQueryType();
+                services.AddTransient(typeof(IQueryHandlerCommon<,>).MakeGenericType(input, output), type);
+            }
+            if (type.IsMultiProjectionQueryType())
+            {
+                var input = type.GetParamTypeFromMultiProjectionQueryType();
+                var output = type.GetResponseTypeFromMultiProjectionQueryType();
+                services.AddTransient(typeof(IQueryHandlerCommon<,>).MakeGenericType(input, output), type);
             }
 
         }

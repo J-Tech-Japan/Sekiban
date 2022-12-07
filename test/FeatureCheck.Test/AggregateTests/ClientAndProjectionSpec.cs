@@ -158,9 +158,9 @@ public class ClientAndProjectionSpec : AggregateTest<Client, CustomerDependency>
                     { ReferenceVersion = client.Version })
             .ThenGetLatestSingleEvent<ClientNameChanged>(ev => ChangedEventDatetime = ev.TimeStamp)
             .ThenSingleProjectionQueryResponseIs<ClientNameHistoryProjection, ClientNameHistoryProjectionCountQuery,
-                ClientNameHistoryProjectionCountQuery.Parameter, int>(
+                ClientNameHistoryProjectionCountQuery.Parameter, ClientNameHistoryProjectionCountQuery.Response>(
                 new ClientNameHistoryProjectionCountQuery.Parameter(branchId, GetAggregateId()),
-                2);
+                new ClientNameHistoryProjectionCountQuery.Response(2));
     }
 
     [Fact]

@@ -15,9 +15,15 @@ public static class QueryHandlerTypesExtension
         var baseType = queryType.GetImplementingFromGenericInterfaceType(typeof(IListQueryInput<>));
         return baseType.GenericTypeArguments[0];
     }
+    public static dynamic? GetQueryObjectFromListQueryInputType(this IServiceProvider serviceProvider, Type inputType, Type outputType)
+    {
+        var baseType = typeof(IListQueryHandlerCommon<,>);
+        var handlerType = baseType.MakeGenericType(inputType, outputType) ?? throw new Exception("Can not create handler type");
+        return serviceProvider.GetService(handlerType);
+    }
     public static dynamic? GetQueryObjectFromQueryInputType(this IServiceProvider serviceProvider, Type inputType, Type outputType)
     {
-        var baseType = typeof(IListHandlerCommon<,>);
+        var baseType = typeof(IQueryHandlerCommon<,>);
         var handlerType = baseType.MakeGenericType(inputType, outputType) ?? throw new Exception("Can not create handler type");
         return serviceProvider.GetService(handlerType);
     }

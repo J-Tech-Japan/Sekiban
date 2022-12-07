@@ -3,11 +3,12 @@ using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Query.QueryModel;
 
 public interface
-    ISingleProjectionQuery<TSingleProjectionPayload, in TQueryParam, out TQueryResponse>
+    ISingleProjectionQuery<TSingleProjectionPayload, in TQueryParameter, out TQueryResponse> : IQueryHandlerCommon<TQueryParameter, TQueryResponse>
     where TSingleProjectionPayload : ISingleProjectionPayloadCommon
-    where TQueryParam : IQueryParameterCommon
+    where TQueryParameter : IQueryParameter<TQueryResponse>
+    where TQueryResponse : IQueryResponse
 {
     public TQueryResponse HandleFilter(
-        TQueryParam queryParam,
+        TQueryParameter queryParam,
         IEnumerable<SingleProjectionState<TSingleProjectionPayload>> list);
 }

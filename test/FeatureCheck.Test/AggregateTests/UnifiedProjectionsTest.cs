@@ -54,11 +54,11 @@ public class UnifiedProjectionsTest : UnifiedTest<CustomerDependency>
                             0))))
             .ThenMultiProjectionQueryResponseIs<ClientLoyaltyPointMultiProjection,
                 ClientLoyaltyPointMultiProjectionQuery,
-                ClientLoyaltyPointMultiProjectionQuery.QueryParameter, ClientLoyaltyPointMultiProjection>(
+                ClientLoyaltyPointMultiProjectionQuery.QueryParameter, ClientLoyaltyPointMultiProjectionQuery.Response>(
                 new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(
                     null,
                     ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
-                new ClientLoyaltyPointMultiProjection(
+                new ClientLoyaltyPointMultiProjectionQuery.Response(
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty.Add(
                         new ClientLoyaltyPointMultiProjection.ProjectedBranch(_branchId, branchName)),
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty.Add(
@@ -107,11 +107,11 @@ public class UnifiedProjectionsTest : UnifiedTest<CustomerDependency>
         GivenScenario(Test);
         RunCommand(new ChangeClientName(_clientId, clientName2));
         ThenMultiProjectionQueryResponseIs<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultiProjectionQuery,
-            ClientLoyaltyPointMultiProjectionQuery.QueryParameter, ClientLoyaltyPointMultiProjection>(
+            ClientLoyaltyPointMultiProjectionQuery.QueryParameter, ClientLoyaltyPointMultiProjectionQuery.Response>(
             new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(
                 null,
                 ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
-            new ClientLoyaltyPointMultiProjection(
+            new ClientLoyaltyPointMultiProjectionQuery.Response(
                 ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty.Add(
                     new ClientLoyaltyPointMultiProjection.ProjectedBranch(_branchId, branchName)),
                 ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty.Add(

@@ -1,6 +1,8 @@
 using FeatureCheck.Domain.Aggregates.Clients.Projections;
+using FeatureCheck.Domain.Aggregates.Clients.Queries;
 using FeatureCheck.Domain.Aggregates.Clients.Queries.BasicClientFilters;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointLists;
+using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
 using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Query.QueryModel;
@@ -40,11 +42,26 @@ public class SimpleQueryTest : TestBase
     }
 
     [Fact]
+    public async Task QueryExecuteAggregateAsync()
+    {
+        var result = await _queryExecutor.ExecuteAsync(
+            new ClientEmailExistsQuery.QueryParameter("foo@example.com"));
+    }
+
+
+    [Fact]
     public async Task QueryExecuteSingleProjectionListAsync()
     {
 
         var result = await _queryExecutor.ExecuteAsync(
             new ClientNameHistoryProjectionQuery.Parameter(null, null, null, null, null));
+    }
+    [Fact]
+    public async Task QueryExecuteSingleProjectionAsync()
+    {
+
+        var result = await _queryExecutor.ExecuteAsync(
+            new ClientNameHistoryProjectionCountQuery.Parameter(null, null));
     }
     [Fact]
     public async Task QueryExecuteMultipleProjectionListAsync()
@@ -59,5 +76,11 @@ public class SimpleQueryTest : TestBase
                 null,
                 null,
                 null));
+    }
+    [Fact]
+    public async Task QueryExecuteMultipleProjectionAsync()
+    {
+        var result = await _queryExecutor.ExecuteAsync(
+            new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(null, ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.Points));
     }
 }

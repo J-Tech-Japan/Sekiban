@@ -30,11 +30,11 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTest<C
             .ThenMultiProjectionQueryResponseIs<ClientLoyaltyPointMultiProjection,
                 ClientLoyaltyPointMultiProjectionQuery,
                 ClientLoyaltyPointMultiProjectionQuery.QueryParameter,
-                ClientLoyaltyPointMultiProjection>(
+                ClientLoyaltyPointMultiProjectionQuery.Response>(
                 new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(
                     null,
                     ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
-                new ClientLoyaltyPointMultiProjection(
+                new ClientLoyaltyPointMultiProjectionQuery.Response(
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty.Add(
                         new ClientLoyaltyPointMultiProjection.ProjectedBranch(branchId, branchName)),
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty));
@@ -44,7 +44,6 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTest<C
     public void JsonEventsTest()
     {
         #region json
-
         GivenEventsFromJson(
                 @"
 [
@@ -602,19 +601,19 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTest<C
     }
 ]
 ")
-
             #endregion
-
-            .ThenGetMultiProjectionPayload<ClientLoyaltyPointMultiProjection>(payload =>
-                Assert.NotNull(payload.Branches));
+            .ThenGetMultiProjectionPayload<ClientLoyaltyPointMultiProjection>(
+                payload =>
+                    Assert.NotNull(payload.Branches));
     }
 
     [Fact]
     public void JsonFileEventsTest()
     {
         GivenEventsFromFile("TestData1.json")
-            .ThenGetMultiProjectionPayload<ClientLoyaltyPointMultiProjection>(payload =>
-                Assert.NotNull(payload.Branches))
+            .ThenGetMultiProjectionPayload<ClientLoyaltyPointMultiProjection>(
+                payload =>
+                    Assert.NotNull(payload.Branches))
             //        await ThenStateFileAsync("TestData1Result.json");
             .WriteMultiProjectionStateToFile<ClientLoyaltyPointMultiProjection>("TestData1ResultOut.json");
     }
@@ -625,7 +624,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTest<C
         GivenScenario(JsonFileEventsTest)
             .ThenMultiProjectionQueryResponseIsFromFile<ClientLoyaltyPointMultiProjection,
                 ClientLoyaltyPointMultiProjectionQuery,
-                ClientLoyaltyPointMultiProjectionQuery.QueryParameter, ClientLoyaltyPointMultiProjection>(
+                ClientLoyaltyPointMultiProjectionQuery.QueryParameter, ClientLoyaltyPointMultiProjectionQuery.Response>(
                 new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(
                     branchId,
                     ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),

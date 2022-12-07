@@ -27,11 +27,11 @@ public class SimpleUnifiedProjectionTest : UnifiedTest<CustomerDependency>
 
         ThenMultiProjectionQueryResponseIs<ClientLoyaltyPointMultiProjection,
                 ClientLoyaltyPointMultiProjectionQuery, ClientLoyaltyPointMultiProjectionQuery.QueryParameter,
-                ClientLoyaltyPointMultiProjection>(
+                ClientLoyaltyPointMultiProjectionQuery.Response>(
                 new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(
                     branchId,
                     ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
-                new ClientLoyaltyPointMultiProjection(
+                new ClientLoyaltyPointMultiProjectionQuery.Response(
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty
                         .Add(new ClientLoyaltyPointMultiProjection.ProjectedBranch(branchId, branchName)),
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty))
@@ -56,11 +56,11 @@ public class SimpleUnifiedProjectionTest : UnifiedTest<CustomerDependency>
         RunCommand(new CreateBranch(branchName), branchId);
         ThenMultiProjectionQueryResponseIs<ClientLoyaltyPointMultiProjection,
                 ClientLoyaltyPointMultiProjectionQuery, ClientLoyaltyPointMultiProjectionQuery.QueryParameter,
-                ClientLoyaltyPointMultiProjection>(
+                ClientLoyaltyPointMultiProjectionQuery.Response>(
                 new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(
                     branchId,
                     ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
-                new ClientLoyaltyPointMultiProjection(
+                new ClientLoyaltyPointMultiProjectionQuery.Response(
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty
                         .Add(new ClientLoyaltyPointMultiProjection.ProjectedBranch(branchId, branchName)),
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty))
