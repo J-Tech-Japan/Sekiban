@@ -82,10 +82,10 @@ public class ClientAndProjectionSpec : AggregateTest<Client, CustomerDependency>
                     },
                     clientEmail))
             .ThenQueryResponseIs(
-                new ClientEmailExistsQuery.QueryParameter(clientEmail),
+                new ClientEmailExistsQuery.Parameter(clientEmail),
                 new ClientEmailExistsQuery.Response(true))
             .ThenQueryResponseIs(
-                new ClientEmailExistsQuery.QueryParameter("not" + clientEmail),
+                new ClientEmailExistsQuery.Parameter("not" + clientEmail),
                 new ClientEmailExistsQuery.Response(false))
             .ThenQueryResponseIs(
                 new BasicClientQueryParameter(

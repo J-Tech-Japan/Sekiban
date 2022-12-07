@@ -28,7 +28,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTest<C
                     0,
                     0))
             .ThenQueryResponseIs(
-                new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(
+                new ClientLoyaltyPointMultiProjectionQuery.Parameter(
                     null,
                     ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
                 new ClientLoyaltyPointMultiProjectionQuery.Response(
@@ -620,7 +620,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTest<C
     {
         GivenScenario(JsonFileEventsTest)
             .ThenQueryResponseIsFromFile(
-                new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(
+                new ClientLoyaltyPointMultiProjectionQuery.Parameter(
                     branchId,
                     ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
                 "ClientLoyaltyPointProjectionQueryResponse01.json"

@@ -53,7 +53,7 @@ public class UnifiedProjectionsTest : UnifiedTest<CustomerDependency>
                             clientName,
                             0))))
             .ThenQueryResponseIs(
-                new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(
+                new ClientLoyaltyPointMultiProjectionQuery.Parameter(
                     null,
                     ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
                 new ClientLoyaltyPointMultiProjectionQuery.Response(
@@ -73,10 +73,10 @@ public class UnifiedProjectionsTest : UnifiedTest<CustomerDependency>
     {
         GivenScenario(Test)
             .ThenQueryResponseIs(
-                new BranchExistsQuery.QueryParameter(_branchId),
+                new BranchExistsQuery.Parameter(_branchId),
                 new BranchExistsQuery.Response(true))
             .ThenQueryResponseIs(
-                new BranchExistsQuery.QueryParameter(Guid.NewGuid()),
+                new BranchExistsQuery.Parameter(Guid.NewGuid()),
                 new BranchExistsQuery.Response(false));
     }
     [Fact]
@@ -84,10 +84,10 @@ public class UnifiedProjectionsTest : UnifiedTest<CustomerDependency>
     {
         GivenScenario(Test)
             .ThenQueryResponseIs(
-                new BranchExistsQuery.QueryParameter(_branchId),
+                new BranchExistsQuery.Parameter(_branchId),
                 new BranchExistsQuery.Response(true))
             .ThenQueryResponseIs(
-                new BranchExistsQuery.QueryParameter(Guid.NewGuid()),
+                new BranchExistsQuery.Parameter(Guid.NewGuid()),
                 new BranchExistsQuery.Response(false));
     }
     [Fact]
@@ -131,7 +131,7 @@ public class UnifiedProjectionsTest : UnifiedTest<CustomerDependency>
         GivenScenario(Test);
         RunCommand(new ChangeClientName(_clientId, clientName2));
         ThenQueryResponseIs(
-            new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(
+            new ClientLoyaltyPointMultiProjectionQuery.Parameter(
                 null,
                 ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
             new ClientLoyaltyPointMultiProjectionQuery.Response(

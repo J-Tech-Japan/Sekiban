@@ -33,7 +33,7 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<CustomerDependen
     {
         GivenScenario(RegularProjection);
         WriteQueryResponseToFile(
-            new ClientLoyaltyPointQuery.QueryParameter(
+            new ClientLoyaltyPointQuery.Parameter(
                 null,
                 null,
                 null,
@@ -66,7 +66,7 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<CustomerDependen
     {
         GivenScenario(CommandTest1);
         ThenQueryResponseIs(
-            new ClientLoyaltyPointQuery.QueryParameter(
+            new ClientLoyaltyPointQuery.Parameter(
                 null,
                 null,
                 null,
@@ -95,7 +95,7 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<CustomerDependen
     {
         GivenScenario(CommandTest1);
         ThenQueryResponseIs(
-            new ClientLoyaltyPointQuery.QueryParameter(
+            new ClientLoyaltyPointQuery.Parameter(
                 null,
                 null,
                 3,
@@ -122,7 +122,7 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<CustomerDependen
     {
         GivenScenario(CommandTest1);
         ThenQueryResponseIs(
-            new ClientLoyaltyPointQuery.QueryParameter(
+            new ClientLoyaltyPointQuery.Parameter(
                 null,
                 null,
                 5,
@@ -151,7 +151,7 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<CustomerDependen
     {
         GivenScenario(CommandTest1);
         ThenQueryResponseIs(
-            new ClientLoyaltyPointQuery.QueryParameter(
+            new ClientLoyaltyPointQuery.Parameter(
                 null,
                 null,
                 3,
@@ -177,7 +177,7 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<CustomerDependen
     {
         GivenScenario(CommandTest1);
         ThenQueryResponseIs(
-            new ClientLoyaltyPointQuery.QueryParameter(
+            new ClientLoyaltyPointQuery.Parameter(
                 null,
                 null,
                 3,
@@ -199,7 +199,7 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<CustomerDependen
     {
         GivenScenario(CommandTest1);
         ThenQueryResponseIs(
-            new ClientLoyaltyPointQuery.QueryParameter(
+            new ClientLoyaltyPointQuery.Parameter(
                 null,
                 null,
                 3,

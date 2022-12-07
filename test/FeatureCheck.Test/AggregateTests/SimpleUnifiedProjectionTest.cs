@@ -26,7 +26,7 @@ public class SimpleUnifiedProjectionTest : UnifiedTest<CustomerDependency>
         RunCommand(new CreateBranch(branchName), branchId);
 
         ThenQueryResponseIs(
-                new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(
+                new ClientLoyaltyPointMultiProjectionQuery.Parameter(
                     branchId,
                     ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
                 new ClientLoyaltyPointMultiProjectionQuery.Response(
@@ -34,10 +34,10 @@ public class SimpleUnifiedProjectionTest : UnifiedTest<CustomerDependency>
                         .Add(new ClientLoyaltyPointMultiProjection.ProjectedBranch(branchId, branchName)),
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty))
             .ThenQueryResponseIs(
-                new BranchExistsQuery.QueryParameter(branchId),
+                new BranchExistsQuery.Parameter(branchId),
                 new BranchExistsQuery.Response(true))
             .ThenQueryResponseIs(
-                new BranchExistsQuery.QueryParameter(Guid.NewGuid()),
+                new BranchExistsQuery.Parameter(Guid.NewGuid()),
                 new BranchExistsQuery.Response(false))
             .ThenMultiProjectionPayloadIs(
                 new ClientLoyaltyPointMultiProjection(
@@ -53,7 +53,7 @@ public class SimpleUnifiedProjectionTest : UnifiedTest<CustomerDependency>
     {
         RunCommand(new CreateBranch(branchName), branchId);
         ThenQueryResponseIs(
-                new ClientLoyaltyPointMultiProjectionQuery.QueryParameter(
+                new ClientLoyaltyPointMultiProjectionQuery.Parameter(
                     branchId,
                     ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
                 new ClientLoyaltyPointMultiProjectionQuery.Response(
@@ -61,10 +61,10 @@ public class SimpleUnifiedProjectionTest : UnifiedTest<CustomerDependency>
                         .Add(new ClientLoyaltyPointMultiProjection.ProjectedBranch(branchId, branchName)),
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty))
             .ThenQueryResponseIs(
-                new BranchExistsQuery.QueryParameter(branchId),
+                new BranchExistsQuery.Parameter(branchId),
                 new BranchExistsQuery.Response(true))
             .ThenQueryResponseIs(
-                new BranchExistsQuery.QueryParameter(Guid.NewGuid()),
+                new BranchExistsQuery.Parameter(Guid.NewGuid()),
                 new BranchExistsQuery.Response(false))
             .ThenMultiProjectionPayloadIs(
                 new ClientLoyaltyPointMultiProjection(
