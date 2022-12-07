@@ -5,7 +5,7 @@ using System.Collections.Immutable;
 namespace FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
 
 public class ClientLoyaltyPointMultiProjectionQuery : IMultiProjectionQuery<ClientLoyaltyPointMultiProjection,
-    ClientLoyaltyPointMultiProjectionQuery.QueryParameter,
+    ClientLoyaltyPointMultiProjectionQuery.Parameter,
     ClientLoyaltyPointMultiProjectionQuery.Response>
 {
     public enum QuerySortKeys
@@ -14,36 +14,36 @@ public class ClientLoyaltyPointMultiProjectionQuery : IMultiProjectionQuery<Clie
     }
 
     public Response HandleFilter(
-        QueryParameter queryParam,
+        Parameter param,
         MultiProjectionState<ClientLoyaltyPointMultiProjection> projection)
     {
-        if (queryParam.BranchId is null)
+        if (param.BranchId is null)
         {
             return new Response(projection.Payload.Branches, projection.Payload.Records);
         }
         return new Response(
-            projection.Payload.Branches.Where(x => x.BranchId == queryParam.BranchId).ToImmutableList(),
-            projection.Payload.Records.Where(m => m.BranchId == queryParam.BranchId).ToImmutableList());
+            projection.Payload.Branches.Where(x => x.BranchId == param.BranchId).ToImmutableList(),
+            projection.Payload.Records.Where(m => m.BranchId == param.BranchId).ToImmutableList());
     }
 
     public ClientLoyaltyPointMultiProjection HandleSortAndPagingIfNeeded(
-        QueryParameter queryParam,
+        Parameter param,
         ClientLoyaltyPointMultiProjection response)
     {
-        if (queryParam.SortKey == QuerySortKeys.ClientName)
+        if (param.SortKey == QuerySortKeys.ClientName)
         {
             return response with
             {
-                Records = queryParam.SortIsAsc
+                Records = param.SortIsAsc
                     ? response.Records.OrderBy(x => x.ClientName).ToImmutableList()
                     : response.Records.OrderByDescending(x => x.ClientName).ToImmutableList()
             };
         }
-        if (queryParam.SortKey == QuerySortKeys.Points)
+        if (param.SortKey == QuerySortKeys.Points)
         {
             return response with
             {
-                Records = queryParam.SortIsAsc
+                Records = param.SortIsAsc
                     ? response.Records.OrderBy(x => x.Point).ToImmutableList()
                     : response.Records.OrderByDescending(x => x.Point).ToImmutableList()
             };
@@ -51,7 +51,7 @@ public class ClientLoyaltyPointMultiProjectionQuery : IMultiProjectionQuery<Clie
         return response with { Records = response.Records.OrderBy(x => x.ClientName).ToImmutableList() };
     }
 
-    public record QueryParameter(Guid? BranchId, QuerySortKeys SortKey, bool SortIsAsc = true) : IQueryParameter<Response>;
+    public record Parameter(Guid? BranchId, QuerySortKeys SortKey, bool SortIsAsc = true) : IQueryParameter<Response>;
 
     public record Response(
         ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch> Branches,

@@ -34,15 +34,15 @@ namespace SampleProjectStoryXTest.Stories;
 //     where TOutput : IOutput
 // {
 //     public IEnumerable<TOutput> HandleFilter(
-//         TInput queryParam,
+//         TInput param,
 //         IEnumerable<AggregateState<TAggregatePayload>> list);
 //
-//     public IEnumerable<TOutput> HandleSort(TInput queryParam, IEnumerable<TOutput> filteredList);
+//     public IEnumerable<TOutput> HandleSort(TInput param, IEnumerable<TOutput> filteredList);
 // }
 // public class Query : IQuery<Client, Input, Output1>
 // {
-//     public IEnumerable<Output1> HandleFilter(Input queryParam, IEnumerable<AggregateState<Client>> list) => throw new NotImplementedException();
-//     public IEnumerable<Output1> HandleSort(Input queryParam, IEnumerable<Output1> filteredList) => throw new NotImplementedException();
+//     public IEnumerable<Output1> HandleFilter(Input param, IEnumerable<AggregateState<Client>> list) => throw new NotImplementedException();
+//     public IEnumerable<Output1> HandleSort(Input param, IEnumerable<Output1> filteredList) => throw new NotImplementedException();
 //     public Task<Output1> ExecuteAsync(Input input) => throw new NotImplementedException();
 // }
 // public class ClassRelationTest

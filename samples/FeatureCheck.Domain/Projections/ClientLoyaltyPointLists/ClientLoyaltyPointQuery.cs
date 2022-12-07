@@ -5,7 +5,7 @@ using System.Collections.Immutable;
 namespace FeatureCheck.Domain.Projections.ClientLoyaltyPointLists;
 
 public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPointListProjection,
-    ClientLoyaltyPointQuery.QueryParameter,
+    ClientLoyaltyPointQuery.Parameter,
     ClientLoyaltyPointQuery.Response>
 {
     public enum FilterSortKey
@@ -14,17 +14,17 @@ public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPo
     }
 
     public IEnumerable<Response> HandleSort(
-        QueryParameter queryParam,
+        Parameter param,
         IEnumerable<Response> filteredList)
     {
         var sort = new Dictionary<FilterSortKey, bool>();
-        if (queryParam.SortKey1 != null)
+        if (param.SortKey1 != null)
         {
-            sort.Add(queryParam.SortKey1.Value, queryParam.SortKey1Asc ?? true);
+            sort.Add(param.SortKey1.Value, param.SortKey1Asc ?? true);
         }
-        if (queryParam.SortKey2 != null)
+        if (param.SortKey2 != null)
         {
-            sort.Add(queryParam.SortKey2.Value, queryParam.SortKey2Asc ?? true);
+            sort.Add(param.SortKey2.Value, param.SortKey2Asc ?? true);
         }
         if (sort.Count == 0)
         {
@@ -76,22 +76,22 @@ public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPo
     }
 
     public IEnumerable<Response> HandleFilter(
-        QueryParameter queryParam,
+        Parameter param,
         MultiProjectionState<ClientLoyaltyPointListProjection> projection)
     {
         var result = projection.Payload.Records.Select(m => new Response(m.BranchId, m.BranchName, m.ClientId, m.ClientName, m.Point));
-        if (queryParam.BranchId.HasValue)
+        if (param.BranchId.HasValue)
         {
-            result = result.Where(x => x.BranchId == queryParam.BranchId.Value).ToImmutableList();
+            result = result.Where(x => x.BranchId == param.BranchId.Value).ToImmutableList();
         }
-        if (queryParam.ClientId.HasValue)
+        if (param.ClientId.HasValue)
         {
-            result = result.Where(x => x.ClientId == queryParam.ClientId.Value).ToImmutableList();
+            result = result.Where(x => x.ClientId == param.ClientId.Value).ToImmutableList();
         }
         return result;
     }
 
-    public record QueryParameter(
+    public record Parameter(
         Guid? BranchId,
         Guid? ClientId,
         int? PageSize,

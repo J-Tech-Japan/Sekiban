@@ -32,10 +32,8 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<CustomerDependen
     public void QueryTest()
     {
         GivenScenario(RegularProjection);
-        WriteMultiProjectionListQueryResponseToFile<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery,
-            ClientLoyaltyPointQuery.QueryParameter,
-            ClientLoyaltyPointQuery.Response>(
-            new ClientLoyaltyPointQuery.QueryParameter(
+        WriteQueryResponseToFile(
+            new ClientLoyaltyPointQuery.Parameter(
                 null,
                 null,
                 null,
@@ -67,10 +65,8 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<CustomerDependen
     public void QueryBasic1()
     {
         GivenScenario(CommandTest1);
-        ThenMultiProjectionListQueryResponseIs<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery,
-            ClientLoyaltyPointQuery.QueryParameter,
-            ClientLoyaltyPointQuery.Response>(
-            new ClientLoyaltyPointQuery.QueryParameter(
+        ThenQueryResponseIs(
+            new ClientLoyaltyPointQuery.Parameter(
                 null,
                 null,
                 null,
@@ -98,10 +94,8 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<CustomerDependen
     public void QueryBasicPaging()
     {
         GivenScenario(CommandTest1);
-        ThenMultiProjectionListQueryResponseIs<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery,
-            ClientLoyaltyPointQuery.QueryParameter,
-            ClientLoyaltyPointQuery.Response>(
-            new ClientLoyaltyPointQuery.QueryParameter(
+        ThenQueryResponseIs(
+            new ClientLoyaltyPointQuery.Parameter(
                 null,
                 null,
                 3,
@@ -127,10 +121,8 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<CustomerDependen
     public void QueryBasicPaging2()
     {
         GivenScenario(CommandTest1);
-        ThenMultiProjectionListQueryResponseIs<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery,
-            ClientLoyaltyPointQuery.QueryParameter,
-            ClientLoyaltyPointQuery.Response>(
-            new ClientLoyaltyPointQuery.QueryParameter(
+        ThenQueryResponseIs(
+            new ClientLoyaltyPointQuery.Parameter(
                 null,
                 null,
                 5,
@@ -158,10 +150,8 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<CustomerDependen
     public void QueryBasicPaging3()
     {
         GivenScenario(CommandTest1);
-        ThenMultiProjectionListQueryResponseIs<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery,
-            ClientLoyaltyPointQuery.QueryParameter,
-            ClientLoyaltyPointQuery.Response>(
-            new ClientLoyaltyPointQuery.QueryParameter(
+        ThenQueryResponseIs(
+            new ClientLoyaltyPointQuery.Parameter(
                 null,
                 null,
                 3,
@@ -186,10 +176,8 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<CustomerDependen
     public void QueryBasicPagingRequestOverflowed()
     {
         GivenScenario(CommandTest1);
-        ThenMultiProjectionListQueryResponseIs<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery,
-            ClientLoyaltyPointQuery.QueryParameter,
-            ClientLoyaltyPointQuery.Response>(
-            new ClientLoyaltyPointQuery.QueryParameter(
+        ThenQueryResponseIs(
+            new ClientLoyaltyPointQuery.Parameter(
                 null,
                 null,
                 3,
@@ -210,10 +198,8 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<CustomerDependen
     public void QueryBasicPagingRequestZero()
     {
         GivenScenario(CommandTest1);
-        ThenMultiProjectionListQueryResponseIs<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery,
-            ClientLoyaltyPointQuery.QueryParameter,
-            ClientLoyaltyPointQuery.Response>(
-            new ClientLoyaltyPointQuery.QueryParameter(
+        ThenQueryResponseIs(
+            new ClientLoyaltyPointQuery.Parameter(
                 null,
                 null,
                 3,

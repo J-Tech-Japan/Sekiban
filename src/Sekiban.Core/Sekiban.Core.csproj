@@ -6,13 +6,13 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>JJ_Sekiban.Core</PackageId>
-        <Version>0.9.26</Version>
+        <Version>0.10.0</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Core</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.9.26</PackageVersion>
-        <Description>Merge Create and Change Commands and Events</Description>
+        <PackageVersion>0.10.0</PackageVersion>
+        <Description>SortableUniqueId uses full ticks, and Query Refactoring</Description>
         <AssemblyName>Sekiban.Core</AssemblyName>
         <RootNamespace>Sekiban.Core</RootNamespace>
     </PropertyGroup>

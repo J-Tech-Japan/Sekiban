@@ -22,9 +22,7 @@ public class ClientSingleProjectionListTest : UnifiedTest<CustomerDependency>
         var client2Id = RunCommand(new CreateClient(branchId, "test name", "test@example.com"));
         var datetime3 = GetLatestEvents().FirstOrDefault()!.TimeStamp;
 
-        ThenSingleProjectionListQueryResponseIs<ClientNameHistoryProjection, ClientNameHistoryProjectionQuery,
-            ClientNameHistoryProjectionQuery.Parameter,
-            ClientNameHistoryProjectionQuery.Response>(
+        ThenQueryResponseIs(
             new ClientNameHistoryProjectionQuery.Parameter(null, null, null, null, null),
             new ListQueryResult<ClientNameHistoryProjectionQuery.Response>(
                 3,
