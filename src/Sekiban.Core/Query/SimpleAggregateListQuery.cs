@@ -6,7 +6,7 @@ namespace Sekiban.Core.Query;
 public record QueryAggregateState<TAggregatePayload>(AggregateState<TAggregatePayload> AggregateState) : IQueryOutput
     where TAggregatePayload : IAggregatePayload, new();
 public record SimpleAggregateListQueryParameter<TAggregatePayload>(int? PageSize, int? PageNumber) : IQueryPagingParameter,
-    IQueryInput<QueryAggregateState<TAggregatePayload>> where TAggregatePayload : IAggregatePayload, new();
+    IListQueryInput<QueryAggregateState<TAggregatePayload>> where TAggregatePayload : IAggregatePayload, new();
 public class SimpleAggregateListQuery<TAggregatePayload> : IAggregateListQuery<TAggregatePayload,
     SimpleAggregateListQueryParameter<TAggregatePayload>,
     QueryAggregateState<TAggregatePayload>> where TAggregatePayload : IAggregatePayload, new()

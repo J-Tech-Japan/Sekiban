@@ -58,7 +58,7 @@ public class QueryHandler
             IEnumerable<AggregateState<TAggregatePayload>> list)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter, IQueryInput<TQueryResponse>
+        where TQueryParameter : IQueryParameter, IListQueryInput<TQueryResponse>
         where TQueryResponse : IQueryOutput
     {
         var query = _serviceProvider.GetService<TQuery>();
@@ -85,7 +85,8 @@ public class QueryHandler
         IEnumerable<AggregateState<TAggregatePayload>> list)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameter, IQueryInput<TQueryResponse>
+        where TQueryResponse : IQueryOutput
     {
         var query = _serviceProvider.GetService<TQuery>();
         if (query is null)

@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
 using Customer.Domain.Aggregates.Branches;
 using Customer.Domain.Aggregates.Branches.Commands;
 using Customer.Domain.Aggregates.Branches.Queries;
@@ -12,8 +8,11 @@ using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
 using Customer.Domain.Shared;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Testing;
+using System;
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
 using Xunit;
-
 namespace Customer.Test.AggregateTests;
 
 public class UnifiedProjectionsTest : UnifiedTest<CustomerDependency>
@@ -37,15 +36,22 @@ public class UnifiedProjectionsTest : UnifiedTest<CustomerDependency>
             .ForEach(
                 m =>
                 {
-                    if (m.GetPayload() is ClientCreated created) dateNameSet = m.TimeStamp;
+                    if (m.GetPayload() is ClientCreated created)
+                    {
+                        dateNameSet = m.TimeStamp;
+                    }
                 });
         ThenMultiProjectionPayloadIs(
                 new ClientLoyaltyPointMultiProjection(
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty.Add(
                         new ClientLoyaltyPointMultiProjection.ProjectedBranch(_branchId, branchName)),
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty.Add(
-                        new ClientLoyaltyPointMultiProjection.ProjectedRecord(_branchId, branchName, _clientId,
-                            clientName, 0))))
+                        new ClientLoyaltyPointMultiProjection.ProjectedRecord(
+                            _branchId,
+                            branchName,
+                            _clientId,
+                            clientName,
+                            0))))
             .ThenMultiProjectionQueryResponseIs<ClientLoyaltyPointMultiProjection,
                 ClientLoyaltyPointMultiProjectionQuery,
                 ClientLoyaltyPointMultiProjectionQuery.QueryParameter, ClientLoyaltyPointMultiProjection>(
@@ -56,20 +62,24 @@ public class UnifiedProjectionsTest : UnifiedTest<CustomerDependency>
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty.Add(
                         new ClientLoyaltyPointMultiProjection.ProjectedBranch(_branchId, branchName)),
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty.Add(
-                        new ClientLoyaltyPointMultiProjection.ProjectedRecord(_branchId, branchName, _clientId,
-                            clientName, 0))));
+                        new ClientLoyaltyPointMultiProjection.ProjectedRecord(
+                            _branchId,
+                            branchName,
+                            _clientId,
+                            clientName,
+                            0))));
     }
 
     [Fact]
     public void TestAggregateQuery()
     {
         GivenScenario(Test)
-            .ThenAggregateQueryResponseIs<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, bool>(
+            .ThenAggregateQueryResponseIs<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, BranchExistsQuery.Output>(
                 new BranchExistsQuery.QueryParameter(_branchId),
-                true)
-            .ThenAggregateQueryResponseIs<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, bool>(
+                new BranchExistsQuery.Output(true))
+            .ThenAggregateQueryResponseIs<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, BranchExistsQuery.Output>(
                 new BranchExistsQuery.QueryParameter(Guid.NewGuid()),
-                false);
+                new BranchExistsQuery.Output(false));
     }
 
     [Fact]
@@ -105,7 +115,11 @@ public class UnifiedProjectionsTest : UnifiedTest<CustomerDependency>
                 ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty.Add(
                     new ClientLoyaltyPointMultiProjection.ProjectedBranch(_branchId, branchName)),
                 ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty.Add(
-                    new ClientLoyaltyPointMultiProjection.ProjectedRecord(_branchId, branchName, _clientId, clientName2,
+                    new ClientLoyaltyPointMultiProjection.ProjectedRecord(
+                        _branchId,
+                        branchName,
+                        _clientId,
+                        clientName2,
                         0))));
     }
 }

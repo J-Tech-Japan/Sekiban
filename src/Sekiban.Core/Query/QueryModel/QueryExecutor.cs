@@ -2,17 +2,20 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleProjections;
+using Sekiban.Core.Types;
+using System.Reflection;
 namespace Sekiban.Core.Query.QueryModel;
 
 public class QueryExecutor : IQueryExecutor
 {
     private readonly IMultiProjectionService multiProjectionService;
     private readonly QueryHandler queryHandler;
-
-    public QueryExecutor(IMultiProjectionService multiProjectionService, QueryHandler queryHandler)
+    private readonly IServiceProvider serviceProvider;
+    public QueryExecutor(IMultiProjectionService multiProjectionService, QueryHandler queryHandler, IServiceProvider serviceProvider)
     {
         this.multiProjectionService = multiProjectionService;
         this.queryHandler = queryHandler;
+        this.serviceProvider = serviceProvider;
     }
 
     public async Task<TQueryResponse>
@@ -47,7 +50,7 @@ public class QueryExecutor : IQueryExecutor
         ForAggregateListQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter, IQueryInput<TQueryResponse>
+        where TQueryParameter : IQueryParameter, IListQueryInput<TQueryResponse>
         where TQueryResponse : IQueryOutput
     {
         var allProjection = await multiProjectionService.GetAggregateList<TAggregatePayload>();
@@ -61,7 +64,8 @@ public class QueryExecutor : IQueryExecutor
         ForAggregateQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter
+        where TQueryParameter : IQueryParameter, IQueryInput<TQueryResponse>
+        where TQueryResponse : IQueryOutput
     {
         var allProjection = await multiProjectionService.GetAggregateList<TAggregatePayload>();
         return queryHandler.GetAggregateQuery<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
@@ -96,5 +100,26 @@ public class QueryExecutor : IQueryExecutor
             .GetSingleProjectionQuery<TSingleProjectionPayload, TQuery,
                 TQueryParameter, TQueryResponse>(param, allProjection);
     }
-    public Task<ListQueryResult<TOutput>> ExecuteAsync<TOutput>(IQueryInput<TOutput> param) where TOutput : IQueryOutput => throw new NotImplementedException();
+    public async Task<ListQueryResult<TOutput>> ExecuteAsync<TOutput>(IListQueryInput<TOutput> param) where TOutput : IQueryOutput
+    {
+        var paramType = param.GetType();
+        if (!paramType.IsListQueryInputType()) { throw new Exception("Invalid parameter type"); }
+        var outputType = paramType.GetOutputClassFromListQueryInputType();
+        var handler = serviceProvider.GetQueryObjectFromQueryInputType(paramType, outputType) ??
+            throw new Exception("Can not find query handler for" + paramType.Name);
+        var handlerType = (Type)handler.GetType();
+        if (handlerType.IsAggregateListQueryType())
+        {
+            var aggregateType = handlerType.GetAggregateTypeFromAggregateListQueryType();
+            var baseMethod = GetType().GetMethod(nameof(ForAggregateListQueryAsync)) ??
+                throw new Exception("Can not find method ForAggregateListQueryAsync");
+            var method = (MethodInfo?)baseMethod.MakeGenericMethod(aggregateType, handler.GetType(), paramType, outputType) ??
+                throw new Exception("Can not find method ForAggregateListQueryAsync");
+            var result = await (dynamic)(method.Invoke(this, new object?[] { param }) ??
+                throw new Exception("Can not find method ForAggregateListQueryAsync"));
+            return result;
+        }
+        throw new Exception("Can not find query handler for" + paramType.Name);
+    }
+    public Task<TOutput> ExecuteAsync<TOutput>(IQueryInput<TOutput> param) where TOutput : IQueryOutput => throw new NotImplementedException();
 }

@@ -3,9 +3,9 @@ using Sekiban.Core.Query.QueryModel.Parameters;
 namespace Sekiban.Core.Query.QueryModel;
 
 public interface
-    IAggregateListQuery<TAggregatePayload, in TQueryParameter, TQueryResponse> : IListQueryCommon<TQueryParameter, TQueryResponse>
+    IAggregateListQuery<TAggregatePayload, in TQueryParameter, TQueryResponse> : IListHandlerCommon<TQueryParameter, TQueryResponse>
     where TAggregatePayload : IAggregatePayload, new()
-    where TQueryParameter : IQueryParameter, IQueryInput<TQueryResponse>
+    where TQueryParameter : IQueryParameter, IListQueryInput<TQueryResponse>
     where TQueryResponse : IQueryOutput
 {
     public IEnumerable<TQueryResponse> HandleFilter(

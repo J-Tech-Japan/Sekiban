@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Immutable;
 using Customer.Domain.Aggregates.Branches;
 using Customer.Domain.Aggregates.Branches.Commands;
 using Customer.Domain.Aggregates.Branches.Queries;
@@ -12,8 +10,9 @@ using Customer.Domain.Aggregates.LoyaltyPoints.Consts;
 using Customer.Domain.Projections.ClientLoyaltyPointMultiples;
 using Customer.Domain.Shared;
 using Sekiban.Testing;
+using System;
+using System.Collections.Immutable;
 using Xunit;
-
 namespace Customer.Test.AggregateTests;
 
 public class SimpleUnifiedProjectionTest : UnifiedTest<CustomerDependency>
@@ -36,12 +35,12 @@ public class SimpleUnifiedProjectionTest : UnifiedTest<CustomerDependency>
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty
                         .Add(new ClientLoyaltyPointMultiProjection.ProjectedBranch(branchId, branchName)),
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty))
-            .ThenAggregateQueryResponseIs<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, bool>(
+            .ThenAggregateQueryResponseIs<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, BranchExistsQuery.Output>(
                 new BranchExistsQuery.QueryParameter(branchId),
-                true)
-            .ThenAggregateQueryResponseIs<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, bool>(
+                new BranchExistsQuery.Output(true))
+            .ThenAggregateQueryResponseIs<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, BranchExistsQuery.Output>(
                 new BranchExistsQuery.QueryParameter(Guid.NewGuid()),
-                false)
+                new BranchExistsQuery.Output(false))
             .ThenMultiProjectionPayloadIs(
                 new ClientLoyaltyPointMultiProjection(
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty
@@ -65,12 +64,12 @@ public class SimpleUnifiedProjectionTest : UnifiedTest<CustomerDependency>
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty
                         .Add(new ClientLoyaltyPointMultiProjection.ProjectedBranch(branchId, branchName)),
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty))
-            .ThenAggregateQueryResponseIs<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, bool>(
+            .ThenAggregateQueryResponseIs<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, BranchExistsQuery.Output>(
                 new BranchExistsQuery.QueryParameter(branchId),
-                true)
-            .ThenAggregateQueryResponseIs<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, bool>(
+                new BranchExistsQuery.Output(true))
+            .ThenAggregateQueryResponseIs<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, BranchExistsQuery.Output>(
                 new BranchExistsQuery.QueryParameter(Guid.NewGuid()),
-                false)
+                new BranchExistsQuery.Output(false))
             .ThenMultiProjectionPayloadIs(
                 new ClientLoyaltyPointMultiProjection(
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty
@@ -86,8 +85,9 @@ public class SimpleUnifiedProjectionTest : UnifiedTest<CustomerDependency>
         RunCommand(new CreateBranch(branchName), branchId);
         ThenGetAggregateTest<Client>(
             test => test.WhenCommand(new CreateClient(branchId, "test", "test@example.com"))
-                .WhenCommand(new ChangeClientName(test.GetAggregateId(), "Test2")
-                    { ReferenceVersion = test.GetCurrentVersion() })
+                .WhenCommand(
+                    new ChangeClientName(test.GetAggregateId(), "Test2")
+                        { ReferenceVersion = test.GetCurrentVersion() })
                 .ThenNotThrowsAnException()
         );
     }
@@ -99,8 +99,9 @@ public class SimpleUnifiedProjectionTest : UnifiedTest<CustomerDependency>
         var clientId = RunCommand(new CreateClient(branchId, "test", "test@example.com"));
         ThenGetAggregateTest<Client>(
             clientId,
-            test => test.WhenCommand(new ChangeClientName(clientId, "Test2")
-                    { ReferenceVersion = test.GetCurrentVersion() })
+            test => test.WhenCommand(
+                    new ChangeClientName(clientId, "Test2")
+                        { ReferenceVersion = test.GetCurrentVersion() })
                 .ThenNotThrowsAnException()
         );
     }
@@ -119,13 +120,15 @@ public class SimpleUnifiedProjectionTest : UnifiedTest<CustomerDependency>
             });
         ThenGetAggregateTest<Client>(
             clientId,
-            test => test.WhenCommand(new ChangeClientName(clientId, "Test2")
-                    { ReferenceVersion = test.GetCurrentVersion() })
+            test => test.WhenCommand(
+                    new ChangeClientName(clientId, "Test2")
+                        { ReferenceVersion = test.GetCurrentVersion() })
                 .ThenNotThrowsAnException()
         );
         var clientTest = GetAggregateTest<Client>(clientId);
-        clientTest.WhenCommand(new ChangeClientName(clientId, "Test3")
-            { ReferenceVersion = clientTest.GetCurrentVersion() });
+        clientTest.WhenCommand(
+            new ChangeClientName(clientId, "Test3")
+                { ReferenceVersion = clientTest.GetCurrentVersion() });
     }
 
     [Fact]
@@ -140,8 +143,12 @@ public class SimpleUnifiedProjectionTest : UnifiedTest<CustomerDependency>
         ThenGetAggregateTest<LoyaltyPoint>(
             clientId,
             test => test.WhenCommand(
-                    new AddLoyaltyPoint(clientId, new DateTime(2022, 11, 1),
-                            LoyaltyPointReceiveTypeKeys.CreditcardUsage, 100, string.Empty)
+                    new AddLoyaltyPoint(
+                            clientId,
+                            new DateTime(2022, 11, 1),
+                            LoyaltyPointReceiveTypeKeys.CreditcardUsage,
+                            100,
+                            string.Empty)
                         { ReferenceVersion = test.GetCurrentVersion() })
                 .ThenNotThrowsAnException()
         );

@@ -216,7 +216,8 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         TQueryParameter param,
         string filename)
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter =>
+        where TQueryParameter : IQueryParameter, IQueryInput<TQueryResponse>
+        where TQueryResponse : IQueryOutput =>
         _helper.WriteAggregateQueryResponseToFile<TQuery, TQueryParameter, TQueryResponse>(param, filename);
 
     public IAggregateTestHelper<TAggregatePayload>
@@ -224,7 +225,8 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
             TQueryParameter param,
             TQueryResponse expectedResponse)
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter =>
+        where TQueryParameter : IQueryParameter, IQueryInput<TQueryResponse>
+        where TQueryResponse : IQueryOutput =>
         _helper.ThenAggregateQueryResponseIs<TQuery, TQueryParameter, TQueryResponse>(param, expectedResponse);
 
     public IAggregateTestHelper<TAggregatePayload> ThenGetAggregateQueryResponse<TQuery, TQueryParameter,
@@ -232,14 +234,16 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         TQueryParameter param,
         Action<TQueryResponse> responseAction)
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter =>
+        where TQueryParameter : IQueryParameter, IQueryInput<TQueryResponse>
+        where TQueryResponse : IQueryOutput =>
         _helper.ThenGetAggregateQueryResponse<TQuery, TQueryParameter, TQueryResponse>(param, responseAction);
 
     public IAggregateTestHelper<TAggregatePayload> ThenAggregateQueryResponseIsFromJson<TQuery, TQueryParameter,
         TQueryResponse>(
         TQueryParameter param,
         string responseJson) where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter => _helper.ThenAggregateQueryResponseIsFromJson<TQuery, TQueryParameter, TQueryResponse>(
+        where TQueryParameter : IQueryParameter, IQueryInput<TQueryResponse>
+        where TQueryResponse : IQueryOutput => _helper.ThenAggregateQueryResponseIsFromJson<TQuery, TQueryParameter, TQueryResponse>(
         param,
         responseJson);
 
@@ -247,7 +251,8 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         TQueryResponse>(
         TQueryParameter param,
         string responseFilename) where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter => _helper.ThenAggregateQueryResponseIsFromFile<TQuery, TQueryParameter, TQueryResponse>(
+        where TQueryParameter : IQueryParameter, IQueryInput<TQueryResponse>
+        where TQueryResponse : IQueryOutput => _helper.ThenAggregateQueryResponseIsFromFile<TQuery, TQueryParameter, TQueryResponse>(
         param,
         responseFilename);
     #endregion
@@ -258,7 +263,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         TQueryParameter param,
         string filename)
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter, IQueryInput<TQueryResponse>
+        where TQueryParameter : IQueryParameter, IListQueryInput<TQueryResponse>
         where TQueryResponse : IQueryOutput
         =>
             _helper.WriteAggregateListQueryResponseToFile<TQuery, TQueryParameter, TQueryResponse>(param, filename);
@@ -268,7 +273,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         TQueryParameter param,
         ListQueryResult<TQueryResponse> expectedResponse)
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter, IQueryInput<TQueryResponse>
+        where TQueryParameter : IQueryParameter, IListQueryInput<TQueryResponse>
         where TQueryResponse : IQueryOutput
         =>
             _helper.ThenAggregateListQueryResponseIs<TQuery, TQueryParameter, TQueryResponse>(
@@ -280,7 +285,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         TQueryParameter param,
         Action<ListQueryResult<TQueryResponse>> responseAction)
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter, IQueryInput<TQueryResponse>
+        where TQueryParameter : IQueryParameter, IListQueryInput<TQueryResponse>
         where TQueryResponse : IQueryOutput
         => _helper
             .ThenGetAggregateListQueryResponse<TQuery, TQueryParameter, TQueryResponse>(param, responseAction);
@@ -289,7 +294,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         TQueryResponse>(
         TQueryParameter param,
         string responseJson) where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter, IQueryInput<TQueryResponse>
+        where TQueryParameter : IQueryParameter, IListQueryInput<TQueryResponse>
         where TQueryResponse : IQueryOutput
         =>
             _helper.ThenAggregateListQueryResponseIsFromJson<TQuery, TQueryParameter, TQueryResponse>(
@@ -300,7 +305,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         TQueryResponse>(
         TQueryParameter param,
         string responseFilename) where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter, IQueryInput<TQueryResponse>
+        where TQueryParameter : IQueryParameter, IListQueryInput<TQueryResponse>
         where TQueryResponse : IQueryOutput
         =>
             _helper.ThenAggregateListQueryResponseIsFromFile<TQuery, TQueryParameter, TQueryResponse>(
