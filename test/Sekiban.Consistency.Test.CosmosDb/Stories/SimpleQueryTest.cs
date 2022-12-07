@@ -1,4 +1,6 @@
+using FeatureCheck.Domain.Aggregates.Clients.Projections;
 using FeatureCheck.Domain.Aggregates.Clients.Queries.BasicClientFilters;
+using FeatureCheck.Domain.Projections.ClientLoyaltyPointLists;
 using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Query.QueryModel;
@@ -23,11 +25,33 @@ public class SimpleQueryTest : TestBase
     }
 
     [Fact]
-    public async Task QueryTestAsync()
+    public async Task QueryExecuteAggregateListAsync()
     {
 
         var result = await _queryExecutor.ExecuteAsync(
             new BasicClientQueryParameter(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null));
+    }
+
+    [Fact]
+    public async Task QueryExecuteSingleProjectionListAsync()
+    {
+
+        var result = await _queryExecutor.ExecuteAsync(
+            new ClientNameHistoryProjectionQuery.Parameter(null, null, null, null, null));
+    }
+    [Fact]
+    public async Task QueryExecuteMultipleProjectionListAsync()
+    {
+        var result = await _queryExecutor.ExecuteAsync(
+            new ClientLoyaltyPointQuery.QueryParameter(
+                null,
                 null,
                 null,
                 null,

@@ -6,16 +6,16 @@ namespace FeatureCheck.Domain.Projections.ClientLoyaltyPointLists;
 
 public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPointListProjection,
     ClientLoyaltyPointQuery.QueryParameter,
-    ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord>
+    ClientLoyaltyPointQuery.Response>
 {
     public enum FilterSortKey
     {
         BranchName, ClientName
     }
 
-    public IEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> HandleSort(
+    public IEnumerable<Response> HandleSort(
         QueryParameter queryParam,
-        IEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> filteredList)
+        IEnumerable<Response> filteredList)
     {
         var sort = new Dictionary<FilterSortKey, bool>();
         if (queryParam.SortKey1 != null)
@@ -54,7 +54,7 @@ public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPo
             else
             {
                 result = sortKey.Value
-                    ? (result as IOrderedEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> ??
+                    ? (result as IOrderedEnumerable<Response> ??
                         throw new InvalidCastException()).ThenBy(
                         m => sortKey.Key switch
                         {
@@ -62,7 +62,7 @@ public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPo
                             FilterSortKey.ClientName => m.ClientName,
                             _ => throw new ArgumentOutOfRangeException()
                         })
-                    : (result as IOrderedEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> ??
+                    : (result as IOrderedEnumerable<Response> ??
                         throw new InvalidCastException()).ThenByDescending(
                         m => sortKey.Key switch
                         {
@@ -75,11 +75,11 @@ public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPo
         return result;
     }
 
-    public IEnumerable<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> HandleFilter(
+    public IEnumerable<Response> HandleFilter(
         QueryParameter queryParam,
         MultiProjectionState<ClientLoyaltyPointListProjection> projection)
     {
-        var result = projection.Payload.Records;
+        var result = projection.Payload.Records.Select(m => new Response(m.BranchId, m.BranchName, m.ClientId, m.ClientName, m.Point));
         if (queryParam.BranchId.HasValue)
         {
             result = result.Where(x => x.BranchId == queryParam.BranchId.Value).ToImmutableList();
@@ -99,5 +99,10 @@ public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPo
         FilterSortKey? SortKey1,
         FilterSortKey? SortKey2,
         bool? SortKey1Asc,
-        bool? SortKey2Asc) : IQueryPagingParameterCommon;
+        bool? SortKey2Asc) : IListQueryPagingParameter<Response>;
+
+    public record Response(Guid BranchId, string BranchName, Guid ClientId, string ClientName, int Point) :
+        ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord(BranchId, BranchName, ClientId, ClientName, Point), IQueryResponse
+    {
+    }
 }

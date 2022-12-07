@@ -18,29 +18,31 @@ public interface IQueryExecutor
             TQueryParameter param)
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionListQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon;
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse;
 
     public Task<ListQueryResult<TQueryResponse>>
         ForAggregateListQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
             TQueryParameter param)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon, IListQueryInput<TQueryResponse>
-        where TQueryResponse : IQueryOutput;
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse;
 
     public Task<TQueryResponse> ForAggregateQueryAsync<TAggregatePayload, TQuery,
         TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon, IQueryInput<TQueryResponse>
-        where TQueryResponse : IQueryOutput;
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse;
 
     public Task<ListQueryResult<TQueryResponse>>
         ForSingleProjectionListQueryAsync<TSingleProjectionPayload, TQuery,
             TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon;
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse;
 
     public Task<TQueryResponse>
         ForSingleProjectionQueryAsync<TSingleProjectionPayload, TQuery,
@@ -49,6 +51,6 @@ public interface IQueryExecutor
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameterCommon;
 
-    public Task<ListQueryResult<TOutput>> ExecuteAsync<TOutput>(IListQueryInput<TOutput> param) where TOutput : IQueryOutput;
-    public Task<TOutput> ExecuteAsync<TOutput>(IQueryInput<TOutput> param) where TOutput : IQueryOutput;
+    public Task<ListQueryResult<TOutput>> ExecuteAsync<TOutput>(IListQueryInput<TOutput> param) where TOutput : IQueryResponse;
+    public Task<TOutput> ExecuteAsync<TOutput>(IQueryInput<TOutput> param) where TOutput : IQueryResponse;
 }

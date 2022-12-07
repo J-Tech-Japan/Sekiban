@@ -19,6 +19,18 @@ public static class QueryInjections
                 var output = type.GetResponseTypeFromAggregateListQueryType();
                 services.AddTransient(typeof(IListHandlerCommon<,>).MakeGenericType(input, output), type);
             }
+            if (type.IsSingleProjectionListQueryType())
+            {
+                var input = type.GetParamTypeFromSingleProjectionListQueryType();
+                var output = type.GetResponseTypeFromSingleProjectionListQueryType();
+                services.AddTransient(typeof(IListHandlerCommon<,>).MakeGenericType(input, output), type);
+            }
+            if (type.IsMultiProjectionListQueryType())
+            {
+                var input = type.GetParamTypeFromMultiProjectionListQueryType();
+                var output = type.GetResponseTypeFromMultiProjectionListQueryType();
+                services.AddTransient(typeof(IListHandlerCommon<,>).MakeGenericType(input, output), type);
+            }
 
         }
         return services;

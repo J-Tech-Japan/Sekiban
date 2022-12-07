@@ -18,7 +18,8 @@ public class QueryHandler
             MultiProjectionState<TProjectionPayload> projection)
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionListQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var query = _serviceProvider.GetService<TQuery>();
         if (query is null)
@@ -58,8 +59,8 @@ public class QueryHandler
             IEnumerable<AggregateState<TAggregatePayload>> list)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon, IListQueryInput<TQueryResponse>
-        where TQueryResponse : IQueryOutput
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var query = _serviceProvider.GetService<TQuery>();
         if (query is null)
@@ -85,8 +86,8 @@ public class QueryHandler
         IEnumerable<AggregateState<TAggregatePayload>> list)
         where TAggregatePayload : IAggregatePayload, new()
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon, IQueryInput<TQueryResponse>
-        where TQueryResponse : IQueryOutput
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var query = _serviceProvider.GetService<TQuery>();
         if (query is null)
@@ -104,7 +105,8 @@ public class QueryHandler
             IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var query = _serviceProvider.GetService<TQuery>();
         if (query is null)

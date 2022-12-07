@@ -16,8 +16,8 @@ public record BasicClientQueryParameter(
     BasicClientQuerySortKey? SortKey1,
     BasicClientQuerySortKey? SortKey2,
     bool? SortKey1Asc,
-    bool? SortKey2Asc) : IQueryPagingParameterCommon, IListQueryInput<BasicClientQueryModel>;
-public record BasicClientQueryModel(Guid BranchId, string ClientName, string ClientEmail) : IQueryOutput;
+    bool? SortKey2Asc) : IListQueryPagingParameter<BasicClientQueryModel>;
+public record BasicClientQueryModel(Guid BranchId, string ClientName, string ClientEmail) : IQueryResponse;
 public class BasicClientQuery : IAggregateListQuery<Client, BasicClientQueryParameter,
     BasicClientQueryModel>
 {

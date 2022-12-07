@@ -74,12 +74,12 @@ public class UnifiedProjectionsTest : UnifiedTest<CustomerDependency>
     public void TestAggregateQuery()
     {
         GivenScenario(Test)
-            .ThenAggregateQueryResponseIs<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, BranchExistsQuery.Output>(
+            .ThenAggregateQueryResponseIs<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, BranchExistsQuery.Response>(
                 new BranchExistsQuery.QueryParameter(_branchId),
-                new BranchExistsQuery.Output(true))
-            .ThenAggregateQueryResponseIs<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, BranchExistsQuery.Output>(
+                new BranchExistsQuery.Response(true))
+            .ThenAggregateQueryResponseIs<Branch, BranchExistsQuery, BranchExistsQuery.QueryParameter, BranchExistsQuery.Response>(
                 new BranchExistsQuery.QueryParameter(Guid.NewGuid()),
-                new BranchExistsQuery.Output(false));
+                new BranchExistsQuery.Response(false));
     }
 
     [Fact]

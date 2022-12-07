@@ -698,8 +698,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     #region Aggregate Query
     private TQueryResponse GetAggregateQueryResponse<TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon, IQueryInput<TQueryResponse>
-        where TQueryResponse : IQueryOutput
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var queryService = _serviceProvider.GetService<IQueryExecutor>() ??
             throw new Exception("Failed to get Query service");
@@ -713,8 +713,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         TQueryParameter param,
         string filename)
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon, IQueryInput<TQueryResponse>
-        where TQueryResponse : IQueryOutput
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var json = SekibanJsonHelper.Serialize(
             GetAggregateQueryResponse<TQuery, TQueryParameter, TQueryResponse>(param));
@@ -731,8 +731,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             TQueryParameter param,
             TQueryResponse expectedResponse)
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon, IQueryInput<TQueryResponse>
-        where TQueryResponse : IQueryOutput
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var actual = GetAggregateQueryResponse<TQuery, TQueryParameter, TQueryResponse>(param);
         var expected = expectedResponse;
@@ -747,8 +747,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         TQueryParameter param,
         Action<TQueryResponse> responseAction)
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon, IQueryInput<TQueryResponse>
-        where TQueryResponse : IQueryOutput
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         responseAction(GetAggregateQueryResponse<TQuery, TQueryParameter, TQueryResponse>(param)!);
         return this;
@@ -758,8 +758,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         TQueryResponse>(
         TQueryParameter param,
         string responseJson) where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon, IQueryInput<TQueryResponse>
-        where TQueryResponse : IQueryOutput
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var response = JsonSerializer.Deserialize<TQueryResponse>(responseJson);
         if (response is null)
@@ -774,8 +774,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         TQueryResponse>(
         TQueryParameter param,
         string responseFilename) where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon, IQueryInput<TQueryResponse>
-        where TQueryResponse : IQueryOutput
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         using var openStream = File.OpenRead(responseFilename);
         var response = JsonSerializer.Deserialize<TQueryResponse>(openStream);
@@ -792,8 +792,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     private ListQueryResult<TQueryResponse> GetAggregateListQueryResponse<TQuery, TQueryParameter, TQueryResponse>(
         TQueryParameter param)
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon, IListQueryInput<TQueryResponse>
-        where TQueryResponse : IQueryOutput
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var queryService = _serviceProvider.GetService<IQueryExecutor>() ??
             throw new Exception("Failed to get Query service");
@@ -808,8 +808,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         TQueryParameter param,
         string filename)
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon, IListQueryInput<TQueryResponse>
-        where TQueryResponse : IQueryOutput
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var json = SekibanJsonHelper.Serialize(
             GetAggregateListQueryResponse<TQuery, TQueryParameter, TQueryResponse>(param));
@@ -826,8 +826,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         TQueryParameter param,
         ListQueryResult<TQueryResponse> expectedResponse)
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon, IListQueryInput<TQueryResponse>
-        where TQueryResponse : IQueryOutput
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var actual = GetAggregateListQueryResponse<TQuery, TQueryParameter, TQueryResponse>(param);
         var expected = expectedResponse;
@@ -842,8 +842,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         TQueryParameter param,
         Action<ListQueryResult<TQueryResponse>> responseAction)
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon, IListQueryInput<TQueryResponse>
-        where TQueryResponse : IQueryOutput
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         responseAction(GetAggregateListQueryResponse<TQuery, TQueryParameter, TQueryResponse>(param)!);
         return this;
@@ -853,8 +853,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         TQueryResponse>(
         TQueryParameter param,
         string responseJson) where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon, IListQueryInput<TQueryResponse>
-        where TQueryResponse : IQueryOutput
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(responseJson);
         if (response is null)
@@ -869,8 +869,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         TQueryResponse>(
         TQueryParameter param,
         string responseFilename) where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon, IListQueryInput<TQueryResponse>
-        where TQueryResponse : IQueryOutput
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         using var openStream = File.OpenRead(responseFilename);
         var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(openStream);
@@ -998,7 +998,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         TQueryParameter param)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var queryService = _serviceProvider.GetService<IQueryExecutor>() ??
             throw new Exception("Failed to get Query service");
@@ -1016,7 +1017,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         string filename)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var json = SekibanJsonHelper.Serialize(
             GetSingleProjectionListQueryResponse<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
@@ -1036,7 +1038,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         ListQueryResult<TQueryResponse> expectedResponse)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var actual =
             GetSingleProjectionListQueryResponse<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
@@ -1055,7 +1058,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         Action<ListQueryResult<TQueryResponse>> responseAction)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         responseAction(
             GetSingleProjectionListQueryResponse<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
@@ -1070,7 +1074,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         string responseJson)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(responseJson);
         if (response is null)
@@ -1090,7 +1095,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         string responseFilename)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameterCommon
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
     {
         using var openStream = File.OpenRead(responseFilename);
         var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(openStream);

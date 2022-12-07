@@ -81,12 +81,12 @@ public class ClientAndProjectionSpec : AggregateTest<Client, CustomerDependency>
                         new(clientName, FirstEventDatetime), new(clientNameChanged, ChangedEventDatetime)
                     },
                     clientEmail))
-            .ThenAggregateQueryResponseIs<ClientEmailExistsQuery, ClientEmailExistsQuery.QueryParameter, ClientEmailExistsQuery.Output>(
+            .ThenAggregateQueryResponseIs<ClientEmailExistsQuery, ClientEmailExistsQuery.QueryParameter, ClientEmailExistsQuery.Response>(
                 new ClientEmailExistsQuery.QueryParameter(clientEmail),
-                new ClientEmailExistsQuery.Output(true))
-            .ThenAggregateQueryResponseIs<ClientEmailExistsQuery, ClientEmailExistsQuery.QueryParameter, ClientEmailExistsQuery.Output>(
+                new ClientEmailExistsQuery.Response(true))
+            .ThenAggregateQueryResponseIs<ClientEmailExistsQuery, ClientEmailExistsQuery.QueryParameter, ClientEmailExistsQuery.Response>(
                 new ClientEmailExistsQuery.QueryParameter("not" + clientEmail),
-                new ClientEmailExistsQuery.Output(false))
+                new ClientEmailExistsQuery.Response(false))
             .ThenAggregateListQueryResponseIs<BasicClientQuery, BasicClientQueryParameter, BasicClientQueryModel>(
                 new BasicClientQueryParameter(
                     branchId,

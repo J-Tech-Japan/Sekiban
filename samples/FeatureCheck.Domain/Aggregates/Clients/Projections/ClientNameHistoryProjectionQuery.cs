@@ -70,7 +70,7 @@ public class ClientNameHistoryProjectionQuery : ISingleProjectionListQuery<Clien
         Guid? BranchId,
         Guid? ClientId,
         ClientNameHistoryProjectionQuerySortKeys? SortKey,
-        bool SortIsAsc = true) : IQueryPagingParameterCommon;
+        bool SortIsAsc = true) : IListQueryPagingParameter<Response>;
 
-    public record Response(Guid BranchId, Guid ClientId, string ClientName, string ClientEmail, DateTime NameSetAt);
+    public record Response(Guid BranchId, Guid ClientId, string ClientName, string ClientEmail, DateTime NameSetAt) : IQueryResponse;
 }
