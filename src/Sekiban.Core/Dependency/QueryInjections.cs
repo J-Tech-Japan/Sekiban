@@ -57,7 +57,7 @@ public static class QueryInjections
 
     public static IServiceCollection AddQueriesFromDependencyDefinition(
         this IServiceCollection services,
-        IDependencyDefinition dependencyDefinition)
+        IQueryDefinition dependencyDefinition)
     {
         AddQueries(
             services,
