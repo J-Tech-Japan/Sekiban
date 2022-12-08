@@ -8,9 +8,9 @@ using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Shared;
 namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
 
-public record LoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : ICommand<LoyaltyPoint>
+public record CreateLoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : ICommand<LoyaltyPoint>
 {
-    public LoyaltyPointAndAddPoint() : this(Guid.Empty, 0)
+    public CreateLoyaltyPointAndAddPoint() : this(Guid.Empty, 0)
     {
     }
 
@@ -19,7 +19,7 @@ public record LoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : ICommand
         return ClientId;
     }
 
-    public class Handler : ICommandHandler<LoyaltyPoint, LoyaltyPointAndAddPoint>
+    public class Handler : ICommandHandler<LoyaltyPoint, CreateLoyaltyPointAndAddPoint>
     {
         private readonly ISekibanDateProducer _dateProducer;
         private readonly IAggregateLoader aggregateLoader;
@@ -32,7 +32,7 @@ public record LoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : ICommand
 
         public async IAsyncEnumerable<IEventPayload<LoyaltyPoint>> HandleCommandAsync(
             Func<AggregateState<LoyaltyPoint>> getAggregateState,
-            LoyaltyPointAndAddPoint command)
+            CreateLoyaltyPointAndAddPoint command)
         {
             await aggregateLoader.AsAggregateAsync<Client>(getAggregateState().AggregateId);
             yield return new LoyaltyPointCreated(0);

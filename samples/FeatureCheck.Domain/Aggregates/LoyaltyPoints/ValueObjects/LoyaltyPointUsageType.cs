@@ -14,22 +14,18 @@ public record LoyaltyPointUsageType : IValueObject<LoyaltyPointUsageTypeKeys>
         { (int)LoyaltyPointUsageTypeKeys.RestaurantCoupon, "レストラン利用券" }
     };
 
-    public LoyaltyPointUsageType(LoyaltyPointUsageTypeKeys receiveType)
+    public LoyaltyPointUsageType(LoyaltyPointUsageTypeKeys value)
     {
-        if (!Enum.IsDefined(typeof(LoyaltyPointUsageTypeKeys), receiveType))
+        if (!Enum.IsDefined(typeof(LoyaltyPointUsageTypeKeys), value))
+        {
             throw new InvalidValueException("登録されていないポイント使用区分です。");
-        Value = receiveType;
+        }
+        Value = value;
     }
 
     public LoyaltyPointUsageTypeKeys Value { get; }
 
-    public static implicit operator LoyaltyPointUsageTypeKeys(LoyaltyPointUsageType vo)
-    {
-        return vo.Value;
-    }
+    public static implicit operator LoyaltyPointUsageTypeKeys(LoyaltyPointUsageType vo) => vo.Value;
 
-    public static implicit operator LoyaltyPointUsageType(LoyaltyPointUsageTypeKeys v)
-    {
-        return new(v);
-    }
+    public static implicit operator LoyaltyPointUsageType(LoyaltyPointUsageTypeKeys v) => new LoyaltyPointUsageType(v);
 }

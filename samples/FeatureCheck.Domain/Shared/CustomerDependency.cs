@@ -9,6 +9,7 @@ using FeatureCheck.Domain.Aggregates.Clients.Queries;
 using FeatureCheck.Domain.Aggregates.Clients.Queries.BasicClientFilters;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
+using FeatureCheck.Domain.Aggregates.RecentActivities;
 using FeatureCheck.Domain.Aggregates.RecentActivities.Commands;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Commands;
@@ -21,10 +22,7 @@ namespace FeatureCheck.Domain.Shared;
 
 public class CustomerDependency : DomainDependencyDefinitionBase
 {
-    public override Assembly GetExecutingAssembly()
-    {
-        return Assembly.GetExecutingAssembly();
-    }
+    public override Assembly GetExecutingAssembly() => Assembly.GetExecutingAssembly();
 
     protected override void Define()
     {
@@ -47,12 +45,13 @@ public class CustomerDependency : DomainDependencyDefinitionBase
 
         AddAggregate<LoyaltyPoint>()
             .AddCommandHandler<CreateLoyaltyPoint, CreateLoyaltyPoint.Handler>()
-            .AddCommandHandler<LoyaltyPointAndAddPoint, LoyaltyPointAndAddPoint.Handler>()
+            .AddCommandHandler<CreateLoyaltyPointAndAddPoint, CreateLoyaltyPointAndAddPoint.Handler>()
             .AddCommandHandler<AddLoyaltyPoint, AddLoyaltyPoint.Handler>()
             .AddCommandHandler<UseLoyaltyPoint, UseLoyaltyPoint.Handler>()
-            .AddCommandHandler<DeleteLoyaltyPoint, DeleteLoyaltyPoint.Handler>();
+            .AddCommandHandler<DeleteLoyaltyPoint, DeleteLoyaltyPoint.Handler>()
+            .AddCommandHandler<AddLoyaltyPointWithVO, AddLoyaltyPointWithVO.Handler>();
 
-        AddAggregate<Aggregates.RecentActivities.RecentActivity>()
+        AddAggregate<RecentActivity>()
             .AddCommandHandler<CreateRecentActivity, CreateRecentActivity.Handler>()
             .AddCommandHandler<AddRecentActivity, AddRecentActivity.Handler>()
             .AddCommandHandler<OnlyPublishingAddRecentActivity, OnlyPublishingAddRecentActivity.Handler>();
