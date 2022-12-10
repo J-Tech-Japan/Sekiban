@@ -9,7 +9,7 @@ using System.Collections.Immutable;
 using Xunit;
 namespace FeatureCheck.Test.AggregateTests;
 
-public class RecentActivityTest : AggregateTest<RecentActivity, CustomerDependency>
+public class RecentActivityTest : AggregateTest<RecentActivity, FeatureCheckDependency>
 {
     private RecentActivityRecord firstRecord = new("first", DateTime.UtcNow);
     private RecentActivityRecord publishOnlyRecord = new("publish only", DateTime.UtcNow);
@@ -31,8 +31,10 @@ public class RecentActivityTest : AggregateTest<RecentActivity, CustomerDependen
             .WhenCommand(new AddRecentActivity(GetAggregateId(), "Regular Event"))
             .ThenNotThrowsAnException()
             .ThenGetLatestSingleEvent<RecentActivityAdded>(ev => regularRecord = ev.Payload.Record)
-            .ThenPayloadIs(new RecentActivity(new List<RecentActivityRecord> { regularRecord, firstRecord }
-                .ToImmutableList()));
+            .ThenPayloadIs(
+                new RecentActivity(
+                    new List<RecentActivityRecord> { regularRecord, firstRecord }
+                        .ToImmutableList()));
     }
 
     [Fact]
@@ -42,7 +44,9 @@ public class RecentActivityTest : AggregateTest<RecentActivity, CustomerDependen
             .WhenCommand(new OnlyPublishingAddRecentActivity(GetAggregateId(), "Publish Only Event"))
             .ThenNotThrowsAnException()
             .ThenGetLatestSingleEvent<RecentActivityAdded>(ev => publishOnlyRecord = ev.Payload.Record)
-            .ThenPayloadIs(new RecentActivity(new List<RecentActivityRecord>
-                { publishOnlyRecord, regularRecord, firstRecord }.ToImmutableList()));
+            .ThenPayloadIs(
+                new RecentActivity(
+                    new List<RecentActivityRecord>
+                        { publishOnlyRecord, regularRecord, firstRecord }.ToImmutableList()));
     }
 }

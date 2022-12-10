@@ -15,7 +15,7 @@ using System;
 using Xunit;
 namespace FeatureCheck.Test.AggregateTests;
 
-public class ClientSpec : AggregateTest<Client, CustomerDependency>
+public class ClientSpec : AggregateTest<Client, FeatureCheckDependency>
 {
     private const string testClientName = "TestName";
     private const string testClientChangedName = "TestName2";
@@ -49,8 +49,9 @@ public class ClientSpec : AggregateTest<Client, CustomerDependency>
                 Payload = new Client(branchId, testClientName, testEmail)
             });
         // 名前変更コマンドを実行する
-        WhenCommand(client => new ChangeClientName(client.AggregateId, testClientChangedName)
-            { ReferenceVersion = client.Version });
+        WhenCommand(
+            client => new ChangeClientName(client.AggregateId, testClientChangedName)
+                { ReferenceVersion = client.Version });
         WriteStateToFile("ClientCreateSpec.json");
         // コマンドによって生成されたイベントを検証する
         ThenLastSingleEventPayloadIs(new ClientNameChanged(testClientChangedName));
@@ -107,8 +108,13 @@ public class ClientSpec : AggregateTest<Client, CustomerDependency>
             otherClientId);
         RunEnvironmentCommand(new ChangeClientName(otherClientId, "Other CreateClient Name"));
         RunEnvironmentCommand(new CreateLoyaltyPoint(otherClientId, 100));
-        RunEnvironmentCommand(new UseLoyaltyPoint(otherClientId, DateTime.Today,
-            LoyaltyPointUsageTypeKeys.TravelCarRental, 30, "test"));
+        RunEnvironmentCommand(
+            new UseLoyaltyPoint(
+                otherClientId,
+                DateTime.Today,
+                LoyaltyPointUsageTypeKeys.TravelCarRental,
+                30,
+                "test"));
     }
 
     [Fact(DisplayName = "Can not delete client twice")]

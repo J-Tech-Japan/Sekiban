@@ -1,4 +1,3 @@
-using FeatureCheck.Domain.Aggregates.Branches;
 using FeatureCheck.Domain.Aggregates.Branches.Commands;
 using FeatureCheck.Domain.Aggregates.Branches.Queries;
 using FeatureCheck.Domain.Aggregates.Clients.Commands;
@@ -15,7 +14,7 @@ using System.Linq;
 using Xunit;
 namespace FeatureCheck.Test.AggregateTests;
 
-public class UnifiedProjectionsTest : UnifiedTest<CustomerDependency>
+public class UnifiedProjectionsTest : UnifiedTest<FeatureCheckDependency>
 {
     private readonly string branchName = "BranchName";
     private readonly string clientEmail = "test@exmple.com";

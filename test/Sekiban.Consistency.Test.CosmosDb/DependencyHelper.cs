@@ -5,7 +5,6 @@ using Sekiban.Core.Dependency;
 using Sekiban.Core.Shared;
 using Sekiban.Infrastructure.Cosmos;
 using Sekiban.Testing.Story;
-
 namespace SampleProjectStoryXTest;
 
 public static class DependencyHelper
@@ -21,15 +20,15 @@ public static class DependencyHelper
         services.AddSingleton<IConfiguration>(fixture.Configuration);
         if (inMemory)
         {
-            services.AddSekibanCoreInMemoryTestWithDependency(new CustomerDependency());
+            services.AddSekibanCoreInMemoryTestWithDependency(new FeatureCheckDependency());
         }
         else
         {
-            services.AddSekibanCoreWithDependency(new CustomerDependency(), sekibanDateProducer, multiProjectionType);
+            services.AddSekibanCoreWithDependency(new FeatureCheckDependency(), sekibanDateProducer, multiProjectionType);
             services.AddSekibanCosmosDB();
         }
 
-        services.AddQueriesFromDependencyDefinition(new CustomerDependency());
+        services.AddQueriesFromDependencyDefinition(new FeatureCheckDependency());
         return services.BuildServiceProvider();
     }
 

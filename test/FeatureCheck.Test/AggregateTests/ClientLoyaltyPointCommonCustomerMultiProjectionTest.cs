@@ -8,7 +8,7 @@ using System.Collections.Immutable;
 using Xunit;
 namespace FeatureCheck.Test.AggregateTests;
 
-public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTest<CustomerDependency>
+public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTest<FeatureCheckDependency>
 {
     private static readonly Guid branchId = Guid.Parse("b4a3c2e3-78ca-473b-8afb-f534e5d6d66b");
     private static readonly string branchName = "Test Branch";

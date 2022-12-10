@@ -9,7 +9,7 @@ using System.Collections.Immutable;
 using Xunit;
 namespace FeatureCheck.Test.AggregateTests;
 
-public class VersionCheckUnifiedTest : UnifiedTest<CustomerDependency>
+public class VersionCheckUnifiedTest : UnifiedTest<FeatureCheckDependency>
 {
 
     [Fact]
@@ -27,11 +27,11 @@ public class VersionCheckUnifiedTest : UnifiedTest<CustomerDependency>
                 { AggregateId = aggregateId, Amount = 300, PaymentKind = PaymentKind.PayPal, Description = "Test" });
         ThenMultiProjectionPayloadIs(
             new VersionCheckMultiProjection(
-                new List<VersionCheckMultiProjection.Record>()
+                new List<VersionCheckMultiProjection.Record>
                 {
-                    new (100, PaymentKind.Cash, "Updated"),
-                    new (200, PaymentKind.CreditCard, "Updated"),
-                    new (300, PaymentKind.PayPal, "Test")
+                    new(100, PaymentKind.Cash, "Updated"),
+                    new(200, PaymentKind.CreditCard, "Updated"),
+                    new(300, PaymentKind.PayPal, "Test")
                 }.ToImmutableList()
             ));
     }

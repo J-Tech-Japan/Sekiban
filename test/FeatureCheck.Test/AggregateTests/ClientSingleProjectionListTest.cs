@@ -9,7 +9,7 @@ using System.Linq;
 using Xunit;
 namespace FeatureCheck.Test.AggregateTests;
 
-public class ClientSingleProjectionListTest : UnifiedTest<CustomerDependency>
+public class ClientSingleProjectionListTest : UnifiedTest<FeatureCheckDependency>
 {
     [Fact]
     public void Test()
