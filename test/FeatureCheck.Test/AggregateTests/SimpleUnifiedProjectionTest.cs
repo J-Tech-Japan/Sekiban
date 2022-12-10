@@ -1,4 +1,3 @@
-using FeatureCheck.Domain.Aggregates.Branches;
 using FeatureCheck.Domain.Aggregates.Branches.Commands;
 using FeatureCheck.Domain.Aggregates.Branches.Queries;
 using FeatureCheck.Domain.Aggregates.Clients;
@@ -15,7 +14,7 @@ using System.Collections.Immutable;
 using Xunit;
 namespace FeatureCheck.Test.AggregateTests;
 
-public class SimpleUnifiedProjectionTest : UnifiedTest<CustomerDependency>
+public class SimpleUnifiedProjectionTest : UnifiedTest<FeatureCheckDependency>
 {
     public Guid branchId = Guid.NewGuid();
     public string branchName = "test";

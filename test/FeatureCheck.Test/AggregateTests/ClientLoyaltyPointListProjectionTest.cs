@@ -9,7 +9,7 @@ using System.Collections.Generic;
 using Xunit;
 namespace FeatureCheck.Test.AggregateTests;
 
-public class ClientLoyaltyPointListProjectionTest : UnifiedTest<CustomerDependency>
+public class ClientLoyaltyPointListProjectionTest : UnifiedTest<FeatureCheckDependency>
 {
     public Guid _branchId = Guid.NewGuid();
     public string _branchName = "TESTBRANCH";

@@ -16,7 +16,7 @@ using System.Linq;
 using Xunit;
 namespace FeatureCheck.Test.AggregateTests;
 
-public class ClientAndProjectionSpec : AggregateTest<Client, CustomerDependency>
+public class ClientAndProjectionSpec : AggregateTest<Client, FeatureCheckDependency>
 {
     public readonly string branchName = "BranchName";
     public readonly string clientEmail = "client@example.com";

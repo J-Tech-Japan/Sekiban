@@ -22,7 +22,7 @@ using Sekiban.Core.Dependency;
 using System.Reflection;
 namespace FeatureCheck.Domain.Shared;
 
-public class CustomerDependency : DomainDependencyDefinitionBase
+public class FeatureCheckDependency : DomainDependencyDefinitionBase
 {
     public override Assembly GetExecutingAssembly() => Assembly.GetExecutingAssembly();
 
