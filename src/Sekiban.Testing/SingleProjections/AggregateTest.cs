@@ -4,6 +4,7 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Event;
 using Sekiban.Core.Query.QueryModel;
+using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;

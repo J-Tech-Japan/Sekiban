@@ -1,12 +1,24 @@
 using Sekiban.Core.Event;
-
 namespace Sekiban.Core.Types;
 
 public static class EventTypesExtensions
 {
-    public static bool IsEventPayloadType(this Type eventPayloadType)
+    public static bool IsEventPayloadType(this Type eventPayloadType) =>
+        eventPayloadType.DoesImplementingFromGenericInterfaceType(typeof(IEventPayload<>));
+
+    public static bool IsEventConvertingPayloadType(this Type eventPayloadType) =>
+        eventPayloadType.DoesImplementingFromGenericInterfaceType(typeof(IEventPayloadConvertingTo<>));
+
+    public static Type GetEventConvertingPayloadConvertingType(this Type eventPayloadType)
     {
-        return eventPayloadType.DoesImplementingFromGenericInterfaceType(typeof(IEventPayload<>));
+        var baseType = eventPayloadType.GetImplementingFromGenericInterfaceType(typeof(IEventPayloadConvertingTo<>));
+        return baseType.GenericTypeArguments[0];
+    }
+    public static Type GetEventConvertingToType(this Type eventPayloadType)
+    {
+        var baseType = eventPayloadType.GetImplementingFromGenericInterfaceType(typeof(IEventPayload<>));
+        var convertingType = baseType.GenericTypeArguments[0];
+        return baseType.MakeGenericType(convertingType);
     }
 
     public static Type GetAggregatePayloadTypeFromEventPayload(this Type query)

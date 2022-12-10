@@ -1,7 +1,6 @@
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.SingleProjections;
-
 namespace Sekiban.Core.Aggregate;
 
 public class Aggregate<TAggregatePayload> : AggregateCommon,
@@ -10,10 +9,7 @@ public class Aggregate<TAggregatePayload> : AggregateCommon,
 {
     protected TAggregatePayload Payload { get; private set; } = new();
 
-    public AggregateState<TAggregatePayload> ToState()
-    {
-        return new(this, Payload);
-    }
+    public AggregateState<TAggregatePayload> ToState() => new(this, Payload);
 
     public void ApplySnapshot(AggregateState<TAggregatePayload> snapshot)
     {
@@ -35,19 +31,27 @@ public class Aggregate<TAggregatePayload> : AggregateCommon,
 
     protected override Action? GetApplyEventAction(IEvent ev, IEventPayloadCommon payload)
     {
+        (ev, payload) = EventHelper.GetConvertedEventAndPayloadIfConverted(ev, payload);
         var func = GetApplyEventFunc(ev, payload);
         return () =>
         {
-            if (func == null) return;
+            if (func == null)
+            {
+                return;
+            }
             var result = func(Payload, ev);
             Payload = result;
         };
     }
 
-    protected Func<TAggregatePayload, IEvent, TAggregatePayload>? GetApplyEventFunc(IEvent ev,
+    protected Func<TAggregatePayload, IEvent, TAggregatePayload>? GetApplyEventFunc(
+        IEvent ev,
         IEventPayloadCommon payload)
     {
-        if (payload is IEventPayload<TAggregatePayload> applicableEvent) return applicableEvent.OnEvent;
+        if (payload is IEventPayload<TAggregatePayload> applicableEvent)
+        {
+            return applicableEvent.OnEvent;
+        }
         return null;
     }
 
@@ -55,10 +59,11 @@ public class Aggregate<TAggregatePayload> : AggregateCommon,
         where TEventPayload : IEventPayloadCommon, IEventPayload<TAggregatePayload>
     {
         var ev = Event<TEventPayload>.GenerateEvent(AggregateId, typeof(TAggregatePayload), eventPayload);
-
         if (GetApplyEventAction(ev, eventPayload) is null)
+        {
             throw new SekibanEventNotImplementedException(
                 $"{eventPayload.GetType().Name} Event not implemented on {GetType().Name} Aggregate");
+        }
         // バージョンが変わる前に、イベントには現在のバージョンを入れて動かす
         ev = ev with { Version = Version };
         ApplyEvent(ev);

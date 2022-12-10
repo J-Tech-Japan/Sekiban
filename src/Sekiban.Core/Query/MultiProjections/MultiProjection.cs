@@ -1,6 +1,6 @@
+using Sekiban.Core.Aggregate;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
-
 namespace Sekiban.Core.Query.MultiProjections;
 
 public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPayload>, IMultiProjectionBase
@@ -15,22 +15,22 @@ public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPa
     public void ApplyEvent(IEvent ev)
     {
         var action = GetApplyEventAction(ev, ev.GetPayload());
-        if (action is null) return;
+        if (action is null)
+        {
+            return;
+        }
         action();
         Version++;
         LastEventId = ev.Id;
         LastSortableUniqueId = ev.SortableUniqueId;
     }
 
-    public MultiProjectionState<TProjectionPayload> ToState()
-    {
-        return new(
-            Payload,
-            LastEventId,
-            LastSortableUniqueId,
-            AppliedSnapshotVersion,
-            Version);
-    }
+    public MultiProjectionState<TProjectionPayload> ToState() => new MultiProjectionState<TProjectionPayload>(
+        Payload,
+        LastEventId,
+        LastSortableUniqueId,
+        AppliedSnapshotVersion,
+        Version);
 
     public void ApplySnapshot(MultiProjectionState<TProjectionPayload> snapshot)
     {
@@ -44,18 +44,22 @@ public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPa
     public virtual IList<string> TargetAggregateNames()
     {
         var projectionPayload = Payload as IMultiProjectionPayload<TProjectionPayload> ??
-                                throw new SekibanMultiProjectionMustInheritISingleProjectionEventApplicable();
+            throw new SekibanMultiProjectionMustInheritISingleProjectionEventApplicable();
         return projectionPayload.TargetAggregateNames();
     }
 
     protected Action? GetApplyEventAction(IEvent ev, IEventPayloadCommon payload)
     {
         var projectionPayload = Payload as IMultiProjectionPayload<TProjectionPayload> ??
-                                throw new SekibanMultiProjectionMustInheritISingleProjectionEventApplicable();
+            throw new SekibanMultiProjectionMustInheritISingleProjectionEventApplicable();
+        (ev, payload) = EventHelper.GetConvertedEventAndPayloadIfConverted(ev, payload);
         var func = projectionPayload.GetApplyEventFunc(ev, payload);
         return () =>
         {
-            if (func == null) return;
+            if (func == null)
+            {
+                return;
+            }
             var result = func(Payload);
             Payload = result;
         };

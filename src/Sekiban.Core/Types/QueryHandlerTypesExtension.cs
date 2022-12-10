@@ -1,4 +1,5 @@
 using Sekiban.Core.Query.QueryModel;
+using Sekiban.Core.Query.QueryModel.Parameters;
 namespace Sekiban.Core.Types;
 
 public static class QueryHandlerTypesExtension
