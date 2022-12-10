@@ -45,7 +45,7 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
         Payload = snapshot.Payload;
     }
 
-    public SingleProjectionState<TProjectionPayload> ToState() => new SingleProjectionState<TProjectionPayload>(
+    public SingleProjectionState<TProjectionPayload> ToState() => new(
         Payload,
         AggregateId,
         LastEventId,
@@ -53,7 +53,7 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
         AppliedSnapshotVersion,
         Version);
 
-    public SingleProjection<TProjectionPayload> CreateInitialAggregate(Guid aggregateId) => new SingleProjection<TProjectionPayload>
+    public SingleProjection<TProjectionPayload> CreateInitialAggregate(Guid aggregateId) => new()
         { AggregateId = aggregateId };
 
     public Type OriginalAggregateType() => typeof(TProjectionPayload).GetOriginalTypeFromSingleProjectionPayload();
@@ -64,6 +64,7 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
     {
         var payload = Payload as ISingleProjectionEventApplicable<TProjectionPayload> ??
             throw new SekibanSingleProjectionMustInheritISingleProjectionEventApplicable();
+        (ev, eventPayload) = EventHelper.GetConvertedEventAndPayloadIfConverted(ev, eventPayload);
         var func = payload.GetApplyEventFunc(ev, eventPayload);
         return () =>
         {

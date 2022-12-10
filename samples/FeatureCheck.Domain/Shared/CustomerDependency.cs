@@ -13,6 +13,8 @@ using FeatureCheck.Domain.Aggregates.RecentActivities;
 using FeatureCheck.Domain.Aggregates.RecentActivities.Commands;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Commands;
+using FeatureCheck.Domain.Aggregates.VersionCheckAggregates;
+using FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Commands;
 using FeatureCheck.Domain.EventSubscribers;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointLists;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
@@ -59,6 +61,11 @@ public class CustomerDependency : DomainDependencyDefinitionBase
         AddAggregate<RecentInMemoryActivity>()
             .AddCommandHandler<CreateRecentInMemoryActivity, CreateRecentInMemoryActivity.Handler>()
             .AddCommandHandler<AddRecentInMemoryActivity, AddRecentInMemoryActivity.Handler>();
+
+        AddAggregate<VersionCheckAggregate>()
+            .AddCommandHandler<OldV1Command, OldV1Command.Handler>()
+            .AddCommandHandler<OldV2Command, OldV2Command.Handler>()
+            .AddCommandHandler<CurrentV3Command, CurrentV3Command.Handler>();
 
         AddMultiProjectionQuery<ClientLoyaltyPointMultiProjectionQuery>();
         AddMultiProjectionListQuery<ClientLoyaltyPointQuery>();
