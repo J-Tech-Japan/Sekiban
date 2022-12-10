@@ -2,7 +2,6 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Types;
-
 namespace Sekiban.Core.Query.SingleProjections;
 
 public class SingleProjection<TProjectionPayload> : ISingleProjection,
@@ -19,9 +18,15 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
 
     public void ApplyEvent(IEvent ev)
     {
-        if (ev.Id == LastEventId) return;
+        if (ev.Id == LastEventId)
+        {
+            return;
+        }
         var action = GetApplyEventAction(ev, ev.GetPayload());
-        if (action is null) return;
+        if (action is null)
+        {
+            return;
+        }
         action();
 
         LastEventId = ev.Id;
@@ -29,10 +34,7 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
         Version++;
     }
 
-    public bool CanApplyEvent(IEvent ev)
-    {
-        return GetApplyEventAction(ev, ev.GetPayload()) is not null;
-    }
+    public bool CanApplyEvent(IEvent ev) => GetApplyEventAction(ev, ev.GetPayload()) is not null;
 
     public void ApplySnapshot(SingleProjectionState<TProjectionPayload> snapshot)
     {
@@ -43,43 +45,29 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
         Payload = snapshot.Payload;
     }
 
-    public SingleProjectionState<TProjectionPayload> ToState()
-    {
-        return new(
-            Payload,
-            AggregateId,
-            LastEventId,
-            LastSortableUniqueId,
-            AppliedSnapshotVersion,
-            Version);
-    }
+    public SingleProjectionState<TProjectionPayload> ToState() => new SingleProjectionState<TProjectionPayload>(
+        Payload,
+        AggregateId,
+        LastEventId,
+        LastSortableUniqueId,
+        AppliedSnapshotVersion,
+        Version);
 
-    public SingleProjection<TProjectionPayload> CreateInitialAggregate(Guid aggregateId)
-    {
-        return new()
-            { AggregateId = aggregateId };
-    }
+    public SingleProjection<TProjectionPayload> CreateInitialAggregate(Guid aggregateId) => new SingleProjection<TProjectionPayload>
+        { AggregateId = aggregateId };
 
-    public Type OriginalAggregateType()
-    {
-        return typeof(TProjectionPayload).GetOriginalTypeFromSingleProjectionPayload();
-    }
+    public Type OriginalAggregateType() => typeof(TProjectionPayload).GetOriginalTypeFromSingleProjectionPayload();
 
-    public bool GetIsDeleted()
-    {
-        return Payload is IDeletable { IsDeleted: true };
-    }
+    public bool GetIsDeleted() => Payload is IDeletable { IsDeleted: true };
 
     protected Action? GetApplyEventAction(IEvent ev, IEventPayloadCommon eventPayload)
     {
         var payload = Payload as ISingleProjectionEventApplicable<TProjectionPayload> ??
-                      throw new SekibanSingleProjectionMustInheritISingleProjectionEventApplicable();
+            throw new SekibanSingleProjectionMustInheritISingleProjectionEventApplicable();
         var func = payload.GetApplyEventFunc(ev, eventPayload);
         return () =>
         {
-            if (func == null)
-                throw new SekibanEventNotImplementedException(
-                    $"{eventPayload.GetType().Name} Event not implemented on {GetType().Name} Projection");
+            if (func == null) { return; }
             var result = func(Payload);
             Payload = result;
         };
