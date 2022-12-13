@@ -11,22 +11,15 @@ public record CreateBranch : ICommand<Branch>, ICleanupNecessaryCommand<CreateBr
     {
     }
 
-    public CreateBranch(string name)
-    {
-        Name = name;
-    }
+    public CreateBranch(string name) => Name = name;
 
-    [Required] [MaxLength(20)] public string Name { get; init; } = string.Empty;
+    [Required]
+    [MaxLength(20)]
+    public string Name { get; init; } = string.Empty;
 
-    public CreateBranch CleanupCommandIfNeeded(CreateBranch command)
-    {
-        return command with { Name = string.Empty };
-    }
+    public CreateBranch CleanupCommand(CreateBranch command) => command with { Name = string.Empty };
 
-    public Guid GetAggregateId()
-    {
-        return Guid.NewGuid();
-    }
+    public Guid GetAggregateId() => Guid.NewGuid();
 
     public class Handler : ICommandHandler<Branch, CreateBranch>
     {

@@ -9,12 +9,11 @@ using Sekiban.Core.Snapshot;
 using Sekiban.Core.Snapshot.Aggregate;
 using Sekiban.Core.Snapshot.Aggregate.Commands;
 using Sekiban.Core.Snapshot.Aggregate.Events;
-
 namespace Sekiban.Core.PubSub;
 
 public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEvent> where TEvent : IEvent
 {
-    private static readonly SemaphoreSlim _semaphoreInMemory = new(1, 1);
+    protected static readonly SemaphoreSlim SemaphoreInMemory = new(1, 1);
 
     private readonly IAggregateSettings _aggregateSettings;
     private readonly IDocumentPersistentRepository _documentPersistentRepository;
@@ -46,19 +45,24 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
     {
         var aggregateType =
             _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == notification.AggregateType);
-        if (aggregateType is null) return;
+        if (aggregateType is null)
+        {
+            return;
+        }
 
         var aggregateContainerGroup =
             AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType.Aggregate);
 
         if (aggregateContainerGroup != AggregateContainerGroup.InMemoryContainer)
         {
-            await _semaphoreInMemory.WaitAsync();
+            await SemaphoreInMemory.WaitAsync();
 
             var aggregate = await aggregateLoader.AsAggregateAsync<SnapshotManager>(SnapshotManager.SharedId);
             if (aggregate is null)
+            {
                 await commandExecutor.ExecCommandAsync(new CreateSnapshotManager());
-            _semaphoreInMemory.Release();
+            }
+            SemaphoreInMemory.Release();
 
             if (_aggregateSettings.ShouldTakeSnapshotForType(aggregateType.Aggregate))
             {
@@ -72,26 +76,39 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                                 notification.Version,
                                 null));
                 if (snapshotManagerResponse.Events.Any(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken)))
+                {
                     foreach (var taken in snapshotManagerResponse.Events.Where(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken))
-                                 .Select(m => (Event<SnapshotManagerSnapshotTaken>)m))
+                        .Select(m => (Event<SnapshotManagerSnapshotTaken>)m))
                     {
                         if (await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
-                                notification.AggregateId,
-                                aggregateType.Aggregate,
-                                taken.Payload.NextSnapshotVersion))
+                            notification.AggregateId,
+                            aggregateType.Aggregate,
+                            taken.Payload.NextSnapshotVersion))
+                        {
                             continue;
+                        }
                         dynamic? awaitable = aggregateLoader.GetType()
                             ?.GetMethod(nameof(aggregateLoader.AsDefaultStateAsync))
                             ?.MakeGenericMethod(aggregateType.Aggregate)
-                            .Invoke(aggregateLoader,
+                            .Invoke(
+                                aggregateLoader,
                                 new object[] { notification.AggregateId, taken.Payload.NextSnapshotVersion });
-                        if (awaitable is null) continue;
+                        if (awaitable is null)
+                        {
+                            continue;
+                        }
                         var aggregateToSnapshot = await awaitable;
                         // var aggregateToSnapshot = await aggregateLoader.AsDefaultStateAsync<T, Q>(
                         // command.AggregateId,
                         // taken.NextSnapshotVersion);
-                        if (aggregateToSnapshot is null) continue;
-                        if (taken.Payload.NextSnapshotVersion != aggregateToSnapshot.Version) continue;
+                        if (aggregateToSnapshot is null)
+                        {
+                            continue;
+                        }
+                        if (taken.Payload.NextSnapshotVersion != aggregateToSnapshot.Version)
+                        {
+                            continue;
+                        }
                         var snapshotDocument = new SnapshotDocument(
                             notification.AggregateId,
                             aggregateType.Aggregate,
@@ -101,12 +118,16 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                             aggregateToSnapshot.Version);
                         await _documentWriter.SaveAsync(snapshotDocument, aggregateType.Aggregate);
                     }
+                }
             }
 
             foreach (var projection in _sekibanAggregateTypes.SingleProjectionTypes.Where(
-                         m => m.Aggregate.FullName == aggregateType.Aggregate.FullName))
+                m => m.Aggregate.FullName == aggregateType.Aggregate.FullName))
             {
-                if (!_aggregateSettings.ShouldTakeSnapshotForType(projection.Aggregate)) continue;
+                if (!_aggregateSettings.ShouldTakeSnapshotForType(projection.Aggregate))
+                {
+                    continue;
+                }
                 var snapshotManagerResponseP
                     = await commandExecutor
                         .ExecCommandWithEventsAsync(
@@ -116,26 +137,41 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                                 notification.AggregateId,
                                 notification.Version,
                                 null));
-                if (snapshotManagerResponseP.Events.All(m => m.DocumentTypeName != nameof(SnapshotManagerSnapshotTaken))) continue;
+                if (snapshotManagerResponseP.Events.All(m => m.DocumentTypeName != nameof(SnapshotManagerSnapshotTaken)))
+                {
+                    continue;
+                }
 
                 foreach (var taken in snapshotManagerResponseP.Events.Where(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken))
-                             .Select(m => (Event<SnapshotManagerSnapshotTaken>)m))
+                    .Select(m => (Event<SnapshotManagerSnapshotTaken>)m))
                 {
                     if (await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
-                            notification.AggregateId,
-                            projection.Aggregate,
-                            taken.Payload.NextSnapshotVersion))
+                        notification.AggregateId,
+                        projection.Aggregate,
+                        taken.Payload.NextSnapshotVersion))
+                    {
                         continue;
+                    }
                     dynamic? awaitable = aggregateLoader.GetType()
                         ?.GetMethod(nameof(aggregateLoader.AsSingleProjectionStateAsync))
                         ?.MakeGenericMethod(projection.Aggregate, projection.Projection, projection.PayloadType)
-                        .Invoke(aggregateLoader,
+                        .Invoke(
+                            aggregateLoader,
                             new object[] { notification.AggregateId, taken.Payload.NextSnapshotVersion });
-                    if (awaitable is null) continue;
+                    if (awaitable is null)
+                    {
+                        continue;
+                    }
                     var aggregateToSnapshot = await awaitable;
 
-                    if (aggregateToSnapshot is null) continue;
-                    if (taken.Payload.NextSnapshotVersion != aggregateToSnapshot.Version) continue;
+                    if (aggregateToSnapshot is null)
+                    {
+                        continue;
+                    }
+                    if (taken.Payload.NextSnapshotVersion != aggregateToSnapshot.Version)
+                    {
+                        continue;
+                    }
                     var snapshotDocument = new SnapshotDocument(
                         notification.AggregateId,
                         projection.Aggregate,

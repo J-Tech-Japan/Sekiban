@@ -1,15 +1,14 @@
 using Sekiban.Core.Document.ValueObjects;
 using Sekiban.Core.Event;
-
 namespace Sekiban.Core.Query.MultiProjections.Projections;
 
-public class MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>
+public record MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>
     where TProjection : IMultiProjector<TProjectionPayload>, new()
     where TProjectionPayload : IMultiProjectionPayloadCommon, new()
 {
-    public List<IEvent> UnsafeEvents { get; set; } = new();
-    public MultiProjectionState<TProjectionPayload>? State { get; set; } = default;
-    public MultiProjectionState<TProjectionPayload>? SafeState { get; set; } = default;
-    public SortableUniqueIdValue? LastSortableUniqueId { get; set; } = null;
-    public SortableUniqueIdValue? SafeSortableUniqueId { get; set; } = null;
+    public List<IEvent> UnsafeEvents { get; init; } = new();
+    public MultiProjectionState<TProjectionPayload>? State { get; init; } = default;
+    public MultiProjectionState<TProjectionPayload>? SafeState { get; init; } = default;
+    public SortableUniqueIdValue? LastSortableUniqueId { get; init; } = null;
+    public SortableUniqueIdValue? SafeSortableUniqueId { get; init; } = null;
 }
