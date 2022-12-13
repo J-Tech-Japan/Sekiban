@@ -6,7 +6,7 @@ namespace Mixed.Domain;
 
 public class MixedContextDependency : DomainDependencyDefinitionBase
 {
-    public override Assembly GetExecutingAssembly() => Assembly.GetEntryAssembly();
+    public override Assembly GetExecutingAssembly() => Assembly.GetExecutingAssembly();
 
     protected override void Define()
     {

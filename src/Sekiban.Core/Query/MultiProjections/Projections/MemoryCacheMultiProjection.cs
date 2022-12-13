@@ -4,7 +4,6 @@ using Sekiban.Core.Document;
 using Sekiban.Core.Document.ValueObjects;
 using Sekiban.Core.Query.UpdateNotice;
 using Sekiban.Core.Setting;
-
 namespace Sekiban.Core.Query.MultiProjections.Projections;
 
 public class MemoryCacheMultiProjection : IMultiProjection
@@ -34,17 +33,25 @@ public class MemoryCacheMultiProjection : IMultiProjection
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         var savedContainer = multiProjectionCache.Get<TProjection, TProjectionPayload>();
-        if (savedContainer == null) return await GetInitialProjection<TProjection, TProjectionPayload>();
+        if (savedContainer == null)
+        {
+            return await GetInitialProjection<TProjection, TProjectionPayload>();
+        }
 
         var projector = new TProjection();
         if (savedContainer.SafeState is null && savedContainer?.SafeSortableUniqueId?.Value is null)
+        {
             return await GetInitialProjection<TProjection, TProjectionPayload>();
+        }
         projector.ApplySnapshot(savedContainer.SafeState!);
 
         bool? canUseCache = null;
         foreach (var targetAggregateName in projector.TargetAggregateNames())
         {
-            if (canUseCache == false) continue;
+            if (canUseCache == false)
+            {
+                continue;
+            }
             if (!_aggregateSettings.UseUpdateMarkerForType(targetAggregateName))
             {
                 canUseCache = false;
@@ -56,7 +63,10 @@ public class MemoryCacheMultiProjection : IMultiProjection
             canUseCache = !updated;
         }
 
-        if (canUseCache == true) return savedContainer.State!;
+        if (canUseCache == true)
+        {
+            return savedContainer.State!;
+        }
 
         var container = new MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>();
         await _documentRepository.GetAllEventsAsync(
@@ -68,31 +78,40 @@ public class MemoryCacheMultiProjection : IMultiProjection
                 var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
                 foreach (var ev in events)
                 {
-                    if (container.LastSortableUniqueId == null && ev.GetSortableUniqueId().EarlierThan(targetSafeId) &&
+                    if (container.LastSortableUniqueId == null &&
+                        ev.GetSortableUniqueId().EarlierThan(targetSafeId) &&
                         projector.Version > 0)
                     {
-                        container.SafeState = projector.ToState();
-                        container.SafeSortableUniqueId = container.SafeState.LastSortableUniqueId;
+                        container = container with
+                        {
+                            SafeState = projector.ToState(),
+                            SafeSortableUniqueId = container.SafeState?.LastSortableUniqueId != null
+                                ? new SortableUniqueIdValue(container.SafeState.LastSortableUniqueId) : null
+                        };
                     }
 
                     if (ev.GetSortableUniqueId().LaterThan(savedContainer.SafeSortableUniqueId!))
                     {
                         projector.ApplyEvent(ev);
-                        container.LastSortableUniqueId = ev.GetSortableUniqueId();
+                        container = container with { LastSortableUniqueId = ev.GetSortableUniqueId() };
                     }
 
-                    if (ev.GetSortableUniqueId().LaterThan(targetSafeId)) container.UnsafeEvents.Add(ev);
+                    if (ev.GetSortableUniqueId().LaterThan(targetSafeId))
+                    {
+                        container.UnsafeEvents.Add(ev);
+                    }
                 }
             });
-        container.State = projector.ToState();
+        container = container with { State = projector.ToState() };
         if (container.LastSortableUniqueId != null && container.SafeSortableUniqueId == null)
         {
-            container.SafeState = container.State;
-            container.SafeSortableUniqueId = container.LastSortableUniqueId;
+            container = container with { SafeState = container.State, SafeSortableUniqueId = container.LastSortableUniqueId };
         }
 
         if (container.SafeState is not null && container.SafeSortableUniqueId != savedContainer?.SafeSortableUniqueId)
+        {
             multiProjectionCache.Set(container);
+        }
         return container.State;
     }
 
@@ -111,28 +130,38 @@ public class MemoryCacheMultiProjection : IMultiProjection
                 var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
                 foreach (var ev in events)
                 {
-                    if (container.LastSortableUniqueId == null && ev.GetSortableUniqueId().EarlierThan(targetSafeId) &&
+                    if (container.LastSortableUniqueId == null &&
+                        ev.GetSortableUniqueId().EarlierThan(targetSafeId) &&
                         projector.Version > 0)
                     {
-                        container.SafeState = projector.ToState();
-                        container.SafeSortableUniqueId = container.SafeState.LastSortableUniqueId;
+                        container = container with
+                        {
+                            SafeState = projector.ToState(),
+                            SafeSortableUniqueId = container.SafeState?.LastSortableUniqueId != null
+                                ? new SortableUniqueIdValue(container.SafeState.LastSortableUniqueId) : null
+                        };
                     }
 
                     projector.ApplyEvent(ev);
-                    container.LastSortableUniqueId = ev.GetSortableUniqueId();
-                    if (ev.GetSortableUniqueId().LaterThan(targetSafeId)) container.UnsafeEvents.Add(ev);
+                    container = container with { LastSortableUniqueId = ev.GetSortableUniqueId() };
+                    if (ev.GetSortableUniqueId().LaterThan(targetSafeId))
+                    {
+                        container.UnsafeEvents.Add(ev);
+                    }
                 }
             });
-        container.State = projector.ToState();
+        container = container with { State = projector.ToState() };
         if (container.LastSortableUniqueId != null &&
             container.SafeSortableUniqueId == null &&
             container.LastSortableUniqueId?.EarlierThan(SortableUniqueIdValue.GetSafeIdFromUtc()) == true)
         {
-            container.SafeState = container.State;
-            container.SafeSortableUniqueId = container.LastSortableUniqueId;
+            container = container with { SafeState = container.State, SafeSortableUniqueId = container.LastSortableUniqueId };
         }
 
-        if (container.SafeState is not null) multiProjectionCache.Set(container);
+        if (container.SafeState is not null)
+        {
+            multiProjectionCache.Set(container);
+        }
         return container.State;
     }
 }

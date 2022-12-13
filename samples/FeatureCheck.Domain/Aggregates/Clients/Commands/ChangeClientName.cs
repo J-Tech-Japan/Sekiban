@@ -11,17 +11,11 @@ public record ChangeClientName(Guid ClientId, string ClientName) : IVersionValid
     {
     }
 
-    public ChangeClientName CleanupCommandIfNeeded(ChangeClientName command)
-    {
-        return command with { ClientName = "stripped for security" };
-    }
+    public ChangeClientName CleanupCommand(ChangeClientName command) => command with { ClientName = "stripped for security" };
 
     public int ReferenceVersion { get; init; }
 
-    public Guid GetAggregateId()
-    {
-        return ClientId;
-    }
+    public Guid GetAggregateId() => ClientId;
 
     public class Handler : IVersionValidationCommandHandler<Client, ChangeClientName>
     {
