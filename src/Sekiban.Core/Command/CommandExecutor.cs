@@ -89,7 +89,7 @@ public class CommandExecutor : ICommandExecutor
         var validationResult = command.ValidateProperties()?.ToList();
         if (validationResult?.Any() == true)
         {
-            return (new CommandExecutorResponse(null, null, 0, validationResult), new List<IEvent>());
+            return (new CommandExecutorResponse(null, null, 0, validationResult, null), new List<IEvent>());
         }
         return await ExecCommandWithoutValidationAsyncTyped<TAggregatePayload, TCommand>(command, callHistories);
     }
@@ -110,6 +110,7 @@ public class CommandExecutor : ICommandExecutor
             ? cleanupCommand.CleanupCommand(command)
             : command;
         var version = 0;
+        string? lastSortableUniqueId = null;
         var aggregateContainerGroup =
             AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(TAggregatePayload));
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
@@ -146,6 +147,7 @@ public class CommandExecutor : ICommandExecutor
                             "Command failed to execute " + command.GetType().Name));
                 await HandleEventsAsync<TAggregatePayload, TCommand>(commandResponse.Events, commandDocument);
                 version = commandResponse.Version;
+                lastSortableUniqueId = commandResponse.LastSortableUniqueId;
             }
             else
             {
@@ -153,6 +155,7 @@ public class CommandExecutor : ICommandExecutor
                 var commandResponse = await adapter.HandleCommandAsync(commandDocument, handler, aggregateId);
                 await HandleEventsAsync<TAggregatePayload, TCommand>(commandResponse.Events, commandDocument);
                 version = commandResponse.Version;
+                lastSortableUniqueId = commandResponse.LastSortableUniqueId;
             }
         }
         catch (Exception e)
@@ -171,7 +174,7 @@ public class CommandExecutor : ICommandExecutor
             }
         }
 
-        return (new CommandExecutorResponse(commandDocument.AggregateId, commandDocument.Id, version, null), events);
+        return (new CommandExecutorResponse(commandDocument.AggregateId, commandDocument.Id, version, null, lastSortableUniqueId), events);
     }
 
     private async Task<List<IEvent>> HandleEventsAsync<TAggregatePayload, TCommand>(
