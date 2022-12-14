@@ -1,6 +1,5 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Event;
-
 namespace Sekiban.Core.Query.SingleProjections;
 
 public interface IAggregateLoader
@@ -12,6 +11,7 @@ public interface IAggregateLoader
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <param name="toVersion"></param>
+    /// <param name="includesSortableUniqueId"></param>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
     public Task<AggregateState<TAggregatePayload>?> AsDefaultStateFromInitialAsync<TAggregatePayload>(
@@ -24,10 +24,11 @@ public interface IAggregateLoader
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <param name="toVersion"></param>
+    /// <param name="includesSortableUniqueId"></param>
     /// <typeparam name="TSingleProjectionPayload"></typeparam>
     /// <returns></returns>
     public Task<SingleProjectionState<TSingleProjectionPayload>?>
-        AsSingleProjectionStateAsync<TSingleProjectionPayload>(Guid aggregateId, int? toVersion = null)
+        AsSingleProjectionStateAsync<TSingleProjectionPayload>(Guid aggregateId, int? toVersion = null, string? includesSortableUniqueId = null)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new();
 
 
@@ -37,11 +38,14 @@ public interface IAggregateLoader
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <param name="toVersion"></param>
+    /// <param name="includesSortableUniqueId"></param>
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Task<Aggregate<TAggregatePayload>?> AsAggregateAsync<TAggregatePayload>(Guid aggregateId,
-        int? toVersion = null)
+    public Task<Aggregate<TAggregatePayload>?> AsAggregateAsync<TAggregatePayload>(
+        Guid aggregateId,
+        int? toVersion = null,
+        string? includesSortableUniqueId = null)
         where TAggregatePayload : IAggregatePayload, new();
 
     /// <summary>
@@ -49,14 +53,21 @@ public interface IAggregateLoader
     ///     こちらはデフォルトプロジェクトション（集約のデフォルトステータス）
     /// </summary>
     /// <param name="aggregateId"></param>
+    /// <param name="toVersion"></param>
+    /// <param name="includesSortableUniqueId"></param>
     /// <typeparam name="T"></typeparam>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Task<AggregateState<TAggregatePayload>?> AsDefaultStateAsync<TAggregatePayload>(Guid aggregateId,
-        int? toVersion = null)
+    public Task<AggregateState<TAggregatePayload>?> AsDefaultStateAsync<TAggregatePayload>(
+        Guid aggregateId,
+        int? toVersion = null,
+        string? includesSortableUniqueId = null)
         where TAggregatePayload : IAggregatePayload, new();
 
 
-    public Task<IEnumerable<IEvent>?> AllEventsAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)
+    public Task<IEnumerable<IEvent>?> AllEventsAsync<TAggregatePayload>(
+        Guid aggregateId,
+        int? toVersion = null,
+        string? includesSortableUniqueId = null)
         where TAggregatePayload : IAggregatePayload, new();
 }

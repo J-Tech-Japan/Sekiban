@@ -1,4 +1,5 @@
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Document.ValueObjects;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleProjections;
@@ -26,7 +27,9 @@ public class QueryExecutor : IQueryExecutor
         where TQueryParameter : IQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
-        var allProjection = await multiProjectionService.GetMultiProjectionAsync<TProjectionPayload>();
+        var allProjection =
+            await multiProjectionService.GetMultiProjectionAsync<TProjectionPayload>(
+                SortableUniqueIdValue.GetShouldIncludeSortableUniqueIdValue(param));
         return queryHandler
             .GetMultiProjectionQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
                 param,
@@ -41,7 +44,9 @@ public class QueryExecutor : IQueryExecutor
         where TQueryParameter : IListQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
-        var allProjection = await multiProjectionService.GetMultiProjectionAsync<TProjectionPayload>();
+        var allProjection =
+            await multiProjectionService.GetMultiProjectionAsync<TProjectionPayload>(
+                SortableUniqueIdValue.GetShouldIncludeSortableUniqueIdValue(param));
         return queryHandler
             .GetMultiProjectionListQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
                 param,
@@ -55,7 +60,8 @@ public class QueryExecutor : IQueryExecutor
         where TQueryParameter : IListQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
-        var allProjection = await multiProjectionService.GetAggregateList<TAggregatePayload>();
+        var allProjection =
+            await multiProjectionService.GetAggregateList<TAggregatePayload>(SortableUniqueIdValue.GetShouldIncludeSortableUniqueIdValue(param));
         return queryHandler
             .GetAggregateListQuery<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
                 param,
@@ -69,7 +75,8 @@ public class QueryExecutor : IQueryExecutor
         where TQueryParameter : IQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
-        var allProjection = await multiProjectionService.GetAggregateList<TAggregatePayload>();
+        var allProjection =
+            await multiProjectionService.GetAggregateList<TAggregatePayload>(SortableUniqueIdValue.GetShouldIncludeSortableUniqueIdValue(param));
         return queryHandler.GetAggregateQuery<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
             param,
             allProjection);
@@ -84,7 +91,7 @@ public class QueryExecutor : IQueryExecutor
         where TQueryResponse : IQueryResponse
     {
         var allProjection = await multiProjectionService
-            .GetSingleProjectionList<TProjectionPayload>();
+            .GetSingleProjectionList<TProjectionPayload>(SortableUniqueIdValue.GetShouldIncludeSortableUniqueIdValue(param));
         return queryHandler
             .GetSingleProjectionListQuery<TProjectionPayload, TQuery,
                 TQueryParameter, TQueryResponse>(param, allProjection);
@@ -99,7 +106,7 @@ public class QueryExecutor : IQueryExecutor
         where TQueryResponse : IQueryResponse
     {
         var allProjection = await multiProjectionService
-            .GetSingleProjectionList<TSingleProjectionPayload>();
+            .GetSingleProjectionList<TSingleProjectionPayload>(SortableUniqueIdValue.GetShouldIncludeSortableUniqueIdValue(param));
         return queryHandler
             .GetSingleProjectionQuery<TSingleProjectionPayload, TQuery,
                 TQueryParameter, TQueryResponse>(param, allProjection);

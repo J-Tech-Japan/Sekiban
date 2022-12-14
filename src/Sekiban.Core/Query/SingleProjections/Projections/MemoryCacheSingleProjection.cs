@@ -30,7 +30,8 @@ public class MemoryCacheSingleProjection : ISingleProjection
 
     public async Task<TProjection?> GetAggregateAsync<TProjection, TState, TProjector>(
         Guid aggregateId,
-        int? toVersion = null)
+        int? toVersion = null,
+        SortableUniqueIdValue? includesSortableUniqueId = null)
         where TProjection : IAggregateCommon, SingleProjections.ISingleProjection,
         ISingleProjectionStateConvertible<TState>
         where TState : IAggregateCommon
@@ -48,13 +49,19 @@ public class MemoryCacheSingleProjection : ISingleProjection
         }
         var aggregate = projector.CreateInitialAggregate(aggregateId);
         aggregate.ApplySnapshot(savedContainer.SafeState!);
+        if (includesSortableUniqueId is not null &&
+            savedContainer?.SafeSortableUniqueId is not null &&
+            includesSortableUniqueId.EarlierThan(savedContainer.SafeSortableUniqueId))
+        {
+            return aggregate;
+        }
 
         if (_aggregateSettings.UseUpdateMarkerForType(projector.OriginalAggregateType().Name))
         {
             var (updated, type) = _updateNotice.HasUpdateAfter(
                 projector.OriginalAggregateType().Name,
                 aggregateId,
-                savedContainer.SafeSortableUniqueId!);
+                savedContainer?.SafeSortableUniqueId!);
             if (!updated)
             {
                 return aggregate;
@@ -276,12 +283,12 @@ public class MemoryCacheSingleProjection : ISingleProjection
             return default;
         }
 
-        container = container with {State = aggregate.ToState()};
+        container = container with { State = aggregate.ToState() };
         if (container.LastSortableUniqueId != null &&
             container.SafeSortableUniqueId == null &&
             container.LastSortableUniqueId?.EarlierThan(SortableUniqueIdValue.GetSafeIdFromUtc()) == true)
         {
-            container = container with {SafeState = container.State,SafeSortableUniqueId = container.LastSortableUniqueId};
+            container = container with { SafeState = container.State, SafeSortableUniqueId = container.LastSortableUniqueId };
         }
 
         if (container.SafeState is not null)

@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
+using Sekiban.Core.Document.ValueObjects;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.MultiProjections;
@@ -222,7 +223,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     {
         var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ??
             throw new Exception("Failed to get Query service");
-        return multiProjectionService.GetMultiProjectionAsync<TMultiProjectionPayload>().Result ??
+        return multiProjectionService.GetMultiProjectionAsync<TMultiProjectionPayload>(SortableUniqueIdValue.GetSafeIdFromUtc()).Result ??
             throw new Exception(
                 "Failed to get Multi Projection Response for " + typeof(TMultiProjectionPayload).Name);
     }
@@ -314,7 +315,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     {
         var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ??
             throw new Exception("Failed to get Query service");
-        return multiProjectionService.GetAggregateListObject<TAggregatePayload>().Result ??
+        return multiProjectionService.GetAggregateListObject<TAggregatePayload>(SortableUniqueIdValue.GetCurrentIdFromUtc()).Result ??
             throw new Exception(
                 "Failed to get Aggregate List Projection Response for " +
                 typeof(TAggregatePayload).Name);
@@ -412,7 +413,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     {
         var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ??
             throw new Exception("Failed to get Query service");
-        return multiProjectionService.GetSingleProjectionListObject<TSingleProjectionPayload>().Result ??
+        return multiProjectionService.GetSingleProjectionListObject<TSingleProjectionPayload>(SortableUniqueIdValue.GetCurrentIdFromUtc()).Result ??
             throw new Exception(
                 "Failed to get Single Projection List Projection Response for " +
                 typeof(TSingleProjectionPayload).Name);

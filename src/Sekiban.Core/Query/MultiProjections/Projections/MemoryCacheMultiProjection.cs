@@ -28,7 +28,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
     }
 
     public async Task<MultiProjectionState<TProjectionPayload>>
-        GetMultiProjectionAsync<TProjection, TProjectionPayload>()
+        GetMultiProjectionAsync<TProjection, TProjectionPayload>(SortableUniqueIdValue? includesSortableUniqueIdValue)
         where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
@@ -42,6 +42,12 @@ public class MemoryCacheMultiProjection : IMultiProjection
         if (savedContainer.SafeState is null && savedContainer?.SafeSortableUniqueId?.Value is null)
         {
             return await GetInitialProjection<TProjection, TProjectionPayload>();
+        }
+        if (includesSortableUniqueIdValue is not null &&
+            savedContainer.SafeSortableUniqueId is not null &&
+            includesSortableUniqueIdValue.EarlierThan(savedContainer.SafeSortableUniqueId))
+        {
+            return savedContainer.State!;
         }
         projector.ApplySnapshot(savedContainer.SafeState!);
 
