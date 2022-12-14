@@ -28,7 +28,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
     }
 
     public async Task<MultiProjectionState<TProjectionPayload>>
-        GetMultiProjectionAsync<TProjection, TProjectionPayload>()
+        GetMultiProjectionAsync<TProjection, TProjectionPayload>(SortableUniqueIdValue? includesSortableUniqueIdValue)
         where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {

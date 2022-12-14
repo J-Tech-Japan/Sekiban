@@ -225,15 +225,15 @@ public class CustomerDbStoryBasic : TestBase
         clientList = await multiProjectionService.GetAggregateList<Client>();
         Assert.Empty(clientList);
         // can find deleted client
-        clientList = await multiProjectionService.GetAggregateList<Client>(QueryListType.DeletedOnly);
+        clientList = await multiProjectionService.GetAggregateList<Client>(null,QueryListType.DeletedOnly);
         Assert.Single(clientList);
-        clientList = await multiProjectionService.GetAggregateList<Client>(QueryListType.ActiveAndDeleted);
+        clientList = await multiProjectionService.GetAggregateList<Client>(null,QueryListType.ActiveAndDeleted);
         Assert.Single(clientList);
 
         // loyalty point should be created with event subscribe
         loyaltyPointList = await multiProjectionService.GetAggregateList<LoyaltyPoint>();
         Assert.Empty(loyaltyPointList);
-        loyaltyPointList = await multiProjectionService.GetAggregateList<LoyaltyPoint>(QueryListType.DeletedOnly);
+        loyaltyPointList = await multiProjectionService.GetAggregateList<LoyaltyPoint>(null,QueryListType.DeletedOnly);
         Assert.Single(loyaltyPointList);
 
         // create recent activity

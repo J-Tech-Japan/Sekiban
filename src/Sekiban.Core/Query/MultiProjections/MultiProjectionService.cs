@@ -1,39 +1,37 @@
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Document.ValueObjects;
 using Sekiban.Core.Query.MultiProjections.Projections;
 using Sekiban.Core.Query.SingleProjections;
-
 namespace Sekiban.Core.Query.MultiProjections;
 
 public class MultiProjectionService : IMultiProjectionService
 {
     private readonly IMultiProjection multiProjection;
 
-    public MultiProjectionService(IMultiProjection multiProjection)
-    {
-        this.multiProjection = multiProjection;
-    }
+    public MultiProjectionService(IMultiProjection multiProjection) => this.multiProjection = multiProjection;
 
-    public Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjectionPayload>()
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
-    {
-        return multiProjection.GetMultiProjectionAsync<MultiProjection<TProjectionPayload>, TProjectionPayload>();
-    }
+    public Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjectionPayload>(
+        SortableUniqueIdValue? includesSortableUniqueIdValue)
+        where TProjectionPayload : IMultiProjectionPayloadCommon, new() =>
+        multiProjection.GetMultiProjectionAsync<MultiProjection<TProjectionPayload>, TProjectionPayload>(includesSortableUniqueIdValue);
 
     public async Task<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>>
-        GetAggregateListObject<TAggregatePayload>() where TAggregatePayload : IAggregatePayload, new()
+        GetAggregateListObject<TAggregatePayload>(SortableUniqueIdValue? includesSortableUniqueIdValue)
+        where TAggregatePayload : IAggregatePayload, new()
     {
         var list = await multiProjection
             .GetMultiProjectionAsync<SingleProjectionListProjector<Aggregate<TAggregatePayload>,
                     AggregateState<TAggregatePayload>,
                     DefaultSingleProjector<TAggregatePayload>>
-                , SingleProjectionListState<AggregateState<TAggregatePayload>>>();
+                , SingleProjectionListState<AggregateState<TAggregatePayload>>>(includesSortableUniqueIdValue);
         return list;
     }
 
     public async Task<List<AggregateState<TAggregatePayload>>> GetAggregateList<TAggregatePayload>(
+        SortableUniqueIdValue? includesSortableUniqueIdValue,
         QueryListType queryListType = QueryListType.ActiveOnly) where TAggregatePayload : IAggregatePayload, new()
     {
-        var projection = await GetAggregateListObject<TAggregatePayload>();
+        var projection = await GetAggregateListObject<TAggregatePayload>(includesSortableUniqueIdValue);
         return queryListType switch
         {
             QueryListType.ActiveAndDeleted => projection.Payload.List.ToList(),
@@ -46,23 +44,21 @@ public class MultiProjectionService : IMultiProjectionService
     public
         Task<MultiProjectionState<
             SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>
-        GetSingleProjectionListObject<TSingleProjectionPayload>()
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
-    {
-        return multiProjection
-            .GetMultiProjectionAsync<
-                SingleProjectionListProjector<SingleProjection<TSingleProjectionPayload>,
-                    SingleProjectionState<TSingleProjectionPayload>,
-                    SingleProjection<TSingleProjectionPayload>>,
-                SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>();
-    }
+        GetSingleProjectionListObject<TSingleProjectionPayload>(SortableUniqueIdValue? includesSortableUniqueIdValue)
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new() => multiProjection
+        .GetMultiProjectionAsync<
+            SingleProjectionListProjector<SingleProjection<TSingleProjectionPayload>,
+                SingleProjectionState<TSingleProjectionPayload>,
+                SingleProjection<TSingleProjectionPayload>>,
+            SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>(includesSortableUniqueIdValue);
 
     public async Task<List<SingleProjectionState<TSingleProjectionPayload>>>
         GetSingleProjectionList<TSingleProjectionPayload>(
+            SortableUniqueIdValue? includesSortableUniqueIdValue,
             QueryListType queryListType = QueryListType.ActiveOnly)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
-        var projection = await GetSingleProjectionListObject<TSingleProjectionPayload>();
+        var projection = await GetSingleProjectionListObject<TSingleProjectionPayload>(includesSortableUniqueIdValue);
         return queryListType switch
         {
             QueryListType.ActiveAndDeleted => projection.Payload.List.ToList(),

@@ -1,18 +1,15 @@
 using Sekiban.Core.Document;
-
+using Sekiban.Core.Document.ValueObjects;
 namespace Sekiban.Core.Query.MultiProjections.Projections;
 
 public class SimpleMultiProjection : IMultiProjection
 {
     private readonly IDocumentRepository _documentRepository;
 
-    public SimpleMultiProjection(IDocumentRepository documentRepository)
-    {
-        _documentRepository = documentRepository;
-    }
+    public SimpleMultiProjection(IDocumentRepository documentRepository) => _documentRepository = documentRepository;
 
     public async Task<MultiProjectionState<TProjectionPayload>>
-        GetMultiProjectionAsync<TProjection, TProjectionPayload>()
+        GetMultiProjectionAsync<TProjection, TProjectionPayload>(SortableUniqueIdValue? includesSortableUniqueIdValue)
         where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
@@ -23,7 +20,10 @@ public class SimpleMultiProjection : IMultiProjection
             null,
             events =>
             {
-                foreach (var ev in events) projector.ApplyEvent(ev);
+                foreach (var ev in events)
+                {
+                    projector.ApplyEvent(ev);
+                }
             });
         return projector.ToState();
     }
