@@ -43,6 +43,12 @@ public class MemoryCacheMultiProjection : IMultiProjection
         {
             return await GetInitialProjection<TProjection, TProjectionPayload>();
         }
+        if (includesSortableUniqueIdValue is not null &&
+            savedContainer.SafeSortableUniqueId is not null &&
+            includesSortableUniqueIdValue.EarlierThan(savedContainer.SafeSortableUniqueId))
+        {
+            return savedContainer.State!;
+        }
         projector.ApplySnapshot(savedContainer.SafeState!);
 
         bool? canUseCache = null;

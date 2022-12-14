@@ -12,10 +12,6 @@ using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Commands;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
 using FeatureCheck.Domain.Shared.Exceptions;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
@@ -27,9 +23,13 @@ using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Snapshot;
 using Sekiban.Core.Snapshot.Aggregate;
 using Sekiban.Infrastructure.Cosmos;
+using Sekiban.Testing.Shared;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
-
 namespace SampleProjectStoryXTest.Stories;
 
 public class CustomerDbStoryBasic : TestBase
@@ -58,13 +58,15 @@ public class CustomerDbStoryBasic : TestBase
         _memoryCache = GetService<IMemoryCache>();
     }
 
+    [Trait(SekibanTestConstants.Category, SekibanTestConstants.Categories.Flaky)]
     [Fact(DisplayName = "CosmosDb ストーリーテスト 集約の機能のテストではなく、CosmosDbと連携して正しく動くかをテストしています。")]
     public async Task CosmosDbStory()
     {
         // 先に全データを削除する
         await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default);
         await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Dissolvable);
-        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command,
+        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(
+            DocumentType.Command,
             AggregateContainerGroup.Dissolvable);
         await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command);
 
@@ -192,8 +194,12 @@ public class CustomerDbStoryBasic : TestBase
             async () =>
             {
                 await commandExecutor.ExecCommandAsync(
-                    new UseLoyaltyPoint(clientId, datetimeFirst.AddSeconds(1), LoyaltyPointUsageTypeKeys.FlightUpgrade,
-                        2000, "")
+                    new UseLoyaltyPoint(
+                        clientId,
+                        datetimeFirst.AddSeconds(1),
+                        LoyaltyPointUsageTypeKeys.FlightUpgrade,
+                        2000,
+                        "")
                     {
                         ReferenceVersion = addPointResult.Version
                     });
@@ -225,15 +231,15 @@ public class CustomerDbStoryBasic : TestBase
         clientList = await multiProjectionService.GetAggregateList<Client>();
         Assert.Empty(clientList);
         // can find deleted client
-        clientList = await multiProjectionService.GetAggregateList<Client>(null,QueryListType.DeletedOnly);
+        clientList = await multiProjectionService.GetAggregateList<Client>(null, QueryListType.DeletedOnly);
         Assert.Single(clientList);
-        clientList = await multiProjectionService.GetAggregateList<Client>(null,QueryListType.ActiveAndDeleted);
+        clientList = await multiProjectionService.GetAggregateList<Client>(null, QueryListType.ActiveAndDeleted);
         Assert.Single(clientList);
 
         // loyalty point should be created with event subscribe
         loyaltyPointList = await multiProjectionService.GetAggregateList<LoyaltyPoint>();
         Assert.Empty(loyaltyPointList);
-        loyaltyPointList = await multiProjectionService.GetAggregateList<LoyaltyPoint>(null,QueryListType.DeletedOnly);
+        loyaltyPointList = await multiProjectionService.GetAggregateList<LoyaltyPoint>(null, QueryListType.DeletedOnly);
         Assert.Single(loyaltyPointList);
 
         // create recent activity
@@ -279,9 +285,15 @@ public class CustomerDbStoryBasic : TestBase
             = await projectionService.AsDefaultStateFromInitialAsync<SnapshotManager>(
                 SnapshotManager.SharedId);
         _testOutputHelper.WriteLine("-requests-");
-        foreach (var key in snapshotManager!.Payload.Requests) _testOutputHelper.WriteLine(key);
+        foreach (var key in snapshotManager!.Payload.Requests)
+        {
+            _testOutputHelper.WriteLine(key);
+        }
         _testOutputHelper.WriteLine("-request takens-");
-        foreach (var key in snapshotManager!.Payload.RequestTakens) _testOutputHelper.WriteLine(key);
+        foreach (var key in snapshotManager!.Payload.RequestTakens)
+        {
+            _testOutputHelper.WriteLine(key);
+        }
 
         branchList = await multiProjectionService.GetAggregateList<Branch>();
         Assert.Equal(3, branchList.Count);
@@ -293,7 +305,8 @@ public class CustomerDbStoryBasic : TestBase
         // 先に全データを削除する
         await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default);
         await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Dissolvable);
-        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command,
+        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(
+            DocumentType.Command,
             AggregateContainerGroup.Dissolvable);
         await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command);
     }
@@ -304,7 +317,8 @@ public class CustomerDbStoryBasic : TestBase
         // 先に全データを削除する
         await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default);
         await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Dissolvable);
-        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command,
+        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(
+            DocumentType.Command,
             AggregateContainerGroup.Dissolvable);
         await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command);
 
@@ -321,19 +335,22 @@ public class CustomerDbStoryBasic : TestBase
         var tasks = new List<Task>();
         var count = 80;
         foreach (var i in Enumerable.Range(0, count))
+        {
             tasks.Add(
                 Task.Run(
                     async () =>
                     {
                         var recentActivityAddedResult
                             = await commandExecutor.ExecCommandAsync(
-                                new AddRecentActivity(createRecentActivityResult.AggregateId!.Value,
+                                new AddRecentActivity(
+                                    createRecentActivityResult.AggregateId!.Value,
                                     $"Message - {i + 1}")
                                 {
                                     ReferenceVersion = version
                                 });
                         version = recentActivityAddedResult.Version;
                     }));
+        }
         await Task.WhenAll(tasks);
         recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
         Assert.Single(recentActivityList);
@@ -342,8 +359,9 @@ public class CustomerDbStoryBasic : TestBase
             = await projectionService.AsDefaultStateFromInitialAsync<RecentActivity>(
                 createRecentActivityResult.AggregateId!.Value);
         var aggregateRecentActivity2
-            = await projectionService.AsDefaultStateAsync<RecentActivity>(createRecentActivityResult.AggregateId!
-                .Value);
+            = await projectionService.AsDefaultStateAsync<RecentActivity>(
+                createRecentActivityResult.AggregateId!
+                    .Value);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + 1, aggregateRecentActivity!.Version);
@@ -353,9 +371,15 @@ public class CustomerDbStoryBasic : TestBase
             = await projectionService.AsDefaultStateFromInitialAsync<SnapshotManager>(
                 SnapshotManager.SharedId);
         _testOutputHelper.WriteLine("-requests-");
-        foreach (var key in snapshotManager!.Payload.Requests) _testOutputHelper.WriteLine(key);
+        foreach (var key in snapshotManager!.Payload.Requests)
+        {
+            _testOutputHelper.WriteLine(key);
+        }
         _testOutputHelper.WriteLine("-request takens-");
-        foreach (var key in snapshotManager!.Payload.RequestTakens) _testOutputHelper.WriteLine(key);
+        foreach (var key in snapshotManager!.Payload.RequestTakens)
+        {
+            _testOutputHelper.WriteLine(key);
+        }
 
         var snapshots = await _documentPersistentRepository.GetSnapshotsForAggregateAsync(
             createRecentActivityResult.AggregateId!.Value,
@@ -374,10 +398,16 @@ public class CustomerDbStoryBasic : TestBase
     {
         foreach (var state in snapshots.Select(snapshot => snapshot.ToState<AggregateState<TAggregatePayload>>()))
         {
-            if (state is null) throw new SekibanInvalidArgumentException();
+            if (state is null)
+            {
+                throw new SekibanInvalidArgumentException();
+            }
             var fromInitial =
                 await projectionService.AsDefaultStateFromInitialAsync<TAggregatePayload>(aggregateId, state.Version);
-            if (fromInitial is null) throw new SekibanInvalidArgumentException();
+            if (fromInitial is null)
+            {
+                throw new SekibanInvalidArgumentException();
+            }
             Assert.Equal(fromInitial.Version, state.Version);
             Assert.Equal(fromInitial.LastEventId, state.LastEventId);
         }
@@ -398,6 +428,7 @@ public class CustomerDbStoryBasic : TestBase
         var tasks = new List<Task>();
         var count = 140;
         foreach (var i in Enumerable.Range(0, count))
+        {
             tasks.Add(
                 Task.Run(
                     async () =>
@@ -405,7 +436,8 @@ public class CustomerDbStoryBasic : TestBase
                         var recentActivityAddedResult
                             = await commandExecutor
                                 .ExecCommandAsync(
-                                    new AddRecentInMemoryActivity(createRecentActivityResult.AggregateId!.Value,
+                                    new AddRecentInMemoryActivity(
+                                        createRecentActivityResult.AggregateId!.Value,
                                         $"Message - {i + 1}")
                                     {
                                         ReferenceVersion = version
@@ -413,6 +445,7 @@ public class CustomerDbStoryBasic : TestBase
                         version = recentActivityAddedResult.Version;
                         _testOutputHelper.WriteLine($"{i} - {recentActivityAddedResult.Version.ToString()}");
                     }));
+        }
         await Task.WhenAll(tasks);
         recentActivityList = await multiProjectionService.GetAggregateList<RecentInMemoryActivity>();
         Assert.Single(recentActivityList);
@@ -452,6 +485,7 @@ public class CustomerDbStoryBasic : TestBase
         var tasks = new List<Task>();
         var count = 280;
         foreach (var i in Enumerable.Range(0, count))
+        {
             tasks.Add(
                 Task.Run(
                     async () =>
@@ -462,6 +496,7 @@ public class CustomerDbStoryBasic : TestBase
                                     { ReferenceVersion = version });
                         version = recentActivityAddedResult.Version;
                     }));
+        }
         await Task.WhenAll(tasks);
         recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
         Assert.Single(recentActivityList);
@@ -483,8 +518,14 @@ public class CustomerDbStoryBasic : TestBase
             = await projectionService.AsDefaultStateFromInitialAsync<SnapshotManager>(
                 SnapshotManager.SharedId);
         _testOutputHelper.WriteLine("-requests-");
-        foreach (var key in snapshotManager!.Payload.Requests) _testOutputHelper.WriteLine(key);
+        foreach (var key in snapshotManager!.Payload.Requests)
+        {
+            _testOutputHelper.WriteLine(key);
+        }
         _testOutputHelper.WriteLine("-request takens-");
-        foreach (var key in snapshotManager!.Payload.RequestTakens) _testOutputHelper.WriteLine(key);
+        foreach (var key in snapshotManager!.Payload.RequestTakens)
+        {
+            _testOutputHelper.WriteLine(key);
+        }
     }
 }
