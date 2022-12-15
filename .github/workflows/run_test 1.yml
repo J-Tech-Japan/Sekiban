@@ -12,6 +12,12 @@ concurrency:
   group: CosmosDbConnect
   cancel-in-progress: false
 jobs:
+  consecutiveness:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: mktcode/consecutive-workflow-action@e2e008186aa210faacd68ec30f6ac236f7e2f435
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
   regular:
     strategy:
       max-parallel: 1
