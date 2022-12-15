@@ -12,17 +12,10 @@ concurrency:
   group: CosmosDbConnect
   cancel-in-progress: false
 jobs:
-  consecutiveness:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: mktcode/consecutive-workflow-action@v1
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
   regular:
     strategy:
       max-parallel: 1
     runs-on: ubuntu-latest
-    needs: [ consecutiveness ]
     steps:
     - uses: actions/checkout@v2
     - name: Setup .NET 7
@@ -54,12 +47,15 @@ jobs:
     - name: Test dotnet
       run: |
         dotnet test Sekiban.sln  --filter "Category!=Flaky&Category!=Performance"
+    - uses: mktcode/consecutive-workflow-action@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
   flaky:
     strategy:
       max-parallel: 1
 
     runs-on: ubuntu-latest
-    needs: [ consecutiveness ]
+    needs: [ regular ]
     steps:
     - uses: actions/checkout@v2
     - name: Setup .NET 7
@@ -91,12 +87,15 @@ jobs:
     - name: Test dotnet
       run: |
         dotnet test Sekiban.sln  --filter "Category=Flaky"
+    - uses: mktcode/consecutive-workflow-action@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
   performance:
     strategy:
       max-parallel: 1
 
     runs-on: ubuntu-latest
-    needs: [ consecutiveness ]
+    needs: [ flaky ]
     steps:
     - uses: actions/checkout@v2
     - name: Setup .NET 7
