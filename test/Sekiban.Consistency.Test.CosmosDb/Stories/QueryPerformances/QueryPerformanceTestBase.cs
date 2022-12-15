@@ -2,8 +2,6 @@ using FeatureCheck.Domain.Aggregates.Branches;
 using FeatureCheck.Domain.Aggregates.Branches.Commands;
 using FeatureCheck.Domain.Aggregates.Clients;
 using FeatureCheck.Domain.Aggregates.Clients.Commands;
-using System.Linq;
-using System.Threading.Tasks;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
@@ -11,10 +9,11 @@ using Sekiban.Core.Document;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Infrastructure.Cosmos;
+using Sekiban.Testing.Shared;
+using System.Linq;
+using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
-using Sekiban.Testing.Shared;
-
 namespace SampleProjectStoryXTest.Stories.QueryPerformances;
 
 public abstract class QueryPerformanceTestBase : TestBase
@@ -31,7 +30,9 @@ public abstract class QueryPerformanceTestBase : TestBase
     protected QueryPerformanceTestBase(
         SekibanTestFixture sekibanTestFixture,
         ITestOutputHelper testOutputHelper,
-        ServiceCollectionExtensions.MultiProjectionType multiProjectionType) : base(sekibanTestFixture, false,
+        ServiceCollectionExtensions.MultiProjectionType multiProjectionType) : base(
+        sekibanTestFixture,
+        false,
         multiProjectionType)
     {
         _testOutputHelper = testOutputHelper;
@@ -45,6 +46,7 @@ public abstract class QueryPerformanceTestBase : TestBase
     }
 
     [Fact]
+    [Trait(SekibanTestConstants.Category, SekibanTestConstants.Categories.Performance)]
     public void TestQuery1()
     {
         // 先に全データを削除する
@@ -90,7 +92,10 @@ public abstract class QueryPerformanceTestBase : TestBase
                 = await CommandExecutor.ExecCommandAsync(
                     new CreateBranch($"CreateBranch {i}"));
             var commandDocument = branchResult.CommandId;
-            if (commandDocument == null) continue;
+            if (commandDocument == null)
+            {
+                continue;
+            }
             var branchId = branchResult.AggregateId;
             Assert.NotNull(branchResult);
             Assert.NotNull(branchResult.AggregateId);

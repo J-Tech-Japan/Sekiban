@@ -1,4 +1,5 @@
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Document.ValueObjects;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Types;
@@ -16,6 +17,8 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
     public int Version { get; set; }
     public Guid AggregateId { get; init; }
 
+    public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().LaterThan(new SortableUniqueIdValue(LastSortableUniqueId));
+    
     public void ApplyEvent(IEvent ev)
     {
         if (ev.Id == LastEventId)
