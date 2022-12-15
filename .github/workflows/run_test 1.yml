@@ -8,7 +8,9 @@ on:
       - "src/**"
       - "test/**"
       - "samples/**"
-concurrency: CosmosDbConnect
+concurrency: 
+  group: CosmosDbConnect
+  cancel-in-progress: false
 jobs:
   build:
 

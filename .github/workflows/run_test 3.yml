@@ -8,7 +8,9 @@ on:
       - "src/**"
       - "test/**"
       - "samples/**"
-concurrency: CosmosDbConnect
+concurrency: 
+  group: CosmosDbConnect
+  cancel-in-progress: false
 jobs:
   build:
 
@@ -43,4 +45,4 @@ jobs:
         dotnet build Sekiban.sln
     - name: Test dotnet
       run: |
-        dotnet test Sekiban.sln  --filter "Category!=Performance"
+        dotnet test Sekiban.sln  --filter "Category=Performance"

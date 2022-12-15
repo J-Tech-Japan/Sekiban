@@ -58,7 +58,6 @@ public class CustomerDbStoryBasic : TestBase
         _memoryCache = GetService<IMemoryCache>();
     }
 
-    [Trait(SekibanTestConstants.Category, SekibanTestConstants.Categories.Flaky)]
     [Fact(DisplayName = "CosmosDb ストーリーテスト 集約の機能のテストではなく、CosmosDbと連携して正しく動くかをテストしています。")]
     public async Task CosmosDbStory()
     {
@@ -257,7 +256,7 @@ public class CustomerDbStoryBasic : TestBase
             var recentActivityAddedResult
                 = await commandExecutor.ExecCommandAsync(
                     new AddRecentActivity(createRecentActivityResult.AggregateId!.Value, $"Message - {i + 1}")
-                        { ReferenceVersion = version });
+                    { ReferenceVersion = version });
             version = recentActivityAddedResult.Version;
         }
 
@@ -311,6 +310,7 @@ public class CustomerDbStoryBasic : TestBase
         await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command);
     }
 
+    [Trait(SekibanTestConstants.Category, SekibanTestConstants.Categories.Flaky)]
     [Fact(DisplayName = "CosmosDb ストーリーテスト 。並列でたくさん動かしたらどうなるか。 INoValidateCommand がRecentActivityに適応されているので、問題ないはず")]
     public async Task AsynchronousExecutionTestAsync()
     {
@@ -493,7 +493,7 @@ public class CustomerDbStoryBasic : TestBase
                         var recentActivityAddedResult
                             = await commandExecutor.ExecCommandAsync(
                                 new AddRecentActivity(aggregateId, $"Message - {i + 1}")
-                                    { ReferenceVersion = version });
+                                { ReferenceVersion = version });
                         version = recentActivityAddedResult.Version;
                     }));
         }
