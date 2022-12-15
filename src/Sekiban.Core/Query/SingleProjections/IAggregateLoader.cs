@@ -11,7 +11,6 @@ public interface IAggregateLoader
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <param name="toVersion"></param>
-    /// <param name="includesSortableUniqueId"></param>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
     public Task<AggregateState<TAggregatePayload>?> AsDefaultStateFromInitialAsync<TAggregatePayload>(
@@ -31,6 +30,21 @@ public interface IAggregateLoader
         AsSingleProjectionStateAsync<TSingleProjectionPayload>(Guid aggregateId, int? toVersion = null, string? includesSortableUniqueId = null)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new();
 
+    /// <summary>
+    ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
+    ///     遅いので、通常はキャッシュバージョンを使用ください
+    ///     検証などのためにこちらを残しています。
+    /// </summary>
+    /// <param name="aggregateId"></param>
+    /// <param name="toVersion"></param>
+    /// <typeparam name="TProjection"></typeparam>
+    /// <typeparam name="TProjector"></typeparam>
+    /// <returns></returns>
+    public Task<TProjection?> AsSingleProjectionStateFromInitialAsync<TProjection, TProjector>(
+        Guid aggregateId,
+        int? toVersion)
+        where TProjection : IAggregateCommon, ISingleProjection
+        where TProjector : ISingleProjector<TProjection>, new();
 
     /// <summary>
     ///     スナップショット、メモリキャッシュを使用する通常版

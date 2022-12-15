@@ -1,5 +1,5 @@
-﻿using Sekiban.Core.Event;
-
+﻿using Sekiban.Core.Document.ValueObjects;
+using Sekiban.Core.Event;
 namespace Sekiban.Core.Aggregate;
 
 public abstract class AggregateCommon : IAggregate
@@ -17,16 +17,19 @@ public abstract class AggregateCommon : IAggregate
     public int AppliedSnapshotVersion => _basicInfo.AppliedSnapshotVersion;
     public int Version => _basicInfo.Version;
 
-    public bool CanApplyEvent(IEvent ev)
-    {
-        return GetApplyEventAction(ev, ev.GetPayload()) is not null;
-    }
+    public bool CanApplyEvent(IEvent ev) => GetApplyEventAction(ev, ev.GetPayload()) is not null;
 
     public void ApplyEvent(IEvent ev)
     {
         var action = GetApplyEventAction(ev, ev.GetPayload());
-        if (action is null) return;
-        if (ev.Id == LastEventId) return;
+        if (action is null)
+        {
+            return;
+        }
+        if (ev.Id == LastEventId)
+        {
+            return;
+        }
         action();
         _basicInfo = _basicInfo with
         {
@@ -34,9 +37,14 @@ public abstract class AggregateCommon : IAggregate
         };
     }
 
+    public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().LaterThan(new SortableUniqueIdValue(LastSortableUniqueId));
+
     public static UAggregate Create<UAggregate>(Guid aggregateId) where UAggregate : AggregateCommon
     {
-        if (typeof(UAggregate).GetConstructor(Type.EmptyTypes) is not { } c) throw new InvalidProgramException();
+        if (typeof(UAggregate).GetConstructor(Type.EmptyTypes) is not { } c)
+        {
+            throw new InvalidProgramException();
+        }
         var aggregate = c.Invoke(new object[] { }) as UAggregate ?? throw new InvalidProgramException();
         aggregate._basicInfo = aggregate._basicInfo with { AggregateId = aggregateId };
         return aggregate;

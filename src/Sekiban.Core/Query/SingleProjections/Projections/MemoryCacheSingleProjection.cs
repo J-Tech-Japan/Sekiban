@@ -70,45 +70,53 @@ public class MemoryCacheSingleProjection : ISingleProjection
 
         var container = new SingleMemoryCacheProjectionContainer<TProjection, TState>
             { AggregateId = aggregateId };
-        await _documentRepository.GetAllEventsForAggregateIdAsync(
-            aggregateId,
-            projector.OriginalAggregateType(),
-            PartitionKeyGenerator.ForEvent(aggregateId, projector.OriginalAggregateType()),
-            savedContainer?.SafeSortableUniqueId?.Value,
-            events =>
-            {
-                var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
-                foreach (var e in events)
-                {
-                    if (!string.IsNullOrWhiteSpace(savedContainer?.SafeSortableUniqueId?.Value) &&
-                        string.CompareOrdinal(savedContainer?.SafeSortableUniqueId?.Value, e.SortableUniqueId) > 0)
-                    {
-                        throw new SekibanEventDuplicateException();
-                    }
-                    if (container.LastSortableUniqueId == null &&
-                        e.GetSortableUniqueId().LaterThan(targetSafeId) &&
-                        aggregate.Version > 0)
-                    {
-                        container = container with
-                        {
-                            SafeState = aggregate.ToState(),
-                            SafeSortableUniqueId = container.SafeState?.LastSortableUniqueId != null
-                                ? new SortableUniqueIdValue(container.SafeState.LastSortableUniqueId) : null
-                        };
-                    }
 
-                    aggregate.ApplyEvent(e);
-                    container = container with { LastSortableUniqueId = e.SortableUniqueId };
-                    if (e.GetSortableUniqueId().LaterThan(targetSafeId))
+        try
+        {
+            await _documentRepository.GetAllEventsForAggregateIdAsync(
+                aggregateId,
+                projector.OriginalAggregateType(),
+                PartitionKeyGenerator.ForEvent(aggregateId, projector.OriginalAggregateType()),
+                savedContainer?.SafeSortableUniqueId?.Value,
+                events =>
+                {
+                    var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
+                    foreach (var e in events)
                     {
-                        container.UnsafeEvents.Add(e);
+                        if (!string.IsNullOrWhiteSpace(savedContainer?.SafeSortableUniqueId?.Value) &&
+                            string.CompareOrdinal(savedContainer?.SafeSortableUniqueId?.Value, e.SortableUniqueId) > 0)
+                        {
+                            throw new SekibanEventDuplicateException();
+                        }
+                        if (container.LastSortableUniqueId == null &&
+                            e.GetSortableUniqueId().LaterThan(targetSafeId) &&
+                            aggregate.Version > 0)
+                        {
+                            container = container with
+                            {
+                                SafeState = aggregate.ToState(),
+                                SafeSortableUniqueId = container.SafeState?.LastSortableUniqueId != null
+                                    ? new SortableUniqueIdValue(container.SafeState.LastSortableUniqueId) : null
+                            };
+                        }
+                        if (!aggregate.EventShouldBeApplied(e)) { throw new SekibanEventOrderMixedUpException(); }
+                        aggregate.ApplyEvent(e);
+                        container = container with { LastSortableUniqueId = e.SortableUniqueId };
+                        if (e.GetSortableUniqueId().LaterThan(targetSafeId))
+                        {
+                            container.UnsafeEvents.Add(e);
+                        }
+                        if (toVersion.HasValue && aggregate.Version == toVersion.Value)
+                        {
+                            break;
+                        }
                     }
-                    if (toVersion.HasValue && aggregate.Version == toVersion.Value)
-                    {
-                        break;
-                    }
-                }
-            });
+                });
+        }
+        catch (SekibanEventOrderMixedUpException)
+        {
+            return await GetAggregateWithoutCacheAsync<TProjection, TState, TProjector>(aggregateId, toVersion);
+        }
         if (aggregate.Version == 0)
         {
             return default;

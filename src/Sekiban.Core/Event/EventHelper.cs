@@ -1,8 +1,9 @@
-using Sekiban.Core.Event;
+using Sekiban.Core.Aggregate;
 using Sekiban.Core.Exceptions;
+using Sekiban.Core.Shared;
 using Sekiban.Core.Types;
 using System.Reflection;
-namespace Sekiban.Core.Aggregate;
+namespace Sekiban.Core.Event;
 
 public static class EventHelper
 {
@@ -41,5 +42,19 @@ public static class EventHelper
             }
         }
         return (ev, payload);
+    }
+
+    public static IEvent? GetUnregisteredEvent(JsonElement dynamicObject)
+    {
+        var payload = dynamicObject.GetProperty(nameof(Event<UnregisteredEventPayload>.Payload));
+        var payloadJson = SekibanJsonHelper.Serialize(payload);
+        var eventPayload = new UnregisteredEventPayload
+        {
+            JsonString = payloadJson ?? string.Empty,
+            EventTypeName = dynamicObject.GetProperty(nameof(Event<EmptyEventPayload>.DocumentTypeName)).GetString() ?? string.Empty
+        };
+        var ev =
+            SekibanJsonHelper.Deserialize(SekibanJsonHelper.Serialize(dynamicObject), typeof(Event<EmptyEventPayload>)) as Event<EmptyEventPayload>;
+        return ev?.ChangePayload(eventPayload);
     }
 }
