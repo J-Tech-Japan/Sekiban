@@ -15,13 +15,14 @@ jobs:
   consecutiveness:
     runs-on: ubuntu-latest
     steps:
-    - uses: mktcode/consecutive-workflow-action@e2e008186aa210faacd68ec30f6ac236f7e2f435
+    - uses: mktcode/consecutive-workflow-action@v1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
   regular:
     strategy:
       max-parallel: 1
     runs-on: ubuntu-latest
+    needs: [ consecutiveness ]
     steps:
     - uses: actions/checkout@v2
     - name: Setup .NET 7
@@ -58,6 +59,7 @@ jobs:
       max-parallel: 1
 
     runs-on: ubuntu-latest
+    needs: [ consecutiveness ]
     steps:
     - uses: actions/checkout@v2
     - name: Setup .NET 7
@@ -94,6 +96,7 @@ jobs:
       max-parallel: 1
 
     runs-on: ubuntu-latest
+    needs: [ consecutiveness ]
     steps:
     - uses: actions/checkout@v2
     - name: Setup .NET 7
