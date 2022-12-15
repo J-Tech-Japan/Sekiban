@@ -141,7 +141,5 @@ public class VersionCheckAggregateTest : AggregateTest<VersionCheckAggregate>
                     Description = "using current event 2"
                 })
             .ThenSingleProjectionPayloadIs(new VersionCheckAggregateLastInfo(220, PaymentKind.CreditCard, "using current event 2"));
-
-
     }
 }
