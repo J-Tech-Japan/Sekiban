@@ -13,6 +13,7 @@ using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Infrastructure.Cosmos;
 using Xunit;
 using Xunit.Abstractions;
+using Sekiban.Testing.Shared;
 
 namespace SampleProjectStoryXTest.Stories.QueryPerformances;
 
@@ -56,6 +57,7 @@ public abstract class QueryPerformanceTestBase : TestBase
     }
 
     [Theory]
+    [Trait(SekibanTestConstants.Category, SekibanTestConstants.Categories.Performance)]
     [InlineData(3, 3, 3, 1)]
     [InlineData(3, 3, 3, 2)]
     [InlineData(3, 3, 3, 3)]

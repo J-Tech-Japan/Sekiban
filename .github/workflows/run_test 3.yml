@@ -1,4 +1,4 @@
-name: Run Backend Test
+name: Run Backend Performance Test
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ on:
       - "src/**"
       - "test/**"
       - "samples/**"
-
+concurrency: CosmosDbConnect
 jobs:
   build:
 
@@ -43,4 +43,4 @@ jobs:
         dotnet build Sekiban.sln
     - name: Test dotnet
       run: |
-        dotnet test Sekiban.sln
+        dotnet test Sekiban.sln  --filter "Category!=Performance"

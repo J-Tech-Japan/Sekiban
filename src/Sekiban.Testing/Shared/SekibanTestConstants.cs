@@ -7,7 +7,8 @@ public static class SekibanTestConstants
     public static class Categories
     {
         public const string Learning = "Learning";
-        public const string Flaky = "Unit";
+        public const string Flaky = "Flaky";
         public const string Bug = "Bug";
+        public const string Performance = "Performance";
     }
 }
