@@ -85,8 +85,12 @@ jobs:
       run: |
         dotnet build Sekiban.sln
     - name: Test dotnet
-      run: |
-        dotnet test Sekiban.sln  --filter "Category=Flaky"
+        uses: nick-fields/retry@v2
+        with:
+          timeout_seconds: 300
+          max_attempts: 3
+          retry_on: error
+          command: dotnet test Sekiban.sln  --filter "Category=Flaky"
     - uses: mktcode/consecutive-workflow-action@v1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
