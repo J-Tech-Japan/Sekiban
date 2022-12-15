@@ -8,14 +8,13 @@ on:
       - "src/**"
       - "test/**"
       - "samples/**"
+concurrency: 
+  group: CosmosDbConnect
+  cancel-in-progress: false
 jobs:
   regular:
-    concurrency: 
-      group: CosmosDbConnect
-      cancel-in-progress: false
     strategy:
       max-parallel: 1
-
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -49,9 +48,6 @@ jobs:
       run: |
         dotnet test Sekiban.sln  --filter "Category!=Flaky&Category!=Performance"
   flaky:
-    concurrency: 
-      group: CosmosDbConnect
-      cancel-in-progress: false
     strategy:
       max-parallel: 1
 
@@ -88,9 +84,6 @@ jobs:
       run: |
         dotnet test Sekiban.sln  --filter "Category=Flaky"
   performance:
-    concurrency: 
-      group: CosmosDbConnect
-      cancel-in-progress: false
     strategy:
       max-parallel: 1
 
