@@ -1,3 +1,4 @@
+using Sekiban.Core.Document.ValueObjects;
 using Sekiban.Core.Event;
 using Sekiban.Core.Query.SingleProjections;
 
@@ -21,6 +22,7 @@ public class
     private SingleProjectionListState<TState> State { get; set; }
 
     public List<TProjection> List { get; private set; } = new();
+    public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().LaterThan(new SortableUniqueIdValue(LastSortableUniqueId));
 
     public void ApplyEvent(IEvent ev)
     {

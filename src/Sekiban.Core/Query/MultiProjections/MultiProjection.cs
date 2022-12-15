@@ -1,4 +1,4 @@
-using Sekiban.Core.Aggregate;
+using Sekiban.Core.Document.ValueObjects;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 namespace Sekiban.Core.Query.MultiProjections;
@@ -25,12 +25,13 @@ public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPa
         LastSortableUniqueId = ev.SortableUniqueId;
     }
 
-    public MultiProjectionState<TProjectionPayload> ToState() => new MultiProjectionState<TProjectionPayload>(
+    public MultiProjectionState<TProjectionPayload> ToState() => new(
         Payload,
         LastEventId,
         LastSortableUniqueId,
         AppliedSnapshotVersion,
         Version);
+    public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().LaterThan(new SortableUniqueIdValue(LastSortableUniqueId));
 
     public void ApplySnapshot(MultiProjectionState<TProjectionPayload> snapshot)
     {
