@@ -152,9 +152,9 @@ public class MemoryCacheSingleProjection : ISingleProjection
         var aggregate = projector.CreateInitialAggregate(aggregateId);
         var container = new SingleMemoryCacheProjectionContainer<TProjection, TState>
             { AggregateId = aggregateId };
-
+        var payloadVersion = projector.GetPayloadVersionIdentifier();
         var snapshotDocument =
-            await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(TProjection));
+            await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(TProjection), payloadVersion);
         var state = snapshotDocument is null ? default : snapshotDocument.ToState<TState>();
         if (state is not null)
         {

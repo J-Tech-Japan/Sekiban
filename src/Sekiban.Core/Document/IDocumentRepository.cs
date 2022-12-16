@@ -1,6 +1,5 @@
 using Sekiban.Core.Event;
 using Sekiban.Core.Snapshot;
-
 namespace Sekiban.Core.Document;
 
 public interface IDocumentRepository
@@ -36,18 +35,16 @@ public interface IDocumentRepository
         string? sinceSortableUniqueId,
         Action<IEnumerable<IEvent>> resultAction);
 
-    Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type originalType);
+    Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type originalType, string payloadVersionIdentifier);
 
-    Task<bool> ExistsSnapshotForAggregateAsync(Guid aggregateId, Type originalType, int version);
+    Task<bool> ExistsSnapshotForAggregateAsync(Guid aggregateId, Type originalType, int version, string payloadVersionIdentifier);
 
     Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type originalType, string partitionKey);
 }
-
 public interface IDocumentPersistentRepository : IDocumentRepository
 {
     Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(Guid aggregateId, Type originalType);
 }
-
 public interface IDocumentTemporaryRepository : IDocumentRepository
 {
     Task<bool> EventsForAggregateIdHasSortableUniqueIdAsync(

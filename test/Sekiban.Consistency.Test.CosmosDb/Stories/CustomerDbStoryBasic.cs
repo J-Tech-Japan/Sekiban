@@ -256,7 +256,7 @@ public class CustomerDbStoryBasic : TestBase
             var recentActivityAddedResult
                 = await commandExecutor.ExecCommandAsync(
                     new AddRecentActivity(createRecentActivityResult.AggregateId!.Value, $"Message - {i + 1}")
-                    { ReferenceVersion = version });
+                        { ReferenceVersion = version });
             version = recentActivityAddedResult.Version;
         }
 
@@ -311,6 +311,11 @@ public class CustomerDbStoryBasic : TestBase
     }
 
     [Trait(SekibanTestConstants.Category, SekibanTestConstants.Categories.Flaky)]
+    [Fact(DisplayName = "No Flaky Test For now. This is just empty test")]
+    public void NoFlakyTest()
+    {
+    }
+
     [Fact(DisplayName = "CosmosDb ストーリーテスト 。並列でたくさん動かしたらどうなるか。 INoValidateCommand がRecentActivityに適応されているので、問題ないはず")]
     public async Task AsynchronousExecutionTestAsync()
     {
@@ -493,7 +498,7 @@ public class CustomerDbStoryBasic : TestBase
                         var recentActivityAddedResult
                             = await commandExecutor.ExecCommandAsync(
                                 new AddRecentActivity(aggregateId, $"Message - {i + 1}")
-                                { ReferenceVersion = version });
+                                    { ReferenceVersion = version });
                         version = recentActivityAddedResult.Version;
                     }));
         }

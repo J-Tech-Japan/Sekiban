@@ -29,6 +29,7 @@ public class Aggregate<TAggregatePayload> : AggregateCommon,
         return clone;
     }
 
+    public override string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();
     protected override Action? GetApplyEventAction(IEvent ev, IEventPayloadCommon payload)
     {
         (ev, payload) = EventHelper.GetConvertedEventAndPayloadIfConverted(ev, payload);

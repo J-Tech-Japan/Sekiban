@@ -95,7 +95,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             });
     }
 
-    public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type originalType)
+    public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type originalType, string payloadVersionIdentifier)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
         return await _cosmosDbFactory.CosmosActionAsync(
@@ -109,7 +109,10 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                         new PartitionKey(PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, originalType))
                 };
                 var query = container.GetItemLinqQueryable<SnapshotDocument>()
-                    .Where(b => b.DocumentType == DocumentType.AggregateSnapshot && b.AggregateId == aggregateId)
+                    .Where(
+                        b => b.DocumentType == DocumentType.AggregateSnapshot &&
+                            b.AggregateId == aggregateId &&
+                            b.PayloadVersionIdentifier == payloadVersionIdentifier)
                     .OrderByDescending(m => m.LastSortableUniqueId);
                 var feedIterator =
                     container.GetItemQueryIterator<SnapshotDocument>(query.ToQueryDefinition(), null, options);
@@ -354,7 +357,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             });
     }
 
-    public async Task<bool> ExistsSnapshotForAggregateAsync(Guid aggregateId, Type originalType, int version)
+    public async Task<bool> ExistsSnapshotForAggregateAsync(Guid aggregateId, Type originalType, int version, string payloadVersionIdentifier)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
         return await _cosmosDbFactory.CosmosActionAsync(
@@ -371,7 +374,8 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     .Where(
                         b => b.DocumentType == DocumentType.AggregateSnapshot &&
                             b.AggregateId == aggregateId &&
-                            b.SavedVersion == version)
+                            b.SavedVersion == version &&
+                            b.PayloadVersionIdentifier == payloadVersionIdentifier)
                     .OrderByDescending(m => m.LastSortableUniqueId);
                 var feedIterator =
                     container.GetItemQueryIterator<SnapshotDocument>(query.ToQueryDefinition(), null, options);
