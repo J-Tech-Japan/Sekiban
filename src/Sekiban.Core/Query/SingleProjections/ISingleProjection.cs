@@ -3,6 +3,7 @@ namespace Sekiban.Core.Query.SingleProjections;
 
 public interface ISingleProjection
 {
+    public string GetPayloadVersionIdentifier();
     public bool EventShouldBeApplied(IEvent ev);
     void ApplyEvent(IEvent ev);
     public bool CanApplyEvent(IEvent ev);

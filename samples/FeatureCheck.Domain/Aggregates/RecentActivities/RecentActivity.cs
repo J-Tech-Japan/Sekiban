@@ -8,4 +8,5 @@ public record RecentActivity(ImmutableList<RecentActivityRecord> LatestActivitie
     public RecentActivity() : this(ImmutableList<RecentActivityRecord>.Empty)
     {
     }
+    public string GetPayloadVersionIdentifier() => "1.0.1 20230101";
 }

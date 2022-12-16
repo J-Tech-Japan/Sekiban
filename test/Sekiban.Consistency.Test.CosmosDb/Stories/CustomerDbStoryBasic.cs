@@ -256,7 +256,7 @@ public class CustomerDbStoryBasic : TestBase
             var recentActivityAddedResult
                 = await commandExecutor.ExecCommandAsync(
                     new AddRecentActivity(createRecentActivityResult.AggregateId!.Value, $"Message - {i + 1}")
-                    { ReferenceVersion = version });
+                        { ReferenceVersion = version });
             version = recentActivityAddedResult.Version;
         }
 
@@ -311,6 +311,11 @@ public class CustomerDbStoryBasic : TestBase
     }
 
     [Trait(SekibanTestConstants.Category, SekibanTestConstants.Categories.Flaky)]
+    [Fact(DisplayName = "No Flaky Test For now. This is just empty test")]
+    public void NoFlakyTest()
+    {
+    }
+
     [Fact(DisplayName = "CosmosDb ストーリーテスト 。並列でたくさん動かしたらどうなるか。 INoValidateCommand がRecentActivityに適応されているので、問題ないはず")]
     public async Task AsynchronousExecutionTestAsync()
     {
@@ -470,8 +475,8 @@ public class CustomerDbStoryBasic : TestBase
 
         var aggregate = await projectionService.AsAggregateAsync<RecentActivity>(aggregateId);
         Assert.NotNull(aggregate);
+        var _ = await projectionService.AsDefaultStateAsync<RecentActivity>(aggregateId);
 
-        var aggregateRecentActivity2 = await projectionService.AsDefaultStateAsync<RecentActivity>(aggregateId);
         //var aggregateRecentActivity =
         //    await projectionService
         //        .AsSingleProjectionStateFromInitialAsync<CreateRecentActivity>(
@@ -493,7 +498,7 @@ public class CustomerDbStoryBasic : TestBase
                         var recentActivityAddedResult
                             = await commandExecutor.ExecCommandAsync(
                                 new AddRecentActivity(aggregateId, $"Message - {i + 1}")
-                                { ReferenceVersion = version });
+                                    { ReferenceVersion = version });
                         version = recentActivityAddedResult.Version;
                     }));
         }
@@ -508,7 +513,7 @@ public class CustomerDbStoryBasic : TestBase
         // check aggregate result
         var aggregateRecentActivity
             = await projectionService.AsDefaultStateFromInitialAsync<RecentActivity>(aggregateId);
-        aggregateRecentActivity2 = await projectionService.AsDefaultStateAsync<RecentActivity>(aggregateId);
+        var aggregateRecentActivity2 = await projectionService.AsDefaultStateAsync<RecentActivity>(aggregateId);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + aggregate!.ToState().Version, aggregateRecentActivity!.Version);

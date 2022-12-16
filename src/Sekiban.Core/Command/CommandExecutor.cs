@@ -145,7 +145,7 @@ public class CommandExecutor : ICommandExecutor
                             new object?[] { commandDocument, handler, aggregateId }) ??
                         throw new SekibanCommandHandlerNotMatchException(
                             "Command failed to execute " + command.GetType().Name));
-                await HandleEventsAsync<TAggregatePayload, TCommand>(commandResponse.Events, commandDocument);
+                events = await HandleEventsAsync<TAggregatePayload, TCommand>(commandResponse.Events, commandDocument);
                 version = commandResponse.Version;
                 lastSortableUniqueId = commandResponse.LastSortableUniqueId;
             }
@@ -153,7 +153,7 @@ public class CommandExecutor : ICommandExecutor
             {
                 var adapter = new CommandHandlerAdapter<TAggregatePayload, TCommand>(_aggregateLoader);
                 var commandResponse = await adapter.HandleCommandAsync(commandDocument, handler, aggregateId);
-                await HandleEventsAsync<TAggregatePayload, TCommand>(commandResponse.Events, commandDocument);
+                events = await HandleEventsAsync<TAggregatePayload, TCommand>(commandResponse.Events, commandDocument);
                 version = commandResponse.Version;
                 lastSortableUniqueId = commandResponse.LastSortableUniqueId;
             }

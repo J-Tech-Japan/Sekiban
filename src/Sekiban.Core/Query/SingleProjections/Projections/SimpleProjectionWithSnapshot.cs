@@ -38,9 +38,9 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
     {
         var projector = new TProjector();
         var aggregate = projector.CreateInitialAggregate(aggregateId);
-
+        var payloadVersion = projector.GetPayloadVersionIdentifier();
         var snapshotDocument =
-            await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(TProjection));
+            await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(TProjection), payloadVersion);
         var state = snapshotDocument is null ? default : snapshotDocument.ToState<TState>();
         if (state is not null)
         {

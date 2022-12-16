@@ -2,6 +2,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Document;
 using Sekiban.Core.Document.ValueObjects;
+using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.UpdateNotice;
 using Sekiban.Core.Setting;
 namespace Sekiban.Core.Query.MultiProjections.Projections;
@@ -75,39 +76,47 @@ public class MemoryCacheMultiProjection : IMultiProjection
         }
 
         var container = new MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>();
-        await _documentRepository.GetAllEventsAsync(
-            typeof(TProjection),
-            projector.TargetAggregateNames(),
-            savedContainer.SafeSortableUniqueId?.Value,
-            events =>
-            {
-                var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
-                foreach (var ev in events)
+        try
+        {
+            await _documentRepository.GetAllEventsAsync(
+                typeof(TProjection),
+                projector.TargetAggregateNames(),
+                savedContainer.SafeSortableUniqueId?.Value,
+                events =>
                 {
-                    if (container.LastSortableUniqueId == null &&
-                        ev.GetSortableUniqueId().EarlierThan(targetSafeId) &&
-                        projector.Version > 0)
+                    var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
+                    foreach (var ev in events)
                     {
-                        container = container with
+                        if (container.LastSortableUniqueId == null &&
+                            ev.GetSortableUniqueId().EarlierThan(targetSafeId) &&
+                            projector.Version > 0)
                         {
-                            SafeState = projector.ToState(),
-                            SafeSortableUniqueId = container.SafeState?.LastSortableUniqueId != null
-                                ? new SortableUniqueIdValue(container.SafeState.LastSortableUniqueId) : null
-                        };
-                    }
+                            container = container with
+                            {
+                                SafeState = projector.ToState(),
+                                SafeSortableUniqueId = container.SafeState?.LastSortableUniqueId != null
+                                    ? new SortableUniqueIdValue(container.SafeState.LastSortableUniqueId) : null
+                            };
+                        }
 
-                    if (ev.GetSortableUniqueId().LaterThan(savedContainer.SafeSortableUniqueId!))
-                    {
-                        projector.ApplyEvent(ev);
-                        container = container with { LastSortableUniqueId = ev.GetSortableUniqueId() };
-                    }
+                        if (ev.GetSortableUniqueId().LaterThan(savedContainer.SafeSortableUniqueId!))
+                        {
+                            if (!projector.EventShouldBeApplied(ev)) { throw new SekibanEventOrderMixedUpException(); }
+                            projector.ApplyEvent(ev);
+                            container = container with { LastSortableUniqueId = ev.GetSortableUniqueId() };
+                        }
 
-                    if (ev.GetSortableUniqueId().LaterThan(targetSafeId))
-                    {
-                        container.UnsafeEvents.Add(ev);
+                        if (ev.GetSortableUniqueId().LaterThan(targetSafeId))
+                        {
+                            container.UnsafeEvents.Add(ev);
+                        }
                     }
-                }
-            });
+                });
+        }
+        catch (SekibanEventOrderMixedUpException)
+        {
+            return await GetInitialProjection<TProjection, TProjectionPayload>();
+        }
         container = container with { State = projector.ToState() };
         if (container.LastSortableUniqueId != null && container.SafeSortableUniqueId == null)
         {

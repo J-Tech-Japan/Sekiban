@@ -80,19 +80,13 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                     foreach (var taken in snapshotManagerResponse.Events.Where(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken))
                         .Select(m => (Event<SnapshotManagerSnapshotTaken>)m))
                     {
-                        if (await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
-                            notification.AggregateId,
-                            aggregateType.Aggregate,
-                            taken.Payload.NextSnapshotVersion))
-                        {
-                            continue;
-                        }
+
                         dynamic? awaitable = aggregateLoader.GetType()
                             ?.GetMethod(nameof(aggregateLoader.AsDefaultStateAsync))
                             ?.MakeGenericMethod(aggregateType.Aggregate)
                             .Invoke(
                                 aggregateLoader,
-                                new object[] { notification.AggregateId, taken.Payload.NextSnapshotVersion });
+                                new object?[] { notification.AggregateId, taken.Payload.NextSnapshotVersion, null });
                         if (awaitable is null)
                         {
                             continue;
@@ -102,6 +96,14 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                         // command.AggregateId,
                         // taken.NextSnapshotVersion);
                         if (aggregateToSnapshot is null)
+                        {
+                            continue;
+                        }
+                        if (await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
+                            notification.AggregateId,
+                            aggregateType.Aggregate,
+                            taken.Payload.NextSnapshotVersion,
+                            aggregateToSnapshot.GetPayloadVersionIdentifier()))
                         {
                             continue;
                         }
@@ -115,7 +117,8 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                             aggregateToSnapshot,
                             aggregateToSnapshot.LastEventId,
                             aggregateToSnapshot.LastSortableUniqueId,
-                            aggregateToSnapshot.Version);
+                            aggregateToSnapshot.Version,
+                            aggregateToSnapshot.GetPayloadVersionIdentifier());
                         await _documentWriter.SaveAsync(snapshotDocument, aggregateType.Aggregate);
                     }
                 }
@@ -145,19 +148,12 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                 foreach (var taken in snapshotManagerResponseP.Events.Where(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken))
                     .Select(m => (Event<SnapshotManagerSnapshotTaken>)m))
                 {
-                    if (await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
-                        notification.AggregateId,
-                        projection.Aggregate,
-                        taken.Payload.NextSnapshotVersion))
-                    {
-                        continue;
-                    }
                     dynamic? awaitable = aggregateLoader.GetType()
                         ?.GetMethod(nameof(aggregateLoader.AsSingleProjectionStateAsync))
                         ?.MakeGenericMethod(projection.Aggregate, projection.Projection, projection.PayloadType)
                         .Invoke(
                             aggregateLoader,
-                            new object[] { notification.AggregateId, taken.Payload.NextSnapshotVersion });
+                            new object?[] { notification.AggregateId, taken.Payload.NextSnapshotVersion, null });
                     if (awaitable is null)
                     {
                         continue;
@@ -165,6 +161,14 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                     var aggregateToSnapshot = await awaitable;
 
                     if (aggregateToSnapshot is null)
+                    {
+                        continue;
+                    }
+                    if (await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
+                        notification.AggregateId,
+                        projection.Aggregate,
+                        taken.Payload.NextSnapshotVersion,
+                        aggregateToSnapshot.GetPayloadVersionIdentifier()))
                     {
                         continue;
                     }
@@ -178,7 +182,8 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                         aggregateToSnapshot,
                         aggregateToSnapshot.LastEventId,
                         aggregateToSnapshot.LastSortableUniqueId,
-                        aggregateToSnapshot.Version);
+                        aggregateToSnapshot.Version,
+                        aggregateToSnapshot.GetPayloadVersionIdentifier());
                     await _documentWriter.SaveAsync(snapshotDocument, projection.Aggregate);
                 }
             }

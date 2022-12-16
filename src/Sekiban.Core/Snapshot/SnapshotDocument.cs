@@ -2,7 +2,6 @@ using Sekiban.Core.Document;
 using Sekiban.Core.Partition;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Shared;
-
 namespace Sekiban.Core.Snapshot;
 
 public record SnapshotDocument : Document.Document, IDocument
@@ -17,7 +16,8 @@ public record SnapshotDocument : Document.Document, IDocument
         IAggregateCommon stateToSnapshot,
         Guid lastEventId,
         string lastSortableUniqueId,
-        int savedVersion) : base(
+        int savedVersion,
+        string payloadVersionIdentifier) : base(
         aggregateId,
         PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregateType),
         DocumentType.AggregateSnapshot,
@@ -28,6 +28,7 @@ public record SnapshotDocument : Document.Document, IDocument
         LastEventId = lastEventId;
         LastSortableUniqueId = lastSortableUniqueId;
         SavedVersion = savedVersion;
+        PayloadVersionIdentifier = payloadVersionIdentifier;
     }
 
     public dynamic? Snapshot { get; init; }
@@ -38,8 +39,7 @@ public record SnapshotDocument : Document.Document, IDocument
 
     public int SavedVersion { get; init; }
 
-    public T? ToState<T>() where T : IAggregateCommon
-    {
-        return SekibanJsonHelper.ConvertTo<T>(Snapshot);
-    }
+    public string PayloadVersionIdentifier { get; init; } = string.Empty;
+
+    public T? ToState<T>() where T : IAggregateCommon => SekibanJsonHelper.ConvertTo<T>(Snapshot);
 }

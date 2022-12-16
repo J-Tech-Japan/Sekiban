@@ -17,8 +17,9 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
     public int Version { get; set; }
     public Guid AggregateId { get; init; }
 
+    public string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();
     public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().LaterThan(new SortableUniqueIdValue(LastSortableUniqueId));
-    
+
     public void ApplyEvent(IEvent ev)
     {
         if (ev.Id == LastEventId)

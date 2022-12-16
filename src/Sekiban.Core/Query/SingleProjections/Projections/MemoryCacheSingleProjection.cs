@@ -7,6 +7,7 @@ using Sekiban.Core.Partition;
 using Sekiban.Core.Query.UpdateNotice;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
+using Sekiban.Core.Types;
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
 public class MemoryCacheSingleProjection : ISingleProjection
@@ -152,9 +153,11 @@ public class MemoryCacheSingleProjection : ISingleProjection
         var aggregate = projector.CreateInitialAggregate(aggregateId);
         var container = new SingleMemoryCacheProjectionContainer<TProjection, TState>
             { AggregateId = aggregateId };
-
+        var payloadVersion = projector.GetPayloadVersionIdentifier();
+        var payloadType = typeof(TProjection).IsSingleProjectionType()
+            ? typeof(TProjection).GetSingleProjectionPayloadFromSingleProjectionType() : typeof(TProjection).GetAggregatePayloadTypeFromAggregate();
         var snapshotDocument =
-            await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(TProjection));
+            await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, payloadType, payloadVersion);
         var state = snapshotDocument is null ? default : snapshotDocument.ToState<TState>();
         if (state is not null)
         {
