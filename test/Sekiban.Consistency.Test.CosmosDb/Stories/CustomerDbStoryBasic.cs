@@ -475,8 +475,8 @@ public class CustomerDbStoryBasic : TestBase
 
         var aggregate = await projectionService.AsAggregateAsync<RecentActivity>(aggregateId);
         Assert.NotNull(aggregate);
+        var _ = await projectionService.AsDefaultStateAsync<RecentActivity>(aggregateId);
 
-        var aggregateRecentActivity2 = await projectionService.AsDefaultStateAsync<RecentActivity>(aggregateId);
         //var aggregateRecentActivity =
         //    await projectionService
         //        .AsSingleProjectionStateFromInitialAsync<CreateRecentActivity>(
@@ -513,7 +513,7 @@ public class CustomerDbStoryBasic : TestBase
         // check aggregate result
         var aggregateRecentActivity
             = await projectionService.AsDefaultStateFromInitialAsync<RecentActivity>(aggregateId);
-        aggregateRecentActivity2 = await projectionService.AsDefaultStateAsync<RecentActivity>(aggregateId);
+        var aggregateRecentActivity2 = await projectionService.AsDefaultStateAsync<RecentActivity>(aggregateId);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + aggregate!.ToState().Version, aggregateRecentActivity!.Version);

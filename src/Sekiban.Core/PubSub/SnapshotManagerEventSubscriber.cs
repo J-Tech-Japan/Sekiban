@@ -86,7 +86,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                             ?.MakeGenericMethod(aggregateType.Aggregate)
                             .Invoke(
                                 aggregateLoader,
-                                new object[] { notification.AggregateId, taken.Payload.NextSnapshotVersion });
+                                new object?[] { notification.AggregateId, taken.Payload.NextSnapshotVersion, null });
                         if (awaitable is null)
                         {
                             continue;
@@ -103,7 +103,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                             notification.AggregateId,
                             aggregateType.Aggregate,
                             taken.Payload.NextSnapshotVersion,
-                            aggregateToSnapshot.Paylad.GetPayloadVersionIdentifier()))
+                            aggregateToSnapshot.GetPayloadVersionIdentifier()))
                         {
                             continue;
                         }
@@ -118,7 +118,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                             aggregateToSnapshot.LastEventId,
                             aggregateToSnapshot.LastSortableUniqueId,
                             aggregateToSnapshot.Version,
-                            aggregateToSnapshot.Paylad.GetPayloadVersionIdentifier());
+                            aggregateToSnapshot.GetPayloadVersionIdentifier());
                         await _documentWriter.SaveAsync(snapshotDocument, aggregateType.Aggregate);
                     }
                 }
@@ -153,7 +153,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                         ?.MakeGenericMethod(projection.Aggregate, projection.Projection, projection.PayloadType)
                         .Invoke(
                             aggregateLoader,
-                            new object[] { notification.AggregateId, taken.Payload.NextSnapshotVersion });
+                            new object?[] { notification.AggregateId, taken.Payload.NextSnapshotVersion, null });
                     if (awaitable is null)
                     {
                         continue;
@@ -168,7 +168,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                         notification.AggregateId,
                         projection.Aggregate,
                         taken.Payload.NextSnapshotVersion,
-                        aggregateToSnapshot.Paylad.GetPayloadVersionIdentifier()))
+                        aggregateToSnapshot.GetPayloadVersionIdentifier()))
                     {
                         continue;
                     }
@@ -183,7 +183,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                         aggregateToSnapshot.LastEventId,
                         aggregateToSnapshot.LastSortableUniqueId,
                         aggregateToSnapshot.Version,
-                        aggregateToSnapshot.Paylad.GetPayloadVersionIdentifier());
+                        aggregateToSnapshot.GetPayloadVersionIdentifier());
                     await _documentWriter.SaveAsync(snapshotDocument, projection.Aggregate);
                 }
             }
