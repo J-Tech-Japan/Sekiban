@@ -24,6 +24,7 @@ public class AggregateContainerGroupAttribute : Attribute
             {
                 return FindAggregateContainerGroup(type.GetMultiProjectionPayloadTypeFromMultiProjection());
             }
+            return AggregateContainerGroup.Default;
         }
 
         var attributes =
