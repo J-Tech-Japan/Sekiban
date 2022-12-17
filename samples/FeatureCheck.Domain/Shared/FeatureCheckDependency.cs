@@ -11,6 +11,7 @@ using FeatureCheck.Domain.Aggregates.LoyaltyPoints;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
 using FeatureCheck.Domain.Aggregates.RecentActivities;
 using FeatureCheck.Domain.Aggregates.RecentActivities.Commands;
+using FeatureCheck.Domain.Aggregates.RecentActivities.Projections;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Commands;
 using FeatureCheck.Domain.Aggregates.VersionCheckAggregates;
@@ -18,6 +19,7 @@ using FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Commands;
 using FeatureCheck.Domain.EventSubscribers;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointLists;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
+using FeatureCheck.Domain.Projections.DissolvableProjection;
 using Sekiban.Core.Dependency;
 using System.Reflection;
 namespace FeatureCheck.Domain.Shared;
@@ -56,7 +58,8 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
         AddAggregate<RecentActivity>()
             .AddCommandHandler<CreateRecentActivity, CreateRecentActivity.Handler>()
             .AddCommandHandler<AddRecentActivity, AddRecentActivity.Handler>()
-            .AddCommandHandler<OnlyPublishingAddRecentActivity, OnlyPublishingAddRecentActivity.Handler>();
+            .AddCommandHandler<OnlyPublishingAddRecentActivity, OnlyPublishingAddRecentActivity.Handler>()
+            .AddSingleProjectionListQuery<TenRecentQuery>();
 
         AddAggregate<RecentInMemoryActivity>()
             .AddCommandHandler<CreateRecentInMemoryActivity, CreateRecentInMemoryActivity.Handler>()
@@ -69,5 +72,6 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
 
         AddMultiProjectionQuery<ClientLoyaltyPointMultiProjectionQuery>();
         AddMultiProjectionListQuery<ClientLoyaltyPointQuery>();
+        AddMultiProjectionQuery<DissolvableProjectionQuery>();
     }
 }
