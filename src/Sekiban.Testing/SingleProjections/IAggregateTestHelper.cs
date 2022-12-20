@@ -31,6 +31,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentCommandExecutorAction(
         Action<TestCommandExecutor> action);
+
+    public void ThrowIfTestHasUnhandledErrors();
     #endregion
 
     #region When

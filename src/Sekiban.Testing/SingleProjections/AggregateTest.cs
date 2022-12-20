@@ -75,6 +75,10 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         _helper.GivenEnvironmentCommandExecutorAction(action);
         return this;
     }
+    public void ThrowIfTestHasUnhandledErrors()
+    {
+        _helper.ThrowIfTestHasUnhandledErrors();
+    }
 
     public IReadOnlyCollection<IEvent> GetLatestEnvironmentEvents() => _helper.GetLatestEnvironmentEvents();
 
@@ -160,6 +164,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
 
     public void Dispose()
     {
+        ThrowIfTestHasUnhandledErrors();
     }
 
 
