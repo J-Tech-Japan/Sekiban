@@ -19,7 +19,7 @@ public class MultipleDbStoryTest : TestBase
     private readonly ISekibanContext _sekibanContext;
 
     public MultipleDbStoryTest(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
-        sekibanTestFixture)
+        sekibanTestFixture, testOutputHelper)
     {
         _sekibanContext = GetService<ISekibanContext>();
     }

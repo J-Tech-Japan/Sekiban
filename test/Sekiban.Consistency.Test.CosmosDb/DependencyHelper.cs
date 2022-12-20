@@ -27,6 +27,10 @@ public static class DependencyHelper
             services.AddSekibanCoreWithDependency(new FeatureCheckDependency(), sekibanDateProducer, multiProjectionType);
             services.AddSekibanCosmosDB();
         }
+        if (fixture.TestOutputHelper is not null)
+        {
+            services.AddSingleton(fixture.TestOutputHelper);
+        }
 
         services.AddQueriesFromDependencyDefinition(new FeatureCheckDependency());
         return services.BuildServiceProvider();

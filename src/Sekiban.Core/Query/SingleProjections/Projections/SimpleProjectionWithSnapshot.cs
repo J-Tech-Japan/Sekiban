@@ -40,7 +40,11 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
         var aggregate = projector.CreateInitialAggregate(aggregateId);
         var payloadVersion = projector.GetPayloadVersionIdentifier();
         var snapshotDocument =
-            await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, typeof(TProjection), payloadVersion);
+            await _documentRepository.GetLatestSnapshotForAggregateAsync(
+                aggregateId,
+                projector.GetOriginalAggregatePayloadType(),
+                projector.GetPayloadType(),
+                payloadVersion);
         var state = snapshotDocument is null ? default : snapshotDocument.ToState<TState>();
         if (state is not null)
         {
@@ -54,8 +58,8 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
         }
         await _documentRepository.GetAllEventsForAggregateIdAsync(
             aggregateId,
-            projector.OriginalAggregateType(),
-            PartitionKeyGenerator.ForEvent(aggregateId, projector.OriginalAggregateType()),
+            projector.GetOriginalAggregatePayloadType(),
+            PartitionKeyGenerator.ForEvent(aggregateId, projector.GetOriginalAggregatePayloadType()),
             state?.LastSortableUniqueId,
             events =>
             {

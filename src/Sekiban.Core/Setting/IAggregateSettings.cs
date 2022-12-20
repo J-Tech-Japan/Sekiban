@@ -2,18 +2,18 @@ namespace Sekiban.Core.Setting;
 
 public interface IAggregateSettings
 {
-    public bool ShouldTakeSnapshotForType(Type originalType);
+    public bool ShouldTakeSnapshotForType(Type aggregatePayloadType);
 
     /// <summary>
     ///     タイプがハイブリッドを使うことができるか？
     ///     ハイブリッドを使うと、生成したイベントをインメモリにも保管する
     ///     使うことができるのは同じインスタンスで全てのイベントが発生することが確定している集約のみ
     /// </summary>
-    /// <param name="originalType"></param>
+    /// <param name="aggregatePayloadType"></param>
     /// <returns></returns>
-    public bool CanUseHybrid(Type originalType);
+    public bool CanUseHybrid(Type aggregatePayloadType);
 
-    public int SnapshotFrequencyForType(Type originalType);
-    public int SnapshotOffsetForType(Type originalType);
-    public bool UseUpdateMarkerForType(string originalType);
+    public int SnapshotFrequencyForType(Type aggregatePayloadType);
+    public int SnapshotOffsetForType(Type aggregatePayloadType);
+    public bool UseUpdateMarkerForType(string aggregatePayloadTypeName);
 }

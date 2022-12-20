@@ -13,17 +13,19 @@ public record SnapshotDocument : Document.Document, IDocument
     public SnapshotDocument(
         Guid aggregateId,
         Type aggregateType,
+        Type payloadType,
         IAggregateCommon stateToSnapshot,
         Guid lastEventId,
         string lastSortableUniqueId,
         int savedVersion,
         string payloadVersionIdentifier) : base(
         aggregateId,
-        PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregateType),
+        PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregateType, payloadType),
         DocumentType.AggregateSnapshot,
-        aggregateType.Name ?? string.Empty)
+        payloadType.Name ?? string.Empty)
     {
         Snapshot = stateToSnapshot;
+        AggregateTypeName = aggregateType.Name;
         AggregateId = aggregateId;
         LastEventId = lastEventId;
         LastSortableUniqueId = lastSortableUniqueId;
@@ -32,6 +34,8 @@ public record SnapshotDocument : Document.Document, IDocument
     }
 
     public dynamic? Snapshot { get; init; }
+
+    public string AggregateTypeName { get; init; } = string.Empty;
 
     public Guid LastEventId { get; init; }
 

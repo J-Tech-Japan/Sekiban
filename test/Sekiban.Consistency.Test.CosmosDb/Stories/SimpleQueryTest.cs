@@ -8,6 +8,8 @@ using Sekiban.Core.Dependency;
 using Sekiban.Core.Query.QueryModel;
 using System.Threading.Tasks;
 using Xunit;
+using Xunit.Abstractions;
+
 namespace SampleProjectStoryXTest.Stories;
 
 public class SimpleQueryTest : TestBase
@@ -16,9 +18,11 @@ public class SimpleQueryTest : TestBase
     private readonly IQueryExecutor _queryExecutor;
     public SimpleQueryTest(
         SekibanTestFixture sekibanTestFixture,
-        bool inMemory = false,
+        ITestOutputHelper testOutputHelper,
+    bool inMemory = false,
         ServiceCollectionExtensions.MultiProjectionType multiProjectionType = ServiceCollectionExtensions.MultiProjectionType.MemoryCache) : base(
         sekibanTestFixture,
+        testOutputHelper,
         inMemory,
         multiProjectionType)
     {

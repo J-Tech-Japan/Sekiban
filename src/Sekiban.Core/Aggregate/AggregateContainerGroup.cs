@@ -18,7 +18,7 @@ public class AggregateContainerGroupAttribute : Attribute
             }
             if (type.IsSingleProjectorType())
             {
-                return FindAggregateContainerGroup(type.GetOriginalAggregateTypeFromSingleProjectionListProjector());
+                return FindAggregateContainerGroup(type.GetOriginalAggregatePayloadTypeFromSingleProjectionListProjector());
             }
             if (type.IsMultiProjectionType())
             {

@@ -4,7 +4,6 @@ using Sekiban.Core.Event;
 using Sekiban.Core.PubSub;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Snapshot;
-
 namespace Sekiban.Core.Document;
 
 public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersistentWriter
@@ -13,7 +12,6 @@ public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersist
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
     private readonly IServiceProvider _serviceProvider;
     private readonly ISnapshotDocumentCache _snapshotDocumentCache;
-
     public InMemoryDocumentWriter(
         InMemoryDocumentStore inMemoryDocumentStore,
         EventPublisher eventPublisher,
@@ -38,7 +36,10 @@ public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersist
                 _inMemoryDocumentStore.SaveEvent((document as IEvent)!, document.PartitionKey, sekibanIdentifier);
                 break;
             case DocumentType.AggregateSnapshot:
-                if (document is SnapshotDocument sd) _snapshotDocumentCache.Set(sd);
+                if (document is SnapshotDocument sd)
+                {
+                    _snapshotDocumentCache.Set(sd);
+                }
                 break;
         }
 

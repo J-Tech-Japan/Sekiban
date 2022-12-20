@@ -16,7 +16,6 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
     public int AppliedSnapshotVersion { get; set; }
     public int Version { get; set; }
     public Guid AggregateId { get; init; }
-
     public string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();
     public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().LaterThan(new SortableUniqueIdValue(LastSortableUniqueId));
 
@@ -57,10 +56,12 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
         AppliedSnapshotVersion,
         Version);
 
+    public Type GetPayloadType() => typeof(TProjectionPayload);
+
     public SingleProjection<TProjectionPayload> CreateInitialAggregate(Guid aggregateId) => new()
         { AggregateId = aggregateId };
 
-    public Type OriginalAggregateType() => typeof(TProjectionPayload).GetOriginalTypeFromSingleProjectionPayload();
+    public Type GetOriginalAggregatePayloadType() => typeof(TProjectionPayload).GetOriginalTypeFromSingleProjectionPayload();
 
     public bool GetIsDeleted() => Payload is IDeletable { IsDeleted: true };
 

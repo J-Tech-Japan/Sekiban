@@ -22,7 +22,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         _snapshotDocumentCache = snapshotDocumentCache;
     }
 
-    public async Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(Guid aggregateId, Type originalType)
+    public async Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType)
     {
         await Task.CompletedTask;
         return new List<SnapshotDocument>();
@@ -30,7 +30,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
 
     public async Task GetAllEventsForAggregateIdAsync(
         Guid aggregateId,
-        Type originalType,
+        Type aggregatePayloadType,
         string? partitionKey,
         string? sinceSortableUniqueId,
         Action<IEnumerable<IEvent>> resultAction)
@@ -67,14 +67,14 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
 
     public async Task GetAllEventStringsForAggregateIdAsync(
         Guid aggregateId,
-        Type originalType,
+        Type aggregatePayloadType,
         string? partitionKey,
         string? sinceSortableUniqueId,
         Action<IEnumerable<string>> resultAction)
     {
         await GetAllEventsForAggregateIdAsync(
             aggregateId,
-            originalType,
+            aggregatePayloadType,
             partitionKey,
             sinceSortableUniqueId,
             events =>
@@ -85,7 +85,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
 
     public async Task GetAllCommandStringsForAggregateIdAsync(
         Guid aggregateId,
-        Type originalType,
+        Type aggregatePayloadType,
         string? sinceSortableUniqueId,
         Action<IEnumerable<string>> resultAction)
     {
@@ -128,17 +128,22 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         }
     }
 
-    public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type originalType, string payloadVersionIdentifier)
+    public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
+        Guid aggregateId,
+        Type aggregatePayloadType,
+        Type projectionPayloadType,
+        string payloadVersionIdentifier)
     {
         await Task.CompletedTask;
-        if (_snapshotDocumentCache.Get(aggregateId, originalType) is { } snapshotDocument)
+        if (_snapshotDocumentCache.Get(aggregateId, projectionPayloadType, projectionPayloadType) is { } snapshotDocument)
         {
             return snapshotDocument;
         }
         return null;
     }
 
-    public Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type originalType, string partitionKey) => throw new NotImplementedException();
+    public Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type aggregatePayloadType, Type projectionPayloadType, string partitionKey) =>
+        throw new NotImplementedException();
 
     public async Task<bool> EventsForAggregateIdHasSortableUniqueIdAsync(
         Guid aggregateId,
@@ -165,7 +170,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
     }
 
     public async Task GetAllEventsForAggregateAsync(
-        Type originalType,
+        Type aggregatePayloadType,
         string? sinceSortableUniqueId,
         Action<IEnumerable<IEvent>> resultAction)
     {
@@ -176,7 +181,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             : sekibanContext.SettingGroupIdentifier;
 
         var list = _inMemoryDocumentStore.GetAllEvents(sekibanIdentifier)
-            .Where(m => m.AggregateType == originalType.Name)
+            .Where(m => m.AggregateType == aggregatePayloadType.Name)
             .ToList();
         if (sinceSortableUniqueId is not null)
         {
@@ -196,6 +201,11 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         }
     }
 
-    public Task<bool> ExistsSnapshotForAggregateAsync(Guid aggregateId, Type originalType, int version, string payloadVersionIdentifier) =>
+    public Task<bool> ExistsSnapshotForAggregateAsync(
+        Guid aggregateId,
+        Type aggregatePayloadType,
+        Type projectionPayloadType,
+        int version,
+        string payloadVersionIdentifier) =>
         Task.FromResult(false);
 }

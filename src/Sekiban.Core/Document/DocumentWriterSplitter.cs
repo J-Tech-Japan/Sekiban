@@ -63,7 +63,7 @@ public class DocumentWriterSplitter : IDocumentWriter
     {
         if (!_aggregateSettings.CanUseHybrid(aggregateType)) return;
         if (!_hybridStoreManager.HasPartition(ev.PartitionKey))
-            _hybridStoreManager.AddPartitionKey(ev.PartitionKey, string.Empty);
+            _hybridStoreManager.AddPartitionKey(ev.PartitionKey, string.Empty, false);
         await _documentTemporaryWriter.SaveAsync(ev, aggregateType);
     }
 

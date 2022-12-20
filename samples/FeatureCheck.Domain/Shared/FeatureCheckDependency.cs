@@ -59,6 +59,7 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
             .AddCommandHandler<CreateRecentActivity, CreateRecentActivity.Handler>()
             .AddCommandHandler<AddRecentActivity, AddRecentActivity.Handler>()
             .AddCommandHandler<OnlyPublishingAddRecentActivity, OnlyPublishingAddRecentActivity.Handler>()
+            .AddSingleProjection<TenRecentProjection>()
             .AddSingleProjectionListQuery<TenRecentQuery>();
 
         AddAggregate<RecentInMemoryActivity>()

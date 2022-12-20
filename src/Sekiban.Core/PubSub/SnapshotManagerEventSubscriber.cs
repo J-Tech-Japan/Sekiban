@@ -102,6 +102,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                         if (await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
                             notification.AggregateId,
                             aggregateType.Aggregate,
+                            aggregateType.Aggregate,
                             taken.Payload.NextSnapshotVersion,
                             aggregateToSnapshot.GetPayloadVersionIdentifier()))
                         {
@@ -113,6 +114,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                         }
                         var snapshotDocument = new SnapshotDocument(
                             notification.AggregateId,
+                            aggregateType.Aggregate,
                             aggregateType.Aggregate,
                             aggregateToSnapshot,
                             aggregateToSnapshot.LastEventId,
@@ -136,7 +138,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                         .ExecCommandWithEventsAsync(
                             new ReportVersionToSnapshotManger(
                                 SnapshotManager.SharedId,
-                                projection.Aggregate,
+                                projection.PayloadType,
                                 notification.AggregateId,
                                 notification.Version,
                                 null));
@@ -150,7 +152,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                 {
                     dynamic? awaitable = aggregateLoader.GetType()
                         ?.GetMethod(nameof(aggregateLoader.AsSingleProjectionStateAsync))
-                        ?.MakeGenericMethod(projection.Aggregate, projection.Projection, projection.PayloadType)
+                        ?.MakeGenericMethod(projection.PayloadType)
                         .Invoke(
                             aggregateLoader,
                             new object?[] { notification.AggregateId, taken.Payload.NextSnapshotVersion, null });
@@ -167,6 +169,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                     if (await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
                         notification.AggregateId,
                         projection.Aggregate,
+                        projection.PayloadType,
                         taken.Payload.NextSnapshotVersion,
                         aggregateToSnapshot.GetPayloadVersionIdentifier()))
                     {
@@ -179,6 +182,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
                     var snapshotDocument = new SnapshotDocument(
                         notification.AggregateId,
                         projection.Aggregate,
+                        projection.PayloadType,
                         aggregateToSnapshot,
                         aggregateToSnapshot.LastEventId,
                         aggregateToSnapshot.LastSortableUniqueId,
