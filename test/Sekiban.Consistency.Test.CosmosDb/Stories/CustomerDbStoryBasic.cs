@@ -478,6 +478,7 @@ public class CustomerDbStoryBasic : TestBase
 
     private async Task ContinuousExecutionTestAsync()
     {
+        _testOutputHelper.WriteLine("481");
         var recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
         Assert.Single(recentActivityList);
         var aggregateId = recentActivityList.First().AggregateId;
@@ -495,6 +496,7 @@ public class CustomerDbStoryBasic : TestBase
         //Assert.NotNull(aggregateRecentActivity2);
         //Assert.Equal(aggregateRecentActivity!.Version, aggregateRecentActivity2!.Version);
 
+        _testOutputHelper.WriteLine("498");
         var version = recentActivityList.First().Version;
         var tasks = new List<Task>();
         var count = 180;
@@ -514,6 +516,8 @@ public class CustomerDbStoryBasic : TestBase
         await Task.WhenAll(tasks);
         recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
         Assert.Single(recentActivityList);
+
+        _testOutputHelper.WriteLine("518");
 
         var snapshots =
             await _documentPersistentRepository.GetSnapshotsForAggregateAsync(aggregateId, typeof(RecentActivity), typeof(RecentActivity));

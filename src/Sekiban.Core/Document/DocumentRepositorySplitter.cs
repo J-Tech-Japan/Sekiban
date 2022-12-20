@@ -1,8 +1,11 @@
+using System.Security.Cryptography.X509Certificates;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Event;
+using Sekiban.Core.Exceptions;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
+using Sekiban.Core.Types;
 using Xunit.Abstractions;
 
 namespace Sekiban.Core.Document;
@@ -37,6 +40,11 @@ public class DocumentRepositorySplitter : IDocumentRepository
         string? sinceSortableUniqueId,
         Action<IEnumerable<IEvent>> resultAction)
     {
+        if (!originalType.IsAggregateType())
+        {
+            throw new SekibanCanNotRetrieveEventBecauseOriginalTypeIsNotAggregatePayloadException(
+                originalType.FullName + "is not aggregate payload");
+        }
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
         {
@@ -73,6 +81,8 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 return;
             }
         }
+        Guid callId = Guid.NewGuid();
+        _outputHelper.WriteLine($"{callId} calling... {aggregateId} {originalType.Name} {partitionKey} {sinceSortableUniqueId}");
 
         await _documentPersistentRepository.GetAllEventsForAggregateIdAsync(
             aggregateId,
@@ -84,6 +94,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 var eventList = events.ToList();
                 if (_aggregateSettings.CanUseHybrid(originalType))
                 {
+                    _outputHelper.WriteLine($"{callId} received result...");
                     if (partitionKey is null)
                     {
                         return;
@@ -147,6 +158,11 @@ public class DocumentRepositorySplitter : IDocumentRepository
         string? sinceSortableUniqueId,
         Action<IEnumerable<string>> resultAction)
     {
+        if (!originalType.IsAggregateType())
+        {
+            throw new SekibanCanNotRetrieveEventBecauseOriginalTypeIsNotAggregatePayloadException(
+                originalType.FullName + "is not aggregate payload");
+        }
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
         {
@@ -269,6 +285,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
     {
         _hybridStoreManager.TestOutputHelper = _outputHelper;
         _hybridStoreManager.AddPartitionKey(partitionKey, sortableUniqueKey, fromInitial);
+        _outputHelper.WriteLine($"events : {events.Count}");
         foreach (var ev in events)
         {
             _documentTemporaryWriter.SaveAsync(ev, originalType).Wait();

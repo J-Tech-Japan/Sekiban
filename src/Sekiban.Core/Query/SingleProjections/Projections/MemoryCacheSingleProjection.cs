@@ -247,7 +247,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
         var addFinished = false;
         await _documentRepository.GetAllEventsForAggregateIdAsync(
             aggregateId,
-            typeof(TProjection),
+            projector.GetOriginalAggregatePayloadType(),
             PartitionKeyGenerator.ForEvent(aggregateId, projector.GetOriginalAggregatePayloadType()),
             null,
             events =>
