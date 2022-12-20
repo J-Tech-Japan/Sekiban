@@ -98,6 +98,18 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             new List<IEvent>();
     }
 
+    public void ThrowIfTestHasUnhandledErrors()
+    {
+        if (_latestException != null)
+        {
+            throw _latestException;
+        }
+        if (_latestValidationErrors.Any())
+        {
+            var first = _latestValidationErrors.First();
+            throw new Exception(first.PropertyName + " has validation error " + first.ErrorMessages.First());
+        }
+    }
     public IAggregateTestHelper<TAggregatePayload> WhenCommand<C>(C changeCommand) where C : ICommand<TAggregatePayload>
     {
         return WhenCommand(_ => changeCommand);
@@ -227,6 +239,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             ? aggregateException.InnerExceptions.First()
             : _latestException;
         Assert.IsType<T>(exception);
+        _latestException = null;
         return this;
     }
 
@@ -237,6 +250,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             : _latestException;
         Assert.IsType<T>(exception);
         checkException((exception as T)!);
+        _latestException = null;
         return this;
     }
 
@@ -244,21 +258,13 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     {
         Assert.NotNull(_latestException);
         checkException(_latestException!);
+        _latestException = null;
         return this;
     }
 
     public IAggregateTestHelper<TAggregatePayload> ThenNotThrowsAnException()
     {
-        var exception = _latestException is AggregateException aggregateException
-            ? aggregateException.InnerExceptions.First()
-            : _latestException;
-        if (exception is SekibanCommandInconsistentVersionException)
-        {
-            throw new Exception("Change Command needs to put a reference version");
-        }
-        Assert.Null(exception);
-
-        Assert.Empty(_latestValidationErrors);
+        ThrowIfTestHasUnhandledErrors();
         return this;
     }
 
@@ -268,6 +274,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             ? aggregateException.InnerExceptions.First()
             : _latestException;
         Assert.NotNull(exception);
+        _latestException = null;
         return this;
     }
 
@@ -279,12 +286,14 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
         Assert.Equal(expectedJson, actualJson);
+        _latestValidationErrors = new List<SekibanValidationParameterError>();
         return this;
     }
 
     public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors()
     {
         Assert.NotEmpty(_latestValidationErrors);
+        _latestValidationErrors = new List<SekibanValidationParameterError>();
         return this;
     }
 
@@ -585,6 +594,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     private void ResetBeforeCommand()
     {
+        ThrowIfTestHasUnhandledErrors();
         _latestValidationErrors = new List<SekibanValidationParameterError>();
         _latestEvents = new List<IEvent>();
         _latestException = null;
