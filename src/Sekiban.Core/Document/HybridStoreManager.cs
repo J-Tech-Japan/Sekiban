@@ -4,12 +4,13 @@ namespace Sekiban.Core.Document;
 
 public class HybridStoreManager
 {
-    public HybridStoreManager(bool elanbled)
+    public HybridStoreManager(bool enabled)
     {
-        Enabled = elanbled;
+        Enabled = enabled;
     }
 
-    private ConcurrentDictionary<string, string> HybridPartitionKeys { get; } = new();
+    private record HybridStatus(bool FromInitial, string SortableUniqueId);
+    private ConcurrentDictionary<string, HybridStatus> HybridPartitionKeys { get; } = new();
 
     public bool Enabled { get; set; }
 
@@ -23,17 +24,23 @@ public class HybridStoreManager
         HybridPartitionKeys.Clear();
     }
 
-    public bool AddPartitionKey(string partitionKey, string sortableUniqueId)
+    public bool AddPartitionKey(string partitionKey, string sortableUniqueId, bool fromInitial)
     {
         if (!Enabled) return false;
-        HybridPartitionKeys[partitionKey] = sortableUniqueId;
+        HybridPartitionKeys[partitionKey] = new HybridStatus(fromInitial,sortableUniqueId);
         return true;
     }
 
     public string? SortableUniqueIdForPartitionKey(string partitionKey)
     {
         if (!Enabled) return null;
-        if (HybridPartitionKeys.Keys.Contains(partitionKey)) return HybridPartitionKeys[partitionKey];
+        if (HybridPartitionKeys.Keys.Contains(partitionKey)) return HybridPartitionKeys[partitionKey].SortableUniqueId;
         return null;
+    }
+    public bool FromInitialForPartitionKey(string partitionKey)
+    {
+        if (!Enabled) return false;
+        if (HybridPartitionKeys.Keys.Contains(partitionKey)) return HybridPartitionKeys[partitionKey].FromInitial;
+        return false;
     }
 }

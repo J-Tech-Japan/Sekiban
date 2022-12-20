@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Dependency;
 using Sekiban.Testing.Story;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace SampleProjectStoryXTest;
 
@@ -17,10 +18,12 @@ public class TestBase : IClassFixture<TestBase.SekibanTestFixture>, IDisposable
 
     public TestBase(
         SekibanTestFixture sekibanTestFixture,
+        ITestOutputHelper output,
         bool inMemory = false,
         ServiceCollectionExtensions.MultiProjectionType multiProjectionType =
             ServiceCollectionExtensions.MultiProjectionType.MemoryCache)
     {
+        sekibanTestFixture.TestOutputHelper = output;
         _sekibanTestFixture = sekibanTestFixture;
         _serviceProvider =
             DependencyHelper.CreateDefaultProvider(sekibanTestFixture, inMemory, null, multiProjectionType);
@@ -58,5 +61,6 @@ public class TestBase : IClassFixture<TestBase.SekibanTestFixture>, IDisposable
         }
 
         public IConfigurationRoot Configuration { get; set; }
+        public ITestOutputHelper TestOutputHelper { get; set; }
     }
 }

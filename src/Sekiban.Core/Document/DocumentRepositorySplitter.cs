@@ -50,8 +50,8 @@ public class DocumentRepositorySplitter : IDocumentRepository
             _aggregateSettings.CanUseHybrid(originalType) &&
             _hybridStoreManager.HasPartition(partitionKey))
         {
-            if ((string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
-                    string.IsNullOrWhiteSpace(_hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey))) ||
+            if (
+                (string.IsNullOrWhiteSpace(sinceSortableUniqueId) && _hybridStoreManager.FromInitialForPartitionKey(partitionKey)) ||
                 (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
                     await _documentTemporaryRepository.EventsForAggregateIdHasSortableUniqueIdAsync(
                         aggregateId,
@@ -88,28 +88,29 @@ public class DocumentRepositorySplitter : IDocumentRepository
                     var hasPartitionKey = _hybridStoreManager.HasPartition(partitionKey);
                     var sinceSortableUniqueIdInPartition =
                         _hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey);
+                    var fromInitial = _hybridStoreManager.FromInitialForPartitionKey(partitionKey);
 
                     if (string.IsNullOrWhiteSpace(sinceSortableUniqueId))
                     {
-                        SaveEvents(eventList, originalType, partitionKey, string.Empty);
+                        SaveEvents(eventList, originalType, partitionKey, string.Empty, true);
                     }
 
                     if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId))
                     {
                         if (!hasPartitionKey)
                         {
-                            SaveEvents(eventList, originalType, partitionKey, sinceSortableUniqueId);
+                            SaveEvents(eventList, originalType, partitionKey, sinceSortableUniqueId, false);
                         }
                         else
                         {
-                            if (!string.IsNullOrWhiteSpace(sinceSortableUniqueIdInPartition) &&
+                            if ((!string.IsNullOrWhiteSpace(sinceSortableUniqueIdInPartition) || !fromInitial) &&
                                 string.Compare(
                                     sinceSortableUniqueIdInPartition!,
                                     sinceSortableUniqueId!,
                                     StringComparison.Ordinal) >
                                 0)
                             {
-                                SaveEvents(eventList, originalType, partitionKey, sinceSortableUniqueId);
+                                SaveEvents(eventList, originalType, partitionKey, sinceSortableUniqueId, false);
                             }
                         }
                     }
@@ -261,9 +262,9 @@ public class DocumentRepositorySplitter : IDocumentRepository
             payloadVersionIdentifier);
     }
 
-    private void SaveEvents(List<IEvent> events, Type originalType, string partitionKey, string sortableUniqueKey)
+    private void SaveEvents(List<IEvent> events, Type originalType, string partitionKey, string sortableUniqueKey, bool fromInitial)
     {
-        _hybridStoreManager.AddPartitionKey(partitionKey, sortableUniqueKey);
+        _hybridStoreManager.AddPartitionKey(partitionKey, sortableUniqueKey, fromInitial);
         foreach (var ev in events)
         {
             _documentTemporaryWriter.SaveAsync(ev, originalType).Wait();

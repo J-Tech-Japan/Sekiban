@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Sekiban.Core.Event;
+using Xunit.Abstractions;
 
 namespace Sekiban.Core.Document;
 
@@ -7,7 +8,7 @@ public class InMemoryDocumentStore
 {
     private static readonly SemaphoreSlim _semaphoreInMemory = new(1, 1);
     private readonly ConcurrentDictionary<string, InMemoryDocumentContainer<IEvent>> _containerDictionary = new();
-
+    public ITestOutputHelper? TestOutputHelper { get; set; }
     public void ResetInMemoryStore()
     {
         _containerDictionary.Clear();
@@ -22,13 +23,19 @@ public class InMemoryDocumentStore
         eventContainer.All.Add(document);
         if (eventContainer.Partitions.ContainsKey(partition))
         {
-            if (!eventContainer.Partitions[partition].Any(m => m.Id == document.Id))
+            if (eventContainer.Partitions[partition].All(m => m.Id != document.Id))
+            {
+                TestOutputHelper?.WriteLine($"writing: {document.PartitionKey} {document.SortableUniqueId}");
                 eventContainer.Partitions[partition].Add(document);
+                TestOutputHelper?.WriteLine($"count: {eventContainer.Partitions[partition].Count} ");
+            }
         }
         else
         {
-            var partitionCollection = new BlockingCollection<IEvent>();
-            partitionCollection.Add(document);
+            var partitionCollection = new BlockingCollection<IEvent>
+            {
+                document
+            };
             eventContainer.Partitions[partition] = partitionCollection;
         }
 

@@ -46,7 +46,7 @@ public class CustomerDbStoryBasic : TestBase
     private readonly IAggregateLoader projectionService;
 
     public CustomerDbStoryBasic(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
-        sekibanTestFixture)
+        sekibanTestFixture, testOutputHelper)
     {
         _testOutputHelper = testOutputHelper;
         _cosmosDbFactory = GetService<CosmosDbFactory>();

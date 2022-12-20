@@ -4,6 +4,7 @@ using Sekiban.Core.Event;
 using Sekiban.Core.PubSub;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Snapshot;
+using Xunit.Abstractions;
 
 namespace Sekiban.Core.Document;
 
@@ -13,17 +14,18 @@ public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersist
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
     private readonly IServiceProvider _serviceProvider;
     private readonly ISnapshotDocumentCache _snapshotDocumentCache;
-
+    private readonly ITestOutputHelper _testOutputHelper;
     public InMemoryDocumentWriter(
         InMemoryDocumentStore inMemoryDocumentStore,
         EventPublisher eventPublisher,
         IServiceProvider serviceProvider,
-        ISnapshotDocumentCache snapshotDocumentCache)
+        ISnapshotDocumentCache snapshotDocumentCache, ITestOutputHelper testOutputHelper)
     {
         _inMemoryDocumentStore = inMemoryDocumentStore;
         _eventPublisher = eventPublisher;
         _serviceProvider = serviceProvider;
         _snapshotDocumentCache = snapshotDocumentCache;
+        _testOutputHelper = testOutputHelper;
     }
 
     public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType) where TDocument : IDocument
@@ -35,6 +37,7 @@ public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersist
         switch (document.DocumentType)
         {
             case DocumentType.Event:
+                _inMemoryDocumentStore.TestOutputHelper = _testOutputHelper;
                 _inMemoryDocumentStore.SaveEvent((document as IEvent)!, document.PartitionKey, sekibanIdentifier);
                 break;
             case DocumentType.AggregateSnapshot:

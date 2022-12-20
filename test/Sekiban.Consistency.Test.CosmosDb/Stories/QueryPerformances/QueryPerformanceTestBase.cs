@@ -32,6 +32,7 @@ public abstract class QueryPerformanceTestBase : TestBase
         ITestOutputHelper testOutputHelper,
         ServiceCollectionExtensions.MultiProjectionType multiProjectionType) : base(
         sekibanTestFixture,
+        testOutputHelper,
         false,
         multiProjectionType)
     {
