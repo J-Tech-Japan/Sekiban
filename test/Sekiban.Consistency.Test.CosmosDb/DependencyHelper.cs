@@ -5,8 +5,6 @@ using Sekiban.Core.Dependency;
 using Sekiban.Core.Shared;
 using Sekiban.Infrastructure.Cosmos;
 using Sekiban.Testing.Story;
-using Xunit.Abstractions;
-
 namespace SampleProjectStoryXTest;
 
 public static class DependencyHelper
@@ -29,7 +27,10 @@ public static class DependencyHelper
             services.AddSekibanCoreWithDependency(new FeatureCheckDependency(), sekibanDateProducer, multiProjectionType);
             services.AddSekibanCosmosDB();
         }
-        services.AddSingleton<ITestOutputHelper>(fixture.TestOutputHelper);
+        if (fixture.TestOutputHelper is not null)
+        {
+            services.AddSingleton(fixture.TestOutputHelper);
+        }
 
         services.AddQueriesFromDependencyDefinition(new FeatureCheckDependency());
         return services.BuildServiceProvider();

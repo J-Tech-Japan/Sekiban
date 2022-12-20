@@ -1,14 +1,11 @@
-using System.Collections.Concurrent;
 using Sekiban.Core.Event;
-using Xunit.Abstractions;
-
+using System.Collections.Concurrent;
 namespace Sekiban.Core.Document;
 
 public class InMemoryDocumentStore
 {
     private static readonly SemaphoreSlim _semaphoreInMemory = new(1, 1);
     private readonly ConcurrentDictionary<string, InMemoryDocumentContainer<IEvent>> _containerDictionary = new();
-    public ITestOutputHelper? TestOutputHelper { get; set; }
     public void ResetInMemoryStore()
     {
         _containerDictionary.Clear();
@@ -18,16 +15,16 @@ public class InMemoryDocumentStore
     {
         _semaphoreInMemory.Wait();
         if (!_containerDictionary.ContainsKey(sekibanContextIdentifier))
+        {
             _containerDictionary[sekibanContextIdentifier] = new InMemoryDocumentContainer<IEvent>();
+        }
         var eventContainer = _containerDictionary[sekibanContextIdentifier];
         eventContainer.All.Add(document);
         if (eventContainer.Partitions.ContainsKey(partition))
         {
             if (eventContainer.Partitions[partition].All(m => m.Id != document.Id))
             {
-                TestOutputHelper?.WriteLine($"writing: {document.PartitionKey} {document.SortableUniqueId}");
                 eventContainer.Partitions[partition].Add(document);
-                TestOutputHelper?.WriteLine($"count: {eventContainer.Partitions[partition].Count} ");
             }
         }
         else
@@ -40,14 +37,18 @@ public class InMemoryDocumentStore
         }
 
         if (!eventContainer.All.Any(m => m.PartitionKey == document.PartitionKey && m.Id == document.Id))
+        {
             eventContainer.All.Add(document);
+        }
         _semaphoreInMemory.Release();
     }
 
     public IEvent[] GetAllEvents(string sekibanContextIdentifier)
     {
         if (!_containerDictionary.ContainsKey(sekibanContextIdentifier))
+        {
             _containerDictionary[sekibanContextIdentifier] = new InMemoryDocumentContainer<IEvent>();
+        }
         var eventContainer = _containerDictionary[sekibanContextIdentifier];
         return eventContainer.All.ToArray();
     }
@@ -55,9 +56,14 @@ public class InMemoryDocumentStore
     public IEvent[] GetEventPartition(string partition, string sekibanContextIdentifier)
     {
         if (!_containerDictionary.ContainsKey(sekibanContextIdentifier))
+        {
             _containerDictionary[sekibanContextIdentifier] = new InMemoryDocumentContainer<IEvent>();
+        }
         var eventContainer = _containerDictionary[sekibanContextIdentifier];
-        if (eventContainer.Partitions.ContainsKey(partition)) return eventContainer.Partitions[partition].ToArray();
+        if (eventContainer.Partitions.ContainsKey(partition))
+        {
+            return eventContainer.Partitions[partition].ToArray();
+        }
         return new IEvent[] { };
     }
 

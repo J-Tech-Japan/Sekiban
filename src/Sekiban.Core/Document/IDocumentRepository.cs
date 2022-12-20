@@ -6,26 +6,26 @@ public interface IDocumentRepository
 {
     Task GetAllEventsForAggregateIdAsync(
         Guid aggregateId,
-        Type originalType,
+        Type aggregatePayloadType,
         string? partitionKey,
         string? sinceSortableUniqueId,
         Action<IEnumerable<IEvent>> resultAction);
 
     Task GetAllEventStringsForAggregateIdAsync(
         Guid aggregateId,
-        Type originalType,
+        Type aggregatePayloadType,
         string? partitionKey,
         string? sinceSortableUniqueId,
         Action<IEnumerable<string>> resultAction);
 
     Task GetAllCommandStringsForAggregateIdAsync(
         Guid aggregateId,
-        Type originalType,
+        Type aggregatePayloadType,
         string? sinceSortableUniqueId,
         Action<IEnumerable<string>> resultAction);
 
     Task GetAllEventsForAggregateAsync(
-        Type originalType,
+        Type aggregatePayloadType,
         string? sinceSortableUniqueId,
         Action<IEnumerable<IEvent>> resultAction);
 

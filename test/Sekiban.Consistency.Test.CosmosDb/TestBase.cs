@@ -1,13 +1,12 @@
-using System;
-using System.Reflection;
 using Microsoft.DotNet.PlatformAbstractions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Dependency;
 using Sekiban.Testing.Story;
+using System;
+using System.Reflection;
 using Xunit;
 using Xunit.Abstractions;
-
 namespace SampleProjectStoryXTest;
 
 [Collection("Sequential")]
@@ -45,7 +44,10 @@ public class TestBase : IClassFixture<TestBase.SekibanTestFixture>, IDisposable
     public T GetService<T>()
     {
         var toreturn = _serviceProvider.GetService<T>();
-        if (toreturn is null) throw new Exception("オブジェクトが登録されていません。" + typeof(T));
+        if (toreturn is null)
+        {
+            throw new Exception("オブジェクトが登録されていません。" + typeof(T));
+        }
         return toreturn;
     }
 
@@ -61,6 +63,6 @@ public class TestBase : IClassFixture<TestBase.SekibanTestFixture>, IDisposable
         }
 
         public IConfigurationRoot Configuration { get; set; }
-        public ITestOutputHelper TestOutputHelper { get; set; }
+        public ITestOutputHelper? TestOutputHelper { get; set; }
     }
 }

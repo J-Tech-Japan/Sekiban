@@ -1,8 +1,4 @@
-using System.Collections.Immutable;
-using Sekiban.Core.Aggregate;
-using Sekiban.Core.Event;
 using Sekiban.Core.History;
-
 namespace Sekiban.Core.Command;
 
 public interface ICommandExecutor
@@ -43,5 +39,4 @@ public interface ICommandExecutor
         TCommand command,
         List<CallHistory>? callHistories = null)
         where TCommand : ICommandCommon;
-
 }

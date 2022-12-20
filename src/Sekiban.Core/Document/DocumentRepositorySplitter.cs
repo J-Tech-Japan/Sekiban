@@ -1,4 +1,3 @@
-using System.Security.Cryptography.X509Certificates;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
@@ -6,8 +5,6 @@ using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
 using Sekiban.Core.Types;
-using Xunit.Abstractions;
-
 namespace Sekiban.Core.Document;
 
 public class DocumentRepositorySplitter : IDocumentRepository
@@ -17,40 +14,38 @@ public class DocumentRepositorySplitter : IDocumentRepository
     private readonly IDocumentTemporaryRepository _documentTemporaryRepository;
     private readonly IDocumentTemporaryWriter _documentTemporaryWriter;
     private readonly HybridStoreManager _hybridStoreManager;
-    private readonly ITestOutputHelper _outputHelper;
     public DocumentRepositorySplitter(
         IDocumentPersistentRepository documentPersistentRepository,
         IDocumentTemporaryRepository documentTemporaryRepository,
         HybridStoreManager hybridStoreManager,
         IDocumentTemporaryWriter documentTemporaryWriter,
-        IAggregateSettings aggregateSettings, ITestOutputHelper outputHelper)
+        IAggregateSettings aggregateSettings)
     {
         _documentPersistentRepository = documentPersistentRepository;
         _documentTemporaryRepository = documentTemporaryRepository;
         _hybridStoreManager = hybridStoreManager;
         _documentTemporaryWriter = documentTemporaryWriter;
         _aggregateSettings = aggregateSettings;
-        _outputHelper = outputHelper;
     }
 
     public async Task GetAllEventsForAggregateIdAsync(
         Guid aggregateId,
-        Type originalType,
+        Type aggregatePayloadType,
         string? partitionKey,
         string? sinceSortableUniqueId,
         Action<IEnumerable<IEvent>> resultAction)
     {
-        if (!originalType.IsAggregateType())
+        if (!aggregatePayloadType.IsAggregateType())
         {
             throw new SekibanCanNotRetrieveEventBecauseOriginalTypeIsNotAggregatePayloadException(
-                originalType.FullName + "is not aggregate payload");
+                aggregatePayloadType.FullName + "is not aggregate payload");
         }
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
         {
             await _documentTemporaryRepository.GetAllEventsForAggregateIdAsync(
                 aggregateId,
-                originalType,
+                aggregatePayloadType,
                 partitionKey,
                 sinceSortableUniqueId,
                 resultAction);
@@ -58,7 +53,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
         }
 
         if (partitionKey is not null &&
-            _aggregateSettings.CanUseHybrid(originalType) &&
+            _aggregateSettings.CanUseHybrid(aggregatePayloadType) &&
             _hybridStoreManager.HasPartition(partitionKey))
         {
             if (
@@ -66,7 +61,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
                     await _documentTemporaryRepository.EventsForAggregateIdHasSortableUniqueIdAsync(
                         aggregateId,
-                        originalType,
+                        aggregatePayloadType,
                         partitionKey,
                         sinceSortableUniqueId)) ||
                 (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
@@ -74,27 +69,23 @@ public class DocumentRepositorySplitter : IDocumentRepository
             {
                 await _documentTemporaryRepository.GetAllEventsForAggregateIdAsync(
                     aggregateId,
-                    originalType,
+                    aggregatePayloadType,
                     partitionKey,
                     sinceSortableUniqueId,
                     resultAction);
                 return;
             }
         }
-        Guid callId = Guid.NewGuid();
-        _outputHelper.WriteLine($"{callId} calling... {aggregateId} {originalType.Name} {partitionKey} {sinceSortableUniqueId}");
-
         await _documentPersistentRepository.GetAllEventsForAggregateIdAsync(
             aggregateId,
-            originalType,
+            aggregatePayloadType,
             partitionKey,
             sinceSortableUniqueId,
             events =>
             {
                 var eventList = events.ToList();
-                if (_aggregateSettings.CanUseHybrid(originalType))
+                if (_aggregateSettings.CanUseHybrid(aggregatePayloadType))
                 {
-                    _outputHelper.WriteLine($"{callId} received result...");
                     if (partitionKey is null)
                     {
                         return;
@@ -106,14 +97,14 @@ public class DocumentRepositorySplitter : IDocumentRepository
 
                     if (string.IsNullOrWhiteSpace(sinceSortableUniqueId))
                     {
-                        SaveEvents(eventList, originalType, partitionKey, string.Empty, true);
+                        SaveEvents(eventList, aggregatePayloadType, partitionKey, string.Empty, true);
                     }
 
                     if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId))
                     {
                         if (!hasPartitionKey)
                         {
-                            SaveEvents(eventList, originalType, partitionKey, sinceSortableUniqueId, false);
+                            SaveEvents(eventList, aggregatePayloadType, partitionKey, sinceSortableUniqueId, false);
                         }
                         else
                         {
@@ -124,7 +115,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
                                     StringComparison.Ordinal) >
                                 0)
                             {
-                                SaveEvents(eventList, originalType, partitionKey, sinceSortableUniqueId, false);
+                                SaveEvents(eventList, aggregatePayloadType, partitionKey, sinceSortableUniqueId, false);
                             }
                         }
                     }
@@ -136,14 +127,14 @@ public class DocumentRepositorySplitter : IDocumentRepository
 
     public async Task GetAllEventStringsForAggregateIdAsync(
         Guid aggregateId,
-        Type originalType,
+        Type aggregatePayloadType,
         string? partitionKey,
         string? sinceSortableUniqueId,
         Action<IEnumerable<string>> resultAction)
     {
         await GetAllEventsForAggregateIdAsync(
             aggregateId,
-            originalType,
+            aggregatePayloadType,
             partitionKey,
             sinceSortableUniqueId,
             events =>
@@ -154,21 +145,21 @@ public class DocumentRepositorySplitter : IDocumentRepository
 
     public async Task GetAllCommandStringsForAggregateIdAsync(
         Guid aggregateId,
-        Type originalType,
+        Type aggregatePayloadType,
         string? sinceSortableUniqueId,
         Action<IEnumerable<string>> resultAction)
     {
-        if (!originalType.IsAggregateType())
+        if (!aggregatePayloadType.IsAggregateType())
         {
             throw new SekibanCanNotRetrieveEventBecauseOriginalTypeIsNotAggregatePayloadException(
-                originalType.FullName + "is not aggregate payload");
+                aggregatePayloadType.FullName + "is not aggregate payload");
         }
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
         {
             await _documentTemporaryRepository.GetAllCommandStringsForAggregateIdAsync(
                 aggregateId,
-                originalType,
+                aggregatePayloadType,
                 sinceSortableUniqueId,
                 resultAction);
             return;
@@ -176,7 +167,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
 
         await _documentPersistentRepository.GetAllCommandStringsForAggregateIdAsync(
             aggregateId,
-            originalType,
+            aggregatePayloadType,
             sinceSortableUniqueId,
             resultAction);
     }
@@ -243,20 +234,20 @@ public class DocumentRepositorySplitter : IDocumentRepository
     }
 
     public Task GetAllEventsForAggregateAsync(
-        Type originalType,
+        Type aggregatePayloadType,
         string? sinceSortableUniqueId,
         Action<IEnumerable<IEvent>> resultAction)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
         {
             return _documentTemporaryRepository.GetAllEventsForAggregateAsync(
-                originalType,
+                aggregatePayloadType,
                 sinceSortableUniqueId,
                 resultAction);
         }
         return _documentPersistentRepository.GetAllEventsForAggregateAsync(
-            originalType,
+            aggregatePayloadType,
             sinceSortableUniqueId,
             events => { resultAction(events); });
     }
@@ -283,9 +274,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
 
     private void SaveEvents(List<IEvent> events, Type originalType, string partitionKey, string sortableUniqueKey, bool fromInitial)
     {
-        _hybridStoreManager.TestOutputHelper = _outputHelper;
         _hybridStoreManager.AddPartitionKey(partitionKey, sortableUniqueKey, fromInitial);
-        _outputHelper.WriteLine($"events : {events.Count}");
         foreach (var ev in events)
         {
             _documentTemporaryWriter.SaveAsync(ev, originalType).Wait();

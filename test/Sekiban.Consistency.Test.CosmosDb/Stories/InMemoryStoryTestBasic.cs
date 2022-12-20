@@ -24,6 +24,7 @@ using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Snapshot;
 using Sekiban.Core.Snapshot.Aggregate;
+using Sekiban.Testing.Story;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -36,7 +37,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
     private readonly IMultiProjectionService multiProjectionService;
     private readonly IAggregateLoader projectionService;
 
-    public InMemoryStoryTestBasic(ITestOutputHelper testOutputHelper, bool inMemory = true) : base(inMemory)
+    public InMemoryStoryTestBasic(ITestOutputHelper testOutputHelper, bool inMemory = true) : base(testOutputHelper, inMemory)
     {
         _testOutputHelper = testOutputHelper;
         commandExecutor = GetService<ICommandExecutor>();

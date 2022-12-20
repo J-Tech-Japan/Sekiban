@@ -30,7 +30,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
 
     public async Task GetAllEventsForAggregateIdAsync(
         Guid aggregateId,
-        Type originalType,
+        Type aggregatePayloadType,
         string? partitionKey,
         string? sinceSortableUniqueId,
         Action<IEnumerable<IEvent>> resultAction)
@@ -67,14 +67,14 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
 
     public async Task GetAllEventStringsForAggregateIdAsync(
         Guid aggregateId,
-        Type originalType,
+        Type aggregatePayloadType,
         string? partitionKey,
         string? sinceSortableUniqueId,
         Action<IEnumerable<string>> resultAction)
     {
         await GetAllEventsForAggregateIdAsync(
             aggregateId,
-            originalType,
+            aggregatePayloadType,
             partitionKey,
             sinceSortableUniqueId,
             events =>
@@ -85,7 +85,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
 
     public async Task GetAllCommandStringsForAggregateIdAsync(
         Guid aggregateId,
-        Type originalType,
+        Type aggregatePayloadType,
         string? sinceSortableUniqueId,
         Action<IEnumerable<string>> resultAction)
     {
@@ -170,7 +170,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
     }
 
     public async Task GetAllEventsForAggregateAsync(
-        Type originalType,
+        Type aggregatePayloadType,
         string? sinceSortableUniqueId,
         Action<IEnumerable<IEvent>> resultAction)
     {
@@ -181,7 +181,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             : sekibanContext.SettingGroupIdentifier;
 
         var list = _inMemoryDocumentStore.GetAllEvents(sekibanIdentifier)
-            .Where(m => m.AggregateType == originalType.Name)
+            .Where(m => m.AggregateType == aggregatePayloadType.Name)
             .ToList();
         if (sinceSortableUniqueId is not null)
         {

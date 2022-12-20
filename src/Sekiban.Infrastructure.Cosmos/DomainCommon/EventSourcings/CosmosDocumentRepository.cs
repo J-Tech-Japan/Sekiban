@@ -178,12 +178,12 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
 
     public async Task GetAllEventsForAggregateIdAsync(
         Guid aggregateId,
-        Type originalType,
+        Type aggregatePayloadType,
         string? partitionKey,
         string? sinceSortableUniqueId,
         Action<IEnumerable<IEvent>> resultAction)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
 
         await _cosmosDbFactory.CosmosActionAsync(
             DocumentType.Event,
@@ -244,14 +244,14 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
 
     public async Task GetAllEventStringsForAggregateIdAsync(
         Guid aggregateId,
-        Type originalType,
+        Type aggregatePayloadType,
         string? partitionKey,
         string? sinceSortableUniqueId,
         Action<IEnumerable<string>> resultAction)
     {
         await GetAllEventsForAggregateIdAsync(
             aggregateId,
-            originalType,
+            aggregatePayloadType,
             partitionKey,
             sinceSortableUniqueId,
             events =>
@@ -262,11 +262,11 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
 
     public async Task GetAllCommandStringsForAggregateIdAsync(
         Guid aggregateId,
-        Type originalType,
+        Type aggregatePayloadType,
         string? sinceSortableUniqueId,
         Action<IEnumerable<string>> resultAction)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
 
         await _cosmosDbFactory.CosmosActionAsync(
             DocumentType.Command,
@@ -275,7 +275,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             {
                 var types = _registeredEventTypes.RegisteredTypes;
                 var options = new QueryRequestOptions();
-                options.PartitionKey = new PartitionKey(PartitionKeyGenerator.ForCommand(aggregateId, originalType));
+                options.PartitionKey = new PartitionKey(PartitionKeyGenerator.ForCommand(aggregateId, aggregatePayloadType));
 
                 var query = container.GetItemLinqQueryable<IDocument>()
                     .Where(b => b.DocumentType == DocumentType.Command && b.AggregateId == aggregateId);
@@ -304,11 +304,11 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
     }
 
     public async Task GetAllEventsForAggregateAsync(
-        Type originalType,
+        Type aggregatePayloadType,
         string? sinceSortableUniqueId,
         Action<IEnumerable<IEvent>> resultAction)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
 
         await _cosmosDbFactory.CosmosActionAsync(
             DocumentType.Event,
@@ -318,7 +318,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 var options = new QueryRequestOptions();
                 var eventTypes = _registeredEventTypes.RegisteredTypes.Select(m => m.Name);
                 var query = container.GetItemLinqQueryable<IEvent>()
-                    .Where(b => b.DocumentType == DocumentType.Event && b.AggregateType == originalType.Name);
+                    .Where(b => b.DocumentType == DocumentType.Event && b.AggregateType == aggregatePayloadType.Name);
 
                 query = sinceSortableUniqueId is not null
                     ? query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0)

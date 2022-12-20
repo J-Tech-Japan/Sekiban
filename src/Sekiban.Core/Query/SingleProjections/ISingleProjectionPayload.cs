@@ -1,6 +1,4 @@
 using Sekiban.Core.Aggregate;
-using Sekiban.Core.Event;
-
 namespace Sekiban.Core.Query.SingleProjections;
 
 public interface
