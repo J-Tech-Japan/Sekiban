@@ -3,6 +3,8 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
+using Xunit.Abstractions;
+
 namespace Sekiban.Core.Document;
 
 public class DocumentRepositorySplitter : IDocumentRepository
@@ -12,19 +14,20 @@ public class DocumentRepositorySplitter : IDocumentRepository
     private readonly IDocumentTemporaryRepository _documentTemporaryRepository;
     private readonly IDocumentTemporaryWriter _documentTemporaryWriter;
     private readonly HybridStoreManager _hybridStoreManager;
-
+    private readonly ITestOutputHelper _outputHelper;
     public DocumentRepositorySplitter(
         IDocumentPersistentRepository documentPersistentRepository,
         IDocumentTemporaryRepository documentTemporaryRepository,
         HybridStoreManager hybridStoreManager,
         IDocumentTemporaryWriter documentTemporaryWriter,
-        IAggregateSettings aggregateSettings)
+        IAggregateSettings aggregateSettings, ITestOutputHelper outputHelper)
     {
         _documentPersistentRepository = documentPersistentRepository;
         _documentTemporaryRepository = documentTemporaryRepository;
         _hybridStoreManager = hybridStoreManager;
         _documentTemporaryWriter = documentTemporaryWriter;
         _aggregateSettings = aggregateSettings;
+        _outputHelper = outputHelper;
     }
 
     public async Task GetAllEventsForAggregateIdAsync(
@@ -264,6 +267,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
 
     private void SaveEvents(List<IEvent> events, Type originalType, string partitionKey, string sortableUniqueKey, bool fromInitial)
     {
+        _hybridStoreManager.TestOutputHelper = _outputHelper;
         _hybridStoreManager.AddPartitionKey(partitionKey, sortableUniqueKey, fromInitial);
         foreach (var ev in events)
         {

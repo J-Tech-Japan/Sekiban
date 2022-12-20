@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Xunit.Abstractions;
 
 namespace Sekiban.Core.Document;
 
@@ -11,6 +12,7 @@ public class HybridStoreManager
 
     private record HybridStatus(bool FromInitial, string SortableUniqueId);
     private ConcurrentDictionary<string, HybridStatus> HybridPartitionKeys { get; } = new();
+    public ITestOutputHelper? TestOutputHelper { get; set; }
 
     public bool Enabled { get; set; }
 
@@ -27,6 +29,7 @@ public class HybridStoreManager
     public bool AddPartitionKey(string partitionKey, string sortableUniqueId, bool fromInitial)
     {
         if (!Enabled) return false;
+        TestOutputHelper?.WriteLine($"adjusting partition key : {partitionKey} {fromInitial} {sortableUniqueId}");
         HybridPartitionKeys[partitionKey] = new HybridStatus(fromInitial,sortableUniqueId);
         return true;
     }
