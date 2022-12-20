@@ -7,7 +7,6 @@ using Sekiban.Core.Partition;
 using Sekiban.Core.Query.UpdateNotice;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
-using Sekiban.Core.Types;
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
 public class MemoryCacheSingleProjection : ISingleProjection
@@ -57,10 +56,10 @@ public class MemoryCacheSingleProjection : ISingleProjection
             return aggregate;
         }
 
-        if (_aggregateSettings.UseUpdateMarkerForType(projector.OriginalAggregateType().Name))
+        if (_aggregateSettings.UseUpdateMarkerForType(projector.GetOriginalAggregatePayloadType().Name))
         {
             var (updated, type) = _updateNotice.HasUpdateAfter(
-                projector.OriginalAggregateType().Name,
+                projector.GetOriginalAggregatePayloadType().Name,
                 aggregateId,
                 savedContainer?.SafeSortableUniqueId!);
             if (!updated)
@@ -76,8 +75,8 @@ public class MemoryCacheSingleProjection : ISingleProjection
         {
             await _documentRepository.GetAllEventsForAggregateIdAsync(
                 aggregateId,
-                projector.OriginalAggregateType(),
-                PartitionKeyGenerator.ForEvent(aggregateId, projector.OriginalAggregateType()),
+                projector.GetOriginalAggregatePayloadType(),
+                PartitionKeyGenerator.ForEvent(aggregateId, projector.GetOriginalAggregatePayloadType()),
                 savedContainer?.SafeSortableUniqueId?.Value,
                 events =>
                 {
@@ -154,10 +153,12 @@ public class MemoryCacheSingleProjection : ISingleProjection
         var container = new SingleMemoryCacheProjectionContainer<TProjection, TState>
             { AggregateId = aggregateId };
         var payloadVersion = projector.GetPayloadVersionIdentifier();
-        var payloadType = typeof(TProjection).IsSingleProjectionType()
-            ? typeof(TProjection).GetSingleProjectionPayloadFromSingleProjectionType() : typeof(TProjection).GetAggregatePayloadTypeFromAggregate();
         var snapshotDocument =
-            await _documentRepository.GetLatestSnapshotForAggregateAsync(aggregateId, payloadType, payloadVersion);
+            await _documentRepository.GetLatestSnapshotForAggregateAsync(
+                aggregateId,
+                projector.GetOriginalAggregatePayloadType(),
+                projector.GetPayloadType(),
+                payloadVersion);
         var state = snapshotDocument is null ? default : snapshotDocument.ToState<TState>();
         if (state is not null)
         {
@@ -170,8 +171,8 @@ public class MemoryCacheSingleProjection : ISingleProjection
 
         await _documentRepository.GetAllEventsForAggregateIdAsync(
             aggregateId,
-            projector.OriginalAggregateType(),
-            PartitionKeyGenerator.ForEvent(aggregateId, projector.OriginalAggregateType()),
+            projector.GetOriginalAggregatePayloadType(),
+            PartitionKeyGenerator.ForEvent(aggregateId, projector.GetOriginalAggregatePayloadType()),
             state?.LastSortableUniqueId,
             events =>
             {
@@ -247,7 +248,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
         await _documentRepository.GetAllEventsForAggregateIdAsync(
             aggregateId,
             typeof(TProjection),
-            PartitionKeyGenerator.ForEvent(aggregateId, projector.OriginalAggregateType()),
+            PartitionKeyGenerator.ForEvent(aggregateId, projector.GetOriginalAggregatePayloadType()),
             null,
             events =>
             {

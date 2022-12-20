@@ -32,6 +32,16 @@ public class AggregateLoader : IAggregateLoader
                 SingleProjection<TSingleProjectionPayload>>(aggregateId, toVersion, SortableUniqueIdValue.NullableValue(includesSortableUniqueId));
         return aggregate?.ToState();
     }
+    public async Task<SingleProjectionState<TSingleProjectionPayload>?> AsSingleProjectionStateFromInitialAsync<TSingleProjectionPayload>(
+        Guid aggregateId,
+        int? toVersion = null) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
+    {
+        var projection =
+            await AsSingleProjectionStateFromInitialAsync<SingleProjection<TSingleProjectionPayload>, SingleProjection<TSingleProjectionPayload>>(
+                aggregateId,
+                toVersion);
+        return projection?.ToState();
+    }
 
     /// <summary>
     ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
@@ -58,7 +68,8 @@ public class AggregateLoader : IAggregateLoader
         .GetAggregateAsync<Aggregate<TAggregatePayload>, AggregateState<TAggregatePayload>,
             DefaultSingleProjector<TAggregatePayload>>(
             aggregateId,
-            toVersion, SortableUniqueIdValue.NullableValue(includesSortableUniqueId));
+            toVersion,
+            SortableUniqueIdValue.NullableValue(includesSortableUniqueId));
 
     public async Task<AggregateState<TAggregatePayload>?> AsDefaultStateAsync<TAggregatePayload>(
         Guid aggregateId,
@@ -134,7 +145,8 @@ public class AggregateLoader : IAggregateLoader
         var aggregate =
             await _singleProjection.GetAggregateAsync<TAggregate, TAggregateState, TSingleProjector>(
                 aggregateId,
-                toVersion, SortableUniqueIdValue.NullableValue(includesSortableUniqueId));
+                toVersion,
+                SortableUniqueIdValue.NullableValue(includesSortableUniqueId));
         return aggregate is null ? default : aggregate.ToState();
     }
 }

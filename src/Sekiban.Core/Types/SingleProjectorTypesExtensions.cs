@@ -15,11 +15,11 @@ public static class SingleProjectorTypesExtensions
         return typeInfo.DoesInheritFromGenericType(typeof(SingleProjectionListProjector<,,>));
     }
 
-    public static Type GetOriginalAggregateTypeFromSingleProjectionListProjector(this Type type)
+    public static Type GetOriginalAggregatePayloadTypeFromSingleProjectionListProjector(this Type type)
     {
         var baseType = type.GetInheritFromGenericType(typeof(SingleProjectionListProjector<,,>));
         var projector = baseType.GenericTypeArguments[2];
         var instance = Activator.CreateInstance(projector) as dynamic;
-        return instance?.OriginalAggregateType() ?? throw new Exception("Could not get original aggregate type");
+        return instance?.GetOriginalAggregatePayloadType() ?? throw new Exception("Could not get original aggregate type");
     }
 }

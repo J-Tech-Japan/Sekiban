@@ -35,15 +35,24 @@ public interface IDocumentRepository
         string? sinceSortableUniqueId,
         Action<IEnumerable<IEvent>> resultAction);
 
-    Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type originalType, string payloadVersionIdentifier);
+    Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
+        Guid aggregateId,
+        Type aggregatePayloadType,
+        Type projectionPayloadType,
+        string payloadVersionIdentifier);
 
-    Task<bool> ExistsSnapshotForAggregateAsync(Guid aggregateId, Type originalType, int version, string payloadVersionIdentifier);
+    Task<bool> ExistsSnapshotForAggregateAsync(
+        Guid aggregateId,
+        Type aggregatePayloadType,
+        Type projectionPayloadType,
+        int version,
+        string payloadVersionIdentifier);
 
-    Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type originalType, string partitionKey);
+    Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type aggregatePayloadType, Type projectionPayloadType, string partitionKey);
 }
 public interface IDocumentPersistentRepository : IDocumentRepository
 {
-    Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(Guid aggregateId, Type originalType);
+    Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType);
 }
 public interface IDocumentTemporaryRepository : IDocumentRepository
 {

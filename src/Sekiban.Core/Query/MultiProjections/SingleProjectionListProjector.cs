@@ -1,7 +1,6 @@
 using Sekiban.Core.Document.ValueObjects;
 using Sekiban.Core.Event;
 using Sekiban.Core.Query.SingleProjections;
-
 namespace Sekiban.Core.Query.MultiProjections;
 
 public class
@@ -74,10 +73,7 @@ public class
             .ToList();
     }
 
-    public IList<string> TargetAggregateNames()
-    {
-        return new List<string> { _projector.OriginalAggregateType().Name };
-    }
+    public IList<string> TargetAggregateNames() => new List<string> { _projector.GetOriginalAggregatePayloadType().Name };
 
     public Guid LastEventId { get; private set; } = Guid.Empty;
     public string LastSortableUniqueId { get; private set; } = string.Empty;

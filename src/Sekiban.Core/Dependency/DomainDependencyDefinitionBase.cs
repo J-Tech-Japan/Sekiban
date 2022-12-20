@@ -1,9 +1,8 @@
-using System.Collections.Immutable;
-using System.Reflection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Event;
 using Sekiban.Core.Types;
-
+using System.Collections.Immutable;
+using System.Reflection;
 namespace Sekiban.Core.Dependency;
 
 public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
@@ -52,23 +51,14 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
         return AggregateDefinitions.SelectMany(s => s.SingleProjectionListQueryTypes);
     }
 
-    public IEnumerable<Type> GetMultiProjectionQueryTypes()
-    {
-        return MultiProjectionQueryTypes;
-    }
+    public IEnumerable<Type> GetMultiProjectionQueryTypes() => MultiProjectionQueryTypes;
 
-    public IEnumerable<Type> GetMultiProjectionListQueryTypes()
-    {
-        return MultiProjectionListQueryTypes;
-    }
+    public IEnumerable<Type> GetMultiProjectionListQueryTypes() => MultiProjectionListQueryTypes;
 
-    public virtual SekibanDependencyOptions GetSekibanDependencyOptions()
-    {
-        return new(
-            new RegisteredEventTypes(GetAssembliesForOptions()),
-            new SekibanAggregateTypes(GetAssembliesForOptions()),
-            GetCommandDependencies().Concat(GetSubscriberDependencies()));
-    }
+    public virtual SekibanDependencyOptions GetSekibanDependencyOptions() => new SekibanDependencyOptions(
+        new RegisteredEventTypes(GetAssembliesForOptions()),
+        new SekibanAggregateTypes(GetAssembliesForOptions()),
+        GetCommandDependencies().Concat(GetSubscriberDependencies()));
 
     public DomainDependencyDefinitionBase AddDependency<TDependency>()
         where TDependency : DomainDependencyDefinitionBase, new()
@@ -89,7 +79,7 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
 
     protected abstract void Define();
 
-    public IEnumerable<Type> GetAggregateTypes()
+    public IEnumerable<Type> GetAggregatePayloadTypes()
     {
         return AggregateDefinitions.Select(s => s.AggregateType);
     }
@@ -99,7 +89,9 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
     {
         if (AggregateDefinitions.SingleOrDefault(s => s.AggregateType == typeof(TAggregatePayload)) is
             AggregateDependencyDefinition<TAggregatePayload> existing)
+        {
             return existing;
+        }
 
         var newone = new AggregateDependencyDefinition<TAggregatePayload>();
         AggregateDefinitions = AggregateDefinitions.Add(newone);
@@ -109,21 +101,27 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
     protected void AddMultiProjectionQuery<TQuery>()
     {
         if (typeof(TQuery).IsMultiProjectionQueryType())
+        {
             MultiProjectionQueryTypes = MultiProjectionQueryTypes.Add(typeof(TQuery));
+        }
         else
+        {
             throw new ArgumentException("Type must implement MultiProjectionQuery", typeof(TQuery).Name);
+        }
     }
 
     protected void AddMultiProjectionListQuery<TQuery>()
     {
         if (typeof(TQuery).IsMultiProjectionListQueryType())
+        {
             MultiProjectionListQueryTypes = MultiProjectionListQueryTypes.Add(typeof(TQuery));
+        }
         else
+        {
             throw new ArgumentException("Type must implement MultiProjectionListQuery", typeof(TQuery).Name);
+        }
     }
 
-    private Assembly[] GetAssembliesForOptions()
-    {
-        return Assemblies.Add(GetExecutingAssembly()).Add(SekibanEventSourcingDependency.GetAssembly()).ToArray();
-    }
+    private Assembly[] GetAssembliesForOptions() =>
+        Assemblies.Add(GetExecutingAssembly()).Add(SekibanEventSourcingDependency.GetAssembly()).ToArray();
 }

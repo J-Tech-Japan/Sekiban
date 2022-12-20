@@ -95,9 +95,13 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             });
     }
 
-    public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type originalType, string payloadVersionIdentifier)
+    public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
+        Guid aggregateId,
+        Type aggregatePayloadType,
+        Type projectionPayloadType,
+        string payloadVersionIdentifier)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         return await _cosmosDbFactory.CosmosActionAsync(
             DocumentType.AggregateSnapshot,
             aggregateContainerGroup,
@@ -106,12 +110,13 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 var options = new QueryRequestOptions
                 {
                     PartitionKey =
-                        new PartitionKey(PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, originalType))
+                        new PartitionKey(PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType))
                 };
                 var query = container.GetItemLinqQueryable<SnapshotDocument>()
                     .Where(
                         b => b.DocumentType == DocumentType.AggregateSnapshot &&
                             b.AggregateId == aggregateId &&
+                            b.DocumentTypeName == projectionPayloadType.Name &&
                             b.PayloadVersionIdentifier == payloadVersionIdentifier)
                     .OrderByDescending(m => m.LastSortableUniqueId);
                 var feedIterator =
@@ -127,9 +132,9 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             });
     }
 
-    public async Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type originalType, string partitionKey)
+    public async Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type aggregatePayloadType, Type projectionPayloadType, string partitionKey)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         return await _cosmosDbFactory.CosmosActionAsync(
             DocumentType.AggregateSnapshot,
             aggregateContainerGroup,
@@ -141,9 +146,9 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             });
     }
 
-    public async Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(Guid aggregateId, Type originalType)
+    public async Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         return await _cosmosDbFactory.CosmosActionAsync(
             DocumentType.AggregateSnapshot,
             aggregateContainerGroup,
@@ -153,7 +158,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 var options = new QueryRequestOptions
                 {
                     PartitionKey =
-                        new PartitionKey(PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, originalType))
+                        new PartitionKey(PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType))
                 };
                 var query = container.GetItemLinqQueryable<SnapshotDocument>()
                     .Where(b => b.DocumentType == DocumentType.AggregateSnapshot && b.AggregateId == aggregateId)
@@ -357,9 +362,14 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             });
     }
 
-    public async Task<bool> ExistsSnapshotForAggregateAsync(Guid aggregateId, Type originalType, int version, string payloadVersionIdentifier)
+    public async Task<bool> ExistsSnapshotForAggregateAsync(
+        Guid aggregateId,
+        Type aggregatePayloadType,
+        Type projectionPayloadType,
+        int version,
+        string payloadVersionIdentifier)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(originalType);
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         return await _cosmosDbFactory.CosmosActionAsync(
             DocumentType.AggregateSnapshot,
             aggregateContainerGroup,
@@ -368,13 +378,14 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 var options = new QueryRequestOptions
                 {
                     PartitionKey =
-                        new PartitionKey(PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, originalType))
+                        new PartitionKey(PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType))
                 };
                 var query = container.GetItemLinqQueryable<SnapshotDocument>()
                     .Where(
                         b => b.DocumentType == DocumentType.AggregateSnapshot &&
                             b.AggregateId == aggregateId &&
                             b.SavedVersion == version &&
+                            b.DocumentTypeName == projectionPayloadType.Name &&
                             b.PayloadVersionIdentifier == payloadVersionIdentifier)
                     .OrderByDescending(m => m.LastSortableUniqueId);
                 var feedIterator =

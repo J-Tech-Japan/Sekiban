@@ -8,6 +8,7 @@ using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Consts;
 using FeatureCheck.Domain.Aggregates.RecentActivities;
 using FeatureCheck.Domain.Aggregates.RecentActivities.Commands;
+using FeatureCheck.Domain.Aggregates.RecentActivities.Projections;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Commands;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
@@ -338,7 +339,7 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Single(recentActivityList);
         var version = createRecentActivityResult.Version;
         var tasks = new List<Task>();
-        var count = 80;
+        var count = 180;
         foreach (var i in Enumerable.Range(0, count))
         {
             tasks.Add(
@@ -359,6 +360,8 @@ public class CustomerDbStoryBasic : TestBase
         await Task.WhenAll(tasks);
         recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
         Assert.Single(recentActivityList);
+        var projection = await projectionService.AsSingleProjectionStateAsync<TenRecentProjection>(createRecentActivityResult.AggregateId!.Value);
+        Assert.NotNull(projection);
         // this works
         var aggregateRecentActivity
             = await projectionService.AsDefaultStateFromInitialAsync<RecentActivity>(
@@ -388,9 +391,15 @@ public class CustomerDbStoryBasic : TestBase
 
         var snapshots = await _documentPersistentRepository.GetSnapshotsForAggregateAsync(
             createRecentActivityResult.AggregateId!.Value,
+            typeof(RecentActivity),
             typeof(RecentActivity));
 
         await CheckSnapshots<RecentActivity>(snapshots, createRecentActivityResult.AggregateId!.Value);
+
+        await _documentPersistentRepository.GetSnapshotsForAggregateAsync(
+            createRecentActivityResult.AggregateId!.Value,
+            typeof(RecentActivity),
+            typeof(TenRecentProjection));
 
         _inMemoryDocumentStore.ResetInMemoryStore();
         _hybridStoreManager.ClearHybridPartitions();
@@ -488,7 +497,7 @@ public class CustomerDbStoryBasic : TestBase
 
         var version = recentActivityList.First().Version;
         var tasks = new List<Task>();
-        var count = 280;
+        var count = 180;
         foreach (var i in Enumerable.Range(0, count))
         {
             tasks.Add(
@@ -507,8 +516,11 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Single(recentActivityList);
 
         var snapshots =
-            await _documentPersistentRepository.GetSnapshotsForAggregateAsync(aggregateId, typeof(RecentActivity));
+            await _documentPersistentRepository.GetSnapshotsForAggregateAsync(aggregateId, typeof(RecentActivity), typeof(RecentActivity));
         await CheckSnapshots<RecentActivity>(snapshots, aggregateId);
+        var projectionSnapshots =
+            await _documentPersistentRepository.GetSnapshotsForAggregateAsync(aggregateId, typeof(RecentActivity), typeof(TenRecentProjection));
+        Assert.NotEmpty(projectionSnapshots);
 
         // check aggregate result
         var aggregateRecentActivity
