@@ -4,7 +4,7 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
-namespace Sekiban.Core.Document;
+namespace Sekiban.Core.Documents;
 
 public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumentPersistentRepository
 {

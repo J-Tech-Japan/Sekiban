@@ -1,5 +1,5 @@
 using Sekiban.Core.Aggregate;
-using Sekiban.Core.Document.ValueObjects;
+using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Types;

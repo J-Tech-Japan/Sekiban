@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Caching.Memory;
 using Sekiban.Core.Cache;
-using Sekiban.Core.Document;
-using Sekiban.Core.Document.ValueObjects;
+using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.UpdateNotice;
 using Sekiban.Core.Setting;

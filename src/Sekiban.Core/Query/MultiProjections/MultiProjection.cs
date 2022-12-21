@@ -1,4 +1,4 @@
-using Sekiban.Core.Document.ValueObjects;
+using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 namespace Sekiban.Core.Query.MultiProjections;

@@ -1,4 +1,4 @@
-using Sekiban.Core.Document.ValueObjects;
+using Sekiban.Core.Documents.ValueObjects;
 namespace Sekiban.Core.Query.MultiProjections.Projections;
 
 public interface IMultiProjection

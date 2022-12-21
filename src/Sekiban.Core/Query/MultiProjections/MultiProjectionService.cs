@@ -1,5 +1,5 @@
 using Sekiban.Core.Aggregate;
-using Sekiban.Core.Document.ValueObjects;
+using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Query.MultiProjections.Projections;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Query.MultiProjections;

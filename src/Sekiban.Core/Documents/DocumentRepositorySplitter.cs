@@ -5,7 +5,7 @@ using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
 using Sekiban.Core.Types;
-namespace Sekiban.Core.Document;
+namespace Sekiban.Core.Documents;
 
 public class DocumentRepositorySplitter : IDocumentRepository
 {
@@ -41,7 +41,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 aggregatePayloadType.FullName + "is not aggregate payload");
         }
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-        if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+        if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
             await _documentTemporaryRepository.GetAllEventsForAggregateIdAsync(
                 aggregateId,
@@ -155,7 +155,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 aggregatePayloadType.FullName + "is not aggregate payload");
         }
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-        if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+        if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
             await _documentTemporaryRepository.GetAllCommandStringsForAggregateIdAsync(
                 aggregateId,
@@ -179,7 +179,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
         Action<IEnumerable<IEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionType);
-        if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+        if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
             await _documentTemporaryRepository.GetAllEventsAsync(
                 multiProjectionType,
@@ -203,7 +203,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
         string payloadVersionIdentifier)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-        if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+        if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
             return await _documentTemporaryRepository.GetLatestSnapshotForAggregateAsync(
                 aggregateId,
@@ -226,7 +226,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
     public Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type aggregatePayloadType, Type projectionPayloadType, string partitionKey)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-        if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+        if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
             return _documentTemporaryRepository.GetSnapshotByIdAsync(id, aggregatePayloadType, projectionPayloadType, partitionKey);
         }
@@ -239,7 +239,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
         Action<IEnumerable<IEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-        if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+        if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
             return _documentTemporaryRepository.GetAllEventsForAggregateAsync(
                 aggregatePayloadType,
@@ -260,7 +260,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
         string payloadVersionIdentifier)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-        if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+        if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
             return false;
         }

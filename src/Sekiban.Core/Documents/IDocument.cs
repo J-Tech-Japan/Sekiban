@@ -1,6 +1,5 @@
-using Sekiban.Core.Document.ValueObjects;
-
-namespace Sekiban.Core.Document;
+using Sekiban.Core.Documents.ValueObjects;
+namespace Sekiban.Core.Documents;
 
 public interface IDocument
 {

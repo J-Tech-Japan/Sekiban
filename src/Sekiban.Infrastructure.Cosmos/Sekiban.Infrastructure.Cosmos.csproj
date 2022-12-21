@@ -4,13 +4,13 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>JJ_Sekiban.Infrastructure.Cosmos</PackageId>
-        <Version>0.10.2</Version>
+        <Version>0.10.3</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework CosmosInfrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.10.2</PackageVersion>
-        <Description>Code Refactoring, adding SortableUniqueId to Queries</Description>
+        <PackageVersion>0.10.3</PackageVersion>
+        <Description>Query Execution Change, comment refactoring</Description>
         <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
         <LangVersion>11</LangVersion>
     </PropertyGroup>

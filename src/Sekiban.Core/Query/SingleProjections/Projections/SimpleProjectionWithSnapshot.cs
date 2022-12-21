@@ -1,5 +1,5 @@
-using Sekiban.Core.Document;
-using Sekiban.Core.Document.ValueObjects;
+using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Partition;
 namespace Sekiban.Core.Query.SingleProjections.Projections;

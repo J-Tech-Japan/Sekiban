@@ -16,7 +16,7 @@ using FeatureCheck.Domain.Shared.Exceptions;
 using Microsoft.Extensions.Caching.Memory;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
-using Sekiban.Core.Document;
+using Sekiban.Core.Documents;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query;
 using Sekiban.Core.Query.MultiProjections;
@@ -46,7 +46,8 @@ public class CustomerDbStoryBasic : TestBase
     private readonly IAggregateLoader projectionService;
 
     public CustomerDbStoryBasic(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
-        sekibanTestFixture, testOutputHelper)
+        sekibanTestFixture,
+        testOutputHelper)
     {
         _testOutputHelper = testOutputHelper;
         _cosmosDbFactory = GetService<CosmosDbFactory>();

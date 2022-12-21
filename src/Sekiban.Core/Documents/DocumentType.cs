@@ -1,4 +1,4 @@
-namespace Sekiban.Core.Document;
+namespace Sekiban.Core.Documents;
 
 public enum DocumentType
 {

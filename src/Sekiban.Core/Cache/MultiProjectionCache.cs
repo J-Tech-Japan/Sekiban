@@ -3,9 +3,12 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.MultiProjections.Projections;
 using Sekiban.Core.Setting;
-
 namespace Sekiban.Core.Cache;
 
+/// <summary>
+///     Default implementation of <see cref="IMultiProjectionCache" />.
+///     Using dotnet memory cache.
+/// </summary>
 public class MultiProjectionCache : IMultiProjectionCache
 {
     private readonly IMemoryCache _memoryCache;
@@ -27,21 +30,16 @@ public class MultiProjectionCache : IMultiProjectionCache
 
     public MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>? Get<TProjection, TProjectionPayload>()
         where TProjection : IMultiProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
-    {
-        return _memoryCache.Get<MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>>(
+        where TProjectionPayload : IMultiProjectionPayloadCommon, new() =>
+        _memoryCache.Get<MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>>(
             GetInMemoryKey<TProjection, TProjectionPayload>());
-    }
 
-    private static MemoryCacheEntryOptions GetMemoryCacheOptions()
+    private static MemoryCacheEntryOptions GetMemoryCacheOptions() => new()
     {
-        return new()
-        {
-            AbsoluteExpiration = DateTimeOffset.UtcNow.AddHours(2),
-            SlidingExpiration = TimeSpan.FromMinutes(15)
-            // 5分読まれなかったら削除するが、2時間経ったらどちらにしても削除する
-        };
-    }
+        AbsoluteExpiration = DateTimeOffset.UtcNow.AddHours(2),
+        SlidingExpiration = TimeSpan.FromMinutes(15)
+        // If not accessed 5 minutes it will be deleted. Anyway it will be deleted after two hours
+    };
 
     private string GetInMemoryKey<TProjector, TPayload>() where TProjector : IMultiProjector<TPayload>, new()
         where TPayload : IMultiProjectionPayloadCommon, new()

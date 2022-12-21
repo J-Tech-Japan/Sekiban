@@ -3,7 +3,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
-using Sekiban.Core.Document;
+using Sekiban.Core.Documents;
 using Sekiban.Core.Event;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;

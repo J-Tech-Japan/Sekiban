@@ -5,7 +5,11 @@ using Sekiban.Core.Query.SingleProjections;
 using System.Collections.Immutable;
 namespace Sekiban.Core.Command;
 
-public class CommandHandlerAdapter<TAggregatePayload, TCommand> where TAggregatePayload : IAggregatePayload, new()
+/// <summary>
+///     System use command handler adapter.
+///     Application Developer does not need to implement this interface
+/// </summary>
+public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> where TAggregatePayload : IAggregatePayload, new()
     where TCommand : ICommand<TAggregatePayload>
 {
     private readonly IAggregateLoader _aggregateLoader;

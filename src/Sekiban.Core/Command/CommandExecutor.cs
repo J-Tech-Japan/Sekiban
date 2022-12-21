@@ -1,6 +1,6 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command.UserInformation;
-using Sekiban.Core.Document;
+using Sekiban.Core.Documents;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.History;
@@ -113,7 +113,7 @@ public class CommandExecutor : ICommandExecutor
         string? lastSortableUniqueId = null;
         var aggregateContainerGroup =
             AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(TAggregatePayload));
-        if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+        if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
             await SemaphoreInMemory.WaitAsync();
         }
@@ -168,7 +168,7 @@ public class CommandExecutor : ICommandExecutor
             await _documentWriter.SaveAsync(
                 commandDocument with { Payload = commandToSave },
                 typeof(TAggregatePayload));
-            if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+            if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
             {
                 SemaphoreInMemory.Release();
             }

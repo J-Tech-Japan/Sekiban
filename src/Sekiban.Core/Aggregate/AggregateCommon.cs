@@ -1,7 +1,11 @@
-﻿using Sekiban.Core.Document.ValueObjects;
+﻿using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Event;
 namespace Sekiban.Core.Aggregate;
 
+/// <summary>
+///     System use Defines Common Aggregate behavior
+///     Application developer usually do not need to use this class directly
+/// </summary>
 public abstract class AggregateCommon : IAggregate
 {
     protected AggregateBasicInfo _basicInfo = new();
@@ -50,7 +54,7 @@ public abstract class AggregateCommon : IAggregate
         aggregate._basicInfo = aggregate._basicInfo with { AggregateId = aggregateId };
         return aggregate;
 
-        // C#の将来の正式バージョンで、インターフェースに静的メソッドを定義できるようになったら、書き換える。
+        // After C# 11, possibly use static interface methods. [Future idea]
     }
 
     protected abstract Action? GetApplyEventAction(IEvent ev, IEventPayloadCommon payload);

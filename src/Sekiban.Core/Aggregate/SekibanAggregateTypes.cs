@@ -1,9 +1,12 @@
-using System.Reflection;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Types;
-
+using System.Reflection;
 namespace Sekiban.Core.Aggregate;
 
+/// <summary>
+///     System use Aggregate type list
+///     Application developer can define your context types by inheriting from DomainDependencyDefinitionBase
+/// </summary>
 public class SekibanAggregateTypes
 {
     private readonly List<SingleProjectionAggregateType> _registeredCustomProjectorTypes = new();
@@ -20,7 +23,10 @@ public class SekibanAggregateTypes
                 var baseProjector = typeof(DefaultSingleProjector<>);
                 var p = baseProjector.MakeGenericType(type);
                 var aggregateType = new DefaultAggregateType(type, p);
-                if (_registeredTypes.Contains(aggregateType)) continue;
+                if (_registeredTypes.Contains(aggregateType))
+                {
+                    continue;
+                }
                 _registeredTypes.Add(aggregateType);
             }
 
@@ -31,7 +37,10 @@ public class SekibanAggregateTypes
                     type.GetOriginalTypeFromSingleProjectionPayload(),
                     type.GetProjectionTypeFromSingleProjection(),
                     type);
-                if (_registeredCustomProjectorTypes.Contains(projectorType)) continue;
+                if (_registeredCustomProjectorTypes.Contains(projectorType))
+                {
+                    continue;
+                }
                 _registeredCustomProjectorTypes.Add(projectorType);
             }
         }

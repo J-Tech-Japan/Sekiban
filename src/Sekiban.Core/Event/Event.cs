@@ -1,10 +1,10 @@
-using Sekiban.Core.Document;
+using Sekiban.Core.Documents;
 using Sekiban.Core.History;
 using Sekiban.Core.Partition;
 using Sekiban.Core.Types;
 namespace Sekiban.Core.Event;
 
-public record Event<TEventPayload> : Document.Document, IEvent where TEventPayload : IEventPayloadCommon
+public record Event<TEventPayload> : Document, IEvent where TEventPayload : IEventPayloadCommon
 {
     public Event()
     {
