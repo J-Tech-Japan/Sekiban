@@ -54,7 +54,7 @@ public record CreateClient : ICommand<Client>
             // Check if branch exists
             var branchExistsOutput
                 = await queryExecutor
-                    .ForAggregateQueryAsync<Branch, BranchExistsQuery, BranchExistsQuery.Parameter, BranchExistsQuery.Response>(
+                    .ExecuteAsync(
                         new BranchExistsQuery.Parameter(command.BranchId));
             if (!branchExistsOutput.Exists)
             {
@@ -64,8 +64,7 @@ public record CreateClient : ICommand<Client>
             // Check no email duplicates
             var emailExistsOutput
                 = await queryExecutor
-                    .ForAggregateQueryAsync<Client, ClientEmailExistsQuery, ClientEmailExistsQuery.Parameter,
-                        ClientEmailExistsQuery.Response>(new ClientEmailExistsQuery.Parameter(command.ClientEmail));
+                    .ExecuteAsync(new ClientEmailExistsQuery.Parameter(command.ClientEmail));
             if (emailExistsOutput.Exists)
             {
                 throw new SekibanEmailAlreadyRegistered();
