@@ -62,7 +62,7 @@ public record Event<TEventPayload> : Document.Document, IEvent where TEventPaylo
     {
         var histories = new List<CallHistory>();
         histories.AddRange(CallHistories);
-        histories.Add(new CallHistory(Id, GetType().Name, string.Empty));
+        histories.Add(new CallHistory(Id, GetPayload().GetType().Name, string.Empty));
         return histories;
     }
 
