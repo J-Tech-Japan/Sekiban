@@ -5,13 +5,13 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>JJ_Sekiban.Testing</PackageId>
-        <Version>0.10.2</Version>
+        <Version>0.10.3</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Testing</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.10.2</PackageVersion>
-        <Description>Code Refactoring, adding SortableUniqueId to Queries</Description>
+        <PackageVersion>0.10.3</PackageVersion>
+        <Description>Query Execution Change, comment refactoring</Description>
         <AssemblyName>Sekiban.Testing</AssemblyName>
         <RootNamespace>Sekiban.Testing</RootNamespace>
     </PropertyGroup>
