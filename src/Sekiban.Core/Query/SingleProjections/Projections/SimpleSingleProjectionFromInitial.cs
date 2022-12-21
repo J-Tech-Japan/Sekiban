@@ -1,4 +1,4 @@
-using Sekiban.Core.Document;
+using Sekiban.Core.Documents;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Partition;
 namespace Sekiban.Core.Query.SingleProjections.Projections;

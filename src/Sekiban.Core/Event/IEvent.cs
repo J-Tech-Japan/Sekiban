@@ -1,5 +1,5 @@
 ﻿using MediatR;
-using Sekiban.Core.Document;
+using Sekiban.Core.Documents;
 using Sekiban.Core.History;
 namespace Sekiban.Core.Event;
 

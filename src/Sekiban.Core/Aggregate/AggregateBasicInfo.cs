@@ -1,5 +1,9 @@
 namespace Sekiban.Core.Aggregate;
 
+/// <summary>
+///     System use Aggregate Information
+///     Application developer usually don't need to use this class.
+/// </summary>
 public record AggregateBasicInfo
 {
     public Guid AggregateId { get; init; } = Guid.Empty;

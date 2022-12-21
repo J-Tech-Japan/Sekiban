@@ -3,6 +3,10 @@ using Sekiban.Core.Partition;
 using Sekiban.Core.Snapshot;
 namespace Sekiban.Core.Cache;
 
+/// <summary>
+///     Default implementation of <see cref="ISnapshotDocumentCache" />.
+///     Using dotnet memory cache.
+/// </summary>
 public class SnapshotDocumentCache : ISnapshotDocumentCache
 {
     private readonly IMemoryCache _memoryCache;

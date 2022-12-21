@@ -1,15 +1,14 @@
 using FeatureCheck.Domain.Aggregates.Branches;
 using FeatureCheck.Domain.Aggregates.Branches.Commands;
-using System.Threading.Tasks;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
-using Sekiban.Core.Document;
+using Sekiban.Core.Documents;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Setting;
 using Sekiban.Infrastructure.Cosmos;
+using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
-
 namespace SampleProjectStoryXTest.Stories;
 
 public class MultipleDbStoryTest : TestBase
@@ -19,10 +18,8 @@ public class MultipleDbStoryTest : TestBase
     private readonly ISekibanContext _sekibanContext;
 
     public MultipleDbStoryTest(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
-        sekibanTestFixture, testOutputHelper)
-    {
-        _sekibanContext = GetService<ISekibanContext>();
-    }
+        sekibanTestFixture,
+        testOutputHelper) => _sekibanContext = GetService<ISekibanContext>();
 
     [Fact(DisplayName = "CosmosDb ストーリーテスト 複数データベースでの動作を検証する")]
     public async Task CosmosDbStory()
@@ -35,7 +32,8 @@ public class MultipleDbStoryTest : TestBase
         // 先に全データを削除する
         await cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default);
         await cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Dissolvable);
-        await cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command,
+        await cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(
+            DocumentType.Command,
             AggregateContainerGroup.Dissolvable);
         await cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command);
 

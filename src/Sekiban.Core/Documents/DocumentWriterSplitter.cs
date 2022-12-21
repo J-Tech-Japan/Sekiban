@@ -3,8 +3,7 @@ using Sekiban.Core.Event;
 using Sekiban.Core.Partition;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Snapshot;
-
-namespace Sekiban.Core.Document;
+namespace Sekiban.Core.Documents;
 
 public class DocumentWriterSplitter : IDocumentWriter
 {
@@ -28,7 +27,7 @@ public class DocumentWriterSplitter : IDocumentWriter
     public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType) where TDocument : IDocument
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
-        if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+        if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
             await _documentTemporaryWriter.SaveAsync(document, aggregateType);
             return;
@@ -49,7 +48,7 @@ public class DocumentWriterSplitter : IDocumentWriter
         where TEvent : IEvent
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
-        if (aggregateContainerGroup == AggregateContainerGroup.InMemoryContainer)
+        if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
             await _documentTemporaryWriter.SaveAndPublishEvent(ev, aggregateType);
             return;
@@ -61,15 +60,22 @@ public class DocumentWriterSplitter : IDocumentWriter
 
     private async Task AddToHybridIfPossible(IEvent ev, Type aggregateType)
     {
-        if (!_aggregateSettings.CanUseHybrid(aggregateType)) return;
+        if (!_aggregateSettings.CanUseHybrid(aggregateType))
+        {
+            return;
+        }
         if (!_hybridStoreManager.HasPartition(ev.PartitionKey))
+        {
             _hybridStoreManager.AddPartitionKey(ev.PartitionKey, string.Empty, false);
+        }
         await _documentTemporaryWriter.SaveAsync(ev, aggregateType);
     }
 
     private async Task SaveSnapshotToHybridIfPossible(SnapshotDocument snapshot, Type aggregateType)
     {
         if (_hybridStoreManager.HasPartition(PartitionKeyGenerator.ForEvent(snapshot.AggregateId, aggregateType)))
+        {
             await _documentTemporaryWriter.SaveAsync(snapshot, aggregateType);
+        }
     }
 }

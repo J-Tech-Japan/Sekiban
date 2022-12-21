@@ -1,6 +1,6 @@
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Shared;
-namespace Sekiban.Core.Document.ValueObjects;
+namespace Sekiban.Core.Documents.ValueObjects;
 
 public record SortableUniqueIdValue(string Value)
 {

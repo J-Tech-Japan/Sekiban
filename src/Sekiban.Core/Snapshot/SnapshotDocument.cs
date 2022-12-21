@@ -1,10 +1,10 @@
-using Sekiban.Core.Document;
+using Sekiban.Core.Documents;
 using Sekiban.Core.Partition;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Shared;
 namespace Sekiban.Core.Snapshot;
 
-public record SnapshotDocument : Document.Document, IDocument
+public record SnapshotDocument : Document, IDocument
 {
     public SnapshotDocument()
     {

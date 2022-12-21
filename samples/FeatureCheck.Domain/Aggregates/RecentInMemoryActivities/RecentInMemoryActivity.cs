@@ -2,7 +2,7 @@ using Sekiban.Core.Aggregate;
 using System.Collections.Immutable;
 namespace FeatureCheck.Domain.Aggregates.RecentInMemoryActivities;
 
-[AggregateContainerGroup(AggregateContainerGroup.InMemoryContainer)]
+[AggregateContainerGroup(AggregateContainerGroup.InMemory)]
 public record RecentInMemoryActivity(ImmutableList<RecentInMemoryActivityRecord> LatestActivities) : IAggregatePayload
 {
     public RecentInMemoryActivity() : this(ImmutableList<RecentInMemoryActivityRecord>.Empty)

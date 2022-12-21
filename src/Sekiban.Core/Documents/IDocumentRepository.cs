@@ -1,6 +1,6 @@
 using Sekiban.Core.Event;
 using Sekiban.Core.Snapshot;
-namespace Sekiban.Core.Document;
+namespace Sekiban.Core.Documents;
 
 public interface IDocumentRepository
 {

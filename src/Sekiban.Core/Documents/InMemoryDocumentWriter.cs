@@ -4,7 +4,7 @@ using Sekiban.Core.Event;
 using Sekiban.Core.PubSub;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Snapshot;
-namespace Sekiban.Core.Document;
+namespace Sekiban.Core.Documents;
 
 public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersistentWriter
 {

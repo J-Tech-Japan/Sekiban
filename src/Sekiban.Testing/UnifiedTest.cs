@@ -2,7 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
-using Sekiban.Core.Document.ValueObjects;
+using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.MultiProjections;

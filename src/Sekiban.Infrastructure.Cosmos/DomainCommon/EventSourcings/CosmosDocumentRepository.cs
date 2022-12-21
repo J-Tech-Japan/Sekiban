@@ -1,7 +1,7 @@
 using Microsoft.Azure.Cosmos.Linq;
 using Sekiban.Core.Aggregate;
-using Sekiban.Core.Document;
-using Sekiban.Core.Document.ValueObjects;
+using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Event;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Partition;

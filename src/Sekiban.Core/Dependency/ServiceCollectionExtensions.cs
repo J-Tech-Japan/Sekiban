@@ -3,7 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Command;
 using Sekiban.Core.Command.UserInformation;
-using Sekiban.Core.Document;
+using Sekiban.Core.Documents;
 using Sekiban.Core.PubSub;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.MultiProjections.Projections;
@@ -14,21 +14,18 @@ using Sekiban.Core.Query.UpdateNotice;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using ISingleProjection = Sekiban.Core.Query.SingleProjections.Projections.ISingleProjection;
-
 namespace Sekiban.Core.Dependency;
 
 public static class ServiceCollectionExtensions
 {
     public enum HttpContextType
     {
-        Local = 1,
-        Azure = 2
+        Local = 1, Azure = 2
     }
 
     public enum MultiProjectionType
     {
-        Simple = 1,
-        MemoryCache = 2
+        Simple = 1, MemoryCache = 2
     }
 
     public static IServiceCollection AddSekibanCore(
@@ -74,7 +71,8 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    public static IServiceCollection AddSekibanCoreInMemory(this IServiceCollection services,
+    public static IServiceCollection AddSekibanCoreInMemory(
+        this IServiceCollection services,
         ISekibanDateProducer? sekibanDateProducer = null)
     {
         services.AddMemoryCache();
@@ -109,7 +107,8 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    public static IServiceCollection AddSekibanCoreAggregateTest(this IServiceCollection services,
+    public static IServiceCollection AddSekibanCoreAggregateTest(
+        this IServiceCollection services,
         ISekibanDateProducer? sekibanDateProducer = null)
     {
         services.AddMemoryCache();
@@ -145,7 +144,8 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    public static IServiceCollection AddSekibanHTTPUser(this IServiceCollection services,
+    public static IServiceCollection AddSekibanHTTPUser(
+        this IServiceCollection services,
         HttpContextType contextType = HttpContextType.Local)
     {
         // ユーザー情報
@@ -170,7 +170,8 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    public static IServiceCollection AddSekibanAppSettingsFromObject(this IServiceCollection services,
+    public static IServiceCollection AddSekibanAppSettingsFromObject(
+        this IServiceCollection services,
         AggregateSettings settings)
     {
         // 例

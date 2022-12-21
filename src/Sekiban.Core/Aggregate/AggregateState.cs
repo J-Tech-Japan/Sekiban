@@ -2,19 +2,17 @@ using Sekiban.Core.Query.SingleProjections;
 using System.ComponentModel.DataAnnotations;
 namespace Sekiban.Core.Aggregate;
 
-public record AggregateState<TPayload> : IAggregateCommon where TPayload : IAggregatePayload, new()
+/// <summary>
+///     Class representing the current state of the aggregate
+///     This class is for the Data Transfer, not for running the aggregate
+///     To make it executable, use the Aggregate class by applying this class as a snapshot
+/// </summary>
+/// <typeparam name="TPayload">Aggregate Payload</typeparam>
+public sealed record AggregateState<TPayload> : IAggregateCommon where TPayload : IAggregatePayload, new()
 {
-    /// <summary>
-    ///     スナップショットからの再構築用。
-    /// </summary>
     public AggregateState()
     {
     }
-
-    /// <summary>
-    ///     一般の構築用。
-    /// </summary>
-    /// <param name="aggregateCommon"></param>
     public AggregateState(IAggregateCommon aggregateCommon)
     {
         AggregateId = aggregateCommon.AggregateId;
@@ -29,23 +27,23 @@ public record AggregateState<TPayload> : IAggregateCommon where TPayload : IAggr
     public TPayload Payload { get; init; } = new();
 
     [Required]
-    [Description("集約ID")]
+    [Description("AggregateId")]
     public Guid AggregateId { get; init; }
 
     [Required]
-    [Description("集約の現在のバージョン")]
+    [Description("Aggregate Version")]
     public int Version { get; init; }
 
     [Required]
-    [Description("集約で最後に発行されたイベントのID")]
+    [Description("Last Event Id")]
     public Guid LastEventId { get; init; }
 
     [Required]
-    [Description("適用されたスナップショットのバージョン（未適用の場合は0）")]
+    [Description("Applied Snapshot Version, if not applied, it is 0")]
     public int AppliedSnapshotVersion { get; init; }
 
     [Required]
-    [Description("並べ替え可能なユニークID（自動付与）、このIDの順番でイベントは常に順番を決定する")]
+    [Description("Last Sortable Unique Id, SortableUniqueId defines the order of events")]
     public string LastSortableUniqueId { get; init; } = string.Empty;
 
     public string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();

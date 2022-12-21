@@ -1,7 +1,7 @@
 using MediatR;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
-using Sekiban.Core.Document;
+using Sekiban.Core.Documents;
 using Sekiban.Core.Event;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Setting;
@@ -53,7 +53,7 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
         var aggregateContainerGroup =
             AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType.Aggregate);
 
-        if (aggregateContainerGroup != AggregateContainerGroup.InMemoryContainer)
+        if (aggregateContainerGroup != AggregateContainerGroup.InMemory)
         {
             await SemaphoreInMemory.WaitAsync();
 

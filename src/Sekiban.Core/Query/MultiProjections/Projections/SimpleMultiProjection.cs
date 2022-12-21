@@ -1,5 +1,5 @@
-using Sekiban.Core.Document;
-using Sekiban.Core.Document.ValueObjects;
+using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.ValueObjects;
 namespace Sekiban.Core.Query.MultiProjections.Projections;
 
 public class SimpleMultiProjection : IMultiProjection

@@ -1,9 +1,8 @@
-using Sekiban.Core.Document.ValueObjects;
+using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Shared;
+namespace Sekiban.Core.Documents;
 
-namespace Sekiban.Core.Document;
-
-public abstract record class Document : IDocument
+public abstract record Document : IDocument
 {
     public Document()
     {
@@ -20,7 +19,8 @@ public abstract record class Document : IDocument
         SortableUniqueId = SortableUniqueIdValue.Generate(TimeStamp, Id);
     }
 
-    [JsonPropertyName("id")] public Guid Id { get; init; }
+    [JsonPropertyName("id")]
+    public Guid Id { get; init; }
 
     public Guid AggregateId { get; init; }
 
@@ -34,8 +34,5 @@ public abstract record class Document : IDocument
 
     public string SortableUniqueId { get; init; } = default!;
 
-    public SortableUniqueIdValue GetSortableUniqueId()
-    {
-        return SortableUniqueId;
-    }
+    public SortableUniqueIdValue GetSortableUniqueId() => SortableUniqueId;
 }
