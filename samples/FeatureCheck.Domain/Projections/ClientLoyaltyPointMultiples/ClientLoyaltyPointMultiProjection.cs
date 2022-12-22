@@ -20,11 +20,8 @@ public record ClientLoyaltyPointMultiProjection(
     {
     }
 
-    public TargetAggregatePayloadCollection GetTargetAggregatePayloads() => 
-        new TargetAggregatePayloadCollection()
-            .Add<Branch>()
-            .Add<Client>()
-            .Add<LoyaltyPoint>();
+    public TargetAggregatePayloadCollection GetTargetAggregatePayloads() =>
+        new TargetAggregatePayloadCollection().Add<Branch, Client, LoyaltyPoint>();
 
     public Func<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultiProjection>? GetApplyEventFunc(
         IEvent ev,
