@@ -46,7 +46,7 @@ public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPa
     {
         var projectionPayload = Payload as IMultiProjectionPayload<TProjectionPayload> ??
             throw new SekibanMultiProjectionMustInheritISingleProjectionEventApplicable();
-        return projectionPayload.TargetAggregateNames();
+        return projectionPayload.GetTargetAggregatePayloads().GetAggregateNames();
     }
 
     protected Action? GetApplyEventAction(IEvent ev, IEventPayloadCommon payload)

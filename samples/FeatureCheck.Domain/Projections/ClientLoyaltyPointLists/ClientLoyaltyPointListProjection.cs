@@ -20,11 +20,15 @@ public record ClientLoyaltyPointListProjection(
     {
     }
 
-    public IList<string> TargetAggregateNames() => new List<string> { nameof(Branch), nameof(Client), nameof(LoyaltyPoint) };
+    public TargetAggregatePayloadCollection GetTargetAggregatePayloads() =>
+        new TargetAggregatePayloadCollection()
+            .Add<Branch>()
+            .Add<Client>()
+            .Add<LoyaltyPoint>();
 
     public Func<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection>? GetApplyEventFunc(
-        IEvent ev,
-        IEventPayloadCommon eventPayload)
+            IEvent ev,
+            IEventPayloadCommon eventPayload)
     {
         return eventPayload switch
         {
@@ -32,7 +36,7 @@ public record ClientLoyaltyPointListProjection(
             {
                 Branches = payload.Branches.Add(
                     new ProjectedBranchInternal
-                        { BranchId = ev.AggregateId, BranchName = branchCreated.Name })
+                    { BranchId = ev.AggregateId, BranchName = branchCreated.Name })
             },
             ClientCreated clientCreated => payload => payload with
             {

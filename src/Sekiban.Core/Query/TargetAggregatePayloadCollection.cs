@@ -5,10 +5,11 @@ namespace Sekiban.Core.Query.MultiProjections;
 
 public class TargetAggregatePayloadCollection
 {
-    private ImmutableList<IAggregatePayload> TargetAggregatePayloads { get; set; } = ImmutableList<IAggregatePayload>.Empty;
-    public TargetAggregatePayloadCollection Add(IAggregatePayload aggregate)
+    private ImmutableList<Type> TargetAggregatePayloads { get; set; } = ImmutableList<Type>.Empty;
+    public TargetAggregatePayloadCollection Add<TAggregatePayload>() where TAggregatePayload : IAggregatePayload
     {
-        TargetAggregatePayloads.Add(aggregate);
+        TargetAggregatePayloads.Add(typeof(TAggregatePayload));
         return this;
     }
+    public IList<string> GetAggregateNames() => TargetAggregatePayloads.Select(e => e.GetType().Name).ToList();
 }
