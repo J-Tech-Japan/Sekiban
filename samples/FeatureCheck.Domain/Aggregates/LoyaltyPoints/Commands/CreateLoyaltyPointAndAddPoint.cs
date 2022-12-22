@@ -43,7 +43,7 @@ public record CreateLoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : IC
             if (client != null && client.Payload.ClientEmail.ToLower().EndsWith("@gmail.com"))
             {
                 yield return new LoyaltyPointAdded(_dateProducer.UtcNow, LoyaltyPointReceiveTypeKeys.InitialGmailUserGift,
-                    command.AddingPoint, string.Empty);
+                    command.AddingPoint, "Gmail users gift");
 
             }
         }
