@@ -7,5 +7,6 @@ public enum LoyaltyPointReceiveTypeKeys
     TravelPoint = 21,
     CreditcardUsage = 22,
     InsuranceUsage = 30,
-    InitialGift = 40
+    InitialGift = 40,
+    InitialGmailUserGift = 41
 }
