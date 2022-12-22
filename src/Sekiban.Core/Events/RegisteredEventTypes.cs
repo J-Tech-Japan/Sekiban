@@ -1,6 +1,5 @@
 using System.Reflection;
-
-namespace Sekiban.Core.Event;
+namespace Sekiban.Core.Events;
 
 public class RegisteredEventTypes
 {

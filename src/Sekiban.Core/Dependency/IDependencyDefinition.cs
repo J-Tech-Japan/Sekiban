@@ -1,6 +1,6 @@
 using System.Reflection;
 using Sekiban.Core.Aggregate;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 
 namespace Sekiban.Core.Dependency;
 

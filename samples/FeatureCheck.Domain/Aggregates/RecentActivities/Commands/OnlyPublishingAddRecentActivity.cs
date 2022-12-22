@@ -1,6 +1,6 @@
 using FeatureCheck.Domain.Aggregates.RecentActivities.Events;
 using Sekiban.Core.Command;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Sekiban.Core.Shared;
 namespace FeatureCheck.Domain.Aggregates.RecentActivities.Commands;
 

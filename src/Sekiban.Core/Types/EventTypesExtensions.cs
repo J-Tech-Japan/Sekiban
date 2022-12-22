@@ -1,4 +1,4 @@
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 namespace Sekiban.Core.Types;
 
 public static class EventTypesExtensions

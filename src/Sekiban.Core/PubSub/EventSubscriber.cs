@@ -1,5 +1,5 @@
 using MediatR;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 
 namespace Sekiban.Core.PubSub;
 

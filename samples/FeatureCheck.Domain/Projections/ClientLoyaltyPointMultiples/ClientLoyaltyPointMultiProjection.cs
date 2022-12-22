@@ -4,7 +4,7 @@ using FeatureCheck.Domain.Aggregates.Clients;
 using FeatureCheck.Domain.Aggregates.Clients.Events;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Events;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Sekiban.Core.Query.MultiProjections;
 using System.Collections.Immutable;
 namespace FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;

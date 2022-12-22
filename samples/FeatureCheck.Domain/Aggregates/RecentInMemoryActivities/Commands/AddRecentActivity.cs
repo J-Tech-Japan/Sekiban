@@ -1,7 +1,7 @@
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Events;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Sekiban.Core.Shared;
 namespace FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Commands;
 

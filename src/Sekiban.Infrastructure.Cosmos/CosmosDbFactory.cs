@@ -4,7 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using Sekiban.Infrastructure.Cosmos.Lib.Json;

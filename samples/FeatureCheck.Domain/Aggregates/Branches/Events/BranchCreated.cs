@@ -1,4 +1,4 @@
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.Branches.Events;
 
 public record BranchCreated(string Name) : IEventPayload<Branch>

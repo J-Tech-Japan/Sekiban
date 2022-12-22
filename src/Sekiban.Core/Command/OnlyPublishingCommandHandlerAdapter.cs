@@ -1,9 +1,14 @@
 using Sekiban.Core.Aggregate;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using System.Collections.Immutable;
 namespace Sekiban.Core.Command;
 
+/// <summary>
+///     System use for internal handler for <see cref="IOnlyPublishingCommand" />
+/// </summary>
+/// <typeparam name="TAggregatePayload"></typeparam>
+/// <typeparam name="TCommand"></typeparam>
 public class OnlyPublishingCommandHandlerAdapter<TAggregatePayload, TCommand>
     where TAggregatePayload : IAggregatePayload, new()
     where TCommand : IOnlyPublishingCommand<TAggregatePayload>

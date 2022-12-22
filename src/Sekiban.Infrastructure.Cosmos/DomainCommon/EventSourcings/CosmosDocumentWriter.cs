@@ -1,6 +1,6 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Sekiban.Core.PubSub;
 namespace Sekiban.Infrastructure.Cosmos.DomainCommon.EventSourcings;
 

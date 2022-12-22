@@ -1,7 +1,7 @@
 ﻿using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Events;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
 
 public record DeleteLoyaltyPoint(Guid ClientId) : ICommand<LoyaltyPoint>

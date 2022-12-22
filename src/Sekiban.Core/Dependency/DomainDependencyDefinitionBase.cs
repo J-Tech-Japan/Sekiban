@@ -1,5 +1,5 @@
 using Sekiban.Core.Aggregate;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Sekiban.Core.Types;
 using System.Collections.Immutable;
 using System.Reflection;

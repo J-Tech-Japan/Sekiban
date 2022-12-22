@@ -2,7 +2,7 @@ using Sekiban.Core.Documents;
 using Sekiban.Core.History;
 using Sekiban.Core.Partition;
 using Sekiban.Core.Types;
-namespace Sekiban.Core.Event;
+namespace Sekiban.Core.Events;
 
 public record Event<TEventPayload> : Document, IEvent where TEventPayload : IEventPayloadCommon
 {

@@ -1,5 +1,5 @@
 using Sekiban.Core.Documents.ValueObjects;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 namespace Sekiban.Core.Query.MultiProjections.Projections;
 
 public record MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>

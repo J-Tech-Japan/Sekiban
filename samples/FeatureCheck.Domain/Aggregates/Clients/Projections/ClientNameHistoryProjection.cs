@@ -1,5 +1,5 @@
 using FeatureCheck.Domain.Aggregates.Clients.Events;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Sekiban.Core.Query.SingleProjections;
 
 // ReSharper disable UnusedVariable

@@ -1,5 +1,5 @@
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Consts;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Events;
 
 public record LoyaltyPointAdded
