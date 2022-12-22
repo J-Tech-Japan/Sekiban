@@ -1,5 +1,4 @@
-using Sekiban.Core.Event;
-
+using Sekiban.Core.Events;
 namespace Sekiban.Core.Query.SingleProjections;
 
 public interface ISingleProjectionEventApplicable<TProjectionPayload> : ISingleProjectionPayloadCommon

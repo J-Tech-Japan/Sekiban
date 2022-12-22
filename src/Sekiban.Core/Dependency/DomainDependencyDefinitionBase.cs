@@ -1,10 +1,14 @@
 using Sekiban.Core.Aggregate;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Sekiban.Core.Types;
 using System.Collections.Immutable;
 using System.Reflection;
 namespace Sekiban.Core.Dependency;
 
+/// <summary>
+///     Defines a sekiban dependency for the each project.
+///     Application developers can inherit this class and override the Define() method to define your dependencies.
+/// </summary>
 public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
 {
     protected DomainDependencyDefinitionBase()
@@ -55,7 +59,7 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
 
     public IEnumerable<Type> GetMultiProjectionListQueryTypes() => MultiProjectionListQueryTypes;
 
-    public virtual SekibanDependencyOptions GetSekibanDependencyOptions() => new SekibanDependencyOptions(
+    public virtual SekibanDependencyOptions GetSekibanDependencyOptions() => new(
         new RegisteredEventTypes(GetAssembliesForOptions()),
         new SekibanAggregateTypes(GetAssembliesForOptions()),
         GetCommandDependencies().Concat(GetSubscriberDependencies()));

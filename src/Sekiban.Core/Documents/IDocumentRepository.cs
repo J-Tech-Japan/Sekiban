@@ -1,4 +1,4 @@
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Sekiban.Core.Snapshot;
 namespace Sekiban.Core.Documents;
 

@@ -15,7 +15,9 @@ using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using ISingleProjection = Sekiban.Core.Query.SingleProjections.Projections.ISingleProjection;
 namespace Sekiban.Core.Dependency;
-
+/// <summary>
+/// Extension methods for <see cref="IServiceCollection"/>
+/// </summary>
 public static class ServiceCollectionExtensions
 {
     public enum HttpContextType

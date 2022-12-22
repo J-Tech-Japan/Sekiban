@@ -3,7 +3,7 @@ using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Consts;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Events;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Shared;
 namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
@@ -14,10 +14,7 @@ public record CreateLoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : IC
     {
     }
 
-    public Guid GetAggregateId()
-    {
-        return ClientId;
-    }
+    public Guid GetAggregateId() => ClientId;
 
     public class Handler : ICommandHandler<LoyaltyPoint, CreateLoyaltyPointAndAddPoint>
     {

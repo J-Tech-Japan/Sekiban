@@ -1,6 +1,6 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using ShippingContext.Aggregates.Products.Events;
 namespace ShippingContext.Aggregates.Products.Commands;
 

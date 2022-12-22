@@ -1,4 +1,4 @@
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Aggregate;

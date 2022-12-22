@@ -1,6 +1,6 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 namespace WarehouseContext.Aggregates.ProductStocks.Commands;
 
 public record ReportProductStockCount : ICommand<ProductStock>

@@ -1,7 +1,4 @@
-using Sekiban.Core.Aggregate;
-using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.QueryModel.Parameters;
-using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Query.QueryModel;
 
 public interface IQueryExecutor

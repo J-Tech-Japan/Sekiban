@@ -1,7 +1,7 @@
 using FeatureCheck.Domain.Aggregates.RecentActivities;
 using FeatureCheck.Domain.Aggregates.RecentActivities.Events;
 using Sekiban.Core.Aggregate;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Sekiban.Core.Query.MultiProjections;
 using System.Collections.Immutable;
 namespace FeatureCheck.Domain.Projections.DissolvableProjection;

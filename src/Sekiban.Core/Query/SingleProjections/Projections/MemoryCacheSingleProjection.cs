@@ -1,7 +1,7 @@
 using Sekiban.Core.Cache;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.ValueObjects;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Partition;
 using Sekiban.Core.Query.UpdateNotice;

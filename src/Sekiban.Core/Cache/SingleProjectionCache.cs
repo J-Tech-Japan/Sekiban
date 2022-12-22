@@ -31,7 +31,7 @@ public class SingleProjectionCache : ISingleProjectionCache
         _memoryCache.Get<SingleMemoryCacheProjectionContainer<TAggregate, TState>>(
             GetCacheKeyForSingleProjectionContainer<TAggregate>(aggregateId));
 
-    private static MemoryCacheEntryOptions GetMemoryCacheOptionsForSingleProjectionContainer() => new MemoryCacheEntryOptions
+    private static MemoryCacheEntryOptions GetMemoryCacheOptionsForSingleProjectionContainer() => new()
     {
         AbsoluteExpiration = DateTimeOffset.UtcNow.AddHours(2),
         SlidingExpiration = TimeSpan.FromMinutes(15)

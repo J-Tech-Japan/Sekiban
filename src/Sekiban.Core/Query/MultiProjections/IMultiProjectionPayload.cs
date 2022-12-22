@@ -1,15 +1,12 @@
-using Sekiban.Core.Event;
-
+using Sekiban.Core.Events;
 namespace Sekiban.Core.Query.MultiProjections;
 
 public interface IMultiProjectionPayload<TProjectionPayload> : IMultiProjectionPayloadCommon
     where TProjectionPayload : IMultiProjectionPayloadCommon
 {
-    public IList<string> TargetAggregateNames()
-    {
-        return new List<string>();
-    }
+    public IList<string> TargetAggregateNames() => new List<string>();
 
-    public Func<TProjectionPayload, TProjectionPayload>? GetApplyEventFunc(IEvent ev,
+    public Func<TProjectionPayload, TProjectionPayload>? GetApplyEventFunc(
+        IEvent ev,
         IEventPayloadCommon eventPayload);
 }

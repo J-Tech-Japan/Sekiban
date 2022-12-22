@@ -3,7 +3,7 @@ using Sekiban.Core.Exceptions;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Types;
 using System.Reflection;
-namespace Sekiban.Core.Event;
+namespace Sekiban.Core.Events;
 
 public static class EventHelper
 {

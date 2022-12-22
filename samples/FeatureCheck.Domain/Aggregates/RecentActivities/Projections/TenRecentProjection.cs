@@ -1,5 +1,5 @@
 using FeatureCheck.Domain.Aggregates.RecentActivities.Events;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Sekiban.Core.Query.SingleProjections;
 using System.Collections.Immutable;
 namespace FeatureCheck.Domain.Aggregates.RecentActivities.Projections;

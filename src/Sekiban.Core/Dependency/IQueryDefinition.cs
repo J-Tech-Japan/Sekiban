@@ -1,5 +1,9 @@
 namespace Sekiban.Core.Dependency;
 
+/// <summary>
+///     System use interface for Query Dependency definition
+///     Application developers does not need to implement this interface directly
+/// </summary>
 public interface IQueryDefinition
 {
     public IEnumerable<Type> GetAggregateListQueryTypes();

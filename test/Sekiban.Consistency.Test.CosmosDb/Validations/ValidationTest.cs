@@ -1,17 +1,20 @@
+using Sekiban.Core.Validation;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using System.Linq;
-using Sekiban.Core.Validation;
 using Xunit;
-
 namespace SampleProjectStoryXTest.Validations;
 
 public class Member
 {
-    [Required] [MaxLength(20)] public string Name { get; init; } = default!;
+    [Required]
+    [MaxLength(20)]
+    public string Name { get; init; } = default!;
 
-    [Required] [Range(18, 75)] public int Age { get; init; }
+    [Required]
+    [Range(18, 75)]
+    public int Age { get; init; }
 
     public int? No { get; init; }
 
@@ -29,7 +32,6 @@ public class Member
 
     public List<Member> Friends { get; init; } = new();
 }
-
 public class ValidationTest
 {
     [Fact(DisplayName = "検証成功")]

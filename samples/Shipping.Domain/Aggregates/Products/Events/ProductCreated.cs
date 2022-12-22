@@ -1,4 +1,4 @@
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 namespace ShippingContext.Aggregates.Products.Events;
 
 public record ProductCreated : IEventPayload<Product>

@@ -1,5 +1,4 @@
 using Sekiban.Core.Query.SingleProjections;
-
 namespace Sekiban.Core.Query.MultiProjections;
 
 public record SingleProjectionListState<TAggregateState> : IMultiProjectionPayloadCommon

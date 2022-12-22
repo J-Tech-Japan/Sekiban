@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Sekiban.Core.Types;
 using System.Text.Json;
 namespace Sekiban.Testing.Projection;

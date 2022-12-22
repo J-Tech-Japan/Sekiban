@@ -3,7 +3,7 @@ using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Events;
 using FeatureCheck.Domain.Shared.Exceptions;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
 
 public record UseLoyaltyPoint(
@@ -13,17 +13,18 @@ public record UseLoyaltyPoint(
     int PointAmount,
     string Note) : IVersionValidationCommand<LoyaltyPoint>
 {
-    public UseLoyaltyPoint() : this(Guid.Empty, DateTime.MinValue, LoyaltyPointUsageTypeKeys.FlightDomestic, 0,
+    public UseLoyaltyPoint() : this(
+        Guid.Empty,
+        DateTime.MinValue,
+        LoyaltyPointUsageTypeKeys.FlightDomestic,
+        0,
         string.Empty)
     {
     }
 
     public int ReferenceVersion { get; init; }
 
-    public Guid GetAggregateId()
-    {
-        return ClientId;
-    }
+    public Guid GetAggregateId() => ClientId;
 
     public class Handler : IVersionValidationCommandHandler<LoyaltyPoint, UseLoyaltyPoint>
     {
@@ -33,9 +34,13 @@ public record UseLoyaltyPoint(
         {
             await Task.CompletedTask;
             if (getAggregateState().Payload.LastOccuredTime > command.HappenedDate)
+            {
                 throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
+            }
             if (getAggregateState().Payload.CurrentPoint - command.PointAmount < 0)
+            {
                 throw new SekibanLoyaltyPointNotEnoughException();
+            }
             yield return new LoyaltyPointUsed(command.HappenedDate, command.Reason, command.PointAmount, command.Note);
         }
     }

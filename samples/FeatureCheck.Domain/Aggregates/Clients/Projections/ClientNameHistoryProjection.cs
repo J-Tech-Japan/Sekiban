@@ -1,5 +1,5 @@
 using FeatureCheck.Domain.Aggregates.Clients.Events;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Sekiban.Core.Query.SingleProjections;
 
 // ReSharper disable UnusedVariable
@@ -12,10 +12,10 @@ public record ClientNameHistoryProjection(
     IReadOnlyCollection<ClientNameHistoryProjection.ClientNameHistoryProjectionRecord> ClientNames,
     string ClientEmail) : IDeletableSingleProjectionPayload<Client, ClientNameHistoryProjection>
 {
-    public bool IsDeleted { get; init; }
     public ClientNameHistoryProjection() : this(Guid.Empty, new List<ClientNameHistoryProjectionRecord>(), string.Empty)
     {
     }
+    public bool IsDeleted { get; init; }
 
     public Func<ClientNameHistoryProjection, ClientNameHistoryProjection>? GetApplyEventFunc(
         IEvent ev,

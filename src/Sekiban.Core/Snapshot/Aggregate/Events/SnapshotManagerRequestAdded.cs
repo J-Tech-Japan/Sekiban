@@ -1,5 +1,4 @@
-using Sekiban.Core.Event;
-
+using Sekiban.Core.Events;
 namespace Sekiban.Core.Snapshot.Aggregate.Events;
 
 public record SnapshotManagerRequestAdded(
@@ -8,12 +7,12 @@ public record SnapshotManagerRequestAdded(
     int NextSnapshotVersion,
     int? SnapshotVersion) : IEventPayload<SnapshotManager>
 {
-    public SnapshotManager OnEvent(SnapshotManager payload, IEvent ev)
+    public SnapshotManager OnEvent(SnapshotManager payload, IEvent ev) => payload with
     {
-        return payload with
-        {
-            Requests = payload.Requests.Add(SnapshotManager.SnapshotKey(AggregateTypeName, TargetAggregateId,
+        Requests = payload.Requests.Add(
+            SnapshotManager.SnapshotKey(
+                AggregateTypeName,
+                TargetAggregateId,
                 NextSnapshotVersion))
-        };
-    }
+    };
 }

@@ -1,6 +1,6 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Shipping.Port.ProductExistsPorts;
 using WarehouseContext.Aggregates.ProductStocks.Events;
 namespace WarehouseContext.Aggregates.ProductStocks.Commands;

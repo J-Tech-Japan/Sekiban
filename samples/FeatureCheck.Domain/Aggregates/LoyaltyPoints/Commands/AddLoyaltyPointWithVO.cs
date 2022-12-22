@@ -4,7 +4,7 @@ using FeatureCheck.Domain.Aggregates.LoyaltyPoints.ValueObjects;
 using FeatureCheck.Domain.Shared.Exceptions;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Sekiban.Core.Shared;
 namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
 

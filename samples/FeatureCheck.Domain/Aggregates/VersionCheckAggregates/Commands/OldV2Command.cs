@@ -2,7 +2,7 @@ using FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Enums;
 using FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Events;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Commands;
 
 public class OldV2Command : ICommand<VersionCheckAggregate>

@@ -1,6 +1,6 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents.ValueObjects;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Types;
 namespace Sekiban.Core.Query.SingleProjections;

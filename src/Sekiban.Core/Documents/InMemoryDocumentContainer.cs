@@ -1,4 +1,4 @@
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using System.Collections.Concurrent;
 namespace Sekiban.Core.Documents;
 

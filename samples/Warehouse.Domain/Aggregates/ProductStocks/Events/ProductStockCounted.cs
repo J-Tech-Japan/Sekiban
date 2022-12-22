@@ -1,4 +1,4 @@
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 namespace WarehouseContext.Aggregates.ProductStocks.Events;
 
 public class ProductStockCounted : IEventPayload<ProductStock>
