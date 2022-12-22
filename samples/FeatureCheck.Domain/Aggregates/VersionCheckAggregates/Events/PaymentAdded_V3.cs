@@ -1,5 +1,5 @@
 using FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Enums;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Events;
 
 public record PaymentAdded_V3(int Amount, PaymentKind PaymentKind, string Description) : IEventPayload<VersionCheckAggregate>

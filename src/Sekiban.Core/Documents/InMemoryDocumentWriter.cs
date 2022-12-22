@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Cache;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Sekiban.Core.PubSub;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Snapshot;

@@ -1,4 +1,4 @@
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 namespace Sekiban.Core.Documents;
 
 public interface IDocumentWriter

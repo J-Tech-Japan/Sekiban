@@ -1,13 +1,14 @@
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Consts;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Events;
 
 public record LoyaltyPointAdded
-(DateTime HappenedDate, LoyaltyPointReceiveTypeKeys Reason, int PointAmount,
+(
+    DateTime HappenedDate,
+    LoyaltyPointReceiveTypeKeys Reason,
+    int PointAmount,
     string Note) : IEventPayload<LoyaltyPoint>
 {
-    public LoyaltyPoint OnEvent(LoyaltyPoint payload, IEvent ev)
-    {
-        return payload with { CurrentPoint = payload.CurrentPoint + PointAmount, LastOccuredTime = HappenedDate };
-    }
+    public LoyaltyPoint OnEvent(LoyaltyPoint payload, IEvent ev) =>
+        payload with { CurrentPoint = payload.CurrentPoint + PointAmount, LastOccuredTime = HappenedDate };
 }

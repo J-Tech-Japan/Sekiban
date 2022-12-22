@@ -3,7 +3,7 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Documents.ValueObjects;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.QueryModel;

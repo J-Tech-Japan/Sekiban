@@ -1,16 +1,12 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
-
+using System.Security.Claims;
 namespace Sekiban.Core.Command.UserInformation;
 
 public class AzureAdUserInformationFactory : IUserInformationFactory
 {
     private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public AzureAdUserInformationFactory(IHttpContextAccessor httpContextAccessor)
-    {
-        _httpContextAccessor = httpContextAccessor;
-    }
+    public AzureAdUserInformationFactory(IHttpContextAccessor httpContextAccessor) => _httpContextAccessor = httpContextAccessor;
 
     public string GetCurrentUserInformation()
     {

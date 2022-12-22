@@ -1,7 +1,7 @@
 ﻿using MediatR;
 using Sekiban.Core.Documents;
 using Sekiban.Core.History;
-namespace Sekiban.Core.Event;
+namespace Sekiban.Core.Events;
 
 public interface IEvent : INotification, ICallHistories, IDocument, IEventPayloadAccessor
 {

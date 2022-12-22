@@ -1,4 +1,3 @@
-using System.Reflection;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Command;
@@ -6,15 +5,16 @@ using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot.Aggregate;
 using Sekiban.Core.Snapshot.Aggregate.Commands;
-
+using System.Reflection;
 namespace Sekiban.Core.Dependency;
 
+/// <summary>
+///     System use Sekiban Dependency Registerer
+///     Application developers do not usually use this class directly
+/// </summary>
 public static class SekibanEventSourcingDependency
 {
-    public static Assembly GetAssembly()
-    {
-        return Assembly.GetExecutingAssembly();
-    }
+    public static Assembly GetAssembly() => Assembly.GetExecutingAssembly();
 
     public static IServiceCollection AddSekibanCoreWithDependency(
         this IServiceCollection services,
@@ -46,14 +46,12 @@ public static class SekibanEventSourcingDependency
     {
         // MediatR
         services.AddMediatR(Assembly.GetExecutingAssembly(), GetAssembly());
-        // Sekibanイベントソーシング
+        // Sekiban Event Sourcing
         services.AddSekibanCore(sekibanDateProducer ?? new SekibanDateProducer(), multiProjectionType);
-        // TODO : services.AddSekibanCosmosDB();
         services.AddSekibanHTTPUser();
-
         services.AddSekibanSettingsFromAppSettings();
 
-        // 各ドメインコンテキスト
+        // Each Domain contexts
         services.AddSingleton(dependencyDefinition.GetSekibanDependencyOptions().RegisteredEventTypes);
         services.AddSingleton(dependencyDefinition.GetSekibanDependencyOptions().SekibanAggregateTypes);
         services.AddTransient(dependencyDefinition.GetSekibanDependencyOptions().TransientDependencies);
@@ -78,14 +76,14 @@ public static class SekibanEventSourcingDependency
         // MediatR
         services.AddMediatR(Assembly.GetExecutingAssembly(), GetAssembly());
 
-        // Sekibanイベントソーシング
+        // Sekiban Event Sourcing
         services.AddSekibanCoreInMemory(sekibanDateProducer);
 
         services.AddSekibanHTTPUser();
 
         services.AddSekibanSettingsFromAppSettings();
 
-        // 各ドメインコンテキスト
+        // Each Domain contexts
         services.AddSingleton(dependencyDefinition.GetSekibanDependencyOptions().RegisteredEventTypes);
         services.AddSingleton(dependencyDefinition.GetSekibanDependencyOptions().SekibanAggregateTypes);
         services.AddTransient(dependencyDefinition.GetSekibanDependencyOptions().TransientDependencies);
@@ -110,27 +108,34 @@ public static class SekibanEventSourcingDependency
         // MediatR
         services.AddMediatR(Assembly.GetExecutingAssembly(), GetAssembly());
 
-        // Sekibanイベントソーシング
+        // Sekiban Event Sourcing
         services.AddSekibanCoreAggregateTest(sekibanDateProducer);
 
         services.AddSekibanHTTPUser();
 
         services.AddSekibanAppSettingsFromObject(new AggregateSettings());
 
-        // 各ドメインコンテキスト
+        // Each Domain contexts
         services.AddSingleton(dependencyDefinition.GetSekibanDependencyOptions().RegisteredEventTypes);
         services.AddSingleton(dependencyDefinition.GetSekibanDependencyOptions().SekibanAggregateTypes);
         services.AddTransient(dependencyDefinition.GetSekibanDependencyOptions().TransientDependencies);
         services.AddTransient(GetDependencies());
     }
 
-    public static void AddTransient(this IServiceCollection services,
+    public static void AddTransient(
+        this IServiceCollection services,
         IEnumerable<(Type serviceType, Type? implementationType)> dependencies)
     {
         foreach (var (serviceType, implementationType) in dependencies)
+        {
             if (implementationType is null)
+            {
                 services.AddTransient(serviceType);
+            }
             else
+            {
                 services.AddTransient(serviceType, implementationType);
+            }
+        }
     }
 }

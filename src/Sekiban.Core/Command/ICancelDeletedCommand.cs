@@ -1,3 +1,4 @@
+using Sekiban.Core.Exceptions;
 namespace Sekiban.Core.Command;
 
 /// <summary>

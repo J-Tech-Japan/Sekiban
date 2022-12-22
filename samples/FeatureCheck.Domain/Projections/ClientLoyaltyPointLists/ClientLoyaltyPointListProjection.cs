@@ -4,7 +4,7 @@ using FeatureCheck.Domain.Aggregates.Clients;
 using FeatureCheck.Domain.Aggregates.Clients.Events;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Events;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Sekiban.Core.Query.MultiProjections;
 using System.Collections.Immutable;
 namespace FeatureCheck.Domain.Projections.ClientLoyaltyPointLists;
@@ -14,25 +14,25 @@ public record ClientLoyaltyPointListProjection(
     ImmutableList<ClientLoyaltyPointListProjection.ProjectedBranchInternal> Branches) : IMultiProjectionPayload<
     ClientLoyaltyPointListProjection>
 {
-    public ClientLoyaltyPointListProjection() : this(ImmutableList<ClientLoyaltyPointListRecord>.Empty,
+    public ClientLoyaltyPointListProjection() : this(
+        ImmutableList<ClientLoyaltyPointListRecord>.Empty,
         ImmutableList<ProjectedBranchInternal>.Empty)
     {
     }
 
-    public IList<string> TargetAggregateNames()
-    {
-        return new List<string> { nameof(Branch), nameof(Client), nameof(LoyaltyPoint) };
-    }
+    public IList<string> TargetAggregateNames() => new List<string> { nameof(Branch), nameof(Client), nameof(LoyaltyPoint) };
 
     public Func<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection>? GetApplyEventFunc(
-        IEvent ev, IEventPayloadCommon eventPayload)
+        IEvent ev,
+        IEventPayloadCommon eventPayload)
     {
         return eventPayload switch
         {
             BranchCreated branchCreated => payload => payload with
             {
-                Branches = payload.Branches.Add(new ProjectedBranchInternal
-                    { BranchId = ev.AggregateId, BranchName = branchCreated.Name })
+                Branches = payload.Branches.Add(
+                    new ProjectedBranchInternal
+                        { BranchId = ev.AggregateId, BranchName = branchCreated.Name })
             },
             ClientCreated clientCreated => payload => payload with
             {
@@ -46,16 +46,18 @@ public record ClientLoyaltyPointListProjection(
             },
             ClientNameChanged clientNameChanged => payload => payload with
             {
-                Records = payload.Records.Select(m =>
-                        m.ClientId == ev.AggregateId ? m with { ClientName = clientNameChanged.ClientName } : m)
+                Records = payload.Records.Select(
+                        m =>
+                            m.ClientId == ev.AggregateId ? m with { ClientName = clientNameChanged.ClientName } : m)
                     .ToImmutableList()
             },
             ClientDeleted clientDeleted => payload =>
                 payload with { Records = payload.Records.Where(m => m.ClientId != ev.AggregateId).ToImmutableList() },
             LoyaltyPointCreated loyaltyPointCreated => payload => payload with
             {
-                Records = payload.Records.Select(m =>
-                        m.ClientId == ev.AggregateId ? m with { Point = loyaltyPointCreated.InitialPoint } : m)
+                Records = payload.Records.Select(
+                        m =>
+                            m.ClientId == ev.AggregateId ? m with { Point = loyaltyPointCreated.InitialPoint } : m)
                     .ToImmutableList()
             },
             LoyaltyPointAdded loyaltyPointAdded => payload => payload with
@@ -78,7 +80,11 @@ public record ClientLoyaltyPointListProjection(
         };
     }
 
-    public record ClientLoyaltyPointListRecord(Guid BranchId, string BranchName, Guid ClientId, string ClientName,
+    public record ClientLoyaltyPointListRecord(
+        Guid BranchId,
+        string BranchName,
+        Guid ClientId,
+        string ClientName,
         int Point);
 
     public class ProjectedBranchInternal

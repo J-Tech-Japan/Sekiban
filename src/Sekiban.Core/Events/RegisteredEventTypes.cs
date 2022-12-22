@@ -1,6 +1,5 @@
 using System.Reflection;
-
-namespace Sekiban.Core.Event;
+namespace Sekiban.Core.Events;
 
 public class RegisteredEventTypes
 {
@@ -10,11 +9,15 @@ public class RegisteredEventTypes
     {
         foreach (var assembly in assemblies)
         {
-            var decoratedTypes = assembly.DefinedTypes.Where(x =>
-                x.IsClass && x.ImplementedInterfaces.Contains(typeof(IEventPayloadCommon)));
+            var decoratedTypes = assembly.DefinedTypes.Where(
+                x =>
+                    x.IsClass && x.ImplementedInterfaces.Contains(typeof(IEventPayloadCommon)));
             foreach (var type in decoratedTypes)
             {
-                if (_registeredTypes.Contains(type)) continue;
+                if (_registeredTypes.Contains(type))
+                {
+                    continue;
+                }
                 _registeredTypes.Add(type);
             }
         }

@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Configuration;
-
 namespace Sekiban.Core.Setting;
 
 public class ConfigurationAggregateSettings : AggregateSettings
@@ -11,7 +10,9 @@ public class ConfigurationAggregateSettings : AggregateSettings
     {
         var section = configuration?.GetSection(SekibanSection);
         if (!string.IsNullOrWhiteSpace(sekibanContext.SettingGroupIdentifier))
+        {
             section = section?.GetSection(sekibanContext.SettingGroupIdentifier);
+        }
         section = section?.GetSection(AggregatesSection);
         var useHybridDefault = section?.GetValue<bool?>("UseHybridDefault") ?? false;
         var takeSnapshotDefault = section?.GetValue<bool?>("TakeSnapshotDefault") ?? false;
@@ -19,7 +20,7 @@ public class ConfigurationAggregateSettings : AggregateSettings
         var snapshotOffsetDefault = section?.GetValue<int?>("SnapshotOffsetDefault") ?? 15;
         var useUpdateMarker = section?.GetValue<bool?>("UseUpdateMarker") ?? false;
         var exceptions = section?.GetSection("SingleAggregateExceptions").Get<List<AggregateSetting>>() ??
-                         new List<AggregateSetting>();
+            new List<AggregateSetting>();
         Helper = new AggregateSettingHelper(
             takeSnapshotDefault,
             useHybridDefault,

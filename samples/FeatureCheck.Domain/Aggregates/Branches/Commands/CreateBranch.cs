@@ -1,7 +1,7 @@
 using FeatureCheck.Domain.Aggregates.Branches.Events;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using System.ComponentModel.DataAnnotations;
 namespace FeatureCheck.Domain.Aggregates.Branches.Commands;
 

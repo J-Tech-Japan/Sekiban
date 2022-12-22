@@ -13,5 +13,5 @@ public record LoyaltyPointValue
     public int Value { get; init; }
     public static implicit operator int(LoyaltyPointValue vo) => vo.Value;
 
-    public static implicit operator LoyaltyPointValue(int v) => new LoyaltyPointValue(v);
+    public static implicit operator LoyaltyPointValue(int v) => new(v);
 }

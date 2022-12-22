@@ -1,6 +1,6 @@
 using FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Enums;
 using FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Events;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Sekiban.Core.Query.SingleProjections;
 namespace FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Projections;
 

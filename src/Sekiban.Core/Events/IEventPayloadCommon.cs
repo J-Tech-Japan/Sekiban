@@ -1,4 +1,4 @@
-namespace Sekiban.Core.Event;
+namespace Sekiban.Core.Events;
 
 public interface IEventPayloadCommon
 {

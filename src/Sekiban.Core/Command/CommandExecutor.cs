@@ -1,7 +1,7 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command.UserInformation;
 using Sekiban.Core.Documents;
-using Sekiban.Core.Event;
+using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.History;
 using Sekiban.Core.Query.SingleProjections;
@@ -11,6 +11,10 @@ using Sekiban.Core.Validation;
 using System.Collections.Immutable;
 namespace Sekiban.Core.Command;
 
+/// <summary>
+///     System use implementation of the <see cref="ICommandExecutor" />
+///     Application developer does not need to use this class directly
+/// </summary>
 public class CommandExecutor : ICommandExecutor
 {
     private static readonly SemaphoreSlim SemaphoreInMemory = new(1, 1);

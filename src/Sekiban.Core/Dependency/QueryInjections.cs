@@ -3,6 +3,10 @@ using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Types;
 namespace Sekiban.Core.Dependency;
 
+/// <summary>
+///     System use this class to resolve query dependencies
+///     Application developers does not need to use this class directly
+/// </summary>
 public static class QueryInjections
 {
     public static IServiceCollection AddQueries(
