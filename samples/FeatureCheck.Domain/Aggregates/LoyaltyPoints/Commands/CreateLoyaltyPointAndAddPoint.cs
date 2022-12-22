@@ -31,14 +31,18 @@ public record CreateLoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : IC
             Func<AggregateState<LoyaltyPoint>> getAggregateState,
             CreateLoyaltyPointAndAddPoint command)
         {
-            await aggregateLoader.AsAggregateAsync<Client>(getAggregateState().AggregateId);
             yield return new LoyaltyPointCreated(0);
             getAggregateState(); // to reproduce the issue;
-            yield return new LoyaltyPointAdded(
-                _dateProducer.UtcNow,
-                LoyaltyPointReceiveTypeKeys.InitialGift,
-                command.AddingPoint,
-                string.Empty);
+            yield return new LoyaltyPointAdded(_dateProducer.UtcNow, LoyaltyPointReceiveTypeKeys.InitialGift,
+                command.AddingPoint, "Initial User Gift");
+            // initial gift for gmail user.
+            var client = await aggregateLoader.AsDefaultStateAsync<Client>(getAggregateState().AggregateId);
+            if (client != null && client.Payload.ClientEmail.ToLower().EndsWith("@gmail.com"))
+            {
+                yield return new LoyaltyPointAdded(_dateProducer.UtcNow, LoyaltyPointReceiveTypeKeys.InitialGmailUserGift,
+                    command.AddingPoint, "Gmail users gift");
+
+            }
         }
     }
 }
