@@ -12,10 +12,7 @@ public record DeleteClient(Guid ClientId) : IVersionValidationCommand<Client>
 
     public int ReferenceVersion { get; init; }
 
-    public Guid GetAggregateId()
-    {
-        return ClientId;
-    }
+    public Guid GetAggregateId() => ClientId;
 
     public class Handler : IVersionValidationCommandHandler<Client, DeleteClient>
     {

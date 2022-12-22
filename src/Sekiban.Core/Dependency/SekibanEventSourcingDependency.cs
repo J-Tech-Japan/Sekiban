@@ -1,4 +1,3 @@
-using System.Reflection;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Command;
@@ -6,15 +5,12 @@ using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot.Aggregate;
 using Sekiban.Core.Snapshot.Aggregate.Commands;
-
+using System.Reflection;
 namespace Sekiban.Core.Dependency;
 
 public static class SekibanEventSourcingDependency
 {
-    public static Assembly GetAssembly()
-    {
-        return Assembly.GetExecutingAssembly();
-    }
+    public static Assembly GetAssembly() => Assembly.GetExecutingAssembly();
 
     public static IServiceCollection AddSekibanCoreWithDependency(
         this IServiceCollection services,
@@ -124,13 +120,20 @@ public static class SekibanEventSourcingDependency
         services.AddTransient(GetDependencies());
     }
 
-    public static void AddTransient(this IServiceCollection services,
+    public static void AddTransient(
+        this IServiceCollection services,
         IEnumerable<(Type serviceType, Type? implementationType)> dependencies)
     {
         foreach (var (serviceType, implementationType) in dependencies)
+        {
             if (implementationType is null)
+            {
                 services.AddTransient(serviceType);
+            }
             else
+            {
                 services.AddTransient(serviceType, implementationType);
+            }
+        }
     }
 }

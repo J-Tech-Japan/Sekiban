@@ -1,6 +1,5 @@
 using MediatR;
 using Sekiban.Core.Events;
-
 namespace Sekiban.Core.PubSub;
 
 public class EventSubscriber<TEventPayload, TEventSubscriber> : INotificationHandler<Event<TEventPayload>>
@@ -8,14 +7,10 @@ public class EventSubscriber<TEventPayload, TEventSubscriber> : INotificationHan
     where TEventSubscriber : IEventSubscriber<TEventPayload>
 {
     private readonly IEventSubscriber<TEventPayload> _eventSubscriber;
-    public EventSubscriber(IEventSubscriber<TEventPayload> eventSubscriber)
-    {
-        _eventSubscriber = eventSubscriber;
-    }
+    public EventSubscriber(IEventSubscriber<TEventPayload> eventSubscriber) => _eventSubscriber = eventSubscriber;
 
     public async Task Handle(Event<TEventPayload> ev, CancellationToken cancellationToken)
     {
         await _eventSubscriber.HandleEventAsync(ev);
     }
-
 }

@@ -14,10 +14,7 @@ public record CreateLoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : IC
     {
     }
 
-    public Guid GetAggregateId()
-    {
-        return ClientId;
-    }
+    public Guid GetAggregateId() => ClientId;
 
     public class Handler : ICommandHandler<LoyaltyPoint, CreateLoyaltyPointAndAddPoint>
     {
@@ -37,8 +34,11 @@ public record CreateLoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : IC
             await aggregateLoader.AsAggregateAsync<Client>(getAggregateState().AggregateId);
             yield return new LoyaltyPointCreated(0);
             getAggregateState(); // to reproduce the issue;
-            yield return new LoyaltyPointAdded(_dateProducer.UtcNow, LoyaltyPointReceiveTypeKeys.InitialGift,
-                command.AddingPoint, string.Empty);
+            yield return new LoyaltyPointAdded(
+                _dateProducer.UtcNow,
+                LoyaltyPointReceiveTypeKeys.InitialGift,
+                command.AddingPoint,
+                string.Empty);
         }
     }
 }

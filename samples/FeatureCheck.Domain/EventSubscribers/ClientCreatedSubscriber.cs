@@ -9,10 +9,7 @@ public class ClientCreatedSubscriber : IEventSubscriber<ClientCreated>
 {
     private readonly ICommandExecutor commandExecutor;
 
-    public ClientCreatedSubscriber(ICommandExecutor commandExecutor)
-    {
-        this.commandExecutor = commandExecutor;
-    }
+    public ClientCreatedSubscriber(ICommandExecutor commandExecutor) => this.commandExecutor = commandExecutor;
 
     public async Task HandleEventAsync(Event<ClientCreated> ev)
     {

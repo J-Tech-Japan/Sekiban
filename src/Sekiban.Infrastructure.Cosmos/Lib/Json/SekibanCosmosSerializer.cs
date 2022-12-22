@@ -1,22 +1,21 @@
-﻿using System.Text.Json;
-using Azure.Core.Serialization;
+﻿using Azure.Core.Serialization;
 using Sekiban.Core.Shared;
-
+using System.Text.Json;
 namespace Sekiban.Infrastructure.Cosmos.Lib.Json;
 
 public class SekibanCosmosSerializer : CosmosSerializer
 {
     private readonly JsonObjectSerializer _jsonObjectSerializer;
 
-    public SekibanCosmosSerializer(JsonSerializerOptions? jsonSerializerOptions = null)
-    {
-        _jsonObjectSerializer =
-            new JsonObjectSerializer(jsonSerializerOptions ?? SekibanJsonHelper.GetDefaultJsonSerializerOptions());
-    }
+    public SekibanCosmosSerializer(JsonSerializerOptions? jsonSerializerOptions = null) => _jsonObjectSerializer =
+        new JsonObjectSerializer(jsonSerializerOptions ?? SekibanJsonHelper.GetDefaultJsonSerializerOptions());
 
     public override T FromStream<T>(Stream stream)
     {
-        if (typeof(Stream).IsAssignableFrom(typeof(T))) return (T)(object)stream;
+        if (typeof(Stream).IsAssignableFrom(typeof(T)))
+        {
+            return (T)(object)stream;
+        }
 
         using (stream)
         {

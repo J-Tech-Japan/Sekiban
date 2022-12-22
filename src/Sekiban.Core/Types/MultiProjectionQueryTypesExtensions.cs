@@ -1,13 +1,10 @@
 using Sekiban.Core.Query.QueryModel;
-
 namespace Sekiban.Core.Types;
 
 public static class MultiProjectionQueryTypesExtensions
 {
-    public static bool IsMultiProjectionQueryType(this Type aggregateQuery)
-    {
-        return aggregateQuery.DoesImplementingFromGenericInterfaceType(typeof(IMultiProjectionQuery<,,>));
-    }
+    public static bool IsMultiProjectionQueryType(this Type aggregateQuery) =>
+        aggregateQuery.DoesImplementingFromGenericInterfaceType(typeof(IMultiProjectionQuery<,,>));
 
     public static Type GetMultiProjectionTypeFromMultiProjectionQueryType(this Type aggregateQueryType)
     {

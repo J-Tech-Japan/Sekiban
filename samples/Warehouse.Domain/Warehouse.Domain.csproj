@@ -8,9 +8,9 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Sekiban.Core\Sekiban.Core.csproj" />
-        <ProjectReference Include="..\Shipping.Port\Shipping.Port.csproj" />
-        <ProjectReference Include="..\Warehouse.Port\Warehouse.Port.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Core\Sekiban.Core.csproj"/>
+        <ProjectReference Include="..\Shipping.Port\Shipping.Port.csproj"/>
+        <ProjectReference Include="..\Warehouse.Port\Warehouse.Port.csproj"/>
     </ItemGroup>
 
 </Project>

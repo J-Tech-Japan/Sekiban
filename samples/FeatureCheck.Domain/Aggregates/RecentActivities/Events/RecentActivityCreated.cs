@@ -4,8 +4,5 @@ namespace FeatureCheck.Domain.Aggregates.RecentActivities.Events;
 
 public record RecentActivityCreated(RecentActivityRecord Activity) : IEventPayload<RecentActivity>
 {
-    public RecentActivity OnEvent(RecentActivity payload, IEvent ev)
-    {
-        return new(ImmutableList<RecentActivityRecord>.Empty.Add(Activity));
-    }
+    public RecentActivity OnEvent(RecentActivity payload, IEvent ev) => new RecentActivity(ImmutableList<RecentActivityRecord>.Empty.Add(Activity));
 }

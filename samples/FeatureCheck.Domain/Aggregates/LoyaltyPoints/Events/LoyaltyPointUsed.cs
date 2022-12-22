@@ -3,11 +3,12 @@ using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Events;
 
 public record LoyaltyPointUsed
-(DateTime HappenedDate, LoyaltyPointUsageTypeKeys Reason, int PointAmount,
+(
+    DateTime HappenedDate,
+    LoyaltyPointUsageTypeKeys Reason,
+    int PointAmount,
     string Note) : IEventPayload<LoyaltyPoint>
 {
-    public LoyaltyPoint OnEvent(LoyaltyPoint payload, IEvent ev)
-    {
-        return payload with { CurrentPoint = payload.CurrentPoint - PointAmount, LastOccuredTime = HappenedDate };
-    }
+    public LoyaltyPoint OnEvent(LoyaltyPoint payload, IEvent ev) =>
+        payload with { CurrentPoint = payload.CurrentPoint - PointAmount, LastOccuredTime = HappenedDate };
 }

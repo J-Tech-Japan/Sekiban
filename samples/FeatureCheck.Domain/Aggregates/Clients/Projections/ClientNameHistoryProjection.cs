@@ -12,10 +12,10 @@ public record ClientNameHistoryProjection(
     IReadOnlyCollection<ClientNameHistoryProjection.ClientNameHistoryProjectionRecord> ClientNames,
     string ClientEmail) : IDeletableSingleProjectionPayload<Client, ClientNameHistoryProjection>
 {
-    public bool IsDeleted { get; init; }
     public ClientNameHistoryProjection() : this(Guid.Empty, new List<ClientNameHistoryProjectionRecord>(), string.Empty)
     {
     }
+    public bool IsDeleted { get; init; }
 
     public Func<ClientNameHistoryProjection, ClientNameHistoryProjection>? GetApplyEventFunc(
         IEvent ev,

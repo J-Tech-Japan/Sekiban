@@ -14,15 +14,13 @@ public record ClientLoyaltyPointMultiProjection(
     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord> Records) : IMultiProjectionPayload<
     ClientLoyaltyPointMultiProjection>
 {
-    public ClientLoyaltyPointMultiProjection() : this(ImmutableList<ProjectedBranch>.Empty,
+    public ClientLoyaltyPointMultiProjection() : this(
+        ImmutableList<ProjectedBranch>.Empty,
         ImmutableList<ProjectedRecord>.Empty)
     {
     }
 
-    public IList<string> TargetAggregateNames()
-    {
-        return new List<string> { nameof(Branch), nameof(Client), nameof(LoyaltyPoint) };
-    }
+    public IList<string> TargetAggregateNames() => new List<string> { nameof(Branch), nameof(Client), nameof(LoyaltyPoint) };
 
     public Func<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultiProjection>? GetApplyEventFunc(
         IEvent ev,
@@ -48,8 +46,9 @@ public record ClientLoyaltyPointMultiProjection(
             },
             ClientNameChanged clientNameChanged => payload => payload with
             {
-                Records = payload.Records.Select(m =>
-                        m.ClientId == ev.AggregateId ? m with { ClientName = clientNameChanged.ClientName } : m)
+                Records = payload.Records.Select(
+                        m =>
+                            m.ClientId == ev.AggregateId ? m with { ClientName = clientNameChanged.ClientName } : m)
                     .ToImmutableList()
             },
             ClientDeleted => payload => payload with
@@ -58,8 +57,9 @@ public record ClientLoyaltyPointMultiProjection(
             },
             LoyaltyPointCreated loyaltyPointCreated => payload => payload with
             {
-                Records = payload.Records.Select(m =>
-                        m.ClientId == ev.AggregateId ? m with { Point = loyaltyPointCreated.InitialPoint } : m)
+                Records = payload.Records.Select(
+                        m =>
+                            m.ClientId == ev.AggregateId ? m with { Point = loyaltyPointCreated.InitialPoint } : m)
                     .ToImmutableList()
             },
             LoyaltyPointAdded loyaltyPointAdded => payload => payload with

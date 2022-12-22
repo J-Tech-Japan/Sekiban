@@ -1,6 +1,5 @@
 using Sekiban.Core.Shared;
 using Xunit;
-
 namespace SampleProjectStoryXTest;
 
 public class VersioningTest
@@ -20,7 +19,6 @@ public class VersioningTest
 
     public record TestV2(string Name, string Location, int Point = 10);
 }
-
 public class VersioningTest2
 {
     [Fact]
@@ -38,7 +36,6 @@ public class VersioningTest2
 
     public record TestV2(string Name, string Location, int Point);
 }
-
 public class VersioningTest3
 {
     [Fact]

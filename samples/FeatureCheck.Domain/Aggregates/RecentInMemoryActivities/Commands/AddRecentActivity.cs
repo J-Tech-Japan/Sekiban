@@ -14,19 +14,13 @@ public record AddRecentInMemoryActivity
 
     public int ReferenceVersion { get; init; }
 
-    public Guid GetAggregateId()
-    {
-        return RecentInMemoryActivityId;
-    }
+    public Guid GetAggregateId() => RecentInMemoryActivityId;
 
     public class Handler : ICommandHandler<RecentInMemoryActivity, AddRecentInMemoryActivity>
     {
         private readonly ISekibanDateProducer _sekibanDateProducer;
 
-        public Handler(ISekibanDateProducer sekibanDateProducer)
-        {
-            _sekibanDateProducer = sekibanDateProducer;
-        }
+        public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
 
         public async IAsyncEnumerable<IEventPayload<RecentInMemoryActivity>> HandleCommandAsync(
             Func<AggregateState<RecentInMemoryActivity>> getAggregateState,

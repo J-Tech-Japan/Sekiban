@@ -1,13 +1,9 @@
 using Sekiban.Core.Query.QueryModel;
-
 namespace Sekiban.Core.Types;
 
 public static class AggregateQueryTypesExtensions
 {
-    public static bool IsAggregateQueryType(this Type query)
-    {
-        return query.DoesImplementingFromGenericInterfaceType(typeof(IAggregateQuery<,,>));
-    }
+    public static bool IsAggregateQueryType(this Type query) => query.DoesImplementingFromGenericInterfaceType(typeof(IAggregateQuery<,,>));
 
     public static Type GetAggregateTypeFromAggregateQueryType(this Type query)
     {

@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-
 namespace Sekiban.Core.Validation;
 
 public record SekibanValidationParameterError(string PropertyName, IEnumerable<string> ErrorMessages)
@@ -13,6 +12,7 @@ public record SekibanValidationParameterError(string PropertyName, IEnumerable<s
             param => new SekibanValidationParameterError(
                 param,
                 list.Where(m => (m.MemberNames.FirstOrDefault() ?? string.Empty) == param)
-                    .Select(m => m.ErrorMessage ?? string.Empty).ToList()));
+                    .Select(m => m.ErrorMessage ?? string.Empty)
+                    .ToList()));
     }
 }

@@ -9,14 +9,12 @@ public record CancelDeleteClient : IVersionValidationCommand<Client>, ICancelDel
 {
     public Guid ClientId { get; init; }
 
-    [Required] public string Reason { get; init; } = string.Empty;
+    [Required]
+    public string Reason { get; init; } = string.Empty;
 
     public int ReferenceVersion { get; init; }
 
-    public Guid GetAggregateId()
-    {
-        return ClientId;
-    }
+    public Guid GetAggregateId() => ClientId;
 
     public class Handler : IVersionValidationCommandHandler<Client, CancelDeleteClient>
     {

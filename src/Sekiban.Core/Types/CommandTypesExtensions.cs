@@ -1,18 +1,12 @@
 using Sekiban.Core.Command;
-
 namespace Sekiban.Core.Types;
 
 public static class CommandTypesExtensions
 {
-    public static bool IsCommandType(this Type commandType)
-    {
-        return commandType.DoesImplementingFromGenericInterfaceType(typeof(ICommand<>));
-    }
+    public static bool IsCommandType(this Type commandType) => commandType.DoesImplementingFromGenericInterfaceType(typeof(ICommand<>));
 
-    public static bool IsCommandHandlerType(this Type eventPayloadType)
-    {
-        return eventPayloadType.DoesImplementingFromGenericInterfaceType(typeof(ICommandHandlerCommon<,>));
-    }
+    public static bool IsCommandHandlerType(this Type eventPayloadType) =>
+        eventPayloadType.DoesImplementingFromGenericInterfaceType(typeof(ICommandHandlerCommon<,>));
 
     public static Type GetAggregatePayloadTypeFromCommandHandlerType(this Type commandHandlerType)
     {

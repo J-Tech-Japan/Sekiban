@@ -9,10 +9,7 @@ public class ClientDeletedSubscriber : IEventSubscriber<ClientDeleted>
 {
     private readonly ICommandExecutor commandExecutor;
 
-    public ClientDeletedSubscriber(ICommandExecutor commandExecutor)
-    {
-        this.commandExecutor = commandExecutor;
-    }
+    public ClientDeletedSubscriber(ICommandExecutor commandExecutor) => this.commandExecutor = commandExecutor;
 
     public async Task HandleEventAsync(Event<ClientDeleted> ev)
     {

@@ -5,7 +5,7 @@ using Sekiban.Core.Shared;
 namespace FeatureCheck.Domain.Aggregates.RecentActivities.Commands;
 
 public record OnlyPublishingAddRecentActivity(Guid RecentActivityId, string Activity) :
-    IOnlyPublishingCommand<RecentActivities.RecentActivity>,
+    IOnlyPublishingCommand<RecentActivity>,
     IOnlyPublishingCommandCommon
 {
     public OnlyPublishingAddRecentActivity() : this(Guid.Empty, string.Empty)
@@ -14,23 +14,18 @@ public record OnlyPublishingAddRecentActivity(Guid RecentActivityId, string Acti
 
     public int ReferenceVersion { get; init; }
 
-    public Guid GetAggregateId()
-    {
-        return RecentActivityId;
-    }
+    public Guid GetAggregateId() => RecentActivityId;
 
-    public class Handler : IOnlyPublishingCommandHandler<RecentActivities.RecentActivity,
+    public class Handler : IOnlyPublishingCommandHandler<RecentActivity,
         OnlyPublishingAddRecentActivity>
     {
         private readonly ISekibanDateProducer _sekibanDateProducer;
 
-        public Handler(ISekibanDateProducer sekibanDateProducer)
-        {
-            _sekibanDateProducer = sekibanDateProducer;
-        }
+        public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
 
-        public async IAsyncEnumerable<IEventPayload<RecentActivities.RecentActivity>> HandleCommandAsync(
-            Guid aggregateId, OnlyPublishingAddRecentActivity command)
+        public async IAsyncEnumerable<IEventPayload<RecentActivity>> HandleCommandAsync(
+            Guid aggregateId,
+            OnlyPublishingAddRecentActivity command)
         {
             await Task.CompletedTask;
             yield return new RecentActivityAdded(

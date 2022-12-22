@@ -55,7 +55,7 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
 
     public IEnumerable<Type> GetMultiProjectionListQueryTypes() => MultiProjectionListQueryTypes;
 
-    public virtual SekibanDependencyOptions GetSekibanDependencyOptions() => new SekibanDependencyOptions(
+    public virtual SekibanDependencyOptions GetSekibanDependencyOptions() => new(
         new RegisteredEventTypes(GetAssembliesForOptions()),
         new SekibanAggregateTypes(GetAssembliesForOptions()),
         GetCommandDependencies().Concat(GetSubscriberDependencies()));

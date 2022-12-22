@@ -7,15 +7,18 @@ public record SnapshotManagerSnapshotTaken(
     int NextSnapshotVersion,
     int? SnapshotVersion) : IEventPayload<SnapshotManager>
 {
-    public SnapshotManager OnEvent(SnapshotManager payload, IEvent ev)
+    public SnapshotManager OnEvent(SnapshotManager payload, IEvent ev) => payload with
     {
-        return payload with
-        {
-            Requests = payload.Requests.Remove(SnapshotManager.SnapshotKey(AggregateTypeName, TargetAggregateId,
+        Requests = payload.Requests.Remove(
+            SnapshotManager.SnapshotKey(
+                AggregateTypeName,
+                TargetAggregateId,
                 NextSnapshotVersion)),
-            RequestTakens =
-            payload.RequestTakens.Add(SnapshotManager.SnapshotKey(AggregateTypeName, TargetAggregateId,
+        RequestTakens =
+        payload.RequestTakens.Add(
+            SnapshotManager.SnapshotKey(
+                AggregateTypeName,
+                TargetAggregateId,
                 NextSnapshotVersion))
-        };
-    }
+    };
 }

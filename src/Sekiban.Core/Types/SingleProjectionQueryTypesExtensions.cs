@@ -1,13 +1,10 @@
 using Sekiban.Core.Query.QueryModel;
-
 namespace Sekiban.Core.Types;
 
 public static class SingleProjectionQueryTypesExtensions
 {
-    public static bool IsSingleProjectionQueryType(this Type singleProjectionQuery)
-    {
-        return singleProjectionQuery.DoesImplementingFromGenericInterfaceType(typeof(ISingleProjectionQuery<,,>));
-    }
+    public static bool IsSingleProjectionQueryType(this Type singleProjectionQuery) =>
+        singleProjectionQuery.DoesImplementingFromGenericInterfaceType(typeof(ISingleProjectionQuery<,,>));
 
     public static Type GetSingleProjectionTypeFromSingleProjectionQueryType(this Type singleProjectionQuery)
     {

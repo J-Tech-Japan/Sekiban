@@ -1,8 +1,7 @@
 using Sekiban.Core.Aggregate;
-
 namespace Sekiban.Core.Query.SingleProjections;
 
-public interface 
+public interface
     IDeletableSingleProjectionPayload<TAggregatePayload, TSingleProjectionPayload> :
         ISingleProjectionPayload<TAggregatePayload, TSingleProjectionPayload>, IDeletable
     where TAggregatePayload : IAggregatePayload
