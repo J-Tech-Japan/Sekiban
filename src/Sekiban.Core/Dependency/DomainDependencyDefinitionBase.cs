@@ -5,6 +5,10 @@ using System.Collections.Immutable;
 using System.Reflection;
 namespace Sekiban.Core.Dependency;
 
+/// <summary>
+///     Defines a sekiban dependency for the each project.
+///     Application developers can inherit this class and override the Define() method to define your dependencies.
+/// </summary>
 public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
 {
     protected DomainDependencyDefinitionBase()

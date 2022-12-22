@@ -3,9 +3,13 @@ using Sekiban.Core.Events;
 using System.Reflection;
 namespace Sekiban.Core.Dependency;
 
+/// <summary>
+///     System use base interface for Dependency Definition
+///     Application developers does not need to use this interface directly
+/// </summary>
 public interface IDependencyDefinition : IQueryDefinition
 {
-    public SekibanDependencyOptions GetSekibanDependencyOptions() => new SekibanDependencyOptions(
+    public SekibanDependencyOptions GetSekibanDependencyOptions() => new(
         new RegisteredEventTypes(GetExecutingAssembly(), SekibanEventSourcingDependency.GetAssembly()),
         new SekibanAggregateTypes(GetExecutingAssembly(), SekibanEventSourcingDependency.GetAssembly()),
         GetCommandDependencies().Concat(GetSubscriberDependencies()));

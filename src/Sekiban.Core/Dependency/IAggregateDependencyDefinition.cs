@@ -1,6 +1,10 @@
 using System.Collections.Immutable;
 namespace Sekiban.Core.Dependency;
 
+/// <summary>
+///     system use base class for <see cref="AggregateDependencyDefinition" />
+///     Application developer does not need to use this class directly.
+/// </summary>
 public interface IAggregateDependencyDefinition
 {
     Type AggregateType { get; }

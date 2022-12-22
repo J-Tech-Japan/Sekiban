@@ -3,6 +3,10 @@ using Sekiban.Core.Events;
 using System.Reflection;
 namespace Sekiban.Core.Dependency;
 
+/// <summary>
+///     System use dependency injection options
+///     Application developers do not need to use this class directly
+/// </summary>
 public record SekibanDependencyOptions
 {
     public SekibanDependencyOptions(
@@ -21,7 +25,7 @@ public record SekibanDependencyOptions
 
     public static SekibanDependencyOptions CreateMergedOption(
         Assembly[] assemblies,
-        IEnumerable<(Type serviceType, Type? implementationType)> transientDependencies) => new SekibanDependencyOptions(
+        IEnumerable<(Type serviceType, Type? implementationType)> transientDependencies) => new(
         new RegisteredEventTypes(assemblies),
         new SekibanAggregateTypes(assemblies),
         transientDependencies);
