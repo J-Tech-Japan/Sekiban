@@ -4,9 +4,7 @@ namespace Sekiban.Core.Documents;
 
 public abstract record Document : IDocument
 {
-    public Document()
-    {
-    }
+    public Document() { }
 
     public Document(Guid aggregateId, string partitionKey, DocumentType documentType, string documentTypeName)
     {
