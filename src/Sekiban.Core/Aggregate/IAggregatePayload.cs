@@ -14,6 +14,6 @@ public interface IAggregatePayload
     ///     e.g.
     ///     public string GetPayloadVersionIdentifier() => "20230101 1.0.0";
     /// </summary>
-    /// <returns>Payment Version</returns>
+    /// <returns>Payload Version</returns>
     public string GetPayloadVersionIdentifier() => "initial";
 }
