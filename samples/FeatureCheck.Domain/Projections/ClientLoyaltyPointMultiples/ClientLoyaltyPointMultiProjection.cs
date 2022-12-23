@@ -20,7 +20,8 @@ public record ClientLoyaltyPointMultiProjection(
     {
     }
 
-    public IList<string> TargetAggregateNames() => new List<string> { nameof(Branch), nameof(Client), nameof(LoyaltyPoint) };
+    public TargetAggregatePayloadCollection GetTargetAggregatePayloads() =>
+        new TargetAggregatePayloadCollection().Add<Branch, Client, LoyaltyPoint>();
 
     public Func<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultiProjection>? GetApplyEventFunc(
         IEvent ev,
