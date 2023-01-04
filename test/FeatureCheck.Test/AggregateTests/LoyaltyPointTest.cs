@@ -44,6 +44,16 @@ public class LoyaltyPointTest : AggregateTest<LoyaltyPoint>
             .ThenNotThrowsAnException();
     }
     [Fact]
+    public void DeleteClientWillDeleteLoyaltyPointTest()
+    {
+        var branchId = RunEnvironmentCommand(new CreateBranch("Test"));
+        var clientId = RunEnvironmentCommand(new CreateClient(branchId, "Test Name", "test@example.com"));
+        WhenCommand(new CreateLoyaltyPoint(clientId, 10));
+        RunEnvironmentCommandWithPublish(new DeleteClient(clientId));
+        var timeStamp = GetLatestEnvironmentEvents().Where(m => m.GetPayload() is LoyaltyPointDeleted).FirstOrDefault()?.TimeStamp;
+        ThenPayloadIs(new LoyaltyPoint(10, timeStamp, true));
+    }
+    [Fact]
     public void UseValueObjectExceptionTest()
     {
         var branchId = RunEnvironmentCommand(new CreateBranch("Test"));

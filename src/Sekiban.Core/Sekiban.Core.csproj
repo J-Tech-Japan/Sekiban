@@ -6,13 +6,13 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>JJ_Sekiban.Core</PackageId>
-        <Version>0.10.4</Version>
+        <Version>0.10.5</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Core</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.10.4</PackageVersion>
-        <Description>Try to downgrade microsoft.extensions.configration.abstraction to 6.0.1</Description>
+        <PackageVersion>0.10.5</PackageVersion>
+        <Description>ThenPayloadIs should be update aggregate as newest state</Description>
         <AssemblyName>Sekiban.Core</AssemblyName>
         <RootNamespace>Sekiban.Core</RootNamespace>
     </PropertyGroup>
