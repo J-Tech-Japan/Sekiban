@@ -187,13 +187,13 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> ThenGetState(
         Action<AggregateState<TAggregatePayload>> checkStateAction)
     {
-        checkStateAction(Aggregate.ToState());
+        checkStateAction(GetAggregateState());
         return this;
     }
 
     public IAggregateTestHelper<TAggregatePayload> ThenStateIs(AggregateState<TAggregatePayload> expectedState)
     {
-        var actual = Aggregate.ToState();
+        var actual = GetAggregateState();
         var expected = expectedState.GetComparableObject(actual);
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
@@ -203,13 +203,22 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public IAggregateTestHelper<TAggregatePayload> ThenGetPayload(Action<TAggregatePayload> payloadAction)
     {
-        payloadAction(Aggregate.ToState().Payload);
+        payloadAction(GetAggregateState().Payload);
         return this;
+    }
+
+    public AggregateState<TAggregatePayload> GetAggregateState()
+    {
+        var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
+            throw new Exception("Failed to get aggregate loader");
+        var aggregate = aggregateLoader.AsDefaultStateAsync<TAggregatePayload>(GetAggregateId()).Result;
+        return aggregate ??
+            throw new SekibanAggregateNotExistsException(GetAggregateId(), typeof(TAggregatePayload).Name);
     }
 
     public IAggregateTestHelper<TAggregatePayload> ThenPayloadIs(TAggregatePayload payload)
     {
-        var actual = Aggregate.ToState().Payload;
+        var actual = GetAggregateState().Payload;
         var expected = payload;
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
@@ -219,7 +228,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public IAggregateTestHelper<TAggregatePayload> WriteStateToFile(string filename)
     {
-        var actual = Aggregate.ToState();
+        var actual = GetAggregateState();
         var actualJson = SekibanJsonHelper.Serialize(actual);
         File.WriteAllText(filename, actualJson);
         return this;
@@ -228,8 +237,6 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public Guid GetAggregateId() => Aggregate.AggregateId;
 
     public int GetCurrentVersion() => Aggregate.Version;
-
-    public AggregateState<TAggregatePayload> GetAggregateState() => Aggregate.ToState();
 
     public Aggregate<TAggregatePayload> GetAggregate() => Aggregate;
 
@@ -299,7 +306,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public IAggregateTestHelper<TAggregatePayload> WritePayloadToFile(string filename)
     {
-        var actual = Aggregate.ToState().Payload;
+        var actual = GetAggregateState().Payload;
         var actualJson = SekibanJsonHelper.Serialize(actual);
         File.WriteAllText(filename, actualJson);
         return this;
@@ -312,7 +319,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         {
             throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
         }
-        var actual = Aggregate.ToState();
+        var actual = GetAggregateState();
         var expected = state.GetComparableObject(actual);
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
@@ -328,7 +335,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         {
             throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
         }
-        var actual = Aggregate.ToState();
+        var actual = GetAggregateState();
         var expected = state.GetComparableObject(actual);
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
@@ -343,7 +350,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         {
             throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
         }
-        var actual = Aggregate.ToState().Payload;
+        var actual = GetAggregateState().Payload;
         var expected = payload;
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
@@ -359,7 +366,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         {
             throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
         }
-        var actual = Aggregate.ToState().Payload;
+        var actual = GetAggregateState().Payload;
         var expected = payload;
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
@@ -402,6 +409,15 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         checkEventAction((Event<T>)_latestEvents.First());
         return this;
     }
+    public AggregateState<TAggregatePayload> GetAggregateStateIfNotNullEmptyAggregate()
+    {
+        var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
+            throw new Exception("Failed to get aggregate loader");
+        var aggregate = aggregateLoader.AsDefaultStateAsync<TAggregatePayload>(GetAggregateId()).Result;
+        return aggregate ??
+            new AggregateState<TAggregatePayload>
+                { AggregateId = GetAggregateId() };
+    }
 
     private IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFile(string filename, bool withPublish)
     {
@@ -428,7 +444,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         {
             throw new SekibanCommandNotRegisteredException(typeof(C).Name);
         }
-        var command = commandFunc(Aggregate.ToState());
+        var command = commandFunc(GetAggregateStateIfNotNullEmptyAggregate());
         var validationResults = command.ValidateProperties().ToList();
         if (validationResults.Any())
         {
@@ -441,13 +457,14 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         CheckCommandJSONSupports(commandDocument);
 
         var aggregateId = command.GetAggregateId();
-
         var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader;
         if (aggregateLoader is null)
         {
             throw new Exception("Failed to get AddAggregate Service");
         }
-
+        Aggregate = aggregateLoader.AsAggregateAsync<TAggregatePayload>(aggregateId).Result ??
+            new Aggregate<TAggregatePayload>
+                { AggregateId = aggregateId };
         try
         {
             if (command is IOnlyPublishingCommandCommon)
@@ -557,7 +574,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     private void CheckStateJSONSupports()
     {
-        var state = Aggregate.ToState();
+        var state = GetAggregateState();
         var fromState = _projector.CreateInitialAggregate(state.AggregateId);
         fromState.ApplySnapshot(state);
         var stateFromSnapshot = fromState.ToState().GetComparableObject(state);
