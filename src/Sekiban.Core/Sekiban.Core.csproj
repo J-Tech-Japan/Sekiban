@@ -6,13 +6,13 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>JJ_Sekiban.Core</PackageId>
-        <Version>0.10.6</Version>
+        <Version>0.10.7</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Core</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.10.6</PackageVersion>
-        <Description>Web URL should not contain `</Description>
+        <PackageVersion>0.10.7</PackageVersion>
+        <Description>Can add setting for cache</Description>
         <AssemblyName>Sekiban.Core</AssemblyName>
         <RootNamespace>Sekiban.Core</RootNamespace>
     </PropertyGroup>
