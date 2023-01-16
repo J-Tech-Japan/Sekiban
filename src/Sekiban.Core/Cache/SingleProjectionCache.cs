@@ -12,8 +12,13 @@ namespace Sekiban.Core.Cache;
 public class SingleProjectionCache : ISingleProjectionCache
 {
     private readonly IMemoryCache _memoryCache;
+    private readonly IMemoryCacheSettings _memoryCacheSettings;
 
-    public SingleProjectionCache(IMemoryCache memoryCache) => _memoryCache = memoryCache;
+    public SingleProjectionCache(IMemoryCache memoryCache, IMemoryCacheSettings memoryCacheSettings)
+    {
+        _memoryCache = memoryCache;
+        _memoryCacheSettings = memoryCacheSettings;
+    }
 
     public void SetContainer<TAggregate, TState>(
         Guid aggregateId,
@@ -31,11 +36,12 @@ public class SingleProjectionCache : ISingleProjectionCache
         _memoryCache.Get<SingleMemoryCacheProjectionContainer<TAggregate, TState>>(
             GetCacheKeyForSingleProjectionContainer<TAggregate>(aggregateId));
 
-    private static MemoryCacheEntryOptions GetMemoryCacheOptionsForSingleProjectionContainer() => new()
+    private MemoryCacheEntryOptions GetMemoryCacheOptionsForSingleProjectionContainer() => new()
     {
-        AbsoluteExpiration = DateTimeOffset.UtcNow.AddHours(2),
-        SlidingExpiration = TimeSpan.FromMinutes(15)
-        // If not accessed 5 minutes it will be deleted. Anyway it will be deleted after two hours
+        AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(_memoryCacheSettings.SingleProjectionAbsoluteExpirationMinutes),
+        SlidingExpiration = TimeSpan.FromMinutes(_memoryCacheSettings.SingleProjectionSlidingExpirationMinutes)
+        // If not accessed 5 minutes it will be deleted. Anyway it will be d
+        // eleted after two hours
     };
 
     public string GetCacheKeyForSingleProjectionContainer<TSingleProjectionOrAggregate>(Guid aggregateId)
