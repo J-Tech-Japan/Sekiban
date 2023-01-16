@@ -15,8 +15,9 @@ using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using ISingleProjection = Sekiban.Core.Query.SingleProjections.Projections.ISingleProjection;
 namespace Sekiban.Core.Dependency;
+
 /// <summary>
-/// Extension methods for <see cref="IServiceCollection"/>
+///     Extension methods for <see cref="IServiceCollection" />
 /// </summary>
 public static class ServiceCollectionExtensions
 {
@@ -67,6 +68,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISekibanContext, SekibanContext>();
         services.AddTransient<IQueryExecutor, QueryExecutor>();
         services.AddTransient<QueryHandler>();
+        services.AddScoped<IMemoryCacheSettings, MemoryCacheSetting>();
         services.AddTransient<ISingleProjectionCache, SingleProjectionCache>();
         services.AddTransient<IMultiProjectionCache, MultiProjectionCache>();
         services.AddTransient<ISnapshotDocumentCache, SnapshotDocumentCache>();
@@ -103,6 +105,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IDocumentPersistentWriter, InMemoryDocumentWriter>();
         services.AddTransient<IQueryExecutor, QueryExecutor>();
         services.AddTransient<QueryHandler>();
+        services.AddScoped<IMemoryCacheSettings, MemoryCacheSetting>();
         services.AddTransient<ISingleProjectionCache, SingleProjectionCache>();
         services.AddTransient<IMultiProjectionCache, MultiProjectionCache>();
         services.AddTransient<ISnapshotDocumentCache, SnapshotDocumentCache>();
@@ -140,6 +143,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IDocumentPersistentWriter, InMemoryDocumentWriter>();
         services.AddTransient<IQueryExecutor, QueryExecutor>();
         services.AddTransient<QueryHandler>();
+        services.AddScoped<IMemoryCacheSettings, MemoryCacheSetting>();
         services.AddTransient<ISingleProjectionCache, SingleProjectionCache>();
         services.AddTransient<IMultiProjectionCache, MultiProjectionCache>();
         services.AddTransient<ISnapshotDocumentCache, SnapshotDocumentCache>();
