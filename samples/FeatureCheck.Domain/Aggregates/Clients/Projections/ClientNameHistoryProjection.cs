@@ -17,11 +17,10 @@ public record ClientNameHistoryProjection(
     }
     public bool IsDeleted { get; init; }
 
-    public Func<ClientNameHistoryProjection, ClientNameHistoryProjection>? GetApplyEventFunc(
-        IEvent ev,
-        IEventPayloadCommon eventPayload)
+    public static Func<ClientNameHistoryProjection, ClientNameHistoryProjection>? GetApplyEventFunc<TEventPayload>(Event<TEventPayload> ev)
+        where TEventPayload : IEventPayloadCommon
     {
-        return eventPayload switch
+        return ev.Payload switch
         {
             ClientCreated clientCreated => _ =>
                 new ClientNameHistoryProjection(
@@ -39,6 +38,9 @@ public record ClientNameHistoryProjection(
             _ => null
         };
     }
+    public Func<ClientNameHistoryProjection, ClientNameHistoryProjection>? GetApplyEventFuncInstance<TEventPayload>(Event<TEventPayload> ev)
+        where TEventPayload : IEventPayloadCommon =>
+        GetApplyEventFunc(ev);
 
     public record ClientNameHistoryProjectionRecord(string Name, DateTime DateChanged);
 }

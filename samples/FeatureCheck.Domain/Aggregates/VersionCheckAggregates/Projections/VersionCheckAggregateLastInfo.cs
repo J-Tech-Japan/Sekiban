@@ -12,8 +12,10 @@ public record VersionCheckAggregateLastInfo
     {
     }
 
-    public Func<VersionCheckAggregateLastInfo, VersionCheckAggregateLastInfo>? GetApplyEventFunc(IEvent ev, IEventPayloadCommon eventPayload) =>
-        eventPayload switch
+
+    public static Func<VersionCheckAggregateLastInfo, VersionCheckAggregateLastInfo>? GetApplyEventFunc<TEventPayload>(Event<TEventPayload> ev)
+        where TEventPayload : IEventPayloadCommon =>
+        ev.Payload switch
         {
             PaymentAdded_V3 paymentAdded => payload => payload with
             {
@@ -21,4 +23,7 @@ public record VersionCheckAggregateLastInfo
             },
             _ => null
         };
+    public Func<VersionCheckAggregateLastInfo, VersionCheckAggregateLastInfo>?
+        GetApplyEventFuncInstance<TEventPayload>(Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon =>
+        GetApplyEventFunc(ev);
 }

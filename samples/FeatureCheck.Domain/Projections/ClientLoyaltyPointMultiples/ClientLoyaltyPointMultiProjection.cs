@@ -23,16 +23,14 @@ public record ClientLoyaltyPointMultiProjection(
     public TargetAggregatePayloadCollection GetTargetAggregatePayloads() =>
         new TargetAggregatePayloadCollection().Add<Branch, Client, LoyaltyPoint>();
 
-    public Func<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultiProjection>? GetApplyEventFunc(
-        IEvent ev,
-        IEventPayloadCommon eventPayload)
+    public static Func<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultiProjection>? GetApplyEventFunc<TEventPayload>(
+        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon
     {
-        return eventPayload switch
+        return ev.Payload switch
         {
             BranchCreated branchCreated => payload => payload with
             {
-                Branches = payload.Branches.Append(new ProjectedBranch(ev.AggregateId, branchCreated.Name))
-                    .ToImmutableList()
+                Branches = payload.Branches.Add(new ProjectedBranch(ev.AggregateId, branchCreated.Name))
             },
             ClientCreated clientCreated => payload => payload with
             {
@@ -82,6 +80,8 @@ public record ClientLoyaltyPointMultiProjection(
             _ => null
         };
     }
+    public Func<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultiProjection>? GetApplyEventFuncInstance<TEventPayload>(
+        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon => GetApplyEventFunc(ev);
 
     public record ProjectedBranch(Guid BranchId, string BranchName);
 

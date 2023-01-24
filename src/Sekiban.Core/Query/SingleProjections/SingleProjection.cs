@@ -67,15 +67,30 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
 
     protected Action? GetApplyEventAction(IEvent ev, IEventPayloadCommon eventPayload)
     {
-        var payload = Payload as ISingleProjectionEventApplicable<TProjectionPayload> ??
-            throw new SekibanSingleProjectionMustInheritISingleProjectionEventApplicable();
         (ev, eventPayload) = EventHelper.GetConvertedEventAndPayloadIfConverted(ev, eventPayload);
-        var func = payload.GetApplyEventFunc(ev, eventPayload);
+
+#if NET7_0_OR_GREATER
+        var type = Payload.GetType();
+        var method = type.GetMethod("GetApplyEventFunc");
+        var genericMethod = method.MakeGenericMethod(ev.GetEventPayloadType());
+        var func = (dynamic?)genericMethod?.Invoke(Payload, new object[] { ev });
         return () =>
         {
             if (func == null) { return; }
-            var result = func(Payload);
-            Payload = result;
+            Payload = func((dynamic)Payload);
         };
+#else
+        var payload = Payload as ISingleProjectionEventApplicable<TProjectionPayload> ??
+            throw new SekibanSingleProjectionMustInheritISingleProjectionEventApplicable();
+        var method = payload.GetType().GetMethod("GetApplyEventFuncInstance");
+        var genericMethod = method?.MakeGenericMethod(ev.GetEventPayloadType());
+        var func = (dynamic?)genericMethod?.Invoke(payload, new object[] { ev });
+        return () =>
+        {
+            if (func == null) { return; }
+            Payload = func((dynamic)Payload);
+        };
+#endif
+
     }
 }

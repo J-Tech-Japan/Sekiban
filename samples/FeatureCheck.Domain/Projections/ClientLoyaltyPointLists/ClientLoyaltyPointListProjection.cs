@@ -26,17 +26,19 @@ public record ClientLoyaltyPointListProjection(
             .Add<Client>()
             .Add<LoyaltyPoint>();
 
-    public Func<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection>? GetApplyEventFunc(
-            IEvent ev,
-            IEventPayloadCommon eventPayload)
+    public Func<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection>? GetApplyEventFuncInstance<TEventPayload>(Event<TEventPayload> ev)
+        where TEventPayload : IEventPayloadCommon => GetApplyEventFunc(ev);
+
+    public static Func<ClientLoyaltyPointListProjection, ClientLoyaltyPointListProjection>? GetApplyEventFunc<TEventPayload>(Event<TEventPayload> ev)
+        where TEventPayload : IEventPayloadCommon
     {
-        return eventPayload switch
+        return ev.Payload switch
         {
             BranchCreated branchCreated => payload => payload with
             {
                 Branches = payload.Branches.Add(
                     new ProjectedBranchInternal
-                    { BranchId = ev.AggregateId, BranchName = branchCreated.Name })
+                        { BranchId = ev.AggregateId, BranchName = branchCreated.Name })
             },
             ClientCreated clientCreated => payload => payload with
             {

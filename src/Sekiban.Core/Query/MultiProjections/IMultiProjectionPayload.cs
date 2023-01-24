@@ -5,8 +5,11 @@ public interface IMultiProjectionPayload<TProjectionPayload> : IMultiProjectionP
     where TProjectionPayload : IMultiProjectionPayloadCommon
 {
     public TargetAggregatePayloadCollection GetTargetAggregatePayloads() => new();
-
-    public Func<TProjectionPayload, TProjectionPayload>? GetApplyEventFunc(
-        IEvent ev,
-        IEventPayloadCommon eventPayload);
+#if NET7_0_OR_GREATER
+    public static abstract Func<TProjectionPayload, TProjectionPayload>? GetApplyEventFunc<TEventPayload>(
+        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon;
+#else
+    public Func<TProjectionPayload, TProjectionPayload>? GetApplyEventFuncInstance<TEventPayload>(
+        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon;
+#endif
 }

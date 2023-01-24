@@ -10,9 +10,13 @@ namespace FeatureCheck.Domain.Projections.DissolvableProjection;
 public record DissolvableEventsProjection : IMultiProjectionPayload<DissolvableEventsProjection>
 {
     public ImmutableList<RecentActivityRecord> RecentActivities { get; init; } = ImmutableList<RecentActivityRecord>.Empty;
+    public Func<DissolvableEventsProjection, DissolvableEventsProjection>? GetApplyEventFuncInstance<TEventPayload>(Event<TEventPayload> ev)
+        where TEventPayload : IEventPayloadCommon =>
+        GetApplyEventFunc(ev);
 
-    public Func<DissolvableEventsProjection, DissolvableEventsProjection>? GetApplyEventFunc(IEvent ev, IEventPayloadCommon eventPayload) =>
-        eventPayload switch
+    public static Func<DissolvableEventsProjection, DissolvableEventsProjection>? GetApplyEventFunc<TEventPayload>(Event<TEventPayload> ev)
+        where TEventPayload : IEventPayloadCommon =>
+        ev.Payload switch
         {
             RecentActivityAdded recentActivityAdded => projection =>
                 projection with { RecentActivities = projection.RecentActivities.Add(recentActivityAdded.Record) },
