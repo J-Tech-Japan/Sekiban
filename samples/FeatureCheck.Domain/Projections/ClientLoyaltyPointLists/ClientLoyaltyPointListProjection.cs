@@ -26,19 +26,24 @@ public record ClientLoyaltyPointListProjection(
             .Add<Client>()
             .Add<LoyaltyPoint>();
 
-    public static Func<ClientLoyaltyPointListProjection>? GetApplyEventFunc<TEventPayload>(
+
+    public ClientLoyaltyPointListProjection? ApplyEventInstance<TEventPayload>(
+        ClientLoyaltyPointListProjection projectionPayload,
+        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon => ApplyEvent(projectionPayload, ev);
+
+    public static ClientLoyaltyPointListProjection? ApplyEvent<TEventPayload>(
         ClientLoyaltyPointListProjection projectionPayload,
         Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon
     {
         return ev.Payload switch
         {
-            BranchCreated branchCreated => () => projectionPayload with
+            BranchCreated branchCreated => projectionPayload with
             {
                 Branches = projectionPayload.Branches.Add(
                     new ProjectedBranchInternal
                         { BranchId = ev.AggregateId, BranchName = branchCreated.Name })
             },
-            ClientCreated clientCreated => () => projectionPayload with
+            ClientCreated clientCreated => projectionPayload with
             {
                 Records = projectionPayload.Records.Add(
                     new ClientLoyaltyPointListRecord(
@@ -48,23 +53,25 @@ public record ClientLoyaltyPointListProjection(
                         clientCreated.ClientName,
                         0))
             },
-            ClientNameChanged clientNameChanged => () => projectionPayload with
+            ClientNameChanged clientNameChanged => projectionPayload with
             {
                 Records = projectionPayload.Records.Select(
                         m =>
                             m.ClientId == ev.AggregateId ? m with { ClientName = clientNameChanged.ClientName } : m)
                     .ToImmutableList()
             },
-            ClientDeleted clientDeleted => () =>
-                projectionPayload with { Records = projectionPayload.Records.Where(m => m.ClientId != ev.AggregateId).ToImmutableList() },
-            LoyaltyPointCreated loyaltyPointCreated => () => projectionPayload with
+            ClientDeleted clientDeleted => projectionPayload with
+            {
+                Records = projectionPayload.Records.Where(m => m.ClientId != ev.AggregateId).ToImmutableList()
+            },
+            LoyaltyPointCreated loyaltyPointCreated => projectionPayload with
             {
                 Records = projectionPayload.Records.Select(
                         m =>
                             m.ClientId == ev.AggregateId ? m with { Point = loyaltyPointCreated.InitialPoint } : m)
                     .ToImmutableList()
             },
-            LoyaltyPointAdded loyaltyPointAdded => () => projectionPayload with
+            LoyaltyPointAdded loyaltyPointAdded => projectionPayload with
             {
                 Records = projectionPayload.Records.Select(
                         m => m.ClientId == ev.AggregateId
@@ -72,7 +79,7 @@ public record ClientLoyaltyPointListProjection(
                             : m)
                     .ToImmutableList()
             },
-            LoyaltyPointUsed loyaltyPointUsed => () => projectionPayload with
+            LoyaltyPointUsed loyaltyPointUsed => projectionPayload with
             {
                 Records = projectionPayload.Records.Select(
                         m => m.ClientId == ev.AggregateId
@@ -83,11 +90,6 @@ public record ClientLoyaltyPointListProjection(
             _ => null
         };
     }
-
-
-    public Func<ClientLoyaltyPointListProjection>? GetApplyEventFuncInstance<TEventPayload>(
-        ClientLoyaltyPointListProjection projectionPayload,
-        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon => GetApplyEventFunc(projectionPayload, ev);
 
     public record ClientLoyaltyPointListRecord(
         Guid BranchId,
