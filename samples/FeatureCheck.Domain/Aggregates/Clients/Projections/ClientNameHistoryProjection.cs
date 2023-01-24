@@ -17,12 +17,8 @@ public record ClientNameHistoryProjection(
     {
     }
     public bool IsDeleted { get; init; }
-    public ClientNameHistoryProjection ApplyEventInstance<TEventPayload>(
-        ClientNameHistoryProjection projectionPayload,
-        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon =>
-        ApplyEvent(projectionPayload, ev);
 
-    public static ClientNameHistoryProjection ApplyEvent<TEventPayload>(
+    public static ClientNameHistoryProjection? ApplyEvent<TEventPayload>(
         ClientNameHistoryProjection projectionPayload,
         Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon
     {
@@ -39,9 +35,13 @@ public record ClientNameHistoryProjection(
                 ClientNames = projectionPayload.ClientNames.Add(new ClientNameHistoryProjectionRecord(clientNameChanged.ClientName, ev.TimeStamp))
             },
             ClientDeleted => projectionPayload with { IsDeleted = true },
-            _ => projectionPayload
+            _ => null
         };
     }
+    public ClientNameHistoryProjection? ApplyEventInstance<TEventPayload>(
+        ClientNameHistoryProjection projectionPayload,
+        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon =>
+        ApplyEvent(projectionPayload, ev);
 
     public record ClientNameHistoryProjectionRecord(string Name, DateTime DateChanged);
 }

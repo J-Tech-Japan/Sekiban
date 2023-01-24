@@ -54,14 +54,14 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon,
         where TEventPayload : IEventPayload<TAggregatePayload, TEventPayload>
     {
 #if NET7_0_OR_GREATER
-            return TEventPayload.OnEvent;
+        return TEventPayload.OnEvent;
 #else
         if (payload is IEventPayload<TAggregatePayload, TEventPayload> applicableEvent)
         {
             return applicableEvent.OnEventInstance;
         }
-#endif
         return null;
+#endif
     }
 
     internal IEvent AddAndApplyEvent<TEventPayload>(TEventPayload eventPayload)
