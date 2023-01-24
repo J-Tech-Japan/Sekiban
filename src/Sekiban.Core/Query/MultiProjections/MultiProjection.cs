@@ -52,12 +52,10 @@ public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPa
 
     protected Action? GetApplyEventAction(IEvent ev, IEventPayloadCommon eventPayload)
     {
-        (ev, eventPayload) = EventHelper.GetConvertedEventAndPayloadIfConverted(ev, eventPayload);
-
-
+        (ev, _) = EventHelper.GetConvertedEventAndPayloadIfConverted(ev, eventPayload);
 #if NET7_0_OR_GREATER
         var type = Payload.GetType();
-        var method = type.GetMethod("ApplyEvent");
+        var method = type.GetMethod("GetApplyEventFunc");
         var genericMethod = method.MakeGenericMethod(ev.GetEventPayloadType());
         var func = (dynamic?)genericMethod?.Invoke(Payload, new object[] { Payload, ev });
         return () =>
@@ -66,11 +64,9 @@ public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPa
             Payload = func();
         };
 #else
-        var projectionPayload = Payload as IMultiProjectionPayload<TProjectionPayload> ??
-            throw new SekibanSingleProjectionMustInheritISingleProjectionEventApplicable();
-        var method = projectionPayload.GetType().GetMethod("GetApplyEventFuncInstance");
+        var method = Payload.GetType().GetMethod("GetApplyEventFuncInstance");
         var genericMethod = method?.MakeGenericMethod(ev.GetEventPayloadType());
-        var func = (dynamic?)genericMethod?.Invoke(projectionPayload, new object[] { projectionPayload, ev });
+        var func = (dynamic?)genericMethod?.Invoke(Payload, new object[] { Payload, ev });
         return () =>
         {
             if (func == null) { return; }
