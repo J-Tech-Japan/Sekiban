@@ -4,13 +4,13 @@ namespace FeatureCheck.Domain.Aggregates.RecentActivities.Events;
 
 public record RecentActivityAdded(RecentActivityRecord Record) : IEventPayload<RecentActivity, RecentActivityAdded>
 {
-    public RecentActivity OnEventInstance(RecentActivity payload, Event<RecentActivityAdded> ev) => OnEvent(payload, ev);
-    public static RecentActivity OnEvent(RecentActivity payload, Event<RecentActivityAdded> ev)
+    public static RecentActivity OnEvent(RecentActivity aggregatePayload, Event<RecentActivityAdded> ev)
     {
         return new RecentActivity(
-            payload.LatestActivities.Add(ev.Payload.Record)
+            aggregatePayload.LatestActivities.Add(ev.Payload.Record)
                 .OrderByDescending(m => m.OccuredAt)
                 .Take(5)
                 .ToImmutableList());
     }
+    public RecentActivity OnEventInstance(RecentActivity aggregatePayload, Event<RecentActivityAdded> ev) => OnEvent(aggregatePayload, ev);
 }

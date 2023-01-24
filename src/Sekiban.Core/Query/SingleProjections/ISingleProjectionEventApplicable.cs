@@ -6,10 +6,11 @@ public interface ISingleProjectionEventApplicable<TProjectionPayload> : ISingleP
 {
 
 #if NET7_0_OR_GREATER
-    static abstract Func<TProjectionPayload, TProjectionPayload>? GetApplyEventFunc<TEventPayload>(
+    static abstract Func<TProjectionPayload>? GetApplyEventFunc<TEventPayload>(
+        TProjectionPayload projectionPayload,
         Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon;
 #else
-    Func<TProjectionPayload, TProjectionPayload>? GetApplyEventFuncInstance<TEventPayload>(
-        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon;
+    Func<TProjectionPayload>? GetApplyEventFuncInstance<TEventPayload>(
+        TProjectionPayload projectionPayload, Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon;
 #endif
 }

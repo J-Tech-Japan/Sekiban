@@ -4,8 +4,8 @@ namespace WarehouseContext.Aggregates.ProductStocks.Events;
 public record ProductStockAdded : IEventPayload<ProductStock, ProductStockAdded>
 {
     public decimal AddedAmount { get; init; }
-    public static ProductStock OnEvent(ProductStock payload, Event<ProductStockAdded> ev) => new()
+    public static ProductStock OnEvent(ProductStock aggregatePayload, Event<ProductStockAdded> ev) => new()
     {
-        Stocks = payload.Stocks + ev.Payload.AddedAmount
+        Stocks = aggregatePayload.Stocks + ev.Payload.AddedAmount
     };
 }

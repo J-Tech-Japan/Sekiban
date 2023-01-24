@@ -73,22 +73,22 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
         var type = Payload.GetType();
         var method = type.GetMethod("GetApplyEventFunc");
         var genericMethod = method.MakeGenericMethod(ev.GetEventPayloadType());
-        var func = (dynamic?)genericMethod?.Invoke(Payload, new object[] { ev });
+        var func = (dynamic?)genericMethod?.Invoke(Payload, new object[] { Payload, ev });
         return () =>
         {
             if (func == null) { return; }
-            Payload = func((dynamic)Payload);
+            Payload = func();
         };
 #else
         var payload = Payload as ISingleProjectionEventApplicable<TProjectionPayload> ??
             throw new SekibanSingleProjectionMustInheritISingleProjectionEventApplicable();
         var method = payload.GetType().GetMethod("GetApplyEventFuncInstance");
         var genericMethod = method?.MakeGenericMethod(ev.GetEventPayloadType());
-        var func = (dynamic?)genericMethod?.Invoke(payload, new object[] { ev });
+        var func = (dynamic?)genericMethod?.Invoke(payload, new object[] { Payload, ev });
         return () =>
         {
             if (func == null) { return; }
-            Payload = func((dynamic)Payload);
+            Payload = func();
         };
 #endif
 

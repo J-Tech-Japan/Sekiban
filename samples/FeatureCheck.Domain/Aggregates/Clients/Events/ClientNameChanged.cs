@@ -3,7 +3,8 @@ namespace FeatureCheck.Domain.Aggregates.Clients.Events;
 
 public record ClientNameChanged(string ClientName) : IEventPayload<Client, ClientNameChanged>
 {
-    public Client OnEventInstance(Client payload, Event<ClientNameChanged> ev) => OnEvent(payload, ev);
 
-    public static Client OnEvent(Client payload, Event<ClientNameChanged> ev) => payload with { ClientName = ev.Payload.ClientName };
+    public static Client OnEvent(Client aggregatePayload, Event<ClientNameChanged> ev) =>
+        aggregatePayload with { ClientName = ev.Payload.ClientName };
+    public Client OnEventInstance(Client aggregatePayload, Event<ClientNameChanged> ev) => OnEvent(aggregatePayload, ev);
 }

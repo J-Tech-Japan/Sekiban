@@ -5,8 +5,8 @@ public interface IEventPayload<TAggregatePayload, TEventPayload> : IEventPayload
     where TAggregatePayload : IAggregatePayload where TEventPayload : IEventPayload<TAggregatePayload, TEventPayload>
 {
 #if NET7_0_OR_GREATER
-    public static abstract TAggregatePayload OnEvent(TAggregatePayload payload, Event<TEventPayload> ev);
+    public static abstract TAggregatePayload OnEvent(TAggregatePayload aggregatePayload, Event<TEventPayload> ev);
 #else
-    public TAggregatePayload OnEventInstance(TAggregatePayload payload, Event<TEventPayload> ev);
+    public TAggregatePayload OnEventInstance(TAggregatePayload aggregatePayload, Event<TEventPayload> ev);
 #endif
 }

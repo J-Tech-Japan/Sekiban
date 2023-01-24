@@ -3,6 +3,6 @@ namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Events;
 
 public record LoyaltyPointDeleted : IEventPayload<LoyaltyPoint, LoyaltyPointDeleted>
 {
-    public LoyaltyPoint OnEventInstance(LoyaltyPoint payload, Event<LoyaltyPointDeleted> ev) => OnEvent(payload, ev);
-    public static LoyaltyPoint OnEvent(LoyaltyPoint payload, Event<LoyaltyPointDeleted> ev) => payload with { IsDeleted = true };
+    public static LoyaltyPoint OnEvent(LoyaltyPoint aggregatePayload, Event<LoyaltyPointDeleted> ev) => aggregatePayload with { IsDeleted = true };
+    public LoyaltyPoint OnEventInstance(LoyaltyPoint aggregatePayload, Event<LoyaltyPointDeleted> ev) => OnEvent(aggregatePayload, ev);
 }
