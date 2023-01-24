@@ -1,11 +1,11 @@
 using Sekiban.Core.Events;
 namespace WarehouseContext.Aggregates.ProductStocks.Events;
 
-public record ProductStockAdded : IEventPayload<ProductStock>
+public record ProductStockAdded : IEventPayload<ProductStock, ProductStockAdded>
 {
     public decimal AddedAmount { get; init; }
-    public ProductStock OnEvent(ProductStock payload, IEvent ev) => new()
+    public static ProductStock OnEvent(ProductStock payload, Event<ProductStockAdded> ev) => new()
     {
-        Stocks = payload.Stocks + AddedAmount
+        Stocks = payload.Stocks + ev.Payload.AddedAmount
     };
 }

@@ -16,7 +16,7 @@ public record DeleteLoyaltyPoint(Guid ClientId) : ICommand<LoyaltyPoint>
 
     public class Handler : ICommandHandler<LoyaltyPoint, DeleteLoyaltyPoint>
     {
-        public async IAsyncEnumerable<IEventPayload<LoyaltyPoint>> HandleCommandAsync(
+        public async IAsyncEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommandAsync(
             Func<AggregateState<LoyaltyPoint>> getAggregateState,
             DeleteLoyaltyPoint command)
         {

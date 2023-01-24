@@ -21,7 +21,11 @@ public abstract class AggregateCommon : IAggregate
     public int AppliedSnapshotVersion => _basicInfo.AppliedSnapshotVersion;
     public int Version => _basicInfo.Version;
 
-    public bool CanApplyEvent(IEvent ev) => GetApplyEventAction(ev, ev.GetPayload()) is not null;
+    public bool CanApplyEvent(IEvent ev)
+    {
+        var result = GetApplyEventAction(ev, ev.GetPayload());
+        return result is not null;
+    }
 
     public void ApplyEvent(IEvent ev)
     {

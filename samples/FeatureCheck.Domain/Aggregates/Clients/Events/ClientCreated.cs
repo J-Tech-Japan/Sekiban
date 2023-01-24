@@ -1,7 +1,8 @@
 ﻿using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.Clients.Events;
 
-public record ClientCreated(Guid BranchId, string ClientName, string ClientEmail) : IEventPayload<Client>
+public record ClientCreated(Guid BranchId, string ClientName, string ClientEmail) : IEventPayload<Client, ClientCreated>
 {
-    public Client OnEvent(Client payload, IEvent ev) => new Client(BranchId, ClientName, ClientEmail);
+    public static Client OnEvent(Client payload, Event<ClientCreated> ev) => new(ev.Payload.BranchId, ev.Payload.ClientName, ev.Payload.ClientEmail);
+    public Client OnEventInstance(Client payload, Event<ClientCreated> ev) => OnEvent(payload, ev);
 }

@@ -14,7 +14,7 @@ public class OldV2Command : ICommand<VersionCheckAggregate>
 
     public class Handler : ICommandHandler<VersionCheckAggregate, OldV2Command>
     {
-        public async IAsyncEnumerable<IEventPayload<VersionCheckAggregate>> HandleCommandAsync(
+        public async IAsyncEnumerable<IEventPayloadApplicableTo<VersionCheckAggregate>> HandleCommandAsync(
             Func<AggregateState<VersionCheckAggregate>> getAggregateState,
             OldV2Command command)
         {

@@ -15,7 +15,7 @@ public record CurrentV3Command : ICommand<VersionCheckAggregate>
 
     public class Handler : ICommandHandler<VersionCheckAggregate, CurrentV3Command>
     {
-        public async IAsyncEnumerable<IEventPayload<VersionCheckAggregate>> HandleCommandAsync(
+        public async IAsyncEnumerable<IEventPayloadApplicableTo<VersionCheckAggregate>> HandleCommandAsync(
             Func<AggregateState<VersionCheckAggregate>> getAggregateState,
             CurrentV3Command command)
         {

@@ -7,8 +7,9 @@ public record LoyaltyPointAdded
     DateTime HappenedDate,
     LoyaltyPointReceiveTypeKeys Reason,
     int PointAmount,
-    string Note) : IEventPayload<LoyaltyPoint>
+    string Note) : IEventPayload<LoyaltyPoint, LoyaltyPointAdded>
 {
-    public LoyaltyPoint OnEvent(LoyaltyPoint payload, IEvent ev) =>
-        payload with { CurrentPoint = payload.CurrentPoint + PointAmount, LastOccuredTime = HappenedDate };
+    public LoyaltyPoint OnEventInstance(LoyaltyPoint payload, Event<LoyaltyPointAdded> ev) => OnEvent(payload, ev);
+    public static LoyaltyPoint OnEvent(LoyaltyPoint payload, Event<LoyaltyPointAdded> ev) =>
+        payload with { CurrentPoint = payload.CurrentPoint + ev.Payload.PointAmount, LastOccuredTime = ev.Payload.HappenedDate };
 }

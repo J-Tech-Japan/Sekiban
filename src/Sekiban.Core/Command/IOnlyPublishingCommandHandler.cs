@@ -19,5 +19,5 @@ public interface
     /// <param name="aggregateId">Aggregate Id</param>
     /// <param name="command">Executing Command</param>
     /// <returns></returns>
-    public IAsyncEnumerable<IEventPayload<TAggregatePayload>> HandleCommandAsync(Guid aggregateId, TCommand command);
+    public IAsyncEnumerable<IEventPayloadApplicableTo<TAggregatePayload>> HandleCommandAsync(Guid aggregateId, TCommand command);
 }

@@ -27,7 +27,7 @@ public class OnlyPublishingCommandHandlerAdapter<TAggregatePayload, TCommand>
         await foreach (var eventPayload in publishHandler.HandleCommandAsync(aggregateId, commandDocument.Payload))
         {
             events.Add(
-                EventHelper.GenerateEventToSave<IEventPayload<TAggregatePayload>, TAggregatePayload>(
+                EventHelper.GenerateEventToSave<IEventPayloadApplicableTo<TAggregatePayload>, TAggregatePayload>(
                     aggregateId,
                     eventPayload));
         }

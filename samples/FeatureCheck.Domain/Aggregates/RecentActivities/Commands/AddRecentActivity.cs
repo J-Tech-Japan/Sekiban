@@ -21,7 +21,7 @@ public record AddRecentActivity(Guid RecentActivityId, string Activity) : IComma
 
         public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
 
-        public async IAsyncEnumerable<IEventPayload<RecentActivity>> HandleCommandAsync(
+        public async IAsyncEnumerable<IEventPayloadApplicableTo<RecentActivity>> HandleCommandAsync(
             Func<AggregateState<RecentActivity>> getAggregateState,
             AddRecentActivity command)
         {

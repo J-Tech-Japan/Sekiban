@@ -3,8 +3,10 @@ using System.Collections.Immutable;
 namespace FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Events;
 
 public record RecentInMemoryActivityCreated
-    (RecentInMemoryActivityRecord Activity) : IEventPayload<RecentInMemoryActivity>
+    (RecentInMemoryActivityRecord Activity) : IEventPayload<RecentInMemoryActivity, RecentInMemoryActivityCreated>
 {
-    public RecentInMemoryActivity OnEvent(RecentInMemoryActivity payload, IEvent ev) =>
-        new RecentInMemoryActivity(ImmutableList<RecentInMemoryActivityRecord>.Empty.Add(Activity));
+    public RecentInMemoryActivity OnEventInstance(RecentInMemoryActivity payload, Event<RecentInMemoryActivityCreated> ev) =>
+        OnEvent(payload, ev);
+    public static RecentInMemoryActivity OnEvent(RecentInMemoryActivity payload, Event<RecentInMemoryActivityCreated> ev) =>
+        new(ImmutableList<RecentInMemoryActivityRecord>.Empty.Add(ev.Payload.Activity));
 }

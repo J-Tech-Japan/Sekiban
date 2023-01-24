@@ -21,7 +21,7 @@ public static class EventHelper
     }
 
     public static IEvent GenerateEventToSave<TEventPayload, TAggregatePayload>(Guid aggregateId, TEventPayload payload)
-        where TEventPayload : IEventPayload<TAggregatePayload> where TAggregatePayload : IAggregatePayload, new()
+        where TEventPayload : IEventPayloadApplicableTo<TAggregatePayload> where TAggregatePayload : IAggregatePayload, new()
     {
         var eventPayloadType = payload.GetType();
         // ReSharper disable once SuspiciousTypeConversion.Global

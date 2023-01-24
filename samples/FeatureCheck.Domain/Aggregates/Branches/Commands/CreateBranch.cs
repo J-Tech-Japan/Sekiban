@@ -23,7 +23,7 @@ public record CreateBranch : ICommand<Branch>, ICleanupNecessaryCommand<CreateBr
 
     public class Handler : ICommandHandler<Branch, CreateBranch>
     {
-        public async IAsyncEnumerable<IEventPayload<Branch>> HandleCommandAsync(
+        public async IAsyncEnumerable<IEventPayloadApplicableTo<Branch>> HandleCommandAsync(
             Func<AggregateState<Branch>> getAggregateState,
             CreateBranch command)
         {
