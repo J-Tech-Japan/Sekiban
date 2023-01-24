@@ -79,7 +79,7 @@ public class ClientAndProjectionSpec : AggregateTest<Client, FeatureCheckDepende
                     new List<ClientNameHistoryProjection.ClientNameHistoryProjectionRecord>
                     {
                         new(clientName, FirstEventDatetime), new(clientNameChanged, ChangedEventDatetime)
-                    },
+                    }.ToImmutableList(),
                     clientEmail))
             .ThenQueryResponseIs(
                 new ClientEmailExistsQuery.Parameter(clientEmail),

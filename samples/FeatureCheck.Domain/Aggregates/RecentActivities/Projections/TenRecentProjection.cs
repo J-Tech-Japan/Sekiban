@@ -7,17 +7,17 @@ namespace FeatureCheck.Domain.Aggregates.RecentActivities.Projections;
 public record TenRecentProjection : ISingleProjectionPayload<RecentActivity, TenRecentProjection>
 {
     public ImmutableList<RecentActivityRecord> List { get; init; } = ImmutableList<RecentActivityRecord>.Empty;
-    public Func<TenRecentProjection>? GetApplyEventFuncInstance<TEventPayload>(TenRecentProjection projectionPayload, Event<TEventPayload> ev)
+    public TenRecentProjection GetApplyEventFuncInstance<TEventPayload>(TenRecentProjection projectionPayload, Event<TEventPayload> ev)
         where TEventPayload : IEventPayloadCommon =>
         GetApplyEventFunc(projectionPayload, ev);
-    public static Func<TenRecentProjection>? GetApplyEventFunc<TEventPayload>(TenRecentProjection projectionPayload, Event<TEventPayload> ev)
+    public static TenRecentProjection GetApplyEventFunc<TEventPayload>(TenRecentProjection projectionPayload, Event<TEventPayload> ev)
         where TEventPayload : IEventPayloadCommon =>
         ev.Payload switch
         {
-            RecentActivityAdded recentActivityAdded => () =>
+            RecentActivityAdded recentActivityAdded =>
                 projectionPayload with { List = projectionPayload.List.Add(recentActivityAdded.Record).Take(10).ToImmutableList() },
-            RecentActivityCreated recentActivityCreated => () =>
+            RecentActivityCreated recentActivityCreated =>
                 projectionPayload with { List = projectionPayload.List.Add(recentActivityCreated.Activity).Take(10).ToImmutableList() },
-            _ => null
+            _ => projectionPayload
         };
 }
