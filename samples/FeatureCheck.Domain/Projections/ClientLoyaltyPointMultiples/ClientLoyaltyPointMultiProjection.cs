@@ -22,56 +22,61 @@ public record ClientLoyaltyPointMultiProjection(
 
     public TargetAggregatePayloadCollection GetTargetAggregatePayloads() =>
         new TargetAggregatePayloadCollection().Add<Branch, Client, LoyaltyPoint>();
+    public Func<ClientLoyaltyPointMultiProjection>? GetApplyEventFuncInstance<TEventPayload>(
+        ClientLoyaltyPointMultiProjection projectionPayload,
+        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon => GetApplyEventFunc(projectionPayload, ev);
 
-    public static Func<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultiProjection>? GetApplyEventFunc<TEventPayload>(
+
+    public static Func<ClientLoyaltyPointMultiProjection>? GetApplyEventFunc<TEventPayload>(
+        ClientLoyaltyPointMultiProjection projectionPayload,
         Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon
     {
         return ev.Payload switch
         {
-            BranchCreated branchCreated => payload => payload with
+            BranchCreated branchCreated => () => projectionPayload with
             {
-                Branches = payload.Branches.Add(new ProjectedBranch(ev.AggregateId, branchCreated.Name))
+                Branches = projectionPayload.Branches.Add(new ProjectedBranch(ev.AggregateId, branchCreated.Name))
             },
-            ClientCreated clientCreated => payload => payload with
+            ClientCreated clientCreated => () => projectionPayload with
             {
-                Records = payload.Records.Append(
+                Records = projectionPayload.Records.Append(
                         new ProjectedRecord(
                             clientCreated.BranchId,
-                            payload.Branches.First(m => m.BranchId == clientCreated.BranchId).BranchName,
+                            projectionPayload.Branches.First(m => m.BranchId == clientCreated.BranchId).BranchName,
                             ev.AggregateId,
                             clientCreated.ClientName,
                             0))
                     .ToImmutableList()
             },
-            ClientNameChanged clientNameChanged => payload => payload with
+            ClientNameChanged clientNameChanged => () => projectionPayload with
             {
-                Records = payload.Records.Select(
+                Records = projectionPayload.Records.Select(
                         m =>
                             m.ClientId == ev.AggregateId ? m with { ClientName = clientNameChanged.ClientName } : m)
                     .ToImmutableList()
             },
-            ClientDeleted => payload => payload with
+            ClientDeleted => () => projectionPayload with
             {
-                Records = payload.Records.Where(m => m.ClientId != ev.AggregateId).ToImmutableList()
+                Records = projectionPayload.Records.Where(m => m.ClientId != ev.AggregateId).ToImmutableList()
             },
-            LoyaltyPointCreated loyaltyPointCreated => payload => payload with
+            LoyaltyPointCreated loyaltyPointCreated => () => projectionPayload with
             {
-                Records = payload.Records.Select(
+                Records = projectionPayload.Records.Select(
                         m =>
                             m.ClientId == ev.AggregateId ? m with { Point = loyaltyPointCreated.InitialPoint } : m)
                     .ToImmutableList()
             },
-            LoyaltyPointAdded loyaltyPointAdded => payload => payload with
+            LoyaltyPointAdded loyaltyPointAdded => () => projectionPayload with
             {
-                Records = payload.Records.Select(
+                Records = projectionPayload.Records.Select(
                         m => m.ClientId == ev.AggregateId
                             ? m with { Point = m.Point + loyaltyPointAdded.PointAmount }
                             : m)
                     .ToImmutableList()
             },
-            LoyaltyPointUsed loyaltyPointUsed => payload => payload with
+            LoyaltyPointUsed loyaltyPointUsed => () => projectionPayload with
             {
-                Records = payload.Records.Select(
+                Records = projectionPayload.Records.Select(
                         m => m.ClientId == ev.AggregateId
                             ? m with { Point = m.Point - loyaltyPointUsed.PointAmount }
                             : m)
@@ -80,8 +85,6 @@ public record ClientLoyaltyPointMultiProjection(
             _ => null
         };
     }
-    public Func<ClientLoyaltyPointMultiProjection, ClientLoyaltyPointMultiProjection>? GetApplyEventFuncInstance<TEventPayload>(
-        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon => GetApplyEventFunc(ev);
 
     public record ProjectedBranch(Guid BranchId, string BranchName);
 
