@@ -17,12 +17,12 @@ public record ClientNameHistoryProjection(
     {
     }
     public bool IsDeleted { get; init; }
-    public ClientNameHistoryProjection GetApplyEventFuncInstance<TEventPayload>(
+    public ClientNameHistoryProjection ApplyEventInstance<TEventPayload>(
         ClientNameHistoryProjection projectionPayload,
         Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon =>
-        GetApplyEventFunc(projectionPayload, ev);
+        ApplyEvent(projectionPayload, ev);
 
-    public static ClientNameHistoryProjection GetApplyEventFunc<TEventPayload>(
+    public static ClientNameHistoryProjection ApplyEvent<TEventPayload>(
         ClientNameHistoryProjection projectionPayload,
         Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon
     {

@@ -57,7 +57,7 @@ public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPa
 
 #if NET7_0_OR_GREATER
         var type = Payload.GetType();
-        var method = type.GetMethod("GetApplyEventFunc");
+        var method = type.GetMethod("ApplyEvent");
         var genericMethod = method.MakeGenericMethod(ev.GetEventPayloadType());
         var func = (dynamic?)genericMethod?.Invoke(Payload, new object[] { Payload, ev });
         return () =>

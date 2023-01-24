@@ -27,11 +27,11 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
         (ev, _) = EventHelper.GetConvertedEventAndPayloadIfConverted(ev, ev.GetPayload());
 
 #if NET7_0_OR_GREATER
-        var method = typeof(TProjectionPayload).GetMethod("GetApplyEventFunc");
+        var method = typeof(TProjectionPayload).GetMethod("ApplyEvent");
         var genericMethod = method?.MakeGenericMethod(ev.GetEventPayloadType());
         Payload = (TProjectionPayload)(genericMethod?.Invoke(typeof(TProjectionPayload), new object[] { Payload, ev }) ?? Payload);
 #else
-        var method = Payload.GetType().GetMethod("GetApplyEventFuncInstance");
+        var method = Payload.GetType().GetMethod("ApplyEventInstance");
         var genericMethod = method?.MakeGenericMethod(ev.GetEventPayloadType());
         Payload = (TProjectionPayload)(genericMethod?.Invoke(Payload, new object[] { Payload, ev }) ?? Payload);
 #endif

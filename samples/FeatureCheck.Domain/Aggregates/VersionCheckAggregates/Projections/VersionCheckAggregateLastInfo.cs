@@ -11,13 +11,13 @@ public record VersionCheckAggregateLastInfo
     public VersionCheckAggregateLastInfo() : this(0, PaymentKind.Cash, string.Empty)
     {
     }
-    public VersionCheckAggregateLastInfo GetApplyEventFuncInstance<TEventPayload>(
+    public VersionCheckAggregateLastInfo ApplyEventInstance<TEventPayload>(
         VersionCheckAggregateLastInfo projectionPayload,
         Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon =>
-        GetApplyEventFunc(projectionPayload, ev);
+        ApplyEvent(projectionPayload, ev);
 
 
-    public static VersionCheckAggregateLastInfo GetApplyEventFunc<TEventPayload>(
+    public static VersionCheckAggregateLastInfo ApplyEvent<TEventPayload>(
         VersionCheckAggregateLastInfo projectionPayload,
         Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon =>
         ev.Payload switch
