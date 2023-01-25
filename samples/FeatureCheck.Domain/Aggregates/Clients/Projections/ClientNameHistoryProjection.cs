@@ -17,31 +17,37 @@ public record ClientNameHistoryProjection(
     {
     }
     public bool IsDeleted { get; init; }
+    public ClientNameHistoryProjection? ApplyEventInstance<TEventPayload>(
+        ClientNameHistoryProjection projectionPayload,
+        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon =>
+        ApplyEvent(projectionPayload, ev);
 
     public static ClientNameHistoryProjection? ApplyEvent<TEventPayload>(
         ClientNameHistoryProjection projectionPayload,
         Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon
     {
-        return ev.Payload switch
+        Func<ClientNameHistoryProjection>? func = ev.Payload switch
         {
-            ClientCreated clientCreated =>
+            ClientCreated clientCreated => () =>
                 new ClientNameHistoryProjection(
                     clientCreated.BranchId,
                     new List<ClientNameHistoryProjectionRecord> { new(clientCreated.ClientName, ev.TimeStamp) }.ToImmutableList(),
                     clientCreated.ClientEmail),
 
-            ClientNameChanged clientNameChanged => projectionPayload with
+            ClientNameChanged clientNameChanged => () =>
             {
-                ClientNames = projectionPayload.ClientNames.Add(new ClientNameHistoryProjectionRecord(clientNameChanged.ClientName, ev.TimeStamp))
+                var a = 1;
+                a++;
+                return projectionPayload with
+                {
+                    ClientNames = projectionPayload.ClientNames.Add(new ClientNameHistoryProjectionRecord(clientNameChanged.ClientName, ev.TimeStamp))
+                };
             },
-            ClientDeleted => projectionPayload with { IsDeleted = true },
+            ClientDeleted => () => projectionPayload with { IsDeleted = true },
             _ => null
         };
+        return func?.Invoke();
     }
-    public ClientNameHistoryProjection? ApplyEventInstance<TEventPayload>(
-        ClientNameHistoryProjection projectionPayload,
-        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon =>
-        ApplyEvent(projectionPayload, ev);
 
     public record ClientNameHistoryProjectionRecord(string Name, DateTime DateChanged);
 }
