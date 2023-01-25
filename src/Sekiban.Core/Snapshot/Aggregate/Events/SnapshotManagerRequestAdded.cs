@@ -5,14 +5,17 @@ public record SnapshotManagerRequestAdded(
     string AggregateTypeName,
     Guid TargetAggregateId,
     int NextSnapshotVersion,
-    int? SnapshotVersion) : IEventPayload<SnapshotManager>
+    int? SnapshotVersion) : IEventPayload<SnapshotManager, SnapshotManagerRequestAdded>
 {
-    public SnapshotManager OnEvent(SnapshotManager payload, IEvent ev) => payload with
+    public SnapshotManager OnEventInstance(SnapshotManager payload, Event<SnapshotManagerRequestAdded> ev) =>
+        OnEvent(payload, ev);
+
+    public static SnapshotManager OnEvent(SnapshotManager payload, Event<SnapshotManagerRequestAdded> ev) => payload with
     {
         Requests = payload.Requests.Add(
             SnapshotManager.SnapshotKey(
-                AggregateTypeName,
-                TargetAggregateId,
-                NextSnapshotVersion))
+                ev.Payload.AggregateTypeName,
+                ev.Payload.TargetAggregateId,
+                ev.Payload.NextSnapshotVersion))
     };
 }

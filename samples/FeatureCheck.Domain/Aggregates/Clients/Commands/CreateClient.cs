@@ -47,7 +47,7 @@ public record CreateClient : ICommand<Client>
             this.queryExecutor = queryExecutor;
         }
 
-        public async IAsyncEnumerable<IEventPayload<Client>> HandleCommandAsync(
+        public async IAsyncEnumerable<IEventPayloadApplicableTo<Client>> HandleCommandAsync(
             Func<AggregateState<Client>> getAggregateStateState,
             CreateClient command)
         {

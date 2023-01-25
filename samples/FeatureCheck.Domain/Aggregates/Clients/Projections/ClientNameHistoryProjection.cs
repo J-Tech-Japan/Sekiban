@@ -1,6 +1,7 @@
 using FeatureCheck.Domain.Aggregates.Clients.Events;
 using Sekiban.Core.Events;
 using Sekiban.Core.Query.SingleProjections;
+using System.Collections.Immutable;
 
 // ReSharper disable UnusedVariable
 // ReSharper disable CollectionNeverQueried.Global
@@ -9,35 +10,43 @@ namespace FeatureCheck.Domain.Aggregates.Clients.Projections;
 
 public record ClientNameHistoryProjection(
     Guid BranchId,
-    IReadOnlyCollection<ClientNameHistoryProjection.ClientNameHistoryProjectionRecord> ClientNames,
+    ImmutableList<ClientNameHistoryProjection.ClientNameHistoryProjectionRecord> ClientNames,
     string ClientEmail) : IDeletableSingleProjectionPayload<Client, ClientNameHistoryProjection>
 {
-    public ClientNameHistoryProjection() : this(Guid.Empty, new List<ClientNameHistoryProjectionRecord>(), string.Empty)
+    public ClientNameHistoryProjection() : this(Guid.Empty, ImmutableList<ClientNameHistoryProjectionRecord>.Empty, string.Empty)
     {
     }
     public bool IsDeleted { get; init; }
+    public ClientNameHistoryProjection? ApplyEventInstance<TEventPayload>(
+        ClientNameHistoryProjection projectionPayload,
+        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon =>
+        ApplyEvent(projectionPayload, ev);
 
-    public Func<ClientNameHistoryProjection, ClientNameHistoryProjection>? GetApplyEventFunc(
-        IEvent ev,
-        IEventPayloadCommon eventPayload)
+    public static ClientNameHistoryProjection? ApplyEvent<TEventPayload>(
+        ClientNameHistoryProjection projectionPayload,
+        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon
     {
-        return eventPayload switch
+        Func<ClientNameHistoryProjection>? func = ev.Payload switch
         {
-            ClientCreated clientCreated => _ =>
+            ClientCreated clientCreated => () =>
                 new ClientNameHistoryProjection(
                     clientCreated.BranchId,
-                    new List<ClientNameHistoryProjectionRecord> { new(clientCreated.ClientName, ev.TimeStamp) },
+                    new List<ClientNameHistoryProjectionRecord> { new(clientCreated.ClientName, ev.TimeStamp) }.ToImmutableList(),
                     clientCreated.ClientEmail),
 
-            ClientNameChanged clientNameChanged => p =>
+            ClientNameChanged clientNameChanged => () =>
             {
-                var list = p.ClientNames.ToList();
-                list.Add(new ClientNameHistoryProjectionRecord(clientNameChanged.ClientName, ev.TimeStamp));
-                return p with { ClientNames = list };
+                var a = 1;
+                a++;
+                return projectionPayload with
+                {
+                    ClientNames = projectionPayload.ClientNames.Add(new ClientNameHistoryProjectionRecord(clientNameChanged.ClientName, ev.TimeStamp))
+                };
             },
-            ClientDeleted => p => p with { IsDeleted = true },
+            ClientDeleted => () => projectionPayload with { IsDeleted = true },
             _ => null
         };
+        return func?.Invoke();
     }
 
     public record ClientNameHistoryProjectionRecord(string Name, DateTime DateChanged);

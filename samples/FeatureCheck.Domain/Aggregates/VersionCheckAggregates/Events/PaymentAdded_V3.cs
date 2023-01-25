@@ -2,10 +2,11 @@ using FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Enums;
 using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Events;
 
-public record PaymentAdded_V3(int Amount, PaymentKind PaymentKind, string Description) : IEventPayload<VersionCheckAggregate>
+public record PaymentAdded_V3(int Amount, PaymentKind PaymentKind, string Description) : IEventPayload<VersionCheckAggregate, PaymentAdded_V3>
 {
-    public VersionCheckAggregate OnEvent(VersionCheckAggregate payload, IEvent ev) => payload with
+    public static VersionCheckAggregate OnEvent(VersionCheckAggregate aggregatePayload, Event<PaymentAdded_V3> ev) => aggregatePayload with
     {
-        Amount = payload.Amount + Amount, PaymentKind = PaymentKind, Description = Description
+        Amount = aggregatePayload.Amount + ev.Payload.Amount, PaymentKind = ev.Payload.PaymentKind, Description = ev.Payload.Description
     };
+    public VersionCheckAggregate OnEventInstance(VersionCheckAggregate aggregatePayload, Event<PaymentAdded_V3> ev) => OnEvent(aggregatePayload, ev);
 }

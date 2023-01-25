@@ -12,13 +12,20 @@ public record VersionCheckAggregateLastInfo
     {
     }
 
-    public Func<VersionCheckAggregateLastInfo, VersionCheckAggregateLastInfo>? GetApplyEventFunc(IEvent ev, IEventPayloadCommon eventPayload) =>
-        eventPayload switch
+
+    public static VersionCheckAggregateLastInfo? ApplyEvent<TEventPayload>(
+        VersionCheckAggregateLastInfo projectionPayload,
+        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon =>
+        ev.Payload switch
         {
-            PaymentAdded_V3 paymentAdded => payload => payload with
+            PaymentAdded_V3 paymentAdded => projectionPayload with
             {
                 LastAmount = paymentAdded.Amount, LastPaymentKind = paymentAdded.PaymentKind, LastDescription = paymentAdded.Description
             },
             _ => null
         };
+    public VersionCheckAggregateLastInfo? ApplyEventInstance<TEventPayload>(
+        VersionCheckAggregateLastInfo projectionPayload,
+        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon =>
+        ApplyEvent(projectionPayload, ev);
 }

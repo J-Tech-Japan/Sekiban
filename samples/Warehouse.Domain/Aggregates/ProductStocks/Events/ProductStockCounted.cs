@@ -1,8 +1,8 @@
 using Sekiban.Core.Events;
 namespace WarehouseContext.Aggregates.ProductStocks.Events;
 
-public class ProductStockCounted : IEventPayload<ProductStock>
+public class ProductStockCounted : IEventPayload<ProductStock, ProductStockCounted>
 {
 
-    public ProductStock OnEvent(ProductStock payload, IEvent ev) => throw new NotImplementedException();
+    public static ProductStock OnEvent(ProductStock aggregatePayload, Event<ProductStockCounted> ev) => throw new NotImplementedException();
 }

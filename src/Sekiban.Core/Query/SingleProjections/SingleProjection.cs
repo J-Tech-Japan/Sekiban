@@ -1,7 +1,6 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
-using Sekiban.Core.Exceptions;
 using Sekiban.Core.Types;
 namespace Sekiban.Core.Query.SingleProjections;
 
@@ -25,19 +24,25 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
         {
             return;
         }
-        var action = GetApplyEventAction(ev, ev.GetPayload());
-        if (action is null)
-        {
-            return;
-        }
-        action();
+        (ev, _) = EventHelper.GetConvertedEventAndPayloadIfConverted(ev, ev.GetPayload());
+
+#if NET7_0_OR_GREATER
+        var method = typeof(TProjectionPayload).GetMethod("ApplyEvent");
+        var genericMethod = method?.MakeGenericMethod(ev.GetEventPayloadType());
+        Payload = (TProjectionPayload)(genericMethod?.Invoke(typeof(TProjectionPayload), new object[] { Payload, ev }) ?? Payload);
+#else
+        var method = Payload.GetType().GetMethod("ApplyEventInstance");
+        var genericMethod = method?.MakeGenericMethod(ev.GetEventPayloadType());
+        Payload = (TProjectionPayload)(genericMethod?.Invoke(Payload, new object[] { Payload, ev }) ?? Payload);
+#endif
+
 
         LastEventId = ev.Id;
         LastSortableUniqueId = ev.SortableUniqueId;
         Version++;
     }
 
-    public bool CanApplyEvent(IEvent ev) => GetApplyEventAction(ev, ev.GetPayload()) is not null;
+    public bool CanApplyEvent(IEvent ev) => true;
 
     public void ApplySnapshot(SingleProjectionState<TProjectionPayload> snapshot)
     {
@@ -64,18 +69,4 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
     public Type GetOriginalAggregatePayloadType() => typeof(TProjectionPayload).GetOriginalTypeFromSingleProjectionPayload();
 
     public bool GetIsDeleted() => Payload is IDeletable { IsDeleted: true };
-
-    protected Action? GetApplyEventAction(IEvent ev, IEventPayloadCommon eventPayload)
-    {
-        var payload = Payload as ISingleProjectionEventApplicable<TProjectionPayload> ??
-            throw new SekibanSingleProjectionMustInheritISingleProjectionEventApplicable();
-        (ev, eventPayload) = EventHelper.GetConvertedEventAndPayloadIfConverted(ev, eventPayload);
-        var func = payload.GetApplyEventFunc(ev, eventPayload);
-        return () =>
-        {
-            if (func == null) { return; }
-            var result = func(Payload);
-            Payload = result;
-        };
-    }
 }

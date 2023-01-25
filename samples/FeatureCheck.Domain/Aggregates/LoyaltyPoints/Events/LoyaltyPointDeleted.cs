@@ -1,7 +1,8 @@
 ﻿using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Events;
 
-public record LoyaltyPointDeleted : IEventPayload<LoyaltyPoint>
+public record LoyaltyPointDeleted : IEventPayload<LoyaltyPoint, LoyaltyPointDeleted>
 {
-    public LoyaltyPoint OnEvent(LoyaltyPoint payload, IEvent ev) => payload with { IsDeleted = true };
+    public static LoyaltyPoint OnEvent(LoyaltyPoint aggregatePayload, Event<LoyaltyPointDeleted> ev) => aggregatePayload with { IsDeleted = true };
+    public LoyaltyPoint OnEventInstance(LoyaltyPoint aggregatePayload, Event<LoyaltyPointDeleted> ev) => OnEvent(aggregatePayload, ev);
 }

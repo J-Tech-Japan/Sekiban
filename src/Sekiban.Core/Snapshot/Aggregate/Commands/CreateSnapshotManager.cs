@@ -15,7 +15,7 @@ public class CreateSnapshotManagerHandler : ICommandHandler<SnapshotManager, Cre
 
     public CreateSnapshotManagerHandler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
 
-    public async IAsyncEnumerable<IEventPayload<SnapshotManager>> HandleCommandAsync(
+    public async IAsyncEnumerable<IEventPayloadApplicableTo<SnapshotManager>> HandleCommandAsync(
         Func<AggregateState<SnapshotManager>> getAggregateState,
         CreateSnapshotManager command)
     {

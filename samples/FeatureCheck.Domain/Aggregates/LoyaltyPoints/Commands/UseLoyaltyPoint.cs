@@ -28,7 +28,7 @@ public record UseLoyaltyPoint(
 
     public class Handler : IVersionValidationCommandHandler<LoyaltyPoint, UseLoyaltyPoint>
     {
-        public async IAsyncEnumerable<IEventPayload<LoyaltyPoint>> HandleCommandAsync(
+        public async IAsyncEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommandAsync(
             Func<AggregateState<LoyaltyPoint>> getAggregateState,
             UseLoyaltyPoint command)
         {

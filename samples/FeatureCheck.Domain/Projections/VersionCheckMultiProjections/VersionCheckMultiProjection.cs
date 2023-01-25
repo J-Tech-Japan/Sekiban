@@ -9,11 +9,17 @@ public record VersionCheckMultiProjection
     (ImmutableList<VersionCheckMultiProjection.Record> History) : IMultiProjectionPayload<VersionCheckMultiProjection>
 {
     public VersionCheckMultiProjection() : this(ImmutableList<Record>.Empty) { }
-    public Func<VersionCheckMultiProjection, VersionCheckMultiProjection>? GetApplyEventFunc(IEvent ev, IEventPayloadCommon eventPayload) =>
-        eventPayload switch
+    public VersionCheckMultiProjection? ApplyEventInstance<TEventPayload>(
+        VersionCheckMultiProjection projectionPayload,
+        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon => ApplyEvent(projectionPayload, ev);
+    public static VersionCheckMultiProjection? ApplyEvent<TEventPayload>(
+        VersionCheckMultiProjection projectionPayload,
+        Event<TEventPayload> ev)
+        where TEventPayload : IEventPayloadCommon =>
+        ev.Payload switch
         {
-            PaymentAdded_V3 paymentAddedV3 => projection => new VersionCheckMultiProjection(
-                projection.History.Add(new Record(paymentAddedV3.Amount, paymentAddedV3.PaymentKind, paymentAddedV3.Description))),
+            PaymentAdded_V3 paymentAddedV3 => new VersionCheckMultiProjection(
+                projectionPayload.History.Add(new Record(paymentAddedV3.Amount, paymentAddedV3.PaymentKind, paymentAddedV3.Description))),
             _ => null
         };
 

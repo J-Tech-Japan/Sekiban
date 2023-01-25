@@ -32,7 +32,7 @@ public class ReportVersionToSnapshotMangerHandler : ICommandHandler<SnapshotMana
 
     public ReportVersionToSnapshotMangerHandler(IAggregateSettings aggregateSettings) => _aggregateSettings = aggregateSettings;
 
-    public async IAsyncEnumerable<IEventPayload<SnapshotManager>> HandleCommandAsync(
+    public async IAsyncEnumerable<IEventPayloadApplicableTo<SnapshotManager>> HandleCommandAsync(
         Func<AggregateState<SnapshotManager>> getAggregateState,
         ReportVersionToSnapshotManger command)
     {

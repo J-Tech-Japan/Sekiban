@@ -39,7 +39,7 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
     }
 
     public AggregateDependencyDefinition<TAggregatePayload> AddEventSubscriber<TEvent, TEventSubscriber>()
-        where TEvent : IEventPayload<TAggregatePayload>
+        where TEvent : IEventPayloadApplicableTo<TAggregatePayload>
         where TEventSubscriber : IEventSubscriber<TEvent>
     {
         SubscriberTypes = SubscriberTypes.Add((typeof(INotificationHandler<Event<TEvent>>), typeof(EventSubscriber<TEvent, TEventSubscriber>)));

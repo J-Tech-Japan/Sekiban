@@ -1,6 +1,8 @@
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.SingleProjections;
+using Sekiban.Core.Types;
+using System.Reflection;
 namespace Sekiban.Core.Aggregate;
 
 /// <summary>
@@ -32,34 +34,42 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon,
     protected override Action? GetApplyEventAction(IEvent ev, IEventPayloadCommon payload)
     {
         (ev, payload) = EventHelper.GetConvertedEventAndPayloadIfConverted(ev, payload);
-        var func = GetApplyEventFunc(ev, payload);
+        var eventType = payload.GetEventPayloadType();
+        var method = GetType().GetMethod(nameof(GetApplyEventFunc), BindingFlags.Instance | BindingFlags.NonPublic);
+        var genericMethod = method?.MakeGenericMethod(eventType);
+        var func = (dynamic?)genericMethod?.Invoke(this, new object[] { payload });
         return () =>
         {
             if (func == null)
             {
                 return;
             }
-            var result = func(Payload, ev);
+            var result = func(Payload, (dynamic)ev);
             Payload = result;
         };
     }
 
-    private Func<TAggregatePayload, IEvent, TAggregatePayload>? GetApplyEventFunc(
-        IEvent ev,
+    private Func<TAggregatePayload, Event<TEventPayload>, TAggregatePayload>? GetApplyEventFunc<TEventPayload>(
         IEventPayloadCommon payload)
+        where TEventPayload : IEventPayload<TAggregatePayload, TEventPayload>
     {
-        if (payload is IEventPayload<TAggregatePayload> applicableEvent)
+#if NET7_0_OR_GREATER
+        return TEventPayload.OnEvent;
+#else
+        if (payload is IEventPayload<TAggregatePayload, TEventPayload> applicableEvent)
         {
-            return applicableEvent.OnEvent;
+            return applicableEvent.OnEventInstance;
         }
         return null;
+#endif
     }
 
     internal IEvent AddAndApplyEvent<TEventPayload>(TEventPayload eventPayload)
-        where TEventPayload : IEventPayloadCommon, IEventPayload<TAggregatePayload>
+        where TEventPayload : IEventPayloadCommon, IEventPayload<TAggregatePayload, TEventPayload>
     {
         var ev = Event<TEventPayload>.GenerateEvent(AggregateId, typeof(TAggregatePayload), eventPayload);
-        if (GetApplyEventAction(ev, eventPayload) is null)
+        var result = GetApplyEventAction(ev, eventPayload);
+        if (result is null)
         {
             throw new SekibanEventNotImplementedException(
                 $"{eventPayload.GetType().Name} Event not implemented on {GetType().Name} Aggregate");

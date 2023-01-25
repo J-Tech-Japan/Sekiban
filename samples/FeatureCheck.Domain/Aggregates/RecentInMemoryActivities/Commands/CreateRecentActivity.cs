@@ -15,7 +15,7 @@ public record CreateRecentInMemoryActivity : ICommand<RecentInMemoryActivity>
 
         public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
 
-        public async IAsyncEnumerable<IEventPayload<RecentInMemoryActivity>> HandleCommandAsync(
+        public async IAsyncEnumerable<IEventPayloadApplicableTo<RecentInMemoryActivity>> HandleCommandAsync(
             Func<AggregateState<RecentInMemoryActivity>> getAggregateState,
             CreateRecentInMemoryActivity command)
         {

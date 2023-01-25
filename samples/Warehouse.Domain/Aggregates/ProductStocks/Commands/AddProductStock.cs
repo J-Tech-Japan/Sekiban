@@ -15,7 +15,7 @@ public record AddProductStock : ICommand<ProductStock>
         private readonly IProductExistsPort _productExistsPort;
         public Handler(IProductExistsPort productExistsPort) => _productExistsPort = productExistsPort;
 
-        public async IAsyncEnumerable<IEventPayload<ProductStock>> HandleCommandAsync(
+        public async IAsyncEnumerable<IEventPayloadApplicableTo<ProductStock>> HandleCommandAsync(
             Func<AggregateState<ProductStock>> getAggregateState,
             AddProductStock command)
         {

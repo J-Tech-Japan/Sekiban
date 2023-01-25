@@ -23,7 +23,7 @@ public record OnlyPublishingAddRecentActivity(Guid RecentActivityId, string Acti
 
         public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
 
-        public async IAsyncEnumerable<IEventPayload<RecentActivity>> HandleCommandAsync(
+        public async IAsyncEnumerable<IEventPayloadApplicableTo<RecentActivity>> HandleCommandAsync(
             Guid aggregateId,
             OnlyPublishingAddRecentActivity command)
         {

@@ -110,7 +110,8 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 var options = new QueryRequestOptions
                 {
                     PartitionKey =
-                        new PartitionKey(PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType))
+                        new PartitionKey(PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType)),
+                    MaxItemCount = 1
                 };
                 var query = container.GetItemLinqQueryable<SnapshotDocument>()
                     .Where(

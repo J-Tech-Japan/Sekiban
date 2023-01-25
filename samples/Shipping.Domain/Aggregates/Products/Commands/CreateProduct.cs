@@ -14,7 +14,7 @@ public record CreateProduct : ICommand<Product>
 
     public class Handler : ICommandHandler<Product, CreateProduct>
     {
-        public async IAsyncEnumerable<IEventPayload<Product>> HandleCommandAsync(
+        public async IAsyncEnumerable<IEventPayloadApplicableTo<Product>> HandleCommandAsync(
             Func<AggregateState<Product>> getAggregateState,
             CreateProduct command)
         {

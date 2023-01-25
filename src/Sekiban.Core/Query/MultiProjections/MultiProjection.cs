@@ -1,6 +1,7 @@
 using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
+using Sekiban.Core.Types;
 namespace Sekiban.Core.Query.MultiProjections;
 
 public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPayload>, IMultiProjectionBase
@@ -14,12 +15,18 @@ public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPa
 
     public void ApplyEvent(IEvent ev)
     {
-        var action = GetApplyEventAction(ev, ev.GetPayload());
-        if (action is null)
-        {
-            return;
-        }
-        action();
+
+        (ev, _) = EventHelper.GetConvertedEventAndPayloadIfConverted(ev, ev.GetPayload());
+
+#if NET7_0_OR_GREATER
+        var method = typeof(TProjectionPayload).GetMethod("ApplyEvent");
+        var genericMethod = method?.MakeGenericMethod(ev.GetEventPayloadType());
+        Payload = (TProjectionPayload)(genericMethod?.Invoke(typeof(TProjectionPayload), new object[] { Payload, ev }) ?? Payload);
+#else
+        var method = Payload.GetType().GetMethod("ApplyEventInstance");
+        var genericMethod = method?.MakeGenericMethod(ev.GetEventPayloadType());
+        Payload = (TProjectionPayload)(genericMethod?.Invoke(Payload, new object[] { Payload, ev }) ?? Payload);
+#endif
         Version++;
         LastEventId = ev.Id;
         LastSortableUniqueId = ev.SortableUniqueId;
@@ -47,22 +54,5 @@ public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPa
         var projectionPayload = Payload as IMultiProjectionPayload<TProjectionPayload> ??
             throw new SekibanMultiProjectionMustInheritISingleProjectionEventApplicable();
         return projectionPayload.GetTargetAggregatePayloads().GetAggregateNames();
-    }
-
-    protected Action? GetApplyEventAction(IEvent ev, IEventPayloadCommon payload)
-    {
-        var projectionPayload = Payload as IMultiProjectionPayload<TProjectionPayload> ??
-            throw new SekibanMultiProjectionMustInheritISingleProjectionEventApplicable();
-        (ev, payload) = EventHelper.GetConvertedEventAndPayloadIfConverted(ev, payload);
-        var func = projectionPayload.GetApplyEventFunc(ev, payload);
-        return () =>
-        {
-            if (func == null)
-            {
-                return;
-            }
-            var result = func(Payload);
-            Payload = result;
-        };
     }
 }

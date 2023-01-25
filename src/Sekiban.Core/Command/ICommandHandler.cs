@@ -26,7 +26,7 @@ public interface ICommandHandler<TAggregatePayload, TCommand> : ICommandHandlerC
     /// </param>
     /// <param name="command"></param>
     /// <returns></returns>
-    public IAsyncEnumerable<IEventPayload<TAggregatePayload>> HandleCommandAsync(
+    public IAsyncEnumerable<IEventPayloadApplicableTo<TAggregatePayload>> HandleCommandAsync(
         Func<AggregateState<TAggregatePayload>> getAggregateState,
         TCommand command);
 }

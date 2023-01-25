@@ -27,20 +27,26 @@ public record CreateLoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : IC
             _dateProducer = dateProducer;
         }
 
-        public async IAsyncEnumerable<IEventPayload<LoyaltyPoint>> HandleCommandAsync(
+        public async IAsyncEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommandAsync(
             Func<AggregateState<LoyaltyPoint>> getAggregateState,
             CreateLoyaltyPointAndAddPoint command)
         {
             yield return new LoyaltyPointCreated(0);
             getAggregateState(); // to reproduce the issue;
-            yield return new LoyaltyPointAdded(_dateProducer.UtcNow, LoyaltyPointReceiveTypeKeys.InitialGift,
-                command.AddingPoint, "Initial User Gift");
+            yield return new LoyaltyPointAdded(
+                _dateProducer.UtcNow,
+                LoyaltyPointReceiveTypeKeys.InitialGift,
+                command.AddingPoint,
+                "Initial User Gift");
             // initial gift for gmail user.
             var client = await aggregateLoader.AsDefaultStateAsync<Client>(getAggregateState().AggregateId);
             if (client != null && client.Payload.ClientEmail.ToLower().EndsWith("@gmail.com"))
             {
-                yield return new LoyaltyPointAdded(_dateProducer.UtcNow, LoyaltyPointReceiveTypeKeys.InitialGmailUserGift,
-                    command.AddingPoint, "Gmail users gift");
+                yield return new LoyaltyPointAdded(
+                    _dateProducer.UtcNow,
+                    LoyaltyPointReceiveTypeKeys.InitialGmailUserGift,
+                    command.AddingPoint,
+                    "Gmail users gift");
 
             }
         }

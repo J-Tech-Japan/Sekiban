@@ -18,7 +18,7 @@ public record CancelDeleteClient : IVersionValidationCommand<Client>, ICancelDel
 
     public class Handler : IVersionValidationCommandHandler<Client, CancelDeleteClient>
     {
-        public async IAsyncEnumerable<IEventPayload<Client>> HandleCommandAsync(
+        public async IAsyncEnumerable<IEventPayloadApplicableTo<Client>> HandleCommandAsync(
             Func<AggregateState<Client>> getAggregateState,
             CancelDeleteClient command)
         {
