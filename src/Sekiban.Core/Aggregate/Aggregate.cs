@@ -34,6 +34,10 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon,
     protected override Action? GetApplyEventAction(IEvent ev, IEventPayloadCommon payload)
     {
         (ev, payload) = EventHelper.GetConvertedEventAndPayloadIfConverted(ev, payload);
+        if (payload is UnregisteredEventPayload || payload is EmptyEventPayload)
+        {
+            return () => { };
+        }
         var eventType = payload.GetEventPayloadType();
         var method = GetType().GetMethod(nameof(GetApplyEventFunc), BindingFlags.Instance | BindingFlags.NonPublic);
         var genericMethod = method?.MakeGenericMethod(eventType);
