@@ -24,8 +24,11 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
         {
             return;
         }
-        (ev, _) = EventHelper.GetConvertedEventAndPayloadIfConverted(ev, ev.GetPayload());
-
+        (ev, var payload) = EventHelper.GetConvertedEventAndPayloadIfConverted(ev, ev.GetPayload());
+        if (payload is UnregisteredEventPayload || payload is EmptyEventPayload)
+        {
+            return;
+        }
 #if NET7_0_OR_GREATER
         var method = typeof(TProjectionPayload).GetMethod("ApplyEvent");
         var genericMethod = method?.MakeGenericMethod(ev.GetEventPayloadType());
