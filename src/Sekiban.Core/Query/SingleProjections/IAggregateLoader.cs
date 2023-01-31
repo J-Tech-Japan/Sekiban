@@ -16,7 +16,7 @@ public interface IAggregateLoader
     public Task<AggregateState<TAggregatePayload>?> AsDefaultStateFromInitialAsync<TAggregatePayload>(
         Guid aggregateId,
         int? toVersion = null)
-        where TAggregatePayload : IAggregatePayload, new();
+        where TAggregatePayload : IAggregatePayloadCommon, new();
 
     /// <summary>
     ///     カスタムプロジェククションを取得
@@ -49,7 +49,7 @@ public interface IAggregateLoader
         Guid aggregateId,
         int? toVersion = null,
         string? includesSortableUniqueId = null)
-        where TAggregatePayload : IAggregatePayload, new();
+        where TAggregatePayload : IAggregatePayloadCommon;
 
     /// <summary>
     ///     スナップショット、メモリキャッシュを使用する通常版
@@ -65,12 +65,12 @@ public interface IAggregateLoader
         Guid aggregateId,
         int? toVersion = null,
         string? includesSortableUniqueId = null)
-        where TAggregatePayload : IAggregatePayload, new();
+        where TAggregatePayload : IAggregatePayloadCommon;
 
 
     public Task<IEnumerable<IEvent>?> AllEventsAsync<TAggregatePayload>(
         Guid aggregateId,
         int? toVersion = null,
         string? includesSortableUniqueId = null)
-        where TAggregatePayload : IAggregatePayload, new();
+        where TAggregatePayload : IAggregatePayloadCommon;
 }

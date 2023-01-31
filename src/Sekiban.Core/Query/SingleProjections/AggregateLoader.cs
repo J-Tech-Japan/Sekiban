@@ -64,7 +64,7 @@ public class AggregateLoader : IAggregateLoader
         Guid aggregateId,
         int? toVersion = null,
         string? includesSortableUniqueId = null)
-        where TAggregatePayload : IAggregatePayload, new() => await _singleProjection
+        where TAggregatePayload : IAggregatePayload => await _singleProjection
         .GetAggregateAsync<Aggregate<TAggregatePayload>, AggregateState<TAggregatePayload>,
             DefaultSingleProjector<TAggregatePayload>>(
             aggregateId,
@@ -75,7 +75,7 @@ public class AggregateLoader : IAggregateLoader
         Guid aggregateId,
         int? toVersion = null,
         string? includesSortableUniqueId = null)
-        where TAggregatePayload : IAggregatePayload, new()
+        where TAggregatePayload : IAggregatePayload
     {
         var aggregate = await AsAggregateAsync<TAggregatePayload>(aggregateId, toVersion);
         return aggregate?.ToState();
@@ -85,7 +85,7 @@ public class AggregateLoader : IAggregateLoader
         Guid aggregateId,
         int? toVersion = null,
         string? includesSortableUniqueId = null)
-        where TAggregatePayload : IAggregatePayload, new()
+        where TAggregatePayload : IAggregatePayload
     {
         var toReturn = new List<IEvent>();
         await _documentRepository.GetAllEventsForAggregateIdAsync(

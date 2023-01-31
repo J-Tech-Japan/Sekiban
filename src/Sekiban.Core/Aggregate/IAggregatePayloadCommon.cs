@@ -5,7 +5,7 @@ namespace Sekiban.Core.Aggregate;
 ///     Application developer can implement this interface to define the state of your aggregate.
 ///     If you want to make your aggregate deletable, please use <see cref="IDeletableAggregatePayload" />.
 /// </summary>
-public interface IAggregatePayload
+public interface IAggregatePayloadCommon
 {
     /// <summary>
     ///     Aggregate Payload Version:

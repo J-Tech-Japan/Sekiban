@@ -14,6 +14,12 @@ using FeatureCheck.Domain.Aggregates.RecentActivities.Commands;
 using FeatureCheck.Domain.Aggregates.RecentActivities.Projections;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Commands;
+using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes;
+using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.PurchasedCarts;
+using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.PurchasedCarts.Commands;
+using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.ShippingCarts;
+using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.ShoppingCarts;
+using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.ShoppingCarts.Commands;
 using FeatureCheck.Domain.Aggregates.VersionCheckAggregates;
 using FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Commands;
 using FeatureCheck.Domain.EventSubscribers;
@@ -70,6 +76,15 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
             .AddCommandHandler<OldV1Command, OldV1Command.Handler>()
             .AddCommandHandler<OldV2Command, OldV2Command.Handler>()
             .AddCommandHandler<CurrentV3Command, CurrentV3Command.Handler>();
+
+        AddParentAggregate<ICartAggregate>()
+            .AddSubAggregate<ShoppingCartI>(
+                subType =>
+                    subType.AddCommandHandler<AddItemToShoppingCartI, AddItemToShoppingCartI.Handler>())
+            .AddSubAggregate<PurchasedCartI>(
+                subType =>
+                    subType.AddCommandHandler<ReceivePaymentToPurchasedCartI, ReceivePaymentToPurchasedCartI.Handler>())
+            .AddSubAggregate<ShippingCartI>(subType => { });
 
         AddMultiProjectionQuery<ClientLoyaltyPointMultiProjectionQuery>();
         AddMultiProjectionListQuery<ClientLoyaltyPointQuery>();

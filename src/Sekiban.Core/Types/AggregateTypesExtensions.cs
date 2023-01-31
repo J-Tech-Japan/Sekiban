@@ -15,6 +15,26 @@ public static class AggregateTypesExtensions
         type.ImplementedInterfaces.Contains(typeof(IAggregatePayload)) &&
         !type.ImplementedInterfaces.Contains(typeof(ISingleProjectionPayloadCommon));
 
+    public static bool IsParentAggregateType(this Type type) =>
+        type.DoesImplementingFromGenericInterfaceType(typeof(IParentAggregatePayload<,>));
+    public static Type GetParentAggregatePayloadTypeFromAggregate(this Type aggregateType)
+    {
+        if (aggregateType.IsParentAggregateType())
+        {
+            var baseType = aggregateType.GetImplementingFromGenericInterfaceType(typeof(IParentAggregatePayload<,>));
+            return baseType.GenericTypeArguments[0];
+        }
+        throw new Exception(aggregateType.FullName + " is not an aggregate");
+    }
+    public static Type GetFirstAggregatePayloadTypeFromAggregate(this Type aggregateType)
+    {
+        if (aggregateType.IsParentAggregateType())
+        {
+            var baseType = aggregateType.GetImplementingFromGenericInterfaceType(typeof(IParentAggregatePayload<,>));
+            return baseType.GenericTypeArguments[1];
+        }
+        throw new Exception(aggregateType.FullName + " is not an aggregate");
+    }
     public static bool IsAggregateType(this Type type) => type.GetTypeInfo().IsAggregateType();
 
     public static Type GetAggregatePayloadTypeFromAggregate(this Type aggregateType)

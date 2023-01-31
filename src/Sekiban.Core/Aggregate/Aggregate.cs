@@ -12,9 +12,9 @@ namespace Sekiban.Core.Aggregate;
 /// <typeparam name="TAggregatePayload">User Defined Aggregate Payload</typeparam>
 public sealed class Aggregate<TAggregatePayload> : AggregateCommon,
     ISingleProjectionStateConvertible<AggregateState<TAggregatePayload>>
-    where TAggregatePayload : IAggregatePayload, new()
+    where TAggregatePayload : IAggregatePayloadCommon
 {
-    private TAggregatePayload Payload { get; set; } = new();
+    private TAggregatePayload Payload { get; set; } = CreatePayload();
 
     public AggregateState<TAggregatePayload> ToState() => new(this, Payload);
 
@@ -28,6 +28,18 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon,
             AppliedSnapshotVersion = snapshot.Version
         };
         CopyPropertiesFromSnapshot(snapshot);
+    }
+
+    private static TAggregatePayload CreatePayload()
+    {
+        if (!typeof(TAggregatePayload).IsParentAggregateType())
+        {
+            return (TAggregatePayload?)Activator.CreateInstance(typeof(TAggregatePayload)) ??
+                throw new Exception("Failed to create Aggregate Payload");
+        }
+        var firstAggregateType = typeof(TAggregatePayload).GetFirstAggregatePayloadTypeFromAggregate();
+        var obj = Activator.CreateInstance(firstAggregateType);
+        return (TAggregatePayload?)obj ?? throw new Exception("Failed to create Aggregate Payload");
     }
 
     public override string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();

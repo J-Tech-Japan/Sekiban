@@ -8,7 +8,7 @@ using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
 namespace Sekiban.Testing.SingleProjections;
 
-public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload : IAggregatePayload, new()
+public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload : IAggregatePayload
 {
     #region given and setup
     public IAggregateTestHelper<TAggregatePayload> GivenScenario(Action initialAction);

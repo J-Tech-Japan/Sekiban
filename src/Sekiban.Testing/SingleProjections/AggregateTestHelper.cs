@@ -16,7 +16,7 @@ using Xunit;
 namespace Sekiban.Testing.SingleProjections;
 
 public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggregatePayload>
-    where TAggregatePayload : IAggregatePayload, new()
+    where TAggregatePayload : IAggregatePayload
 {
     private readonly TestCommandExecutor _commandExecutor;
     private readonly IServiceProvider _serviceProvider;

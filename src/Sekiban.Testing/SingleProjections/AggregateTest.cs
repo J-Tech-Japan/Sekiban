@@ -12,7 +12,7 @@ namespace Sekiban.Testing.SingleProjections;
 
 public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposable,
     IAggregateTestHelper<TAggregatePayload>
-    where TAggregatePayload : IAggregatePayload, new()
+    where TAggregatePayload : IAggregatePayload
     where TDependencyDefinition : IDependencyDefinition, new()
 {
     private readonly IAggregateTestHelper<TAggregatePayload> _helper;

@@ -4,6 +4,6 @@ using Sekiban.Testing.SingleProjections;
 namespace FeatureCheck.Test;
 
 public class AggregateTest<TAggregatePayload> : AggregateTest<TAggregatePayload, FeatureCheckDependency>
-    where TAggregatePayload : IAggregatePayload, new()
+    where TAggregatePayload : IAggregatePayload
 {
 }

@@ -5,7 +5,7 @@ namespace Sekiban.Core.Snapshot.Aggregate;
 
 [AggregateContainerGroup(AggregateContainerGroup.InMemory)]
 public record SnapshotManager
-    (ImmutableList<string> Requests, ImmutableList<string> RequestTakens, DateTime CreatedAt) : IAggregatePayload
+    (ImmutableList<string> Requests, ImmutableList<string> RequestTakens, DateTime CreatedAt) : IAggregatePayloadCommon
 {
     internal const int SnapshotCount = 40;
     internal const int SnapshotTakeOffset = 15;

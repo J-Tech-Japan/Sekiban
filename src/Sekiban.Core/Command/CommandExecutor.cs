@@ -87,7 +87,7 @@ public class CommandExecutor : ICommandExecutor
 
     public async Task<(CommandExecutorResponse, List<IEvent>)> ExecCommandAsyncTyped<TAggregatePayload, TCommand>(
         TCommand command,
-        List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new()
+        List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayloadCommon
         where TCommand : ICommand<TAggregatePayload>
     {
         var validationResult = command.ValidateProperties()?.ToList();
@@ -101,7 +101,7 @@ public class CommandExecutor : ICommandExecutor
     public async Task<(CommandExecutorResponse, List<IEvent>)> ExecCommandWithoutValidationAsyncTyped<TAggregatePayload,
         TCommand>(
         TCommand command,
-        List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new()
+        List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayloadCommon
         where TCommand : ICommand<TAggregatePayload>
     {
         var commandDocument
@@ -184,7 +184,7 @@ public class CommandExecutor : ICommandExecutor
     private async Task<List<IEvent>> HandleEventsAsync<TAggregatePayload, TCommand>(
         IReadOnlyCollection<IEvent> events,
         CommandDocument<TCommand> commandDocument)
-        where TAggregatePayload : IAggregatePayload, new()
+        where TAggregatePayload : IAggregatePayloadCommon
         where TCommand : ICommand<TAggregatePayload>
     {
         var toReturnEvents = new List<IEvent>();

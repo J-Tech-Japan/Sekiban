@@ -1,4 +1,5 @@
 using Sekiban.Core.Query.SingleProjections;
+using Sekiban.Core.Types;
 using System.ComponentModel.DataAnnotations;
 namespace Sekiban.Core.Aggregate;
 
@@ -8,7 +9,7 @@ namespace Sekiban.Core.Aggregate;
 ///     To make it executable, use the Aggregate class by applying this class as a snapshot
 /// </summary>
 /// <typeparam name="TPayload">Aggregate Payload</typeparam>
-public sealed record AggregateState<TPayload> : IAggregateCommon where TPayload : IAggregatePayload, new()
+public sealed record AggregateState<TPayload> : IAggregateCommon where TPayload : IAggregatePayloadCommon
 {
     public AggregateState()
     {
@@ -24,7 +25,7 @@ public sealed record AggregateState<TPayload> : IAggregateCommon where TPayload 
 
     public AggregateState(IAggregateCommon aggregateCommon, TPayload payload) : this(aggregateCommon) => Payload = payload;
 
-    public TPayload Payload { get; init; } = new();
+    public TPayload Payload { get; init; } = CreatePayload();
 
     [Required]
     [Description("AggregateId")]
@@ -45,6 +46,17 @@ public sealed record AggregateState<TPayload> : IAggregateCommon where TPayload 
     [Required]
     [Description("Last Sortable Unique Id, SortableUniqueId defines the order of events")]
     public string LastSortableUniqueId { get; init; } = string.Empty;
+
+    private static TPayload CreatePayload()
+    {
+        if (!typeof(TPayload).IsParentAggregateType())
+        {
+            return (TPayload?)Activator.CreateInstance(typeof(TPayload)) ?? throw new Exception("Failed to create Aggregate Payload");
+        }
+        var firstAggregateType = typeof(TPayload).GetFirstAggregatePayloadTypeFromAggregate();
+        var obj = Activator.CreateInstance(firstAggregateType);
+        return (TPayload?)obj ?? throw new Exception("Failed to create Aggregate Payload");
+    }
 
     public string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();
 

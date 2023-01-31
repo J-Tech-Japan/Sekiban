@@ -89,7 +89,7 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
     }
 
     protected AggregateDependencyDefinition<TAggregatePayload> AddAggregate<TAggregatePayload>()
-        where TAggregatePayload : IAggregatePayload, new()
+        where TAggregatePayload : IAggregatePayloadCommon
     {
         if (AggregateDefinitions.SingleOrDefault(s => s.AggregateType == typeof(TAggregatePayload)) is
             AggregateDependencyDefinition<TAggregatePayload> existing)
@@ -98,6 +98,20 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
         }
 
         var newone = new AggregateDependencyDefinition<TAggregatePayload>();
+        AggregateDefinitions = AggregateDefinitions.Add(newone);
+        return newone;
+    }
+
+    protected ParentAggregateDependencyDefinition<TAggregatePayload> AddParentAggregate<TAggregatePayload>()
+        where TAggregatePayload : IParentAggregatePayloadCommon<TAggregatePayload>
+    {
+        if (AggregateDefinitions.SingleOrDefault(s => s.AggregateType == typeof(TAggregatePayload)) is
+            ParentAggregateDependencyDefinition<TAggregatePayload> existing)
+        {
+            return existing;
+        }
+
+        var newone = new ParentAggregateDependencyDefinition<TAggregatePayload>();
         AggregateDefinitions = AggregateDefinitions.Add(newone);
         return newone;
     }
