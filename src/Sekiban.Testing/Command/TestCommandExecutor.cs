@@ -104,18 +104,18 @@ public class TestCommandExecutor
     public Guid ExecuteCommand<TAggregatePayload>(
         ICommand<TAggregatePayload> command,
         Guid? injectingAggregateId = null)
-        where TAggregatePayload : IAggregatePayload, new() => ExecuteCommand(command, injectingAggregateId, false);
+        where TAggregatePayload : IAggregatePayloadCommon => ExecuteCommand(command, injectingAggregateId, false);
 
     public Guid ExecuteCommandWithPublish<TAggregatePayload>(
         ICommand<TAggregatePayload> command,
         Guid? injectingAggregateId = null)
-        where TAggregatePayload : IAggregatePayload, new() => ExecuteCommand(command, injectingAggregateId, true);
+        where TAggregatePayload : IAggregatePayloadCommon => ExecuteCommand(command, injectingAggregateId, true);
 
     private Guid ExecuteCommand<TAggregatePayload>(
         ICommand<TAggregatePayload> command,
         Guid? injectingAggregateId,
         bool withPublish)
-        where TAggregatePayload : IAggregatePayload, new()
+        where TAggregatePayload : IAggregatePayloadCommon
     {
         var validationResults = command.ValidateProperties().ToList();
         if (validationResults.Any())

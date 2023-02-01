@@ -42,15 +42,15 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
 
     #region Get Aggregate Test
     public AggregateTest<TAggregatePayload, TDependencyDefinition> GetAggregateTest<TAggregatePayload>(Guid aggregateId)
-        where TAggregatePayload : IAggregatePayload, new() => new(_serviceProvider, aggregateId);
+        where TAggregatePayload : IAggregatePayloadCommon => new(_serviceProvider, aggregateId);
 
     public AggregateTest<TAggregatePayload, TDependencyDefinition> GetAggregateTest<TAggregatePayload>()
-        where TAggregatePayload : IAggregatePayload, new() => new(_serviceProvider);
+        where TAggregatePayload : IAggregatePayloadCommon => new(_serviceProvider);
 
     public UnifiedTest<TDependencyDefinition> ThenGetAggregateTest<TAggregatePayload>(
         Guid aggregateId,
         Action<AggregateTest<TAggregatePayload, TDependencyDefinition>> testAction)
-        where TAggregatePayload : IAggregatePayload, new()
+        where TAggregatePayload : IAggregatePayloadCommon
     {
         testAction(new AggregateTest<TAggregatePayload, TDependencyDefinition>(_serviceProvider, aggregateId));
         return this;
@@ -58,7 +58,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
 
     public UnifiedTest<TDependencyDefinition> ThenGetAggregateTest<TAggregatePayload>(
         Action<AggregateTest<TAggregatePayload, TDependencyDefinition>> testAction)
-        where TAggregatePayload : IAggregatePayload, new()
+        where TAggregatePayload : IAggregatePayloadCommon
     {
         testAction(new AggregateTest<TAggregatePayload, TDependencyDefinition>(_serviceProvider));
         return this;
@@ -311,7 +311,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     #region Aggregate List Projection
     public MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>
         GetAggregateListProjectionState<TAggregatePayload>()
-        where TAggregatePayload : IAggregatePayload, new()
+        where TAggregatePayload : IAggregatePayloadCommon
     {
         var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ??
             throw new Exception("Failed to get Query service");
@@ -337,7 +337,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
 
     public UnifiedTest<TDependencyDefinition> ThenGetAggregateListProjectionPayload<TAggregatePayload>(
         Action<SingleProjectionListState<AggregateState<TAggregatePayload>>> payloadAction)
-        where TAggregatePayload : IAggregatePayload, new()
+        where TAggregatePayload : IAggregatePayloadCommon
     {
         payloadAction(GetAggregateListProjectionState<TAggregatePayload>().Payload);
         return this;
@@ -345,7 +345,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
 
     public UnifiedTest<TDependencyDefinition> ThenGetAggregateListProjectionState<TAggregatePayload>(
         Action<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>> stateAction)
-        where TAggregatePayload : IAggregatePayload, new()
+        where TAggregatePayload : IAggregatePayloadCommon
     {
         stateAction(GetAggregateListProjectionState<TAggregatePayload>());
         return this;
@@ -353,7 +353,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
 
     public UnifiedTest<TDependencyDefinition> ThenAggregateListProjectionStateIs<TAggregatePayload>(
         MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>> state)
-        where TAggregatePayload : IAggregatePayload, new()
+        where TAggregatePayload : IAggregatePayloadCommon
     {
         var actual = GetAggregateListProjectionState<TAggregatePayload>();
         var expected = state with
@@ -369,7 +369,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
 
     public UnifiedTest<TDependencyDefinition> ThenAggregateListProjectionPayloadIs<TAggregatePayload>(
         SingleProjectionListState<AggregateState<TAggregatePayload>> payload)
-        where TAggregatePayload : IAggregatePayload, new()
+        where TAggregatePayload : IAggregatePayloadCommon
     {
         var actual = GetAggregateListProjectionState<TAggregatePayload>().Payload;
         var expected = payload;
@@ -605,12 +605,12 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
 
     #region Run Commands
     public Guid RunCommand<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
-        where TAggregatePayload : IAggregatePayload, new() => _commandExecutor.ExecuteCommand(command, injectingAggregateId);
+        where TAggregatePayload : IAggregatePayloadCommon => _commandExecutor.ExecuteCommand(command, injectingAggregateId);
 
     public Guid RunCommandWithPublish<TAggregatePayload>(
         ICommand<TAggregatePayload> command,
         Guid? injectingAggregateId = null)
-        where TAggregatePayload : IAggregatePayload, new() => _commandExecutor.ExecuteCommandWithPublish(command, injectingAggregateId);
+        where TAggregatePayload : IAggregatePayloadCommon => _commandExecutor.ExecuteCommandWithPublish(command, injectingAggregateId);
 
     public UnifiedTest<TDependencyDefinition> GivenCommandExecutorAction(Action<TestCommandExecutor> action)
     {

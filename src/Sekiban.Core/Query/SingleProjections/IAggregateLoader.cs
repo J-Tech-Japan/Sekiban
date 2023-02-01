@@ -16,7 +16,7 @@ public interface IAggregateLoader
     public Task<AggregateState<TAggregatePayload>?> AsDefaultStateFromInitialAsync<TAggregatePayload>(
         Guid aggregateId,
         int? toVersion = null)
-        where TAggregatePayload : IAggregatePayloadCommon, new();
+        where TAggregatePayload : IAggregatePayloadCommon;
 
     /// <summary>
     ///     カスタムプロジェククションを取得

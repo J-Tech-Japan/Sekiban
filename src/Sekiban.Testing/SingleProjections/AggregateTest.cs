@@ -12,7 +12,7 @@ namespace Sekiban.Testing.SingleProjections;
 
 public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposable,
     IAggregateTestHelper<TAggregatePayload>
-    where TAggregatePayload : IAggregatePayload
+    where TAggregatePayload : IAggregatePayloadCommon
     where TDependencyDefinition : IDependencyDefinition, new()
 {
     private readonly IAggregateTestHelper<TAggregatePayload> _helper;
@@ -48,12 +48,12 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
 
     public AggregateState<TEnvironmentAggregatePayload>
         GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
-        where TEnvironmentAggregatePayload : IAggregatePayload, new() =>
+        where TEnvironmentAggregatePayload : IAggregatePayloadCommon =>
         _helper.GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(aggregateId);
 
     public Guid RunEnvironmentCommand<TEnvironmentAggregatePayload>(
         ICommand<TEnvironmentAggregatePayload> command,
-        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayload, new() =>
+        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon =>
         _helper.RunEnvironmentCommand(command, injectingAggregateId);
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventWithPublish(IEvent ev) => _helper.GivenEnvironmentEventWithPublish(ev);
@@ -66,7 +66,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
 
     public Guid RunEnvironmentCommandWithPublish<TEnvironmentAggregatePayload>(
         ICommand<TEnvironmentAggregatePayload> command,
-        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayload, new() =>
+        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon =>
         _helper.RunEnvironmentCommandWithPublish(command, injectingAggregateId);
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentCommandExecutorAction(

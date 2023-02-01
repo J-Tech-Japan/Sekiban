@@ -79,6 +79,21 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon,
         return null;
 #endif
     }
+    private Func<TAggregatePayload, Event<TEventPayload>, TAggregatePayload>? GetApplyEventFunc<TAggregatePayloadIn, TAggregatePayloadOut,
+        TEventPayload>(
+        IEventPayloadCommon payload)
+        where TEventPayload : IEventPayload<TAggregatePayload, TEventPayload>
+    {
+#if NET7_0_OR_GREATER
+        return TEventPayload.OnEvent;
+#else
+        if (payload is IEventPayload<TAggregatePayload, TEventPayload> applicableEvent)
+        {
+            return applicableEvent.OnEventInstance;
+        }
+        return null;
+#endif
+    }
 
     internal IEvent AddAndApplyEvent<TEventPayload>(TEventPayload eventPayload)
         where TEventPayload : IEventPayloadCommon, IEventPayload<TAggregatePayload, TEventPayload>
