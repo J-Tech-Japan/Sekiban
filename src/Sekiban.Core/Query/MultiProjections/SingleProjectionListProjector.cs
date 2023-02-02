@@ -25,19 +25,16 @@ public class
 
     public void ApplyEvent(IEvent ev)
     {
-        if (_eventChecker.CanApplyEvent(ev))
+        var targetAggregate = List.FirstOrDefault(m => m.AggregateId == ev.AggregateId);
+        if (targetAggregate is null)
         {
-            var targetAggregate = List.FirstOrDefault(m => m.AggregateId == ev.AggregateId);
-            if (targetAggregate is null)
-            {
-                var aggregate = _projector.CreateInitialAggregate(ev.AggregateId);
-                aggregate.ApplyEvent(ev);
-                List.Add(aggregate);
-            }
-            else
-            {
-                targetAggregate.ApplyEvent(ev);
-            }
+            var aggregate = _projector.CreateInitialAggregate(ev.AggregateId);
+            aggregate.ApplyEvent(ev);
+            List.Add(aggregate);
+        }
+        else
+        {
+            targetAggregate.ApplyEvent(ev);
         }
 
         Version++;

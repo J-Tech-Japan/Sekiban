@@ -80,7 +80,8 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
         AddParentAggregate<ICartAggregate>()
             .AddSubAggregate<ShoppingCartI>(
                 subType =>
-                    subType.AddCommandHandler<AddItemToShoppingCartI, AddItemToShoppingCartI.Handler>())
+                    subType.AddCommandHandler<AddItemToShoppingCartI, AddItemToShoppingCartI.Handler>()
+                        .AddCommandHandler<SubmitOrderI, SubmitOrderI.Handler>())
             .AddSubAggregate<PurchasedCartI>(
                 subType =>
                     subType.AddCommandHandler<ReceivePaymentToPurchasedCartI, ReceivePaymentToPurchasedCartI.Handler>())

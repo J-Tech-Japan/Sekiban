@@ -144,7 +144,7 @@ public class TestEventHandler
         foreach (var (aggregateId, payload) in eventTouples)
         {
             var type = payload.GetType();
-            var aggregateType = payload.GetAggregatePayloadType();
+            var aggregateType = payload.GetAggregatePayloadInType();
             var eventType = typeof(Event<>);
             var genericType = eventType.MakeGenericType(type);
             var ev = Activator.CreateInstance(genericType, aggregateId, aggregateType, payload) as IEvent;

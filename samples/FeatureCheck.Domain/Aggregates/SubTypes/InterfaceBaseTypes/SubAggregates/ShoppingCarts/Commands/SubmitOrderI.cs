@@ -2,33 +2,30 @@ using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.S
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
-using System.ComponentModel.DataAnnotations;
 namespace FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.ShoppingCarts.Commands;
 
-public class AddItemToShoppingCartI : ICommand<ShoppingCartI>
+public record SubmitOrderI : IVersionValidationCommand<ShoppingCartI>
 {
     public Guid CartId { get; init; } = Guid.Empty;
-    [Required]
-    public string Code { get; init; } = string.Empty;
-    [Required]
-    public string Name { get; init; } = string.Empty;
-    [Range(1, 1000)]
-    public int Quantity { get; init; } = 0;
+    public DateTime OrderSubmittedLocalTime { get; init; }
     public Guid GetAggregateId() => CartId;
+    public int ReferenceVersion
+    {
+        get;
+        init;
+    }
 
-    public class Handler : ICommandHandler<ShoppingCartI, AddItemToShoppingCartI>
+    public class Handler : IVersionValidationCommandHandler<ShoppingCartI, SubmitOrderI>
     {
 
         public async IAsyncEnumerable<IEventPayloadApplicableTo<ShoppingCartI>> HandleCommandAsync(
             Func<AggregateState<ShoppingCartI>> getAggregateState,
-            AddItemToShoppingCartI command)
+            SubmitOrderI command)
         {
             await Task.CompletedTask;
-            yield return new ItemAddedToShoppingCartI
+            yield return new OrderSubmittedI
             {
-                Code = command.Code,
-                Name = command.Name,
-                Quantity = command.Quantity
+                OrderSubmittedLocalTime = command.OrderSubmittedLocalTime
             };
         }
     }

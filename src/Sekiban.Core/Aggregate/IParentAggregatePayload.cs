@@ -4,7 +4,7 @@ public interface IParentAggregatePayload<TParentAggregatePayload> : IParentAggre
     where TParentAggregatePayload : IAggregatePayloadCommon, new()
 {
 }
-public interface IParentAggregatePayloadCommon<TParentAggregatePayload> : IAggregatePayloadCommon, IApplicableAggregatePayload<TParentAggregatePayload>
+public interface IParentAggregatePayloadCommon<TParentAggregatePayload> : IAggregatePayload, IApplicableAggregatePayload<TParentAggregatePayload>
     where TParentAggregatePayload : IAggregatePayloadCommon
 {
 }

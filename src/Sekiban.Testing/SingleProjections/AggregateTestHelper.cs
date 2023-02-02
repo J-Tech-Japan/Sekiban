@@ -11,6 +11,7 @@ using Sekiban.Core.Shared;
 using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
 using System.Diagnostics;
+using System.Reflection;
 using System.Text.Json;
 using Xunit;
 namespace Sekiban.Testing.SingleProjections;
@@ -110,24 +111,27 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             throw new Exception(first.PropertyName + " has validation error " + first.ErrorMessages.First());
         }
     }
-    public IAggregateTestHelper<TAggregatePayload> WhenCommand<C>(C changeCommand) where C : ICommand<TAggregatePayload>
+    public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(TCommand changeCommand) where TCommand : ICommand<TAggregatePayload>
     {
         return WhenCommand(_ => changeCommand);
     }
+    public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommand<TAggregateSubtypePayload, TCommand>(TCommand changeCommand)
+        where TAggregateSubtypePayload : TAggregatePayload, IAggregatePayloadCommon where TCommand : ICommand<TAggregateSubtypePayload> =>
+        WhenCommandPrivate<TAggregateSubtypePayload, TCommand>(_ => changeCommand, false);
 
-    public IAggregateTestHelper<TAggregatePayload> WhenCommand<C>(
-        Func<AggregateState<TAggregatePayload>, C> commandFunc)
-        where C : ICommand<TAggregatePayload> => WhenCommandPrivate(commandFunc, false);
+    public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommand<TAggregatePayload> => WhenCommandPrivate<TAggregatePayload, TCommand>(commandFunc, false);
 
-    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<C>(C changeCommand)
-        where C : ICommand<TAggregatePayload>
+    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(TCommand changeCommand)
+        where TCommand : ICommand<TAggregatePayload>
     {
-        return WhenCommandPrivate(_ => changeCommand, true);
+        return WhenCommandPrivate<TAggregatePayload, TCommand>(_ => changeCommand, true);
     }
 
-    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<C>(
-        Func<AggregateState<TAggregatePayload>, C> commandFunc)
-        where C : ICommand<TAggregatePayload> => WhenCommandPrivate(commandFunc, true);
+    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommand<TAggregatePayload> => WhenCommandPrivate<TAggregatePayload, TCommand>(commandFunc, true);
 
     public IAggregateTestHelper<TAggregatePayload> ThenGetLatestEvents(Action<List<IEvent>> checkEventsAction)
     {
@@ -431,18 +435,19 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         return this;
     }
 
-    private IAggregateTestHelper<TAggregatePayload> WhenCommandPrivate<C>(
-        Func<AggregateState<TAggregatePayload>, C> commandFunc,
+    private IAggregateTestHelper<TAggregatePayload> WhenCommandPrivate<TAggregatePayloadIn, TCommand>(
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc,
         bool withPublish)
-        where C : ICommand<TAggregatePayload>
+        where TAggregatePayloadIn : IAggregatePayloadCommon
+        where TCommand : ICommand<TAggregatePayloadIn>
     {
         ResetBeforeCommand();
         var handler
-            = _serviceProvider.GetService(typeof(ICommandHandlerCommon<TAggregatePayload, C>)) as
-                ICommandHandlerCommon<TAggregatePayload, C>;
+            = _serviceProvider.GetService(typeof(ICommandHandlerCommon<TAggregatePayloadIn, TCommand>)) as
+                ICommandHandlerCommon<TAggregatePayloadIn, TCommand>;
         if (handler is null)
         {
-            throw new SekibanCommandNotRegisteredException(typeof(C).Name);
+            throw new SekibanCommandNotRegisteredException(typeof(TCommand).Name);
         }
         var command = commandFunc(GetAggregateStateIfNotNullEmptyAggregate());
         var validationResults = command.ValidateProperties().ToList();
@@ -453,7 +458,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             return this;
         }
 
-        var commandDocument = new CommandDocument<C>(Aggregate.AggregateId, command, typeof(TAggregatePayload));
+        var commandDocument = new CommandDocument<TCommand>(Aggregate.AggregateId, command, typeof(TAggregatePayload));
         CheckCommandJSONSupports(commandDocument);
 
         var aggregateId = command.GetAggregateId();
@@ -470,7 +475,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             if (command is IOnlyPublishingCommandCommon)
             {
                 var baseClass = typeof(OnlyPublishingCommandHandlerAdapter<,>);
-                var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), command.GetType());
+                var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayloadIn), command.GetType());
                 var adapter = Activator.CreateInstance(adapterClass) ?? throw new Exception("Method not found");
                 var method = adapterClass.GetMethod("HandleCommandAsync") ??
                     throw new Exception("HandleCommandAsync not found");
@@ -486,7 +491,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             else
             {
                 var baseClass = typeof(CommandHandlerAdapter<,>);
-                var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), command.GetType());
+                var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayloadIn), command.GetType());
                 var adapter = Activator.CreateInstance(adapterClass, aggregateLoader, false) ??
                     throw new Exception("Adapter not found");
 
@@ -582,7 +587,16 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var expectedJson = SekibanJsonHelper.Serialize(stateFromSnapshot);
         Assert.Equal(expectedJson, actualJson);
         var json = SekibanJsonHelper.Serialize(state);
-        var stateFromJson = SekibanJsonHelper.Deserialize<AggregateState<TAggregatePayload>>(json);
+
+        var method = typeof(SekibanJsonHelper)
+            .GetMethods(BindingFlags.Static | BindingFlags.Public)
+            .FirstOrDefault(m => m.Name == "Deserialize" && m.GetParameters().Length == 1);
+        var type = typeof(AggregateState<>);
+        var genericType = type.MakeGenericType(state.Payload.GetType());
+        var genericMethod = method?.MakeGenericMethod(genericType);
+        var stateFromJson = genericMethod?.Invoke(typeof(SekibanJsonHelper), new object?[] { json });
+
+        //var stateFromJson = SekibanJsonHelper.Deserialize<AggregateState<TAggregatePayload>>(json);
         var stateFromJsonJson = SekibanJsonHelper.Serialize(stateFromJson);
         Assert.Equal(json, stateFromJsonJson);
         CheckEventJsonCompatibility();

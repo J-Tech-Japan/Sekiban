@@ -36,19 +36,22 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     #endregion
 
     #region When
-    public IAggregateTestHelper<TAggregatePayload> WhenCommand<C>(C changeCommand)
-        where C : ICommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(TCommand changeCommand)
+        where TCommand : ICommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommand<TAggregateSubtypePayload, TCommand>(TCommand changeCommand)
+        where TAggregateSubtypePayload : TAggregatePayload, IAggregatePayloadCommon
+        where TCommand : ICommand<TAggregateSubtypePayload>;
 
-    public IAggregateTestHelper<TAggregatePayload> WhenCommand<C>(
-        Func<AggregateState<TAggregatePayload>, C> commandFunc)
-        where C : ICommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommand<TAggregatePayload>;
 
-    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<C>(C changeCommand)
-        where C : ICommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(TCommand changeCommand)
+        where TCommand : ICommand<TAggregatePayload>;
 
-    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<C>(
-        Func<AggregateState<TAggregatePayload>, C> commandFunc)
-        where C : ICommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommand<TAggregatePayload>;
     #endregion
 
     #region Then

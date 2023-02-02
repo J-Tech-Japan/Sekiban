@@ -21,8 +21,6 @@ public abstract class AggregateCommon : IAggregate
     public int AppliedSnapshotVersion => _basicInfo.AppliedSnapshotVersion;
     public int Version => _basicInfo.Version;
 
-    public bool CanApplyEvent(IEvent ev) => true;
-
     public void ApplyEvent(IEvent ev)
     {
         var action = GetApplyEventAction(ev, ev.GetPayload());
@@ -44,6 +42,8 @@ public abstract class AggregateCommon : IAggregate
     public abstract string GetPayloadVersionIdentifier();
     public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().LaterThan(new SortableUniqueIdValue(LastSortableUniqueId));
 
+    public bool CanApplyEvent(IEvent ev) => true;
+
     public static UAggregate Create<UAggregate>(Guid aggregateId) where UAggregate : AggregateCommon
     {
         if (typeof(UAggregate).GetConstructor(Type.EmptyTypes) is not { } c)
@@ -57,5 +57,5 @@ public abstract class AggregateCommon : IAggregate
         // After C# 11, possibly use static interface methods. [Future idea]
     }
 
-    protected abstract Action? GetApplyEventAction(IEvent ev, IEventPayloadCommon payload);
+    protected abstract Action? GetApplyEventAction(IEvent ev, IEventPayloadCommon eventPayload);
 }

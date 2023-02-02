@@ -49,7 +49,7 @@ public sealed record AggregateState<TPayload> : IAggregateCommon where TPayload 
 
     private static TPayload CreatePayload()
     {
-        if (!typeof(TPayload).IsParentAggregateType())
+        if (typeof(TPayload).IsAggregateSubtypePayload())
         {
             return (TPayload?)Activator.CreateInstance(typeof(TPayload)) ?? throw new Exception("Failed to create Aggregate Payload");
         }

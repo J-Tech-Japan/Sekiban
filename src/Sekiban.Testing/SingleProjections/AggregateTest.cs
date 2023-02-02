@@ -86,18 +86,22 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
 
     public List<IEvent> GetAllAggregateEvents(int? toVersion = null) => _helper.GetAllAggregateEvents(toVersion);
 
-    public IAggregateTestHelper<TAggregatePayload> WhenCommand<C>(C command) where C : ICommand<TAggregatePayload> => _helper.WhenCommand(command);
+    public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(TCommand command) where TCommand : ICommand<TAggregatePayload> =>
+        _helper.WhenCommand(command);
+    public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommand<TAggregateSubtypePayload, TCommand>(TCommand changeCommand)
+        where TAggregateSubtypePayload : TAggregatePayload, IAggregatePayloadCommon where TCommand : ICommand<TAggregateSubtypePayload> =>
+        _helper.WhenSubtypeCommand<TAggregateSubtypePayload, TCommand>(changeCommand);
 
-    public IAggregateTestHelper<TAggregatePayload> WhenCommand<C>(
-        Func<AggregateState<TAggregatePayload>, C> commandFunc)
-        where C : ICommand<TAggregatePayload> => _helper.WhenCommand(commandFunc);
+    public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommand<TAggregatePayload> => _helper.WhenCommand(commandFunc);
 
-    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<C>(C changeCommand)
-        where C : ICommand<TAggregatePayload> => _helper.WhenCommandWithPublish(changeCommand);
+    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(TCommand changeCommand)
+        where TCommand : ICommand<TAggregatePayload> => _helper.WhenCommandWithPublish(changeCommand);
 
-    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<C>(
-        Func<AggregateState<TAggregatePayload>, C> commandFunc)
-        where C : ICommand<TAggregatePayload> => _helper.WhenCommandWithPublish(commandFunc);
+    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommand<TAggregatePayload> => _helper.WhenCommandWithPublish(commandFunc);
 
     public IAggregateTestHelper<TAggregatePayload> ThenGetLatestEvents(Action<List<IEvent>> checkEventsAction) =>
         _helper.ThenGetLatestEvents(checkEventsAction);
