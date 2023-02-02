@@ -47,6 +47,16 @@ public sealed record AggregateState<TPayload> : IAggregateCommon where TPayload 
     [Description("Last Sortable Unique Id, SortableUniqueId defines the order of events")]
     public string LastSortableUniqueId { get; init; } = string.Empty;
 
+    public dynamic AsDynamicTypedState()
+    {
+        var payloadType = Payload.GetType();
+        var aggregateStateType = typeof(AggregateState<>);
+        var genericAggregateStateType = aggregateStateType.MakeGenericType(payloadType);
+        return Activator.CreateInstance(genericAggregateStateType, this, Payload) ?? this;
+    }
+    public bool IsAggregatePayloadType<TAggregatePayloadExpected>() where TAggregatePayloadExpected : IAggregatePayloadCommon =>
+        Payload is TAggregatePayloadExpected;
+
     private static TPayload CreatePayload()
     {
         if (typeof(TPayload).IsAggregateSubtypePayload())

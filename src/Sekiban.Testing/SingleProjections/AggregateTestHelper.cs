@@ -586,7 +586,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var actualJson = SekibanJsonHelper.Serialize(state);
         var expectedJson = SekibanJsonHelper.Serialize(stateFromSnapshot);
         Assert.Equal(expectedJson, actualJson);
-        var json = SekibanJsonHelper.Serialize(state);
+        var json = SekibanJsonHelper.Serialize(state.AsDynamicTypedState());
 
         var method = typeof(SekibanJsonHelper)
             .GetMethods(BindingFlags.Static | BindingFlags.Public)
