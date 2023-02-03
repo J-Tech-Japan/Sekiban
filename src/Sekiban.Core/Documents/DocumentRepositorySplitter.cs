@@ -35,7 +35,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
         string? sinceSortableUniqueId,
         Action<IEnumerable<IEvent>> resultAction)
     {
-        if (!aggregatePayloadType.IsAggregateType())
+        if (!aggregatePayloadType.IsAggregatePayloadType())
         {
             throw new SekibanCanNotRetrieveEventBecauseOriginalTypeIsNotAggregatePayloadException(
                 aggregatePayloadType.FullName + "is not aggregate payload");
@@ -149,7 +149,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
         string? sinceSortableUniqueId,
         Action<IEnumerable<string>> resultAction)
     {
-        if (!aggregatePayloadType.IsAggregateType())
+        if (!aggregatePayloadType.IsAggregatePayloadType())
         {
             throw new SekibanCanNotRetrieveEventBecauseOriginalTypeIsNotAggregatePayloadException(
                 aggregatePayloadType.FullName + "is not aggregate payload");

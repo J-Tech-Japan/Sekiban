@@ -1,4 +1,5 @@
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Types;
 namespace Sekiban.Core.Query.SingleProjections;
 
 public class DefaultSingleProjector<TAggregatePayload> : ISingleProjector<Aggregate<TAggregatePayload>>
@@ -6,6 +7,6 @@ public class DefaultSingleProjector<TAggregatePayload> : ISingleProjector<Aggreg
 {
     public Aggregate<TAggregatePayload> CreateInitialAggregate(Guid aggregateId) => AggregateCommon.Create<Aggregate<TAggregatePayload>>(aggregateId);
 
-    public Type GetOriginalAggregatePayloadType() => typeof(TAggregatePayload);
-    public Type GetPayloadType() => typeof(TAggregatePayload);
+    public Type GetOriginalAggregatePayloadType() => typeof(TAggregatePayload).GetBaseAggregatePayloadTypeFromAggregate();
+    public Type GetPayloadType() => typeof(TAggregatePayload).GetBaseAggregatePayloadTypeFromAggregate();
 }

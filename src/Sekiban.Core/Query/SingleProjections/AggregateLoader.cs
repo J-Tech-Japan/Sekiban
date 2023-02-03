@@ -78,7 +78,7 @@ public class AggregateLoader : IAggregateLoader
         where TAggregatePayload : IAggregatePayloadCommon
     {
         var aggregate = await AsAggregateAsync<TAggregatePayload>(aggregateId, toVersion);
-        return aggregate?.ToState();
+        return aggregate?.GetPayloadTypeIs<TAggregatePayload>() == true ? aggregate?.ToState() : null;
     }
 
     public async Task<IEnumerable<IEvent>?> AllEventsAsync<TAggregatePayload>(

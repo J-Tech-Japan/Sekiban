@@ -7,6 +7,7 @@ using Sekiban.Core.Partition;
 using Sekiban.Core.Query.UpdateNotice;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
+using Sekiban.Core.Types;
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
 public class MemoryCacheSingleProjection : ISingleProjection
@@ -125,6 +126,10 @@ public class MemoryCacheSingleProjection : ISingleProjection
         {
             throw new SekibanVersionNotReachToSpecificVersion();
         }
+        if (aggregate.IsAggregateType() && !aggregate.GetPayloadTypeIs(aggregate.GetAggregatePayloadTypeFromAggregate()))
+        {
+            return aggregate;
+        }
         container = container with { State = aggregate.ToState() };
         if (container.LastSortableUniqueId != null &&
             container.SafeSortableUniqueId == null &&
@@ -216,6 +221,10 @@ public class MemoryCacheSingleProjection : ISingleProjection
         if (toVersion.HasValue && aggregate.Version < toVersion.Value)
         {
             throw new SekibanVersionNotReachToSpecificVersion();
+        }
+        if (aggregate.IsAggregateType() && !aggregate.GetPayloadTypeIs(aggregate.GetAggregatePayloadTypeFromAggregate()))
+        {
+            return aggregate;
         }
         container = container with { State = aggregate.ToState() };
         if (container.LastSortableUniqueId != null &&

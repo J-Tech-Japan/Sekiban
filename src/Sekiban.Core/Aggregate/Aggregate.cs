@@ -15,6 +15,13 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon,
     where TAggregatePayload : IAggregatePayloadCommon
 {
     private IAggregatePayloadCommon Payload { get; set; } = CreatePayload();
+    public bool GetPayloadTypeIs(Type expect)
+    {
+        if (!expect.IsAggregatePayloadType()) { return false; }
+        var method = GetType().GetMethods().FirstOrDefault(m => m.Name == nameof(GetPayloadTypeIs) && m.IsGenericMethod);
+        var genericMethod = method?.MakeGenericMethod(expect);
+        return (bool?)genericMethod?.Invoke(this, null) ?? false;
+    }
     public AggregateState<TAggregatePayload> ToState() => ToState<TAggregatePayload>();
     public void ApplySnapshot(AggregateState<TAggregatePayload> snapshot)
     {
@@ -27,6 +34,10 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon,
         };
         CopyPropertiesFromSnapshot(snapshot);
     }
+
+
+    public bool GetPayloadTypeIs<TAggregatePayloadExpect>() =>
+        Payload is TAggregatePayloadExpect;
 
     public override void ApplyEvent(IEvent ev)
     {
@@ -45,24 +56,22 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon,
             LastEventId = ev.Id, LastSortableUniqueId = ev.SortableUniqueId, Version = Version + 1
         };
     }
-
-
-    public bool GetPayloadTypeIs<TAggregatePayloadExpect>() where TAggregatePayloadExpect : IAggregatePayloadCommon =>
-        Payload is TAggregatePayloadExpect;
     public AggregateState<TAggregatePayloadOut> ToState<TAggregatePayloadOut>() where TAggregatePayloadOut : IAggregatePayloadCommon =>
         Payload is TAggregatePayloadOut payloadOut ? new AggregateState<TAggregatePayloadOut>(this, payloadOut)
             : throw new AggregateTypeNotMatchException(typeof(TAggregatePayloadOut), Payload.GetType());
 
     private static IAggregatePayloadCommon CreatePayload()
     {
-        if (!typeof(TAggregatePayload).IsParentAggregatePayload())
+        var baseType = typeof(TAggregatePayload).GetBaseAggregatePayloadTypeFromAggregate();
+        if (!baseType.IsParentAggregatePayload())
         {
-            return (TAggregatePayload?)Activator.CreateInstance(typeof(TAggregatePayload)) ??
+            return (IAggregatePayloadCommon?)Activator.CreateInstance(
+                    baseType) ??
                 throw new Exception("Failed to create Aggregate Payload");
         }
         var firstAggregateType = typeof(TAggregatePayload).GetFirstAggregatePayloadTypeFromAggregate();
         var obj = Activator.CreateInstance(firstAggregateType);
-        return (TAggregatePayload?)obj ?? throw new Exception("Failed to create Aggregate Payload");
+        return (IAggregatePayloadCommon?)obj ?? throw new Exception("Failed to create Aggregate Payload");
     }
 
     public override string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();
@@ -76,7 +85,7 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon,
         var eventType = eventPayload.GetEventPayloadType();
         var aggregatePayloadIn = eventPayload.GetAggregatePayloadInType();
         if (aggregatePayloadIn != Payload.GetType()) { return null; }
-        
+
         var aggregatePayloadOut = eventPayload.GetAggregatePayloadOutType();
         var methods = GetType().GetMethods(BindingFlags.Static | BindingFlags.NonPublic).Where(m => m.Name == nameof(ApplyEventToAggregatePayload));
         var method = methods.First(m => m.IsGenericMethodDefinition && m.GetGenericArguments().Length == 3);

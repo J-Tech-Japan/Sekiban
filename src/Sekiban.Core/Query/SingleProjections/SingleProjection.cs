@@ -45,8 +45,6 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
         Version++;
     }
 
-    public bool CanApplyEvent(IEvent ev) => true;
-
     public void ApplySnapshot(SingleProjectionState<TProjectionPayload> snapshot)
     {
         Version = snapshot.Version;
@@ -56,6 +54,14 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
         Payload = snapshot.Payload;
     }
 
+    public bool GetPayloadTypeIs<TAggregatePayloadExpect>() => Payload is TAggregatePayloadExpect;
+    public bool GetPayloadTypeIs(Type expect)
+    {
+        if (!expect.IsAggregatePayloadType()) { return false; }
+        var method = GetType().GetMethods().FirstOrDefault(m => m.Name == nameof(GetPayloadTypeIs) && m.IsGenericMethod);
+        var genericMethod = method?.MakeGenericMethod(expect);
+        return (bool?)genericMethod?.Invoke(this, null) ?? false;
+    }
     public SingleProjectionState<TProjectionPayload> ToState() => new(
         Payload,
         AggregateId,
@@ -69,7 +75,10 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
     public SingleProjection<TProjectionPayload> CreateInitialAggregate(Guid aggregateId) => new()
         { AggregateId = aggregateId };
 
-    public Type GetOriginalAggregatePayloadType() => typeof(TProjectionPayload).GetOriginalTypeFromSingleProjectionPayload();
+    public Type GetOriginalAggregatePayloadType() =>
+        typeof(TProjectionPayload).GetOriginalTypeFromSingleProjectionPayload().GetBaseAggregatePayloadTypeFromAggregate();
+
+    public bool CanApplyEvent(IEvent ev) => true;
 
     public bool GetIsDeleted() => Payload is IDeletable { IsDeleted: true };
 }
