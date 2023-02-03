@@ -10,6 +10,14 @@ namespace Sekiban.Testing.SingleProjections;
 
 public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload : IAggregatePayloadCommon
 {
+
+    #region Subtypes
+    public IAggregateTestHelper<TAggregatePayload> ThenPayloadTypeIs<TAggregatePayloadExpected>()
+        where TAggregatePayloadExpected : IAggregatePayloadCommon;
+    public IAggregateTestHelper<TAggregatePayload> Subtype<TAggregateSubtypePayload>(
+        Action<IAggregateTestHelper<TAggregateSubtypePayload>> subtypeTestHelperAction)
+        where TAggregateSubtypePayload : IAggregatePayloadCommon, IApplicableAggregatePayload<TAggregatePayload>;
+    #endregion
     #region given and setup
     public IAggregateTestHelper<TAggregatePayload> GivenScenario(Action initialAction);
 

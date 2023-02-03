@@ -38,6 +38,13 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
     public AggregateTest(IServiceProvider serviceProvider, Guid aggregateId) : this(serviceProvider) =>
         _helper = new AggregateTestHelper<TAggregatePayload>(_serviceProvider, aggregateId);
 
+    public IAggregateTestHelper<TAggregatePayload> ThenPayloadTypeIs<TAggregatePayloadExpected>()
+        where TAggregatePayloadExpected : IAggregatePayloadCommon => _helper.ThenPayloadTypeIs<TAggregatePayloadExpected>();
+    public IAggregateTestHelper<TAggregatePayload> Subtype<TAggregateSubtypePayload>(
+        Action<IAggregateTestHelper<TAggregateSubtypePayload>> subtypeTestHelperAction)
+        where TAggregateSubtypePayload : IAggregatePayloadCommon, IApplicableAggregatePayload<TAggregatePayload> =>
+        _helper.Subtype(subtypeTestHelperAction);
+
     public IAggregateTestHelper<TAggregatePayload> GivenScenario(Action initialAction) => _helper.GivenScenario(initialAction);
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvent(IEvent ev) => _helper.GivenEnvironmentEvent(ev);

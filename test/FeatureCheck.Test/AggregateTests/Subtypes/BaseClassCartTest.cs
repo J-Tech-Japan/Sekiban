@@ -1,4 +1,5 @@
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes;
+using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.PurchasedCarts;
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.ShoppingCarts;
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.ShoppingCarts.Commands;
 using FeatureCheck.Domain.Shared;
@@ -15,17 +16,18 @@ public class BaseClassCartTest : AggregateTest<ICartAggregate, FeatureCheckDepen
     [Fact]
     public void CommandExecuteTest()
     {
-        WhenSubtypeCommand<ShoppingCartI, AddItemToShoppingCartI>(
-                new AddItemToShoppingCartI
-                {
-                    CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
-                })
-            .ThenGetLatestEvents(
-                events =>
-                {
-                    var ev = events.First();
-                    Assert.Equal(nameof(ICartAggregate), ev.AggregateType);
-                })
+        Subtype<ShoppingCartI>(
+                subType => subType.WhenCommand(
+                        new AddItemToShoppingCartI
+                        {
+                            CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
+                        })
+                    .ThenGetLatestEvents(
+                        events =>
+                        {
+                            var ev = events.First();
+                            Assert.Equal(nameof(ICartAggregate), ev.AggregateType);
+                        }))
             .ThenPayloadIs(
                 new ShoppingCartI
                 {
@@ -38,21 +40,42 @@ public class BaseClassCartTest : AggregateTest<ICartAggregate, FeatureCheckDepen
     [Fact]
     public void CommandExecuteTestAndChangeAggregateType()
     {
-        WhenSubtypeCommand<ShoppingCartI, AddItemToShoppingCartI>(
-            new AddItemToShoppingCartI
-            {
-                CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
-            });
-        WhenSubtypeCommand<ShoppingCartI, SubmitOrderI>(
-            new SubmitOrderI
-            {
-                CartId = CartId, OrderSubmittedLocalTime = new DateTime(
-                    2023,
-                    2,
-                    2,
-                    2,
-                    22,
-                    2)
-            });
+        Subtype<ShoppingCartI>(
+                subType => subType.WhenCommand(
+                    new AddItemToShoppingCartI
+                    {
+                        CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
+                    }))
+            .ThenPayloadTypeIs<ShoppingCartI>();
+        Subtype<ShoppingCartI>(
+                subType => subType.WhenCommand(
+                    new SubmitOrderI
+                    {
+                        CartId = CartId, OrderSubmittedLocalTime = new DateTime(
+                            2023,
+                            2,
+                            2,
+                            2,
+                            22,
+                            2)
+                    }))
+            .ThenPayloadTypeIs<PurchasedCartI>()
+            .ThenPayloadIs(
+                new PurchasedCartI
+                {
+                    Items = ImmutableSortedDictionary<int, CartItemRecordI>.Empty.Add(
+                        0,
+                        new CartItemRecordI
+                        {
+                            Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
+                        }),
+                    PurchasedDate = new DateTime(
+                        2023,
+                        2,
+                        2,
+                        2,
+                        22,
+                        2)
+                });
     }
 }

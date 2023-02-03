@@ -36,7 +36,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         _projector = new DefaultSingleProjector<TAggregatePayload>();
         var singleProjectionService = serviceProvider.GetService<IAggregateLoader>();
         Debug.Assert(singleProjectionService != null, nameof(singleProjectionService) + " != null");
-        Aggregate = singleProjectionService.AsAggregateAsync<TAggregatePayload>(aggregateId).Result ??
+        Aggregate = aggregateId == Guid.Empty ? _projector.CreateInitialAggregate(Guid.Empty)
+            : singleProjectionService.AsAggregateAsync<TAggregatePayload>(aggregateId).Result ??
             throw new InvalidOperationException(
                 "Aggregate not found for Id" +
                 aggregateId +
@@ -53,6 +54,25 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     private DefaultSingleProjector<TAggregatePayload> _projector { get; }
 
+    public IAggregateTestHelper<TAggregatePayload> ThenPayloadTypeIs<TAggregatePayloadExpected>()
+        where TAggregatePayloadExpected : IAggregatePayloadCommon
+    {
+        Assert.True(GetAggregate().GetPayloadTypeIs<TAggregatePayloadExpected>());
+        return this;
+    }
+    public IAggregateTestHelper<TAggregatePayload> Subtype<TAggregateSubtypePayload>(
+        Action<IAggregateTestHelper<TAggregateSubtypePayload>> subtypeTestHelperAction)
+        where TAggregateSubtypePayload : IAggregatePayloadCommon, IApplicableAggregatePayload<TAggregatePayload>
+    {
+        var subTypeTest = new AggregateTestHelper<TAggregateSubtypePayload>(_serviceProvider, GetAggregateId());
+        subtypeTestHelperAction(subTypeTest);
+        var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
+            throw new Exception("Failed to get aggregate loader");
+        Aggregate = aggregateLoader.AsAggregateAsync<TAggregatePayload>(subTypeTest.Aggregate.AggregateId).Result ??
+            new Aggregate<TAggregatePayload>
+                { AggregateId = subTypeTest.Aggregate.AggregateId };
+        return this;
+    }
     public IAggregateTestHelper<TAggregatePayload> GivenScenario(Action initialAction)
     {
         initialAction();
@@ -243,7 +263,6 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public int GetCurrentVersion() => Aggregate.Version;
 
     public Aggregate<TAggregatePayload> GetAggregate() => Aggregate;
-
     public IAggregateTestHelper<TAggregatePayload> ThenThrows<T>() where T : Exception
     {
         var exception = _latestException is AggregateException aggregateException
@@ -413,6 +432,13 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         checkEventAction((Event<T>)_latestEvents.First());
         return this;
     }
+    private void UpdateAggregate()
+    {
+        var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
+            throw new Exception("Failed to get aggregate loader");
+        Aggregate = aggregateLoader.AsAggregateAsync<TAggregatePayload>(GetAggregateId()).Result ?? Aggregate;
+
+    }
     public AggregateState<TAggregatePayload> GetAggregateStateIfNotNullEmptyAggregate()
     {
         var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
@@ -579,6 +605,9 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     private void CheckStateJSONSupports()
     {
+        // when aggregate payload type changed, skip this test
+        UpdateAggregate();
+        if (!Aggregate.GetPayloadTypeIs<TAggregatePayload>()) { return; }
         var state = GetAggregateState();
         var fromState = _projector.CreateInitialAggregate(state.AggregateId);
         fromState.ApplySnapshot(state);
