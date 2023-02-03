@@ -4,6 +4,7 @@ namespace FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregat
 
 public class PaymentCompletedI : IEventPayload<PurchasedCartI, ShippingCartI, PaymentCompletedI>
 {
-    public static ShippingCartI OnEvent(PurchasedCartI aggregatePayload, Event<PaymentCompletedI> ev) => throw new NotImplementedException();
+    public static ShippingCartI OnEvent(PurchasedCartI aggregatePayload, Event<PaymentCompletedI> ev) => new()
+        { Items = aggregatePayload.Items };
     public ShippingCartI OnEventInstance(PurchasedCartI aggregatePayload, Event<PaymentCompletedI> ev) => OnEvent(aggregatePayload, ev);
 }

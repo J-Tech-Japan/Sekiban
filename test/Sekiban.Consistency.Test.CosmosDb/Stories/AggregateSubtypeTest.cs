@@ -1,10 +1,13 @@
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes;
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.PurchasedCarts;
+using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.PurchasedCarts.Commands;
+using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.ShippingCarts;
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.ShoppingCarts;
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.ShoppingCarts.Commands;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
+using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Infrastructure.Cosmos;
 using System;
@@ -20,6 +23,7 @@ public class AggregateSubtypeTest : TestBase
     private readonly IAggregateLoader aggregateLoader;
     private readonly Guid cartId = Guid.NewGuid();
     private readonly ICommandExecutor commandExecutor;
+    private readonly IMultiProjectionService multiProjectionService;
     private CommandExecutorResponseWithEvents commandResponse = default!;
     public AggregateSubtypeTest(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
         sekibanTestFixture,
@@ -28,6 +32,7 @@ public class AggregateSubtypeTest : TestBase
         _cosmosDbFactory = GetService<CosmosDbFactory>();
         commandExecutor = GetService<ICommandExecutor>();
         aggregateLoader = GetService<IAggregateLoader>();
+        multiProjectionService = GetService<IMultiProjectionService>();
     }
 
     [Fact(DisplayName = "SubtypeのAggregateを作成する")]
@@ -118,6 +123,29 @@ public class AggregateSubtypeTest : TestBase
     }
 
     [Fact]
+    public async Task SimpleCommandsTest()
+    {
+        commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
+            new AddItemToShoppingCartI
+                { CartId = cartId, Code = "TEST1", Name = "Name1", Quantity = 1 });
+        commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
+            new AddItemToShoppingCartI
+                { CartId = cartId, Code = "TEST2", Name = "Name2", Quantity = 1 });
+        var purchasedTime = DateTime.Now;
+        commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
+            new SubmitOrderI
+                { CartId = cartId, OrderSubmittedLocalTime = purchasedTime, ReferenceVersion = commandResponse.Version });
+
+        commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
+            new ReceivePaymentToPurchasedCartI
+                { CartId = cartId, PaymentMethod = "Credit Card", Amount = 1000, Currency = "USD", ReferenceVersion = commandResponse.Version });
+
+        var state = await aggregateLoader.AsDefaultStateAsync<ICartAggregate>(cartId);
+        Assert.NotNull(state);
+        Assert.Equal(typeof(ShippingCartI), state.Payload.GetType());
+    }
+
+    [Fact]
     public async Task AfterChangePayloadType()
     {
         await SecondCommandTest();
@@ -129,6 +157,66 @@ public class AggregateSubtypeTest : TestBase
                     new AddItemToShoppingCartI
                         { CartId = cartId, Code = "TEST2", Name = "Name2", Quantity = 2 });
             });
+
+    }
+
+    [Fact]
+    public async Task multiProjectionsTest()
+    {
+        // 先に全データを削除する
+        await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default);
+        await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Dissolvable);
+        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(
+            DocumentType.Command,
+            AggregateContainerGroup.Dissolvable);
+        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command);
+
+        var cartId1 = Guid.NewGuid();
+        var cartId2 = Guid.NewGuid();
+        var cartId3 = Guid.NewGuid();
+        var cartId4 = Guid.NewGuid();
+
+        commandResponse = commandExecutor.ExecCommandWithEventsAsync(
+                new AddItemToShoppingCartI
+                    { CartId = cartId1, Name = "Name1", Code = "Code1", Quantity = 1 })
+            .Result;
+        commandResponse = commandExecutor.ExecCommandWithEventsAsync(
+                new AddItemToShoppingCartI
+                    { CartId = cartId1, Name = "Name2", Code = "Code2", Quantity = 2 })
+            .Result;
+        commandResponse = commandExecutor.ExecCommandWithEventsAsync(
+                new SubmitOrderI
+                    { CartId = cartId1, OrderSubmittedLocalTime = DateTime.Now, ReferenceVersion = commandResponse.Version })
+            .Result;
+
+
+        commandResponse = commandExecutor.ExecCommandWithEventsAsync(
+                new AddItemToShoppingCartI
+                    { CartId = cartId2, Name = "Name2", Code = "Code2", Quantity = 1 })
+            .Result;
+        commandResponse = commandExecutor.ExecCommandWithEventsAsync(
+                new SubmitOrderI
+                    { CartId = cartId2, OrderSubmittedLocalTime = DateTime.Now, ReferenceVersion = commandResponse.Version })
+            .Result;
+
+        commandResponse = commandExecutor.ExecCommandWithEventsAsync(
+                new AddItemToShoppingCartI
+                    { CartId = cartId3, Name = "Name3", Code = "Code3", Quantity = 1 })
+            .Result;
+        commandResponse = commandExecutor.ExecCommandWithEventsAsync(
+                new AddItemToShoppingCartI
+                    { CartId = cartId3, Name = "Name2", Code = "Code2", Quantity = 2 })
+            .Result;
+
+        commandResponse = commandExecutor.ExecCommandWithEventsAsync(
+                new AddItemToShoppingCartI
+                    { CartId = cartId4, Name = "Name4", Code = "Code4", Quantity = 1 })
+            .Result;
+
+        var list = await multiProjectionService.GetAggregateList<ICartAggregate>();
+        Assert.Equal(4, list.Count);
+        Assert.Equal(2, list.Count(m => m.Payload is ShoppingCartI));
+        Assert.Equal(2, list.Count(m => m.Payload is PurchasedCartI));
 
     }
 }

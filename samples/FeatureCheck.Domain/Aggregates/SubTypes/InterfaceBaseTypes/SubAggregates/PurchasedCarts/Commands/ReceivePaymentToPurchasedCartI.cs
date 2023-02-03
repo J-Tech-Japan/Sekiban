@@ -1,3 +1,4 @@
+using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.PurchasedCarts.Events;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
@@ -7,6 +8,9 @@ public record ReceivePaymentToPurchasedCartI : IVersionValidationCommand<Purchas
 {
     public Guid CartId { get; init; }
 
+    public string PaymentMethod { get; init; } = "Cash";
+    public decimal Amount { get; init; } = 0;
+    public string Currency { get; init; } = "JPY";
     public Guid GetAggregateId() => CartId;
     public int ReferenceVersion { get; init; }
 
@@ -17,7 +21,9 @@ public record ReceivePaymentToPurchasedCartI : IVersionValidationCommand<Purchas
             ReceivePaymentToPurchasedCartI command)
         {
             await Task.CompletedTask;
-            yield break;
+            yield return new PaymentReceivedToCartI
+                { PaymentMethod = command.PaymentMethod, Amount = command.Amount, Currency = command.Currency };
+            yield return new PaymentCompletedI();
         }
     }
 }
