@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Command;
@@ -34,7 +35,8 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddSekibanCore(
         this IServiceCollection services,
         ISekibanDateProducer? sekibanDateProducer = null,
-        MultiProjectionType multiProjectionType = MultiProjectionType.MemoryCache)
+        MultiProjectionType multiProjectionType = MultiProjectionType.MemoryCache,
+        IConfiguration? configuration = null)
     {
         services.AddMemoryCache();
 
@@ -68,7 +70,14 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISekibanContext, SekibanContext>();
         services.AddTransient<IQueryExecutor, QueryExecutor>();
         services.AddTransient<QueryHandler>();
-        services.AddScoped<IMemoryCacheSettings, MemoryCacheSetting>();
+        if (configuration is not null)
+        {
+            services.AddSingleton<IMemoryCacheSettings>(new MemoryCacheSetting(configuration));
+        }
+        else
+        {
+            services.AddScoped<IMemoryCacheSettings, MemoryCacheSetting>();
+        }
         services.AddTransient<ISingleProjectionCache, SingleProjectionCache>();
         services.AddTransient<IMultiProjectionCache, MultiProjectionCache>();
         services.AddTransient<ISnapshotDocumentCache, SnapshotDocumentCache>();

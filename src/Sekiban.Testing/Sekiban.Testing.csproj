@@ -5,13 +5,13 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>JJ_Sekiban.Testing</PackageId>
-        <Version>0.10.10</Version>
+        <Version>0.10.11</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Testing</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.10.10</PackageVersion>
-        <Description>Should not crash when can not handle</Description>
+        <PackageVersion>0.10.11</PackageVersion>
+        <Description>Add Multi Projection Cache Length</Description>
         <AssemblyName>Sekiban.Testing</AssemblyName>
         <RootNamespace>Sekiban.Testing</RootNamespace>
     </PropertyGroup>
