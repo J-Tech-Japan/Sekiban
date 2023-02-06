@@ -52,6 +52,6 @@ public class MultiProjectionCache : IMultiProjectionCache
         where TPayload : IMultiProjectionPayloadCommon, new()
     {
         var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
-        return "MultiProjection-" + sekibanContext?.SettingGroupIdentifier + "-" + typeof(TProjector).FullName;
+        return "MultiProjection-" + sekibanContext?.SettingGroupIdentifier + "-" + typeof(TPayload).FullName;
     }
 }
