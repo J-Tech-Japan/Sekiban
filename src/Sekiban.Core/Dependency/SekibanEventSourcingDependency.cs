@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Command;
 using Sekiban.Core.Setting;
@@ -14,14 +15,18 @@ namespace Sekiban.Core.Dependency;
 /// </summary>
 public static class SekibanEventSourcingDependency
 {
-    public static Assembly GetAssembly() => Assembly.GetExecutingAssembly();
+    public static Assembly GetAssembly()
+    {
+        return Assembly.GetExecutingAssembly();
+    }
 
     public static IServiceCollection AddSekibanCoreWithDependency(
         this IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
         ISekibanDateProducer? sekibanDateProducer = null,
         ServiceCollectionExtensions.MultiProjectionType multiProjectionType =
-            ServiceCollectionExtensions.MultiProjectionType.MemoryCache)
+            ServiceCollectionExtensions.MultiProjectionType.MemoryCache,
+        IConfiguration? configuration = null)
 
     {
         Register(services, dependencyDefinition, sekibanDateProducer, multiProjectionType);
@@ -42,7 +47,8 @@ public static class SekibanEventSourcingDependency
         IDependencyDefinition dependencyDefinition,
         ISekibanDateProducer? sekibanDateProducer = null,
         ServiceCollectionExtensions.MultiProjectionType multiProjectionType =
-            ServiceCollectionExtensions.MultiProjectionType.MemoryCache)
+            ServiceCollectionExtensions.MultiProjectionType.MemoryCache,
+        IConfiguration? configuration = null)
     {
         // MediatR
         services.AddMediatR(Assembly.GetExecutingAssembly(), GetAssembly());
