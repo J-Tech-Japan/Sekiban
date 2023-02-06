@@ -29,7 +29,7 @@ public static class SekibanEventSourcingDependency
         IConfiguration? configuration = null)
 
     {
-        Register(services, dependencyDefinition, sekibanDateProducer, multiProjectionType);
+        Register(services, dependencyDefinition, sekibanDateProducer, multiProjectionType, configuration);
         return services;
     }
 
@@ -53,7 +53,7 @@ public static class SekibanEventSourcingDependency
         // MediatR
         services.AddMediatR(Assembly.GetExecutingAssembly(), GetAssembly());
         // Sekiban Event Sourcing
-        services.AddSekibanCore(sekibanDateProducer ?? new SekibanDateProducer(), multiProjectionType);
+        services.AddSekibanCore(sekibanDateProducer ?? new SekibanDateProducer(), multiProjectionType, configuration);
         services.AddSekibanHTTPUser();
         services.AddSekibanSettingsFromAppSettings();
 
