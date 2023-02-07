@@ -43,8 +43,7 @@ public class MultiProjectionCache : IMultiProjectionCache
         return new()
         {
             AbsoluteExpiration = DateTimeOffset.UtcNow.AddHours(_memoryCacheSettings.MultiProjectionAbsoluteExpirationMinutes),
-            SlidingExpiration = TimeSpan.FromMinutes(_memoryCacheSettings.MultiProjectionSlidingExpirationMinutes),
-            Size = 10000
+            SlidingExpiration = TimeSpan.FromMinutes(_memoryCacheSettings.MultiProjectionSlidingExpirationMinutes)
             // If not accessed 5 minutes it will be deleted. Anyway it will be deleted after two hours
         };
     }
