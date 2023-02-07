@@ -146,8 +146,7 @@ public class CosmosDbFactory
             _memoryCache.Set(
                 GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier),
                 client,
-                new MemoryCacheEntryOptions
-                    { Size = 200 });
+                new MemoryCacheEntryOptions());
         }
 
         var database =
@@ -158,8 +157,7 @@ public class CosmosDbFactory
             _memoryCache.Set(
                 GetMemoryCacheDatabaseKey(documentType, databaseId, _sekibanContextIdentifier),
                 database,
-                new MemoryCacheEntryOptions
-                    { Size = 200 });
+                new MemoryCacheEntryOptions());
         }
 
         var containerProperties = new ContainerProperties(containerId, "/PartitionKey");
@@ -167,8 +165,7 @@ public class CosmosDbFactory
         _memoryCache.Set(
             GetMemoryCacheContainerKey(documentType, databaseId, containerId, _sekibanContextIdentifier),
             container,
-            new MemoryCacheEntryOptions
-                { Size = 200 });
+            new MemoryCacheEntryOptions());
 
         return container;
     }
