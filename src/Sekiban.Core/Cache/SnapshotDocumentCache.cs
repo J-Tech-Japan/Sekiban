@@ -37,7 +37,8 @@ public class SnapshotDocumentCache : ISnapshotDocumentCache
         return new MemoryCacheEntryOptions
         {
             AbsoluteExpiration = DateTimeOffset.UtcNow.AddHours(_memoryCacheSettings.SnapshotAbsoluteExpirationMinutes),
-            SlidingExpiration = TimeSpan.FromMinutes(_memoryCacheSettings.SnapshotAbsoluteExpirationMinutes)
+            SlidingExpiration = TimeSpan.FromMinutes(_memoryCacheSettings.SnapshotSlidingExpirationMinutes),
+            Size = 2000
             // If not accessed 5 minutes it will be deleted. Anyway it will be deleted after two hours
         };
     }

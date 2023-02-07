@@ -39,7 +39,8 @@ public class SingleProjectionCache : ISingleProjectionCache
     private MemoryCacheEntryOptions GetMemoryCacheOptionsForSingleProjectionContainer() => new()
     {
         AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(_memoryCacheSettings.SingleProjectionAbsoluteExpirationMinutes),
-        SlidingExpiration = TimeSpan.FromMinutes(_memoryCacheSettings.SingleProjectionSlidingExpirationMinutes)
+        SlidingExpiration = TimeSpan.FromMinutes(_memoryCacheSettings.SingleProjectionSlidingExpirationMinutes),
+        Size = 2000
         // If not accessed 5 minutes it will be deleted. Anyway it will be d
         // eleted after two hours
     };
