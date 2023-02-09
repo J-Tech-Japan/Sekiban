@@ -40,25 +40,51 @@ public class BaseClassCartTest : AggregateTest<ICartAggregate, FeatureCheckDepen
     [Fact]
     public void CommandExecuteTestAndChangeAggregateType()
     {
+        // Subtype<ShoppingCartI>()
+        //     .WhenCommand(
+        //         new AddItemToShoppingCartI
+        //         {
+        //             CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
+        //         })
+        //     .ThenPayloadTypeIs<ShoppingCartI>();
+        //     .WhenCommand(
+        //     new SubmitOrderI
+        //     {
+        //         CartId = CartId, OrderSubmittedLocalTime = new DateTime(
+        //             2023,
+        //             2,
+        //             2,
+        //             2,
+        //             22,
+        //             2)
+        //     }));
+        //
+        // Subtype<PurchasedCartI>()
+        //     .WhenCommand(new PurchaseCartI { CartId = CartId })
+        //
+
+
         Subtype<ShoppingCartI>(
                 subType => subType.WhenCommand(
-                    new AddItemToShoppingCartI
-                    {
-                        CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
-                    }))
-            .ThenPayloadTypeIs<ShoppingCartI>();
-        Subtype<ShoppingCartI>(
-                subType => subType.WhenCommand(
-                    new SubmitOrderI
-                    {
-                        CartId = CartId, OrderSubmittedLocalTime = new DateTime(
-                            2023,
-                            2,
-                            2,
-                            2,
-                            22,
-                            2)
-                    }))
+                        new AddItemToShoppingCartI
+                        {
+                            CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
+                        })
+                    .ThenPayloadTypeIs<ShoppingCartI>()
+                    .WhenCommand(
+                        new SubmitOrderI
+                        {
+                            CartId = CartId, OrderSubmittedLocalTime = new DateTime(
+                                2023,
+                                2,
+                                2,
+                                2,
+                                22,
+                                2)
+                        })
+                    .ThenPayloadTypeIs<PurchasedCartI>()
+                    .ThenPayloadIs()
+            )
             .ThenPayloadTypeIs<PurchasedCartI>()
             .ThenPayloadIs(
                 new PurchasedCartI

@@ -14,8 +14,11 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     #region Subtypes
     public IAggregateTestHelper<TAggregatePayload> ThenPayloadTypeIs<TAggregatePayloadExpected>()
         where TAggregatePayloadExpected : IAggregatePayloadCommon;
-    public IAggregateTestHelper<TAggregatePayload> Subtype<TAggregateSubtypePayload>(
-        Action<IAggregateTestHelper<TAggregateSubtypePayload>> subtypeTestHelperAction)
+
+    // public IAggregateTestHelper<TAggregatePayload> Subtype<TAggregateSubtypePayload>(
+    //     Action<IAggregateTestHelper<TAggregateSubtypePayload>> subtypeTestHelperAction)
+    //     where TAggregateSubtypePayload : IAggregatePayloadCommon, IApplicableAggregatePayload<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregateSubtypePayload> Subtype<TAggregateSubtypePayload>()
         where TAggregateSubtypePayload : IAggregatePayloadCommon, IApplicableAggregatePayload<TAggregatePayload>;
     #endregion
     #region given and setup

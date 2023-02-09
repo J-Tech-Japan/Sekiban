@@ -60,19 +60,25 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         Assert.True(GetAggregate().GetPayloadTypeIs<TAggregatePayloadExpected>());
         return this;
     }
-    public IAggregateTestHelper<TAggregatePayload> Subtype<TAggregateSubtypePayload>(
-        Action<IAggregateTestHelper<TAggregateSubtypePayload>> subtypeTestHelperAction)
+    public IAggregateTestHelper<TAggregateSubtypePayload> Subtype<TAggregateSubtypePayload>()
         where TAggregateSubtypePayload : IAggregatePayloadCommon, IApplicableAggregatePayload<TAggregatePayload>
     {
         var subTypeTest = new AggregateTestHelper<TAggregateSubtypePayload>(_serviceProvider, GetAggregateId());
-        subtypeTestHelperAction(subTypeTest);
-        var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
-            throw new Exception("Failed to get aggregate loader");
-        Aggregate = aggregateLoader.AsAggregateAsync<TAggregatePayload>(subTypeTest.Aggregate.AggregateId).Result ??
-            new Aggregate<TAggregatePayload>
-                { AggregateId = subTypeTest.Aggregate.AggregateId };
-        return this;
+        return subTypeTest;
     }
+    // public IAggregateTestHelper<TAggregatePayload> Subtype<TAggregateSubtypePayload>(
+    //     Action<IAggregateTestHelper<TAggregateSubtypePayload>> subtypeTestHelperAction)
+    //     where TAggregateSubtypePayload : IAggregatePayloadCommon, IApplicableAggregatePayload<TAggregatePayload>
+    // {
+    //     var subTypeTest = new AggregateTestHelper<TAggregateSubtypePayload>(_serviceProvider, GetAggregateId());
+    //     subtypeTestHelperAction(subTypeTest);
+    //     var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
+    //         throw new Exception("Failed to get aggregate loader");
+    //     Aggregate = aggregateLoader.AsAggregateAsync<TAggregatePayload>(subTypeTest.Aggregate.AggregateId).Result ??
+    //         new Aggregate<TAggregatePayload>
+    //             { AggregateId = subTypeTest.Aggregate.AggregateId };
+    //     return this;
+    // }
     public IAggregateTestHelper<TAggregatePayload> GivenScenario(Action initialAction)
     {
         initialAction();
@@ -91,7 +97,10 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         return this;
     }
 
-    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFile(string filename) => GivenEnvironmentEventsFile(filename, false);
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFile(string filename)
+    {
+        return GivenEnvironmentEventsFile(filename, false);
+    }
 
     public AggregateState<TEnvironmentAggregatePayload>
         GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
@@ -107,9 +116,15 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name);
     }
 
-    public IReadOnlyCollection<IEvent> GetLatestEnvironmentEvents() => _commandExecutor.LatestEvents;
+    public IReadOnlyCollection<IEvent> GetLatestEnvironmentEvents()
+    {
+        return _commandExecutor.LatestEvents;
+    }
 
-    public List<IEvent> GetLatestEvents() => _latestEvents.ToList();
+    public List<IEvent> GetLatestEvents()
+    {
+        return _latestEvents.ToList();
+    }
 
     public List<IEvent> GetAllAggregateEvents(int? toVersion = null)
     {
@@ -136,12 +151,17 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         return WhenCommand(_ => changeCommand);
     }
     public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommand<TAggregateSubtypePayload, TCommand>(TCommand changeCommand)
-        where TAggregateSubtypePayload : TAggregatePayload, IAggregatePayloadCommon where TCommand : ICommand<TAggregateSubtypePayload> =>
-        WhenCommandPrivate<TAggregateSubtypePayload, TCommand>(_ => changeCommand, false);
+        where TAggregateSubtypePayload : TAggregatePayload, IAggregatePayloadCommon where TCommand : ICommand<TAggregateSubtypePayload>
+    {
+        return WhenCommandPrivate<TAggregateSubtypePayload, TCommand>(_ => changeCommand, false);
+    }
 
     public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(
         Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
-        where TCommand : ICommand<TAggregatePayload> => WhenCommandPrivate<TAggregatePayload, TCommand>(commandFunc, false);
+        where TCommand : ICommand<TAggregatePayload>
+    {
+        return WhenCommandPrivate<TAggregatePayload, TCommand>(commandFunc, false);
+    }
 
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(TCommand changeCommand)
         where TCommand : ICommand<TAggregatePayload>
@@ -151,7 +171,10 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(
         Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
-        where TCommand : ICommand<TAggregatePayload> => WhenCommandPrivate<TAggregatePayload, TCommand>(commandFunc, true);
+        where TCommand : ICommand<TAggregatePayload>
+    {
+        return WhenCommandPrivate<TAggregatePayload, TCommand>(commandFunc, true);
+    }
 
     public IAggregateTestHelper<TAggregatePayload> ThenGetLatestEvents(Action<List<IEvent>> checkEventsAction)
     {
@@ -258,11 +281,20 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         return this;
     }
 
-    public Guid GetAggregateId() => Aggregate.AggregateId;
+    public Guid GetAggregateId()
+    {
+        return Aggregate.AggregateId;
+    }
 
-    public int GetCurrentVersion() => Aggregate.Version;
+    public int GetCurrentVersion()
+    {
+        return Aggregate.Version;
+    }
 
-    public Aggregate<TAggregatePayload> GetAggregate() => Aggregate;
+    public Aggregate<TAggregatePayload> GetAggregate()
+    {
+        return Aggregate;
+    }
     public IAggregateTestHelper<TAggregatePayload> ThenThrows<T>() where T : Exception
     {
         var exception = _latestException is AggregateException aggregateException
@@ -399,20 +431,32 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public Guid RunEnvironmentCommand<TEnvironmentAggregatePayload>(
         ICommand<TEnvironmentAggregatePayload> command,
-        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon =>
-        _commandExecutor.ExecuteCommand(command, injectingAggregateId);
+        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon
+    {
+        return _commandExecutor.ExecuteCommand(command, injectingAggregateId);
+    }
 
-    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventWithPublish(IEvent ev) => SaveEvent(ev, true);
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventWithPublish(IEvent ev)
+    {
+        return SaveEvent(ev, true);
+    }
 
-    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsWithPublish(IEnumerable<IEvent> events) => SaveEvents(events, true);
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsWithPublish(IEnumerable<IEvent> events)
+    {
+        return SaveEvents(events, true);
+    }
 
-    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFileWithPublish(string filename) =>
-        GivenEnvironmentEventsFile(filename, true);
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFileWithPublish(string filename)
+    {
+        return GivenEnvironmentEventsFile(filename, true);
+    }
 
     public Guid RunEnvironmentCommandWithPublish<TEnvironmentAggregatePayload>(
         ICommand<TEnvironmentAggregatePayload> command,
-        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon =>
-        _commandExecutor.ExecuteCommandWithPublish(command, injectingAggregateId);
+        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon
+    {
+        return _commandExecutor.ExecuteCommandWithPublish(command, injectingAggregateId);
+    }
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentCommandExecutorAction(
         Action<TestCommandExecutor> action)
