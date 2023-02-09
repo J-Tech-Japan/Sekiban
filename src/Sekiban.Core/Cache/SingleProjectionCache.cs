@@ -32,17 +32,22 @@ public class SingleProjectionCache : ISingleProjectionCache
     }
 
     public SingleMemoryCacheProjectionContainer<TAggregate, TState>? GetContainer<TAggregate, TState>(Guid aggregateId)
-        where TAggregate : IAggregateCommon, ISingleProjection where TState : IAggregateCommon =>
-        _memoryCache.Get<SingleMemoryCacheProjectionContainer<TAggregate, TState>>(
-            GetCacheKeyForSingleProjectionContainer<TAggregate>(aggregateId));
-
-    private MemoryCacheEntryOptions GetMemoryCacheOptionsForSingleProjectionContainer() => new()
+        where TAggregate : IAggregateCommon, ISingleProjection where TState : IAggregateCommon
     {
-        AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(_memoryCacheSettings.SingleProjectionAbsoluteExpirationMinutes),
-        SlidingExpiration = TimeSpan.FromMinutes(_memoryCacheSettings.SingleProjectionSlidingExpirationMinutes)
-        // If not accessed 5 minutes it will be deleted. Anyway it will be d
-        // eleted after two hours
-    };
+        return _memoryCache.Get<SingleMemoryCacheProjectionContainer<TAggregate, TState>>(
+            GetCacheKeyForSingleProjectionContainer<TAggregate>(aggregateId));
+    }
+
+    private MemoryCacheEntryOptions GetMemoryCacheOptionsForSingleProjectionContainer()
+    {
+        return new()
+        {
+            AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(_memoryCacheSettings.SingleProjectionAbsoluteExpirationMinutes),
+            SlidingExpiration = TimeSpan.FromMinutes(_memoryCacheSettings.SingleProjectionSlidingExpirationMinutes)
+            // If not accessed 5 minutes it will be deleted. Anyway it will be d
+            // eleted after two hours
+        };
+    }
 
     public string GetCacheKeyForSingleProjectionContainer<TSingleProjectionOrAggregate>(Guid aggregateId)
     {

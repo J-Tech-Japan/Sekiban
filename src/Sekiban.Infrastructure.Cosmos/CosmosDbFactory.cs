@@ -68,33 +68,48 @@ public class CosmosDbFactory
         DocumentType documentType,
         string databaseId,
         string containerId,
-        string sekibanContextIdentifier) =>
-        $"{(documentType == DocumentType.Event ? "event." : "")}cosmosdb.container.{databaseId}.{containerId}.{sekibanContextIdentifier}";
+        string sekibanContextIdentifier)
+    {
+        return $"{(documentType == DocumentType.Event ? "event." : "")}cosmosdb.container.{databaseId}.{containerId}.{sekibanContextIdentifier}";
+    }
 
-    private static string GetMemoryCacheClientKey(DocumentType documentType, string sekibanContextIdentifier) =>
-        $"{(documentType == DocumentType.Event ? "event." : "")}cosmosdb.client.{sekibanContextIdentifier}";
+    private static string GetMemoryCacheClientKey(DocumentType documentType, string sekibanContextIdentifier)
+    {
+        return $"{(documentType == DocumentType.Event ? "event." : "")}cosmosdb.client.{sekibanContextIdentifier}";
+    }
 
     private static string GetMemoryCacheDatabaseKey(
         DocumentType documentType,
         string databaseId,
-        string sekibanContextIdentifier) =>
-        $"{(documentType == DocumentType.Event ? "event." : "")}cosmosdb.container.{databaseId}.{sekibanContextIdentifier}";
+        string sekibanContextIdentifier)
+    {
+        return $"{(documentType == DocumentType.Event ? "event." : "")}cosmosdb.container.{databaseId}.{sekibanContextIdentifier}";
+    }
 
-    private string GetUri(DocumentType documentType) => (documentType == DocumentType.Event
-            ? _section?.GetValue<string>("EventCosmosDbEndPointUrl") ?? _section?.GetValue<string>("CosmosDbEndPointUrl")
-            : _section?.GetValue<string>("CosmosDbEndPointUrl")) ??
-        throw new Exception("CosmosDbEndPointUrl not found");
+    private string GetUri(DocumentType documentType)
+    {
+        return (documentType == DocumentType.Event
+                ? _section?.GetValue<string>("EventCosmosDbEndPointUrl") ?? _section?.GetValue<string>("CosmosDbEndPointUrl")
+                : _section?.GetValue<string>("CosmosDbEndPointUrl")) ??
+            throw new Exception("CosmosDbEndPointUrl not found");
+    }
 
-    private string GetSecurityKey(DocumentType documentType) => (documentType == DocumentType.Event
-            ? _section?.GetValue<string>("EventCosmosDbAuthorizationKey") ??
-            _section?.GetValue<string>("CosmosDbAuthorizationKey")
-            : _section?.GetValue<string>("CosmosDbAuthorizationKey")) ??
-        throw new Exception("CosmosDbAuthorizationKey not found");
+    private string GetSecurityKey(DocumentType documentType)
+    {
+        return (documentType == DocumentType.Event
+                ? _section?.GetValue<string>("EventCosmosDbAuthorizationKey") ??
+                _section?.GetValue<string>("CosmosDbAuthorizationKey")
+                : _section?.GetValue<string>("CosmosDbAuthorizationKey")) ??
+            throw new Exception("CosmosDbAuthorizationKey not found");
+    }
 
-    private string GetDatabaseId(DocumentType documentType) => (documentType == DocumentType.Event
-            ? _section?.GetValue<string>("EventCosmosDbDatabase") ?? _section?.GetValue<string>("CosmosDbDatabase")
-            : _section?.GetValue<string>("CosmosDbDatabase")) ??
-        throw new Exception("CosmosDbDatabase not found");
+    private string GetDatabaseId(DocumentType documentType)
+    {
+        return (documentType == DocumentType.Event
+                ? _section?.GetValue<string>("EventCosmosDbDatabase") ?? _section?.GetValue<string>("CosmosDbDatabase")
+                : _section?.GetValue<string>("CosmosDbDatabase")) ??
+            throw new Exception("CosmosDbDatabase not found");
+    }
 
     private async Task<Container> GetContainerAsync(DocumentType documentType, AggregateContainerGroup containerGroup)
     {
@@ -128,7 +143,10 @@ public class CosmosDbFactory
         if (client is null)
         {
             client = new CosmosClient(uri, securityKey, options);
-            _memoryCache.Set(GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier), client);
+            _memoryCache.Set(
+                GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier),
+                client,
+                new MemoryCacheEntryOptions());
         }
 
         var database =
@@ -136,14 +154,18 @@ public class CosmosDbFactory
         if (database is null)
         {
             database = await client.CreateDatabaseIfNotExistsAsync(databaseId);
-            _memoryCache.Set(GetMemoryCacheDatabaseKey(documentType, databaseId, _sekibanContextIdentifier), database);
+            _memoryCache.Set(
+                GetMemoryCacheDatabaseKey(documentType, databaseId, _sekibanContextIdentifier),
+                database,
+                new MemoryCacheEntryOptions());
         }
 
         var containerProperties = new ContainerProperties(containerId, "/PartitionKey");
         container = await database.CreateContainerIfNotExistsAsync(containerProperties, 400);
         _memoryCache.Set(
             GetMemoryCacheContainerKey(documentType, databaseId, containerId, _sekibanContextIdentifier),
-            container);
+            container,
+            new MemoryCacheEntryOptions());
 
         return container;
     }
