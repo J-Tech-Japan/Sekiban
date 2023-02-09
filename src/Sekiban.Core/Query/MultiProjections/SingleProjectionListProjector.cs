@@ -21,7 +21,10 @@ public class
     private SingleProjectionListState<TState> State { get; set; }
 
     public List<TProjection> List { get; private set; } = new();
-    public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().LaterThan(new SortableUniqueIdValue(LastSortableUniqueId));
+    public bool EventShouldBeApplied(IEvent ev)
+    {
+        return ev.GetSortableUniqueId().LaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
+    }
 
     public void ApplyEvent(IEvent ev)
     {
@@ -70,7 +73,10 @@ public class
             .ToList();
     }
 
-    public IList<string> TargetAggregateNames() => new List<string> { _projector.GetOriginalAggregatePayloadType().Name };
+    public IList<string> TargetAggregateNames()
+    {
+        return new List<string> { _projector.GetOriginalAggregatePayloadType().Name };
+    }
 
     public Guid LastEventId { get; private set; } = Guid.Empty;
     public string LastSortableUniqueId { get; private set; } = string.Empty;

@@ -40,10 +40,10 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         _helper = new AggregateTestHelper<TAggregatePayload>(_serviceProvider, aggregateId);
     }
 
-    public IAggregateTestHelper<TAggregatePayload> ThenPayloadTypeIs<TAggregatePayloadExpected>()
+    public IAggregateTestHelper<TAggregatePayloadExpected> ThenPayloadTypeShouldBe<TAggregatePayloadExpected>()
         where TAggregatePayloadExpected : IAggregatePayloadCommon
     {
-        return _helper.ThenPayloadTypeIs<TAggregatePayloadExpected>();
+        return _helper.ThenPayloadTypeShouldBe<TAggregatePayloadExpected>();
     }
     public IAggregateTestHelper<TAggregateSubtypePayload> Subtype<TAggregateSubtypePayload>()
         where TAggregateSubtypePayload : IAggregatePayloadCommon, IApplicableAggregatePayload<TAggregatePayload>

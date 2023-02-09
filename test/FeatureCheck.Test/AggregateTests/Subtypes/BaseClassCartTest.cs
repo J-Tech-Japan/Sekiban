@@ -16,18 +16,19 @@ public class BaseClassCartTest : AggregateTest<ICartAggregate, FeatureCheckDepen
     [Fact]
     public void CommandExecuteTest()
     {
-        Subtype<ShoppingCartI>(
-                subType => subType.WhenCommand(
-                        new AddItemToShoppingCartI
-                        {
-                            CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
-                        })
-                    .ThenGetLatestEvents(
-                        events =>
-                        {
-                            var ev = events.First();
-                            Assert.Equal(nameof(ICartAggregate), ev.AggregateType);
-                        }))
+        Subtype<ShoppingCartI>()
+            .WhenCommand(
+                new AddItemToShoppingCartI
+                {
+                    CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
+                })
+            .ThenGetLatestEvents(
+                events =>
+                {
+                    var ev = events.First();
+                    Assert.Equal(nameof(ICartAggregate), ev.AggregateType);
+                })
+            .ThenPayloadTypeShouldBe<ShoppingCartI>()
             .ThenPayloadIs(
                 new ShoppingCartI
                 {
@@ -40,52 +41,25 @@ public class BaseClassCartTest : AggregateTest<ICartAggregate, FeatureCheckDepen
     [Fact]
     public void CommandExecuteTestAndChangeAggregateType()
     {
-        // Subtype<ShoppingCartI>()
-        //     .WhenCommand(
-        //         new AddItemToShoppingCartI
-        //         {
-        //             CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
-        //         })
-        //     .ThenPayloadTypeIs<ShoppingCartI>();
-        //     .WhenCommand(
-        //     new SubmitOrderI
-        //     {
-        //         CartId = CartId, OrderSubmittedLocalTime = new DateTime(
-        //             2023,
-        //             2,
-        //             2,
-        //             2,
-        //             22,
-        //             2)
-        //     }));
-        //
-        // Subtype<PurchasedCartI>()
-        //     .WhenCommand(new PurchaseCartI { CartId = CartId })
-        //
-
-
-        Subtype<ShoppingCartI>(
-                subType => subType.WhenCommand(
-                        new AddItemToShoppingCartI
-                        {
-                            CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
-                        })
-                    .ThenPayloadTypeIs<ShoppingCartI>()
-                    .WhenCommand(
-                        new SubmitOrderI
-                        {
-                            CartId = CartId, OrderSubmittedLocalTime = new DateTime(
-                                2023,
-                                2,
-                                2,
-                                2,
-                                22,
-                                2)
-                        })
-                    .ThenPayloadTypeIs<PurchasedCartI>()
-                    .ThenPayloadIs()
-            )
-            .ThenPayloadTypeIs<PurchasedCartI>()
+        Subtype<ShoppingCartI>()
+            .WhenCommand(
+                new AddItemToShoppingCartI
+                {
+                    CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
+                })
+            .ThenPayloadTypeShouldBe<ShoppingCartI>()
+            .WhenCommand(
+                new SubmitOrderI
+                {
+                    CartId = CartId, OrderSubmittedLocalTime = new DateTime(
+                        2023,
+                        2,
+                        2,
+                        2,
+                        22,
+                        2)
+                })
+            .ThenPayloadTypeShouldBe<PurchasedCartI>()
             .ThenPayloadIs(
                 new PurchasedCartI
                 {

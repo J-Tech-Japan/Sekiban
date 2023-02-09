@@ -90,7 +90,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
                             throw new SekibanEventDuplicateException();
                         }
                         if (container.LastSortableUniqueId == null &&
-                            e.GetSortableUniqueId().LaterThan(targetSafeId) &&
+                            e.GetSortableUniqueId().LaterThanOrEqual(targetSafeId) &&
                             aggregate.Version > 0)
                         {
                             container = container with
@@ -103,7 +103,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
                         if (!aggregate.EventShouldBeApplied(e)) { throw new SekibanEventOrderMixedUpException(); }
                         aggregate.ApplyEvent(e);
                         container = container with { LastSortableUniqueId = e.SortableUniqueId };
-                        if (e.GetSortableUniqueId().LaterThan(targetSafeId))
+                        if (e.GetSortableUniqueId().LaterThanOrEqual(targetSafeId))
                         {
                             container.UnsafeEvents.Add(e);
                         }
@@ -204,7 +204,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
 
                     aggregate.ApplyEvent(e);
                     container = container with { LastSortableUniqueId = e.GetSortableUniqueId() };
-                    if (e.GetSortableUniqueId().LaterThan(targetSafeId))
+                    if (e.GetSortableUniqueId().LaterThanOrEqual(targetSafeId))
                     {
                         container.UnsafeEvents.Add(e);
                     }
@@ -288,7 +288,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
 
                     aggregate.ApplyEvent(e);
                     container = container with { LastSortableUniqueId = e.GetSortableUniqueId() };
-                    if (e.GetSortableUniqueId().LaterThan(targetSafeId))
+                    if (e.GetSortableUniqueId().LaterThanOrEqual(targetSafeId))
                     {
                         container.UnsafeEvents.Add(e);
                     }

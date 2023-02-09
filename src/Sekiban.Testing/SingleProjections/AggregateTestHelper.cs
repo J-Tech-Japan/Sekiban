@@ -54,11 +54,12 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     private DefaultSingleProjector<TAggregatePayload> _projector { get; }
 
-    public IAggregateTestHelper<TAggregatePayload> ThenPayloadTypeIs<TAggregatePayloadExpected>()
+    public IAggregateTestHelper<TAggregatePayloadExpected> ThenPayloadTypeShouldBe<TAggregatePayloadExpected>()
         where TAggregatePayloadExpected : IAggregatePayloadCommon
     {
         Assert.True(GetAggregate().GetPayloadTypeIs<TAggregatePayloadExpected>());
-        return this;
+        return new AggregateTestHelper<TAggregatePayloadExpected>(_serviceProvider, GetAggregateId());
+        ;
     }
     public IAggregateTestHelper<TAggregateSubtypePayload> Subtype<TAggregateSubtypePayload>()
         where TAggregateSubtypePayload : IAggregatePayloadCommon, IApplicableAggregatePayload<TAggregatePayload>

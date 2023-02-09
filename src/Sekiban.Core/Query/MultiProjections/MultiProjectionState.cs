@@ -1,3 +1,4 @@
+using Sekiban.Core.Events;
 namespace Sekiban.Core.Query.MultiProjections;
 
 public record MultiProjectionState<TProjectionPayload>(
@@ -5,6 +6,17 @@ public record MultiProjectionState<TProjectionPayload>(
     Guid LastEventId,
     string LastSortableUniqueId,
     int AppliedSnapshotVersion,
-    int Version) : IProjection where TProjectionPayload : IMultiProjectionPayloadCommon
+    int Version) : IProjection where TProjectionPayload : IMultiProjectionPayloadCommon, new()
 {
+    public MultiProjectionState() : this(new TProjectionPayload(), Guid.Empty, string.Empty, 0, 0) { }
+    public MultiProjectionState<TProjectionPayload> ApplyEvent(IEvent ev)
+    {
+        return this with
+        {
+            Payload = ((IMultiProjectionPayload<TProjectionPayload>)Payload).ApplyIEvent(ev),
+            LastEventId = ev.Id,
+            LastSortableUniqueId = ev.SortableUniqueId,
+            Version = Version + 1
+        };
+    }
 }

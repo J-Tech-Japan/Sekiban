@@ -41,7 +41,11 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             aggregateContainerGroup,
             async container =>
             {
-                var options = new QueryRequestOptions();
+                var options = new QueryRequestOptions
+                {
+                    MaxItemCount = -1,
+                    MaxBufferedItemCount = -1
+                };
                 var query = targetAggregateNames.Count switch
                 {
                     0 => container.GetItemLinqQueryable<IEvent>().Where(b => b.DocumentType == DocumentType.Event),
@@ -55,7 +59,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     query = query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0);
                 }
 
-                query = query.OrderByDescending(m => m.SortableUniqueId);
+                // query = query.OrderByDescending(m => m.SortableUniqueId);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
                 var events = new List<IEvent>();
                 while (feedIterator.HasMoreResults)
@@ -90,7 +94,6 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                         events.Add(toAdd);
                     }
                 }
-
                 resultAction(events.OrderBy(m => m.SortableUniqueId));
             });
     }

@@ -2,30 +2,34 @@ using Microsoft.Extensions.Caching.Memory;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.ValueObjects;
+using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.UpdateNotice;
 using Sekiban.Core.Setting;
+using Sekiban.Core.Shared;
 namespace Sekiban.Core.Query.MultiProjections.Projections;
 
 public class MemoryCacheMultiProjection : IMultiProjection
 {
     private readonly IAggregateSettings _aggregateSettings;
     private readonly IDocumentRepository _documentRepository;
+    private readonly RegisteredEventTypes _registeredEventTypes;
     private readonly IUpdateNotice _updateNotice;
     private readonly IMultiProjectionCache multiProjectionCache;
-
     public MemoryCacheMultiProjection(
         IMemoryCache memoryCache,
         IDocumentRepository documentRepository,
         IServiceProvider serviceProvider,
         IUpdateNotice updateNotice,
         IAggregateSettings aggregateSettings,
-        IMultiProjectionCache multiProjectionCache)
+        IMultiProjectionCache multiProjectionCache,
+        RegisteredEventTypes registeredEventTypes)
     {
         _documentRepository = documentRepository;
         _updateNotice = updateNotice;
         _aggregateSettings = aggregateSettings;
         this.multiProjectionCache = multiProjectionCache;
+        _registeredEventTypes = registeredEventTypes;
     }
 
     public async Task<MultiProjectionState<TProjectionPayload>>
@@ -99,14 +103,14 @@ public class MemoryCacheMultiProjection : IMultiProjection
                             };
                         }
 
-                        if (ev.GetSortableUniqueId().LaterThan(savedContainer.SafeSortableUniqueId!))
+                        if (ev.GetSortableUniqueId().LaterThanOrEqual(savedContainer.SafeSortableUniqueId!))
                         {
                             if (!projector.EventShouldBeApplied(ev)) { throw new SekibanEventOrderMixedUpException(); }
                             projector.ApplyEvent(ev);
                             container = container with { LastSortableUniqueId = ev.GetSortableUniqueId() };
                         }
 
-                        if (ev.GetSortableUniqueId().LaterThan(targetSafeId))
+                        if (ev.GetSortableUniqueId().LaterThanOrEqual(targetSafeId))
                         {
                             container.UnsafeEvents.Add(ev);
                         }
@@ -128,6 +132,89 @@ public class MemoryCacheMultiProjection : IMultiProjection
             multiProjectionCache.Set(container);
         }
         return container.State;
+    }
+    public async Task<MultiProjectionState<TProjectionPayload>> GetInitialMultiProjectionFromStreamAsync<TProjection, TProjectionPayload>(
+        Stream stream,
+        SortableUniqueIdValue? includesSortableUniqueIdValue) where TProjection : IMultiProjector<TProjectionPayload>, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+    {
+        await Task.CompletedTask;
+        var list = JsonSerializer.Deserialize<List<JsonElement>>(stream) ?? throw new Exception("Could not deserialize file");
+        var events = (IList<IEvent>)list.Select(m => SekibanJsonHelper.DeserializeToEvent(m, _registeredEventTypes.RegisteredTypes))
+            .Where(m => m is not null)
+            .OrderBy(m => m is null ? string.Empty : m.SortableUniqueId)
+            .ToList();
+        var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
+        var safeEvents = events.Where(m => m.GetSortableUniqueId().EarlierThan(targetSafeId)).ToList();
+        var unsafeEvents = events.Where(m => m.GetSortableUniqueId().LaterThanOrEqual(targetSafeId)).ToList();
+        var safeState = safeEvents.Aggregate(
+            new MultiProjectionState<TProjectionPayload>(),
+            (projection, ev) => projection.ApplyEvent(ev));
+        var state = unsafeEvents.Aggregate(
+            safeState,
+            (projection, ev) => projection.ApplyEvent(ev));
+        var container = new MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>
+        {
+            UnsafeEvents = unsafeEvents,
+            LastSortableUniqueId = events.LastOrDefault()?.GetSortableUniqueId(),
+            SafeSortableUniqueId = safeEvents.LastOrDefault()?.GetSortableUniqueId(),
+            SafeState = safeEvents.Count == 0 ? null : safeState,
+            State = state
+        };
+
+        if (container.SafeState is not null)
+        {
+            multiProjectionCache.Set(container);
+        }
+
+        return container.State;
+    }
+    public async Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionFromMultipleStreamAsync<TProjection, TProjectionPayload>(
+        Func<Task<Stream?>> stream,
+        SortableUniqueIdValue? includesSortableUniqueIdValue) where TProjection : IMultiProjector<TProjectionPayload>, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+    {
+        var eventStream = await stream();
+        var multiProjectionState = new MultiProjectionState<TProjectionPayload>();
+
+        var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
+        var unsafeEvents = new List<IEvent>();
+        SortableUniqueIdValue? lastSortableUniqueId = null;
+
+
+        while (eventStream != null)
+        {
+            var list = JsonSerializer.Deserialize<List<JsonElement>>(eventStream) ?? throw new Exception("Could not deserialize file");
+            var events = (IList<IEvent>)list.Select(m => SekibanJsonHelper.DeserializeToEvent(m, _registeredEventTypes.RegisteredTypes))
+                .Where(m => m is not null)
+                .ToList();
+            lastSortableUniqueId = events.LastOrDefault()?.GetSortableUniqueId();
+            var safeEvents = events.Where(m => m.GetSortableUniqueId().EarlierThan(targetSafeId)).ToList();
+            multiProjectionState = safeEvents.Aggregate(
+                multiProjectionState,
+                (projection, ev) => projection.ApplyEvent(ev));
+
+            unsafeEvents.AddRange(events.Where(m => m.GetSortableUniqueId().LaterThanOrEqual(targetSafeId)));
+            eventStream = await stream();
+        }
+
+        var unsafeState = unsafeEvents.Aggregate(
+            multiProjectionState,
+            (projection, ev) => projection.ApplyEvent(ev));
+
+        var container = new MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>
+        {
+            UnsafeEvents = unsafeEvents,
+            LastSortableUniqueId = unsafeState.Version == 0 ? null : new SortableUniqueIdValue(unsafeState.LastSortableUniqueId),
+            SafeSortableUniqueId = multiProjectionState.Version == 0 ? null : new SortableUniqueIdValue(multiProjectionState.LastSortableUniqueId),
+            SafeState = multiProjectionState.Version == 0 ? null : multiProjectionState,
+            State = unsafeState.Version == 0 ? null : unsafeState
+        };
+        if (container.SafeState is not null)
+        {
+            multiProjectionCache.Set(container);
+        }
+        return multiProjectionState;
     }
 
     private async Task<MultiProjectionState<TProjectionPayload>> GetInitialProjection<TProjection, TProjectionPayload>()
@@ -159,7 +246,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
 
                     projector.ApplyEvent(ev);
                     container = container with { LastSortableUniqueId = ev.GetSortableUniqueId() };
-                    if (ev.GetSortableUniqueId().LaterThan(targetSafeId))
+                    if (ev.GetSortableUniqueId().LaterThanOrEqual(targetSafeId))
                     {
                         container.UnsafeEvents.Add(ev);
                     }
