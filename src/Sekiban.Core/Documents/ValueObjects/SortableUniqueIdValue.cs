@@ -18,27 +18,55 @@ public record SortableUniqueIdValue(string Value)
         return new DateTime(ticks);
     }
 
-    public static implicit operator string(SortableUniqueIdValue vo) => vo.Value;
+    public static implicit operator string(SortableUniqueIdValue vo)
+    {
+        return vo.Value;
+    }
 
-    public static implicit operator SortableUniqueIdValue(string v) => new(v);
+    public static implicit operator SortableUniqueIdValue(string v)
+    {
+        return new(v);
+    }
 
-    public static string Generate(DateTime timestamp, Guid id) => GetTickString(timestamp.Ticks) + GetIdString(id);
+    public static string Generate(DateTime timestamp, Guid id)
+    {
+        return GetTickString(timestamp.Ticks) + GetIdString(id);
+    }
 
-    public static string GetSafeIdFromUtc() =>
-        GetTickString(SekibanDateProducer.GetRegistered().UtcNow.AddMilliseconds(-SafeMilliseconds).Ticks) +
-        GetIdString(Guid.Empty);
-    public static string GetCurrentIdFromUtc() =>
-        GetTickString(SekibanDateProducer.GetRegistered().UtcNow.Ticks) +
-        GetIdString(Guid.Empty);
+    public static string GetSafeIdFromUtc()
+    {
+        return GetTickString(SekibanDateProducer.GetRegistered().UtcNow.AddMilliseconds(-SafeMilliseconds).Ticks) +
+            GetIdString(Guid.Empty);
+    }
+    public static string GetCurrentIdFromUtc()
+    {
+        return GetTickString(SekibanDateProducer.GetRegistered().UtcNow.Ticks) +
+            GetIdString(Guid.Empty);
+    }
 
-    public string GetSafeId() => GetTicks().AddSeconds(-SafeMilliseconds).Ticks + GetIdString(Guid.Empty);
+    public string GetSafeId()
+    {
+        return GetTicks().AddSeconds(-SafeMilliseconds).Ticks + GetIdString(Guid.Empty);
+    }
 
-    public bool EarlierThan(SortableUniqueIdValue toCompare) => Value.CompareTo(toCompare) < 0;
+    public bool EarlierThan(SortableUniqueIdValue toCompare)
+    {
+        return Value.CompareTo(toCompare) < 0;
+    }
 
-    public bool LaterThan(SortableUniqueIdValue toCompare) => Value.CompareTo(toCompare) > 0;
+    public bool LaterThanOrEqual(SortableUniqueIdValue toCompare)
+    {
+        return Value.CompareTo(toCompare) >= 0;
+    }
 
-    public static string GetTickString(long tick) => tick.ToString(TickFormatter);
-    public static string GetIdString(Guid id) => (Math.Abs(id.GetHashCode()) % IdModBase).ToString(IdFormatter);
+    public static string GetTickString(long tick)
+    {
+        return tick.ToString(TickFormatter);
+    }
+    public static string GetIdString(Guid id)
+    {
+        return (Math.Abs(id.GetHashCode()) % IdModBase).ToString(IdFormatter);
+    }
     public static SortableUniqueIdValue? GetShouldIncludeSortableUniqueIdValue(object target)
     {
         if (target is IShouldIncludesSortableUniqueId sortableUniqueId)
@@ -48,5 +76,8 @@ public record SortableUniqueIdValue(string Value)
         }
         return null;
     }
-    public static SortableUniqueIdValue? NullableValue(string? value) => value != null ? new SortableUniqueIdValue(value) : null;
+    public static SortableUniqueIdValue? NullableValue(string? value)
+    {
+        return value != null ? new SortableUniqueIdValue(value) : null;
+    }
 }

@@ -20,14 +20,7 @@ public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPa
         {
             return;
         }
-        var projectionPayload = ((IMultiProjectionPayload<TProjectionPayload>)Payload).ApplyIEvent(ev) ?? Payload;
-        state = state with
-        {
-            Payload = projectionPayload,
-            LastEventId = ev.Id,
-            LastSortableUniqueId = ev.SortableUniqueId,
-            Version = state.Version + 1
-        };
+        state = state.ApplyEvent(ev);
     }
 
     public MultiProjectionState<TProjectionPayload> ToState()
@@ -36,7 +29,7 @@ public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPa
     }
     public bool EventShouldBeApplied(IEvent ev)
     {
-        return ev.GetSortableUniqueId().LaterThan(new SortableUniqueIdValue(LastSortableUniqueId));
+        return ev.GetSortableUniqueId().LaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
     }
 
     public void ApplySnapshot(MultiProjectionState<TProjectionPayload> snapshot)
