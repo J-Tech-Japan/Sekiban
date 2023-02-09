@@ -7,4 +7,14 @@ public interface IMultiProjection
         SortableUniqueIdValue? includesSortableUniqueIdValue)
         where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon, new();
+    Task<MultiProjectionState<TProjectionPayload>> GetInitialMultiProjectionFromStreamAsync<TProjection, TProjectionPayload>(
+        Stream stream,
+        SortableUniqueIdValue? includesSortableUniqueIdValue)
+        where TProjection : IMultiProjector<TProjectionPayload>, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon, new();
+    Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionFromMultipleStreamAsync<TProjection, TProjectionPayload>(
+        Func<Task<Stream?>> stream,
+        SortableUniqueIdValue? includesSortableUniqueIdValue)
+        where TProjection : IMultiProjector<TProjectionPayload>, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon, new();
 }

@@ -1,9 +1,14 @@
-﻿namespace Sekiban.Core.Shared;
+﻿using Sekiban.Core.Documents;
+using Sekiban.Core.Events;
+namespace Sekiban.Core.Shared;
 
 public static class SekibanJsonHelper
 {
-    public static JsonSerializerOptions GetDefaultJsonSerializerOptions() => new JsonSerializerOptions
-        { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, PropertyNameCaseInsensitive = true };
+    public static JsonSerializerOptions GetDefaultJsonSerializerOptions()
+    {
+        return new()
+            { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, PropertyNameCaseInsensitive = true };
+    }
 
     public static string? Serialize(dynamic? obj)
     {
@@ -15,9 +20,11 @@ public static class SekibanJsonHelper
         return JsonSerializer.Serialize(obj, GetDefaultJsonSerializerOptions());
     }
 
-    public static string? Serialize(Exception ex) =>
+    public static string? Serialize(Exception ex)
+    {
         // System.Text.JsonはException型を直接シリアライズできないので、匿名型にしてからシリアライズする
-        Serialize(new { ex.Message, ex.Source, ex.StackTrace });
+        return Serialize(new { ex.Message, ex.Source, ex.StackTrace });
+    }
 
     public static object? Deserialize(string? jsonString, Type returnType)
     {
@@ -37,6 +44,22 @@ public static class SekibanJsonHelper
         }
 
         return JsonSerializer.Deserialize<T>(jsonString, GetDefaultJsonSerializerOptions());
+    }
+
+    public static IEvent? DeserializeToEvent(JsonElement jsonElement, ReadOnlyCollection<Type> registeredTypes)
+    {
+        if (GetValue<string>(jsonElement, nameof(IDocument.DocumentTypeName)) is not string
+            typeName)
+        {
+            return null;
+        }
+
+        return registeredTypes.Where(m => m.Name == typeName)
+                .Select(
+                    m =>
+                        ConvertTo(jsonElement, typeof(Event<>).MakeGenericType(m)) as IEvent)
+                .FirstOrDefault(m => m is not null) ??
+            EventHelper.GetUnregisteredEvent(jsonElement);
     }
 
     public static object? ConvertTo(dynamic? jsonObj, Type convertionType)
@@ -61,7 +84,10 @@ public static class SekibanJsonHelper
         return Deserialize<T>(jsonString);
     }
 
-    public static T? GetValue<T>(dynamic? jsonObj, string propertyName) => GetValue<T>(Serialize(jsonObj), propertyName);
+    public static T? GetValue<T>(dynamic? jsonObj, string propertyName)
+    {
+        return GetValue<T>(Serialize(jsonObj), propertyName);
+    }
 
     public static T? GetValue<T>(string? jsonString, string propertyName)
     {
