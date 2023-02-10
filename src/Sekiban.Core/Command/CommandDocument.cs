@@ -1,6 +1,7 @@
 using Sekiban.Core.Documents;
 using Sekiban.Core.History;
 using Sekiban.Core.Partition;
+using Sekiban.Core.Types;
 namespace Sekiban.Core.Command;
 
 /// <summary>
@@ -16,7 +17,7 @@ public sealed record CommandDocument<T> : Document, ICallHistories where T : ICo
         Type aggregateType,
         List<CallHistory>? callHistories = null) : base(
         aggregateId,
-        PartitionKeyGenerator.ForCommand(aggregateId, aggregateType),
+        PartitionKeyGenerator.ForCommand(aggregateId, aggregateType.GetBaseAggregatePayloadTypeFromAggregate()),
         DocumentType.Command,
         typeof(T).Name)
     {

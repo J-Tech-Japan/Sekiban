@@ -1,4 +1,5 @@
 ﻿using Sekiban.Core.Aggregate;
+using Sekiban.Core.Types;
 using System.Collections.Immutable;
 namespace Sekiban.Core.Query.MultiProjections;
 
@@ -74,5 +75,8 @@ public class TargetAggregatePayloadCollection
         Add<TAggregatePayload7>();
         return this;
     }
-    public IList<string> GetAggregateNames() => TargetAggregatePayloads.Select(e => e.Name).ToList();
+    public IList<string> GetAggregateNames()
+    {
+        return TargetAggregatePayloads.Select(e => e.GetBaseAggregatePayloadTypeFromAggregate().Name).ToList();
+    }
 }

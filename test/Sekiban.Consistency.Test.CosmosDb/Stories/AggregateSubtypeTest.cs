@@ -4,6 +4,7 @@ using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.P
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.ShippingCarts;
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.ShoppingCarts;
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.ShoppingCarts.Commands;
+using Microsoft.Extensions.Caching.Memory;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
@@ -20,6 +21,9 @@ namespace SampleProjectStoryXTest.Stories;
 public class AggregateSubtypeTest : TestBase
 {
     private readonly CosmosDbFactory _cosmosDbFactory;
+    private readonly HybridStoreManager _hybridStoreManager;
+    private readonly InMemoryDocumentStore _inMemoryDocumentStore;
+    private readonly IMemoryCache _memoryCache;
     private readonly IAggregateLoader aggregateLoader;
     private readonly Guid cartId = Guid.NewGuid();
     private readonly ICommandExecutor commandExecutor;
@@ -33,6 +37,9 @@ public class AggregateSubtypeTest : TestBase
         commandExecutor = GetService<ICommandExecutor>();
         aggregateLoader = GetService<IAggregateLoader>();
         multiProjectionService = GetService<IMultiProjectionService>();
+        _hybridStoreManager = GetService<HybridStoreManager>();
+        _inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
+        _memoryCache = GetService<IMemoryCache>();
     }
 
     [Fact(DisplayName = "SubtypeのAggregateを作成する")]
@@ -144,6 +151,38 @@ public class AggregateSubtypeTest : TestBase
         Assert.NotNull(state);
         Assert.Equal(typeof(ShippingCartI), state.Payload.GetType());
     }
+
+    [Fact]
+    public async Task SimpleCommandsTestSnapshot()
+    {
+        // 先に全データを削除する
+        await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default);
+        await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Dissolvable);
+        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(
+            DocumentType.Command,
+            AggregateContainerGroup.Dissolvable);
+        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command);
+
+        var snapshotCartId = Guid.NewGuid();
+        for (var i = 0; i < 140; i++)
+        {
+            commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
+                new AddItemToShoppingCartI
+                    { CartId = snapshotCartId, Code = $"TEST{i:000}", Name = $"Name{i:000}", Quantity = i + 1 });
+            var state = await aggregateLoader.AsDefaultStateAsync<ICartAggregate>(snapshotCartId);
+            Assert.NotNull(state);
+            Assert.Equal(typeof(ShoppingCartI).Name, state?.PayloadTypeName);
+        }
+        // Remove in memory data
+        _inMemoryDocumentStore.ResetInMemoryStore();
+        _hybridStoreManager.ClearHybridPartitions();
+        ((MemoryCache)_memoryCache).Compact(1);
+
+        var stateAfter = await aggregateLoader.AsDefaultStateAsync<ICartAggregate>(snapshotCartId);
+        Assert.NotNull(stateAfter);
+        Assert.Equal(typeof(ShoppingCartI).Name, stateAfter?.PayloadTypeName);
+    }
+
 
     [Fact]
     public async Task AfterChangePayloadType()
