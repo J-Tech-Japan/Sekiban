@@ -55,14 +55,23 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
         return AggregateDefinitions.SelectMany(s => s.SingleProjectionListQueryTypes);
     }
 
-    public IEnumerable<Type> GetMultiProjectionQueryTypes() => MultiProjectionQueryTypes;
+    public IEnumerable<Type> GetMultiProjectionQueryTypes()
+    {
+        return MultiProjectionQueryTypes;
+    }
 
-    public IEnumerable<Type> GetMultiProjectionListQueryTypes() => MultiProjectionListQueryTypes;
+    public IEnumerable<Type> GetMultiProjectionListQueryTypes()
+    {
+        return MultiProjectionListQueryTypes;
+    }
 
-    public virtual SekibanDependencyOptions GetSekibanDependencyOptions() => new(
-        new RegisteredEventTypes(GetAssembliesForOptions()),
-        new SekibanAggregateTypes(GetAssembliesForOptions()),
-        GetCommandDependencies().Concat(GetSubscriberDependencies()));
+    public virtual SekibanDependencyOptions GetSekibanDependencyOptions()
+    {
+        return new(
+            new RegisteredEventTypes(GetAssembliesForOptions()),
+            new SekibanAggregateTypes(GetAssembliesForOptions()),
+            GetCommandDependencies().Concat(GetSubscriberDependencies()));
+    }
 
     public DomainDependencyDefinitionBase AddDependency<TDependency>()
         where TDependency : DomainDependencyDefinitionBase, new()
@@ -86,6 +95,10 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
     public IEnumerable<Type> GetAggregatePayloadTypes()
     {
         return AggregateDefinitions.Select(s => s.AggregateType);
+    }
+    public IEnumerable<Type> GetAggregatePayloadSubtypes()
+    {
+        return AggregateDefinitions.SelectMany(s => s.AggregateSubtypes);
     }
 
     protected AggregateDependencyDefinition<TAggregatePayload> AddAggregate<TAggregatePayload>()
@@ -140,6 +153,8 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
         }
     }
 
-    private Assembly[] GetAssembliesForOptions() =>
-        Assemblies.Add(GetExecutingAssembly()).Add(SekibanEventSourcingDependency.GetAssembly()).ToArray();
+    private Assembly[] GetAssembliesForOptions()
+    {
+        return Assemblies.Add(GetExecutingAssembly()).Add(SekibanEventSourcingDependency.GetAssembly()).ToArray();
+    }
 }

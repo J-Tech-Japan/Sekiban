@@ -5,14 +5,13 @@ namespace Sekiban.Core.Dependency;
 public class ParentAggregateDependencyDefinition<TAggregatePayload> : AggregateDependencyDefinition<TAggregatePayload>
     where TAggregatePayload : IParentAggregatePayloadCommon<TAggregatePayload>
 {
-    private readonly List<IAggregateSubTypeDependencyDefinition<TAggregatePayload>> subAggregates = new();
 
     public override ImmutableList<(Type, Type?)> CommandTypes
     {
         get
         {
             var types = SelfCommandTypes;
-            foreach (var subAggregate in subAggregates)
+            foreach (var subAggregate in SubAggregates)
             {
                 types = types.AddRange(subAggregate.CommandTypes);
             }
@@ -25,7 +24,7 @@ public class ParentAggregateDependencyDefinition<TAggregatePayload> : AggregateD
         where TSubAggregatePayload : IAggregateSubtypePayload<TAggregatePayload>
     {
         var subAggregate = new AggregateSubtypeDependencyDefinition<TAggregatePayload, TSubAggregatePayload>(this);
-        subAggregates.Add(subAggregate);
+        SubAggregates = SubAggregates.Add(subAggregate);
         subAggregateDefinitionAction(subAggregate);
         return this;
     }

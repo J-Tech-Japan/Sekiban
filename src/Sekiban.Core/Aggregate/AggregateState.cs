@@ -23,7 +23,12 @@ public sealed record AggregateState<TPayload> : IAggregateCommon where TPayload 
         AppliedSnapshotVersion = aggregateCommon.AppliedSnapshotVersion;
     }
 
-    public AggregateState(IAggregateCommon aggregateCommon, TPayload payload) : this(aggregateCommon) => Payload = payload;
+    public AggregateState(IAggregateCommon aggregateCommon, TPayload payload) : this(aggregateCommon)
+    {
+        Payload = payload;
+    }
+
+    public string PayloadTypeName => Payload.GetType().Name;
 
     public TPayload Payload { get; init; } = CreatePayload();
 
@@ -54,8 +59,10 @@ public sealed record AggregateState<TPayload> : IAggregateCommon where TPayload 
         var genericAggregateStateType = aggregateStateType.MakeGenericType(payloadType);
         return Activator.CreateInstance(genericAggregateStateType, this, Payload) ?? this;
     }
-    public bool IsAggregatePayloadType<TAggregatePayloadExpected>() where TAggregatePayloadExpected : IAggregatePayloadCommon =>
-        Payload is TAggregatePayloadExpected;
+    public bool IsAggregatePayloadType<TAggregatePayloadExpected>() where TAggregatePayloadExpected : IAggregatePayloadCommon
+    {
+        return Payload is TAggregatePayloadExpected;
+    }
 
     private static TPayload CreatePayload()
     {
@@ -68,16 +75,25 @@ public sealed record AggregateState<TPayload> : IAggregateCommon where TPayload 
         return (TPayload?)obj ?? throw new Exception("Failed to create Aggregate Payload");
     }
 
-    public string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();
-
-    public bool GetIsDeleted() => Payload is IDeletable { IsDeleted: true };
-
-    public dynamic GetComparableObject(AggregateState<TPayload> original, bool copyVersion = true) => this with
+    public string GetPayloadVersionIdentifier()
     {
-        AggregateId = original.AggregateId,
-        Version = copyVersion ? original.Version : Version,
-        LastEventId = original.LastEventId,
-        AppliedSnapshotVersion = original.AppliedSnapshotVersion,
-        LastSortableUniqueId = original.LastSortableUniqueId
-    };
+        return Payload.GetPayloadVersionIdentifier();
+    }
+
+    public bool GetIsDeleted()
+    {
+        return Payload is IDeletable { IsDeleted: true };
+    }
+
+    public dynamic GetComparableObject(AggregateState<TPayload> original, bool copyVersion = true)
+    {
+        return this with
+        {
+            AggregateId = original.AggregateId,
+            Version = copyVersion ? original.Version : Version,
+            LastEventId = original.LastEventId,
+            AppliedSnapshotVersion = original.AppliedSnapshotVersion,
+            LastSortableUniqueId = original.LastSortableUniqueId
+        };
+    }
 }

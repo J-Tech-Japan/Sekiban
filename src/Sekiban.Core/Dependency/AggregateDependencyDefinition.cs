@@ -18,10 +18,16 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
     where TAggregatePayload : IAggregatePayloadCommon
 {
 
-    public AggregateDependencyDefinition() => AggregateType = typeof(TAggregatePayload);
+    public AggregateDependencyDefinition()
+    {
+        AggregateType = typeof(TAggregatePayload);
+    }
+    public ImmutableList<IAggregateSubTypeDependencyDefinition<TAggregatePayload>> SubAggregates { get; protected set; } =
+        ImmutableList<IAggregateSubTypeDependencyDefinition<TAggregatePayload>>.Empty;
 
     protected ImmutableList<(Type, Type?)> SelfCommandTypes { get; set; } = ImmutableList<(Type, Type?)>.Empty;
 
+    public ImmutableList<Type> AggregateSubtypes => SubAggregates.Select(m => m.GetType().GetGenericArguments().Last()).ToImmutableList();
     public virtual ImmutableList<(Type, Type?)> CommandTypes => SelfCommandTypes;
     public ImmutableList<(Type, Type?)> SubscriberTypes { get; private set; } = ImmutableList<(Type, Type?)>.Empty;
     public ImmutableList<Type> AggregateQueryTypes { get; private set; } = ImmutableList<Type>.Empty;
