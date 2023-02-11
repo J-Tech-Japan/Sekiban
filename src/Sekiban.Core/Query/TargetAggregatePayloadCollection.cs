@@ -1,7 +1,7 @@
 ﻿using Sekiban.Core.Aggregate;
 using Sekiban.Core.Types;
 using System.Collections.Immutable;
-namespace Sekiban.Core.Query.MultiProjections;
+namespace Sekiban.Core.Query;
 
 public class TargetAggregatePayloadCollection
 {

@@ -5,6 +5,7 @@ using FeatureCheck.Domain.Aggregates.Clients.Events;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Events;
 using Sekiban.Core.Events;
+using Sekiban.Core.Query;
 using Sekiban.Core.Query.MultiProjections;
 using System.Collections.Immutable;
 namespace FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
@@ -20,11 +21,16 @@ public record ClientLoyaltyPointMultiProjection(
     {
     }
 
-    public TargetAggregatePayloadCollection GetTargetAggregatePayloads() =>
-        new TargetAggregatePayloadCollection().Add<Branch, Client, LoyaltyPoint>();
+    public TargetAggregatePayloadCollection GetTargetAggregatePayloads()
+    {
+        return new TargetAggregatePayloadCollection().Add<Branch, Client, LoyaltyPoint>();
+    }
     public ClientLoyaltyPointMultiProjection? ApplyEventInstance<TEventPayload>(
         ClientLoyaltyPointMultiProjection projectionPayload,
-        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon => ApplyEvent(projectionPayload, ev);
+        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon
+    {
+        return ApplyEvent(projectionPayload, ev);
+    }
 
 
     public static ClientLoyaltyPointMultiProjection? ApplyEvent<TEventPayload>(

@@ -1,7 +1,7 @@
-using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes;
-using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.PurchasedCarts;
-using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.ShoppingCarts;
-using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.ShoppingCarts.Commands;
+using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes;
+using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.PurchasedCarts;
+using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.ShoppingCarts;
+using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.ShoppingCarts.Commands;
 using FeatureCheck.Domain.Shared;
 using Sekiban.Testing.SingleProjections;
 using System;
@@ -10,15 +10,15 @@ using System.Linq;
 using Xunit;
 namespace FeatureCheck.Test.AggregateTests.Subtypes;
 
-public class BaseClassCartTest : AggregateTest<ICartAggregate, FeatureCheckDependency>
+public class CartAggregateRTest : AggregateTest<CartAggregateR, FeatureCheckDependency>
 {
     private readonly Guid CartId = Guid.NewGuid();
     [Fact]
     public void CommandExecuteTest()
     {
-        Subtype<ShoppingCartI>()
+        Subtype<ShoppingCartR>()
             .WhenCommand(
-                new AddItemToShoppingCartI
+                new AddItemToShoppingCartR
                 {
                     CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
                 })
@@ -26,30 +26,30 @@ public class BaseClassCartTest : AggregateTest<ICartAggregate, FeatureCheckDepen
                 events =>
                 {
                     var ev = events.First();
-                    Assert.Equal(nameof(ICartAggregate), ev.AggregateType);
+                    Assert.Equal(nameof(CartAggregateR), ev.AggregateType);
                 })
-            .ThenPayloadTypeShouldBe<ShoppingCartI>()
+            .ThenPayloadTypeShouldBe<ShoppingCartR>()
             .ThenPayloadIs(
-                new ShoppingCartI
+                new ShoppingCartR
                 {
-                    Items = ImmutableSortedDictionary<int, CartItemRecordI>.Empty.Add(
+                    Items = ImmutableSortedDictionary<int, CartItemRecordR>.Empty.Add(
                         0,
-                        new CartItemRecordI
+                        new CartItemRecordR
                             { Code = "TESTCODE", Name = "TESTNAME", Quantity = 100 })
                 });
     }
     [Fact]
     public void CommandExecuteTestAndChangeAggregateType()
     {
-        Subtype<ShoppingCartI>()
+        Subtype<ShoppingCartR>()
             .WhenCommand(
-                new AddItemToShoppingCartI
+                new AddItemToShoppingCartR
                 {
                     CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
                 })
-            .ThenPayloadTypeShouldBe<ShoppingCartI>()
+            .ThenPayloadTypeShouldBe<ShoppingCartR>()
             .WhenCommand(
-                new SubmitOrderI
+                new SubmitOrderR
                 {
                     CartId = CartId, OrderSubmittedLocalTime = new DateTime(
                         2023,
@@ -59,13 +59,13 @@ public class BaseClassCartTest : AggregateTest<ICartAggregate, FeatureCheckDepen
                         22,
                         2)
                 })
-            .ThenPayloadTypeShouldBe<PurchasedCartI>()
+            .ThenPayloadTypeShouldBe<PurchasedCartR>()
             .ThenPayloadIs(
-                new PurchasedCartI
+                new PurchasedCartR
                 {
-                    Items = ImmutableSortedDictionary<int, CartItemRecordI>.Empty.Add(
+                    Items = ImmutableSortedDictionary<int, CartItemRecordR>.Empty.Add(
                         0,
-                        new CartItemRecordI
+                        new CartItemRecordR
                         {
                             Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
                         }),

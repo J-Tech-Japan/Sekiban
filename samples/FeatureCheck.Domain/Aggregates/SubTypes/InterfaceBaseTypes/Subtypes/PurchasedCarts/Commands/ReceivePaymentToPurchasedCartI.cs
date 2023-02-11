@@ -1,8 +1,8 @@
-using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.PurchasedCarts.Events;
+using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.PurchasedCarts.Events;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
-namespace FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.PurchasedCarts.Commands;
+namespace FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.PurchasedCarts.Commands;
 
 public record ReceivePaymentToPurchasedCartI : IVersionValidationCommand<PurchasedCartI>
 {
@@ -11,7 +11,10 @@ public record ReceivePaymentToPurchasedCartI : IVersionValidationCommand<Purchas
     public string PaymentMethod { get; init; } = "Cash";
     public decimal Amount { get; init; } = 0;
     public string Currency { get; init; } = "JPY";
-    public Guid GetAggregateId() => CartId;
+    public Guid GetAggregateId()
+    {
+        return CartId;
+    }
     public int ReferenceVersion { get; init; }
 
     public class Handler : IVersionValidationCommandHandler<PurchasedCartI, ReceivePaymentToPurchasedCartI>

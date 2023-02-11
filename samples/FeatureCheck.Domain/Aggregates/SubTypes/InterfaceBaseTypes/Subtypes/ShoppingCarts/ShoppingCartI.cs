@@ -1,6 +1,6 @@
 using Sekiban.Core.Aggregate;
 using System.Collections.Immutable;
-namespace FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.ShoppingCarts;
+namespace FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.ShoppingCarts;
 
 public record ShoppingCartI : ICartAggregate, IAggregateSubtypePayload<ICartAggregate>
 {

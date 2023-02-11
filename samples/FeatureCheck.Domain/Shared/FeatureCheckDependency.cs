@@ -15,11 +15,17 @@ using FeatureCheck.Domain.Aggregates.RecentActivities.Projections;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Commands;
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes;
-using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.PurchasedCarts;
-using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.PurchasedCarts.Commands;
-using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.ShippingCarts;
-using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.ShoppingCarts;
-using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.ShoppingCarts.Commands;
+using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.PurchasedCarts;
+using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.PurchasedCarts.Commands;
+using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.ShippingCarts;
+using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.ShoppingCarts;
+using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.ShoppingCarts.Commands;
+using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes;
+using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.PurchasedCarts;
+using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.PurchasedCarts.Commands;
+using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.ShippingCarts;
+using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.ShoppingCarts;
+using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.ShoppingCarts.Commands;
 using FeatureCheck.Domain.Aggregates.VersionCheckAggregates;
 using FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Commands;
 using FeatureCheck.Domain.EventSubscribers;
@@ -32,7 +38,10 @@ namespace FeatureCheck.Domain.Shared;
 
 public class FeatureCheckDependency : DomainDependencyDefinitionBase
 {
-    public override Assembly GetExecutingAssembly() => Assembly.GetExecutingAssembly();
+    public override Assembly GetExecutingAssembly()
+    {
+        return Assembly.GetExecutingAssembly();
+    }
 
     protected override void Define()
     {
@@ -86,6 +95,16 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
                 subType =>
                     subType.AddCommandHandler<ReceivePaymentToPurchasedCartI, ReceivePaymentToPurchasedCartI.Handler>())
             .AddSubAggregate<ShippingCartI>(subType => { });
+
+        AddParentAggregate<CartAggregateR>()
+            .AddSubAggregate<ShoppingCartR>(
+                subType =>
+                    subType.AddCommandHandler<AddItemToShoppingCartR, AddItemToShoppingCartR.Handler>()
+                        .AddCommandHandler<SubmitOrderR, SubmitOrderR.Handler>())
+            .AddSubAggregate<PurchasedCartR>(
+                subType =>
+                    subType.AddCommandHandler<ReceivePaymentToPurchasedCartR, ReceivePaymentToPurchasedCartR.Handler>())
+            .AddSubAggregate<ShippingCartR>(subType => { });
 
         AddMultiProjectionQuery<ClientLoyaltyPointMultiProjectionQuery>();
         AddMultiProjectionListQuery<ClientLoyaltyPointQuery>();

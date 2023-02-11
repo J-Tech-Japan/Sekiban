@@ -1,4 +1,4 @@
-using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.ShoppingCarts;
+using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.ShoppingCarts;
 using Sekiban.Core.Aggregate;
 using System.Collections.Immutable;
 namespace FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes;

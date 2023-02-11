@@ -1,9 +1,9 @@
-using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.ShoppingCarts.Events;
+using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.ShoppingCarts.Events;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 using System.ComponentModel.DataAnnotations;
-namespace FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.SubAggregates.ShoppingCarts.Commands;
+namespace FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.ShoppingCarts.Commands;
 
 public class AddItemToShoppingCartI : ICommand<ShoppingCartI>
 {
@@ -14,7 +14,10 @@ public class AddItemToShoppingCartI : ICommand<ShoppingCartI>
     public string Name { get; init; } = string.Empty;
     [Range(1, 1000)]
     public int Quantity { get; init; } = 0;
-    public Guid GetAggregateId() => CartId;
+    public Guid GetAggregateId()
+    {
+        return CartId;
+    }
 
     public class Handler : ICommandHandler<ShoppingCartI, AddItemToShoppingCartI>
     {
