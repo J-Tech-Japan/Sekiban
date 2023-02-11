@@ -54,7 +54,7 @@ public class AggregateLoader : IAggregateLoader
     /// <returns></returns>
     public async Task<AggregateState<TAggregatePayload>?> AsDefaultStateFromInitialAsync<TAggregatePayload>(
         Guid aggregateId,
-        int? toVersion = null) where TAggregatePayload : IAggregatePayload, new()
+        int? toVersion = null) where TAggregatePayload : IAggregatePayloadCommon
     {
         var aggregate = await AsAggregateFromInitialAsync<TAggregatePayload>(aggregateId, toVersion);
         return aggregate?.ToState();
@@ -64,7 +64,7 @@ public class AggregateLoader : IAggregateLoader
         Guid aggregateId,
         int? toVersion = null,
         string? includesSortableUniqueId = null)
-        where TAggregatePayload : IAggregatePayload, new() => await _singleProjection
+        where TAggregatePayload : IAggregatePayloadCommon => await _singleProjection
         .GetAggregateAsync<Aggregate<TAggregatePayload>, AggregateState<TAggregatePayload>,
             DefaultSingleProjector<TAggregatePayload>>(
             aggregateId,
@@ -75,17 +75,17 @@ public class AggregateLoader : IAggregateLoader
         Guid aggregateId,
         int? toVersion = null,
         string? includesSortableUniqueId = null)
-        where TAggregatePayload : IAggregatePayload, new()
+        where TAggregatePayload : IAggregatePayloadCommon
     {
         var aggregate = await AsAggregateAsync<TAggregatePayload>(aggregateId, toVersion);
-        return aggregate?.ToState();
+        return aggregate?.GetPayloadTypeIs<TAggregatePayload>() == true ? aggregate?.ToState() : null;
     }
 
     public async Task<IEnumerable<IEvent>?> AllEventsAsync<TAggregatePayload>(
         Guid aggregateId,
         int? toVersion = null,
         string? includesSortableUniqueId = null)
-        where TAggregatePayload : IAggregatePayload, new()
+        where TAggregatePayload : IAggregatePayloadCommon
     {
         var toReturn = new List<IEvent>();
         await _documentRepository.GetAllEventsForAggregateIdAsync(
@@ -119,7 +119,7 @@ public class AggregateLoader : IAggregateLoader
     public Task<Aggregate<TAggregatePayload>?> AsAggregateFromInitialAsync<TAggregatePayload>(
         Guid aggregateId,
         int? toVersion = null)
-        where TAggregatePayload : IAggregatePayload, new() => AsSingleProjectionStateFromInitialAsync<Aggregate<TAggregatePayload>,
+        where TAggregatePayload : IAggregatePayloadCommon => AsSingleProjectionStateFromInitialAsync<Aggregate<TAggregatePayload>,
         DefaultSingleProjector<TAggregatePayload>>(
         aggregateId,
         toVersion);

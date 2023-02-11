@@ -18,7 +18,14 @@ public record CommandExecutorResponseWithEvents(
     int Version,
     IEnumerable<ValidationResult>? ValidationResults,
     ImmutableList<IEvent> Events,
-    string? LastSortableUniqueId) : CommandExecutorResponse(AggregateId, CommandId, Version, ValidationResults, LastSortableUniqueId)
+    string? LastSortableUniqueId,
+    string AggregatePayloadOutTypeName) : CommandExecutorResponse(
+    AggregateId,
+    CommandId,
+    Version,
+    ValidationResults,
+    LastSortableUniqueId,
+    AggregatePayloadOutTypeName)
 {
     public CommandExecutorResponseWithEvents() : this(
         null,
@@ -26,7 +33,8 @@ public record CommandExecutorResponseWithEvents(
         0,
         null,
         ImmutableList<IEvent>.Empty,
-        null)
+        null,
+        string.Empty)
     {
     }
     public CommandExecutorResponseWithEvents(CommandExecutorResponse response, ImmutableList<IEvent> events) : this(
@@ -35,7 +43,8 @@ public record CommandExecutorResponseWithEvents(
         response.Version,
         response.ValidationResults,
         events,
-        response.LastSortableUniqueId)
+        response.LastSortableUniqueId,
+        response.AggregatePayloadOutTypeName)
     {
     }
 }

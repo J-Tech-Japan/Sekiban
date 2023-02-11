@@ -87,13 +87,19 @@ public class CommandExecutor : ICommandExecutor
 
     public async Task<(CommandExecutorResponse, List<IEvent>)> ExecCommandAsyncTyped<TAggregatePayload, TCommand>(
         TCommand command,
-        List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new()
+        List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayloadCommon
         where TCommand : ICommand<TAggregatePayload>
     {
         var validationResult = command.ValidateProperties()?.ToList();
         if (validationResult?.Any() == true)
         {
-            return (new CommandExecutorResponse(null, null, 0, validationResult, null), new List<IEvent>());
+            return (new CommandExecutorResponse(
+                null,
+                null,
+                0,
+                validationResult,
+                null,
+                GetAggregatePayloadOut<TAggregatePayload>(new List<IEvent>())), new List<IEvent>());
         }
         return await ExecCommandWithoutValidationAsyncTyped<TAggregatePayload, TCommand>(command, callHistories);
     }
@@ -101,7 +107,7 @@ public class CommandExecutor : ICommandExecutor
     public async Task<(CommandExecutorResponse, List<IEvent>)> ExecCommandWithoutValidationAsyncTyped<TAggregatePayload,
         TCommand>(
         TCommand command,
-        List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayload, new()
+        List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayloadCommon
         where TCommand : ICommand<TAggregatePayload>
     {
         var commandDocument
@@ -178,13 +184,25 @@ public class CommandExecutor : ICommandExecutor
             }
         }
 
-        return (new CommandExecutorResponse(commandDocument.AggregateId, commandDocument.Id, version, null, lastSortableUniqueId), events);
+        return (new CommandExecutorResponse(
+            commandDocument.AggregateId,
+            commandDocument.Id,
+            version,
+            null,
+            lastSortableUniqueId,
+            GetAggregatePayloadOut<TAggregatePayload>(events)), events);
+    }
+
+    private string GetAggregatePayloadOut<TAggregatePayload>(IEnumerable<IEvent> events)
+    {
+        var enumerable = events.ToList();
+        return enumerable.Any() ? enumerable.Last().GetPayload().GetAggregatePayloadOutType().Name : typeof(TAggregatePayload).Name;
     }
 
     private async Task<List<IEvent>> HandleEventsAsync<TAggregatePayload, TCommand>(
         IReadOnlyCollection<IEvent> events,
         CommandDocument<TCommand> commandDocument)
-        where TAggregatePayload : IAggregatePayload, new()
+        where TAggregatePayload : IAggregatePayloadCommon
         where TCommand : ICommand<TAggregatePayload>
     {
         var toReturnEvents = new List<IEvent>();

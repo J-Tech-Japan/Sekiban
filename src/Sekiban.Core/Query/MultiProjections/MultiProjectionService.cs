@@ -17,7 +17,7 @@ public class MultiProjectionService : IMultiProjectionService
 
     public async Task<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>>
         GetAggregateListObject<TAggregatePayload>(SortableUniqueIdValue? includesSortableUniqueIdValue)
-        where TAggregatePayload : IAggregatePayload, new()
+        where TAggregatePayload : IAggregatePayloadCommon
     {
         var list = await multiProjection
             .GetMultiProjectionAsync<SingleProjectionListProjector<Aggregate<TAggregatePayload>,
@@ -29,7 +29,7 @@ public class MultiProjectionService : IMultiProjectionService
 
     public async Task<List<AggregateState<TAggregatePayload>>> GetAggregateList<TAggregatePayload>(
         SortableUniqueIdValue? includesSortableUniqueIdValue,
-        QueryListType queryListType = QueryListType.ActiveOnly) where TAggregatePayload : IAggregatePayload, new()
+        QueryListType queryListType = QueryListType.ActiveOnly) where TAggregatePayload : IAggregatePayloadCommon
     {
         var projection = await GetAggregateListObject<TAggregatePayload>(includesSortableUniqueIdValue);
         return queryListType switch

@@ -14,9 +14,16 @@ public record CommandExecutorResponse(
     Guid? CommandId,
     int Version,
     IEnumerable<ValidationResult>? ValidationResults,
-    string? LastSortableUniqueId)
+    string? LastSortableUniqueId,
+    string AggregatePayloadOutTypeName)
 {
-    public CommandExecutorResponse() : this(null, null, 0, null, null)
+    public CommandExecutorResponse() : this(
+        null,
+        null,
+        0,
+        null,
+        null,
+        string.Empty)
     {
     }
 }

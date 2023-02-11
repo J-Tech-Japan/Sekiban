@@ -8,6 +8,7 @@ namespace Sekiban.Core.Dependency;
 public interface IAggregateDependencyDefinition
 {
     Type AggregateType { get; }
+    ImmutableList<Type> AggregateSubtypes { get; }
     ImmutableList<(Type, Type?)> CommandTypes { get; }
     ImmutableList<(Type, Type?)> SubscriberTypes { get; }
     ImmutableList<Type> AggregateQueryTypes { get; }

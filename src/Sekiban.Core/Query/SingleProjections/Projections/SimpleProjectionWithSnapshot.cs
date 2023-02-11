@@ -1,3 +1,4 @@
+using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Exceptions;
@@ -7,14 +8,16 @@ namespace Sekiban.Core.Query.SingleProjections.Projections;
 public class SimpleProjectionWithSnapshot : ISingleProjection
 {
     private readonly IDocumentRepository _documentRepository;
+    private readonly SekibanAggregateTypes _sekibanAggregateTypes;
     private readonly ISingleProjectionFromInitial singleProjectionFromInitial;
-
     public SimpleProjectionWithSnapshot(
         IDocumentRepository documentRepository,
-        ISingleProjectionFromInitial singleProjectionFromInitial)
+        ISingleProjectionFromInitial singleProjectionFromInitial,
+        SekibanAggregateTypes sekibanAggregateTypes)
     {
         _documentRepository = documentRepository;
         this.singleProjectionFromInitial = singleProjectionFromInitial;
+        _sekibanAggregateTypes = sekibanAggregateTypes;
     }
 
     /// <summary>
@@ -45,7 +48,7 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
                 projector.GetOriginalAggregatePayloadType(),
                 projector.GetPayloadType(),
                 payloadVersion);
-        var state = snapshotDocument is null ? default : snapshotDocument.ToState<TState>();
+        var state = snapshotDocument is null ? default : snapshotDocument.ToState<TState>(_sekibanAggregateTypes);
         if (state is not null)
         {
             aggregate.ApplySnapshot(state);

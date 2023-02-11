@@ -11,12 +11,12 @@ public interface IMultiProjectionService
 
     public Task<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>>
         GetAggregateListObject<TAggregatePayload>(SortableUniqueIdValue? includesSortableUniqueIdValue)
-        where TAggregatePayload : IAggregatePayload, new();
+        where TAggregatePayload : IAggregatePayloadCommon;
 
     public Task<List<AggregateState<TAggregatePayload>>> GetAggregateList<TAggregatePayload>(
         SortableUniqueIdValue? includesSortableUniqueIdValue = null,
         QueryListType queryListType = QueryListType.ActiveOnly)
-        where TAggregatePayload : IAggregatePayload, new();
+        where TAggregatePayload : IAggregatePayloadCommon;
 
     public
         Task<MultiProjectionState<

@@ -10,6 +10,7 @@ public abstract class AggregateCommon : IAggregate
 {
     protected AggregateBasicInfo _basicInfo = new();
 
+
     public Guid AggregateId
     {
         get => _basicInfo.AggregateId;
@@ -21,33 +22,17 @@ public abstract class AggregateCommon : IAggregate
     public int AppliedSnapshotVersion => _basicInfo.AppliedSnapshotVersion;
     public int Version => _basicInfo.Version;
 
-    public bool CanApplyEvent(IEvent ev)
-    {
-        return true;
-    }
-
-    public void ApplyEvent(IEvent ev)
-    {
-        var action = GetApplyEventAction(ev, ev.GetPayload());
-        if (action is null)
-        {
-            return;
-        }
-        if (ev.Id == LastEventId)
-        {
-            return;
-        }
-        action();
-        _basicInfo = _basicInfo with
-        {
-            LastEventId = ev.Id, LastSortableUniqueId = ev.SortableUniqueId, Version = Version + 1
-        };
-    }
+    public abstract void ApplyEvent(IEvent ev);
 
     public abstract string GetPayloadVersionIdentifier();
     public bool EventShouldBeApplied(IEvent ev)
     {
         return ev.GetSortableUniqueId().LaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
+    }
+
+    public bool CanApplyEvent(IEvent ev)
+    {
+        return true;
     }
 
     public static UAggregate Create<UAggregate>(Guid aggregateId) where UAggregate : AggregateCommon
@@ -63,5 +48,5 @@ public abstract class AggregateCommon : IAggregate
         // After C# 11, possibly use static interface methods. [Future idea]
     }
 
-    protected abstract Action? GetApplyEventAction(IEvent ev, IEventPayloadCommon payload);
+    protected abstract object? GetAggregatePayloadWithAppliedEvent(object aggregatePayload, IEvent ev);
 }

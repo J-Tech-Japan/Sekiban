@@ -12,12 +12,17 @@ namespace Sekiban.Core.Aggregate;
 /// <typeparam name="TAggregatePayload">User Defined Aggregate Payload</typeparam>
 public sealed class Aggregate<TAggregatePayload> : AggregateCommon,
     ISingleProjectionStateConvertible<AggregateState<TAggregatePayload>>
-    where TAggregatePayload : IAggregatePayload, new()
+    where TAggregatePayload : IAggregatePayloadCommon
 {
-    private TAggregatePayload Payload { get; set; } = new();
-
-    public AggregateState<TAggregatePayload> ToState() => new(this, Payload);
-
+    private IAggregatePayloadCommon Payload { get; set; } = CreatePayload();
+    public bool GetPayloadTypeIs(Type expect)
+    {
+        if (!expect.IsAggregatePayloadType()) { return false; }
+        var method = GetType().GetMethods().FirstOrDefault(m => m.Name == nameof(GetPayloadTypeIs) && m.IsGenericMethod);
+        var genericMethod = method?.MakeGenericMethod(expect);
+        return (bool?)genericMethod?.Invoke(this, null) ?? false;
+    }
+    public AggregateState<TAggregatePayload> ToState() => ToState<TAggregatePayload>();
     public void ApplySnapshot(AggregateState<TAggregatePayload> snapshot)
     {
         _basicInfo = _basicInfo with
@@ -30,49 +35,88 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon,
         CopyPropertiesFromSnapshot(snapshot);
     }
 
-    public override string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();
-    protected override Action? GetApplyEventAction(IEvent ev, IEventPayloadCommon payload)
+
+    public bool GetPayloadTypeIs<TAggregatePayloadExpect>() =>
+        Payload is TAggregatePayloadExpect;
+
+    public override void ApplyEvent(IEvent ev)
     {
-        (ev, payload) = EventHelper.GetConvertedEventAndPayloadIfConverted(ev, payload);
-        if (payload is UnregisteredEventPayload || payload is EmptyEventPayload)
+        var result = GetAggregatePayloadWithAppliedEvent(Payload, ev);
+        if (result is null)
         {
-            return () => { };
+            return;
         }
-        var eventType = payload.GetEventPayloadType();
-        var method = GetType().GetMethod(nameof(GetApplyEventFunc), BindingFlags.Instance | BindingFlags.NonPublic);
-        var genericMethod = method?.MakeGenericMethod(eventType);
-        var func = (dynamic?)genericMethod?.Invoke(this, new object[] { payload });
-        return () =>
+        if (ev.Id == LastEventId)
         {
-            if (func == null)
-            {
-                return;
-            }
-            var result = func(Payload, (dynamic)ev);
-            Payload = result;
+            return;
+        }
+        Payload = result;
+        _basicInfo = _basicInfo with
+        {
+            LastEventId = ev.Id, LastSortableUniqueId = ev.SortableUniqueId, Version = Version + 1
         };
     }
+    public AggregateState<TAggregatePayloadOut> ToState<TAggregatePayloadOut>() where TAggregatePayloadOut : IAggregatePayloadCommon =>
+        Payload is TAggregatePayloadOut payloadOut ? new AggregateState<TAggregatePayloadOut>(this, payloadOut)
+            : throw new AggregateTypeNotMatchException(typeof(TAggregatePayloadOut), Payload.GetType());
 
-    private Func<TAggregatePayload, Event<TEventPayload>, TAggregatePayload>? GetApplyEventFunc<TEventPayload>(
-        IEventPayloadCommon payload)
-        where TEventPayload : IEventPayload<TAggregatePayload, TEventPayload>
+    private static IAggregatePayloadCommon CreatePayload()
+    {
+        var baseType = typeof(TAggregatePayload).GetBaseAggregatePayloadTypeFromAggregate();
+        if (!baseType.IsParentAggregatePayload())
+        {
+            return (IAggregatePayloadCommon?)Activator.CreateInstance(
+                    baseType) ??
+                throw new Exception("Failed to create Aggregate Payload");
+        }
+        var firstAggregateType = typeof(TAggregatePayload).GetFirstAggregatePayloadTypeFromAggregate();
+        var obj = Activator.CreateInstance(firstAggregateType);
+        return (IAggregatePayloadCommon?)obj ?? throw new Exception("Failed to create Aggregate Payload");
+    }
+
+    public override string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();
+    protected override IAggregatePayloadCommon? GetAggregatePayloadWithAppliedEvent(object aggregatePayload, IEvent ev)
+    {
+        (ev, var eventPayload) = EventHelper.GetConvertedEventAndPayloadIfConverted(ev, ev.GetPayload());
+        if (eventPayload is UnregisteredEventPayload || eventPayload is EmptyEventPayload)
+        {
+            return null;
+        }
+        var eventType = eventPayload.GetEventPayloadType();
+        var aggregatePayloadIn = eventPayload.GetAggregatePayloadInType();
+        if (aggregatePayloadIn != Payload.GetType()) { return null; }
+
+        var aggregatePayloadOut = eventPayload.GetAggregatePayloadOutType();
+        var methods = GetType().GetMethods(BindingFlags.Static | BindingFlags.NonPublic).Where(m => m.Name == nameof(ApplyEventToAggregatePayload));
+        var method = methods.First(m => m.IsGenericMethodDefinition && m.GetGenericArguments().Length == 3);
+        var genericMethod = method?.MakeGenericMethod(aggregatePayloadIn, aggregatePayloadOut, eventType);
+        return (IAggregatePayloadCommon?)genericMethod?.Invoke(this, new object[] { Payload, ev });
+    }
+
+    private static TAggregatePayloadOut? ApplyEventToAggregatePayload<TAggregatePayloadIn, TAggregatePayloadOut,
+        TEventPayload>(TAggregatePayloadIn aggregatePayload, Event<TEventPayload> ev)
+        where TAggregatePayloadIn : IAggregatePayloadCommon
+        where TAggregatePayloadOut : IAggregatePayloadCommon
+        where TEventPayload : IEventPayload<TAggregatePayloadIn, TAggregatePayloadOut, TEventPayload>
     {
 #if NET7_0_OR_GREATER
-        return TEventPayload.OnEvent;
+        return TEventPayload.OnEvent(aggregatePayload, ev);
 #else
-        if (payload is IEventPayload<TAggregatePayload, TEventPayload> applicableEvent)
+        if (ev.Payload is IEventPayload<TAggregatePayloadIn, TAggregatePayloadOut, TEventPayload> applicableEvent)
         {
-            return applicableEvent.OnEventInstance;
+            return applicableEvent.OnEventInstance(aggregatePayload, ev);
         }
-        return null;
+        return default;
 #endif
     }
 
     internal IEvent AddAndApplyEvent<TEventPayload>(TEventPayload eventPayload)
-        where TEventPayload : IEventPayloadCommon, IEventPayload<TAggregatePayload, TEventPayload>
+        where TEventPayload : IEventPayloadCommon
     {
-        var ev = Event<TEventPayload>.GenerateEvent(AggregateId, typeof(TAggregatePayload), eventPayload);
-        var result = GetApplyEventAction(ev, eventPayload);
+        var aggregatePayloadBase = Payload.GetBaseAggregatePayloadType();
+        // var aggregatePayloadBase = typeof(TEventPayload);
+        var ev = Event<TEventPayload>.GenerateEvent(AggregateId, aggregatePayloadBase, eventPayload);
+        var result = GetAggregatePayloadWithAppliedEvent(Payload, ev);
         if (result is null)
         {
             throw new SekibanEventNotImplementedException(

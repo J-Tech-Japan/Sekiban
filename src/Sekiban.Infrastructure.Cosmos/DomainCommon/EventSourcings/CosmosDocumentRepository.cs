@@ -8,6 +8,7 @@ using Sekiban.Core.Partition;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
+using Sekiban.Core.Types;
 // ReSharper disable StringCompareToIsCultureSpecific
 
 namespace Sekiban.Infrastructure.Cosmos.DomainCommon.EventSourcings;
@@ -279,7 +280,8 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             {
                 var types = _registeredEventTypes.RegisteredTypes;
                 var options = new QueryRequestOptions();
-                options.PartitionKey = new PartitionKey(PartitionKeyGenerator.ForCommand(aggregateId, aggregatePayloadType));
+                options.PartitionKey = new PartitionKey(
+                    PartitionKeyGenerator.ForCommand(aggregateId, aggregatePayloadType.GetBaseAggregatePayloadTypeFromAggregate()));
 
                 var query = container.GetItemLinqQueryable<IDocument>()
                     .Where(b => b.DocumentType == DocumentType.Command && b.AggregateId == aggregateId);

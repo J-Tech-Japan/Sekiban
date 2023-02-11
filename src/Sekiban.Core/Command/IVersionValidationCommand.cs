@@ -10,6 +10,6 @@ namespace Sekiban.Core.Command;
 /// <typeparam name="TAggregatePayload">Target Aggregate</typeparam>
 public interface IVersionValidationCommand<TAggregatePayload> : ICommand<TAggregatePayload>,
     IVersionValidationCommandCommon
-    where TAggregatePayload : IAggregatePayload, new()
+    where TAggregatePayload : IAggregatePayloadCommon
 {
 }

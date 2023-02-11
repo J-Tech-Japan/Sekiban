@@ -1,3 +1,4 @@
+using Sekiban.Core.Aggregate;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.ValueObjects;
@@ -7,25 +8,28 @@ using Sekiban.Core.Partition;
 using Sekiban.Core.Query.UpdateNotice;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
+using Sekiban.Core.Types;
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
 public class MemoryCacheSingleProjection : ISingleProjection
 {
     private readonly IAggregateSettings _aggregateSettings;
     private readonly IDocumentRepository _documentRepository;
+    private readonly SekibanAggregateTypes _sekibanAggregateTypes;
     private readonly IUpdateNotice _updateNotice;
     private readonly ISingleProjectionCache singleProjectionCache;
-
     public MemoryCacheSingleProjection(
         IDocumentRepository documentRepository,
         IUpdateNotice updateNotice,
         IAggregateSettings aggregateSettings,
-        ISingleProjectionCache singleProjectionCache)
+        ISingleProjectionCache singleProjectionCache,
+        SekibanAggregateTypes sekibanAggregateTypes)
     {
         _documentRepository = documentRepository;
         _updateNotice = updateNotice;
         _aggregateSettings = aggregateSettings;
         this.singleProjectionCache = singleProjectionCache;
+        _sekibanAggregateTypes = sekibanAggregateTypes;
     }
 
     public async Task<TProjection?> GetAggregateAsync<TProjection, TState, TProjector>(
@@ -125,6 +129,10 @@ public class MemoryCacheSingleProjection : ISingleProjection
         {
             throw new SekibanVersionNotReachToSpecificVersion();
         }
+        if (aggregate.IsAggregateType() && !aggregate.GetPayloadTypeIs(aggregate.GetAggregatePayloadTypeFromAggregate()))
+        {
+            return aggregate;
+        }
         container = container with { State = aggregate.ToState() };
         if (container.LastSortableUniqueId != null &&
             container.SafeSortableUniqueId == null &&
@@ -159,7 +167,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
                 projector.GetOriginalAggregatePayloadType(),
                 projector.GetPayloadType(),
                 payloadVersion);
-        var state = snapshotDocument is null ? default : snapshotDocument.ToState<TState>();
+        var state = snapshotDocument is null ? default : snapshotDocument.ToState<TState>(_sekibanAggregateTypes);
         if (state is not null)
         {
             aggregate.ApplySnapshot(state);
@@ -216,6 +224,10 @@ public class MemoryCacheSingleProjection : ISingleProjection
         if (toVersion.HasValue && aggregate.Version < toVersion.Value)
         {
             throw new SekibanVersionNotReachToSpecificVersion();
+        }
+        if (aggregate.IsAggregateType() && !aggregate.GetPayloadTypeIs(aggregate.GetAggregatePayloadTypeFromAggregate()))
+        {
+            return aggregate;
         }
         container = container with { State = aggregate.ToState() };
         if (container.LastSortableUniqueId != null &&

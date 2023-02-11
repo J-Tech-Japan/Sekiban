@@ -8,8 +8,16 @@ using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
 namespace Sekiban.Testing.SingleProjections;
 
-public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload : IAggregatePayload, new()
+public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload : IAggregatePayloadCommon
 {
+
+    #region Subtypes
+    public IAggregateTestHelper<TAggregatePayloadExpected> ThenPayloadTypeShouldBe<TAggregatePayloadExpected>()
+        where TAggregatePayloadExpected : IAggregatePayloadCommon;
+
+    public IAggregateTestHelper<TAggregateSubtypePayload> Subtype<TAggregateSubtypePayload>()
+        where TAggregateSubtypePayload : IAggregatePayloadCommon, IApplicableAggregatePayload<TAggregatePayload>;
+    #endregion
     #region given and setup
     public IAggregateTestHelper<TAggregatePayload> GivenScenario(Action initialAction);
 
@@ -19,7 +27,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
 
     public Guid RunEnvironmentCommand<TEnvironmentAggregatePayload>(
         ICommand<TEnvironmentAggregatePayload> command,
-        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayload, new();
+        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon;
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventWithPublish(IEvent ev);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsWithPublish(IEnumerable<IEvent> events);
@@ -27,7 +35,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
 
     public Guid RunEnvironmentCommandWithPublish<TEnvironmentAggregatePayload>(
         ICommand<TEnvironmentAggregatePayload> command,
-        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayload, new();
+        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon;
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentCommandExecutorAction(
         Action<TestCommandExecutor> action);
@@ -36,19 +44,22 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     #endregion
 
     #region When
-    public IAggregateTestHelper<TAggregatePayload> WhenCommand<C>(C changeCommand)
-        where C : ICommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(TCommand changeCommand)
+        where TCommand : ICommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommand<TAggregateSubtypePayload, TCommand>(TCommand changeCommand)
+        where TAggregateSubtypePayload : TAggregatePayload, IAggregatePayloadCommon
+        where TCommand : ICommand<TAggregateSubtypePayload>;
 
-    public IAggregateTestHelper<TAggregatePayload> WhenCommand<C>(
-        Func<AggregateState<TAggregatePayload>, C> commandFunc)
-        where C : ICommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommand<TAggregatePayload>;
 
-    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<C>(C changeCommand)
-        where C : ICommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(TCommand changeCommand)
+        where TCommand : ICommand<TAggregatePayload>;
 
-    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<C>(
-        Func<AggregateState<TAggregatePayload>, C> commandFunc)
-        where C : ICommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommand<TAggregatePayload>;
     #endregion
 
     #region Then
@@ -99,7 +110,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
 
     public AggregateState<TEnvironmentAggregatePayload>
         GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
-        where TEnvironmentAggregatePayload : IAggregatePayload, new();
+        where TEnvironmentAggregatePayload : IAggregatePayloadCommon;
 
     public IReadOnlyCollection<IEvent> GetLatestEnvironmentEvents();
     public List<IEvent> GetLatestEvents();

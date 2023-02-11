@@ -15,11 +15,20 @@ namespace Sekiban.Core.Dependency;
 /// </summary>
 /// <typeparam name="TAggregatePayload"></typeparam>
 public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDependencyDefinition
-    where TAggregatePayload : IAggregatePayload, new()
+    where TAggregatePayload : IAggregatePayloadCommon
 {
-    public AggregateDependencyDefinition() => AggregateType = typeof(TAggregatePayload);
 
-    public ImmutableList<(Type, Type?)> CommandTypes { get; private set; } = ImmutableList<(Type, Type?)>.Empty;
+    public AggregateDependencyDefinition()
+    {
+        AggregateType = typeof(TAggregatePayload);
+    }
+    public ImmutableList<IAggregateSubTypeDependencyDefinition<TAggregatePayload>> SubAggregates { get; protected set; } =
+        ImmutableList<IAggregateSubTypeDependencyDefinition<TAggregatePayload>>.Empty;
+
+    protected ImmutableList<(Type, Type?)> SelfCommandTypes { get; set; } = ImmutableList<(Type, Type?)>.Empty;
+
+    public ImmutableList<Type> AggregateSubtypes => SubAggregates.Select(m => m.GetType().GetGenericArguments().Last()).ToImmutableList();
+    public virtual ImmutableList<(Type, Type?)> CommandTypes => SelfCommandTypes;
     public ImmutableList<(Type, Type?)> SubscriberTypes { get; private set; } = ImmutableList<(Type, Type?)>.Empty;
     public ImmutableList<Type> AggregateQueryTypes { get; private set; } = ImmutableList<Type>.Empty;
     public ImmutableList<Type> AggregateListQueryTypes { get; private set; } = ImmutableList<Type>.Empty;
@@ -32,7 +41,7 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         where TCreateCommand : ICommand<TAggregatePayload>, new()
         where TCommandHandler : ICommandHandlerCommon<TAggregatePayload, TCreateCommand>
     {
-        CommandTypes = CommandTypes.Add(
+        SelfCommandTypes = SelfCommandTypes.Add(
             (typeof(ICommandHandlerCommon<TAggregatePayload, TCreateCommand>),
                 typeof(TCommandHandler)));
         return this;
