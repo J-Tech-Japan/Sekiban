@@ -33,7 +33,7 @@ public class ClientSpec : AggregateTest<Client, FeatureCheckDependency>
     {
         // CreateコマンドでBranchを参照するため、Branch作成コマンドを流す
         var branchId = RunEnvironmentCommand(new CreateBranch("TEST"));
-
+//Given 前提条件
         // CreateClient コマンドを実行する
         WhenCommand(new CreateClient(branchId, testClientName, testEmail));
         // エラーとならない
