@@ -60,7 +60,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     query = query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0);
                 }
 
-                query = query.OrderByDescending(m => m.SortableUniqueId);
+                query = query.OrderBy(m => m.SortableUniqueId);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
                 while (feedIterator.HasMoreResults)
                 {
