@@ -26,12 +26,7 @@ public class MultiProjectionCache : IMultiProjectionCache
         where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
-        Console.WriteLine("saving..." + container.State?.Version);
-        Console.WriteLine("option ..." + GetMemoryCacheOptions().AbsoluteExpiration);
-        Console.WriteLine("option ..." + GetMemoryCacheOptions().SlidingExpiration);
-        Console.WriteLine("option ..." + GetMemoryCacheOptions());
         _memoryCache.Cache.Set(GetInMemoryKey<TProjection, TProjectionPayload>(), container, GetMemoryCacheOptions());
-        _memoryCache.Cache.Set(typeof(TProjectionPayload).Name, "TEST");
     }
 
     public MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>? Get<TProjection, TProjectionPayload>()
@@ -40,16 +35,12 @@ public class MultiProjectionCache : IMultiProjectionCache
     {
         var toReturn = _memoryCache.Cache.Get<MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>>(
             GetInMemoryKey<TProjection, TProjectionPayload>());
-        var test = _memoryCache.Cache.Get<string>(typeof(TProjectionPayload).Name);
-        Console.WriteLine("MemoryCacheTest=" + _memoryCache.Cache.Get<string>("MemoryCacheTest"));
-        Console.WriteLine(test is null ? "read null test" : "read not null test " + test);
-        Console.WriteLine(toReturn is null ? "read null" : "read not null" + toReturn.State?.Version);
         return toReturn;
     }
 
     private MemoryCacheEntryOptions GetMemoryCacheOptions()
     {
-        return new()
+        return new MemoryCacheEntryOptions
         {
             AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(_memoryCacheSettings.MultiProjectionAbsoluteExpirationMinutes),
             SlidingExpiration = TimeSpan.FromMinutes(_memoryCacheSettings.MultiProjectionSlidingExpirationMinutes)
@@ -62,7 +53,6 @@ public class MultiProjectionCache : IMultiProjectionCache
     {
         var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
         var name = "MultiProjection-" + sekibanContext?.SettingGroupIdentifier + "-" + typeof(TPayload).FullName;
-        Console.WriteLine(name);
         return name;
     }
 }
