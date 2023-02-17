@@ -39,7 +39,7 @@ public static class ServiceCollectionExtensions
         IConfiguration? configuration = null)
     {
         services.AddMemoryCache();
-
+        services.AddTransient<IMemoryCacheAccessor, MemoryCacheAccessor>();
         services.AddTransient<EventPublisher>();
 
         services.AddTransient<ICommandExecutor, CommandExecutor>();
@@ -89,6 +89,7 @@ public static class ServiceCollectionExtensions
         ISekibanDateProducer? sekibanDateProducer = null)
     {
         services.AddMemoryCache();
+        services.AddTransient<IMemoryCacheAccessor, MemoryCacheAccessor>();
 
         services.AddTransient<EventPublisher>();
 
@@ -126,7 +127,7 @@ public static class ServiceCollectionExtensions
         ISekibanDateProducer? sekibanDateProducer = null)
     {
         services.AddMemoryCache();
-
+        services.AddTransient<IMemoryCacheAccessor, MemoryCacheAccessor>();
 
         services.AddTransient<EventPublisher>();
 
