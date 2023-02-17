@@ -6,7 +6,7 @@ public class MemoryCacheAccessor : IMemoryCacheAccessor
     private static IMemoryCache? staticMemoryCache;
     public MemoryCacheAccessor(IMemoryCache memoryCache)
     {
-        Cache = staticMemoryCache is null ? staticMemoryCache = memoryCache : staticMemoryCache;
+        Cache = staticMemoryCache ??= memoryCache;
     }
     public IMemoryCache Cache
     {
