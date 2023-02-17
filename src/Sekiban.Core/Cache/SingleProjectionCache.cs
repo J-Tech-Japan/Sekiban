@@ -11,10 +11,10 @@ namespace Sekiban.Core.Cache;
 /// </summary>
 public class SingleProjectionCache : ISingleProjectionCache
 {
-    private readonly IMemoryCache _memoryCache;
+    private readonly IMemoryCacheAccessor _memoryCache;
     private readonly IMemoryCacheSettings _memoryCacheSettings;
 
-    public SingleProjectionCache(IMemoryCache memoryCache, IMemoryCacheSettings memoryCacheSettings)
+    public SingleProjectionCache(IMemoryCacheAccessor memoryCache, IMemoryCacheSettings memoryCacheSettings)
     {
         _memoryCache = memoryCache;
         _memoryCacheSettings = memoryCacheSettings;
@@ -25,7 +25,7 @@ public class SingleProjectionCache : ISingleProjectionCache
         SingleMemoryCacheProjectionContainer<TAggregate, TState> container)
         where TAggregate : IAggregateCommon, ISingleProjection where TState : IAggregateCommon
     {
-        _memoryCache.Set(
+        _memoryCache.Cache.Set(
             GetCacheKeyForSingleProjectionContainer<TAggregate>(aggregateId),
             container,
             GetMemoryCacheOptionsForSingleProjectionContainer());
@@ -34,7 +34,7 @@ public class SingleProjectionCache : ISingleProjectionCache
     public SingleMemoryCacheProjectionContainer<TAggregate, TState>? GetContainer<TAggregate, TState>(Guid aggregateId)
         where TAggregate : IAggregateCommon, ISingleProjection where TState : IAggregateCommon
     {
-        return _memoryCache.Get<SingleMemoryCacheProjectionContainer<TAggregate, TState>>(
+        return _memoryCache.Cache.Get<SingleMemoryCacheProjectionContainer<TAggregate, TState>>(
             GetCacheKeyForSingleProjectionContainer<TAggregate>(aggregateId));
     }
 

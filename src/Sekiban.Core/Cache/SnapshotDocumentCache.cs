@@ -9,9 +9,9 @@ namespace Sekiban.Core.Cache;
 /// </summary>
 public class SnapshotDocumentCache : ISnapshotDocumentCache
 {
-    private readonly IMemoryCache _memoryCache;
+    private readonly IMemoryCacheAccessor _memoryCache;
     private readonly IMemoryCacheSettings _memoryCacheSettings;
-    public SnapshotDocumentCache(IMemoryCache memoryCache, IMemoryCacheSettings memoryCacheSettings)
+    public SnapshotDocumentCache(IMemoryCacheAccessor memoryCache, IMemoryCacheSettings memoryCacheSettings)
     {
         _memoryCache = memoryCache;
         _memoryCacheSettings = memoryCacheSettings;
@@ -19,12 +19,12 @@ public class SnapshotDocumentCache : ISnapshotDocumentCache
 
     public void Set(SnapshotDocument document)
     {
-        _memoryCache.Set(GetCacheKey(document), document, GetMemoryCacheOptions());
+        _memoryCache.Cache.Set(GetCacheKey(document), document, GetMemoryCacheOptions());
     }
 
     public SnapshotDocument? Get(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType)
     {
-        return _memoryCache.Get<SnapshotDocument>(GetCacheKey(aggregateId, aggregatePayloadType, projectionPayloadType));
+        return _memoryCache.Cache.Get<SnapshotDocument>(GetCacheKey(aggregateId, aggregatePayloadType, projectionPayloadType));
     }
 
     public string GetCacheKey(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType)
@@ -36,7 +36,7 @@ public class SnapshotDocumentCache : ISnapshotDocumentCache
     {
         return new MemoryCacheEntryOptions
         {
-            AbsoluteExpiration = DateTimeOffset.UtcNow.AddHours(_memoryCacheSettings.SnapshotAbsoluteExpirationMinutes),
+            AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(_memoryCacheSettings.SnapshotAbsoluteExpirationMinutes),
             SlidingExpiration = TimeSpan.FromMinutes(_memoryCacheSettings.SnapshotSlidingExpirationMinutes)
             // If not accessed 5 minutes it will be deleted. Anyway it will be deleted after two hours
         };
