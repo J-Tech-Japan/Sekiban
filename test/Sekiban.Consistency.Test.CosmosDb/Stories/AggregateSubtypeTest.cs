@@ -6,6 +6,7 @@ using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.Shoppi
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.ShoppingCarts.Commands;
 using Microsoft.Extensions.Caching.Memory;
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Cache;
 using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Query.MultiProjections;
@@ -23,7 +24,7 @@ public class AggregateSubtypeTest : TestBase
     private readonly CosmosDbFactory _cosmosDbFactory;
     private readonly HybridStoreManager _hybridStoreManager;
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
-    private readonly IMemoryCache _memoryCache;
+    private readonly IMemoryCacheAccessor _memoryCache;
     private readonly IAggregateLoader aggregateLoader;
     private readonly Guid cartId = Guid.NewGuid();
     private readonly ICommandExecutor commandExecutor;
@@ -39,7 +40,7 @@ public class AggregateSubtypeTest : TestBase
         multiProjectionService = GetService<IMultiProjectionService>();
         _hybridStoreManager = GetService<HybridStoreManager>();
         _inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
-        _memoryCache = GetService<IMemoryCache>();
+        _memoryCache = GetService<IMemoryCacheAccessor>();
     }
 
     [Fact(DisplayName = "SubtypeのAggregateを作成する")]

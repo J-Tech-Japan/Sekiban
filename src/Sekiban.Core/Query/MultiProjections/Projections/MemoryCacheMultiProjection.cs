@@ -17,9 +17,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
     private readonly IUpdateNotice _updateNotice;
     private readonly IMultiProjectionCache multiProjectionCache;
     public MemoryCacheMultiProjection(
-        IMemoryCache memoryCache,
         IDocumentRepository documentRepository,
-        IServiceProvider serviceProvider,
         IUpdateNotice updateNotice,
         IAggregateSettings aggregateSettings,
         IMultiProjectionCache multiProjectionCache,
