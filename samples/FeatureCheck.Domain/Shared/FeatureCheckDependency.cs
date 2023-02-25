@@ -86,25 +86,25 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
             .AddCommandHandler<OldV2Command, OldV2Command.Handler>()
             .AddCommandHandler<CurrentV3Command, CurrentV3Command.Handler>();
 
-        AddParentAggregate<ICartAggregate>()
-            .AddSubAggregate<ShoppingCartI>(
+        AddAggregate<ICartAggregate>()
+            .AddSubtype<ShoppingCartI>(
                 subType =>
                     subType.AddCommandHandler<AddItemToShoppingCartI, AddItemToShoppingCartI.Handler>()
                         .AddCommandHandler<SubmitOrderI, SubmitOrderI.Handler>())
-            .AddSubAggregate<PurchasedCartI>(
+            .AddSubtype<PurchasedCartI>(
                 subType =>
                     subType.AddCommandHandler<ReceivePaymentToPurchasedCartI, ReceivePaymentToPurchasedCartI.Handler>())
-            .AddSubAggregate<ShippingCartI>(subType => { });
+            .AddSubtype<ShippingCartI>(subType => { });
 
-        AddParentAggregate<CartAggregateR>()
-            .AddSubAggregate<ShoppingCartR>(
+        AddAggregate<CartAggregateR>()
+            .AddSubtype<ShoppingCartR>(
                 subType =>
                     subType.AddCommandHandler<AddItemToShoppingCartR, AddItemToShoppingCartR.Handler>()
                         .AddCommandHandler<SubmitOrderR, SubmitOrderR.Handler>())
-            .AddSubAggregate<PurchasedCartR>(
+            .AddSubtype<PurchasedCartR>(
                 subType =>
                     subType.AddCommandHandler<ReceivePaymentToPurchasedCartR, ReceivePaymentToPurchasedCartR.Handler>())
-            .AddSubAggregate<ShippingCartR>(subType => { });
+            .AddSubtype<ShippingCartR>(subType => { });
 
         AddMultiProjectionQuery<ClientLoyaltyPointMultiProjectionQuery>();
         AddMultiProjectionListQuery<ClientLoyaltyPointQuery>();

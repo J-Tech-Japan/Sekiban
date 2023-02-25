@@ -2,11 +2,13 @@ using FeatureCheck.Domain.Aggregates.VersionCheckAggregates;
 using FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Commands;
 using FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Enums;
 using FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Projections;
+using FeatureCheck.Domain.Shared;
+using Sekiban.Testing.SingleProjections;
 using System;
 using Xunit;
 namespace FeatureCheck.Test.AggregateTests;
 
-public class VersionCheckAggregateTest : AggregateTest<VersionCheckAggregate>
+public class VersionCheckAggregateTest : AggregateTest<VersionCheckAggregate, FeatureCheckDependency>
 {
     [Fact]
     private void VersionCheckAggregate_Create()

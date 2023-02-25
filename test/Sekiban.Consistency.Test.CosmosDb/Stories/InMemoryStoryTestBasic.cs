@@ -12,8 +12,11 @@ using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Commands;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
 using FeatureCheck.Domain.Shared.Exceptions;
+using Microsoft.Extensions.Caching.Memory;
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Cache;
 using Sekiban.Core.Command;
+using Sekiban.Core.Documents;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query;
 using Sekiban.Core.Query.MultiProjections;
@@ -30,22 +33,35 @@ namespace SampleProjectStoryXTest.Stories;
 
 public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
 {
+    private readonly HybridStoreManager _hybridStoreManager;
+    private readonly InMemoryDocumentStore _inMemoryDocumentStore;
+    private readonly IMemoryCacheAccessor _memoryCacheAccessor;
     private readonly ITestOutputHelper _testOutputHelper;
     private readonly ICommandExecutor commandExecutor;
     private readonly IMultiProjectionService multiProjectionService;
     private readonly IAggregateLoader projectionService;
 
-    public InMemoryStoryTestBasic(ITestOutputHelper testOutputHelper, bool inMemory = true) : base(testOutputHelper, inMemory)
+    public InMemoryStoryTestBasic(
+        ITestOutputHelper testOutputHelper,
+        bool inMemory = true) : base(testOutputHelper, inMemory)
     {
         _testOutputHelper = testOutputHelper;
         commandExecutor = GetService<ICommandExecutor>();
         projectionService = GetService<IAggregateLoader>();
         multiProjectionService = GetService<IMultiProjectionService>();
+        _inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
+        _hybridStoreManager = GetService<HybridStoreManager>();
+        _memoryCacheAccessor = GetService<IMemoryCacheAccessor>();
     }
 
     [Fact(DisplayName = "CosmosDb ストーリーテスト インメモリで集約の機能のテストを行う")]
     public async Task CosmosDbStory()
     {
+
+        _inMemoryDocumentStore.ResetInMemoryStore();
+        _hybridStoreManager.ClearHybridPartitions();
+        ((MemoryCache)_memoryCacheAccessor.Cache).Compact(1);
+
         // create list branch
         var branchList = await multiProjectionService.GetAggregateList<Branch>();
         Assert.Empty(branchList);

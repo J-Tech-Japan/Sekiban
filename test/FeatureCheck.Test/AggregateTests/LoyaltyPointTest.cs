@@ -6,13 +6,15 @@ using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Consts;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Events;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints.ValueObjects;
+using FeatureCheck.Domain.Shared;
 using Sekiban.Core.Shared;
+using Sekiban.Testing.SingleProjections;
 using System;
 using System.Linq;
 using Xunit;
 namespace FeatureCheck.Test.AggregateTests;
 
-public class LoyaltyPointTest : AggregateTest<LoyaltyPoint>
+public class LoyaltyPointTest : AggregateTest<LoyaltyPoint, FeatureCheckDependency>
 {
     [Fact]
     public void CreateAndAddTest()

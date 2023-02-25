@@ -67,7 +67,7 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
 
     public virtual SekibanDependencyOptions GetSekibanDependencyOptions()
     {
-        return new(
+        return new SekibanDependencyOptions(
             new RegisteredEventTypes(GetAssembliesForOptions()),
             new SekibanAggregateTypes(GetAssembliesForOptions()),
             GetCommandDependencies().Concat(GetSubscriberDependencies()));
@@ -102,7 +102,7 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
     }
 
     protected AggregateDependencyDefinition<TAggregatePayload> AddAggregate<TAggregatePayload>()
-        where TAggregatePayload : IAggregatePayloadCommon
+        where TAggregatePayload : IAggregatePayload
     {
         if (AggregateDefinitions.SingleOrDefault(s => s.AggregateType == typeof(TAggregatePayload)) is
             AggregateDependencyDefinition<TAggregatePayload> existing)
@@ -111,20 +111,6 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
         }
 
         var newone = new AggregateDependencyDefinition<TAggregatePayload>();
-        AggregateDefinitions = AggregateDefinitions.Add(newone);
-        return newone;
-    }
-
-    protected ParentAggregateDependencyDefinition<TAggregatePayload> AddParentAggregate<TAggregatePayload>()
-        where TAggregatePayload : IParentAggregatePayloadCommon<TAggregatePayload>
-    {
-        if (AggregateDefinitions.SingleOrDefault(s => s.AggregateType == typeof(TAggregatePayload)) is
-            ParentAggregateDependencyDefinition<TAggregatePayload> existing)
-        {
-            return existing;
-        }
-
-        var newone = new ParentAggregateDependencyDefinition<TAggregatePayload>();
         AggregateDefinitions = AggregateDefinitions.Add(newone);
         return newone;
     }
@@ -152,6 +138,7 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
             throw new ArgumentException("Type must implement MultiProjectionListQuery", typeof(TQuery).Name);
         }
     }
+
 
     private Assembly[] GetAssembliesForOptions()
     {
