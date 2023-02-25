@@ -86,7 +86,7 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
             .AddCommandHandler<OldV2Command, OldV2Command.Handler>()
             .AddCommandHandler<CurrentV3Command, CurrentV3Command.Handler>();
 
-        AddParentAggregate<ICartAggregate>()
+        AddAggregate<ICartAggregate>()
             .AddSubAggregate<ShoppingCartI>(
                 subType =>
                     subType.AddCommandHandler<AddItemToShoppingCartI, AddItemToShoppingCartI.Handler>()
@@ -96,7 +96,7 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
                     subType.AddCommandHandler<ReceivePaymentToPurchasedCartI, ReceivePaymentToPurchasedCartI.Handler>())
             .AddSubAggregate<ShippingCartI>(subType => { });
 
-        AddParentAggregate<CartAggregateR>()
+        AddAggregate<CartAggregateR>()
             .AddSubAggregate<ShoppingCartR>(
                 subType =>
                     subType.AddCommandHandler<AddItemToShoppingCartR, AddItemToShoppingCartR.Handler>()

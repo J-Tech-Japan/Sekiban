@@ -28,7 +28,18 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
     protected ImmutableList<(Type, Type?)> SelfCommandTypes { get; set; } = ImmutableList<(Type, Type?)>.Empty;
 
     public ImmutableList<Type> AggregateSubtypes => SubAggregates.Select(m => m.GetType().GetGenericArguments().Last()).ToImmutableList();
-    public virtual ImmutableList<(Type, Type?)> CommandTypes => SelfCommandTypes;
+    public virtual ImmutableList<(Type, Type?)> CommandTypes
+    {
+        get
+        {
+            var types = SelfCommandTypes;
+            foreach (var subAggregate in SubAggregates)
+            {
+                types = types.AddRange(subAggregate.CommandTypes);
+            }
+            return types;
+        }
+    }
     public ImmutableList<(Type, Type?)> SubscriberTypes { get; private set; } = ImmutableList<(Type, Type?)>.Empty;
     public ImmutableList<Type> AggregateQueryTypes { get; private set; } = ImmutableList<Type>.Empty;
     public ImmutableList<Type> AggregateListQueryTypes { get; private set; } = ImmutableList<Type>.Empty;
@@ -122,6 +133,16 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         {
             throw new ArgumentException("Type must implement ISingleProjectionListQuery", typeof(TQuery).Name);
         }
+        return this;
+    }
+
+    public AggregateDependencyDefinition<TAggregatePayload> AddSubAggregate<TSubAggregatePayload>(
+        Action<AggregateSubtypeDependencyDefinition<TAggregatePayload, TSubAggregatePayload>> subAggregateDefinitionAction)
+        where TSubAggregatePayload : TAggregatePayload
+    {
+        var subAggregate = new AggregateSubtypeDependencyDefinition<TAggregatePayload, TSubAggregatePayload>(this);
+        SubAggregates = SubAggregates.Add(subAggregate);
+        subAggregateDefinitionAction(subAggregate);
         return this;
     }
 }
