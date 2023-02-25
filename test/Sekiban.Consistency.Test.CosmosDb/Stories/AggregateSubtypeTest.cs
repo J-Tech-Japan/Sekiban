@@ -200,6 +200,16 @@ public class AggregateSubtypeTest : TestBase
     }
 
     [Fact]
+    public async Task CanAddPaymentAfterSubmit()
+    {
+        await SecondCommandTest();
+
+        commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
+            new ReceivePaymentToPurchasedCartI
+                { CartId = cartId, Amount = 1000, Currency = "JPY", ReferenceVersion = commandResponse.Version });
+    }
+
+    [Fact]
     public async Task multiProjectionsTest()
     {
         // 先に全データを削除する
