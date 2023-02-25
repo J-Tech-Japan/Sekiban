@@ -44,16 +44,15 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             {
                 var options = new QueryRequestOptions
                 {
+                    MaxConcurrency = -1,
                     MaxItemCount = -1,
                     MaxBufferedItemCount = -1
                 };
                 var query = targetAggregateNames.Count switch
                 {
-                    0 => container.GetItemLinqQueryable<IEvent>().Where(b => b.DocumentType == DocumentType.Event),
+                    0 => container.GetItemLinqQueryable<IEvent>(),
                     _ => container.GetItemLinqQueryable<IEvent>()
-                        .Where(
-                            b => b.DocumentType == DocumentType.Event &&
-                                (targetAggregateNames.Count == 0 || targetAggregateNames.Contains(b.AggregateType)))
+                        .Where(b => targetAggregateNames.Contains(b.AggregateType))
                 };
                 if (!string.IsNullOrEmpty(sinceSortableUniqueId))
                 {
@@ -196,7 +195,12 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             async container =>
             {
                 var types = _registeredEventTypes.RegisteredTypes;
-                var options = new QueryRequestOptions();
+                var options = new QueryRequestOptions
+                {
+                    MaxConcurrency = -1,
+                    MaxItemCount = -1,
+                    MaxBufferedItemCount = -1
+                };
                 if (partitionKey is not null)
                 {
                     options.PartitionKey = new PartitionKey(partitionKey);
@@ -279,7 +283,12 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             async container =>
             {
                 var types = _registeredEventTypes.RegisteredTypes;
-                var options = new QueryRequestOptions();
+                var options = new QueryRequestOptions
+                {
+                    MaxConcurrency = -1,
+                    MaxItemCount = -1,
+                    MaxBufferedItemCount = -1
+                };
                 options.PartitionKey = new PartitionKey(
                     PartitionKeyGenerator.ForCommand(aggregateId, aggregatePayloadType.GetBaseAggregatePayloadTypeFromAggregate()));
 
@@ -321,7 +330,12 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             aggregateContainerGroup,
             async container =>
             {
-                var options = new QueryRequestOptions();
+                var options = new QueryRequestOptions
+                {
+                    MaxConcurrency = -1,
+                    MaxItemCount = -1,
+                    MaxBufferedItemCount = -1
+                };
                 var eventTypes = _registeredEventTypes.RegisteredTypes.Select(m => m.Name);
                 var query = container.GetItemLinqQueryable<IEvent>()
                     .Where(b => b.DocumentType == DocumentType.Event && b.AggregateType == aggregatePayloadType.Name);
