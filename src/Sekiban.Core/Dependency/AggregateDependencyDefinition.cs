@@ -136,7 +136,7 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         return this;
     }
 
-    public AggregateDependencyDefinition<TAggregatePayload> AddSubAggregate<TSubAggregatePayload>(
+    public AggregateDependencyDefinition<TAggregatePayload> AddSubtype<TSubAggregatePayload>(
         Action<AggregateSubtypeDependencyDefinition<TAggregatePayload, TSubAggregatePayload>> subAggregateDefinitionAction)
         where TSubAggregatePayload : TAggregatePayload
     {

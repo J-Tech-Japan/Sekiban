@@ -87,24 +87,24 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
             .AddCommandHandler<CurrentV3Command, CurrentV3Command.Handler>();
 
         AddAggregate<ICartAggregate>()
-            .AddSubAggregate<ShoppingCartI>(
+            .AddSubtype<ShoppingCartI>(
                 subType =>
                     subType.AddCommandHandler<AddItemToShoppingCartI, AddItemToShoppingCartI.Handler>()
                         .AddCommandHandler<SubmitOrderI, SubmitOrderI.Handler>())
-            .AddSubAggregate<PurchasedCartI>(
+            .AddSubtype<PurchasedCartI>(
                 subType =>
                     subType.AddCommandHandler<ReceivePaymentToPurchasedCartI, ReceivePaymentToPurchasedCartI.Handler>())
-            .AddSubAggregate<ShippingCartI>(subType => { });
+            .AddSubtype<ShippingCartI>(subType => { });
 
         AddAggregate<CartAggregateR>()
-            .AddSubAggregate<ShoppingCartR>(
+            .AddSubtype<ShoppingCartR>(
                 subType =>
                     subType.AddCommandHandler<AddItemToShoppingCartR, AddItemToShoppingCartR.Handler>()
                         .AddCommandHandler<SubmitOrderR, SubmitOrderR.Handler>())
-            .AddSubAggregate<PurchasedCartR>(
+            .AddSubtype<PurchasedCartR>(
                 subType =>
                     subType.AddCommandHandler<ReceivePaymentToPurchasedCartR, ReceivePaymentToPurchasedCartR.Handler>())
-            .AddSubAggregate<ShippingCartR>(subType => { });
+            .AddSubtype<ShippingCartR>(subType => { });
 
         AddMultiProjectionQuery<ClientLoyaltyPointMultiProjectionQuery>();
         AddMultiProjectionListQuery<ClientLoyaltyPointQuery>();
