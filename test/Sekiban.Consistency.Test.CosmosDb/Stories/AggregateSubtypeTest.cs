@@ -177,7 +177,7 @@ public class AggregateSubtypeTest : TestBase
         // Remove in memory data
         _inMemoryDocumentStore.ResetInMemoryStore();
         _hybridStoreManager.ClearHybridPartitions();
-        ((MemoryCache)_memoryCache).Compact(1);
+        ((MemoryCache)_memoryCache.Cache).Compact(1);
 
         var stateAfter = await aggregateLoader.AsDefaultStateAsync<ICartAggregate>(snapshotCartId);
         Assert.NotNull(stateAfter);
