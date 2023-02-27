@@ -9,6 +9,10 @@ public record MultiProjectionState<TProjectionPayload>(
     int Version) : IProjection where TProjectionPayload : IMultiProjectionPayloadCommon, new()
 {
     public MultiProjectionState() : this(new TProjectionPayload(), Guid.Empty, string.Empty, 0, 0) { }
+    public string GetPayloadVersionIdentifier()
+    {
+        return Payload.GetPayloadVersionIdentifier();
+    }
     public MultiProjectionState<TProjectionPayload> ApplyEvent(IEvent ev)
     {
         return this with

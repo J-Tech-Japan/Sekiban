@@ -141,9 +141,18 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         }
         return null;
     }
+    public async Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(
+        Type multiProjectionPayloadType,
+        string payloadVersionIdentifier)
+    {
+        await Task.CompletedTask;
+        return default;
+    }
 
-    public Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type aggregatePayloadType, Type projectionPayloadType, string partitionKey) =>
+    public Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type aggregatePayloadType, Type projectionPayloadType, string partitionKey)
+    {
         throw new NotImplementedException();
+    }
 
     public async Task<bool> EventsForAggregateIdHasSortableUniqueIdAsync(
         Guid aggregateId,
@@ -206,6 +215,8 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         Type aggregatePayloadType,
         Type projectionPayloadType,
         int version,
-        string payloadVersionIdentifier) =>
-        Task.FromResult(false);
+        string payloadVersionIdentifier)
+    {
+        return Task.FromResult(false);
+    }
 }

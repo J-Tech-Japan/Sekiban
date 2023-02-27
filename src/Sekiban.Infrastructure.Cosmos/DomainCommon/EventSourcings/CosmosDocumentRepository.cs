@@ -135,6 +135,40 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 return null;
             });
     }
+    public async Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(
+        Type multiProjectionPayloadType,
+        string payloadVersionIdentifier)
+    {
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionPayloadType);
+        return await _cosmosDbFactory.CosmosActionAsync(
+            DocumentType.AggregateSnapshot,
+            aggregateContainerGroup,
+            async container =>
+            {
+                var options = new QueryRequestOptions
+                {
+                    PartitionKey =
+                        new PartitionKey(PartitionKeyGenerator.ForMultiProjectionSnapshot(multiProjectionPayloadType)),
+                    MaxItemCount = 1
+                };
+                var query = container.GetItemLinqQueryable<MultiProjectionSnapshotDocument>()
+                    .Where(
+                        b => b.DocumentType == DocumentType.AggregateSnapshot &&
+                            b.DocumentTypeName == multiProjectionPayloadType.Name &&
+                            b.PayloadVersionIdentifier == payloadVersionIdentifier)
+                    .OrderByDescending(m => m.LastSortableUniqueId);
+                var feedIterator =
+                    container.GetItemQueryIterator<MultiProjectionSnapshotDocument>(query.ToQueryDefinition(), null, options);
+                while (feedIterator.HasMoreResults)
+                {
+                    foreach (var obj in await feedIterator.ReadNextAsync())
+                    {
+                        return obj;
+                    }
+                }
+                return null;
+            });
+    }
 
     public async Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type aggregatePayloadType, Type projectionPayloadType, string partitionKey)
     {

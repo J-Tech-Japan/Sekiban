@@ -1,7 +1,7 @@
 using Sekiban.Core.Events;
 namespace Sekiban.Core.Query.MultiProjections;
 
-public interface IMultiProjector<TProjectionPayload> : IProjection where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+public interface IMultiProjector<TProjectionPayload> : IMultiProjectionCommon where TProjectionPayload : IMultiProjectionPayloadCommon, new()
 {
     public bool EventShouldBeApplied(IEvent ev);
     void ApplyEvent(IEvent ev);
