@@ -46,7 +46,7 @@ jobs:
         dotnet build Sekiban.sln
     - name: Test dotnet
       run: |
-        dotnet test Sekiban.sln  --filter "Category!=Flaky&Category!=Performance"
+        dotnet test Sekiban.sln  --filter "Category!=Flaky&Category!=Performance" -v d
     - uses: mktcode/consecutive-workflow-action@v1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
