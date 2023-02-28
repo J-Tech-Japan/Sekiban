@@ -6,4 +6,7 @@ public interface IMultiProjectionSnapshotGenerator
         int minimumNumberOfEventsToGenerateSnapshot)
         where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon, new();
+
+    Task<MultiProjectionState<TProjectionPayload>> GetCurrentStateAsync<TProjectionPayload>()
+        where TProjectionPayload : IMultiProjectionPayloadCommon, new();
 }

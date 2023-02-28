@@ -1,6 +1,8 @@
 using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using System.IO.Compression;
 namespace Sekiban.Core.Setting;
 
 public class BlobAccessor : IBlobAccessor
@@ -29,16 +31,16 @@ public class BlobAccessor : IBlobAccessor
             return section;
         }
     }
-    public async Task<Stream?> GetBlobAsync(SekibanBlobContainer container, Guid blobName)
+    public async Task<Stream?> GetBlobAsync(SekibanBlobContainer container, string blobName)
     {
-        var containerClient = GetContainer(container.ToString());
-        var blobClient = containerClient.GetBlobClient(blobName.ToString());
+        var containerClient = await GetContainerAsync(container.ToString());
+        var blobClient = containerClient.GetBlobClient(blobName);
         return blobClient is null ? null : await blobClient.OpenReadAsync();
     }
-    public async Task<bool> SetBlobAsync(SekibanBlobContainer container, Guid blobName, Stream blob)
+    public async Task<bool> SetBlobAsync(SekibanBlobContainer container, string blobName, Stream blob)
     {
-        var containerClient = GetContainer(container.ToString());
-        var blobClient = containerClient.GetBlobClient(blobName.ToString());
+        var containerClient = await GetContainerAsync(container.ToString());
+        var blobClient = containerClient.GetBlobClient(blobName);
         if (blobClient is null)
         {
             return false;
@@ -46,12 +48,51 @@ public class BlobAccessor : IBlobAccessor
         await blobClient.UploadAsync(blob);
         return true;
     }
-    private string BlobConnectionString()
+    public async Task<Stream?> GetBlobWithGZipAsync(SekibanBlobContainer container, string blobName)
     {
-        return _section?.GetValue<string>("BlobConnectionString") ?? throw new Exception("BlobConnectionString not found");
+        var containerClient = await GetContainerAsync(container.ToString());
+        var blobClient = containerClient.GetBlobClient(blobName);
+        if (blobClient is null)
+        {
+            return null;
+        }
+        var uncompressedStream = new MemoryStream();
+        var gzipStream = new GZipStream(await blobClient.OpenReadAsync(), CompressionMode.Decompress);
+        await gzipStream.CopyToAsync(uncompressedStream);
+        uncompressedStream.Position = 0;
+        return uncompressedStream;
     }
-    private BlobContainerClient GetContainer(string containerName)
+    public async Task<bool> SetBlobWithGZipAsync(SekibanBlobContainer container, string blobName, Stream blob)
     {
-        return new BlobContainerClient(BlobConnectionString(), containerName.ToLower());
+        var containerClient = await GetContainerAsync(container.ToString());
+        var blobClient = containerClient.GetBlobClient(blobName);
+        if (blobClient is null)
+        {
+            return false;
+        }
+        var compressedStream = new MemoryStream();
+        await using var gzipStream = new GZipStream(compressedStream, CompressionMode.Compress);
+        await blob.CopyToAsync(gzipStream);
+        gzipStream.Flush();
+        compressedStream.Position = 0;
+        await blobClient.UploadAsync(
+            compressedStream,
+            new BlobUploadOptions
+            {
+                HttpHeaders = new BlobHttpHeaders
+                {
+                    ContentType = "application/gzip"
+                }
+            });
+        return true;
+    }
+
+    private string BlobConnectionString() =>
+        _section?.GetValue<string>("BlobConnectionString") ?? throw new Exception("BlobConnectionString not found");
+    private async Task<BlobContainerClient> GetContainerAsync(string containerName)
+    {
+        var client = new BlobContainerClient(BlobConnectionString(), containerName.ToLower());
+        await client.CreateIfNotExistsAsync();
+        return client;
     }
 }

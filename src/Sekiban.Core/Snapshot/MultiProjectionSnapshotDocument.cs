@@ -31,14 +31,10 @@ public record MultiProjectionSnapshotDocument : IDocument
     public string PayloadVersionIdentifier { get; init; } = string.Empty;
     [JsonPropertyName("id")]
     public Guid Id { get; init; } = Guid.NewGuid();
-    public Guid AggregateId { get; init; }
     public string PartitionKey { get; init; } = default!;
     public DocumentType DocumentType { get; init; }
     public string DocumentTypeName { get; init; } = default!;
     public DateTime TimeStamp { get; init; }
     public string SortableUniqueId { get; init; } = default!;
-    public SortableUniqueIdValue GetSortableUniqueId()
-    {
-        return SortableUniqueId;
-    }
+    public SortableUniqueIdValue GetSortableUniqueId() => SortableUniqueId;
 }

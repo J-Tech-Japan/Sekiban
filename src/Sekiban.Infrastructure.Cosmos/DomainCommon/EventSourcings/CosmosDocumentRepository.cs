@@ -141,7 +141,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionPayloadType);
         return await _cosmosDbFactory.CosmosActionAsync(
-            DocumentType.AggregateSnapshot,
+            DocumentType.MultiProjectionSnapshot,
             aggregateContainerGroup,
             async container =>
             {
@@ -153,7 +153,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 };
                 var query = container.GetItemLinqQueryable<MultiProjectionSnapshotDocument>()
                     .Where(
-                        b => b.DocumentType == DocumentType.AggregateSnapshot &&
+                        b => b.DocumentType == DocumentType.MultiProjectionSnapshot &&
                             b.DocumentTypeName == multiProjectionPayloadType.Name &&
                             b.PayloadVersionIdentifier == payloadVersionIdentifier)
                     .OrderByDescending(m => m.LastSortableUniqueId);
@@ -326,7 +326,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 options.PartitionKey = new PartitionKey(
                     PartitionKeyGenerator.ForCommand(aggregateId, aggregatePayloadType.GetBaseAggregatePayloadTypeFromAggregate()));
 
-                var query = container.GetItemLinqQueryable<IDocument>()
+                var query = container.GetItemLinqQueryable<IAggregateDocument>()
                     .Where(b => b.DocumentType == DocumentType.Command && b.AggregateId == aggregateId);
                 query = sinceSortableUniqueId is not null
                     ? query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0)
