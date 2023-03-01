@@ -41,6 +41,10 @@ public interface IDocumentRepository
         Type projectionPayloadType,
         string payloadVersionIdentifier);
 
+    Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(
+        Type multiProjectionPayloadType,
+        string payloadVersionIdentifier);
+
     Task<bool> ExistsSnapshotForAggregateAsync(
         Guid aggregateId,
         Type aggregatePayloadType,

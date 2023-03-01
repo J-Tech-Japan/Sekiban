@@ -135,6 +135,40 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 return null;
             });
     }
+    public async Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(
+        Type multiProjectionPayloadType,
+        string payloadVersionIdentifier)
+    {
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionPayloadType);
+        return await _cosmosDbFactory.CosmosActionAsync(
+            DocumentType.MultiProjectionSnapshot,
+            aggregateContainerGroup,
+            async container =>
+            {
+                var options = new QueryRequestOptions
+                {
+                    PartitionKey =
+                        new PartitionKey(PartitionKeyGenerator.ForMultiProjectionSnapshot(multiProjectionPayloadType)),
+                    MaxItemCount = 1
+                };
+                var query = container.GetItemLinqQueryable<MultiProjectionSnapshotDocument>()
+                    .Where(
+                        b => b.DocumentType == DocumentType.MultiProjectionSnapshot &&
+                            b.DocumentTypeName == multiProjectionPayloadType.Name &&
+                            b.PayloadVersionIdentifier == payloadVersionIdentifier)
+                    .OrderByDescending(m => m.LastSortableUniqueId);
+                var feedIterator =
+                    container.GetItemQueryIterator<MultiProjectionSnapshotDocument>(query.ToQueryDefinition(), null, options);
+                while (feedIterator.HasMoreResults)
+                {
+                    foreach (var obj in await feedIterator.ReadNextAsync())
+                    {
+                        return obj;
+                    }
+                }
+                return null;
+            });
+    }
 
     public async Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type aggregatePayloadType, Type projectionPayloadType, string partitionKey)
     {
@@ -292,7 +326,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 options.PartitionKey = new PartitionKey(
                     PartitionKeyGenerator.ForCommand(aggregateId, aggregatePayloadType.GetBaseAggregatePayloadTypeFromAggregate()));
 
-                var query = container.GetItemLinqQueryable<IDocument>()
+                var query = container.GetItemLinqQueryable<IAggregateDocument>()
                     .Where(b => b.DocumentType == DocumentType.Command && b.AggregateId == aggregateId);
                 query = sinceSortableUniqueId is not null
                     ? query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0)

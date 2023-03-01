@@ -43,4 +43,8 @@ public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPa
             throw new SekibanMultiProjectionMustInheritISingleProjectionEventApplicable();
         return projectionPayload.GetTargetAggregatePayloads().GetAggregateNames();
     }
+    public string GetPayloadVersionIdentifier()
+    {
+        return Payload.GetPayloadVersionIdentifier();
+    }
 }

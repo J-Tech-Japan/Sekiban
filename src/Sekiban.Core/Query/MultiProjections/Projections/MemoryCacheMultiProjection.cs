@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Caching.Memory;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.ValueObjects;
@@ -16,20 +15,21 @@ public class MemoryCacheMultiProjection : IMultiProjection
     private readonly RegisteredEventTypes _registeredEventTypes;
     private readonly IUpdateNotice _updateNotice;
     private readonly IMultiProjectionCache multiProjectionCache;
+    private readonly IMultiProjectionSnapshotGenerator multiProjectionSnapshotGenerator;
     public MemoryCacheMultiProjection(
-        IMemoryCache memoryCache,
         IDocumentRepository documentRepository,
-        IServiceProvider serviceProvider,
         IUpdateNotice updateNotice,
         IAggregateSettings aggregateSettings,
         IMultiProjectionCache multiProjectionCache,
-        RegisteredEventTypes registeredEventTypes)
+        RegisteredEventTypes registeredEventTypes,
+        IMultiProjectionSnapshotGenerator multiProjectionSnapshotGenerator)
     {
         _documentRepository = documentRepository;
         _updateNotice = updateNotice;
         _aggregateSettings = aggregateSettings;
         this.multiProjectionCache = multiProjectionCache;
         _registeredEventTypes = registeredEventTypes;
+        this.multiProjectionSnapshotGenerator = multiProjectionSnapshotGenerator;
     }
 
     public async Task<MultiProjectionState<TProjectionPayload>>
@@ -37,7 +37,9 @@ public class MemoryCacheMultiProjection : IMultiProjection
         where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
-        var savedContainer = multiProjectionCache.Get<TProjection, TProjectionPayload>();
+        var savedContainerCache = multiProjectionCache.Get<TProjection, TProjectionPayload>();
+        var savedContainerBlob = savedContainerCache != null ? null : await GetContainerFromSnapshot<TProjection, TProjectionPayload>();
+        var savedContainer = savedContainerCache ?? savedContainerBlob;
         if (savedContainer == null)
         {
             return await GetInitialProjection<TProjection, TProjectionPayload>();
@@ -57,29 +59,34 @@ public class MemoryCacheMultiProjection : IMultiProjection
         projector.ApplySnapshot(savedContainer.SafeState!);
 
         bool? canUseCache = null;
-        foreach (var targetAggregateName in projector.TargetAggregateNames())
+        if (savedContainerCache != null)
         {
-            if (canUseCache == false)
+            foreach (var targetAggregateName in projector.TargetAggregateNames())
             {
-                continue;
-            }
-            if (!_aggregateSettings.UseUpdateMarkerForType(targetAggregateName))
-            {
-                canUseCache = false;
-                continue;
+                if (canUseCache == false)
+                {
+                    continue;
+                }
+                if (!_aggregateSettings.UseUpdateMarkerForType(targetAggregateName))
+                {
+                    canUseCache = false;
+                    continue;
+                }
+
+                var (updated, type) =
+                    _updateNotice.HasUpdateAfter(targetAggregateName, savedContainer.SafeSortableUniqueId!);
+                canUseCache = !updated;
             }
 
-            var (updated, type) =
-                _updateNotice.HasUpdateAfter(targetAggregateName, savedContainer.SafeSortableUniqueId!);
-            canUseCache = !updated;
-        }
-
-        if (canUseCache == true)
-        {
-            return savedContainer.State!;
+            if (canUseCache == true)
+            {
+                return savedContainer.State!;
+            }
         }
 
         var container = new MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>();
+
+
         try
         {
             await _documentRepository.GetAllEventsAsync(
@@ -215,6 +222,27 @@ public class MemoryCacheMultiProjection : IMultiProjection
             multiProjectionCache.Set(container);
         }
         return multiProjectionState;
+    }
+
+    private async Task<MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>?>
+        GetContainerFromSnapshot<TProjection, TProjectionPayload>()
+        where TProjection : IMultiProjector<TProjectionPayload>, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+    {
+        var state = await multiProjectionSnapshotGenerator.GetCurrentStateAsync<TProjectionPayload>();
+        if (state.Version == 0)
+        {
+            return null;
+        }
+        var container = new MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>();
+        container = container with
+        {
+            SafeState = state,
+            State = state,
+            SafeSortableUniqueId = string.IsNullOrEmpty(state.LastSortableUniqueId) ? null : new SortableUniqueIdValue(state.LastSortableUniqueId),
+            LastSortableUniqueId = string.IsNullOrEmpty(state.LastSortableUniqueId) ? null : new SortableUniqueIdValue(state.LastSortableUniqueId)
+        };
+        return container;
     }
 
     private async Task<MultiProjectionState<TProjectionPayload>> GetInitialProjection<TProjection, TProjectionPayload>()

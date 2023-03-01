@@ -15,6 +15,7 @@ using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
 using FeatureCheck.Domain.Shared.Exceptions;
 using Microsoft.Extensions.Caching.Memory;
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Cache;
 using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Exceptions;
@@ -39,7 +40,7 @@ public class CustomerDbStoryBasic : TestBase
     private readonly IDocumentPersistentRepository _documentPersistentRepository;
     private readonly HybridStoreManager _hybridStoreManager;
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
-    private readonly IMemoryCache _memoryCache;
+    private readonly IMemoryCacheAccessor _memoryCache;
     private readonly ITestOutputHelper _testOutputHelper;
     private readonly ICommandExecutor commandExecutor;
     private readonly IMultiProjectionService multiProjectionService;
@@ -57,7 +58,7 @@ public class CustomerDbStoryBasic : TestBase
         multiProjectionService = GetService<IMultiProjectionService>();
         _inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
         _hybridStoreManager = GetService<HybridStoreManager>();
-        _memoryCache = GetService<IMemoryCache>();
+        _memoryCache = GetService<IMemoryCacheAccessor>();
     }
 
     [Fact(DisplayName = "CosmosDb ストーリーテスト 集約の機能のテストではなく、CosmosDbと連携して正しく動くかをテストしています。")]
@@ -405,7 +406,7 @@ public class CustomerDbStoryBasic : TestBase
 
         _inMemoryDocumentStore.ResetInMemoryStore();
         _hybridStoreManager.ClearHybridPartitions();
-        ((MemoryCache)_memoryCache).Compact(1);
+        ((MemoryCache)_memoryCache.Cache).Compact(1);
         await ContinuousExecutionTestAsync();
     }
 

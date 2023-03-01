@@ -82,4 +82,8 @@ public class
     public string LastSortableUniqueId { get; private set; } = string.Empty;
     public int AppliedSnapshotVersion { get; private set; }
     public int Version { get; private set; }
+    public string GetPayloadVersionIdentifier()
+    {
+        return _projector.GetPayloadVersionIdentifier();
+    }
 }

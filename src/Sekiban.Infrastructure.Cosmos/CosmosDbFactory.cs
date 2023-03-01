@@ -3,6 +3,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Cache;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Events;
 using Sekiban.Core.Setting;
@@ -14,13 +15,13 @@ public class CosmosDbFactory
 {
     private const string SekibanSection = "Sekiban";
     private readonly IConfiguration _configuration;
-    private readonly IMemoryCache _memoryCache;
+    private readonly IMemoryCacheAccessor _memoryCache;
     private readonly string _sekibanContextIdentifier;
     private readonly IServiceProvider _serviceProvider;
 
     public CosmosDbFactory(
         IConfiguration configuration,
-        IMemoryCache memoryCache,
+        IMemoryCacheAccessor memoryCache,
         ISekibanContext sekibanContext,
         IServiceProvider serviceProvider)
     {
@@ -116,7 +117,7 @@ public class CosmosDbFactory
         var databaseId = GetDatabaseId(documentType);
         var containerId = GetContainerId(documentType, containerGroup);
         var container =
-            (Container?)_memoryCache.Get(
+            (Container?)_memoryCache.Cache.Get(
                 GetMemoryCacheContainerKey(
                     documentType,
                     databaseId,
@@ -139,22 +140,22 @@ public class CosmosDbFactory
             MaxRetryAttemptsOnRateLimitedRequests = 150,
             MaxTcpConnectionsPerEndpoint = 50
         };
-        var client = _memoryCache.Get<CosmosClient?>(GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier));
+        var client = _memoryCache.Cache.Get<CosmosClient?>(GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier));
         if (client is null)
         {
             client = new CosmosClient(uri, securityKey, options);
-            _memoryCache.Set(
+            _memoryCache.Cache.Set(
                 GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier),
                 client,
                 new MemoryCacheEntryOptions());
         }
 
         var database =
-            _memoryCache.Get<Database?>(GetMemoryCacheDatabaseKey(documentType, databaseId, _sekibanContextIdentifier));
+            _memoryCache.Cache.Get<Database?>(GetMemoryCacheDatabaseKey(documentType, databaseId, _sekibanContextIdentifier));
         if (database is null)
         {
             database = await client.CreateDatabaseIfNotExistsAsync(databaseId);
-            _memoryCache.Set(
+            _memoryCache.Cache.Set(
                 GetMemoryCacheDatabaseKey(documentType, databaseId, _sekibanContextIdentifier),
                 database,
                 new MemoryCacheEntryOptions());
@@ -162,7 +163,7 @@ public class CosmosDbFactory
 
         var containerProperties = new ContainerProperties(containerId, "/PartitionKey");
         container = await database.CreateContainerIfNotExistsAsync(containerProperties, 400);
-        _memoryCache.Set(
+        _memoryCache.Cache.Set(
             GetMemoryCacheContainerKey(documentType, databaseId, containerId, _sekibanContextIdentifier),
             container,
             new MemoryCacheEntryOptions());
@@ -239,9 +240,9 @@ public class CosmosDbFactory
         var databaseId = GetDatabaseId(documentType);
         // ネットワークエラーの可能性があるので、コンテナを初期化する
         // これによって次回回復したら再接続できる
-        _memoryCache.Remove(GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier));
-        _memoryCache.Remove(GetMemoryCacheDatabaseKey(documentType, databaseId, _sekibanContextIdentifier));
-        _memoryCache.Remove(
+        _memoryCache.Cache.Remove(GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier));
+        _memoryCache.Cache.Remove(GetMemoryCacheDatabaseKey(documentType, databaseId, _sekibanContextIdentifier));
+        _memoryCache.Cache.Remove(
             GetMemoryCacheContainerKey(documentType, databaseId, containerId, _sekibanContextIdentifier));
     }
 

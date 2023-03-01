@@ -222,6 +222,24 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 projectionPayloadType,
                 payloadVersionIdentifier);
     }
+    public async Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(
+        Type multiProjectionPayloadType,
+        string payloadVersionIdentifier)
+    {
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionPayloadType);
+        if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
+        {
+            return await _documentTemporaryRepository.GetLatestSnapshotForMultiProjectionAsync(
+                multiProjectionPayloadType,
+                payloadVersionIdentifier);
+        }
+        return await _documentTemporaryRepository.GetLatestSnapshotForMultiProjectionAsync(
+                multiProjectionPayloadType,
+                payloadVersionIdentifier) ??
+            await _documentPersistentRepository.GetLatestSnapshotForMultiProjectionAsync(
+                multiProjectionPayloadType,
+                payloadVersionIdentifier);
+    }
 
     public Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type aggregatePayloadType, Type projectionPayloadType, string partitionKey)
     {

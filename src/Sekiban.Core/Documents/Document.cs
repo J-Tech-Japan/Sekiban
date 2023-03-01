@@ -2,7 +2,7 @@ using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Shared;
 namespace Sekiban.Core.Documents;
 
-public abstract record Document : IDocument
+public abstract record Document : IAggregateDocument
 {
     public Document() { }
 
