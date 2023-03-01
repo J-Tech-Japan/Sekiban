@@ -49,7 +49,7 @@ public class MultiProjectionSnapshotGenerator : IMultiProjectionSnapshotGenerato
         {
             state = projector.ToState();
             var json = JsonSerializer.Serialize(state, new JsonSerializerOptions());
-            var memoryStream = new MemoryStream(Encoding.UTF8.GetBytes(json + "\n"));
+            var memoryStream = new MemoryStream(Encoding.UTF8.GetBytes(json));
             var blobId = Guid.NewGuid();
             await _blobAccessor.SetBlobWithGZipAsync(
                 SekibanBlobContainer.MultiProjectionState,

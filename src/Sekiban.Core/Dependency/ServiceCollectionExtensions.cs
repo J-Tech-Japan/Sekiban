@@ -163,6 +163,10 @@ public static class ServiceCollectionExtensions
         services.AddTransient<ISingleProjectionCache, SingleProjectionCache>();
         services.AddTransient<IMultiProjectionCache, MultiProjectionCache>();
         services.AddTransient<ISnapshotDocumentCache, SnapshotDocumentCache>();
+
+        services.AddTransient<IMultiProjectionSnapshotGenerator, MultiProjectionSnapshotGenerator>();
+        services.AddTransient<IBlobAccessor, NothingBlobAccessor>();
+
         return services;
     }
 

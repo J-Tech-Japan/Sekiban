@@ -81,7 +81,7 @@ public class BlobAccessor : IBlobAccessor
             {
                 HttpHeaders = new BlobHttpHeaders
                 {
-                    ContentType = "application/gzip"
+                    ContentType = "application/x-gzip"
                 }
             });
         return true;
