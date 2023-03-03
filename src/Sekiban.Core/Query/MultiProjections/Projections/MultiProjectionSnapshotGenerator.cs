@@ -58,7 +58,7 @@ public class MultiProjectionSnapshotGenerator : IMultiProjectionSnapshotGenerato
             var snapshotDocument = new MultiProjectionSnapshotDocument(typeof(TProjectionPayload), blobId, projector);
             await _documentWriter.SaveAsync(snapshotDocument, typeof(TProjectionPayload));
         }
-        return state;
+        return projector.ToState();
     }
 
     public async Task<MultiProjectionState<TProjectionPayload>> GetCurrentStateAsync<TProjectionPayload>()
