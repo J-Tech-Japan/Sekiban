@@ -39,6 +39,12 @@ public class MemoryCacheMultiProjection : IMultiProjection
     {
         var savedContainerCache = multiProjectionCache.Get<TProjection, TProjectionPayload>();
         var savedContainerBlob = savedContainerCache != null ? null : await GetContainerFromSnapshot<TProjection, TProjectionPayload>();
+
+        if (savedContainerBlob is not null && savedContainerCache is null)
+        {
+            multiProjectionCache.Set(savedContainerBlob);
+        }
+
         var savedContainer = savedContainerCache ?? savedContainerBlob;
         if (savedContainer == null)
         {
