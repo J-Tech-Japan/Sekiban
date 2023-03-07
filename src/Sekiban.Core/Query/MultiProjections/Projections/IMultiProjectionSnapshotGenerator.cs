@@ -1,3 +1,5 @@
+using Sekiban.Core.Aggregate;
+using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Query.MultiProjections.Projections;
 
 public interface IMultiProjectionSnapshotGenerator
@@ -6,6 +8,35 @@ public interface IMultiProjectionSnapshotGenerator
         int minimumNumberOfEventsToGenerateSnapshot)
         where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon, new();
+
+    Task<MultiProjectionState<TProjectionPayload>> GenerateMultiProjectionSnapshotAsync<TProjectionPayload>(
+        int minimumNumberOfEventsToGenerateSnapshot)
+        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+    {
+        return GenerateMultiProjectionSnapshotAsync<MultiProjection<TProjectionPayload>, TProjectionPayload>(minimumNumberOfEventsToGenerateSnapshot);
+    }
+
+    Task<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>> GenerateAggregateListSnapshotAsync<TAggregatePayload>(
+        int minimumNumberOfEventsToGenerateSnapshot)
+        where TAggregatePayload : IAggregatePayloadCommon, new()
+    {
+        return GenerateMultiProjectionSnapshotAsync<SingleProjectionListProjector<Aggregate<TAggregatePayload>,
+                AggregateState<TAggregatePayload>,
+                DefaultSingleProjector<TAggregatePayload>>
+            , SingleProjectionListState<AggregateState<TAggregatePayload>>>(minimumNumberOfEventsToGenerateSnapshot);
+    }
+
+    Task<MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>> GenerateSingleProjectionListSnapshotAsync<
+        TSingleProjectionPayload>(
+        int minimumNumberOfEventsToGenerateSnapshot)
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
+    {
+        return GenerateMultiProjectionSnapshotAsync<SingleProjectionListProjector<SingleProjection<TSingleProjectionPayload>,
+                SingleProjectionState<TSingleProjectionPayload>,
+                SingleProjection<TSingleProjectionPayload>>,
+            SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>(minimumNumberOfEventsToGenerateSnapshot);
+    }
+
 
     Task<MultiProjectionState<TProjectionPayload>> GetCurrentStateAsync<TProjectionPayload>()
         where TProjectionPayload : IMultiProjectionPayloadCommon, new();
