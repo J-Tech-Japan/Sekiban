@@ -1,4 +1,5 @@
-﻿namespace Sekiban.Core.Partition;
+﻿using Sekiban.Core.Types;
+namespace Sekiban.Core.Partition;
 
 public static class PartitionKeyGenerator
 {
@@ -20,6 +21,10 @@ public static class PartitionKeyGenerator
 
     public static string ForMultiProjectionSnapshot(Type projectionType)
     {
+        if (projectionType.IsSingleProjectionListStateType())
+        {
+            return $"m_list_{projectionType.GetAggregatePayloadOrSingleProjectionPayloadTypeFromSingleProjectionListStateType().Name}";
+        }
         return $"m_{projectionType.Name}";
     }
 }

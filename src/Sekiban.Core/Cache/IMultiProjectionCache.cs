@@ -1,5 +1,7 @@
+using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.MultiProjections.Projections;
+using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Cache;
 
 /// <summary>
@@ -17,4 +19,29 @@ public interface IMultiProjectionCache
     public MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>? Get<TProjection, TProjectionPayload>()
         where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon, new();
+
+
+    public MultipleMemoryProjectionContainer<SingleProjectionListProjector<Aggregate<TAggregatePayload>,
+            AggregateState<TAggregatePayload>,
+            DefaultSingleProjector<TAggregatePayload>>
+        , SingleProjectionListState<AggregateState<TAggregatePayload>>>? GetAggregateList<TAggregatePayload>()
+        where TAggregatePayload : IAggregatePayloadCommon, new()
+    {
+        return Get<SingleProjectionListProjector<Aggregate<TAggregatePayload>,
+                AggregateState<TAggregatePayload>,
+                DefaultSingleProjector<TAggregatePayload>>
+            , SingleProjectionListState<AggregateState<TAggregatePayload>>>();
+    }
+
+    public MultipleMemoryProjectionContainer<SingleProjectionListProjector<SingleProjection<TSingleProjectionPayload>,
+            SingleProjectionState<TSingleProjectionPayload>,
+            SingleProjection<TSingleProjectionPayload>>,
+        SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>? GetSingleProjectionList<TSingleProjectionPayload>()
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
+    {
+        return Get<SingleProjectionListProjector<SingleProjection<TSingleProjectionPayload>,
+                SingleProjectionState<TSingleProjectionPayload>,
+                SingleProjection<TSingleProjectionPayload>>,
+            SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>();
+    }
 }
