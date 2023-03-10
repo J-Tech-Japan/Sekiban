@@ -2,6 +2,7 @@ using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Snapshot;
+using Sekiban.Core.Types;
 using System.Text;
 namespace Sekiban.Core.Query.MultiProjections.Projections;
 
@@ -91,5 +92,8 @@ public class MultiProjectionSnapshotGenerator : IMultiProjectionSnapshotGenerato
     }
 
     public string FilenameForSnapshot(Type projectionPayload, Guid id, SortableUniqueIdValue sortableUniqueId) =>
-        $"{projectionPayload.Name}_{sortableUniqueId.GetTicks().Ticks:00000000000000000000}_{id}.json.gz";
+        $"{ProjectionName(projectionPayload)}_{sortableUniqueId.GetTicks().Ticks:00000000000000000000}_{id}.json.gz";
+
+    private string ProjectionName(Type projectionType) => projectionType.IsSingleProjectionListStateType() ?
+        $"list_{projectionType.GetAggregatePayloadOrSingleProjectionPayloadTypeFromSingleProjectionListStateType().Name}" : projectionType.Name;
 }
