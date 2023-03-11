@@ -2,9 +2,12 @@ using Microsoft.DotNet.PlatformAbstractions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Dependency;
+using Sekiban.Core.Snapshot.BackgroundServices;
 using Sekiban.Testing.Story;
 using System;
 using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
 namespace SampleProjectStoryXTest;
@@ -26,6 +29,9 @@ public class TestBase : IClassFixture<TestBase.SekibanTestFixture>, IDisposable
         _sekibanTestFixture = sekibanTestFixture;
         _serviceProvider =
             DependencyHelper.CreateDefaultProvider(sekibanTestFixture, inMemory, null, multiProjectionType);
+        var backgroundService = _serviceProvider.GetRequiredService<SnapshotTakingBackgroundService>();
+        backgroundService.ServiceProvider = _serviceProvider;
+        Task.Run(() => backgroundService.StartAsync(CancellationToken.None));
     }
 
     public void Dispose()

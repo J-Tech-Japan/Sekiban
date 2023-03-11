@@ -14,6 +14,7 @@ using Sekiban.Core.Query.SingleProjections.Projections;
 using Sekiban.Core.Query.UpdateNotice;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
+using Sekiban.Core.Snapshot.BackgroundServices;
 using ISingleProjection = Sekiban.Core.Query.SingleProjections.Projections.ISingleProjection;
 namespace Sekiban.Core.Dependency;
 
@@ -84,6 +85,15 @@ public static class ServiceCollectionExtensions
 
         services.AddTransient<IMultiProjectionSnapshotGenerator, MultiProjectionSnapshotGenerator>();
         services.AddTransient<IBlobAccessor, BlobAccessor>();
+        services.AddSingleton(new SnapshotTakingBackgroundService());
+        services.AddHostedService(
+            serviceProvider =>
+            {
+                var snapshotTakingBackgroundService = serviceProvider.GetRequiredService<SnapshotTakingBackgroundService>();
+                snapshotTakingBackgroundService.ServiceProvider = serviceProvider;
+                return snapshotTakingBackgroundService;
+            });
+        services.AddTransient<SnapshotGenerator>();
         return services;
     }
 
@@ -125,6 +135,15 @@ public static class ServiceCollectionExtensions
 
         services.AddTransient<IMultiProjectionSnapshotGenerator, MultiProjectionSnapshotGenerator>();
         services.AddTransient<IBlobAccessor, BlobAccessor>();
+        services.AddSingleton(new SnapshotTakingBackgroundService());
+        services.AddHostedService(
+            serviceProvider =>
+            {
+                var snapshotTakingBackgroundService = serviceProvider.GetRequiredService<SnapshotTakingBackgroundService>();
+                snapshotTakingBackgroundService.ServiceProvider = serviceProvider;
+                return snapshotTakingBackgroundService;
+            });
+        services.AddTransient<SnapshotGenerator>();
         return services;
     }
 
@@ -166,7 +185,15 @@ public static class ServiceCollectionExtensions
 
         services.AddTransient<IMultiProjectionSnapshotGenerator, MultiProjectionSnapshotGenerator>();
         services.AddTransient<IBlobAccessor, NothingBlobAccessor>();
-
+        services.AddSingleton(new SnapshotTakingBackgroundService());
+        services.AddHostedService(
+            serviceProvider =>
+            {
+                var snapshotTakingBackgroundService = serviceProvider.GetRequiredService<SnapshotTakingBackgroundService>();
+                snapshotTakingBackgroundService.ServiceProvider = serviceProvider;
+                return snapshotTakingBackgroundService;
+            });
+        services.AddTransient<SnapshotGenerator>();
         return services;
     }
 
