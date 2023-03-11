@@ -286,15 +286,22 @@ public class CustomerDbStoryBasic : TestBase
         var snapshotManager
             = await projectionService.AsDefaultStateFromInitialAsync<SnapshotManager>(
                 SnapshotManager.SharedId);
-        _testOutputHelper.WriteLine("-requests-");
-        foreach (var key in snapshotManager!.Payload.Requests)
+        if (snapshotManager is null)
         {
-            _testOutputHelper.WriteLine(key);
+            _testOutputHelper.WriteLine("snapshot manager is null");
         }
-        _testOutputHelper.WriteLine("-request takens-");
-        foreach (var key in snapshotManager!.Payload.RequestTakens)
+        else
         {
-            _testOutputHelper.WriteLine(key);
+            _testOutputHelper.WriteLine("-requests-");
+            foreach (var key in snapshotManager!.Payload.Requests)
+            {
+                _testOutputHelper.WriteLine(key);
+            }
+            _testOutputHelper.WriteLine("-request takens-");
+            foreach (var key in snapshotManager!.Payload.RequestTakens)
+            {
+                _testOutputHelper.WriteLine(key);
+            }
         }
 
         branchList = await multiProjectionService.GetAggregateList<Branch>();

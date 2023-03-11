@@ -94,6 +94,7 @@ public static class ServiceCollectionExtensions
                 return snapshotTakingBackgroundService;
             });
         services.AddTransient<SnapshotGenerator>();
+        services.AddTransient<ISingleProjectionSnapshotAccessor, SingleProjectionSnapshotAccessor>();
         return services;
     }
 
@@ -144,6 +145,7 @@ public static class ServiceCollectionExtensions
                 return snapshotTakingBackgroundService;
             });
         services.AddTransient<SnapshotGenerator>();
+        services.AddTransient<ISingleProjectionSnapshotAccessor, SingleProjectionSnapshotAccessor>();
         return services;
     }
 
@@ -194,6 +196,7 @@ public static class ServiceCollectionExtensions
                 return snapshotTakingBackgroundService;
             });
         services.AddTransient<SnapshotGenerator>();
+        services.AddTransient<ISingleProjectionSnapshotAccessor, SingleProjectionSnapshotAccessor>();
         return services;
     }
 

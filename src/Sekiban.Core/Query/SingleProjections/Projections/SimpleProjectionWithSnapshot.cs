@@ -9,15 +9,18 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
 {
     private readonly IDocumentRepository _documentRepository;
     private readonly SekibanAggregateTypes _sekibanAggregateTypes;
+    private readonly ISingleProjectionSnapshotAccessor _singleProjectionSnapshotAccessor;
     private readonly ISingleProjectionFromInitial singleProjectionFromInitial;
     public SimpleProjectionWithSnapshot(
         IDocumentRepository documentRepository,
         ISingleProjectionFromInitial singleProjectionFromInitial,
-        SekibanAggregateTypes sekibanAggregateTypes)
+        SekibanAggregateTypes sekibanAggregateTypes,
+        ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor)
     {
         _documentRepository = documentRepository;
         this.singleProjectionFromInitial = singleProjectionFromInitial;
         _sekibanAggregateTypes = sekibanAggregateTypes;
+        _singleProjectionSnapshotAccessor = singleProjectionSnapshotAccessor;
     }
 
     /// <summary>
@@ -48,7 +51,8 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
                 projector.GetOriginalAggregatePayloadType(),
                 projector.GetPayloadType(),
                 payloadVersion);
-        var state = snapshotDocument is null ? default : snapshotDocument.ToState<TState>(_sekibanAggregateTypes);
+        var state = snapshotDocument is null ? default
+            : await _singleProjectionSnapshotAccessor.StateFromSnapshotDocumentAsync<TState>(snapshotDocument);
         if (state is not null)
         {
             aggregate.ApplySnapshot(state);
