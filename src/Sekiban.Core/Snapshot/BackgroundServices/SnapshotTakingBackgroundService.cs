@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Sekiban.Core.Events;
 using System.Collections.Concurrent;
 namespace Sekiban.Core.Snapshot.BackgroundServices;
@@ -20,8 +21,16 @@ public class SnapshotTakingBackgroundService : BackgroundService
                 if (ServiceProvider is null) { return; }
                 using var scope = ServiceProvider.CreateScope();
                 var snapshotGenerator = scope.ServiceProvider.GetService<SnapshotGenerator>();
+                var logger = scope.ServiceProvider.GetService<ILogger<SnapshotTakingBackgroundService>>();
                 if (snapshotGenerator is null) { continue; }
-                await snapshotGenerator.Generate(ev);
+                try
+                {
+                    await snapshotGenerator.Generate(ev);
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogError(ex, "Snapshot Generator Error");
+                }
             }
             // タスクがない場合は待機する
             else

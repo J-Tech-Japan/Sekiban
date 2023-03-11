@@ -252,15 +252,18 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         var snapshotManager
             = await projectionService.AsDefaultStateFromInitialAsync<SnapshotManager>(
                 SnapshotManager.SharedId);
-        _testOutputHelper.WriteLine("-requests-");
-        foreach (var key in snapshotManager!.Payload.Requests)
+        if (snapshotManager is not null)
         {
-            _testOutputHelper.WriteLine(key);
-        }
-        _testOutputHelper.WriteLine("-request takens-");
-        foreach (var key in snapshotManager!.Payload.RequestTakens)
-        {
-            _testOutputHelper.WriteLine(key);
+            _testOutputHelper.WriteLine("-requests-");
+            foreach (var key in snapshotManager!.Payload.Requests)
+            {
+                _testOutputHelper.WriteLine(key);
+            }
+            _testOutputHelper.WriteLine("-request takens-");
+            foreach (var key in snapshotManager!.Payload.RequestTakens)
+            {
+                _testOutputHelper.WriteLine(key);
+            }
         }
     }
 
@@ -316,14 +319,17 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
             = await projectionService.AsDefaultStateFromInitialAsync<SnapshotManager>(
                 SnapshotManager.SharedId);
         _testOutputHelper.WriteLine("-requests-");
-        foreach (var key in snapshotManager!.Payload.Requests)
+        if (snapshotManager is not null)
         {
-            _testOutputHelper.WriteLine(key);
-        }
-        _testOutputHelper.WriteLine("-request takens-");
-        foreach (var key in snapshotManager!.Payload.RequestTakens)
-        {
-            _testOutputHelper.WriteLine(key);
+            foreach (var key in snapshotManager.Payload.Requests)
+            {
+                _testOutputHelper.WriteLine(key);
+            }
+            _testOutputHelper.WriteLine("-request takens-");
+            foreach (var key in snapshotManager.Payload.RequestTakens)
+            {
+                _testOutputHelper.WriteLine(key);
+            }
         }
     }
 
