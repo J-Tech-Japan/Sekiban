@@ -4,13 +4,13 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>JJ_Sekiban.Infrastructure.Cosmos</PackageId>
-        <Version>0.10.25</Version>
+        <Version>0.10.26</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework CosmosInfrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.10.25</PackageVersion>
-        <Description>Add Multi Projection Snapshot with blob</Description>
+        <PackageVersion>0.10.26</PackageVersion>
+        <Description>Fix DateOnly Validation</Description>
         <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
         <LangVersion>11</LangVersion>
     </PropertyGroup>
