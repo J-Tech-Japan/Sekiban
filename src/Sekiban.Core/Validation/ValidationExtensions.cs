@@ -1,5 +1,6 @@
 using System.Collections;
 using System.ComponentModel.DataAnnotations;
+using System.Reflection;
 namespace Sekiban.Core.Validation;
 
 public static class ValidationExtensions
@@ -110,7 +111,7 @@ public static class ValidationExtensions
         }
 
         // 参照型のプロパティがあるかどうかをチェックする
-        foreach (var pi in targetClass.GetType().GetProperties())
+        foreach (var pi in targetClass.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
             if (!isReferenceType(pi.PropertyType))
             {
