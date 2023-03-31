@@ -19,6 +19,7 @@ public class CommandExecutor : ICommandExecutor
 {
     private static readonly SemaphoreSlim SemaphoreInMemory = new(1, 1);
     private readonly IAggregateLoader _aggregateLoader;
+    private readonly ICommandExecuteAwaiter _commandExecuteAwaiter;
     private readonly IDocumentWriter _documentWriter;
     private readonly IServiceProvider _serviceProvider;
     private readonly IUserInformationFactory _userInformationFactory;
@@ -26,12 +27,14 @@ public class CommandExecutor : ICommandExecutor
         IDocumentWriter documentWriter,
         IServiceProvider serviceProvider,
         IAggregateLoader aggregateLoader,
-        IUserInformationFactory userInformationFactory)
+        IUserInformationFactory userInformationFactory,
+        ICommandExecuteAwaiter commandExecuteAwaiter)
     {
         _documentWriter = documentWriter;
         _serviceProvider = serviceProvider;
         _aggregateLoader = aggregateLoader;
         _userInformationFactory = userInformationFactory;
+        _commandExecuteAwaiter = commandExecuteAwaiter;
     }
     public async Task<CommandExecutorResponse> ExecCommandAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null)
         where TCommand : ICommandCommon
@@ -127,8 +130,10 @@ public class CommandExecutor : ICommandExecutor
         {
             await SemaphoreInMemory.WaitAsync();
         }
+        var aggregateId = command.GetAggregateId();
         try
         {
+
             var handler =
                 _serviceProvider.GetService(typeof(ICommandHandlerCommon<TAggregatePayload, TCommand>)) as
                     ICommandHandlerCommon<TAggregatePayload, TCommand>;
@@ -136,7 +141,9 @@ public class CommandExecutor : ICommandExecutor
             {
                 throw new SekibanCommandNotRegisteredException(typeof(TCommand).Name);
             }
-            var aggregateId = command.GetAggregateId();
+
+            await _commandExecuteAwaiter.WaitUntilOtherThreadFinished<TAggregatePayload>(aggregateId);
+            _commandExecuteAwaiter.StartTask<TAggregatePayload>(aggregateId);
             commandDocument
                 = new CommandDocument<TCommand>(aggregateId, command, typeof(TAggregatePayload), callHistories)
                 {
@@ -175,6 +182,7 @@ public class CommandExecutor : ICommandExecutor
         }
         finally
         {
+            _commandExecuteAwaiter.EndTask<TAggregatePayload>(aggregateId);
             await _documentWriter.SaveAsync(
                 commandDocument with { Payload = commandToSave },
                 typeof(TAggregatePayload));

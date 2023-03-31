@@ -95,6 +95,7 @@ public static class ServiceCollectionExtensions
             });
         services.AddTransient<SnapshotGenerator>();
         services.AddTransient<ISingleProjectionSnapshotAccessor, SingleProjectionSnapshotAccessor>();
+        services.AddSingleton<ICommandExecuteAwaiter>(new CommandExecuteAwaiter());
         return services;
     }
 
@@ -146,6 +147,7 @@ public static class ServiceCollectionExtensions
             });
         services.AddTransient<SnapshotGenerator>();
         services.AddTransient<ISingleProjectionSnapshotAccessor, SingleProjectionSnapshotAccessor>();
+        services.AddSingleton<ICommandExecuteAwaiter>(new CommandExecuteAwaiter());
         return services;
     }
 
@@ -197,6 +199,7 @@ public static class ServiceCollectionExtensions
             });
         services.AddTransient<SnapshotGenerator>();
         services.AddTransient<ISingleProjectionSnapshotAccessor, SingleProjectionSnapshotAccessor>();
+        services.AddSingleton<ICommandExecuteAwaiter>(new CommandExecuteAwaiter());
         return services;
     }
 
