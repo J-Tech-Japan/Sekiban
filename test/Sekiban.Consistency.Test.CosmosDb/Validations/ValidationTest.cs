@@ -1,4 +1,5 @@
 using Sekiban.Core.Validation;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
@@ -41,6 +42,21 @@ public class ValidationTest
         var vresults = m.ValidateProperties();
         Assert.False(vresults?.Any() ?? false);
         Assert.True(m.TryValidateProperties(out _));
+    }
+    [Fact]
+    public void TestDateOnly()
+    {
+        var m = new Box
+            { Contents = new Contents() };
+        var vresults = m.ValidateProperties();
+        Assert.False(vresults?.Any() ?? false);
+    }
+    [Fact]
+    public void TestDateOnly2()
+    {
+        var m = new Contents();
+        var vresults = m.ValidateProperties();
+        Assert.False(vresults?.Any() ?? false);
     }
 
     [Fact(DisplayName = "検証失敗_名前未入力")]
@@ -153,5 +169,16 @@ public class ValidationTest
         Assert.Equal("Friends[1].Age", vresults?.First()?.MemberNames?.First());
         Debug.Assert(vresults != null, nameof(vresults) + " != null");
         Assert.Single(vresults);
+    }
+
+    public record Contents
+    {
+        public DateOnly Date { get; init; } = default;
+        public DateTime DateTime { get; init; } = default;
+    }
+
+    public record Box
+    {
+        public Contents Contents { get; init; } = default!;
     }
 }
