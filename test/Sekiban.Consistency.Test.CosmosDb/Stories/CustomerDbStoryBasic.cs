@@ -308,6 +308,31 @@ public class CustomerDbStoryBasic : TestBase
         Assert.Equal(3, branchList.Count);
     }
 
+    [Fact]
+    public async Task SnapshotTestAsync()
+    {
+        await DeleteonlyAsync();
+        var branchResult = await commandExecutor.ExecCommandAsync(new CreateBranch("Tokyo"));
+        var branchId = branchResult.AggregateId!.Value;
+        var clientResult = await commandExecutor.ExecCommandAsync(new CreateClient(branchId, "name", "email@example.com"));
+        var currentVersion = clientResult.Version;
+        foreach (var i in Enumerable.Range(0, 160))
+        {
+            clientResult = await commandExecutor.ExecCommandAsync(
+                new ChangeClientName(clientResult.AggregateId!.Value, $"name{i + 1}") { ReferenceVersion = currentVersion });
+            currentVersion = clientResult.Version;
+        }
+
+        _inMemoryDocumentStore.ResetInMemoryStore();
+        _hybridStoreManager.ClearHybridPartitions();
+        ((MemoryCache)_memoryCache.Cache).Compact(1);
+
+        var client = await projectionService.AsDefaultStateAsync<Client>(clientResult.AggregateId!.Value);
+        Assert.NotNull(client);
+        var clientProjection = await projectionService.AsSingleProjectionStateAsync<ClientNameHistoryProjection>(clientResult.AggregateId!.Value);
+        Assert.NotNull(clientProjection);
+    }
+
     [Fact(DisplayName = "CosmosDbストーリーテスト用に削除のみを行う 。")]
     public async Task DeleteonlyAsync()
     {

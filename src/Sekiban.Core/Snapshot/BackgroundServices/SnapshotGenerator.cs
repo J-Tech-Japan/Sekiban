@@ -111,7 +111,8 @@ public class SnapshotGenerator
                         {
                             continue;
                         }
-                        var snapshotDocument = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(awaitable);
+
+                        var snapshotDocument = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(aggregateToSnapshot);
                         // var snapshotDocument = new SnapshotDocument(
                         //     notification.AggregateId,
                         //     aggregateType.Aggregate,
@@ -179,15 +180,10 @@ public class SnapshotGenerator
                     {
                         continue;
                     }
-                    var snapshotDocument = new SnapshotDocument(
-                        notification.AggregateId,
-                        projection.Aggregate,
-                        projection.PayloadType,
-                        aggregateToSnapshot,
-                        aggregateToSnapshot.LastEventId,
-                        aggregateToSnapshot.LastSortableUniqueId,
-                        aggregateToSnapshot.Version,
-                        aggregateToSnapshot.GetPayloadVersionIdentifier());
+                    var snapshotDocument =
+                        await singleProjectionSnapshotAccessor.SnapshotDocumentFromSingleProjectionStateAsync(
+                            aggregateToSnapshot,
+                            projection.Aggregate);
                     await _documentWriter.SaveAsync(snapshotDocument, projection.Aggregate);
                 }
             }
