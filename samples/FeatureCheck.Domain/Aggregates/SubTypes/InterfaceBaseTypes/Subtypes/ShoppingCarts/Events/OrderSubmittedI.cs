@@ -1,5 +1,6 @@
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.PurchasedCarts;
 using Sekiban.Core.Events;
+using Sekiban.Core.PubSub;
 namespace FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.ShoppingCarts.Events;
 
 public record OrderSubmittedI : IEventPayload<ShoppingCartI, PurchasedCartI, OrderSubmittedI>
@@ -12,7 +13,17 @@ public record OrderSubmittedI : IEventPayload<ShoppingCartI, PurchasedCartI, Ord
 
     public static PurchasedCartI OnEvent(ShoppingCartI aggregatePayload, Event<OrderSubmittedI> ev)
     {
-        return new()
+        return new PurchasedCartI
             { Items = aggregatePayload.Items, PurchasedDate = ev.Payload.OrderSubmittedLocalTime };
+    }
+
+
+    public class Subscriber : IEventSubscriber<OrderSubmittedI>
+    {
+        public async Task HandleEventAsync(Event<OrderSubmittedI> ev)
+        {
+            Console.WriteLine($"{ev.Payload.OrderSubmittedLocalTime}");
+            await Task.CompletedTask;
+        }
     }
 }

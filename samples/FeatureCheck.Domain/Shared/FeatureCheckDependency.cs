@@ -20,6 +20,7 @@ using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.Purcha
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.ShippingCarts;
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.ShoppingCarts;
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.ShoppingCarts.Commands;
+using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.ShoppingCarts.Events;
 using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes;
 using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.PurchasedCarts;
 using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.PurchasedCarts.Commands;
@@ -90,7 +91,8 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
             .AddSubtype<ShoppingCartI>(
                 subType =>
                     subType.AddCommandHandler<AddItemToShoppingCartI, AddItemToShoppingCartI.Handler>()
-                        .AddCommandHandler<SubmitOrderI, SubmitOrderI.Handler>())
+                        .AddCommandHandler<SubmitOrderI, SubmitOrderI.Handler>()
+                        .AddEventSubscriber<OrderSubmittedI, OrderSubmittedI.Subscriber>())
             .AddSubtype<PurchasedCartI>(
                 subType =>
                     subType.AddCommandHandler<ReceivePaymentToPurchasedCartI, ReceivePaymentToPurchasedCartI.Handler>())
