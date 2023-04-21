@@ -38,6 +38,27 @@ public class BaseClassCartTest : AggregateTest<ICartAggregate, FeatureCheckDepen
                             { Code = "TESTCODE", Name = "TESTNAME", Quantity = 100 })
                 });
     }
+
+
+    [Fact]
+    public void PublishTest()
+    {
+        Subtype<ShoppingCartI>()
+            .WhenCommand(
+                new AddItemToShoppingCartI
+                {
+                    CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
+                })
+            .WhenCommandWithPublish(
+                new SubmitOrderI
+                {
+                    CartId = GetAggregateId(),
+                    OrderSubmittedLocalTime = DateTime.Now,
+                    ReferenceVersion = GetCurrentVersion()
+                })
+            .ThenPayloadTypeShouldBe<PurchasedCartI>();
+    }
+
     [Fact]
     public void CommandExecuteTestAndChangeAggregateType()
     {
