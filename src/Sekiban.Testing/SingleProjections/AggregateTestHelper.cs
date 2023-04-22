@@ -42,6 +42,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     }
     private Exception? _latestException { get; set; }
     private List<IEvent> _latestEvents { get; set; } = new();
+    private ICommandCommon? _latestCommand { get; set; }
     private List<SekibanValidationParameterError> _latestValidationErrors { get; set; } = new();
 
     private DefaultSingleProjector<TAggregatePayload> _projector { get; }
@@ -137,7 +138,11 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         if (_latestValidationErrors.Any())
         {
             var first = _latestValidationErrors.First();
-            throw new Exception(first.PropertyName + " has validation error " + first.ErrorMessages.First());
+            throw new Exception(
+                $"{_latestCommand?.GetType().Name ?? ""}" +
+                first.PropertyName +
+                " has validation error " +
+                first.ErrorMessages.First());
         }
     }
     public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(TCommand changeCommand) where TCommand : ICommand<TAggregatePayload>
@@ -504,6 +509,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             throw new SekibanCommandNotRegisteredException(typeof(TCommand).Name);
         }
         var command = commandFunc(GetAggregateStateIfNotNullEmptyAggregate());
+        _latestCommand = command;
         AggregateIdHolder.AggregateId = command.GetAggregateId();
         var validationResults = command.ValidateProperties().ToList();
         if (validationResults.Any())
