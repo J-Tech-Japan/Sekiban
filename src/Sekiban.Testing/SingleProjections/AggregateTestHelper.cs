@@ -26,45 +26,38 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     {
         _serviceProvider = serviceProvider;
         _projector = new DefaultSingleProjector<TAggregatePayload>();
-        Aggregate = _projector.CreateInitialAggregate(Guid.Empty);
         _commandExecutor = new TestCommandExecutor(_serviceProvider);
+        var aggregateLoader = _serviceProvider.GetRequiredService<IAggregateLoader>() ?? throw new Exception("AggregateLoader is not registered");
+        AggregateIdHolder = new AggregateIdHolder<TAggregatePayload>(aggregateLoader);
     }
 
-    public AggregateTestHelper(IServiceProvider serviceProvider, Guid aggregateId)
+    public AggregateTestHelper(IServiceProvider serviceProvider, IAggregateIdHolder aggregateIdHolder)
     {
+        AggregateIdHolder = aggregateIdHolder;
         _serviceProvider = serviceProvider;
         _projector = new DefaultSingleProjector<TAggregatePayload>();
         var singleProjectionService = serviceProvider.GetService<IAggregateLoader>();
         Debug.Assert(singleProjectionService != null, nameof(singleProjectionService) + " != null");
-        Aggregate = aggregateId == Guid.Empty ? _projector.CreateInitialAggregate(Guid.Empty)
-            : singleProjectionService.AsAggregateAsync<TAggregatePayload>(aggregateId).Result ??
-            throw new InvalidOperationException(
-                "Aggregate not found for Id" +
-                aggregateId +
-                " and Type " +
-                typeof(TAggregatePayload).Name);
         _commandExecutor = new TestCommandExecutor(_serviceProvider);
     }
-
-    private Aggregate<TAggregatePayload> Aggregate { get; set; }
-
     private Exception? _latestException { get; set; }
     private List<IEvent> _latestEvents { get; set; } = new();
     private List<SekibanValidationParameterError> _latestValidationErrors { get; set; } = new();
 
     private DefaultSingleProjector<TAggregatePayload> _projector { get; }
 
+    public IAggregateIdHolder AggregateIdHolder { get; }
+
     public IAggregateTestHelper<TAggregatePayloadExpected> ThenPayloadTypeShouldBe<TAggregatePayloadExpected>()
         where TAggregatePayloadExpected : IAggregatePayloadCommon
     {
-        Assert.True(GetAggregate().GetPayloadTypeIs<TAggregatePayloadExpected>());
-        return new AggregateTestHelper<TAggregatePayloadExpected>(_serviceProvider, GetAggregateId());
-        ;
+        Assert.True(AggregateIdHolder.IsAggregateType<TAggregatePayloadExpected>());
+        return new AggregateTestHelper<TAggregatePayloadExpected>(_serviceProvider, AggregateIdHolder);
     }
     public IAggregateTestHelper<TAggregateSubtypePayload> Subtype<TAggregateSubtypePayload>()
         where TAggregateSubtypePayload : IAggregatePayloadCommon, IApplicableAggregatePayload<TAggregatePayload>
     {
-        var subTypeTest = new AggregateTestHelper<TAggregateSubtypePayload>(_serviceProvider, GetAggregateId());
+        var subTypeTest = new AggregateTestHelper<TAggregateSubtypePayload>(_serviceProvider, AggregateIdHolder);
         return subTypeTest;
     }
     // public IAggregateTestHelper<TAggregatePayload> Subtype<TAggregateSubtypePayload>(
@@ -259,7 +252,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     {
         var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
             throw new Exception("Failed to get aggregate loader");
-        var aggregate = aggregateLoader.AsDefaultStateAsync<TAggregatePayload>(GetAggregateId()).Result;
+        var aggregateId = GetAggregateId();
+        var aggregate = aggregateLoader.AsDefaultStateAsync<TAggregatePayload>(aggregateId).Result;
         return aggregate ??
             throw new SekibanAggregateNotExistsException(GetAggregateId(), typeof(TAggregatePayload).Name);
     }
@@ -284,18 +278,14 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public Guid GetAggregateId()
     {
-        return Aggregate.AggregateId;
+        return AggregateIdHolder.AggregateId;
     }
 
     public int GetCurrentVersion()
     {
-        return Aggregate.Version;
+        return GetAggregateState().Version;
     }
 
-    public Aggregate<TAggregatePayload> GetAggregate()
-    {
-        return Aggregate;
-    }
     public IAggregateTestHelper<TAggregatePayload> ThenThrows<T>() where T : Exception
     {
         var exception = _latestException is AggregateException aggregateException
@@ -477,13 +467,6 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         checkEventAction((Event<T>)_latestEvents.First());
         return this;
     }
-    private void UpdateAggregate()
-    {
-        var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
-            throw new Exception("Failed to get aggregate loader");
-        Aggregate = aggregateLoader.AsAggregateAsync<TAggregatePayload>(GetAggregateId()).Result ?? Aggregate;
-
-    }
     public AggregateState<TAggregatePayload> GetAggregateStateIfNotNullEmptyAggregate()
     {
         var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
@@ -521,6 +504,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             throw new SekibanCommandNotRegisteredException(typeof(TCommand).Name);
         }
         var command = commandFunc(GetAggregateStateIfNotNullEmptyAggregate());
+        AggregateIdHolder.AggregateId = command.GetAggregateId();
         var validationResults = command.ValidateProperties().ToList();
         if (validationResults.Any())
         {
@@ -529,18 +513,15 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             return this;
         }
 
-        var commandDocument = new CommandDocument<TCommand>(Aggregate.AggregateId, command, typeof(TAggregatePayload));
+        var commandDocument = new CommandDocument<TCommand>(GetAggregateId(), command, typeof(TAggregatePayload));
         CheckCommandJSONSupports(commandDocument);
 
-        var aggregateId = command.GetAggregateId();
+        var aggregateId = GetAggregateId();
         var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader;
         if (aggregateLoader is null)
         {
             throw new Exception("Failed to get AddAggregate Service");
         }
-        Aggregate = aggregateLoader.AsAggregateAsync<TAggregatePayload>(aggregateId).Result ??
-            new Aggregate<TAggregatePayload>
-                { AggregateId = aggregateId };
         try
         {
             if (command is IOnlyPublishingCommandCommon)
@@ -587,8 +568,6 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
         SaveEvents(_latestEvents, withPublish);
         CheckStateJSONSupports();
-        Aggregate = aggregateLoader.AsAggregateAsync<TAggregatePayload>(aggregateId).Result ??
-            throw new Exception("Aggregate not found");
         return this;
     }
 
@@ -651,8 +630,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     private void CheckStateJSONSupports()
     {
         // when aggregate payload type changed, skip this test
-        UpdateAggregate();
-        if (!Aggregate.GetPayloadTypeIs<TAggregatePayload>()) { return; }
+        if (!AggregateIdHolder.IsAggregateType<TAggregatePayload>()) { return; }
         var state = GetAggregateState();
         var fromState = _projector.CreateInitialAggregate(state.AggregateId);
         fromState.ApplySnapshot(state);
