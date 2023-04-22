@@ -15,7 +15,10 @@ public class TestCommandExecutor
 {
     private readonly IServiceProvider _serviceProvider;
 
-    public TestCommandExecutor(IServiceProvider serviceProvider) => _serviceProvider = serviceProvider;
+    public TestCommandExecutor(IServiceProvider serviceProvider)
+    {
+        _serviceProvider = serviceProvider;
+    }
 
     public ImmutableList<IEvent> LatestEvents { get; set; } = ImmutableList<IEvent>.Empty;
 
@@ -104,12 +107,18 @@ public class TestCommandExecutor
     public Guid ExecuteCommand<TAggregatePayload>(
         ICommand<TAggregatePayload> command,
         Guid? injectingAggregateId = null)
-        where TAggregatePayload : IAggregatePayloadCommon => ExecuteCommand(command, injectingAggregateId, false);
+        where TAggregatePayload : IAggregatePayloadCommon
+    {
+        return ExecuteCommand(command, injectingAggregateId, false);
+    }
 
     public Guid ExecuteCommandWithPublish<TAggregatePayload>(
         ICommand<TAggregatePayload> command,
         Guid? injectingAggregateId = null)
-        where TAggregatePayload : IAggregatePayloadCommon => ExecuteCommand(command, injectingAggregateId, true);
+        where TAggregatePayload : IAggregatePayloadCommon
+    {
+        return ExecuteCommand(command, injectingAggregateId, true);
+    }
 
     private Guid ExecuteCommand<TAggregatePayload>(
         ICommand<TAggregatePayload> command,
@@ -120,7 +129,7 @@ public class TestCommandExecutor
         var validationResults = command.ValidateProperties().ToList();
         if (validationResults.Any())
         {
-            throw new ValidationException("Validation failed " + validationResults);
+            throw new ValidationException($"{command.GetType().Name} command validation failed :" + validationResults);
         }
 
         var baseType = typeof(ICommandHandlerCommon<,>);

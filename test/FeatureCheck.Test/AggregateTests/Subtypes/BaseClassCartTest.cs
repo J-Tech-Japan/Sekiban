@@ -38,6 +38,69 @@ public class BaseClassCartTest : AggregateTest<ICartAggregate, FeatureCheckDepen
                             { Code = "TESTCODE", Name = "TESTNAME", Quantity = 100 })
                 });
     }
+
+
+    [Fact]
+    public void PublishTest()
+    {
+        Subtype<ShoppingCartI>()
+            .WhenCommand(
+                new AddItemToShoppingCartI
+                {
+                    CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
+                })
+            .WhenCommandWithPublish(
+                new SubmitOrderI
+                {
+                    CartId = GetAggregateId(),
+                    OrderSubmittedLocalTime = DateTime.Now,
+                    ReferenceVersion = GetCurrentVersion()
+                })
+            .ThenPayloadTypeShouldBe<PurchasedCartI>();
+    }
+
+
+    [Fact]
+    public void ScenarioTest()
+    {
+        GivenScenario(CommandExecuteTest)
+            .ThenPayloadTypeShouldBe<ShoppingCartI>()
+            .WhenCommandWithPublish(
+                new SubmitOrderI
+                {
+                    CartId = GetAggregateId(),
+                    OrderSubmittedLocalTime = DateTime.Now,
+                    ReferenceVersion = GetCurrentVersion()
+                })
+            .ThenPayloadTypeShouldBe<PurchasedCartI>();
+    }
+
+
+    [Fact]
+    public void MultiCommandTest()
+    {
+        var subtype = Subtype<ShoppingCartI>();
+        subtype.WhenCommand(
+            new AddItemToShoppingCartI
+            {
+                CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
+            });
+        var aggregateId = GetAggregateId();
+        subtype.WhenCommandWithPublish(
+            new SubmitOrderI
+            {
+                CartId = GetAggregateId(),
+                OrderSubmittedLocalTime = DateTime.Now,
+                ReferenceVersion = GetCurrentVersion()
+            });
+        var sybtype2 = subtype.ThenPayloadTypeShouldBe<PurchasedCartI>()
+            .ThenGetState(
+                state =>
+                {
+                    Assert.NotEqual(Guid.Empty, state.AggregateId);
+                });
+    }
+
     [Fact]
     public void CommandExecuteTestAndChangeAggregateType()
     {

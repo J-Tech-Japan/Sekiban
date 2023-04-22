@@ -26,6 +26,7 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         ImmutableList<IAggregateSubTypeDependencyDefinition<TAggregatePayload>>.Empty;
 
     protected ImmutableList<(Type, Type?)> SelfCommandTypes { get; set; } = ImmutableList<(Type, Type?)>.Empty;
+    protected ImmutableList<(Type, Type?)> SelfSubscriberTypes { get; private set; } = ImmutableList<(Type, Type?)>.Empty;
 
     public ImmutableList<Type> AggregateSubtypes => SubAggregates.Select(m => m.GetType().GetGenericArguments().Last()).ToImmutableList();
     public virtual ImmutableList<(Type, Type?)> CommandTypes
@@ -40,7 +41,18 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
             return types;
         }
     }
-    public ImmutableList<(Type, Type?)> SubscriberTypes { get; private set; } = ImmutableList<(Type, Type?)>.Empty;
+    public ImmutableList<(Type, Type?)> SubscriberTypes
+    {
+        get
+        {
+            var types = SelfSubscriberTypes;
+            foreach (var subAggregate in SubAggregates)
+            {
+                types = types.AddRange(subAggregate.SubscriberTypes);
+            }
+            return types;
+        }
+    }
     public ImmutableList<Type> AggregateQueryTypes { get; private set; } = ImmutableList<Type>.Empty;
     public ImmutableList<Type> AggregateListQueryTypes { get; private set; } = ImmutableList<Type>.Empty;
     public ImmutableList<Type> SingleProjectionTypes { get; private set; } = ImmutableList<Type>.Empty;
@@ -62,8 +74,9 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         where TEvent : IEventPayloadApplicableTo<TAggregatePayload>
         where TEventSubscriber : IEventSubscriber<TEvent>
     {
-        SubscriberTypes = SubscriberTypes.Add((typeof(INotificationHandler<Event<TEvent>>), typeof(EventSubscriber<TEvent, TEventSubscriber>)));
-        SubscriberTypes = SubscriberTypes.Add((typeof(IEventSubscriber<TEvent>), typeof(TEventSubscriber)));
+        SelfSubscriberTypes =
+            SelfSubscriberTypes.Add((typeof(INotificationHandler<Event<TEvent>>), typeof(EventSubscriber<TEvent, TEventSubscriber>)));
+        SelfSubscriberTypes = SelfSubscriberTypes.Add((typeof(IEventSubscriber<TEvent>), typeof(TEventSubscriber)));
         return this;
     }
 

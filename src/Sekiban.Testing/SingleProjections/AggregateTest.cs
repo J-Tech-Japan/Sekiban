@@ -37,7 +37,8 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
 
     public AggregateTest(IServiceProvider serviceProvider, Guid aggregateId) : this(serviceProvider)
     {
-        _helper = new AggregateTestHelper<TAggregatePayload>(_serviceProvider, aggregateId);
+        _helper = new AggregateTestHelper<TAggregatePayload>(_serviceProvider);
+        _helper.AggregateIdHolder.AggregateId = aggregateId;
     }
 
     public IAggregateTestHelper<TAggregatePayloadExpected> ThenPayloadTypeShouldBe<TAggregatePayloadExpected>()
@@ -117,6 +118,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         _helper.GivenEnvironmentCommandExecutorAction(action);
         return this;
     }
+    public IAggregateIdHolder AggregateIdHolder => _helper.AggregateIdHolder;
     public void ThrowIfTestHasUnhandledErrors()
     {
         _helper.ThrowIfTestHasUnhandledErrors();
@@ -265,11 +267,6 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
     public AggregateState<TAggregatePayload> GetAggregateState()
     {
         return _helper.GetAggregateState();
-    }
-
-    public Aggregate<TAggregatePayload> GetAggregate()
-    {
-        return _helper.GetAggregate();
     }
 
     public IAggregateTestHelper<TAggregatePayload> ThenThrows<T>() where T : Exception

@@ -39,6 +39,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentCommandExecutorAction(
         Action<TestCommandExecutor> action);
+    public IAggregateIdHolder AggregateIdHolder { get; }
 
     public void ThrowIfTestHasUnhandledErrors();
     #endregion
@@ -106,7 +107,6 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public Guid GetAggregateId();
     public int GetCurrentVersion();
     public AggregateState<TAggregatePayload> GetAggregateState();
-    public Aggregate<TAggregatePayload> GetAggregate();
 
     public AggregateState<TEnvironmentAggregatePayload>
         GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
