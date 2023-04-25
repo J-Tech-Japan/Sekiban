@@ -227,6 +227,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                             if (filled is not null)
                             {
                                 list.Add(filled);
+                                continue;
                             }
                         }
                         list.Add(obj);

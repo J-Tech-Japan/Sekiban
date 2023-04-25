@@ -24,6 +24,7 @@ using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Snapshot;
 using Sekiban.Core.Snapshot.Aggregate;
+using Sekiban.Core.Types;
 using Sekiban.Infrastructure.Cosmos;
 using Sekiban.Testing.Shared;
 using System;
@@ -431,6 +432,13 @@ public class CustomerDbStoryBasic : TestBase
 
         await CheckSnapshots<RecentActivity>(snapshots, createRecentActivityResult.AggregateId!.Value);
 
+        var snapshots2 = await _documentPersistentRepository.GetSnapshotsForAggregateAsync(
+            createRecentActivityResult.AggregateId!.Value,
+            typeof(RecentActivity),
+            typeof(TenRecentProjection));
+
+        await CheckProjectionSnapshots<TenRecentProjection>(snapshots2, createRecentActivityResult.AggregateId!.Value);
+
         await _documentPersistentRepository.GetSnapshotsForAggregateAsync(
             createRecentActivityResult.AggregateId!.Value,
             typeof(RecentActivity),
@@ -443,16 +451,50 @@ public class CustomerDbStoryBasic : TestBase
     }
 
     private async Task CheckSnapshots<TAggregatePayload>(List<SnapshotDocument> snapshots, Guid aggregateId)
-        where TAggregatePayload : IAggregatePayload, new()
+        where TAggregatePayload : IAggregatePayloadCommon
     {
-        foreach (var state in snapshots.Select(snapshot => snapshot.ToState<AggregateState<TAggregatePayload>>()))
+        _testOutputHelper.WriteLine($"snapshots {typeof(TAggregatePayload).Name} {snapshots.Count} ");
+        foreach (var snapshot in snapshots)
         {
+            _testOutputHelper.WriteLine($"snapshot {snapshot.AggregateTypeName}  {snapshot.Id}  {snapshot.SavedVersion} is checking");
+            var state = snapshot.ToState<AggregateState<TAggregatePayload>>();
             if (state is null)
+            {
+                _testOutputHelper.WriteLine($"Snapshot {snapshot.AggregateTypeName} {snapshot.Id} {snapshot.SavedVersion}  is null");
+                throw new SekibanInvalidArgumentException($"Snapshot {snapshot.AggregateTypeName} {snapshot.SavedVersion}  is null");
+            }
+            _testOutputHelper.WriteLine($"Snapshot {snapshot.AggregateTypeName}  {snapshot.Id}  {snapshot.SavedVersion}  is not null");
+            var fromInitial =
+                await projectionService.AsDefaultStateFromInitialAsync<TAggregatePayload>(aggregateId, state.Version);
+            if (fromInitial is null)
             {
                 throw new SekibanInvalidArgumentException();
             }
+            Assert.Equal(fromInitial.Version, state.Version);
+            Assert.Equal(fromInitial.LastEventId, state.LastEventId);
+        }
+    }
+
+    private async Task CheckProjectionSnapshots<TAggregatePayload>(List<SnapshotDocument> snapshots, Guid aggregateId)
+        where TAggregatePayload : ISingleProjectionPayloadCommon, new()
+    {
+        var aggregateType = typeof(TAggregatePayload).GetOriginalTypeFromSingleProjectionPayload();
+        _testOutputHelper.WriteLine($"snapshots {typeof(TAggregatePayload).Name} {snapshots.Count} ");
+        foreach (var snapshot in snapshots)
+        {
+            _testOutputHelper.WriteLine(
+                $"snapshot {snapshot.AggregateTypeName} {snapshot.DocumentTypeName} {snapshot.Id}  {snapshot.SavedVersion} is checking");
+            var state = snapshot.ToState<AggregateState<TAggregatePayload>>();
+            if (state is null)
+            {
+                _testOutputHelper.WriteLine(
+                    $"Snapshot {snapshot.AggregateTypeName} {snapshot.DocumentTypeName} {snapshot.Id} {snapshot.SavedVersion}  is null");
+                throw new SekibanInvalidArgumentException($"Snapshot {snapshot.AggregateTypeName} {snapshot.SavedVersion}  is null");
+            }
+            _testOutputHelper.WriteLine(
+                $"Snapshot {snapshot.AggregateTypeName} {snapshot.DocumentTypeName} {snapshot.Id}  {snapshot.SavedVersion}  is not null");
             var fromInitial =
-                await projectionService.AsDefaultStateFromInitialAsync<TAggregatePayload>(aggregateId, state.Version);
+                await projectionService.AsSingleProjectionStateAsync<TAggregatePayload>(aggregateId, state.Version);
             if (fromInitial is null)
             {
                 throw new SekibanInvalidArgumentException();
@@ -560,6 +602,8 @@ public class CustomerDbStoryBasic : TestBase
         var projectionSnapshots =
             await _documentPersistentRepository.GetSnapshotsForAggregateAsync(aggregateId, typeof(RecentActivity), typeof(TenRecentProjection));
         Assert.NotEmpty(projectionSnapshots);
+
+        await CheckProjectionSnapshots<TenRecentProjection>(projectionSnapshots, aggregateId);
 
         // check aggregate result
         var aggregateRecentActivity
