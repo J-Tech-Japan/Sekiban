@@ -6,10 +6,7 @@ public class AggregateIdHolder<TBaseAggregatePayload> : IAggregateIdHolder
     where TBaseAggregatePayload : IAggregatePayloadCommon
 {
     private readonly IAggregateLoader aggregateLoader;
-    public AggregateIdHolder(IAggregateLoader aggregateLoader)
-    {
-        this.aggregateLoader = aggregateLoader;
-    }
+    public AggregateIdHolder(IAggregateLoader aggregateLoader) => this.aggregateLoader = aggregateLoader;
 
     public Guid AggregateId
     {
@@ -30,14 +27,10 @@ public class AggregateIdHolder<TBaseAggregatePayload> : IAggregateIdHolder
     }
     public bool IsAggregateType<TAggregatePayload>() where TAggregatePayload : IAggregatePayloadCommon
     {
-        return GetAggregate()?.GetPayloadTypeIs<TAggregatePayload>() ?? false;
+        var aggregate = GetAggregate();
+        return aggregate?.GetPayloadTypeIs<TAggregatePayload>() ?? false;
     }
-    public async Task<Aggregate<TBaseAggregatePayload>?> GetAggregateAsync()
-    {
-        return await aggregateLoader.AsAggregateAsync<TBaseAggregatePayload>(AggregateId);
-    }
-    public Aggregate<TBaseAggregatePayload>? GetAggregate()
-    {
-        return GetAggregateAsync().Result;
-    }
+    public async Task<Aggregate<TBaseAggregatePayload>?> GetAggregateAsync() =>
+        await aggregateLoader.AsAggregateAsync<TBaseAggregatePayload>(AggregateId);
+    public Aggregate<TBaseAggregatePayload>? GetAggregate() => GetAggregateAsync().Result;
 }

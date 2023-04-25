@@ -14,6 +14,7 @@ using FeatureCheck.Domain.Aggregates.RecentActivities.Commands;
 using FeatureCheck.Domain.Aggregates.RecentActivities.Projections;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Commands;
+using FeatureCheck.Domain.Aggregates.SubTypes.InheritedSubtypes;
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes;
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.PurchasedCarts;
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.PurchasedCarts.Commands;
@@ -39,10 +40,7 @@ namespace FeatureCheck.Domain.Shared;
 
 public class FeatureCheckDependency : DomainDependencyDefinitionBase
 {
-    public override Assembly GetExecutingAssembly()
-    {
-        return Assembly.GetExecutingAssembly();
-    }
+    public override Assembly GetExecutingAssembly() => Assembly.GetExecutingAssembly();
 
     protected override void Define()
     {
@@ -111,5 +109,17 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
         AddMultiProjectionQuery<ClientLoyaltyPointMultiProjectionQuery>();
         AddMultiProjectionListQuery<ClientLoyaltyPointQuery>();
         AddMultiProjectionQuery<DissolvableProjectionQuery>();
+
+        AddAggregate<IInheritedAggregate>()
+            .AddSubtype<ProcessingSubAggregate>(
+                subType =>
+                    subType.AddCommandHandler<OpenInheritedAggregate, OpenInheritedAggregate.Handler>()
+                        .AddCommandHandler<CloseInheritedAggregate, CloseInheritedAggregate.Handler>()
+            )
+            .AddSubtype<ClosedSubAggregate>(
+                subType =>
+                    subType.AddCommandHandler<ReopenInheritedAggregate, ReopenInheritedAggregate.Handler>()
+            );
+
     }
 }

@@ -84,7 +84,7 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon,
         }
         var eventType = eventPayload.GetEventPayloadType();
         var aggregatePayloadIn = eventPayload.GetAggregatePayloadInType();
-        if (aggregatePayloadIn != Payload.GetType()) { return null; }
+        if (!aggregatePayloadIn.IsInstanceOfType(Payload)) { return null; }
 
         var aggregatePayloadOut = eventPayload.GetAggregatePayloadOutType();
         var methods = GetType().GetMethods(BindingFlags.Static | BindingFlags.NonPublic).Where(m => m.Name == nameof(ApplyEventToAggregatePayload));
