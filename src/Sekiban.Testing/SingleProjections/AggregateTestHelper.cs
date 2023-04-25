@@ -510,7 +510,6 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         }
         var command = commandFunc(GetAggregateStateIfNotNullEmptyAggregate());
         _latestCommand = command;
-        AggregateIdHolder.AggregateId = command.GetAggregateId();
         var validationResults = command.ValidateProperties().ToList();
         if (validationResults.Any())
         {
@@ -518,6 +517,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
                 SekibanValidationParameterError.CreateFromValidationResults(validationResults).ToList();
             return this;
         }
+        AggregateIdHolder.AggregateId = command.GetAggregateId();
 
         var commandDocument = new CommandDocument<TCommand>(GetAggregateId(), command, typeof(TAggregatePayload));
         CheckCommandJSONSupports(commandDocument);
