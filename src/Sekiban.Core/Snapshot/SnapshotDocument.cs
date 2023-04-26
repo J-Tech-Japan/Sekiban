@@ -93,6 +93,21 @@ public record SnapshotDocument : Document, IDocument
                 }
             }
         }
+        if (baseType.IsGenericType && baseType.GetGenericTypeDefinition() == typeof(SingleProjectionState<>))
+        {
+            if (AggregateTypeName != typeof(T).Name && sekibanAggregateTypes != null)
+            {
+                var aggregateType = sekibanAggregateTypes.SingleProjectionTypes.FirstOrDefault(m => m.PayloadType.Name == DocumentTypeName);
+                if (aggregateType != null)
+                {
+                    var state = SekibanJsonHelper.ConvertTo(Snapshot, typeof(SingleProjectionState<>).MakeGenericType(aggregateType.PayloadType));
+                    if (state is not null)
+                    {
+                        return Activator.CreateInstance(typeof(T), state, state.Payload);
+                    }
+                }
+            }
+        }
         return SekibanJsonHelper.ConvertTo<T>(Snapshot);
     }
 

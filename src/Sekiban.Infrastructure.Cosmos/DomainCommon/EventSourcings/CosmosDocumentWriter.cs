@@ -44,7 +44,7 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
                 }
                 var serializer = new SekibanCosmosSerializer();
                 var stream = serializer.ToStream(snapshot);
-                if (stream.Length > 1500)
+                if (stream.Length > 9500)
                 {
                     var blobSnapshot = snapshot with { Snapshot = null };
                     var snapshotValue = snapshot.Snapshot;
