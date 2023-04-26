@@ -494,7 +494,7 @@ public class CustomerDbStoryBasic : TestBase
             _testOutputHelper.WriteLine(
                 $"Snapshot {snapshot.AggregateTypeName} {snapshot.DocumentTypeName} {snapshot.Id}  {snapshot.SavedVersion}  is not null");
             var fromInitial =
-                await projectionService.AsSingleProjectionStateAsync<TAggregatePayload>(aggregateId, state.Version);
+                await projectionService.AsSingleProjectionStateFromInitialAsync<TAggregatePayload>(aggregateId, state.Version);
             if (fromInitial is null)
             {
                 throw new SekibanInvalidArgumentException();
