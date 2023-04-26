@@ -87,7 +87,7 @@ public class BlobAccessor : IBlobAccessor
         return true;
     }
 
-    private string BlobConnectionString() =>
+    public string BlobConnectionString() =>
         _section?.GetValue<string>("BlobConnectionString") ?? throw new Exception("BlobConnectionString not found");
     private async Task<BlobContainerClient> GetContainerAsync(string containerName)
     {

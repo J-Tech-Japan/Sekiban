@@ -1,5 +1,6 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Setting;
+using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
@@ -48,7 +49,7 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
         await Task.CompletedTask;
         return document.ToState<TState>(_sekibanAggregateTypes);
     }
-    public async Task<SnapshotDocument?> FillSnapshotDocumentWithBlob(SnapshotDocument document)
+    public async Task<SnapshotDocument?> FillSnapshotDocumentWithBlobAsync(SnapshotDocument document)
     {
         if (document.Snapshot is not null) { return document; }
         var stream = await _blobAccessor.GetBlobWithGZipAsync(SekibanBlobContainer.SingleProjectionState, document.FilenameForSnapshot());
@@ -80,6 +81,48 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
                 }
             }
         }
+        return null;
+    }
+    public async Task<SnapshotDocument?> FillSnapshotDocumentAsync(SnapshotDocument document) => document.Snapshot switch
+    {
+        null => await FillSnapshotDocumentWithBlobAsync(document),
+        _ => await FillSnapshotDocumentWithJObjectAsync(document)
+    };
+    public async Task<SnapshotDocument?> FillSnapshotDocumentWithJObjectAsync(SnapshotDocument document)
+    {
+        var documentTypeName = document.DocumentTypeName;
+        var aggregateTypeName = document.AggregateTypeName;
+        var isAggregate = documentTypeName.Equals(aggregateTypeName);
+        if (isAggregate)
+        {
+            var aggregateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == aggregateTypeName);
+            if (aggregateType != null)
+            {
+                var targetClassType = typeof(AggregateState<>).MakeGenericType(aggregateType.Aggregate);
+                var state = SekibanJsonHelper.ConvertTo(document.Snapshot, targetClassType);
+                if (state is not null)
+                {
+                    var snapshot = Activator.CreateInstance(targetClassType, state, state.Payload);
+                    return document with { Snapshot = snapshot };
+                }
+            }
+        }
+        else
+        {
+
+            var projectionType = _sekibanAggregateTypes.SingleProjectionTypes.FirstOrDefault(m => m.PayloadType.Name == documentTypeName);
+            if (projectionType != null)
+            {
+                var targetClassType = typeof(SingleProjectionState<>).MakeGenericType(projectionType.PayloadType);
+                var state = SekibanJsonHelper.ConvertTo(document.Snapshot, targetClassType);
+                if (state is not null)
+                {
+                    var snapshot = Activator.CreateInstance(targetClassType, state, state.Payload);
+                    return document with { Snapshot = snapshot };
+                }
+            }
+        }
+        await Task.CompletedTask;
         return null;
     }
 }

@@ -133,11 +133,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     foreach (var obj in await feedIterator.ReadNextAsync())
                     {
                         if (obj is null) { continue; }
-                        if (obj.Snapshot is null)
-                        {
-                            return await _singleProjectionSnapshotAccessor.FillSnapshotDocumentWithBlob(obj);
-                        }
-                        return obj;
+                        return await _singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(obj);
                     }
                 }
                 return null;
@@ -189,11 +185,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 var response =
                     await container.ReadItemAsync<SnapshotDocument>(id.ToString(), new PartitionKey(partitionKey));
                 if (response.Resource is null) { return null; }
-                if (response.Resource.Snapshot is null)
-                {
-                    return await _singleProjectionSnapshotAccessor.FillSnapshotDocumentWithBlob(response.Resource);
-                }
-                return response.Resource;
+                return await _singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(response.Resource);
             });
     }
 
@@ -221,16 +213,11 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     foreach (var obj in await feedIterator.ReadNextAsync())
                     {
                         if (obj is null) { continue; }
-                        if (obj.Snapshot is null)
+                        var filled = await _singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(obj);
+                        if (filled is not null)
                         {
-                            var filled = await _singleProjectionSnapshotAccessor.FillSnapshotDocumentWithBlob(obj);
-                            if (filled is not null)
-                            {
-                                list.Add(filled);
-                                continue;
-                            }
+                            list.Add(filled);
                         }
-                        list.Add(obj);
                     }
                 }
                 return list;

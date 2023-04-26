@@ -23,6 +23,7 @@ using Sekiban.Core.Query;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Query.SingleProjections.Projections;
+using Sekiban.Core.Setting;
 using Sekiban.Core.Snapshot;
 using Sekiban.Core.Snapshot.Aggregate;
 using Sekiban.Core.Types;
@@ -45,6 +46,7 @@ public class CustomerDbStoryBasic : TestBase
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
     private readonly IMemoryCacheAccessor _memoryCache;
     private readonly ITestOutputHelper _testOutputHelper;
+    private readonly IBlobAccessor blobAccessor;
     private readonly ICommandExecutor commandExecutor;
     private readonly IMultiProjectionService multiProjectionService;
     private readonly IAggregateLoader projectionService;
@@ -64,6 +66,7 @@ public class CustomerDbStoryBasic : TestBase
         _memoryCache = GetService<IMemoryCacheAccessor>();
         singleProjectionSnapshotAccessor = GetService<ISingleProjectionSnapshotAccessor>();
         _documentPersistentWriter = GetService<IDocumentPersistentWriter>();
+        blobAccessor = GetService<IBlobAccessor>();
     }
 
     [Fact(DisplayName = "CosmosDb ストーリーテスト 集約の機能のテストではなく、CosmosDbと連携して正しく動くかをテストしています。")]
@@ -337,9 +340,16 @@ public class CustomerDbStoryBasic : TestBase
         var clientProjection = await projectionService.AsSingleProjectionStateAsync<ClientNameHistoryProjection>(clientResult.AggregateId!.Value);
         Assert.NotNull(clientProjection);
     }
+    [Fact]
+    public void CheckBlobAccessorBlobConnectionString()
+    {
+        var connectionString = blobAccessor.BlobConnectionString();
+        _testOutputHelper.WriteLine("BlobConnectionString: " + connectionString);
+        Assert.NotNull(connectionString);
+    }
 
     [Fact]
-    public async Task ManualSnapshotTestAsync()
+    public async Task  ManualSnapshotTestAsync()
     {
         await DeleteonlyAsync();
         var branchResult = await commandExecutor.ExecCommandAsync(new CreateBranch("Tokyo"));

@@ -12,5 +12,7 @@ public interface ISingleProjectionSnapshotAccessor
     Task<TState?> StateFromSnapshotDocumentAsync<TState>(SnapshotDocument document)
         where TState : IAggregateCommon;
 
-    Task<SnapshotDocument?> FillSnapshotDocumentWithBlob(SnapshotDocument document);
+    Task<SnapshotDocument?> FillSnapshotDocumentWithBlobAsync(SnapshotDocument document);
+    Task<SnapshotDocument?> FillSnapshotDocumentAsync(SnapshotDocument document);
+    Task<SnapshotDocument?> FillSnapshotDocumentWithJObjectAsync(SnapshotDocument document);
 }

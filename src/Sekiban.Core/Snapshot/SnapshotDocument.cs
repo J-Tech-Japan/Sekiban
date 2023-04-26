@@ -48,65 +48,9 @@ public record SnapshotDocument : Document, IDocument
 
     public T? ToState<T>(SekibanAggregateTypes? sekibanAggregateTypes = null) where T : IAggregateCommon
     {
-
-        // if (baseType.IsGenericType && baseType.GetGenericTypeDefinition() == typeof(AggregateState<>))
-        // {
-        //     var aggregateType = sekibanAggregateTypes?.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == AggregateTypeName);
-        //     if (aggregateType != null)
-        //     {
-        //         var state = SekibanJsonHelper.ConvertTo(Snapshot, typeof(AggregateState<>).MakeGenericType(aggregateType.Aggregate));
-        //         if (state is not null)
-        //         {
-        //             return Activator.CreateInstance(typeof(T), state, state.Payload);
-        //         }
-        //     }
-        // }
-        // if (baseType.IsGenericType && baseType.GetGenericTypeDefinition() == typeof(SingleProjectionState<>))
-        // {
-        //     var projectionType = sekibanAggregateTypes?.SingleProjectionTypes.FirstOrDefault(m => m.PayloadType.Name == DocumentTypeName);
-        //     if (projectionType != null)
-        //     {
-        //         var state = SekibanJsonHelper.ConvertTo(Snapshot, typeof(SingleProjectionState<>).MakeGenericType(projectionType.PayloadType));
-        //         if (state is not null)
-        //         {
-        //             return Activator.CreateInstance(typeof(T), state, state.Payload);
-        //         }
-        //     }
-        // }
         if (Snapshot is T t)
         {
             return t;
-        }
-        var baseType = typeof(T);
-        if (baseType.IsGenericType && baseType.GetGenericTypeDefinition() == typeof(AggregateState<>))
-        {
-            if (AggregateTypeName != typeof(T).Name && sekibanAggregateTypes != null)
-            {
-                var aggregateType = sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == AggregateTypeName);
-                if (aggregateType != null)
-                {
-                    var state = SekibanJsonHelper.ConvertTo(Snapshot, typeof(AggregateState<>).MakeGenericType(aggregateType.Aggregate));
-                    if (state is not null)
-                    {
-                        return Activator.CreateInstance(typeof(T), state, state.Payload);
-                    }
-                }
-            }
-        }
-        if (baseType.IsGenericType && baseType.GetGenericTypeDefinition() == typeof(SingleProjectionState<>))
-        {
-            if (AggregateTypeName != typeof(T).Name && sekibanAggregateTypes != null)
-            {
-                var aggregateType = sekibanAggregateTypes.SingleProjectionTypes.FirstOrDefault(m => m.PayloadType.Name == DocumentTypeName);
-                if (aggregateType != null)
-                {
-                    var state = SekibanJsonHelper.ConvertTo(Snapshot, typeof(SingleProjectionState<>).MakeGenericType(aggregateType.PayloadType));
-                    if (state is not null)
-                    {
-                        return Activator.CreateInstance(typeof(T), state, state.Payload);
-                    }
-                }
-            }
         }
         return SekibanJsonHelper.ConvertTo<T>(Snapshot);
     }
