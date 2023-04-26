@@ -23,6 +23,12 @@ public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersist
         _serviceProvider = serviceProvider;
         _snapshotDocumentCache = snapshotDocumentCache;
     }
+    public Task SaveSingleSnapshotAsync(SnapshotDocument document, Type aggregateType, bool useBlob)
+    {
+        _snapshotDocumentCache.Set(document);
+        return Task.CompletedTask;
+    }
+    public bool ShouldUseBlob(SnapshotDocument document) => false;
 
     public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType) where TDocument : IDocument
     {
@@ -38,7 +44,7 @@ public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersist
             case DocumentType.AggregateSnapshot:
                 if (document is SnapshotDocument sd)
                 {
-                    _snapshotDocumentCache.Set(sd);
+                    await SaveSingleSnapshotAsync(sd, aggregateType, ShouldUseBlob(sd));
                 }
                 break;
         }

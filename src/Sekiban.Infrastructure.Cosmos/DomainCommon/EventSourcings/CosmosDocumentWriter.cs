@@ -42,37 +42,7 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
                 {
                     return;
                 }
-                var serializer = new SekibanCosmosSerializer();
-                var stream = serializer.ToStream(snapshot);
-                if (stream.Length > 1500)
-                {
-                    var blobSnapshot = snapshot with { Snapshot = null };
-                    var snapshotValue = snapshot.Snapshot;
-                    var json = JsonSerializer.Serialize(snapshotValue, new JsonSerializerOptions());
-                    var memoryStream = new MemoryStream(Encoding.UTF8.GetBytes(json));
-                    await _blobAccessor.SetBlobWithGZipAsync(
-                        SekibanBlobContainer.SingleProjectionState,
-                        blobSnapshot.FilenameForSnapshot(),
-                        memoryStream);
-                    await _cosmosDbFactory.CosmosActionAsync(
-                        blobSnapshot.DocumentType,
-                        aggregateContainerGroup,
-                        async container =>
-                        {
-                            await container.CreateItemAsync(blobSnapshot, new PartitionKey(blobSnapshot.PartitionKey));
-                        });
-
-                }
-                else
-                {
-                    await _cosmosDbFactory.CosmosActionAsync(
-                        document.DocumentType,
-                        aggregateContainerGroup,
-                        async container =>
-                        {
-                            await container.CreateItemAsync(document, new PartitionKey(document.PartitionKey));
-                        });
-                }
+                await SaveSingleSnapshotAsync(snapshot, aggregateType, ShouldUseBlob(snapshot));
                 break;
             default:
                 await _cosmosDbFactory.CosmosActionAsync(
@@ -95,5 +65,44 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
             aggregateContainerGroup,
             async container => { await container.UpsertItemAsync<dynamic>(ev, new PartitionKey(ev.PartitionKey)); });
         await _eventPublisher.PublishAsync(ev);
+    }
+    public async Task SaveSingleSnapshotAsync(SnapshotDocument document, Type aggregateType, bool useBlob)
+    {
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
+        if (useBlob)
+        {
+            var blobSnapshot = document with { Snapshot = null };
+            var snapshotValue = document.Snapshot;
+            var json = JsonSerializer.Serialize(snapshotValue, new JsonSerializerOptions());
+            var memoryStream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+            await _blobAccessor.SetBlobWithGZipAsync(
+                SekibanBlobContainer.SingleProjectionState,
+                blobSnapshot.FilenameForSnapshot(),
+                memoryStream);
+            await _cosmosDbFactory.CosmosActionAsync(
+                blobSnapshot.DocumentType,
+                aggregateContainerGroup,
+                async container =>
+                {
+                    await container.CreateItemAsync(blobSnapshot, new PartitionKey(blobSnapshot.PartitionKey));
+                });
+
+        }
+        else
+        {
+            await _cosmosDbFactory.CosmosActionAsync(
+                document.DocumentType,
+                aggregateContainerGroup,
+                async container =>
+                {
+                    await container.CreateItemAsync(document, new PartitionKey(document.PartitionKey));
+                });
+        }
+    }
+    public bool ShouldUseBlob(SnapshotDocument document)
+    {
+        var serializer = new SekibanCosmosSerializer();
+        var stream = serializer.ToStream(document);
+        return stream.Length > 1500;
     }
 }
