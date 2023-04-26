@@ -344,12 +344,12 @@ public class CustomerDbStoryBasic : TestBase
     public void CheckBlobAccessorBlobConnectionString()
     {
         var connectionString = blobAccessor.BlobConnectionString();
-        _testOutputHelper.WriteLine("BlobConnectionString: " + connectionString);
+        Console.WriteLine("BlobConnectionString: " + connectionString);
         Assert.NotNull(connectionString);
     }
 
     [Fact]
-    public async Task  ManualSnapshotTestAsync()
+    public async Task ManualSnapshotTestAsync()
     {
         await DeleteonlyAsync();
         var branchResult = await commandExecutor.ExecCommandAsync(new CreateBranch("Tokyo"));
