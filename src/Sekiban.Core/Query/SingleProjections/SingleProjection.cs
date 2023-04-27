@@ -61,7 +61,7 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
         AppliedSnapshotVersion,
         Version);
     public bool CanApplySnapshot(IAggregateStateCommon? snapshot) =>
-        snapshot is null ? false : typeof(TProjectionPayload).IsAssignableFrom(snapshot.GetPayload());
+        snapshot is not null && snapshot.GetPayload() is TProjectionPayload;
     public void ApplySnapshot(IAggregateStateCommon snapshot)
     {
         Version = snapshot.Version;

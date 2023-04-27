@@ -52,7 +52,10 @@ public class MemoryCacheSingleProjection : ISingleProjection
             return await GetAggregateWithoutCacheAsync<TProjection, TState, TProjector>(aggregateId, toVersion);
         }
         var aggregate = projector.CreateInitialAggregate(aggregateId);
-        aggregate.ApplySnapshot(savedContainer.SafeState);
+        if (savedContainer.SafeState is not null && aggregate.CanApplySnapshot(savedContainer.SafeState))
+        {
+            aggregate.ApplySnapshot(savedContainer.SafeState);
+        }
         if (includesSortableUniqueId is not null &&
             savedContainer?.SafeSortableUniqueId is not null &&
             includesSortableUniqueId.EarlierThan(savedContainer.SafeSortableUniqueId))

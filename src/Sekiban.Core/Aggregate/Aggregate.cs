@@ -23,8 +23,8 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon,
         return (bool?)genericMethod?.Invoke(this, null) ?? false;
     }
     public AggregateState<TAggregatePayload> ToState() => ToState<TAggregatePayload>();
-    public bool CanApplySnapshot(IAggregateStateCommon snapshot) =>
-        snapshot is not null && typeof(TAggregatePayload).IsAssignableTo(snapshot.GetType());
+    public bool CanApplySnapshot(IAggregateStateCommon? snapshot) =>
+        snapshot?.GetPayload() is TAggregatePayload;
     public void ApplySnapshot(IAggregateStateCommon snapshot)
     {
         ApplyBaseInfo(snapshot);
@@ -95,8 +95,8 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon,
         var aggregatePayloadOut = eventPayload.GetAggregatePayloadOutType();
         var methods = GetType().GetMethods(BindingFlags.Static | BindingFlags.NonPublic).Where(m => m.Name == nameof(ApplyEventToAggregatePayload));
         var method = methods.First(m => m.IsGenericMethodDefinition && m.GetGenericArguments().Length == 3);
-        var genericMethod = method?.MakeGenericMethod(aggregatePayloadIn, aggregatePayloadOut, eventType);
-        return (IAggregatePayloadCommon?)genericMethod?.Invoke(this, new object[] { Payload, ev });
+        var genericMethod = method.MakeGenericMethod(aggregatePayloadIn, aggregatePayloadOut, eventType);
+        return (IAggregatePayloadCommon?)genericMethod.Invoke(this, new object[] { Payload, ev });
     }
 
     private static TAggregatePayloadOut? ApplyEventToAggregatePayload<TAggregatePayloadIn, TAggregatePayloadOut,
@@ -132,10 +132,5 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon,
         ApplyEvent(ev);
         ev = ev with { Version = Version };
         return ev;
-    }
-
-    private void CopyPropertiesFromSnapshot(AggregateState<TAggregatePayload> snapshot)
-    {
-        Payload = snapshot.Payload;
     }
 }

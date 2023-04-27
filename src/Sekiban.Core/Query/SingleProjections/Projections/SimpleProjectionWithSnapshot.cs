@@ -8,8 +8,6 @@ namespace Sekiban.Core.Query.SingleProjections.Projections;
 public class SimpleProjectionWithSnapshot : ISingleProjection
 {
     private readonly IDocumentRepository _documentRepository;
-    private readonly SekibanAggregateTypes _sekibanAggregateTypes;
-    private readonly ISingleProjectionSnapshotAccessor _singleProjectionSnapshotAccessor;
     private readonly ISingleProjectionFromInitial singleProjectionFromInitial;
     public SimpleProjectionWithSnapshot(
         IDocumentRepository documentRepository,
@@ -19,8 +17,6 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
     {
         _documentRepository = documentRepository;
         this.singleProjectionFromInitial = singleProjectionFromInitial;
-        _sekibanAggregateTypes = sekibanAggregateTypes;
-        _singleProjectionSnapshotAccessor = singleProjectionSnapshotAccessor;
     }
 
     /// <summary>
@@ -54,7 +50,7 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
         IAggregateStateCommon? state = null;
         if (snapshotDocument is not null && aggregate.CanApplySnapshot(snapshotDocument.Snapshot))
         {
-            aggregate.ApplySnapshot(snapshotDocument.Snapshot);
+            aggregate.ApplySnapshot(snapshotDocument?.Snapshot);
         }
         if (toVersion.HasValue && aggregate.Version >= toVersion.Value)
         {

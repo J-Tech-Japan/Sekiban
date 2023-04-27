@@ -123,7 +123,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     .Where(
                         b => b.DocumentType == DocumentType.AggregateSnapshot &&
                             b.AggregateId == aggregateId &&
-                            b.DocumentTypeName == projectionPayloadType.Name &&
+                            b.AggregateTypeName == aggregatePayloadType.Name &&
                             b.PayloadVersionIdentifier == payloadVersionIdentifier)
                     .OrderByDescending(m => m.LastSortableUniqueId);
                 var feedIterator =

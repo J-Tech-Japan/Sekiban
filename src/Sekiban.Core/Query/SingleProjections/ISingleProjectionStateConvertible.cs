@@ -6,6 +6,6 @@ public interface ISingleProjectionStateConvertible<TState> where TState : IAggre
     bool GetPayloadTypeIs<TAggregatePayloadExpect>();
     bool GetPayloadTypeIs(Type expect);
     TState ToState();
-    bool CanApplySnapshot(IAggregateStateCommon snapshot);
+    bool CanApplySnapshot(IAggregateStateCommon? snapshot);
     void ApplySnapshot(IAggregateStateCommon snapshot);
 }
