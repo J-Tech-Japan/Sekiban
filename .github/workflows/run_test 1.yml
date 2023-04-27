@@ -74,12 +74,12 @@ jobs:
     - name: Secret Settings
       run: |
         pushd ./test/Sekiban.Consistency.Test.CosmosDb
-        dotnet user-secrets set "Sekiban:Default:CosmosDbEndPointUrl" ${{secrets.TEST_COSMOS_ENDPOINT}}
-        dotnet user-secrets set "Sekiban:Default:CosmosDbAuthorizationKey" ${{secrets.TEST_COSMOS_SECRET}}
-        dotnet user-secrets set "Sekiban:Default:BlobConnectionString" ${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}
-        dotnet user-secrets set "Sekiban:Secondary:CosmosDbEndPointUrl" ${{secrets.TEST_COSMOS_ENDPOINT}}
-        dotnet user-secrets set "Sekiban:Secondary:CosmosDbAuthorizationKey" ${{secrets.TEST_COSMOS_SECRET}}
-        dotnet user-secrets set "Sekiban:Secondary:BlobConnectionString" ${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}
+        dotnet user-secrets set "Sekiban:Default:CosmosDbEndPointUrl" "${{secrets.TEST_COSMOS_ENDPOINT}}"
+        dotnet user-secrets set "Sekiban:Default:CosmosDbAuthorizationKey" "${{secrets.TEST_COSMOS_SECRET}}"
+        dotnet user-secrets set "Sekiban:Default:BlobConnectionString" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
+        dotnet user-secrets set "Sekiban:Secondary:CosmosDbEndPointUrl" "${{secrets.TEST_COSMOS_ENDPOINT}}"
+        dotnet user-secrets set "Sekiban:Secondary:CosmosDbAuthorizationKey" "${{secrets.TEST_COSMOS_SECRET}}"
+        dotnet user-secrets set "Sekiban:Secondary:BlobConnectionString" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
         dotnet user-secrets set "Sekiban:Default:CosmosDbDatabase" "GithubActions"
         dotnet user-secrets set "Sekiban:Secondary:CosmosDbDatabase" "GithubActions"
     - name: Restore dependencies
@@ -120,12 +120,12 @@ jobs:
     - name: Secret Settings
       run: |
         pushd ./test/Sekiban.Consistency.Test.CosmosDb
-        dotnet user-secrets set "Sekiban:Default:CosmosDbEndPointUrl" ${{secrets.TEST_COSMOS_ENDPOINT}}
-        dotnet user-secrets set "Sekiban:Default:CosmosDbAuthorizationKey" ${{secrets.TEST_COSMOS_SECRET}}
-        dotnet user-secrets set "Sekiban:Default:BlobConnectionString" ${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}
-        dotnet user-secrets set "Sekiban:Secondary:CosmosDbEndPointUrl" ${{secrets.TEST_COSMOS_ENDPOINT}}
-        dotnet user-secrets set "Sekiban:Secondary:CosmosDbAuthorizationKey" ${{secrets.TEST_COSMOS_SECRET}}
-        dotnet user-secrets set "Sekiban:Secondary:BlobConnectionString" ${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}
+        dotnet user-secrets set "Sekiban:Default:CosmosDbEndPointUrl" "${{secrets.TEST_COSMOS_ENDPOINT}}"
+        dotnet user-secrets set "Sekiban:Default:CosmosDbAuthorizationKey" "${{secrets.TEST_COSMOS_SECRET}}"
+        dotnet user-secrets set "Sekiban:Default:BlobConnectionString" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
+        dotnet user-secrets set "Sekiban:Secondary:CosmosDbEndPointUrl" "${{secrets.TEST_COSMOS_ENDPOINT}}"
+        dotnet user-secrets set "Sekiban:Secondary:CosmosDbAuthorizationKey" "${{secrets.TEST_COSMOS_SECRET}}"
+        dotnet user-secrets set "Sekiban:Secondary:BlobConnectionString" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
         dotnet user-secrets set "Sekiban:Default:CosmosDbDatabase" "GithubActions"
         dotnet user-secrets set "Sekiban:Secondary:CosmosDbDatabase" "GithubActions"
     - name: Restore dependencies

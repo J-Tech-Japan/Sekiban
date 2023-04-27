@@ -677,7 +677,7 @@ public class CustomerDbStoryBasic : TestBase
         await CheckSnapshots<RecentActivity>(snapshots, aggregateId);
         var projectionSnapshots =
             await _documentPersistentRepository.GetSnapshotsForAggregateAsync(aggregateId, typeof(RecentActivity), typeof(TenRecentProjection));
-
+        Assert.NotEmpty(projectionSnapshots);
         await CheckProjectionSnapshots<TenRecentProjection>(projectionSnapshots, aggregateId);
 
         // check aggregate result
