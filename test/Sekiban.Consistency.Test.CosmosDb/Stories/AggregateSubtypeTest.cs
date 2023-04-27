@@ -11,6 +11,7 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.SingleProjections;
+using Sekiban.Core.Query.SingleProjections.Projections;
 using Sekiban.Infrastructure.Cosmos;
 using System;
 using System.Linq;
@@ -22,14 +23,18 @@ namespace SampleProjectStoryXTest.Stories;
 public class AggregateSubtypeTest : TestBase
 {
     private readonly CosmosDbFactory _cosmosDbFactory;
+    private readonly IDocumentPersistentWriter _documentPersistentWriter;
     private readonly HybridStoreManager _hybridStoreManager;
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
     private readonly IMemoryCacheAccessor _memoryCache;
     private readonly IAggregateLoader aggregateLoader;
     private readonly Guid cartId = Guid.NewGuid();
     private readonly ICommandExecutor commandExecutor;
+    private readonly IDocumentPersistentRepository documentPersistentRepository;
     private readonly IMultiProjectionService multiProjectionService;
+    private readonly ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor;
     private CommandExecutorResponseWithEvents commandResponse = default!;
+
     public AggregateSubtypeTest(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
         sekibanTestFixture,
         testOutputHelper)
@@ -41,6 +46,9 @@ public class AggregateSubtypeTest : TestBase
         _hybridStoreManager = GetService<HybridStoreManager>();
         _inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
         _memoryCache = GetService<IMemoryCacheAccessor>();
+        documentPersistentRepository = GetService<IDocumentPersistentRepository>();
+        singleProjectionSnapshotAccessor = GetService<ISingleProjectionSnapshotAccessor>();
+        _documentPersistentWriter = GetService<IDocumentPersistentWriter>();
     }
 
     [Fact(DisplayName = "SubtypeのAggregateを作成する")]
@@ -172,16 +180,51 @@ public class AggregateSubtypeTest : TestBase
                     { CartId = snapshotCartId, Code = $"TEST{i:000}", Name = $"Name{i:000}", Quantity = i + 1 });
             var state = await aggregateLoader.AsDefaultStateAsync<ICartAggregate>(snapshotCartId);
             Assert.NotNull(state);
-            Assert.Equal(typeof(ShoppingCartI).Name, state?.PayloadTypeName);
+            Assert.Equal(nameof(ShoppingCartI), state?.PayloadTypeName);
         }
+
+        var cart1 = await aggregateLoader.AsDefaultStateFromInitialAsync<ICartAggregate>(snapshotCartId, 90);
+        var cartSnapshot = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(cart1!);
+        await _documentPersistentWriter.SaveSingleSnapshotAsync(cartSnapshot!, typeof(ICartAggregate), false);
+        var cart2 = await aggregateLoader.AsDefaultStateFromInitialAsync<ICartAggregate>(snapshotCartId);
+        var cartSnapshot2 = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(cart2!);
+        await _documentPersistentWriter.SaveSingleSnapshotAsync(cartSnapshot2!, typeof(ICartAggregate), true);
+
+        var snapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(
+            snapshotCartId,
+            typeof(ICartAggregate),
+            typeof(ICartAggregate));
+
+        Assert.Contains(cartSnapshot!.Id, snapshots.Select(m => m.Id));
+        var clientFromSnapshot = snapshots.First(m => m.Id == cartSnapshot.Id).ToState<AggregateState<ShoppingCartI>>();
+        Assert.NotNull(clientFromSnapshot);
+
+        Assert.Contains(cartSnapshot2!.Id, snapshots.Select(m => m.Id));
+        var clientFromSnapshot2 = snapshots.First(m => m.Id == cartSnapshot2.Id).ToState<AggregateState<ShoppingCartI>>();
+        Assert.NotNull(clientFromSnapshot2);
+
+
+
+
         // Remove in memory data
         _inMemoryDocumentStore.ResetInMemoryStore();
         _hybridStoreManager.ClearHybridPartitions();
         ((MemoryCache)_memoryCache.Cache).Compact(1);
 
+        snapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(
+            snapshotCartId,
+            typeof(ICartAggregate),
+            typeof(ICartAggregate));
+        Assert.NotEmpty(snapshots);
+        foreach (var snapshot in snapshots)
+        {
+            var state = snapshot.ToState<AggregateState<ICartAggregate>>();
+            Assert.NotNull(state);
+        }
         var stateAfter = await aggregateLoader.AsDefaultStateAsync<ICartAggregate>(snapshotCartId);
         Assert.NotNull(stateAfter);
-        Assert.Equal(typeof(ShoppingCartI).Name, stateAfter?.PayloadTypeName);
+        Assert.Equal(nameof(ShoppingCartI), stateAfter?.PayloadTypeName);
+        Assert.NotEqual(0, stateAfter!.AppliedSnapshotVersion);
     }
 
 

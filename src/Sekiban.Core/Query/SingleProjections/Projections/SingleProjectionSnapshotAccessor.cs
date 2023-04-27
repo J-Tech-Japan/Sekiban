@@ -2,24 +2,27 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
+using Sekiban.Core.Types;
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
 public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccessor
 {
     private readonly IBlobAccessor _blobAccessor;
     private readonly SekibanAggregateTypes _sekibanAggregateTypes;
+
     public SingleProjectionSnapshotAccessor(SekibanAggregateTypes sekibanAggregateTypes, IBlobAccessor blobAccessor)
     {
         _sekibanAggregateTypes = sekibanAggregateTypes;
         _blobAccessor = blobAccessor;
     }
     public async Task<SnapshotDocument?> SnapshotDocumentFromAggregateStateAsync<TPayload>(AggregateState<TPayload> state)
-        where TPayload : IAggregatePayloadCommon, new()
+        where TPayload : IAggregatePayloadCommon
     {
         await Task.CompletedTask;
+        var parentAggregateType = typeof(TPayload).GetBaseAggregatePayloadTypeFromAggregate();
         return new SnapshotDocument(
             state.AggregateId,
-            typeof(TPayload),
+            parentAggregateType,
             state.Payload.GetType(),
             state,
             state.LastEventId,
@@ -56,31 +59,56 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
         if (stream is null) { return null; }
         using var reader = new StreamReader(stream);
         var snapshotString = await reader.ReadToEndAsync();
-        foreach (var aggregate in _sekibanAggregateTypes.AggregateTypes)
+        switch (GetStateType(document))
         {
-            if (aggregate.Aggregate.Name == document.DocumentTypeName)
+            case StateType.Aggregate:
             {
-                var aggregateStateType = typeof(AggregateState<>).MakeGenericType(aggregate.Aggregate);
+                var aggregateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.AggregateTypeName);
+                if (aggregateType is null) { return null; }
+                var aggregateStateType = typeof(AggregateState<>).MakeGenericType(aggregateType.Aggregate);
+                var state = JsonSerializer.Deserialize(snapshotString, aggregateStateType);
+                if (state != null)
+                {
+                    return document with { Snapshot = state };
+                }
+
+            }
+                break;
+            case StateType.AggregateSubtype:
+            {
+                var aggregateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.AggregateTypeName);
+                if (aggregateType is null) { return null; }
+                var baseType = aggregateType.Aggregate.GetBaseAggregatePayloadTypeFromAggregate();
+                var subAggregateStateType =
+                    _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.DocumentTypeName);
+                if (subAggregateStateType is null) { return null; }
+                var aggregateStateType = typeof(AggregateState<>).MakeGenericType(subAggregateStateType.Aggregate);
                 var state = JsonSerializer.Deserialize(snapshotString, aggregateStateType);
                 if (state != null)
                 {
                     return document with { Snapshot = state };
                 }
             }
+                break;
+            case StateType.SingleProjection:
+                foreach (var singleProjection in _sekibanAggregateTypes.SingleProjectionTypes)
+                {
+                    if (singleProjection.PayloadType.Name == document.DocumentTypeName)
+                    {
+                        var aggregateStateType = typeof(SingleProjectionState<>).MakeGenericType(singleProjection.PayloadType);
+                        var state = JsonSerializer.Deserialize(snapshotString, aggregateStateType);
+                        if (state != null)
+                        {
+                            return document with { Snapshot = state };
+                        }
+                    }
+                }
+                break;
+            default:
+                return null;
         }
 
-        foreach (var singleProjection in _sekibanAggregateTypes.SingleProjectionTypes)
-        {
-            if (singleProjection.PayloadType.Name == document.DocumentTypeName)
-            {
-                var aggregateStateType = typeof(SingleProjectionState<>).MakeGenericType(singleProjection.PayloadType);
-                var state = JsonSerializer.Deserialize(snapshotString, aggregateStateType);
-                if (state != null)
-                {
-                    return document with { Snapshot = state };
-                }
-            }
-        }
+
         return null;
     }
     public async Task<SnapshotDocument?> FillSnapshotDocumentAsync(SnapshotDocument document) => document.Snapshot switch
@@ -90,14 +118,12 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
     };
     public async Task<SnapshotDocument?> FillSnapshotDocumentWithJObjectAsync(SnapshotDocument document)
     {
-        var documentTypeName = document.DocumentTypeName;
-        var aggregateTypeName = document.AggregateTypeName;
-        var isAggregate = documentTypeName.Equals(aggregateTypeName);
-        if (isAggregate)
+        switch (GetStateType(document))
         {
-            var aggregateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == aggregateTypeName);
-            if (aggregateType != null)
+            case StateType.Aggregate:
             {
+                var aggregateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.AggregateTypeName);
+                if (aggregateType == null) { return null; }
                 var targetClassType = typeof(AggregateState<>).MakeGenericType(aggregateType.Aggregate);
                 var state = SekibanJsonHelper.ConvertTo(document.Snapshot, targetClassType);
                 if (state is not null)
@@ -106,23 +132,63 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
                     return document with { Snapshot = snapshot };
                 }
             }
-        }
-        else
-        {
-
-            var projectionType = _sekibanAggregateTypes.SingleProjectionTypes.FirstOrDefault(m => m.PayloadType.Name == documentTypeName);
-            if (projectionType != null)
+                break;
+            case StateType.AggregateSubtype:
             {
-                var targetClassType = typeof(SingleProjectionState<>).MakeGenericType(projectionType.PayloadType);
-                var state = SekibanJsonHelper.ConvertTo(document.Snapshot, targetClassType);
+                var aggregateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.AggregateTypeName);
+                if (aggregateType is null) { return null; }
+                var subAggregateStateType =
+                    _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.DocumentTypeName);
+                if (subAggregateStateType is null) { return null; }
+                var aggregateStateType = typeof(AggregateState<>).MakeGenericType(subAggregateStateType.Aggregate);
+                var state = SekibanJsonHelper.ConvertTo(document.Snapshot, aggregateStateType);
                 if (state is not null)
                 {
-                    var snapshot = Activator.CreateInstance(targetClassType, state, state.Payload);
+                    var snapshot = Activator.CreateInstance(aggregateStateType, state, state.Payload);
                     return document with { Snapshot = snapshot };
                 }
             }
+
+                break;
+            case StateType.SingleProjection:
+            {
+                var projectionType =
+                    _sekibanAggregateTypes.SingleProjectionTypes.FirstOrDefault(m => m.PayloadType.Name == document.DocumentTypeName);
+                if (projectionType != null)
+                {
+                    var targetClassType = typeof(SingleProjectionState<>).MakeGenericType(projectionType.PayloadType);
+                    var state = SekibanJsonHelper.ConvertTo(document.Snapshot, targetClassType);
+                    if (state is not null)
+                    {
+                        var snapshot = Activator.CreateInstance(targetClassType, state, state.Payload);
+                        return document with { Snapshot = snapshot };
+                    }
+                }
+            }
+                break;
+            default:
+                return null;
         }
+
         await Task.CompletedTask;
         return null;
+    }
+
+    private StateType GetStateType(SnapshotDocument document)
+    {
+        if (document.AggregateTypeName == document.DocumentTypeName)
+        {
+            return StateType.Aggregate;
+        }
+        if (_sekibanAggregateTypes.AggregateTypes.Any(m => m.Aggregate.Name == document.DocumentTypeName))
+        {
+            return StateType.AggregateSubtype;
+        }
+        return StateType.SingleProjection;
+    }
+
+    private enum StateType
+    {
+        Aggregate = 1, AggregateSubtype, SingleProjection
     }
 }

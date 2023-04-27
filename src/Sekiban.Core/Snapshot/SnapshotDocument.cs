@@ -2,7 +2,6 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Partition;
 using Sekiban.Core.Query.SingleProjections;
-using Sekiban.Core.Shared;
 namespace Sekiban.Core.Snapshot;
 
 public record SnapshotDocument : Document, IDocument
@@ -52,7 +51,7 @@ public record SnapshotDocument : Document, IDocument
         {
             return t;
         }
-        return SekibanJsonHelper.ConvertTo<T>(Snapshot);
+        return default;
     }
 
     public string FilenameForSnapshot() => $"{DocumentTypeName}_{AggregateId}_{SavedVersion}_{PayloadVersionIdentifier}.json";

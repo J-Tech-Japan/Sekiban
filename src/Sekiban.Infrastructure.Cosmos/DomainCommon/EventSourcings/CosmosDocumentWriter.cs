@@ -103,6 +103,6 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
     {
         var serializer = new SekibanCosmosSerializer();
         var stream = serializer.ToStream(document);
-        return stream.Length > 1500;
+        return stream.Length > 1024 * 500;
     }
 }
