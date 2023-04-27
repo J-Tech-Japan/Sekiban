@@ -9,9 +9,6 @@ public interface ISingleProjectionSnapshotAccessor
     Task<SnapshotDocument?> SnapshotDocumentFromSingleProjectionStateAsync<TPayload>(SingleProjectionState<TPayload> state, Type aggregateType)
         where TPayload : ISingleProjectionPayloadCommon, new();
 
-    Task<TState?> StateFromSnapshotDocumentAsync<TState>(SnapshotDocument document)
-        where TState : IAggregateCommon;
-
     Task<SnapshotDocument?> FillSnapshotDocumentWithBlobAsync(SnapshotDocument document);
     Task<SnapshotDocument?> FillSnapshotDocumentAsync(SnapshotDocument document);
     Task<SnapshotDocument?> FillSnapshotDocumentWithJObjectAsync(SnapshotDocument document);

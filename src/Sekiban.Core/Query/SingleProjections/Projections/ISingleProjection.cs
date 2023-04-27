@@ -1,3 +1,4 @@
+using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents.ValueObjects;
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
@@ -9,6 +10,6 @@ public interface ISingleProjection
         SortableUniqueIdValue? includesSortableUniqueId = null)
         where TProjection : IAggregateCommon, SingleProjections.ISingleProjection,
         ISingleProjectionStateConvertible<TState>
-        where TState : IAggregateCommon
+        where TState : IAggregateStateCommon
         where TProjector : ISingleProjector<TProjection>, new();
 }

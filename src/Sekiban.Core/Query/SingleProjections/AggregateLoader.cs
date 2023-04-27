@@ -139,7 +139,7 @@ public class AggregateLoader : IAggregateLoader
         int? toVersion = null,
         string? includesSortableUniqueId = null)
         where TAggregate : IAggregateCommon, ISingleProjection, ISingleProjectionStateConvertible<TAggregateState>
-        where TAggregateState : IAggregateCommon
+        where TAggregateState : IAggregateStateCommon
         where TSingleProjector : ISingleProjector<TAggregate>, new()
     {
         var aggregate =

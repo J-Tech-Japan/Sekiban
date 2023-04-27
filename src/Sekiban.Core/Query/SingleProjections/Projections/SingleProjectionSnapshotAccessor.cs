@@ -47,11 +47,6 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
             state.GetPayloadVersionIdentifier());
         return snapshotDocument;
     }
-    public async Task<TState?> StateFromSnapshotDocumentAsync<TState>(SnapshotDocument document) where TState : IAggregateCommon
-    {
-        await Task.CompletedTask;
-        return document.ToState<TState>(_sekibanAggregateTypes);
-    }
     public async Task<SnapshotDocument?> FillSnapshotDocumentWithBlobAsync(SnapshotDocument document)
     {
         if (document.Snapshot is not null) { return document; }

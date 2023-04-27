@@ -23,7 +23,18 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon,
         return (bool?)genericMethod?.Invoke(this, null) ?? false;
     }
     public AggregateState<TAggregatePayload> ToState() => ToState<TAggregatePayload>();
-    public void ApplySnapshot(AggregateState<TAggregatePayload> snapshot)
+    public bool CanApplySnapshot(IAggregateStateCommon snapshot) =>
+        snapshot is not null && typeof(TAggregatePayload).IsAssignableTo(snapshot.GetType());
+    public void ApplySnapshot(IAggregateStateCommon snapshot)
+    {
+        ApplyBaseInfo(snapshot);
+        Payload = snapshot.GetPayload();
+    }
+
+    public bool GetPayloadTypeIs<TAggregatePayloadExpect>() =>
+        Payload is TAggregatePayloadExpect;
+
+    private void ApplyBaseInfo(IAggregateCommon snapshot)
     {
         _basicInfo = _basicInfo with
         {
@@ -32,12 +43,7 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon,
             LastSortableUniqueId = snapshot.LastSortableUniqueId,
             AppliedSnapshotVersion = snapshot.Version
         };
-        CopyPropertiesFromSnapshot(snapshot);
     }
-
-
-    public bool GetPayloadTypeIs<TAggregatePayloadExpect>() =>
-        Payload is TAggregatePayloadExpect;
 
     public override void ApplyEvent(IEvent ev)
     {

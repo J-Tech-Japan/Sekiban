@@ -45,11 +45,19 @@ public record SnapshotDocument : Document, IDocument
 
     public string PayloadVersionIdentifier { get; init; } = string.Empty;
 
-    public T? ToState<T>(SekibanAggregateTypes? sekibanAggregateTypes = null) where T : IAggregateCommon
+    public IAggregateStateCommon? GetState() => Snapshot as IAggregateStateCommon;
+
+    public TProjection? ToProjection<TProjection>(SekibanAggregateTypes sekibanAggregateTypes) where TProjection : IAggregateCommon
     {
-        if (Snapshot is T t)
+        var projectionType = typeof(TProjection);
+        if (!projectionType.IsGenericType) { return default; }
+        if (projectionType.GetGenericTypeDefinition() == typeof(Aggregate<>))
         {
-            return t;
+
+        }
+        if (projectionType.GetGenericTypeDefinition() == typeof(SingleProjection<>))
+        {
+
         }
         return default;
     }

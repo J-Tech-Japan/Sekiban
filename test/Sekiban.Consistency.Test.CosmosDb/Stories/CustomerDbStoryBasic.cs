@@ -375,11 +375,11 @@ public class CustomerDbStoryBasic : TestBase
         var snapshots = await _documentPersistentRepository.GetSnapshotsForAggregateAsync(aggregateId, typeof(Client), typeof(Client));
 
         Assert.Contains(clientSnapshot!.Id, snapshots.Select(m => m.Id));
-        var clientFromSnapshot = snapshots.First(m => m.Id == clientSnapshot.Id).ToState<AggregateState<Client>>();
+        var clientFromSnapshot = snapshots.First(m => m.Id == clientSnapshot.Id).GetState();
         Assert.NotNull(clientFromSnapshot);
 
         Assert.Contains(clientSnapshot2!.Id, snapshots.Select(m => m.Id));
-        var clientFromSnapshot2 = snapshots.First(m => m.Id == clientSnapshot2.Id).ToState<AggregateState<Client>>();
+        var clientFromSnapshot2 = snapshots.First(m => m.Id == clientSnapshot2.Id).GetState();
         Assert.NotNull(clientFromSnapshot2);
 
         var projection1 =
@@ -398,13 +398,11 @@ public class CustomerDbStoryBasic : TestBase
 
         Assert.Contains(projectionSnapshot!.Id, projectionSnapshots.Select(m => m.Id));
 
-        var clientProjectionFromSnapshot = projectionSnapshots.First(m => m.Id == projectionSnapshot.Id)
-            .ToState<SingleProjectionState<ClientNameHistoryProjection>>();
+        var clientProjectionFromSnapshot = projectionSnapshots.First(m => m.Id == projectionSnapshot.Id).GetState();
         Assert.NotNull(clientProjectionFromSnapshot);
 
         Assert.Contains(projectionSnapshot2!.Id, projectionSnapshots.Select(m => m.Id));
-        var clientProjectionFromSnapshot2 = projectionSnapshots.First(m => m.Id == projectionSnapshot2.Id)
-            .ToState<SingleProjectionState<ClientNameHistoryProjection>>();
+        var clientProjectionFromSnapshot2 = projectionSnapshots.First(m => m.Id == projectionSnapshot2.Id).GetState();
         Assert.NotNull(clientProjectionFromSnapshot2);
 
     }
@@ -533,7 +531,7 @@ public class CustomerDbStoryBasic : TestBase
         foreach (var snapshot in snapshots)
         {
             _testOutputHelper.WriteLine($"snapshot {snapshot.AggregateTypeName}  {snapshot.Id}  {snapshot.SavedVersion} is checking");
-            var state = snapshot.ToState<AggregateState<TAggregatePayload>>();
+            var state = snapshot.GetState();
             if (state is null)
             {
                 _testOutputHelper.WriteLine($"Snapshot {snapshot.AggregateTypeName} {snapshot.Id} {snapshot.SavedVersion}  is null");
@@ -560,7 +558,7 @@ public class CustomerDbStoryBasic : TestBase
         {
             _testOutputHelper.WriteLine(
                 $"snapshot {snapshot.AggregateTypeName} {snapshot.DocumentTypeName} {snapshot.Id}  {snapshot.SavedVersion} is checking");
-            var state = snapshot.ToState<AggregateState<TAggregatePayload>>();
+            var state = snapshot.GetState();
             if (state is null)
             {
                 _testOutputHelper.WriteLine(

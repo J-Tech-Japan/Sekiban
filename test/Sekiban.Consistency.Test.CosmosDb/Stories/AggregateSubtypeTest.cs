@@ -196,11 +196,11 @@ public class AggregateSubtypeTest : TestBase
             typeof(ICartAggregate));
 
         Assert.Contains(cartSnapshot!.Id, snapshots.Select(m => m.Id));
-        var clientFromSnapshot = snapshots.First(m => m.Id == cartSnapshot.Id).ToState<AggregateState<ShoppingCartI>>();
+        var clientFromSnapshot = snapshots.First(m => m.Id == cartSnapshot.Id).GetState();
         Assert.NotNull(clientFromSnapshot);
 
         Assert.Contains(cartSnapshot2!.Id, snapshots.Select(m => m.Id));
-        var clientFromSnapshot2 = snapshots.First(m => m.Id == cartSnapshot2.Id).ToState<AggregateState<ShoppingCartI>>();
+        var clientFromSnapshot2 = snapshots.First(m => m.Id == cartSnapshot2.Id).GetState();
         Assert.NotNull(clientFromSnapshot2);
 
 
@@ -218,7 +218,7 @@ public class AggregateSubtypeTest : TestBase
         Assert.NotEmpty(snapshots);
         foreach (var snapshot in snapshots)
         {
-            var state = snapshot.ToState<AggregateState<ICartAggregate>>();
+            var state = snapshot.GetState()?.GetPayload() as ICartAggregate;
             Assert.NotNull(state);
         }
         var stateAfter = await aggregateLoader.AsDefaultStateAsync<ICartAggregate>(snapshotCartId);

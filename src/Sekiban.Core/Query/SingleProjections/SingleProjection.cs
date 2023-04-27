@@ -44,14 +44,6 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
         LastSortableUniqueId = ev.SortableUniqueId;
         Version++;
     }
-    public void ApplySnapshot(SingleProjectionState<TProjectionPayload> snapshot)
-    {
-        Version = snapshot.Version;
-        LastEventId = snapshot.LastEventId;
-        LastSortableUniqueId = snapshot.LastSortableUniqueId;
-        AppliedSnapshotVersion = snapshot.Version;
-        Payload = snapshot.Payload;
-    }
 
     public bool GetPayloadTypeIs<TAggregatePayloadExpect>() => Payload is TAggregatePayloadExpect;
     public bool GetPayloadTypeIs(Type expect)
@@ -68,6 +60,16 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
         LastSortableUniqueId,
         AppliedSnapshotVersion,
         Version);
+    public bool CanApplySnapshot(IAggregateStateCommon? snapshot) =>
+        snapshot is null ? false : typeof(TProjectionPayload).IsAssignableFrom(snapshot.GetPayload());
+    public void ApplySnapshot(IAggregateStateCommon snapshot)
+    {
+        Version = snapshot.Version;
+        LastEventId = snapshot.LastEventId;
+        LastSortableUniqueId = snapshot.LastSortableUniqueId;
+        AppliedSnapshotVersion = snapshot.Version;
+        Payload = snapshot.GetPayload();
+    }
 
     public Type GetPayloadType() => typeof(TProjectionPayload);
 

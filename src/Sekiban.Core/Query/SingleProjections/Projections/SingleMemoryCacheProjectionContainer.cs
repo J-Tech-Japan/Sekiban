@@ -1,10 +1,11 @@
+using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
 public record SingleMemoryCacheProjectionContainer<TAggregate, TState>
     where TAggregate : IAggregateCommon, SingleProjections.ISingleProjection
-    where TState : IAggregateCommon
+    where TState : IAggregateStateCommon
 {
     public Guid AggregateId { get; init; } = Guid.Empty;
     public List<IEvent> UnsafeEvents { get; init; } = new();

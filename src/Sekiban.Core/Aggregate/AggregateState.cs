@@ -9,7 +9,7 @@ namespace Sekiban.Core.Aggregate;
 ///     To make it executable, use the Aggregate class by applying this class as a snapshot
 /// </summary>
 /// <typeparam name="TPayload">Aggregate Payload</typeparam>
-public sealed record AggregateState<TPayload> : IAggregateCommon where TPayload : IAggregatePayloadCommon
+public sealed record AggregateState<TPayload> : IAggregateStateCommon where TPayload : IAggregatePayloadCommon
 {
     public AggregateState()
     {
@@ -23,10 +23,7 @@ public sealed record AggregateState<TPayload> : IAggregateCommon where TPayload 
         AppliedSnapshotVersion = aggregateCommon.AppliedSnapshotVersion;
     }
 
-    public AggregateState(IAggregateCommon aggregateCommon, TPayload payload) : this(aggregateCommon)
-    {
-        Payload = payload;
-    }
+    public AggregateState(IAggregateCommon aggregateCommon, TPayload payload) : this(aggregateCommon) => Payload = payload;
 
     public string PayloadTypeName => Payload.GetType().Name;
 
@@ -51,6 +48,7 @@ public sealed record AggregateState<TPayload> : IAggregateCommon where TPayload 
     [Required]
     [Description("Last Sortable Unique Id, SortableUniqueId defines the order of events")]
     public string LastSortableUniqueId { get; init; } = string.Empty;
+    public dynamic GetPayload() => Payload;
 
     public dynamic AsDynamicTypedState()
     {
@@ -59,10 +57,8 @@ public sealed record AggregateState<TPayload> : IAggregateCommon where TPayload 
         var genericAggregateStateType = aggregateStateType.MakeGenericType(payloadType);
         return Activator.CreateInstance(genericAggregateStateType, this, Payload) ?? this;
     }
-    public bool IsAggregatePayloadType<TAggregatePayloadExpected>() where TAggregatePayloadExpected : IAggregatePayloadCommon
-    {
-        return Payload is TAggregatePayloadExpected;
-    }
+    public bool IsAggregatePayloadType<TAggregatePayloadExpected>() where TAggregatePayloadExpected : IAggregatePayloadCommon =>
+        Payload is TAggregatePayloadExpected;
 
     private static TPayload CreatePayload()
     {
@@ -75,25 +71,16 @@ public sealed record AggregateState<TPayload> : IAggregateCommon where TPayload 
         return (TPayload?)obj ?? throw new Exception("Failed to create Aggregate Payload");
     }
 
-    public string GetPayloadVersionIdentifier()
-    {
-        return Payload.GetPayloadVersionIdentifier();
-    }
+    public string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();
 
-    public bool GetIsDeleted()
-    {
-        return Payload is IDeletable { IsDeleted: true };
-    }
+    public bool GetIsDeleted() => Payload is IDeletable { IsDeleted: true };
 
-    public dynamic GetComparableObject(AggregateState<TPayload> original, bool copyVersion = true)
+    public dynamic GetComparableObject(AggregateState<TPayload> original, bool copyVersion = true) => this with
     {
-        return this with
-        {
-            AggregateId = original.AggregateId,
-            Version = copyVersion ? original.Version : Version,
-            LastEventId = original.LastEventId,
-            AppliedSnapshotVersion = original.AppliedSnapshotVersion,
-            LastSortableUniqueId = original.LastSortableUniqueId
-        };
-    }
+        AggregateId = original.AggregateId,
+        Version = copyVersion ? original.Version : Version,
+        LastEventId = original.LastEventId,
+        AppliedSnapshotVersion = original.AppliedSnapshotVersion,
+        LastSortableUniqueId = original.LastSortableUniqueId
+    };
 }
