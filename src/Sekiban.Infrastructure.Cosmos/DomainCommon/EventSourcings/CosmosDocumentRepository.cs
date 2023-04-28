@@ -158,7 +158,6 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 var query = container.GetItemLinqQueryable<MultiProjectionSnapshotDocument>()
                     .Where(
                         b => b.DocumentType == DocumentType.MultiProjectionSnapshot &&
-                            b.DocumentTypeName == multiProjectionPayloadType.Name &&
                             b.PayloadVersionIdentifier == payloadVersionIdentifier)
                     .OrderByDescending(m => m.LastSortableUniqueId);
                 var feedIterator =
