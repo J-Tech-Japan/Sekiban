@@ -9,12 +9,12 @@ public record MultiProjectionSnapshotDocument : IDocument
 {
     public MultiProjectionSnapshotDocument() { }
 
-    public MultiProjectionSnapshotDocument(Type aggregateType, Guid id, IMultiProjectionCommon projection)
+    public MultiProjectionSnapshotDocument(Type projectionType, Guid id, IMultiProjectionCommon projection)
     {
         Id = id;
-        DocumentTypeName = aggregateType.Name;
+        DocumentTypeName = DocumentTypeNameFromProjectionType(projectionType);
         DocumentType = DocumentType.MultiProjectionSnapshot;
-        PartitionKey = PartitionKeyGenerator.ForMultiProjectionSnapshot(aggregateType);
+        PartitionKey = PartitionKeyGenerator.ForMultiProjectionSnapshot(projectionType);
         TimeStamp = SekibanDateProducer.GetRegistered().UtcNow;
         SortableUniqueId = SortableUniqueIdValue.Generate(TimeStamp, Id);
         LastEventId = projection.LastEventId;
@@ -37,4 +37,16 @@ public record MultiProjectionSnapshotDocument : IDocument
     public DateTime TimeStamp { get; init; }
     public string SortableUniqueId { get; init; } = default!;
     public SortableUniqueIdValue GetSortableUniqueId() => SortableUniqueId;
+    public static string DocumentTypeNameFromProjectionType(Type projectionType)
+    {
+        if (projectionType.IsGenericType && projectionType.GetGenericTypeDefinition() == typeof(SingleProjectionListState<>))
+        {
+            var stateType = projectionType.GenericTypeArguments[0];
+            if (stateType.IsGenericType)
+            {
+                return stateType.GenericTypeArguments[0].Name;
+            }
+        }
+        return projectionType.Name;
+    }
 }
