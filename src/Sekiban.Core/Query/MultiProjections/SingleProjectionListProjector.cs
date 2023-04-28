@@ -1,3 +1,4 @@
+using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 using Sekiban.Core.Query.SingleProjections;
@@ -6,7 +7,7 @@ namespace Sekiban.Core.Query.MultiProjections;
 public class
     SingleProjectionListProjector<TProjection, TState, TProjector> : IMultiProjector<SingleProjectionListState<TState>>
     where TProjection : IAggregateCommon, ISingleProjection, ISingleProjectionStateConvertible<TState>
-    where TState : IAggregateCommon
+    where TState : IAggregateStateCommon
     where TProjector : ISingleProjector<TProjection>, new()
 {
     private TProjection _eventChecker;
@@ -21,10 +22,7 @@ public class
     private SingleProjectionListState<TState> State { get; set; }
 
     public List<TProjection> List { get; private set; } = new();
-    public bool EventShouldBeApplied(IEvent ev)
-    {
-        return ev.GetSortableUniqueId().LaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
-    }
+    public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().LaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
 
     public void ApplyEvent(IEvent ev)
     {
@@ -73,17 +71,11 @@ public class
             .ToList();
     }
 
-    public IList<string> TargetAggregateNames()
-    {
-        return new List<string> { _projector.GetOriginalAggregatePayloadType().Name };
-    }
+    public IList<string> TargetAggregateNames() => new List<string> { _projector.GetOriginalAggregatePayloadType().Name };
 
     public Guid LastEventId { get; private set; } = Guid.Empty;
     public string LastSortableUniqueId { get; private set; } = string.Empty;
     public int AppliedSnapshotVersion { get; private set; }
     public int Version { get; private set; }
-    public string GetPayloadVersionIdentifier()
-    {
-        return _projector.GetPayloadVersionIdentifier();
-    }
+    public string GetPayloadVersionIdentifier() => _projector.GetPayloadVersionIdentifier();
 }

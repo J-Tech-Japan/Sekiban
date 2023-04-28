@@ -1,4 +1,5 @@
 using Sekiban.Core.Events;
+using Sekiban.Core.Snapshot;
 namespace Sekiban.Core.Documents;
 
 public interface IDocumentWriter
@@ -8,6 +9,8 @@ public interface IDocumentWriter
 }
 public interface IDocumentPersistentWriter : IDocumentWriter
 {
+    Task SaveSingleSnapshotAsync(SnapshotDocument document, Type aggregateType, bool useBlob);
+    bool ShouldUseBlob(SnapshotDocument document);
 }
 public interface IDocumentTemporaryWriter : IDocumentWriter
 {

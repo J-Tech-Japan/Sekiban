@@ -336,7 +336,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
     private async Task CheckSnapshots<TAggregatePayload>(List<SnapshotDocument> snapshots, Guid aggregateId)
         where TAggregatePayload : IAggregatePayload, new()
     {
-        foreach (var state in snapshots.Select(snapshot => snapshot.ToState<AggregateState<TAggregatePayload>>()))
+        foreach (var state in snapshots.Select(snapshot => snapshot.GetState()))
         {
             if (state is null)
             {

@@ -3,6 +3,7 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Events;
 using Sekiban.Core.Query.SingleProjections;
+using Sekiban.Core.Query.SingleProjections.Projections;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Snapshot.Aggregate;
 using Sekiban.Core.Snapshot.Aggregate.Commands;
@@ -19,7 +20,7 @@ public class SnapshotGenerator
     private readonly SekibanAggregateTypes _sekibanAggregateTypes;
     private readonly IAggregateLoader aggregateLoader;
     private readonly ICommandExecutor commandExecutor;
-
+    private readonly ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor;
     public SnapshotGenerator(
         SekibanAggregateTypes sekibanAggregateTypes,
         ICommandExecutor commandExecutor,
@@ -27,7 +28,8 @@ public class SnapshotGenerator
         IAggregateLoader aggregateLoader,
         IDocumentWriter documentWriter,
         IAggregateSettings aggregateSettings,
-        ISekibanContext sekibanContext)
+        ISekibanContext sekibanContext,
+        ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor)
     {
         _sekibanAggregateTypes = sekibanAggregateTypes;
         this.commandExecutor = commandExecutor;
@@ -35,6 +37,7 @@ public class SnapshotGenerator
         this.aggregateLoader = aggregateLoader;
         _documentWriter = documentWriter;
         _aggregateSettings = aggregateSettings;
+        this.singleProjectionSnapshotAccessor = singleProjectionSnapshotAccessor;
     }
 
     public async Task Generate<TEvent>(TEvent notification) where TEvent : IEvent
@@ -108,15 +111,17 @@ public class SnapshotGenerator
                         {
                             continue;
                         }
-                        var snapshotDocument = new SnapshotDocument(
-                            notification.AggregateId,
-                            aggregateType.Aggregate,
-                            aggregateType.Aggregate,
-                            aggregateToSnapshot,
-                            aggregateToSnapshot.LastEventId,
-                            aggregateToSnapshot.LastSortableUniqueId,
-                            aggregateToSnapshot.Version,
-                            aggregateToSnapshot.GetPayloadVersionIdentifier());
+
+                        var snapshotDocument = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(aggregateToSnapshot);
+                        // var snapshotDocument = new SnapshotDocument(
+                        //     notification.AggregateId,
+                        //     aggregateType.Aggregate,
+                        //     aggregateType.Aggregate,
+                        //     aggregateToSnapshot,
+                        //     aggregateToSnapshot.LastEventId,
+                        //     aggregateToSnapshot.LastSortableUniqueId,
+                        //     aggregateToSnapshot.Version,
+                        //     aggregateToSnapshot.GetPayloadVersionIdentifier());
                         await _documentWriter.SaveAsync(snapshotDocument, aggregateType.Aggregate);
                     }
                 }
@@ -175,15 +180,10 @@ public class SnapshotGenerator
                     {
                         continue;
                     }
-                    var snapshotDocument = new SnapshotDocument(
-                        notification.AggregateId,
-                        projection.Aggregate,
-                        projection.PayloadType,
-                        aggregateToSnapshot,
-                        aggregateToSnapshot.LastEventId,
-                        aggregateToSnapshot.LastSortableUniqueId,
-                        aggregateToSnapshot.Version,
-                        aggregateToSnapshot.GetPayloadVersionIdentifier());
+                    var snapshotDocument =
+                        await singleProjectionSnapshotAccessor.SnapshotDocumentFromSingleProjectionStateAsync(
+                            aggregateToSnapshot,
+                            projection.Aggregate);
                     await _documentWriter.SaveAsync(snapshotDocument, projection.Aggregate);
                 }
             }

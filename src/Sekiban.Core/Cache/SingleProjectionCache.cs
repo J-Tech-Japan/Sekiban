@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Caching.Memory;
+using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Query.SingleProjections.Projections;
 using Sekiban.Core.Types;
@@ -23,7 +24,7 @@ public class SingleProjectionCache : ISingleProjectionCache
     public void SetContainer<TAggregate, TState>(
         Guid aggregateId,
         SingleMemoryCacheProjectionContainer<TAggregate, TState> container)
-        where TAggregate : IAggregateCommon, ISingleProjection where TState : IAggregateCommon
+        where TAggregate : IAggregateCommon, ISingleProjection where TState : IAggregateStateCommon
     {
         _memoryCache.Cache.Set(
             GetCacheKeyForSingleProjectionContainer<TAggregate>(aggregateId),
@@ -32,22 +33,17 @@ public class SingleProjectionCache : ISingleProjectionCache
     }
 
     public SingleMemoryCacheProjectionContainer<TAggregate, TState>? GetContainer<TAggregate, TState>(Guid aggregateId)
-        where TAggregate : IAggregateCommon, ISingleProjection where TState : IAggregateCommon
-    {
-        return _memoryCache.Cache.Get<SingleMemoryCacheProjectionContainer<TAggregate, TState>>(
+        where TAggregate : IAggregateCommon, ISingleProjection where TState : IAggregateStateCommon =>
+        _memoryCache.Cache.Get<SingleMemoryCacheProjectionContainer<TAggregate, TState>>(
             GetCacheKeyForSingleProjectionContainer<TAggregate>(aggregateId));
-    }
 
-    private MemoryCacheEntryOptions GetMemoryCacheOptionsForSingleProjectionContainer()
+    private MemoryCacheEntryOptions GetMemoryCacheOptionsForSingleProjectionContainer() => new()
     {
-        return new()
-        {
-            AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(_memoryCacheSettings.SingleProjectionAbsoluteExpirationMinutes),
-            SlidingExpiration = TimeSpan.FromMinutes(_memoryCacheSettings.SingleProjectionSlidingExpirationMinutes)
-            // If not accessed 5 minutes it will be deleted. Anyway it will be d
-            // eleted after two hours
-        };
-    }
+        AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(_memoryCacheSettings.SingleProjectionAbsoluteExpirationMinutes),
+        SlidingExpiration = TimeSpan.FromMinutes(_memoryCacheSettings.SingleProjectionSlidingExpirationMinutes)
+        // If not accessed 5 minutes it will be deleted. Anyway it will be d
+        // eleted after two hours
+    };
 
     public string GetCacheKeyForSingleProjectionContainer<TSingleProjectionOrAggregate>(Guid aggregateId)
     {

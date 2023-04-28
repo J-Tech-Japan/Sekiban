@@ -8,4 +8,6 @@ public interface IBlobAccessor
     public Task<Stream?> GetBlobWithGZipAsync(SekibanBlobContainer container, string blobName);
 
     public Task<bool> SetBlobWithGZipAsync(SekibanBlobContainer container, string blobName, Stream blob);
+
+    public string BlobConnectionString();
 }

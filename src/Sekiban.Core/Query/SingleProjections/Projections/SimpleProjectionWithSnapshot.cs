@@ -8,16 +8,15 @@ namespace Sekiban.Core.Query.SingleProjections.Projections;
 public class SimpleProjectionWithSnapshot : ISingleProjection
 {
     private readonly IDocumentRepository _documentRepository;
-    private readonly SekibanAggregateTypes _sekibanAggregateTypes;
     private readonly ISingleProjectionFromInitial singleProjectionFromInitial;
     public SimpleProjectionWithSnapshot(
         IDocumentRepository documentRepository,
         ISingleProjectionFromInitial singleProjectionFromInitial,
-        SekibanAggregateTypes sekibanAggregateTypes)
+        SekibanAggregateTypes sekibanAggregateTypes,
+        ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor)
     {
         _documentRepository = documentRepository;
         this.singleProjectionFromInitial = singleProjectionFromInitial;
-        _sekibanAggregateTypes = sekibanAggregateTypes;
     }
 
     /// <summary>
@@ -36,7 +35,7 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
         SortableUniqueIdValue? includesSortableUniqueId = null)
         where TProjection : IAggregateCommon, SingleProjections.ISingleProjection,
         ISingleProjectionStateConvertible<TState>
-        where TState : IAggregateCommon
+        where TState : IAggregateStateCommon
         where TProjector : ISingleProjector<TProjection>, new()
     {
         var projector = new TProjector();
@@ -48,10 +47,10 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
                 projector.GetOriginalAggregatePayloadType(),
                 projector.GetPayloadType(),
                 payloadVersion);
-        var state = snapshotDocument is null ? default : snapshotDocument.ToState<TState>(_sekibanAggregateTypes);
-        if (state is not null)
+        IAggregateStateCommon? state = null;
+        if (snapshotDocument is not null && aggregate.CanApplySnapshot(snapshotDocument.Snapshot))
         {
-            aggregate.ApplySnapshot(state);
+            aggregate.ApplySnapshot(snapshotDocument?.Snapshot);
         }
         if (toVersion.HasValue && aggregate.Version >= toVersion.Value)
         {

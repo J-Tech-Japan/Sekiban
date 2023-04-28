@@ -38,7 +38,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
         SortableUniqueIdValue? includesSortableUniqueId = null)
         where TProjection : IAggregateCommon, SingleProjections.ISingleProjection,
         ISingleProjectionStateConvertible<TState>
-        where TState : IAggregateCommon
+        where TState : IAggregateStateCommon
         where TProjector : ISingleProjector<TProjection>, new()
     {
         var savedContainer = singleProjectionCache.GetContainer<TProjection, TState>(aggregateId);
@@ -52,7 +52,10 @@ public class MemoryCacheSingleProjection : ISingleProjection
             return await GetAggregateWithoutCacheAsync<TProjection, TState, TProjector>(aggregateId, toVersion);
         }
         var aggregate = projector.CreateInitialAggregate(aggregateId);
-        aggregate.ApplySnapshot(savedContainer.SafeState!);
+        if (savedContainer.SafeState is not null && aggregate.CanApplySnapshot(savedContainer.SafeState))
+        {
+            aggregate.ApplySnapshot(savedContainer.SafeState);
+        }
         if (includesSortableUniqueId is not null &&
             savedContainer?.SafeSortableUniqueId is not null &&
             includesSortableUniqueId.EarlierThan(savedContainer.SafeSortableUniqueId))
@@ -153,7 +156,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
         int? toVersion = null)
         where TProjection : IAggregateCommon, SingleProjections.ISingleProjection,
         ISingleProjectionStateConvertible<TState>
-        where TState : IAggregateCommon
+        where TState : IAggregateStateCommon
         where TProjector : ISingleProjector<TProjection>, new()
     {
         var projector = new TProjector();
@@ -167,8 +170,8 @@ public class MemoryCacheSingleProjection : ISingleProjection
                 projector.GetOriginalAggregatePayloadType(),
                 projector.GetPayloadType(),
                 payloadVersion);
-        var state = snapshotDocument is null ? default : snapshotDocument.ToState<TState>(_sekibanAggregateTypes);
-        if (state is not null)
+        var state = snapshotDocument?.GetState();
+        if (state is not null && aggregate.CanApplySnapshot(state))
         {
             aggregate.ApplySnapshot(state);
         }
@@ -249,7 +252,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
         int? toVersion)
         where TProjection : IAggregateCommon, SingleProjections.ISingleProjection,
         ISingleProjectionStateConvertible<TState>
-        where TState : IAggregateCommon
+        where TState : IAggregateStateCommon
         where TProjector : ISingleProjector<TProjection>, new()
     {
         var projector = new TProjector();

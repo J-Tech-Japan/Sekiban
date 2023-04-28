@@ -22,8 +22,11 @@ using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.SingleProjections;
+using Sekiban.Core.Query.SingleProjections.Projections;
+using Sekiban.Core.Setting;
 using Sekiban.Core.Snapshot;
 using Sekiban.Core.Snapshot.Aggregate;
+using Sekiban.Core.Types;
 using Sekiban.Infrastructure.Cosmos;
 using Sekiban.Testing.Shared;
 using System;
@@ -38,14 +41,16 @@ public class CustomerDbStoryBasic : TestBase
 {
     private readonly CosmosDbFactory _cosmosDbFactory;
     private readonly IDocumentPersistentRepository _documentPersistentRepository;
+    private readonly IDocumentPersistentWriter _documentPersistentWriter;
     private readonly HybridStoreManager _hybridStoreManager;
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
     private readonly IMemoryCacheAccessor _memoryCache;
     private readonly ITestOutputHelper _testOutputHelper;
+    private readonly IBlobAccessor blobAccessor;
     private readonly ICommandExecutor commandExecutor;
     private readonly IMultiProjectionService multiProjectionService;
     private readonly IAggregateLoader projectionService;
-
+    private readonly ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor;
     public CustomerDbStoryBasic(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
         sekibanTestFixture,
         testOutputHelper)
@@ -59,6 +64,9 @@ public class CustomerDbStoryBasic : TestBase
         _inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
         _hybridStoreManager = GetService<HybridStoreManager>();
         _memoryCache = GetService<IMemoryCacheAccessor>();
+        singleProjectionSnapshotAccessor = GetService<ISingleProjectionSnapshotAccessor>();
+        _documentPersistentWriter = GetService<IDocumentPersistentWriter>();
+        blobAccessor = GetService<IBlobAccessor>();
     }
 
     [Fact(DisplayName = "CosmosDb ストーリーテスト 集約の機能のテストではなく、CosmosDbと連携して正しく動くかをテストしています。")]
@@ -286,20 +294,119 @@ public class CustomerDbStoryBasic : TestBase
         var snapshotManager
             = await projectionService.AsDefaultStateFromInitialAsync<SnapshotManager>(
                 SnapshotManager.SharedId);
-        _testOutputHelper.WriteLine("-requests-");
-        foreach (var key in snapshotManager!.Payload.Requests)
+        if (snapshotManager is null)
         {
-            _testOutputHelper.WriteLine(key);
+            _testOutputHelper.WriteLine("snapshot manager is null");
         }
-        _testOutputHelper.WriteLine("-request takens-");
-        foreach (var key in snapshotManager!.Payload.RequestTakens)
+        else
         {
-            _testOutputHelper.WriteLine(key);
+            _testOutputHelper.WriteLine("-requests-");
+            foreach (var key in snapshotManager!.Payload.Requests)
+            {
+                _testOutputHelper.WriteLine(key);
+            }
+            _testOutputHelper.WriteLine("-request takens-");
+            foreach (var key in snapshotManager!.Payload.RequestTakens)
+            {
+                _testOutputHelper.WriteLine(key);
+            }
         }
 
         branchList = await multiProjectionService.GetAggregateList<Branch>();
         Assert.Equal(3, branchList.Count);
     }
+
+    [Fact]
+    public async Task SnapshotTestAsync()
+    {
+        await DeleteonlyAsync();
+        var branchResult = await commandExecutor.ExecCommandAsync(new CreateBranch("Tokyo"));
+        var branchId = branchResult.AggregateId!.Value;
+        var clientResult = await commandExecutor.ExecCommandAsync(new CreateClient(branchId, "name", "email@example.com"));
+        var currentVersion = clientResult.Version;
+        foreach (var i in Enumerable.Range(0, 160))
+        {
+            clientResult = await commandExecutor.ExecCommandAsync(
+                new ChangeClientName(clientResult.AggregateId!.Value, $"name{i + 1}") { ReferenceVersion = currentVersion });
+            currentVersion = clientResult.Version;
+        }
+
+        _inMemoryDocumentStore.ResetInMemoryStore();
+        _hybridStoreManager.ClearHybridPartitions();
+        ((MemoryCache)_memoryCache.Cache).Compact(1);
+
+        var client = await projectionService.AsDefaultStateAsync<Client>(clientResult.AggregateId!.Value);
+        Assert.NotNull(client);
+        var clientProjection = await projectionService.AsSingleProjectionStateAsync<ClientNameHistoryProjection>(clientResult.AggregateId!.Value);
+        Assert.NotNull(clientProjection);
+    }
+    [Fact]
+    public void CheckBlobAccessorBlobConnectionString()
+    {
+        var connectionString = blobAccessor.BlobConnectionString();
+        Console.WriteLine("BlobConnectionString: " + connectionString);
+        Assert.NotNull(connectionString);
+    }
+
+    [Fact]
+    public async Task ManualSnapshotTestAsync()
+    {
+        await DeleteonlyAsync();
+        var branchResult = await commandExecutor.ExecCommandAsync(new CreateBranch("Tokyo"));
+        var branchId = branchResult.AggregateId!.Value;
+        var clientResult = await commandExecutor.ExecCommandAsync(new CreateClient(branchId, "name", "email@example.com"));
+        var currentVersion = clientResult.Version;
+        foreach (var i in Enumerable.Range(0, 160))
+        {
+            clientResult = await commandExecutor.ExecCommandAsync(
+                new ChangeClientName(clientResult.AggregateId!.Value, $"name{i + 1}") { ReferenceVersion = currentVersion });
+            currentVersion = clientResult.Version;
+        }
+
+        var aggregateId = clientResult.AggregateId!.Value;
+
+        var client1 = await projectionService.AsDefaultStateFromInitialAsync<Client>(aggregateId, 80);
+        var clientSnapshot = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(client1!);
+        await _documentPersistentWriter.SaveSingleSnapshotAsync(clientSnapshot!, typeof(Client), false);
+        var client2 = await projectionService.AsDefaultStateFromInitialAsync<Client>(aggregateId);
+        var clientSnapshot2 = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(client2!);
+        await _documentPersistentWriter.SaveSingleSnapshotAsync(clientSnapshot2!, typeof(Client), true);
+
+        var snapshots = await _documentPersistentRepository.GetSnapshotsForAggregateAsync(aggregateId, typeof(Client), typeof(Client));
+
+        Assert.Contains(clientSnapshot!.Id, snapshots.Select(m => m.Id));
+        var clientFromSnapshot = snapshots.First(m => m.Id == clientSnapshot.Id).GetState();
+        Assert.NotNull(clientFromSnapshot);
+
+        Assert.Contains(clientSnapshot2!.Id, snapshots.Select(m => m.Id));
+        var clientFromSnapshot2 = snapshots.First(m => m.Id == clientSnapshot2.Id).GetState();
+        Assert.NotNull(clientFromSnapshot2);
+
+        var projection1 =
+            await projectionService.AsSingleProjectionStateFromInitialAsync<ClientNameHistoryProjection>(clientResult.AggregateId!.Value, 80);
+        var projectionSnapshot = await singleProjectionSnapshotAccessor.SnapshotDocumentFromSingleProjectionStateAsync(projection1!, typeof(Client));
+        await _documentPersistentWriter.SaveSingleSnapshotAsync(projectionSnapshot!, typeof(Client), false);
+        var projection2 =
+            await projectionService.AsSingleProjectionStateFromInitialAsync<ClientNameHistoryProjection>(clientResult.AggregateId!.Value);
+        var projectionSnapshot2 = await singleProjectionSnapshotAccessor.SnapshotDocumentFromSingleProjectionStateAsync(projection2!, typeof(Client));
+        await _documentPersistentWriter.SaveSingleSnapshotAsync(projectionSnapshot2!, typeof(Client), true);
+
+        var projectionSnapshots = await _documentPersistentRepository.GetSnapshotsForAggregateAsync(
+            aggregateId,
+            typeof(Client),
+            typeof(ClientNameHistoryProjection));
+
+        Assert.Contains(projectionSnapshot!.Id, projectionSnapshots.Select(m => m.Id));
+
+        var clientProjectionFromSnapshot = projectionSnapshots.First(m => m.Id == projectionSnapshot.Id).GetState();
+        Assert.NotNull(clientProjectionFromSnapshot);
+
+        Assert.Contains(projectionSnapshot2!.Id, projectionSnapshots.Select(m => m.Id));
+        var clientProjectionFromSnapshot2 = projectionSnapshots.First(m => m.Id == projectionSnapshot2.Id).GetState();
+        Assert.NotNull(clientProjectionFromSnapshot2);
+
+    }
+
 
     [Fact(DisplayName = "CosmosDbストーリーテスト用に削除のみを行う 。")]
     public async Task DeleteonlyAsync()
@@ -399,6 +506,13 @@ public class CustomerDbStoryBasic : TestBase
 
         await CheckSnapshots<RecentActivity>(snapshots, createRecentActivityResult.AggregateId!.Value);
 
+        var snapshots2 = await _documentPersistentRepository.GetSnapshotsForAggregateAsync(
+            createRecentActivityResult.AggregateId!.Value,
+            typeof(RecentActivity),
+            typeof(TenRecentProjection));
+
+        await CheckProjectionSnapshots<TenRecentProjection>(snapshots2, createRecentActivityResult.AggregateId!.Value);
+
         await _documentPersistentRepository.GetSnapshotsForAggregateAsync(
             createRecentActivityResult.AggregateId!.Value,
             typeof(RecentActivity),
@@ -411,16 +525,50 @@ public class CustomerDbStoryBasic : TestBase
     }
 
     private async Task CheckSnapshots<TAggregatePayload>(List<SnapshotDocument> snapshots, Guid aggregateId)
-        where TAggregatePayload : IAggregatePayload, new()
+        where TAggregatePayload : IAggregatePayloadCommon
     {
-        foreach (var state in snapshots.Select(snapshot => snapshot.ToState<AggregateState<TAggregatePayload>>()))
+        _testOutputHelper.WriteLine($"snapshots {typeof(TAggregatePayload).Name} {snapshots.Count} ");
+        foreach (var snapshot in snapshots)
         {
+            _testOutputHelper.WriteLine($"snapshot {snapshot.AggregateTypeName}  {snapshot.Id}  {snapshot.SavedVersion} is checking");
+            var state = snapshot.GetState();
             if (state is null)
+            {
+                _testOutputHelper.WriteLine($"Snapshot {snapshot.AggregateTypeName} {snapshot.Id} {snapshot.SavedVersion}  is null");
+                throw new SekibanInvalidArgumentException($"Snapshot {snapshot.AggregateTypeName} {snapshot.SavedVersion}  is null");
+            }
+            _testOutputHelper.WriteLine($"Snapshot {snapshot.AggregateTypeName}  {snapshot.Id}  {snapshot.SavedVersion}  is not null");
+            var fromInitial =
+                await projectionService.AsDefaultStateFromInitialAsync<TAggregatePayload>(aggregateId, state.Version);
+            if (fromInitial is null)
             {
                 throw new SekibanInvalidArgumentException();
             }
+            Assert.Equal(fromInitial.Version, state.Version);
+            Assert.Equal(fromInitial.LastEventId, state.LastEventId);
+        }
+    }
+
+    private async Task CheckProjectionSnapshots<TAggregatePayload>(List<SnapshotDocument> snapshots, Guid aggregateId)
+        where TAggregatePayload : ISingleProjectionPayloadCommon, new()
+    {
+        var aggregateType = typeof(TAggregatePayload).GetOriginalTypeFromSingleProjectionPayload();
+        _testOutputHelper.WriteLine($"snapshots {typeof(TAggregatePayload).Name} {snapshots.Count} ");
+        foreach (var snapshot in snapshots)
+        {
+            _testOutputHelper.WriteLine(
+                $"snapshot {snapshot.AggregateTypeName} {snapshot.DocumentTypeName} {snapshot.Id}  {snapshot.SavedVersion} is checking");
+            var state = snapshot.GetState();
+            if (state is null)
+            {
+                _testOutputHelper.WriteLine(
+                    $"Snapshot {snapshot.AggregateTypeName} {snapshot.DocumentTypeName} {snapshot.Id} {snapshot.SavedVersion}  is null");
+                throw new SekibanInvalidArgumentException($"Snapshot {snapshot.AggregateTypeName} {snapshot.SavedVersion}  is null");
+            }
+            _testOutputHelper.WriteLine(
+                $"Snapshot {snapshot.AggregateTypeName} {snapshot.DocumentTypeName} {snapshot.Id}  {snapshot.SavedVersion}  is not null");
             var fromInitial =
-                await projectionService.AsDefaultStateFromInitialAsync<TAggregatePayload>(aggregateId, state.Version);
+                await projectionService.AsSingleProjectionStateFromInitialAsync<TAggregatePayload>(aggregateId, state.Version);
             if (fromInitial is null)
             {
                 throw new SekibanInvalidArgumentException();
@@ -528,6 +676,7 @@ public class CustomerDbStoryBasic : TestBase
         var projectionSnapshots =
             await _documentPersistentRepository.GetSnapshotsForAggregateAsync(aggregateId, typeof(RecentActivity), typeof(TenRecentProjection));
         Assert.NotEmpty(projectionSnapshots);
+        await CheckProjectionSnapshots<TenRecentProjection>(projectionSnapshots, aggregateId);
 
         // check aggregate result
         var aggregateRecentActivity

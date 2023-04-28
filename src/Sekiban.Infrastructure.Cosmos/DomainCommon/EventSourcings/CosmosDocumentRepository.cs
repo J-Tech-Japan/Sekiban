@@ -5,6 +5,7 @@ using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Partition;
+using Sekiban.Core.Query.SingleProjections.Projections;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
@@ -18,15 +19,17 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
     private readonly CosmosDbFactory _cosmosDbFactory;
     private readonly RegisteredEventTypes _registeredEventTypes;
     private readonly ISekibanContext _sekibanContext;
-
+    private readonly ISingleProjectionSnapshotAccessor _singleProjectionSnapshotAccessor;
     public CosmosDocumentRepository(
         CosmosDbFactory cosmosDbFactory,
         RegisteredEventTypes registeredEventTypes,
-        ISekibanContext sekibanContext)
+        ISekibanContext sekibanContext,
+        ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor)
     {
         _cosmosDbFactory = cosmosDbFactory;
         _registeredEventTypes = registeredEventTypes;
         _sekibanContext = sekibanContext;
+        _singleProjectionSnapshotAccessor = singleProjectionSnapshotAccessor;
     }
 
     public async Task GetAllEventsAsync(
@@ -120,7 +123,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     .Where(
                         b => b.DocumentType == DocumentType.AggregateSnapshot &&
                             b.AggregateId == aggregateId &&
-                            b.DocumentTypeName == projectionPayloadType.Name &&
+                            b.AggregateTypeName == aggregatePayloadType.Name &&
                             b.PayloadVersionIdentifier == payloadVersionIdentifier)
                     .OrderByDescending(m => m.LastSortableUniqueId);
                 var feedIterator =
@@ -129,7 +132,8 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 {
                     foreach (var obj in await feedIterator.ReadNextAsync())
                     {
-                        return obj;
+                        if (obj is null) { continue; }
+                        return await _singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(obj);
                     }
                 }
                 return null;
@@ -180,7 +184,8 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             {
                 var response =
                     await container.ReadItemAsync<SnapshotDocument>(id.ToString(), new PartitionKey(partitionKey));
-                return response.Resource;
+                if (response.Resource is null) { return null; }
+                return await _singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(response.Resource);
             });
     }
 
@@ -207,7 +212,12 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 {
                     foreach (var obj in await feedIterator.ReadNextAsync())
                     {
-                        list.Add(obj);
+                        if (obj is null) { continue; }
+                        var filled = await _singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(obj);
+                        if (filled is not null)
+                        {
+                            list.Add(filled);
+                        }
                     }
                 }
                 return list;

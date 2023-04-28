@@ -15,14 +15,8 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
     public int AppliedSnapshotVersion { get; set; }
     public int Version { get; set; }
     public Guid AggregateId { get; init; }
-    public string GetPayloadVersionIdentifier()
-    {
-        return Payload.GetPayloadVersionIdentifier();
-    }
-    public bool EventShouldBeApplied(IEvent ev)
-    {
-        return ev.GetSortableUniqueId().LaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
-    }
+    public string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();
+    public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().LaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
 
     public void ApplyEvent(IEvent ev)
     {
@@ -50,19 +44,8 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
         LastSortableUniqueId = ev.SortableUniqueId;
         Version++;
     }
-    public void ApplySnapshot(SingleProjectionState<TProjectionPayload> snapshot)
-    {
-        Version = snapshot.Version;
-        LastEventId = snapshot.LastEventId;
-        LastSortableUniqueId = snapshot.LastSortableUniqueId;
-        AppliedSnapshotVersion = snapshot.Version;
-        Payload = snapshot.Payload;
-    }
 
-    public bool GetPayloadTypeIs<TAggregatePayloadExpect>()
-    {
-        return Payload is TAggregatePayloadExpect;
-    }
+    public bool GetPayloadTypeIs<TAggregatePayloadExpect>() => Payload is TAggregatePayloadExpect;
     public bool GetPayloadTypeIs(Type expect)
     {
         if (!expect.IsAggregatePayloadType()) { return false; }
@@ -70,40 +53,37 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
         var genericMethod = method?.MakeGenericMethod(expect);
         return (bool?)genericMethod?.Invoke(this, null) ?? false;
     }
-    public SingleProjectionState<TProjectionPayload> ToState()
+    public SingleProjectionState<TProjectionPayload> ToState() => new(
+        Payload,
+        AggregateId,
+        LastEventId,
+        LastSortableUniqueId,
+        AppliedSnapshotVersion,
+        Version);
+    public bool CanApplySnapshot(IAggregateStateCommon? snapshot) =>
+        snapshot is not null && snapshot.GetPayload() is TProjectionPayload;
+    public void ApplySnapshot(IAggregateStateCommon snapshot)
     {
-        return new(
-            Payload,
-            AggregateId,
-            LastEventId,
-            LastSortableUniqueId,
-            AppliedSnapshotVersion,
-            Version);
+        Version = snapshot.Version;
+        LastEventId = snapshot.LastEventId;
+        LastSortableUniqueId = snapshot.LastSortableUniqueId;
+        AppliedSnapshotVersion = snapshot.Version;
+        Payload = snapshot.GetPayload();
     }
 
-    public Type GetPayloadType()
-    {
-        return typeof(TProjectionPayload);
-    }
+    public Type GetPayloadType() => typeof(TProjectionPayload);
 
-    public SingleProjection<TProjectionPayload> CreateInitialAggregate(Guid aggregateId)
-    {
-        return new SingleProjection<TProjectionPayload>
-            { AggregateId = aggregateId };
-    }
+    public SingleProjection<TProjectionPayload> CreateInitialAggregate(Guid aggregateId) => new()
+        { AggregateId = aggregateId };
+    public SingleProjection<TProjectionPayload> CreateAggregateFromState(
+        SingleProjection<TProjectionPayload> current,
+        object state,
+        SekibanAggregateTypes sekibanAggregateTypes) => throw new NotImplementedException();
 
-    public Type GetOriginalAggregatePayloadType()
-    {
-        return typeof(TProjectionPayload).GetOriginalTypeFromSingleProjectionPayload().GetBaseAggregatePayloadTypeFromAggregate();
-    }
-    public bool CanApplyEvent(IEvent ev)
-    {
-        return true;
-    }
+    public Type GetOriginalAggregatePayloadType() =>
+        typeof(TProjectionPayload).GetOriginalTypeFromSingleProjectionPayload().GetBaseAggregatePayloadTypeFromAggregate();
+    public bool CanApplyEvent(IEvent ev) => true;
 
 
-    public bool GetIsDeleted()
-    {
-        return Payload is IDeletable { IsDeleted: true };
-    }
+    public bool GetIsDeleted() => Payload is IDeletable { IsDeleted: true };
 }

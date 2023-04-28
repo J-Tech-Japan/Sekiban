@@ -1,3 +1,4 @@
+using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Query.SingleProjections.Projections;
 using ISingleProjection = Sekiban.Core.Query.SingleProjections.ISingleProjection;
@@ -14,8 +15,8 @@ public interface ISingleProjectionCache
         Guid aggregateId,
         SingleMemoryCacheProjectionContainer<TAggregate, TState> container)
         where TAggregate : IAggregateCommon, ISingleProjection
-        where TState : IAggregateCommon;
+        where TState : IAggregateStateCommon;
 
     public SingleMemoryCacheProjectionContainer<TAggregate, TState>? GetContainer<TAggregate, TState>(Guid aggregateId)
-        where TAggregate : IAggregateCommon, ISingleProjection where TState : IAggregateCommon;
+        where TAggregate : IAggregateCommon, ISingleProjection where TState : IAggregateStateCommon;
 }

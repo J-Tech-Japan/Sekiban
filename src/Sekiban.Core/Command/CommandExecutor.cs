@@ -19,10 +19,10 @@ public class CommandExecutor : ICommandExecutor
 {
     private static readonly SemaphoreSlim SemaphoreInMemory = new(1, 1);
     private readonly IAggregateLoader _aggregateLoader;
+    private readonly ICommandExecuteAwaiter _commandExecuteAwaiter;
     private readonly IDocumentWriter _documentWriter;
     private readonly IServiceProvider _serviceProvider;
     private readonly IUserInformationFactory _userInformationFactory;
-    private readonly ICommandExecuteAwaiter _commandExecuteAwaiter;
     public CommandExecutor(
         IDocumentWriter documentWriter,
         IServiceProvider serviceProvider,
@@ -133,7 +133,7 @@ public class CommandExecutor : ICommandExecutor
         var aggregateId = command.GetAggregateId();
         try
         {
-            
+
             var handler =
                 _serviceProvider.GetService(typeof(ICommandHandlerCommon<TAggregatePayload, TCommand>)) as
                     ICommandHandlerCommon<TAggregatePayload, TCommand>;

@@ -2,7 +2,6 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Partition;
 using Sekiban.Core.Query.SingleProjections;
-using Sekiban.Core.Shared;
 namespace Sekiban.Core.Snapshot;
 
 public record SnapshotDocument : Document, IDocument
@@ -26,7 +25,7 @@ public record SnapshotDocument : Document, IDocument
         payloadType.Name ?? string.Empty)
     {
         Snapshot = stateToSnapshot;
-        AggregateTypeName = Snapshot.PayloadTypeName;
+        AggregateTypeName = aggregateType.Name;
         AggregateId = aggregateId;
         LastEventId = lastEventId;
         LastSortableUniqueId = lastSortableUniqueId;
@@ -46,20 +45,22 @@ public record SnapshotDocument : Document, IDocument
 
     public string PayloadVersionIdentifier { get; init; } = string.Empty;
 
-    public T? ToState<T>(SekibanAggregateTypes? sekibanAggregateTypes = null) where T : IAggregateCommon
+    public IAggregateStateCommon? GetState() => Snapshot as IAggregateStateCommon;
+
+    public TProjection? ToProjection<TProjection>(SekibanAggregateTypes sekibanAggregateTypes) where TProjection : IAggregateCommon
     {
-        if (AggregateTypeName != typeof(T).Name && sekibanAggregateTypes != null)
+        var projectionType = typeof(TProjection);
+        if (!projectionType.IsGenericType) { return default; }
+        if (projectionType.GetGenericTypeDefinition() == typeof(Aggregate<>))
         {
-            var aggregateType = sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == AggregateTypeName);
-            if (aggregateType != null)
-            {
-                var state = SekibanJsonHelper.ConvertTo(Snapshot, typeof(AggregateState<>).MakeGenericType(aggregateType.Aggregate));
-                if (state is not null)
-                {
-                    return Activator.CreateInstance(typeof(T), state, state.Payload);
-                }
-            }
+
         }
-        return SekibanJsonHelper.ConvertTo<T>(Snapshot);
+        if (projectionType.GetGenericTypeDefinition() == typeof(SingleProjection<>))
+        {
+
+        }
+        return default;
     }
+
+    public string FilenameForSnapshot() => $"{DocumentTypeName}_{AggregateId}_{SavedVersion}_{PayloadVersionIdentifier}.json";
 }
