@@ -93,6 +93,8 @@ public static class SekibanEventSourcingDependency
         services.AddSingleton(dependencyDefinition.GetSekibanDependencyOptions().SekibanAggregateTypes);
         services.AddTransient(dependencyDefinition.GetSekibanDependencyOptions().TransientDependencies);
         services.AddTransient(GetDependencies());
+        
+        services.AddQueriesFromDependencyDefinition(dependencyDefinition);
     }
 
     public static IServiceCollection AddSekibanCoreForAggregateTestWithDependency(
@@ -125,6 +127,7 @@ public static class SekibanEventSourcingDependency
         services.AddSingleton(dependencyDefinition.GetSekibanDependencyOptions().SekibanAggregateTypes);
         services.AddTransient(dependencyDefinition.GetSekibanDependencyOptions().TransientDependencies);
         services.AddTransient(GetDependencies());
+        services.AddQueriesFromDependencyDefinition(dependencyDefinition);
     }
 
     public static void AddTransient(
