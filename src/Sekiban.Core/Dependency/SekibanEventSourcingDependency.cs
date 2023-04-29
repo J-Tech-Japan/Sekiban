@@ -15,10 +15,7 @@ namespace Sekiban.Core.Dependency;
 /// </summary>
 public static class SekibanEventSourcingDependency
 {
-    public static Assembly GetAssembly()
-    {
-        return Assembly.GetExecutingAssembly();
-    }
+    public static Assembly GetAssembly() => Assembly.GetExecutingAssembly();
 
     public static IServiceCollection AddSekibanCoreWithDependency(
         this IServiceCollection services,
@@ -62,6 +59,8 @@ public static class SekibanEventSourcingDependency
         services.AddSingleton(dependencyDefinition.GetSekibanDependencyOptions().SekibanAggregateTypes);
         services.AddTransient(dependencyDefinition.GetSekibanDependencyOptions().TransientDependencies);
         services.AddTransient(GetDependencies());
+
+        services.AddQueriesFromDependencyDefinition(dependencyDefinition);
     }
 
     public static IServiceCollection AddSekibanCoreInMemoryTestWithDependency(
