@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <TargetFrameworks>net7.0;net6.0</TargetFrameworks>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="AWSSDK.DynamoDBv2" Version="3.7.102.38" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj" />
+    </ItemGroup>
+
+</Project>

@@ -53,6 +53,10 @@ public record SortableUniqueIdValue(string Value)
     {
         return Value.CompareTo(toCompare) < 0;
     }
+    public bool EarlierThanOrEqual(SortableUniqueIdValue toCompare)
+    {
+        return Value.CompareTo(toCompare) <= 0;
+    }
 
     public bool LaterThanOrEqual(SortableUniqueIdValue toCompare)
     {

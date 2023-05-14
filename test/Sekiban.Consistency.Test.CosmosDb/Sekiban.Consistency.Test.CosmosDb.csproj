@@ -43,6 +43,7 @@
         <ProjectReference Include="..\..\samples\FeatureCheck.Domain\FeatureCheck.Domain.csproj" />
         <ProjectReference Include="..\..\samples\SampleProject.Common\SampleProject.Common.csproj" />
         <ProjectReference Include="..\..\src\Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Infrastructure.Dynamo\Sekiban.Infrastructure.Dynamo.csproj" />
         <ProjectReference Include="..\..\src\Sekiban.Testing\Sekiban.Testing.csproj" />
     </ItemGroup>
 

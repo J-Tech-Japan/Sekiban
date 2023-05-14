@@ -18,11 +18,11 @@ public class SimpleQueryTest : TestBase
     public SimpleQueryTest(
         SekibanTestFixture sekibanTestFixture,
         ITestOutputHelper testOutputHelper,
-        bool inMemory = false,
+        DependencyHelper.DatabaseType databaseType = DependencyHelper.DatabaseType.CosmosDb,
         ServiceCollectionExtensions.MultiProjectionType multiProjectionType = ServiceCollectionExtensions.MultiProjectionType.MemoryCache) : base(
         sekibanTestFixture,
         testOutputHelper,
-        inMemory,
+        databaseType,
         multiProjectionType)
     {
         _commandExecutor = GetService<ICommandExecutor>();

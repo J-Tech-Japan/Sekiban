@@ -33,7 +33,7 @@ public abstract class QueryPerformanceTestBase : TestBase
         ServiceCollectionExtensions.MultiProjectionType multiProjectionType) : base(
         sekibanTestFixture,
         testOutputHelper,
-        false,
+        DependencyHelper.DatabaseType.CosmosDb,
         multiProjectionType)
     {
         _testOutputHelper = testOutputHelper;

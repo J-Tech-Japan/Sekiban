@@ -12,7 +12,7 @@ public static class CosmosDbServiceCollectionExtensions
 
         services.AddTransient<IDocumentPersistentWriter, CosmosDocumentWriter>();
         services.AddTransient<IDocumentPersistentRepository, CosmosDocumentRepository>();
-
+        services.AddTransient<IDocumentRemover, CosmosDbDocumentRemover>();
         return services;
     }
 }

@@ -18,17 +18,14 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
 {
     private readonly CosmosDbFactory _cosmosDbFactory;
     private readonly RegisteredEventTypes _registeredEventTypes;
-    private readonly ISekibanContext _sekibanContext;
     private readonly ISingleProjectionSnapshotAccessor _singleProjectionSnapshotAccessor;
     public CosmosDocumentRepository(
         CosmosDbFactory cosmosDbFactory,
         RegisteredEventTypes registeredEventTypes,
-        ISekibanContext sekibanContext,
         ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor)
     {
         _cosmosDbFactory = cosmosDbFactory;
         _registeredEventTypes = registeredEventTypes;
-        _sekibanContext = sekibanContext;
         _singleProjectionSnapshotAccessor = singleProjectionSnapshotAccessor;
     }
 

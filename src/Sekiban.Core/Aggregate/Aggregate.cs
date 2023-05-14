@@ -1,3 +1,4 @@
+using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.SingleProjections;
@@ -47,6 +48,10 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon,
 
     public override void ApplyEvent(IEvent ev)
     {
+        if ((!string.IsNullOrEmpty(LastSortableUniqueId)) && new SortableUniqueIdValue(LastSortableUniqueId).LaterThanOrEqual(new SortableUniqueIdValue(ev.SortableUniqueId)))
+        {
+            return;
+        }
         var result = GetAggregatePayloadWithAppliedEvent(Payload, ev);
         if (result is null)
         {

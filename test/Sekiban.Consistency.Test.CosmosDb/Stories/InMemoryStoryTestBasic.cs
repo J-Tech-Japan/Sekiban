@@ -43,7 +43,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
 
     public InMemoryStoryTestBasic(
         ITestOutputHelper testOutputHelper,
-        bool inMemory = true) : base(testOutputHelper, inMemory)
+        DependencyHelper.DatabaseType databaseType = DependencyHelper.DatabaseType.InMemory) : base(testOutputHelper, databaseType)
     {
         _testOutputHelper = testOutputHelper;
         commandExecutor = GetService<ICommandExecutor>();

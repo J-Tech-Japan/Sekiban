@@ -21,14 +21,14 @@ public class TestBase : IClassFixture<TestBase.SekibanTestFixture>, IDisposable
     public TestBase(
         SekibanTestFixture sekibanTestFixture,
         ITestOutputHelper output,
-        bool inMemory = false,
+        DependencyHelper.DatabaseType databaseType = DependencyHelper.DatabaseType.CosmosDb,
         ServiceCollectionExtensions.MultiProjectionType multiProjectionType =
             ServiceCollectionExtensions.MultiProjectionType.MemoryCache)
     {
         sekibanTestFixture.TestOutputHelper = output;
         _sekibanTestFixture = sekibanTestFixture;
         _serviceProvider =
-            DependencyHelper.CreateDefaultProvider(sekibanTestFixture, inMemory, null, multiProjectionType);
+            DependencyHelper.CreateDefaultProvider(sekibanTestFixture, databaseType, null, multiProjectionType);
         var backgroundService = _serviceProvider.GetRequiredService<SnapshotTakingBackgroundService>();
         backgroundService.ServiceProvider = _serviceProvider;
         Task.Run(() => backgroundService.StartAsync(CancellationToken.None));
