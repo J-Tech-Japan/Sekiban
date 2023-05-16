@@ -19,7 +19,7 @@ public class MultipleDbStoryTest : TestBase
 
     public MultipleDbStoryTest(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
         sekibanTestFixture,
-        testOutputHelper) => _sekibanContext = GetService<ISekibanContext>();
+        testOutputHelper, new CosmosSekibanServiceProviderGenerator()) => _sekibanContext = GetService<ISekibanContext>();
 
     [Fact(DisplayName = "CosmosDb ストーリーテスト 複数データベースでの動作を検証する")]
     public async Task CosmosDbStory()

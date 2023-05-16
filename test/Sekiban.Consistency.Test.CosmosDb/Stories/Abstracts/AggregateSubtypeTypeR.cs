@@ -11,16 +11,17 @@ using Sekiban.Core.Documents;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Infrastructure.Cosmos;
+using Sekiban.Testing.Story;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
-namespace SampleProjectStoryXTest.Stories;
+namespace SampleProjectStoryXTest.Stories.Abstracts;
 
-public class AggregateSubtypeTypeR : TestBase
+public abstract class AggregateSubtypeTypeR : TestBase
 {
-    private readonly CosmosDbFactory _cosmosDbFactory;
+    private readonly IDocumentRemover _documentRemover;
     private readonly HybridStoreManager _hybridStoreManager;
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
     private readonly IMemoryCache _memoryCache;
@@ -29,11 +30,11 @@ public class AggregateSubtypeTypeR : TestBase
     private readonly ICommandExecutor commandExecutor;
     private readonly IMultiProjectionService multiProjectionService;
     private CommandExecutorResponseWithEvents commandResponse = default!;
-    public AggregateSubtypeTypeR(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
+    public AggregateSubtypeTypeR(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper, ISekibanServiceProviderGenerator providerGenerator) : base(
         sekibanTestFixture,
-        testOutputHelper)
+        testOutputHelper, providerGenerator)
     {
-        _cosmosDbFactory = GetService<CosmosDbFactory>();
+        _documentRemover = GetService<IDocumentRemover>();
         commandExecutor = GetService<ICommandExecutor>();
         aggregateLoader = GetService<IAggregateLoader>();
         multiProjectionService = GetService<IMultiProjectionService>();
@@ -46,14 +47,10 @@ public class AggregateSubtypeTypeR : TestBase
     public async Task CosmosDbStory()
     {
         // 先に全データを削除する
-        await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default);
-        await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Dissolvable);
-        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(
-            DocumentType.Command,
-            AggregateContainerGroup.Dissolvable);
-        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command);
-
-
+        await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Default);
+        await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Dissolvable);
+        await _documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Default);
+        await _documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Dissolvable);
 
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
             new AddItemToShoppingCartR
@@ -156,12 +153,10 @@ public class AggregateSubtypeTypeR : TestBase
     public async Task SimpleCommandsTestSnapshot()
     {
         // 先に全データを削除する
-        await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default);
-        await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Dissolvable);
-        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(
-            DocumentType.Command,
-            AggregateContainerGroup.Dissolvable);
-        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command);
+        await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Default);
+        await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Dissolvable);
+        await _documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Default);
+        await _documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Dissolvable);
 
         var snapshotCartId = Guid.NewGuid();
         for (var i = 0; i < 140; i++)
@@ -203,12 +198,10 @@ public class AggregateSubtypeTypeR : TestBase
     public async Task multiProjectionsTest()
     {
         // 先に全データを削除する
-        await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default);
-        await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Dissolvable);
-        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(
-            DocumentType.Command,
-            AggregateContainerGroup.Dissolvable);
-        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command);
+        await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Default);
+        await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Dissolvable);
+        await _documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Default);
+        await _documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Dissolvable);
 
         var cartId1 = Guid.NewGuid();
         var cartId2 = Guid.NewGuid();

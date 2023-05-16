@@ -31,7 +31,7 @@ public class InheritedSubtypeTests : TestBase
 
     public InheritedSubtypeTests(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
         sekibanTestFixture,
-        testOutputHelper)
+        testOutputHelper, new CosmosSekibanServiceProviderGenerator())
     {
         _cosmosDbFactory = GetService<CosmosDbFactory>();
         commandExecutor = GetService<ICommandExecutor>();

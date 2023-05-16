@@ -29,34 +29,24 @@ public class MultiProjectionSnapshotTests : TestBase
 
 
     private readonly CosmosDbFactory _cosmosDbFactory;
-    private readonly IDocumentPersistentRepository _documentPersistentRepository;
-    private readonly IDocumentPersistentWriter _documentPersistentWriter;
     private readonly HybridStoreManager _hybridStoreManager;
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
     private readonly IMemoryCacheAccessor _memoryCache;
-    private readonly ITestOutputHelper _testOutputHelper;
     private readonly IAggregateLoader aggregateLoader;
-    private readonly IBlobAccessor blobAccessor;
     private readonly ICommandExecutor commandExecutor;
     private readonly IMultiProjectionService multiProjectionService;
     private readonly IMultiProjectionSnapshotGenerator multiProjectionSnapshotGenerator;
-    private readonly ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor;
     public MultiProjectionSnapshotTests(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
         sekibanTestFixture,
-        testOutputHelper)
+        testOutputHelper, new CosmosSekibanServiceProviderGenerator())
     {
-        _testOutputHelper = testOutputHelper;
         _cosmosDbFactory = GetService<CosmosDbFactory>();
         commandExecutor = GetService<ICommandExecutor>();
         aggregateLoader = GetService<IAggregateLoader>();
-        _documentPersistentRepository = GetService<IDocumentPersistentRepository>();
         multiProjectionService = GetService<IMultiProjectionService>();
         _inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
         _hybridStoreManager = GetService<HybridStoreManager>();
         _memoryCache = GetService<IMemoryCacheAccessor>();
-        singleProjectionSnapshotAccessor = GetService<ISingleProjectionSnapshotAccessor>();
-        _documentPersistentWriter = GetService<IDocumentPersistentWriter>();
-        blobAccessor = GetService<IBlobAccessor>();
         multiProjectionSnapshotGenerator = GetService<IMultiProjectionSnapshotGenerator>();
     }
 

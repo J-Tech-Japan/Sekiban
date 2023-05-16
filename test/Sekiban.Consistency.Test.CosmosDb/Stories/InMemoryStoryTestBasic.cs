@@ -23,6 +23,7 @@ using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Snapshot;
 using Sekiban.Core.Snapshot.Aggregate;
+using Sekiban.Testing.Shared;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -42,8 +43,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
     private readonly IAggregateLoader projectionService;
 
     public InMemoryStoryTestBasic(
-        ITestOutputHelper testOutputHelper,
-        DependencyHelper.DatabaseType databaseType = DependencyHelper.DatabaseType.InMemory) : base(testOutputHelper, databaseType)
+        ITestOutputHelper testOutputHelper) : base(testOutputHelper, new InMemorySekibanServiceProviderGenerator())
     {
         _testOutputHelper = testOutputHelper;
         commandExecutor = GetService<ICommandExecutor>();

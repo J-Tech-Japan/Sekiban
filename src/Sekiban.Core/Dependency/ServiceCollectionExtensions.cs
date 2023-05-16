@@ -128,6 +128,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IDocumentPersistentRepository, InMemoryDocumentRepository>();
         services.AddTransient<IDocumentTemporaryWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentPersistentWriter, InMemoryDocumentWriter>();
+        services.AddTransient<IDocumentRemover, InMemoryDocumentRemover>();
         services.AddTransient<IQueryExecutor, QueryExecutor>();
         services.AddTransient<QueryHandler>();
         services.AddScoped<IMemoryCacheSettings, MemoryCacheSetting>();

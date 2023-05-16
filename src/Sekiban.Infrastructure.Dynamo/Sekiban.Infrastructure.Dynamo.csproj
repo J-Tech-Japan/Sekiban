@@ -12,6 +12,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj" />
+      <ProjectReference Include="..\Sekiban.Testing\Sekiban.Testing.csproj" />
     </ItemGroup>
 
 </Project>

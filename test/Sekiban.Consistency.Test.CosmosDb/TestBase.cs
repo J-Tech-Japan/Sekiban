@@ -1,3 +1,4 @@
+using FeatureCheck.Domain.Shared;
 using Microsoft.DotNet.PlatformAbstractions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,19 +17,18 @@ namespace SampleProjectStoryXTest;
 public class TestBase : IClassFixture<TestBase.SekibanTestFixture>, IDisposable
 {
     protected readonly SekibanTestFixture _sekibanTestFixture;
-    protected readonly ServiceProvider _serviceProvider;
+    protected readonly IServiceProvider _serviceProvider;
 
     public TestBase(
         SekibanTestFixture sekibanTestFixture,
         ITestOutputHelper output,
-        DependencyHelper.DatabaseType databaseType = DependencyHelper.DatabaseType.CosmosDb,
+        ISekibanServiceProviderGenerator providerGenerator,
         ServiceCollectionExtensions.MultiProjectionType multiProjectionType =
             ServiceCollectionExtensions.MultiProjectionType.MemoryCache)
     {
         sekibanTestFixture.TestOutputHelper = output;
         _sekibanTestFixture = sekibanTestFixture;
-        _serviceProvider =
-            DependencyHelper.CreateDefaultProvider(sekibanTestFixture, databaseType, null, multiProjectionType);
+        _serviceProvider = providerGenerator.Generate(sekibanTestFixture, new FeatureCheckDependency(), null, null);
         var backgroundService = _serviceProvider.GetRequiredService<SnapshotTakingBackgroundService>();
         backgroundService.ServiceProvider = _serviceProvider;
         Task.Run(() => backgroundService.StartAsync(CancellationToken.None));

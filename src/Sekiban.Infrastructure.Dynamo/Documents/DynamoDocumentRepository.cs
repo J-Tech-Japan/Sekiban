@@ -287,7 +287,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 var partitionKey = PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType);
                 var filter = new QueryFilter();
                 filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
-                filter.AddCondition(nameof(SnapshotDocument.PayloadVersionIdentifier), QueryOperator.Equal, partitionKey);
+                filter.AddCondition(nameof(SnapshotDocument.PayloadVersionIdentifier), QueryOperator.Equal, payloadVersionIdentifier);
 
                 var config = new QueryOperationConfig
                 {
@@ -338,7 +338,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 var partitionKey = PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType);
                 var filter = new QueryFilter();
                 filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
-                filter.AddCondition(nameof(SnapshotDocument.PayloadVersionIdentifier), QueryOperator.Equal, partitionKey);
+                filter.AddCondition(nameof(SnapshotDocument.PayloadVersionIdentifier), QueryOperator.Equal, payloadVersionIdentifier);
                 filter.AddCondition(nameof(SnapshotDocument.SavedVersion), QueryOperator.Equal, version);
 
                 var config = new QueryOperationConfig

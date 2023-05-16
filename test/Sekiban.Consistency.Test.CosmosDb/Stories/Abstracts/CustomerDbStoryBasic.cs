@@ -27,15 +27,15 @@ using Sekiban.Core.Setting;
 using Sekiban.Core.Snapshot;
 using Sekiban.Core.Snapshot.Aggregate;
 using Sekiban.Core.Types;
-using Sekiban.Infrastructure.Cosmos;
 using Sekiban.Testing.Shared;
+using Sekiban.Testing.Story;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
-namespace SampleProjectStoryXTest.Stories.CustomerDbStoryBasic;
+namespace SampleProjectStoryXTest.Stories.Abstracts;
 
 public abstract class CustomerDbStoryBasic : TestBase
 {
@@ -51,9 +51,9 @@ public abstract class CustomerDbStoryBasic : TestBase
     private readonly IMultiProjectionService multiProjectionService;
     private readonly IAggregateLoader projectionService;
     private readonly ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor;
-    public CustomerDbStoryBasic(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper, DependencyHelper.DatabaseType databaseType) : base(
+    public CustomerDbStoryBasic(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper, ISekibanServiceProviderGenerator providerGenerator) : base(
         sekibanTestFixture,
-        testOutputHelper, databaseType)
+        testOutputHelper, providerGenerator)
     {
         _testOutputHelper = testOutputHelper;
         _documentRemover = GetService<IDocumentRemover>();

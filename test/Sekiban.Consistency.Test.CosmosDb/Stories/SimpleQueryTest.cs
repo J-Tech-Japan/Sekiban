@@ -6,6 +6,7 @@ using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
 using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Query.QueryModel;
+using Sekiban.Infrastructure.Cosmos;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
@@ -18,12 +19,10 @@ public class SimpleQueryTest : TestBase
     public SimpleQueryTest(
         SekibanTestFixture sekibanTestFixture,
         ITestOutputHelper testOutputHelper,
-        DependencyHelper.DatabaseType databaseType = DependencyHelper.DatabaseType.CosmosDb,
         ServiceCollectionExtensions.MultiProjectionType multiProjectionType = ServiceCollectionExtensions.MultiProjectionType.MemoryCache) : base(
         sekibanTestFixture,
         testOutputHelper,
-        databaseType,
-        multiProjectionType)
+        new CosmosSekibanServiceProviderGenerator())
     {
         _commandExecutor = GetService<ICommandExecutor>();
         _queryExecutor = GetService<IQueryExecutor>();
