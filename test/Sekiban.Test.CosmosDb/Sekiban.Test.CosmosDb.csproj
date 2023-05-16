@@ -9,7 +9,8 @@
         <OpenApiGenerateDocuments>false</OpenApiGenerateDocuments>
         <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
         <UserSecretsId>55f43f08-0c5d-41bd-8846-13832dbc5714</UserSecretsId>
-        <RootNamespace>SampleProjectStoryXTest</RootNamespace>
+        <RootNamespace>Sekiban.Test.CosmosDb</RootNamespace>
+        <AssemblyName>Sekiban.Test.CosmosDb</AssemblyName>
     </PropertyGroup>
 
     <ItemGroup>

@@ -1,6 +1,6 @@
 using Sekiban.Infrastructure.Cosmos;
 using Xunit.Abstractions;
-namespace SampleProjectStoryXTest.Stories.CustomerDbStoryBasic;
+namespace Sekiban.Test.CosmosDb.Stories;
 
 public class CosmosCustomerDbStoryBasic : Abstracts.CustomerDbStoryBasic
 {

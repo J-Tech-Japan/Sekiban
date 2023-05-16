@@ -14,7 +14,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
-namespace SampleProjectStoryXTest.Stories.QueryPerformances;
+namespace Sekiban.Test.CosmosDb.Stories.QueryPerformances;
 
 public abstract class QueryPerformanceTestBase : TestBase
 {

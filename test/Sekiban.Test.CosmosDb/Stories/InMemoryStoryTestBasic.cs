@@ -30,7 +30,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
-namespace SampleProjectStoryXTest.Stories;
+namespace Sekiban.Test.CosmosDb.Stories;
 
 public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
 {

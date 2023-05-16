@@ -11,7 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
-namespace SampleProjectStoryXTest;
+namespace Sekiban.Test.CosmosDb;
 
 [Collection("Sequential")]
 public class TestBase : IClassFixture<TestBase.SekibanTestFixture>, IDisposable

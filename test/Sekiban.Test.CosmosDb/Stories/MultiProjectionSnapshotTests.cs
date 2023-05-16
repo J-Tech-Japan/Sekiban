@@ -14,15 +14,13 @@ using Sekiban.Core.Documents;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.MultiProjections.Projections;
 using Sekiban.Core.Query.SingleProjections;
-using Sekiban.Core.Query.SingleProjections.Projections;
-using Sekiban.Core.Setting;
 using Sekiban.Infrastructure.Cosmos;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
-namespace SampleProjectStoryXTest.Stories;
+namespace Sekiban.Test.CosmosDb.Stories;
 
 public class MultiProjectionSnapshotTests : TestBase
 {

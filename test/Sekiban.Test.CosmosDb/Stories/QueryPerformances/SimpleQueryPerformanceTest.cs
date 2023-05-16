@@ -1,4 +1,4 @@
-namespace SampleProjectStoryXTest.Stories.QueryPerformances;
+namespace Sekiban.Test.CosmosDb.Stories.QueryPerformances;
 #if false
 public class SimpleQueryPerformanceTest : QueryPerformanceTestBase
 {

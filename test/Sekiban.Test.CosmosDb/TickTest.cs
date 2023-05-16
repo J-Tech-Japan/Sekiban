@@ -1,7 +1,7 @@
 using System;
 using Xunit;
 using Xunit.Abstractions;
-namespace SampleProjectStoryXTest;
+namespace Sekiban.Test.CosmosDb;
 
 public class TickTest
 {

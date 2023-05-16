@@ -1,6 +1,6 @@
 using Sekiban.Core.Shared;
 using Xunit;
-namespace SampleProjectStoryXTest;
+namespace Sekiban.Test.CosmosDb;
 
 public class VersioningTest
 {

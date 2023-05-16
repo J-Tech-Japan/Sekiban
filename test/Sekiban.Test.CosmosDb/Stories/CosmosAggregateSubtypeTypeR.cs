@@ -1,8 +1,7 @@
-using SampleProjectStoryXTest.Stories.Abstracts;
 using Sekiban.Infrastructure.Cosmos;
-using Sekiban.Testing.Story;
+using Sekiban.Test.CosmosDb.Stories.Abstracts;
 using Xunit.Abstractions;
-namespace SampleProjectStoryXTest.Stories;
+namespace Sekiban.Test.CosmosDb.Stories;
 
 public class CosmosAggregateSubtypeTypeR : AggregateSubtypeTypeR
 {

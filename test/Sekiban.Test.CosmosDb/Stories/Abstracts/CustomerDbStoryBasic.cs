@@ -35,7 +35,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
-namespace SampleProjectStoryXTest.Stories.Abstracts;
+namespace Sekiban.Test.CosmosDb.Stories.Abstracts;
 
 public abstract class CustomerDbStoryBasic : TestBase
 {

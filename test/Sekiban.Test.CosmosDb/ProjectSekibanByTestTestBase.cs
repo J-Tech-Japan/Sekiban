@@ -1,8 +1,7 @@
 using FeatureCheck.Domain.Shared;
 using Sekiban.Testing.Story;
-using System;
 using Xunit.Abstractions;
-namespace SampleProjectStoryXTest;
+namespace Sekiban.Test.CosmosDb;
 
 public class ProjectSekibanByTestTestBase : SekibanByTestTestBase
 {

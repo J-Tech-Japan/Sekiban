@@ -1,6 +1,5 @@
-using SampleProjectStoryXTest.Stories.Abstracts;
-using SampleProjectStoryXTest.Stories.CustomerDbStoryBasic;
 using Sekiban.Infrastructure.Dynamo;
+using Sekiban.Test.CosmosDb.Stories.Abstracts;
 using Xunit.Abstractions;
 namespace Sekiban.Test.Dynamo.Tests;
 

@@ -1,6 +1,6 @@
 using Sekiban.Core.Dependency;
 using Xunit.Abstractions;
-namespace SampleProjectStoryXTest.Stories.QueryPerformances;
+namespace Sekiban.Test.CosmosDb.Stories.QueryPerformances;
 
 public class MemoryCachePerformanceTest : QueryPerformanceTestBase
 {

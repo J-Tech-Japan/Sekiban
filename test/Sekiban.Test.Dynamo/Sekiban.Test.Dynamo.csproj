@@ -30,7 +30,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\Sekiban.Consistency.Test.CosmosDb\Sekiban.Consistency.Test.CosmosDb.csproj" />
+      <ProjectReference Include="..\Sekiban.Test.CosmosDb\Sekiban.Test.CosmosDb.csproj" />
     </ItemGroup>
 
 </Project>

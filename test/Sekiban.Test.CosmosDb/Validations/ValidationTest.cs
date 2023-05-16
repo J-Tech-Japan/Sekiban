@@ -5,7 +5,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using System.Linq;
 using Xunit;
-namespace SampleProjectStoryXTest.Validations;
+namespace Sekiban.Test.CosmosDb.Validations;
 
 public class Member
 {
