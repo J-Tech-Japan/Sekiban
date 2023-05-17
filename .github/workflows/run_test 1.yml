@@ -73,7 +73,7 @@ jobs:
         dotnet nuget add source --username USERNAME --password ${{secrets.TOMOHISA_PAT}} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/J-Tech-Japan/index.json"
     - name: Secret Settings
       run: |
-        pushd ./test/Sekiban.Consistency.Test.CosmosDb
+        pushd ./test/Sekiban.Test.CosmosDb
         dotnet user-secrets set "Sekiban:Default:CosmosDbEndPointUrl" "${{secrets.TEST_COSMOS_ENDPOINT}}"
         dotnet user-secrets set "Sekiban:Default:CosmosDbAuthorizationKey" "${{secrets.TEST_COSMOS_SECRET}}"
         dotnet user-secrets set "Sekiban:Default:BlobConnectionString" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
@@ -82,7 +82,17 @@ jobs:
         dotnet user-secrets set "Sekiban:Secondary:BlobConnectionString" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
         dotnet user-secrets set "Sekiban:Default:CosmosDbDatabase" "GithubActions"
         dotnet user-secrets set "Sekiban:Secondary:CosmosDbDatabase" "GithubActions"
-    - name: Restore dependencies
+    - name: Secret Settings Dynamo
+      run: |
+        pushd ./test/Sekiban.Test.Dynamo
+        dotnet user-secrets set "Sekiban:Default:CosmosDbEndPointUrl" "${{secrets.TEST_COSMOS_ENDPOINT}}"
+        dotnet user-secrets set "Sekiban:Default:CosmosDbAuthorizationKey" "${{secrets.TEST_COSMOS_SECRET}}"
+        dotnet user-secrets set "Sekiban:Default:BlobConnectionString" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
+        dotnet user-secrets set "Sekiban:Secondary:CosmosDbEndPointUrl" "${{secrets.TEST_COSMOS_ENDPOINT}}"
+        dotnet user-secrets set "Sekiban:Secondary:CosmosDbAuthorizationKey" "${{secrets.TEST_COSMOS_SECRET}}"
+        dotnet user-secrets set "Sekiban:Secondary:BlobConnectionString" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
+        dotnet user-secrets set "Sekiban:Default:CosmosDbDatabase" "GithubActions"
+        dotnet user-secrets set "Sekiban:Secondary:CosmosDbDatabase" "GithubActions"    - name: Restore dependencies
       run: |
         dotnet restore Sekiban.sln
     - name: Build with dotnet
@@ -119,7 +129,7 @@ jobs:
         dotnet nuget add source --username USERNAME --password ${{secrets.TOMOHISA_PAT}} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/J-Tech-Japan/index.json"
     - name: Secret Settings
       run: |
-        pushd ./test/Sekiban.Consistency.Test.CosmosDb
+        pushd ./test/Sekiban.Test.CosmosDb
         dotnet user-secrets set "Sekiban:Default:CosmosDbEndPointUrl" "${{secrets.TEST_COSMOS_ENDPOINT}}"
         dotnet user-secrets set "Sekiban:Default:CosmosDbAuthorizationKey" "${{secrets.TEST_COSMOS_SECRET}}"
         dotnet user-secrets set "Sekiban:Default:BlobConnectionString" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"

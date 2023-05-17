@@ -5,14 +5,14 @@ using Microsoft.Extensions.DependencyInjection;
 using System.IO.Compression;
 namespace Sekiban.Core.Setting;
 
-public class BlobAccessor : IBlobAccessor
+public class AzureBlobAccessor : IBlobAccessor
 {
     private const string SekibanSection = "Sekiban";
 
     private readonly IConfiguration _configuration;
     private readonly IServiceProvider _serviceProvider;
 
-    public BlobAccessor(IServiceProvider serviceProvider, IConfiguration configuration)
+    public AzureBlobAccessor(IServiceProvider serviceProvider, IConfiguration configuration)
     {
         _serviceProvider = serviceProvider;
         _configuration = configuration;

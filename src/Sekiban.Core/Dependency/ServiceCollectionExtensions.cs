@@ -82,9 +82,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<ISingleProjectionCache, SingleProjectionCache>();
         services.AddTransient<IMultiProjectionCache, MultiProjectionCache>();
         services.AddTransient<ISnapshotDocumentCache, SnapshotDocumentCache>();
-
         services.AddTransient<IMultiProjectionSnapshotGenerator, MultiProjectionSnapshotGenerator>();
-        services.AddTransient<IBlobAccessor, BlobAccessor>();
         services.AddSingleton(new SnapshotTakingBackgroundService());
         services.AddHostedService(
             serviceProvider =>
@@ -137,7 +135,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<ISnapshotDocumentCache, SnapshotDocumentCache>();
 
         services.AddTransient<IMultiProjectionSnapshotGenerator, MultiProjectionSnapshotGenerator>();
-        services.AddTransient<IBlobAccessor, BlobAccessor>();
+        services.AddTransient<IBlobAccessor, NothingBlobAccessor>();
         services.AddSingleton(new SnapshotTakingBackgroundService());
         services.AddHostedService(
             serviceProvider =>
