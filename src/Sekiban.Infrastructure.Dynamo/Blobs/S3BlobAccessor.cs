@@ -3,10 +3,13 @@ using Amazon.S3;
 using Amazon.S3.Model;
 using Amazon.S3.Transfer;
 using Azure.Storage.Blobs;
+using ICSharpCode.SharpZipLib.Core;
+using ICSharpCode.SharpZipLib.GZip;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Setting;
 using System.IO.Compression;
+using System.Text;
 namespace Sekiban.Infrastructure.Dynamo.Blobs;
 
 public class S3BlobAccessor : IBlobAccessor
@@ -77,12 +80,22 @@ public class S3BlobAccessor : IBlobAccessor
             return null;
         }
         var uncompressedStream = new MemoryStream();
+
         var gzipStream = new GZipStream(readStream, CompressionMode.Decompress);
         await gzipStream.CopyToAsync(uncompressedStream);
-        uncompressedStream.Position = 0;
+        
+        // await using GZipInputStream zipStream = new GZipInputStream(readStream);
+        // StreamUtils.Copy(zipStream, uncompressedStream, new byte[4096]);
+        // zipStream.Close();
+        uncompressedStream.Seek(0, SeekOrigin.Begin);
         return uncompressedStream;
     }
     public async Task<bool> SetBlobWithGZipAsync(SekibanBlobContainer container, string blobName, Stream blob)
+    {
+        return await SetBlobWithGZipAsyncV2(container, blobName, blob);
+    }
+    
+    public async Task<bool> SetBlobWithGZipAsyncV1(SekibanBlobContainer container, string blobName, Stream blob)
     {
         var client = await GetS3ClientAsync();
         
@@ -102,6 +115,28 @@ public class S3BlobAccessor : IBlobAccessor
         PutObjectResponse _ = await client.PutObjectAsync(putRequest);
         return true;
     }
+    public async Task<bool> SetBlobWithGZipAsyncV2(SekibanBlobContainer container, string blobName, Stream blob)
+    {
+        var client = await GetS3ClientAsync();
+        
+        await using var msGzip = new MemoryStream();
+        await using (var gzos = new GZipOutputStream(msGzip){IsStreamOwner = false})
+        {
+            await blob.CopyToAsync(gzos);
+        }
+
+        msGzip.Seek(0, SeekOrigin.Begin);
+
+        var putRequest = new PutObjectRequest
+        {
+            BucketName = S3BucketName,
+            Key = GetKey(container, blobName),
+            InputStream = msGzip,
+        };
+        PutObjectResponse _ = await client.PutObjectAsync(putRequest);
+        return true;
+    }
+
     public string BlobConnectionString() => $"s3://{S3BucketName}";
     private string AwsAccessKeyId => _section?.GetValue<string>("AwsAccessKeyId") ?? throw new ArgumentNullException("AwsAccessKeyId");
     private string AwsAccessKey => _section?.GetValue<string>("AwsAccessKey") ?? throw new ArgumentNullException("AwsAccessKey");
