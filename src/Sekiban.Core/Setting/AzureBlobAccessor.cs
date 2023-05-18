@@ -1,5 +1,6 @@
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
+using ICSharpCode.SharpZipLib.GZip;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using System.IO.Compression;
@@ -71,10 +72,12 @@ public class AzureBlobAccessor : IBlobAccessor
             return false;
         }
         var compressedStream = new MemoryStream();
-        await using var gzipStream = new GZipStream(compressedStream, CompressionMode.Compress);
-        await blob.CopyToAsync(gzipStream);
-        gzipStream.Flush();
-        compressedStream.Position = 0;
+
+        await using (var gZipOutputStream = new GZipOutputStream(compressedStream){IsStreamOwner = false})
+        {
+            await blob.CopyToAsync(gZipOutputStream);
+        }
+        compressedStream.Seek(0, SeekOrigin.Begin);
         await blobClient.UploadAsync(
             compressedStream,
             new BlobUploadOptions

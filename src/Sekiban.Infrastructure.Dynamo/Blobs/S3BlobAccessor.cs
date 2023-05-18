@@ -91,19 +91,19 @@ public class S3BlobAccessor : IBlobAccessor
     {
         var client = await GetS3ClientAsync();
         
-        await using var uncompressedStream = new MemoryStream();
-        await using (var gZipOutputStream = new GZipOutputStream(uncompressedStream){IsStreamOwner = false})
+        await using var compressedStream = new MemoryStream();
+        await using (var gZipOutputStream = new GZipOutputStream(compressedStream){IsStreamOwner = false})
         {
             await blob.CopyToAsync(gZipOutputStream);
         }
 
-        uncompressedStream.Seek(0, SeekOrigin.Begin);
+        compressedStream.Seek(0, SeekOrigin.Begin);
 
         var putRequest = new PutObjectRequest
         {
             BucketName = S3BucketName,
             Key = GetKey(container, blobName),
-            InputStream = uncompressedStream,
+            InputStream = compressedStream,
         };
         var _ = await client.PutObjectAsync(putRequest);
         return true;
