@@ -83,57 +83,29 @@ public class S3BlobAccessor : IBlobAccessor
 
         var gzipStream = new GZipStream(readStream, CompressionMode.Decompress);
         await gzipStream.CopyToAsync(uncompressedStream);
-        
-        // await using GZipInputStream zipStream = new GZipInputStream(readStream);
-        // StreamUtils.Copy(zipStream, uncompressedStream, new byte[4096]);
-        // zipStream.Close();
+
         uncompressedStream.Seek(0, SeekOrigin.Begin);
         return uncompressedStream;
     }
     public async Task<bool> SetBlobWithGZipAsync(SekibanBlobContainer container, string blobName, Stream blob)
     {
-        return await SetBlobWithGZipAsyncV2(container, blobName, blob);
-    }
-    
-    public async Task<bool> SetBlobWithGZipAsyncV1(SekibanBlobContainer container, string blobName, Stream blob)
-    {
         var client = await GetS3ClientAsync();
         
-        var compressedStream = new MemoryStream();
-        await using var gzipStream = new GZipStream(compressedStream, CompressionMode.Compress);
-        await blob.CopyToAsync(gzipStream);
-        gzipStream.Flush();
-        compressedStream.Position = 0;
-        var sendingStream = new MemoryStream(compressedStream.GetBuffer());
-        var putRequest = new PutObjectRequest
+        await using var uncompressedStream = new MemoryStream();
+        await using (var gZipOutputStream = new GZipOutputStream(uncompressedStream){IsStreamOwner = false})
         {
-            BucketName = S3BucketName,
-            Key = GetKey(container, blobName),
-            InputStream = sendingStream,
-            ContentType = "application/x-gzip"
-        };
-        PutObjectResponse _ = await client.PutObjectAsync(putRequest);
-        return true;
-    }
-    public async Task<bool> SetBlobWithGZipAsyncV2(SekibanBlobContainer container, string blobName, Stream blob)
-    {
-        var client = await GetS3ClientAsync();
-        
-        await using var msGzip = new MemoryStream();
-        await using (var gzos = new GZipOutputStream(msGzip){IsStreamOwner = false})
-        {
-            await blob.CopyToAsync(gzos);
+            await blob.CopyToAsync(gZipOutputStream);
         }
 
-        msGzip.Seek(0, SeekOrigin.Begin);
+        uncompressedStream.Seek(0, SeekOrigin.Begin);
 
         var putRequest = new PutObjectRequest
         {
             BucketName = S3BucketName,
             Key = GetKey(container, blobName),
-            InputStream = msGzip,
+            InputStream = uncompressedStream,
         };
-        PutObjectResponse _ = await client.PutObjectAsync(putRequest);
+        var _ = await client.PutObjectAsync(putRequest);
         return true;
     }
 

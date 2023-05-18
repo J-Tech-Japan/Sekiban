@@ -345,7 +345,6 @@ public abstract class CustomerDbStoryBasic : TestBase
         Console.WriteLine("BlobConnectionString: " + connectionString);
         Assert.NotNull(connectionString);
     }
-
     [Fact]
     public async Task ManualSnapshotTestAsync()
     {
