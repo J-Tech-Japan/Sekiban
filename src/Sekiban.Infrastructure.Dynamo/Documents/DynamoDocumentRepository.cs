@@ -318,9 +318,41 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
         Type multiProjectionPayloadType,
         string payloadVersionIdentifier)
     {
-        // TODO: Not implemented
-        await Task.CompletedTask;
-        return default;
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionPayloadType);
+        return await _dbFactory.DynamoActionAsync(
+            DocumentType.MultiProjectionSnapshot,
+            aggregateContainerGroup,
+            async table =>
+            {
+                var partitionKey = PartitionKeyGenerator.ForMultiProjectionSnapshot(multiProjectionPayloadType);
+                var filter = new QueryFilter();
+                filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
+                filter.AddCondition(nameof(MultiProjectionSnapshotDocument.PayloadVersionIdentifier), QueryOperator.Equal, payloadVersionIdentifier);
+
+                var config = new QueryOperationConfig
+                {
+                    Filter = filter,
+                    BackwardSearch = true
+                };
+                var search = table.Query(config);
+
+                var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
+                do
+                {
+                    var nextSet = await search.GetNextSetAsync();
+                    resultList.AddRange(nextSet);
+                    if (resultList.Any()) { break; }
+                } while (!search.IsDone);
+
+                foreach (var result in resultList)
+                {
+                    
+                    var snapshot = SekibanJsonHelper.Deserialize<MultiProjectionSnapshotDocument>(result.ToJson());
+                    if (snapshot is null) { continue; }
+                    return snapshot;
+                }
+                return null;
+            });
     }
     public async Task<bool> ExistsSnapshotForAggregateAsync(
         Guid aggregateId,
