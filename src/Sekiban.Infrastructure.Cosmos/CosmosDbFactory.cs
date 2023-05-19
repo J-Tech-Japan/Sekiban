@@ -216,6 +216,10 @@ public class CosmosDbFactory
     {
         await DeleteAllFromAggregateFromContainerIncludes(DocumentType.Event, containerGroup);
     }
+    public async Task DeleteAllFromItemsContainer(AggregateContainerGroup containerGroup)
+    {
+        await DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command, containerGroup);
+    }
 
     public async Task<T> CosmosActionAsync<T>(
         DocumentType documentType,
