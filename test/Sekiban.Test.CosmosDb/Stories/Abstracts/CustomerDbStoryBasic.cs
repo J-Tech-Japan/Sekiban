@@ -69,8 +69,8 @@ public abstract class CustomerDbStoryBasic : TestBase
         blobAccessor = GetService<IBlobAccessor>();
     }
 
-    [Fact(DisplayName = "CosmosDb ストーリーテスト 集約の機能のテストではなく、CosmosDbと連携して正しく動くかをテストしています。")]
-    public async Task CosmosDbStory()
+    [Fact(DisplayName = "ストーリーテスト 集約の機能のテストではなく、DBと連携して正しく動くかをテストしています。")]
+    public async Task DocumentDbStory()
     {
         // 先に全データを削除する
         await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Default);
@@ -405,7 +405,7 @@ public abstract class CustomerDbStoryBasic : TestBase
     }
 
 
-    [Fact(DisplayName = "CosmosDbストーリーテスト用に削除のみを行う 。")]
+    [Fact(DisplayName = "ストーリーテスト用に削除のみを行う 。")]
     public async Task DeleteonlyAsync()
     {
         // 先に全データを削除する
@@ -422,7 +422,7 @@ public abstract class CustomerDbStoryBasic : TestBase
     {
     }
 
-    [Fact(DisplayName = "CosmosDb ストーリーテスト 。並列でたくさん動かしたらどうなるか。 INoValidateCommand がRecentActivityに適応されているので、問題ないはず")]
+    [Fact(DisplayName = "ストーリーテスト 。並列でたくさん動かしたらどうなるか。 INoValidateCommand がRecentActivityに適応されているので、問題ないはず")]
     [Trait(SekibanTestConstants.Category, SekibanTestConstants.Categories.Flaky)]
     public async Task AsynchronousExecutionTestAsync()
     {
