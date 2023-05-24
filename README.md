@@ -11,3 +11,5 @@ Sekiban - Event Sourcing Framework using .NET and Cosmos DB
 # Support
 
 # License
+Apache 2.0
+[See License](LICENSE)
