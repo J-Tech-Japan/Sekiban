@@ -1,6 +1,7 @@
 # Sekiban
 Sekiban - Event Sourcing Framework using .NET and Cosmos DB
-![sekiban logo](docs/images/Sekiban.png)
+
+Logo is under redesign process.
 
 (Introduction)
 
@@ -10,10 +11,10 @@ Sekiban - Event Sourcing Framework using .NET and Cosmos DB
 
 # Support
 
-[Contribution Guideline](CONTRIBUTING.md)
+[Contribution Guideline](https://github.com/J-Tech-Japan/Sekiban/blob/main/CONTRIBUTING.md)
 
-[Code of Conduct](CODE_OF_CONDUCT.md)
+[Code of Conduct](https://github.com/J-Tech-Japan/Sekiban/blob/main/CODE_OF_CONDUCT.md)
 
 # License
 Apache 2.0
-[See License](LICENSE)
+[See License](https://github.com/J-Tech-Japan/Sekiban/blob/main/LICENSE)

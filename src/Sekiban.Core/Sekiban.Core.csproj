@@ -5,16 +5,18 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
-        <PackageId>JJ_Sekiban.Core</PackageId>
-        <Version>0.10.30</Version>
+        <PackageId>Sekiban.Core</PackageId>
+        <Version>0.11.2</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Core</PackageDescription>
-        <RepositoryUrl>https://github.com/J-Tech-Japan/JJ_Sekiban</RepositoryUrl>
-        <PackageVersion>0.10.30</PackageVersion>
-        <Description>Snapshot will save with blob if its big</Description>
+        <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
+        <PackageVersion>0.11.2</PackageVersion>
+        <Description>Open Source Initial Version</Description>
         <AssemblyName>Sekiban.Core</AssemblyName>
         <RootNamespace>Sekiban.Core</RootNamespace>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
     </PropertyGroup>
 
     <ItemGroup>
@@ -30,6 +32,7 @@
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="6.0.1" />
         <PackageReference Include="NUlid" Version="1.7.1" />
         <PackageReference Include="SharpZipLib" Version="1.4.2" />
+        <None Include="..\..\README.md" Pack="true" PackagePath="\" />
     </ItemGroup>
 
     <ItemGroup>

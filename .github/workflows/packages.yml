@@ -18,29 +18,25 @@ jobs:
       uses: actions/setup-dotnet@v1
       with:
         dotnet-version: 6.0.x
-    - name: Package settings
-      run: |
-        dotnet nuget add source --username USERNAME --password ${{secrets.TOMOHISA_PAT}} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/J-Tech-Japan/index.json"
     - name: Restore dependencies
       run: |
-        pushd ./src
-        dotnet restore Sekiban.Lib.sln
+        dotnet restore Sekiban.sln --configuration Release
     - name: Build with dotnet
       run: |
         pushd ./src
-        dotnet build Sekiban.Lib.sln
+        dotnet build Sekiban.sln --configuration Release
     - name: Pack Core
       run: |
-        pushd ./src/Sekiban.Core
-        dotnet pack --configuration Release
-        dotnet nuget push "bin/Release/JJ_Sekiban.Core.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
-    - name: Pack Testing
-      run: |
-        pushd ./src/Sekiban.Testing
-        dotnet pack --configuration Release
-        dotnet nuget push "bin/Release/JJ_Sekiban.Testing.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
+        dotnet nuget push "src/Sekiban.Core/bin/Release/Sekiban.Core.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
     - name: Pack Cosmos
       run: |
-        pushd ./src/Sekiban.Infrastructure.Cosmos
-        dotnet pack --configuration Release
-        dotnet nuget push "bin/Release/JJ_Sekiban.Infrastructure.Cosmos.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
+        dotnet nuget push "src/Sekiban.Infrastructure.Cosmos/bin/Release/Sekiban.Infrastructure.Cosmos.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+    - name: Pack Dynamo
+      run: |
+        dotnet nuget push "src/Sekiban.Infrastructure.Dynamo/bin/Release/Sekiban.Infrastructure.Dynamo.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+    - name: Pack Testing
+      run: |
+        dotnet nuget push "src/Sekiban.Testing/bin/Release/Sekiban.Testing.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+    - name: Pack Web
+      run: |
+        dotnet nuget push "src/Sekiban.Web/bin/Release/Sekiban.Web.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
