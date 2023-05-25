@@ -29,18 +29,19 @@ jobs:
       run: |
         pushd ./src
         dotnet build Sekiban.Lib.sln
-    - name: Pack Core
-      run: |
-        pushd ./src/Sekiban.Core
-        dotnet pack --configuration Release
-        dotnet nuget push "bin/Release/JJ_Sekiban.Core.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
-    - name: Pack Testing
-      run: |
-        pushd ./src/Sekiban.Testing
-        dotnet pack --configuration Release
-        dotnet nuget push "bin/Release/JJ_Sekiban.Testing.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
-    - name: Pack Cosmos
-      run: |
-        pushd ./src/Sekiban.Infrastructure.Cosmos
-        dotnet pack --configuration Release
-        dotnet nuget push "bin/Release/JJ_Sekiban.Infrastructure.Cosmos.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
+# this should be updated to the nuget packages
+# - name: Pack Core
+#   run: |
+#     pushd ./src/Sekiban.Core
+#     dotnet pack --configuration Release
+#     dotnet nuget push "bin/Release/JJ_Sekiban.Core.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
+# - name: Pack Testing
+#   run: |
+#     pushd ./src/Sekiban.Testing
+#     dotnet pack --configuration Release
+#     dotnet nuget push "bin/Release/JJ_Sekiban.Testing.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
+# - name: Pack Cosmos
+#   run: |
+#     pushd ./src/Sekiban.Infrastructure.Cosmos
+#     dotnet pack --configuration Release
+#     dotnet nuget push "bin/Release/JJ_Sekiban.Infrastructure.Cosmos.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.TOMOHISA_PAT}} --source "github"
