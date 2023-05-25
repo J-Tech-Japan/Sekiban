@@ -26,9 +26,6 @@ jobs:
       uses: actions/setup-dotnet@v1
       with:
         dotnet-version: 6.0.x
-    - name: Package settings
-      run: |
-        dotnet nuget add source --username USERNAME --password ${{secrets.TOMOHISA_PAT}} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/J-Tech-Japan/index.json"
     - name: Secret Settings
       run: |
         pushd ./test/Sekiban.Test.CosmosDb
@@ -61,12 +58,9 @@ jobs:
     - name: Restore dependencies
       run: |
         dotnet restore Sekiban.sln
-    - name: Build with dotnet
-      run: |
-        dotnet build Sekiban.sln
     - name: Test dotnet
       run: |
-        dotnet test Sekiban.sln  --filter "Category!=Flaky&Category!=Performance" -v n
+        dotnet test Sekiban.sln  --filter "Category!=Flaky&Category!=Performance" -v n -c Release
     - uses: mktcode/consecutive-workflow-action@v1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
@@ -86,9 +80,6 @@ jobs:
       uses: actions/setup-dotnet@v1
       with:
         dotnet-version: 6.0.x
-    - name: Package settings
-      run: |
-        dotnet nuget add source --username USERNAME --password ${{secrets.TOMOHISA_PAT}} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/J-Tech-Japan/index.json"
     - name: Secret Settings
       run: |
         pushd ./test/Sekiban.Test.CosmosDb
@@ -121,16 +112,13 @@ jobs:
     - name: Restore dependencies
       run: |
         dotnet restore Sekiban.sln
-    - name: Build with dotnet
-      run: |
-        dotnet build Sekiban.sln
     - name: Test dotnet
       uses: nick-fields/retry@v2
       with:
         timeout_seconds: 300
         max_attempts: 3
         retry_on: error
-        command: dotnet test Sekiban.sln  --filter "Category=Flaky" -v n
+        command: dotnet test Sekiban.sln  --filter "Category=Flaky" -v n -c Release
     - uses: mktcode/consecutive-workflow-action@v1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
@@ -150,9 +138,6 @@ jobs:
       uses: actions/setup-dotnet@v1
       with:
         dotnet-version: 6.0.x
-    - name: Package settings
-      run: |
-        dotnet nuget add source --username USERNAME --password ${{secrets.TOMOHISA_PAT}} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/J-Tech-Japan/index.json"
     - name: Secret Settings
       run: |
         pushd ./test/Sekiban.Test.CosmosDb
@@ -185,9 +170,6 @@ jobs:
     - name: Restore dependencies
       run: |
         dotnet restore Sekiban.sln
-    - name: Build with dotnet
-      run: |
-        dotnet build Sekiban.sln
     - name: Test dotnet
       run: |
-        dotnet test Sekiban.sln  --filter "Category=Performance" -v n
+        dotnet test Sekiban.sln  --filter "Category=Performance" -v n -c Release
