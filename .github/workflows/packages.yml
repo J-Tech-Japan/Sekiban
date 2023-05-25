@@ -21,11 +21,11 @@ jobs:
     - name: Restore dependencies
       run: |
         pushd ./
-        dotnet restore Sekiban.sln --configuration Release
+        dotnet restore Sekiban.sln
     - name: Build with dotnet
       run: |
         pushd ./
-        dotnet build Sekiban.sln --configuration Release
+        dotnet build Sekiban.sln -c Release
     - name: Pack Core
       run: |
         dotnet nuget push "src/Sekiban.Core/bin/Release/Sekiban.Core.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
