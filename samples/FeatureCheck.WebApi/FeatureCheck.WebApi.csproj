@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <LangVersion>11</LangVersion>
+        <TargetFramework>net7.0</TargetFramework>
+        <UserSecretsId>a871e401-5d10-4932-9bdf-0d5f641558da</UserSecretsId>
+        <RootNamespace>FeatureCheck.WebApi</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj" />
+        <ProjectReference Include="..\FeatureCheck.Domain\FeatureCheck.Domain.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Addon.Web\Sekiban.Addon.Web.csproj" />
+    </ItemGroup>
+
+</Project>

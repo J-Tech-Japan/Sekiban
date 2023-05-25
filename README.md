@@ -1,6 +1,7 @@
 # Sekiban
 Sekiban - Event Sourcing Framework using .NET and Cosmos DB
-![sekiban logo](docs/images/Sekiban.png)
+
+Logo is under redesign process.
 
 (Introduction)
 
