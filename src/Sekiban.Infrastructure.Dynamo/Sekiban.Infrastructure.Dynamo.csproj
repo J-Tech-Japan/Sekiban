@@ -3,7 +3,17 @@
     <PropertyGroup>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <TargetFrameworks>net7.0;net6.0</TargetFrameworks>
+        <PackageId>Sekiban.Infrastructure.Dynamo</PackageId>
+        <Version>0.11.0</Version>
+        <Authors>J-Tech Group</Authors>
+        <Company>J-Tech-Japan</Company>
+        <PackageDescription>Sekiban - Event Sourcing Framework Dynamo Infrastructure</PackageDescription>
+        <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
+        <PackageVersion>0.11.0</PackageVersion>
+        <Description>Open Source Initial Version</Description>
+        <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
+        <LangVersion>11</LangVersion>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     </PropertyGroup>
 
     <ItemGroup>

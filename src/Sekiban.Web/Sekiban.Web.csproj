@@ -1,30 +1,28 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <PackageId>Sekiban.Infrastructure.Cosmos</PackageId>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <OutputType>Library</OutputType>
+        <PackageId>Sekiban.Web</PackageId>
         <Version>0.11.0</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
-        <PackageDescription>Sekiban - Event Sourcing Framework CosmosInfrastructure</PackageDescription>
+        <PackageDescription>Sekiban - Event Sourcing Framework WebHelper</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <PackageVersion>0.11.0</PackageVersion>
         <Description>Open Source Initial Version</Description>
         <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
         <LangVersion>11</LangVersion>
-        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <OpenApiGenerateDocuments>false</OpenApiGenerateDocuments>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.31.2" />
-        <PackageReference Include="Microsoft.Extensions.Configuration" Version="6.0.1" />
-        <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="6.0.0" />
+        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj" />
-        <ProjectReference Include="..\Sekiban.Testing\Sekiban.Testing.csproj" />
     </ItemGroup>
 
 </Project>
