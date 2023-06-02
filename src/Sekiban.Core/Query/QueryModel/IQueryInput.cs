@@ -1,5 +1,5 @@
 namespace Sekiban.Core.Query.QueryModel;
 
-public interface IQueryInput<TQueryOutput> where TQueryOutput : IQueryResponse
+public interface IQueryInput<TQueryOutput> : IQueryInputCommon where TQueryOutput : IQueryResponse
 {
 }

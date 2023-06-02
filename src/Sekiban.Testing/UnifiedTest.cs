@@ -77,6 +77,56 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
             throw new Exception("Failed to get Aggregate Query Response for " + param.GetType().Name);
     }
 
+    private Exception? GetQueryException(
+        IListQueryInputCommon param)
+    {
+        var queryService = _serviceProvider.GetService<IQueryExecutor>() ??
+            throw new Exception("Failed to get Query service");
+        try
+        {
+            var _ = queryService.ExecuteAsync((dynamic)param).Result;
+        }
+        catch (Exception e)
+        {
+            return e is AggregateException ae ? ae.InnerExceptions.First() : e;
+        }
+        return null;
+    }
+
+    public UnifiedTest<TDependencyDefinition> ThenQueryThrows<T>(IListQueryInputCommon param) where T : Exception
+    {
+        Assert.IsType<T>(GetQueryException(param));
+        return this;
+    }
+    public UnifiedTest<TDependencyDefinition>  ThenQueryGetException<T>(IListQueryInputCommon param, Action<T> checkException) where T : Exception
+    {
+        var exception = GetQueryException(param);
+        Assert.NotNull(exception);
+        Assert.IsType<T>(exception);
+        checkException(exception as T ?? throw new Exception("Failed to cast exception"));
+        return this;
+    }
+    public UnifiedTest<TDependencyDefinition> ThenQueryGetException<TQueryResponse>(
+        IListQueryInput<TQueryResponse> param,
+        Action<Exception> checkException) where TQueryResponse : IQueryResponse
+    {
+        var exception = GetQueryException(param);
+        Assert.NotNull(exception);
+        checkException(exception ?? throw new Exception("Failed to cast exception"));
+        return this;
+    }
+    public UnifiedTest<TDependencyDefinition>  ThenQueryNotThrowsAnException(IListQueryInputCommon param)
+    {
+        Assert.Null(GetQueryException(param));
+        return this;
+    }
+
+    public UnifiedTest<TDependencyDefinition> ThenQueryThrowsAnException(IListQueryInputCommon param)
+    {
+        Assert.NotNull(GetQueryException(param));
+        return this;
+    }
+    
     public UnifiedTest<TDependencyDefinition> ThenQueryResponseIs<TQueryResponse>(
         IListQueryInput<TQueryResponse> param,
         ListQueryResult<TQueryResponse> expectedResponse)
@@ -152,6 +202,56 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
                 .Result ??
             throw new Exception("Failed to get Aggregate Query Response for " + param.GetType().Name);
     }
+    private Exception? GetQueryException(
+        IQueryInputCommon param)
+    {
+        var queryService = _serviceProvider.GetService<IQueryExecutor>() ??
+            throw new Exception("Failed to get Query service");
+        try
+        {
+            var _ = queryService.ExecuteAsync((dynamic)param).Result;
+        }
+        catch (Exception e)
+        {
+            return e is AggregateException ae ? ae.InnerExceptions.First() : e;
+        }
+        return null;
+    }
+
+    public UnifiedTest<TDependencyDefinition> ThenQueryThrows<T>(IQueryInputCommon param) where T : Exception
+    {
+        Assert.IsType<T>(GetQueryException(param));
+        return this;
+    }
+    public UnifiedTest<TDependencyDefinition>  ThenQueryGetException<T>(IQueryInputCommon param, Action<T> checkException) where T : Exception
+    {
+        var exception = GetQueryException(param);
+        Assert.NotNull(exception);
+        Assert.IsType<T>(exception);
+        checkException(exception as T ?? throw new Exception("Failed to cast exception"));
+        return this;
+    }
+    public UnifiedTest<TDependencyDefinition> ThenQueryGetException(
+        IQueryInputCommon param,
+        Action<Exception> checkException)
+    {
+        var exception = GetQueryException(param);
+        Assert.NotNull(exception);
+        checkException(exception ?? throw new Exception("Failed to cast exception"));
+        return this;
+    }
+    public UnifiedTest<TDependencyDefinition>  ThenQueryNotThrowsAnException(IQueryInputCommon param)
+    {
+        Assert.Null(GetQueryException(param));
+        return this;
+    }
+
+    public UnifiedTest<TDependencyDefinition>  ThenQueryThrowsAnException(IQueryInputCommon param)
+    {
+        Assert.NotNull(GetQueryException(param));
+        return this;
+    }
+
 
     public UnifiedTest<TDependencyDefinition> ThenQueryResponseIs<TQueryResponse>(
         IQueryInput<TQueryResponse> param,
