@@ -67,7 +67,7 @@ public class QueryExecutor : IQueryExecutor
         if (!paramType.IsQueryInputType()) { throw new Exception("Invalid parameter type"); }
         var outputType = paramType.GetOutputClassFromQueryInputType();
         var handler = serviceProvider.GetQueryObjectFromQueryInputType(paramType, outputType) ??
-            throw new Exception("Can not find query handler for" + paramType.Name);
+            throw new Exception("Can not find query handler for " + paramType.Name);
         var handlerType = (Type)handler.GetType();
         if (handlerType.IsAggregateQueryType())
         {
@@ -95,11 +95,11 @@ public class QueryExecutor : IQueryExecutor
         {
             var multiProjectionType = handlerType.GetMultiProjectionTypeFromMultiProjectionQueryType();
             var baseMethod = GetType().GetMethod(nameof(ForMultiProjectionQueryAsync)) ??
-                throw new Exception("Can not find method ForAggregateListQueryAsync");
+                throw new Exception("Can not find method For MultiProjectionQuery");
             var method = (MethodInfo?)baseMethod.MakeGenericMethod(multiProjectionType, handler.GetType(), paramType, outputType) ??
-                throw new Exception("Can not find method ForAggregateListQueryAsync");
+                throw new Exception("Can not find method For MultiProjectionQuery");
             var result = await (dynamic)(method.Invoke(this, new object?[] { param }) ??
-                throw new Exception("Can not find method ForAggregateListQueryAsync"));
+                throw new Exception("Can not find method For MultiProjectionQuery"));
             return result;
         }
         throw new Exception("Can not find query handler for" + paramType.Name);

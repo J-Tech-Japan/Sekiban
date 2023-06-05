@@ -109,6 +109,8 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
         AddMultiProjectionQuery<ClientLoyaltyPointMultiProjectionQuery>();
         AddMultiProjectionListQuery<ClientLoyaltyPointQuery>();
         AddMultiProjectionQuery<DissolvableProjectionQuery>();
+        AddMultiProjectionQuery<ClientLoyaltyPointExceptionTestQuery>();
+        AddMultiProjectionListQuery<ClientLoyaltyPointExceptionTestListQuery>();
 
         AddAggregate<IInheritedAggregate>()
             .AddSubtype<ProcessingSubAggregate>(

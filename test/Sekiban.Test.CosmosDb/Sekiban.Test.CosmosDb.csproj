@@ -54,8 +54,4 @@
         </None>
     </ItemGroup>
 
-    <ItemGroup>
-      <Folder Include="Stories\CustomerDbStoryBasic\" />
-    </ItemGroup>
-
 </Project>

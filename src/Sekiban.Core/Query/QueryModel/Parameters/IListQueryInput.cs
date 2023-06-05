@@ -1,5 +1,5 @@
 namespace Sekiban.Core.Query.QueryModel.Parameters;
 
-public interface IListQueryInput<out TOutput> where TOutput : IQueryResponse
+public interface IListQueryInput<out TOutput> : IListQueryInputCommon where TOutput : IQueryResponse
 {
 }
