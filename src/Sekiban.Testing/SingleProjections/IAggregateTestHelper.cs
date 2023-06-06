@@ -170,6 +170,15 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         IListQueryInput<TQueryResponse> param,
         string responseFilename)
         where TQueryResponse : IQueryResponse;
+
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryThrows<T>(IListQueryInputCommon param) where T : Exception;
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<T>(IListQueryInputCommon param, Action<T> checkException) where T : Exception;
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<TQueryResponse>(
+        IListQueryInput<TQueryResponse> param,
+        Action<Exception> checkException) where TQueryResponse : IQueryResponse;
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryNotThrowsAnException(IListQueryInputCommon param);
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryThrowsAnException(IListQueryInputCommon param);
+    
     #endregion
 
     #region Query Test (not list)
@@ -195,5 +204,13 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         IQueryInput<TQueryResponse> param,
         string responseFilename)
         where TQueryResponse : IQueryResponse;
+
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryThrows<T>(IQueryInputCommon param) where T : Exception;
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<T>(IQueryInputCommon param, Action<T> checkException) where T : Exception;
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException(IQueryInputCommon param, Action<Exception> checkException);
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryNotThrowsAnException(IQueryInputCommon param);
+
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryThrowsAnException(IQueryInputCommon param);
+
     #endregion
 }
