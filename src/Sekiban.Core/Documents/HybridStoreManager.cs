@@ -3,9 +3,9 @@ namespace Sekiban.Core.Documents;
 
 public class HybridStoreManager
 {
-    public HybridStoreManager(bool enabled) => Enabled = enabled;
     private ConcurrentDictionary<string, HybridStatus> HybridPartitionKeys { get; } = new();
     public bool Enabled { get; set; }
+    public HybridStoreManager(bool enabled) => Enabled = enabled;
 
     public bool HasPartition(string partitionKey) => Enabled && HybridPartitionKeys.Keys.Contains(partitionKey);
 

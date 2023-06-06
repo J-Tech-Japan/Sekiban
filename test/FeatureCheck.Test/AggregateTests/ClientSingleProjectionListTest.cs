@@ -34,7 +34,6 @@ public class ClientSingleProjectionListTest : UnifiedTest<FeatureCheckDependency
                     new(branchId, client1Id, "John Smith", "john@example.com", datetime1),
                     new(branchId, client1Id, "John Doe", "john@example.com", datetime2),
                     new(branchId, client2Id, "test name", "test@example.com", datetime3)
-                }
-            ));
+                }));
     }
 }

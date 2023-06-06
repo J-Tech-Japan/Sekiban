@@ -5,10 +5,7 @@ namespace Sekiban.Infrastructure.Cosmos.DomainCommon.EventSourcings;
 public class CosmosDbDocumentRemover : IDocumentRemover
 {
     private readonly CosmosDbFactory _cosmosDbFactory;
-    public CosmosDbDocumentRemover(CosmosDbFactory cosmosDbFactory)
-    {
-        _cosmosDbFactory = cosmosDbFactory;
-    }
+    public CosmosDbDocumentRemover(CosmosDbFactory cosmosDbFactory) => _cosmosDbFactory = cosmosDbFactory;
 
     public async Task RemoveAllEventsAsync(AggregateContainerGroup aggregateContainerGroup)
     {
@@ -18,5 +15,4 @@ public class CosmosDbDocumentRemover : IDocumentRemover
     {
         await _cosmosDbFactory.DeleteAllFromItemsContainer(aggregateContainerGroup);
     }
-
 }

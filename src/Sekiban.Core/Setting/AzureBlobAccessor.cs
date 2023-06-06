@@ -13,12 +13,6 @@ public class AzureBlobAccessor : IBlobAccessor
     private readonly IConfiguration _configuration;
     private readonly IServiceProvider _serviceProvider;
 
-    public AzureBlobAccessor(IServiceProvider serviceProvider, IConfiguration configuration)
-    {
-        _serviceProvider = serviceProvider;
-        _configuration = configuration;
-    }
-
     private IConfigurationSection? _section
     {
         get
@@ -31,6 +25,12 @@ public class AzureBlobAccessor : IBlobAccessor
             }
             return section;
         }
+    }
+
+    public AzureBlobAccessor(IServiceProvider serviceProvider, IConfiguration configuration)
+    {
+        _serviceProvider = serviceProvider;
+        _configuration = configuration;
     }
     public async Task<Stream?> GetBlobAsync(SekibanBlobContainer container, string blobName)
     {
@@ -73,20 +73,14 @@ public class AzureBlobAccessor : IBlobAccessor
         }
         var compressedStream = new MemoryStream();
 
-        await using (var gZipOutputStream = new GZipOutputStream(compressedStream){IsStreamOwner = false})
+        await using (var gZipOutputStream = new GZipOutputStream(compressedStream) { IsStreamOwner = false })
         {
             await blob.CopyToAsync(gZipOutputStream);
         }
         compressedStream.Seek(0, SeekOrigin.Begin);
         await blobClient.UploadAsync(
             compressedStream,
-            new BlobUploadOptions
-            {
-                HttpHeaders = new BlobHttpHeaders
-                {
-                    ContentType = "application/x-gzip"
-                }
-            });
+            new BlobUploadOptions { HttpHeaders = new BlobHttpHeaders { ContentType = "application/x-gzip" } });
         return true;
     }
 

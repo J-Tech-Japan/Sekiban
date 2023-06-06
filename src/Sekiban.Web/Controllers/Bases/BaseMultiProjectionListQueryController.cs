@@ -8,8 +8,7 @@ namespace Sekiban.Web.Controllers.Bases;
 
 [ApiController]
 [Produces("application/json")]
-public class
-    BaseMultiProjectionListQueryController<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse> : ControllerBase
+public class BaseMultiProjectionListQueryController<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse> : ControllerBase
     where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     where TQuery : IMultiProjectionListQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
     where TQueryParameter : IListQueryParameter<TQueryResponse>
@@ -31,9 +30,7 @@ public class
 
     [HttpGet]
     [Route("")]
-    public async Task<ActionResult<ListQueryResult<TQueryResponse>>> GetQueryResult(
-        [FromQuery]
-        TQueryParameter queryParam)
+    public async Task<ActionResult<ListQueryResult<TQueryResponse>>> GetQueryResult([FromQuery] TQueryParameter queryParam)
     {
         if (_webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.MultiProjection,
@@ -47,8 +44,7 @@ public class
         {
             return Unauthorized();
         }
-        var result = await QueryExecutor
-            .ExecuteAsync(queryParam);
+        var result = await QueryExecutor.ExecuteAsync(queryParam);
         return Ok(result);
     }
 }

@@ -49,9 +49,7 @@ public static class GeneralTypeExtensions
 
         return type.BaseType != null
             ? GetInheritFromGenericType(type.BaseType, genericType)
-            : throw new ArgumentException(
-                "The type does not implement the generic interface.",
-                nameof(type));
+            : throw new ArgumentException("The type does not implement the generic interface.", nameof(type));
     }
 
     public static bool DoesImplementingFromGenericInterfaceType(this Type type, Type genericInterface)
@@ -61,8 +59,7 @@ public static class GeneralTypeExtensions
 
     public static Type GetImplementingFromGenericInterfaceType(this Type type, Type genericInterface)
     {
-        return type.GetInterfaces()
-                .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == genericInterface) ??
+        return type.GetInterfaces().FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == genericInterface) ??
             throw new ArgumentException("The type does not implement the generic interface.", nameof(type));
     }
 }

@@ -42,17 +42,12 @@ public class BaseSingleProjectionController<TSingleProjectionPayload> : Controll
         {
             return Unauthorized();
         }
-        var result = await aggregateLoader.AsSingleProjectionStateAsync<TSingleProjectionPayload>(
-            id,
-            toVersion,
-            includesSortableUniqueId);
+        var result = await aggregateLoader.AsSingleProjectionStateAsync<TSingleProjectionPayload>(id, toVersion, includesSortableUniqueId);
         return Ok(result);
     }
     [HttpGet]
     [Route("getWithoutSnapshot/{id}")]
-    public virtual async Task<ActionResult<SingleProjectionState<TSingleProjectionPayload>?>> GetWithoutSnapshotAsync(
-        Guid id,
-        int? toVersion = null)
+    public virtual async Task<ActionResult<SingleProjectionState<TSingleProjectionPayload>?>> GetWithoutSnapshotAsync(Guid id, int? toVersion = null)
     {
         if (_webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.SingleProjection,
@@ -66,9 +61,7 @@ public class BaseSingleProjectionController<TSingleProjectionPayload> : Controll
         {
             return Unauthorized();
         }
-        var result = await aggregateLoader.AsSingleProjectionStateFromInitialAsync<TSingleProjectionPayload>(
-            id,
-            toVersion);
+        var result = await aggregateLoader.AsSingleProjectionStateFromInitialAsync<TSingleProjectionPayload>(id, toVersion);
         return Ok(result);
     }
 }

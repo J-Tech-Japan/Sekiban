@@ -7,8 +7,8 @@ public class SekibanCosmosSerializer : CosmosSerializer
 {
     private readonly JsonObjectSerializer _jsonObjectSerializer;
 
-    public SekibanCosmosSerializer(JsonSerializerOptions? jsonSerializerOptions = null) => _jsonObjectSerializer =
-        new JsonObjectSerializer(jsonSerializerOptions ?? SekibanJsonHelper.GetDefaultJsonSerializerOptions());
+    public SekibanCosmosSerializer(JsonSerializerOptions? jsonSerializerOptions = null) =>
+        _jsonObjectSerializer = new JsonObjectSerializer(jsonSerializerOptions ?? SekibanJsonHelper.GetDefaultJsonSerializerOptions());
 
     public override T FromStream<T>(Stream stream)
     {

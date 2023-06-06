@@ -17,22 +17,19 @@ public record ClientNameHistoryProjection(
     {
     }
     public bool IsDeleted { get; init; }
-    public ClientNameHistoryProjection? ApplyEventInstance<TEventPayload>(
-        ClientNameHistoryProjection projectionPayload,
-        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon =>
+    public ClientNameHistoryProjection? ApplyEventInstance<TEventPayload>(ClientNameHistoryProjection projectionPayload, Event<TEventPayload> ev)
+        where TEventPayload : IEventPayloadCommon =>
         ApplyEvent(projectionPayload, ev);
 
-    public static ClientNameHistoryProjection? ApplyEvent<TEventPayload>(
-        ClientNameHistoryProjection projectionPayload,
-        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon
+    public static ClientNameHistoryProjection? ApplyEvent<TEventPayload>(ClientNameHistoryProjection projectionPayload, Event<TEventPayload> ev)
+        where TEventPayload : IEventPayloadCommon
     {
         Func<ClientNameHistoryProjection>? func = ev.Payload switch
         {
-            ClientCreated clientCreated => () =>
-                new ClientNameHistoryProjection(
-                    clientCreated.BranchId,
-                    new List<ClientNameHistoryProjectionRecord> { new(clientCreated.ClientName, ev.TimeStamp) }.ToImmutableList(),
-                    clientCreated.ClientEmail),
+            ClientCreated clientCreated => () => new ClientNameHistoryProjection(
+                clientCreated.BranchId,
+                new List<ClientNameHistoryProjectionRecord> { new(clientCreated.ClientName, ev.TimeStamp) }.ToImmutableList(),
+                clientCreated.ClientEmail),
 
             ClientNameChanged clientNameChanged => () =>
             {
@@ -40,7 +37,8 @@ public record ClientNameHistoryProjection(
                 a++;
                 return projectionPayload with
                 {
-                    ClientNames = projectionPayload.ClientNames.Add(new ClientNameHistoryProjectionRecord(clientNameChanged.ClientName, ev.TimeStamp))
+                    ClientNames = projectionPayload.ClientNames.Add(
+                        new ClientNameHistoryProjectionRecord(clientNameChanged.ClientName, ev.TimeStamp))
                 };
             },
             ClientDeleted => () => projectionPayload with { IsDeleted = true },

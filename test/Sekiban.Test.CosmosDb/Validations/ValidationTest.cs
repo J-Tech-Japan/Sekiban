@@ -46,8 +46,7 @@ public class ValidationTest
     [Fact]
     public void TestDateOnly()
     {
-        var m = new Box
-            { Contents = new Contents() };
+        var m = new Box { Contents = new Contents() };
         var vresults = m.ValidateProperties();
         Assert.False(vresults?.Any() ?? false);
     }
@@ -70,8 +69,7 @@ public class ValidationTest
     [Fact(DisplayName = "検証失敗_名前の桁あふれ")]
     public void Test3()
     {
-        var m = new Member
-            { Name = "YAMADA Taroooooooooooooooo", Age = 25, Tel = "090-1111-2222", Email = "hoge@example.com" };
+        var m = new Member { Name = "YAMADA Taroooooooooooooooo", Age = 25, Tel = "090-1111-2222", Email = "hoge@example.com" };
         var vresults = m.ValidateProperties();
         Assert.True(vresults?.Any() ?? false);
     }
@@ -124,8 +122,7 @@ public class ValidationTest
             Age = 25,
             Tel = "090-1111-2222",
             Email = "hoge@example.com",
-            Partner = new Member
-                { Name = "YAMADA Hanakoooooooooooooo", Age = 25, Tel = "080-1111-2222", Email = "hana@example.com" }
+            Partner = new Member { Name = "YAMADA Hanakoooooooooooooo", Age = 25, Tel = "080-1111-2222", Email = "hana@example.com" }
         };
         var vresults = m.ValidateProperties();
         Assert.True(vresults?.Any() ?? false);
@@ -141,10 +138,8 @@ public class ValidationTest
             Age = 25,
             Tel = "090-1111-2222",
             Email = "hoge@example.com",
-            Partner =
-                new Member { Name = "YAMADA Hanako", Age = 25, Tel = "080-1111-2222", Email = "hana@example.com" },
-            Friends = new List<Member>
-                { new() { Name = "SUZUKI Ichiro", Age = 30 }, new() { Name = "Nakata Hidetoshi", Age = 28 } }
+            Partner = new Member { Name = "YAMADA Hanako", Age = 25, Tel = "080-1111-2222", Email = "hana@example.com" },
+            Friends = new List<Member> { new() { Name = "SUZUKI Ichiro", Age = 30 }, new() { Name = "Nakata Hidetoshi", Age = 28 } }
         };
         var vresults = m.ValidateProperties();
         Assert.False(vresults?.Any() ?? false);
@@ -159,10 +154,8 @@ public class ValidationTest
             Age = 25,
             Tel = "090-1111-2222",
             Email = "hoge@example.com",
-            Partner =
-                new Member { Name = "YAMADA Hanako", Age = 25, Tel = "080-1111-2222", Email = "hana@example.com" },
-            Friends = new List<Member>
-                { new() { Name = "SUZUKI Ichiro", Age = 30 }, new() { Name = "Nakata Hidetoshi", Age = 90 } }
+            Partner = new Member { Name = "YAMADA Hanako", Age = 25, Tel = "080-1111-2222", Email = "hana@example.com" },
+            Friends = new List<Member> { new() { Name = "SUZUKI Ichiro", Age = 30 }, new() { Name = "Nakata Hidetoshi", Age = 90 } }
         };
         var vresults = m.ValidateProperties();
         Assert.True(vresults?.Any() ?? false);

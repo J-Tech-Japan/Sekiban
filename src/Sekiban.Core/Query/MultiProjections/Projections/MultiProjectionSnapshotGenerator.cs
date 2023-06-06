@@ -68,8 +68,7 @@ public class MultiProjectionSnapshotGenerator : IMultiProjectionSnapshotGenerato
         var payload = new TProjectionPayload();
         var snapshotDocument = await _documentRepository.GetLatestSnapshotForMultiProjectionAsync(
             typeof(TProjectionPayload),
-            payload.GetPayloadVersionIdentifier()
-        );
+            payload.GetPayloadVersionIdentifier());
 
         // if snapshot document is not null, load it from blob storage
         if (snapshotDocument != null)
@@ -94,6 +93,8 @@ public class MultiProjectionSnapshotGenerator : IMultiProjectionSnapshotGenerato
     public string FilenameForSnapshot(Type projectionPayload, Guid id, SortableUniqueIdValue sortableUniqueId) =>
         $"{ProjectionName(projectionPayload)}_{sortableUniqueId.GetTicks().Ticks:00000000000000000000}_{id}.json.gz";
 
-    private string ProjectionName(Type projectionType) => projectionType.IsSingleProjectionListStateType() ?
-        $"list_{projectionType.GetAggregatePayloadOrSingleProjectionPayloadTypeFromSingleProjectionListStateType().Name}" : projectionType.Name;
+    private string ProjectionName(Type projectionType) =>
+        projectionType.IsSingleProjectionListStateType()
+            ? $"list_{projectionType.GetAggregatePayloadOrSingleProjectionPayloadTypeFromSingleProjectionListStateType().Name}"
+            : projectionType.Name;
 }

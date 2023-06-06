@@ -8,8 +8,7 @@ public interface ISingleProjection
         Guid aggregateId,
         int? toVersion = null,
         SortableUniqueIdValue? includesSortableUniqueId = null)
-        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection,
-        ISingleProjectionStateConvertible<TState>
+        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<TState>
         where TState : IAggregateStateCommon
         where TProjector : ISingleProjector<TProjection>, new();
 }

@@ -25,23 +25,17 @@ public class SimpleUnifiedProjectionTest : UnifiedTest<FeatureCheckDependency>
         RunCommand(new CreateBranch(branchName), branchId);
 
         ThenQueryResponseIs(
-                new ClientLoyaltyPointMultiProjectionQuery.Parameter(
-                    branchId,
-                    ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
+                new ClientLoyaltyPointMultiProjectionQuery.Parameter(branchId, ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
                 new ClientLoyaltyPointMultiProjectionQuery.Response(
-                    ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty
-                        .Add(new ClientLoyaltyPointMultiProjection.ProjectedBranch(branchId, branchName)),
+                    ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty.Add(
+                        new ClientLoyaltyPointMultiProjection.ProjectedBranch(branchId, branchName)),
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty))
-            .ThenQueryResponseIs(
-                new BranchExistsQuery.Parameter(branchId),
-                new BranchExistsQuery.Response(true))
-            .ThenQueryResponseIs(
-                new BranchExistsQuery.Parameter(Guid.NewGuid()),
-                new BranchExistsQuery.Response(false))
+            .ThenQueryResponseIs(new BranchExistsQuery.Parameter(branchId), new BranchExistsQuery.Response(true))
+            .ThenQueryResponseIs(new BranchExistsQuery.Parameter(Guid.NewGuid()), new BranchExistsQuery.Response(false))
             .ThenMultiProjectionPayloadIs(
                 new ClientLoyaltyPointMultiProjection(
-                    ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty
-                        .Add(new ClientLoyaltyPointMultiProjection.ProjectedBranch(branchId, branchName)),
+                    ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty.Add(
+                        new ClientLoyaltyPointMultiProjection.ProjectedBranch(branchId, branchName)),
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty))
             .ThenGetAggregateListProjectionPayload<Client>(payload => Assert.Empty(payload.List))
             .ThenGetSingleProjectionListPayload<ClientNameHistoryProjection>(payload => Assert.Empty(payload.List));
@@ -52,23 +46,17 @@ public class SimpleUnifiedProjectionTest : UnifiedTest<FeatureCheckDependency>
     {
         RunCommand(new CreateBranch(branchName), branchId);
         ThenQueryResponseIs(
-                new ClientLoyaltyPointMultiProjectionQuery.Parameter(
-                    branchId,
-                    ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
+                new ClientLoyaltyPointMultiProjectionQuery.Parameter(branchId, ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
                 new ClientLoyaltyPointMultiProjectionQuery.Response(
-                    ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty
-                        .Add(new ClientLoyaltyPointMultiProjection.ProjectedBranch(branchId, branchName)),
+                    ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty.Add(
+                        new ClientLoyaltyPointMultiProjection.ProjectedBranch(branchId, branchName)),
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty))
-            .ThenQueryResponseIs(
-                new BranchExistsQuery.Parameter(branchId),
-                new BranchExistsQuery.Response(true))
-            .ThenQueryResponseIs(
-                new BranchExistsQuery.Parameter(Guid.NewGuid()),
-                new BranchExistsQuery.Response(false))
+            .ThenQueryResponseIs(new BranchExistsQuery.Parameter(branchId), new BranchExistsQuery.Response(true))
+            .ThenQueryResponseIs(new BranchExistsQuery.Parameter(Guid.NewGuid()), new BranchExistsQuery.Response(false))
             .ThenMultiProjectionPayloadIs(
                 new ClientLoyaltyPointMultiProjection(
-                    ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty
-                        .Add(new ClientLoyaltyPointMultiProjection.ProjectedBranch(branchId, branchName)),
+                    ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty.Add(
+                        new ClientLoyaltyPointMultiProjection.ProjectedBranch(branchId, branchName)),
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord>.Empty))
             .ThenGetAggregateListProjectionPayload<Client>(payload => Assert.Empty(payload.List))
             .ThenGetSingleProjectionListPayload<ClientNameHistoryProjection>(payload => Assert.Empty(payload.List));
@@ -80,11 +68,8 @@ public class SimpleUnifiedProjectionTest : UnifiedTest<FeatureCheckDependency>
         RunCommand(new CreateBranch(branchName), branchId);
         ThenGetAggregateTest<Client>(
             test => test.WhenCommand(new CreateClient(branchId, "test", "test@example.com"))
-                .WhenCommand(
-                    new ChangeClientName(test.GetAggregateId(), "Test2")
-                        { ReferenceVersion = test.GetCurrentVersion() })
-                .ThenNotThrowsAnException()
-        );
+                .WhenCommand(new ChangeClientName(test.GetAggregateId(), "Test2") { ReferenceVersion = test.GetCurrentVersion() })
+                .ThenNotThrowsAnException());
     }
 
     [Fact]
@@ -94,11 +79,8 @@ public class SimpleUnifiedProjectionTest : UnifiedTest<FeatureCheckDependency>
         var clientId = RunCommand(new CreateClient(branchId, "test", "test@example.com"));
         ThenGetAggregateTest<Client>(
             clientId,
-            test => test.WhenCommand(
-                    new ChangeClientName(clientId, "Test2")
-                        { ReferenceVersion = test.GetCurrentVersion() })
-                .ThenNotThrowsAnException()
-        );
+            test => test.WhenCommand(new ChangeClientName(clientId, "Test2") { ReferenceVersion = test.GetCurrentVersion() })
+                .ThenNotThrowsAnException());
     }
 
     [Fact]
@@ -109,21 +91,15 @@ public class SimpleUnifiedProjectionTest : UnifiedTest<FeatureCheckDependency>
         ThenGetAggregateTest<Client>(
             test =>
             {
-                test.WhenCommand(new CreateClient(branchId, "test", "test@example.com"))
-                    .ThenNotThrowsAnException();
+                test.WhenCommand(new CreateClient(branchId, "test", "test@example.com")).ThenNotThrowsAnException();
                 clientId = test.GetAggregateId();
             });
         ThenGetAggregateTest<Client>(
             clientId,
-            test => test.WhenCommand(
-                    new ChangeClientName(clientId, "Test2")
-                        { ReferenceVersion = test.GetCurrentVersion() })
-                .ThenNotThrowsAnException()
-        );
+            test => test.WhenCommand(new ChangeClientName(clientId, "Test2") { ReferenceVersion = test.GetCurrentVersion() })
+                .ThenNotThrowsAnException());
         var clientTest = GetAggregateTest<Client>(clientId);
-        clientTest.WhenCommand(
-            new ChangeClientName(clientId, "Test3")
-                { ReferenceVersion = clientTest.GetCurrentVersion() });
+        clientTest.WhenCommand(new ChangeClientName(clientId, "Test3") { ReferenceVersion = clientTest.GetCurrentVersion() });
     }
 
     [Fact]
@@ -131,21 +107,16 @@ public class SimpleUnifiedProjectionTest : UnifiedTest<FeatureCheckDependency>
     {
         RunCommand(new CreateBranch(branchName), branchId);
         var test = GetAggregateTest<Client>();
-        test.WhenCommandWithPublish(new CreateClient(branchId, "test", "test@example.com"))
-            .ThenNotThrowsAnException();
+        test.WhenCommandWithPublish(new CreateClient(branchId, "test", "test@example.com")).ThenNotThrowsAnException();
         var clientId = test.GetAggregateId();
         // Create Loyalty Point Runs automatically with event Created CreateClient
         ThenGetAggregateTest<LoyaltyPoint>(
             clientId,
             test => test.WhenCommand(
-                    new AddLoyaltyPoint(
-                            clientId,
-                            new DateTime(2022, 11, 1),
-                            LoyaltyPointReceiveTypeKeys.CreditcardUsage,
-                            100,
-                            string.Empty)
-                        { ReferenceVersion = test.GetCurrentVersion() })
-                .ThenNotThrowsAnException()
-        );
+                    new AddLoyaltyPoint(clientId, new DateTime(2022, 11, 1), LoyaltyPointReceiveTypeKeys.CreditcardUsage, 100, string.Empty)
+                    {
+                        ReferenceVersion = test.GetCurrentVersion()
+                    })
+                .ThenNotThrowsAnException());
     }
 }

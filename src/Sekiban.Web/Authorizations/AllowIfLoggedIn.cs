@@ -2,8 +2,7 @@
 using Sekiban.Web.Authorizations.Definitions;
 namespace Sekiban.Web.Authorizations;
 
-public class AllowIfLoggedIn<TDefinitionType> : IAuthorizeDefinition
-    where TDefinitionType : IAuthorizationDefinitionType, new()
+public class AllowIfLoggedIn<TDefinitionType> : IAuthorizeDefinition where TDefinitionType : IAuthorizationDefinitionType, new()
 {
     public AuthorizeResultType Check(
         AuthorizeMethodType authorizeMethodType,
@@ -20,9 +19,7 @@ public class AllowIfLoggedIn<TDefinitionType> : IAuthorizeDefinition
         // 認証チェック
         if (!(httpContext.User.Identity?.IsAuthenticated ?? false))
         {
-            return httpContext.User.Identity?.IsAuthenticated ?? false
-                ? AuthorizeResultType.Allowed
-                : AuthorizeResultType.Denied;
+            return httpContext.User.Identity?.IsAuthenticated ?? false ? AuthorizeResultType.Allowed : AuthorizeResultType.Denied;
         }
         return AuthorizeResultType.Passed;
     }

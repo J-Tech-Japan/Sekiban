@@ -5,13 +5,13 @@ public class RegisteredEventTypes
 {
     private readonly List<Type> _registeredTypes = new();
 
+    public ReadOnlyCollection<Type> RegisteredTypes { get; }
+
     public RegisteredEventTypes(params Assembly[] assemblies)
     {
         foreach (var assembly in assemblies)
         {
-            var decoratedTypes = assembly.DefinedTypes.Where(
-                x =>
-                    x.IsClass && x.ImplementedInterfaces.Contains(typeof(IEventPayloadCommon)));
+            var decoratedTypes = assembly.DefinedTypes.Where(x => x.IsClass && x.ImplementedInterfaces.Contains(typeof(IEventPayloadCommon)));
             foreach (var type in decoratedTypes)
             {
                 if (_registeredTypes.Contains(type))
@@ -24,6 +24,4 @@ public class RegisteredEventTypes
 
         RegisteredTypes = _registeredTypes.AsReadOnly();
     }
-
-    public ReadOnlyCollection<Type> RegisteredTypes { get; }
 }

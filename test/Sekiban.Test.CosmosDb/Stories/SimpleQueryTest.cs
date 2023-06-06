@@ -46,8 +46,7 @@ public class SimpleQueryTest : TestBase
     [Fact]
     public async Task QueryExecuteAggregateAsync()
     {
-        var result = await _queryExecutor.ExecuteAsync(
-            new ClientEmailExistsQuery.Parameter("foo@example.com"));
+        var result = await _queryExecutor.ExecuteAsync(new ClientEmailExistsQuery.Parameter("foo@example.com"));
     }
 
 
@@ -55,15 +54,13 @@ public class SimpleQueryTest : TestBase
     public async Task QueryExecuteSingleProjectionListAsync()
     {
 
-        var result = await _queryExecutor.ExecuteAsync(
-            new ClientNameHistoryProjectionQuery.Parameter(null, null, null, null, null));
+        var result = await _queryExecutor.ExecuteAsync(new ClientNameHistoryProjectionQuery.Parameter(null, null, null, null, null));
     }
     [Fact]
     public async Task QueryExecuteSingleProjectionAsync()
     {
 
-        var result = await _queryExecutor.ExecuteAsync(
-            new ClientNameHistoryProjectionCountQuery.Parameter(null, null));
+        var result = await _queryExecutor.ExecuteAsync(new ClientNameHistoryProjectionCountQuery.Parameter(null, null));
     }
     [Fact]
     public async Task QueryExecuteMultipleProjectionListAsync()

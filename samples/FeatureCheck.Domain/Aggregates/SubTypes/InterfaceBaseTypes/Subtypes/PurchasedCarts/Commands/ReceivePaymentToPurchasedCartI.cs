@@ -11,10 +11,7 @@ public record ReceivePaymentToPurchasedCartI : IVersionValidationCommand<Purchas
     public string PaymentMethod { get; init; } = "Cash";
     public decimal Amount { get; init; } = 0;
     public string Currency { get; init; } = "JPY";
-    public Guid GetAggregateId()
-    {
-        return CartId;
-    }
+    public Guid GetAggregateId() => CartId;
     public int ReferenceVersion { get; init; }
 
     public class Handler : IVersionValidationCommandHandler<PurchasedCartI, ReceivePaymentToPurchasedCartI>
@@ -24,8 +21,7 @@ public record ReceivePaymentToPurchasedCartI : IVersionValidationCommand<Purchas
             ReceivePaymentToPurchasedCartI command)
         {
             await Task.CompletedTask;
-            yield return new PaymentReceivedToCartI
-                { PaymentMethod = command.PaymentMethod, Amount = command.Amount, Currency = command.Currency };
+            yield return new PaymentReceivedToCartI { PaymentMethod = command.PaymentMethod, Amount = command.Amount, Currency = command.Currency };
             yield return new PaymentCompletedI();
         }
     }

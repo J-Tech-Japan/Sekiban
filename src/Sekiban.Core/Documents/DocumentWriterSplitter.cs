@@ -44,8 +44,7 @@ public class DocumentWriterSplitter : IDocumentWriter
         await _documentPersistentWriter.SaveAsync(document, aggregateType);
     }
 
-    public async Task SaveAndPublishEvent<TEvent>(TEvent ev, Type aggregateType)
-        where TEvent : IEvent
+    public async Task SaveAndPublishEvent<TEvent>(TEvent ev, Type aggregateType) where TEvent : IEvent
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemory)

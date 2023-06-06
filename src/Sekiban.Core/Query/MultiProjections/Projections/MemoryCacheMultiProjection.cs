@@ -32,9 +32,8 @@ public class MemoryCacheMultiProjection : IMultiProjection
         this.multiProjectionSnapshotGenerator = multiProjectionSnapshotGenerator;
     }
 
-    public async Task<MultiProjectionState<TProjectionPayload>>
-        GetMultiProjectionAsync<TProjection, TProjectionPayload>(SortableUniqueIdValue? includesSortableUniqueIdValue)
-        where TProjection : IMultiProjector<TProjectionPayload>, new()
+    public async Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjection, TProjectionPayload>(
+        SortableUniqueIdValue? includesSortableUniqueIdValue) where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         var savedContainerCache = multiProjectionCache.Get<TProjection, TProjectionPayload>();
@@ -79,8 +78,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
                     continue;
                 }
 
-                var (updated, type) =
-                    _updateNotice.HasUpdateAfter(targetAggregateName, savedContainer.SafeSortableUniqueId!);
+                var (updated, type) = _updateNotice.HasUpdateAfter(targetAggregateName, savedContainer.SafeSortableUniqueId!);
                 canUseCache = !updated;
             }
 
@@ -104,15 +102,14 @@ public class MemoryCacheMultiProjection : IMultiProjection
                     var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
                     foreach (var ev in events)
                     {
-                        if (container.LastSortableUniqueId == null &&
-                            ev.GetSortableUniqueId().EarlierThan(targetSafeId) &&
-                            projector.Version > 0)
+                        if (container.LastSortableUniqueId == null && ev.GetSortableUniqueId().EarlierThan(targetSafeId) && projector.Version > 0)
                         {
                             container = container with
                             {
                                 SafeState = projector.ToState(),
                                 SafeSortableUniqueId = container.SafeState?.LastSortableUniqueId != null
-                                    ? new SortableUniqueIdValue(container.SafeState.LastSortableUniqueId) : null
+                                    ? new SortableUniqueIdValue(container.SafeState.LastSortableUniqueId)
+                                    : null
                             };
                         }
 
@@ -160,12 +157,8 @@ public class MemoryCacheMultiProjection : IMultiProjection
         var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
         var safeEvents = events.Where(m => m.GetSortableUniqueId().EarlierThan(targetSafeId)).ToList();
         var unsafeEvents = events.Where(m => m.GetSortableUniqueId().LaterThanOrEqual(targetSafeId)).ToList();
-        var safeState = safeEvents.Aggregate(
-            new MultiProjectionState<TProjectionPayload>(),
-            (projection, ev) => projection.ApplyEvent(ev));
-        var state = unsafeEvents.Aggregate(
-            safeState,
-            (projection, ev) => projection.ApplyEvent(ev));
+        var safeState = safeEvents.Aggregate(new MultiProjectionState<TProjectionPayload>(), (projection, ev) => projection.ApplyEvent(ev));
+        var state = unsafeEvents.Aggregate(safeState, (projection, ev) => projection.ApplyEvent(ev));
         var container = new MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>
         {
             UnsafeEvents = unsafeEvents,
@@ -203,23 +196,20 @@ public class MemoryCacheMultiProjection : IMultiProjection
                 .ToList();
             lastSortableUniqueId = events.LastOrDefault()?.GetSortableUniqueId();
             var safeEvents = events.Where(m => m.GetSortableUniqueId().EarlierThan(targetSafeId)).ToList();
-            multiProjectionState = safeEvents.Aggregate(
-                multiProjectionState,
-                (projection, ev) => projection.ApplyEvent(ev));
+            multiProjectionState = safeEvents.Aggregate(multiProjectionState, (projection, ev) => projection.ApplyEvent(ev));
 
             unsafeEvents.AddRange(events.Where(m => m.GetSortableUniqueId().LaterThanOrEqual(targetSafeId)));
             eventStream = await stream();
         }
 
-        var unsafeState = unsafeEvents.Aggregate(
-            multiProjectionState,
-            (projection, ev) => projection.ApplyEvent(ev));
+        var unsafeState = unsafeEvents.Aggregate(multiProjectionState, (projection, ev) => projection.ApplyEvent(ev));
 
         var container = new MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>
         {
             UnsafeEvents = unsafeEvents,
             LastSortableUniqueId = unsafeState.Version == 0 ? null : new SortableUniqueIdValue(unsafeState.LastSortableUniqueId),
-            SafeSortableUniqueId = multiProjectionState.Version == 0 ? null : new SortableUniqueIdValue(multiProjectionState.LastSortableUniqueId),
+            SafeSortableUniqueId
+                = multiProjectionState.Version == 0 ? null : new SortableUniqueIdValue(multiProjectionState.LastSortableUniqueId),
             SafeState = multiProjectionState.Version == 0 ? null : multiProjectionState,
             State = unsafeState.Version == 0 ? null : unsafeState
         };
@@ -231,8 +221,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
     }
 
     private async Task<MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>?>
-        GetContainerFromSnapshot<TProjection, TProjectionPayload>()
-        where TProjection : IMultiProjector<TProjectionPayload>, new()
+        GetContainerFromSnapshot<TProjection, TProjectionPayload>() where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         var state = await multiProjectionSnapshotGenerator.GetCurrentStateAsync<TProjectionPayload>();
@@ -245,15 +234,15 @@ public class MemoryCacheMultiProjection : IMultiProjection
         {
             SafeState = state,
             State = state,
-            SafeSortableUniqueId = string.IsNullOrEmpty(state.LastSortableUniqueId) ? null : new SortableUniqueIdValue(state.LastSortableUniqueId),
+            SafeSortableUniqueId
+            = string.IsNullOrEmpty(state.LastSortableUniqueId) ? null : new SortableUniqueIdValue(state.LastSortableUniqueId),
             LastSortableUniqueId = string.IsNullOrEmpty(state.LastSortableUniqueId) ? null : new SortableUniqueIdValue(state.LastSortableUniqueId)
         };
         return container;
     }
 
     private async Task<MultiProjectionState<TProjectionPayload>> GetInitialProjection<TProjection, TProjectionPayload>()
-        where TProjection : IMultiProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+        where TProjection : IMultiProjector<TProjectionPayload>, new() where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         var projector = new TProjection();
         var container = new MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>();
@@ -266,15 +255,14 @@ public class MemoryCacheMultiProjection : IMultiProjection
                 var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
                 foreach (var ev in events)
                 {
-                    if (container.LastSortableUniqueId == null &&
-                        ev.GetSortableUniqueId().EarlierThan(targetSafeId) &&
-                        projector.Version > 0)
+                    if (container.LastSortableUniqueId == null && ev.GetSortableUniqueId().EarlierThan(targetSafeId) && projector.Version > 0)
                     {
                         container = container with
                         {
                             SafeState = projector.ToState(),
                             SafeSortableUniqueId = container.SafeState?.LastSortableUniqueId != null
-                                ? new SortableUniqueIdValue(container.SafeState.LastSortableUniqueId) : null
+                                ? new SortableUniqueIdValue(container.SafeState.LastSortableUniqueId)
+                                : null
                         };
                     }
 

@@ -8,10 +8,7 @@ public record SubmitOrderR : IVersionValidationCommand<ShoppingCartR>
 {
     public Guid CartId { get; init; } = Guid.Empty;
     public DateTime OrderSubmittedLocalTime { get; init; }
-    public Guid GetAggregateId()
-    {
-        return CartId;
-    }
+    public Guid GetAggregateId() => CartId;
     public int ReferenceVersion
     {
         get;
@@ -26,10 +23,7 @@ public record SubmitOrderR : IVersionValidationCommand<ShoppingCartR>
             SubmitOrderR command)
         {
             await Task.CompletedTask;
-            yield return new OrderSubmittedR
-            {
-                OrderSubmittedLocalTime = command.OrderSubmittedLocalTime
-            };
+            yield return new OrderSubmittedR { OrderSubmittedLocalTime = command.OrderSubmittedLocalTime };
         }
     }
 }

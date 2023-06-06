@@ -2,8 +2,7 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Testing.SingleProjections;
 
-public class AggregateIdHolder<TBaseAggregatePayload> : IAggregateIdHolder
-    where TBaseAggregatePayload : IAggregatePayloadCommon
+public class AggregateIdHolder<TBaseAggregatePayload> : IAggregateIdHolder where TBaseAggregatePayload : IAggregatePayloadCommon
 {
     private readonly IAggregateLoader aggregateLoader;
     public AggregateIdHolder(IAggregateLoader aggregateLoader) => this.aggregateLoader = aggregateLoader;

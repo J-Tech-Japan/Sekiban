@@ -28,9 +28,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTest<F
                     0,
                     0))
             .ThenQueryResponseIs(
-                new ClientLoyaltyPointMultiProjectionQuery.Parameter(
-                    null,
-                    ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
+                new ClientLoyaltyPointMultiProjectionQuery.Parameter(null, ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
                 new ClientLoyaltyPointMultiProjectionQuery.Response(
                     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch>.Empty.Add(
                         new ClientLoyaltyPointMultiProjection.ProjectedBranch(branchId, branchName)),
@@ -599,18 +597,14 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTest<F
 ]
 ")
             #endregion
-            .ThenGetMultiProjectionPayload<ClientLoyaltyPointMultiProjection>(
-                payload =>
-                    Assert.NotNull(payload.Branches));
+            .ThenGetMultiProjectionPayload<ClientLoyaltyPointMultiProjection>(payload => Assert.NotNull(payload.Branches));
     }
 
     [Fact]
     public void JsonFileEventsTest()
     {
         GivenEventsFromFile("TestData1.json")
-            .ThenGetMultiProjectionPayload<ClientLoyaltyPointMultiProjection>(
-                payload =>
-                    Assert.NotNull(payload.Branches))
+            .ThenGetMultiProjectionPayload<ClientLoyaltyPointMultiProjection>(payload => Assert.NotNull(payload.Branches))
             //        await ThenStateFileAsync("TestData1Result.json");
             .WriteMultiProjectionStateToFile<ClientLoyaltyPointMultiProjection>("TestData1ResultOut.json");
     }
@@ -620,10 +614,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTest<F
     {
         GivenScenario(JsonFileEventsTest)
             .ThenQueryResponseIsFromFile(
-                new ClientLoyaltyPointMultiProjectionQuery.Parameter(
-                    branchId,
-                    ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
-                "ClientLoyaltyPointProjectionQueryResponse01.json"
-            );
+                new ClientLoyaltyPointMultiProjectionQuery.Parameter(branchId, ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
+                "ClientLoyaltyPointProjectionQueryResponse01.json");
     }
 }

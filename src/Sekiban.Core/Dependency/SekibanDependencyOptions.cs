@@ -9,6 +9,10 @@ namespace Sekiban.Core.Dependency;
 /// </summary>
 public record SekibanDependencyOptions
 {
+
+    public RegisteredEventTypes RegisteredEventTypes { get; init; }
+    public SekibanAggregateTypes SekibanAggregateTypes { get; init; }
+    public IEnumerable<(Type serviceType, Type? implementationType)> TransientDependencies { get; init; }
     public SekibanDependencyOptions(
         RegisteredEventTypes registeredEventTypes,
         SekibanAggregateTypes sekibanAggregateTypes,
@@ -19,14 +23,8 @@ public record SekibanDependencyOptions
         TransientDependencies = transientDependencies;
     }
 
-    public RegisteredEventTypes RegisteredEventTypes { get; init; }
-    public SekibanAggregateTypes SekibanAggregateTypes { get; init; }
-    public IEnumerable<(Type serviceType, Type? implementationType)> TransientDependencies { get; init; }
-
     public static SekibanDependencyOptions CreateMergedOption(
         Assembly[] assemblies,
-        IEnumerable<(Type serviceType, Type? implementationType)> transientDependencies) => new(
-        new RegisteredEventTypes(assemblies),
-        new SekibanAggregateTypes(assemblies),
-        transientDependencies);
+        IEnumerable<(Type serviceType, Type? implementationType)> transientDependencies) =>
+        new(new RegisteredEventTypes(assemblies), new SekibanAggregateTypes(assemblies), transientDependencies);
 }

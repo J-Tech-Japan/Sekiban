@@ -5,7 +5,10 @@ namespace Sekiban.Test.Dynamo.Tests;
 
 public class CustomerDbStoryBasicDynamo : CustomerDbStoryBasic
 {
-    public CustomerDbStoryBasicDynamo(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(sekibanTestFixture, testOutputHelper, new DynamoSekibanServiceProviderGenerator())
+    public CustomerDbStoryBasicDynamo(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
+        sekibanTestFixture,
+        testOutputHelper,
+        new DynamoSekibanServiceProviderGenerator())
     {
     }
 }

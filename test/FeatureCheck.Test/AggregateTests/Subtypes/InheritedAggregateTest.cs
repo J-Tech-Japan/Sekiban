@@ -9,23 +9,11 @@ public class InheritedAggregateTest : AggregateTest<IInheritedAggregate, Feature
     [Fact]
     public void Test()
     {
-        Subtype<ProcessingSubAggregate>()
-            .WhenCommand(
-                new OpenInheritedAggregate
-                {
-                    YearMonth = 202201
-                });
+        Subtype<ProcessingSubAggregate>().WhenCommand(new OpenInheritedAggregate { YearMonth = 202201 });
         ThenPayloadTypeShouldBe<ProcessingSubAggregate>()
-            .WhenCommand(
-                new CloseInheritedAggregate
-                    { Reason = "test", AggregateId = GetAggregateId() });
-        ThenPayloadTypeShouldBe<ClosedSubAggregate>()
-            .WhenCommand(
-                new ReopenInheritedAggregate
-                    { Reason = "test", AggregateId = GetAggregateId() });
+            .WhenCommand(new CloseInheritedAggregate { Reason = "test", AggregateId = GetAggregateId() });
+        ThenPayloadTypeShouldBe<ClosedSubAggregate>().WhenCommand(new ReopenInheritedAggregate { Reason = "test", AggregateId = GetAggregateId() });
         ThenPayloadTypeShouldBe<ProcessingSubAggregate>()
-            .WhenCommand(
-                new CloseInheritedAggregate
-                    { Reason = "test", AggregateId = GetAggregateId() });
+            .WhenCommand(new CloseInheritedAggregate { Reason = "test", AggregateId = GetAggregateId() });
     }
 }

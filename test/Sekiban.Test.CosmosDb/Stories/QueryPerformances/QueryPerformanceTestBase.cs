@@ -52,9 +52,7 @@ public abstract class QueryPerformanceTestBase : TestBase
         // 先に全データを削除する
         _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default).Wait();
         _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Dissolvable).Wait();
-        _cosmosDbFactory
-            .DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command, AggregateContainerGroup.Dissolvable)
-            .Wait();
+        _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command, AggregateContainerGroup.Dissolvable).Wait();
         _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command).Wait();
     }
 
@@ -88,9 +86,7 @@ public abstract class QueryPerformanceTestBase : TestBase
             _testOutputHelper.WriteLine($"create branch {branchList.Count}");
 
             var firstcount = branchList.Count;
-            var branchResult
-                = await CommandExecutor.ExecCommandAsync(
-                    new CreateBranch($"CreateBranch {i}"));
+            var branchResult = await CommandExecutor.ExecCommandAsync(new CreateBranch($"CreateBranch {i}"));
             var commandDocument = branchResult.CommandId;
             if (commandDocument == null)
             {
@@ -109,20 +105,15 @@ public abstract class QueryPerformanceTestBase : TestBase
                 var clientList = await MultiProjectionService.GetAggregateList<Client>();
                 _testOutputHelper.WriteLine($"create client {clientList.Count}");
                 var firstClientCount = clientList.Count;
-                var clientCreateResult =
-                    await CommandExecutor.ExecCommandAsync(
-                        new CreateClient(
-                            branchId!.Value,
-                            $"clientname {i}-{j}",
-                            $"test{i}.{j}.{id}@example.com"));
+                var clientCreateResult = await CommandExecutor.ExecCommandAsync(
+                    new CreateClient(branchId!.Value, $"clientname {i}-{j}", $"test{i}.{j}.{id}@example.com"));
                 clientList = await MultiProjectionService.GetAggregateList<Client>();
                 _testOutputHelper.WriteLine($"client created {clientList.Count}");
                 Assert.Equal(firstClientCount + 1, clientList.Count);
                 for (var k = 0; k < changeNameCount; k++)
                 {
                     _testOutputHelper.WriteLine($"client change name {k + 1}");
-                    var aggregate =
-                        await ProjectionService.AsDefaultStateAsync<Client>(clientCreateResult.AggregateId!.Value);
+                    var aggregate = await ProjectionService.AsDefaultStateAsync<Client>(clientCreateResult.AggregateId!.Value);
                     _testOutputHelper.WriteLine($"aggregate.version = {aggregate?.Version}");
                     await CommandExecutor.ExecCommandAsync(
                         new ChangeClientName(clientCreateResult.AggregateId!.Value, $"change{i}-{j}-{k}")

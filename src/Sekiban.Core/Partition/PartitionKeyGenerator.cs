@@ -9,7 +9,8 @@ public static class PartitionKeyGenerator
 
     public static string ForAggregateSnapshot(Guid aggregateId, Type aggregateType, Type projectionType) =>
         aggregateType == projectionType || projectionType.IsAggregateSubtypePayload()
-            ? $"s_{aggregateType.Name}_{aggregateId}" : $"s_{aggregateType.Name}_{projectionType.Name}_{aggregateId}";
+            ? $"s_{aggregateType.Name}_{aggregateId}"
+            : $"s_{aggregateType.Name}_{projectionType.Name}_{aggregateId}";
 
     public static string ForMultiProjectionSnapshot(Type projectionType)
     {

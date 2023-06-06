@@ -11,13 +11,11 @@ public static class SingleProjectionListStateTypesExtensions
             singleProjectionListStateType.GetGenericTypeDefinition() == typeof(SingleProjectionListState<>))
         {
             var aggregateStateType = singleProjectionListStateType.GetGenericArguments()[0];
-            if (aggregateStateType.IsGenericType &&
-                aggregateStateType.GetGenericTypeDefinition() == typeof(AggregateState<>))
+            if (aggregateStateType.IsGenericType && aggregateStateType.GetGenericTypeDefinition() == typeof(AggregateState<>))
             {
                 return aggregateStateType.GetGenericArguments()[0];
             }
-            if (aggregateStateType.IsGenericType &&
-                aggregateStateType.GetGenericTypeDefinition() == typeof(SingleProjectionState<>))
+            if (aggregateStateType.IsGenericType && aggregateStateType.GetGenericTypeDefinition() == typeof(SingleProjectionState<>))
             {
                 return aggregateStateType.GetGenericArguments()[0];
             }

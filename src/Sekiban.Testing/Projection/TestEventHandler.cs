@@ -29,13 +29,11 @@ public class TestEventHandler
         {
             throw new Exception("Failed to get document writer");
         }
-        var sekibanAggregateTypes = _serviceProvider.GetService<SekibanAggregateTypes>() ??
-            throw new Exception("Failed to get aggregate types");
+        var sekibanAggregateTypes = _serviceProvider.GetService<SekibanAggregateTypes>() ?? throw new Exception("Failed to get aggregate types");
 
         foreach (var e in events)
         {
-            var aggregateType =
-                sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == e.AggregateType);
+            var aggregateType = sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == e.AggregateType);
             if (aggregateType is null)
             {
                 throw new Exception($"Failed to find aggregate type {e.AggregateType}");
@@ -95,21 +93,17 @@ public class TestEventHandler
         AddEventsFromList(list, withPublish);
     }
 
-    public void GivenEvents(
-        params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTouples)
+    public void GivenEvents(params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTouples)
     {
         GivenEvents(false, eventTouples);
     }
 
-    public void GivenEventsWithPublish(
-        params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTouples)
+    public void GivenEventsWithPublish(params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTouples)
     {
         GivenEvents(true, eventTouples);
     }
 
-    private void GivenEvents(
-        bool withPublish,
-        params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTouples)
+    private void GivenEvents(bool withPublish, params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTouples)
     {
         foreach (var (aggregateId, aggregateType, payload) in eventTouples)
         {
@@ -125,21 +119,17 @@ public class TestEventHandler
         }
     }
 
-    public void GivenEvents(
-        params (Guid aggregateId, IEventPayloadCommon payload)[] eventTouples)
+    public void GivenEvents(params (Guid aggregateId, IEventPayloadCommon payload)[] eventTouples)
     {
         GivenEvents(false, eventTouples);
     }
 
-    public void GivenEventsWithPublish(
-        params (Guid aggregateId, IEventPayloadCommon payload)[] eventTouples)
+    public void GivenEventsWithPublish(params (Guid aggregateId, IEventPayloadCommon payload)[] eventTouples)
     {
         GivenEvents(true, eventTouples);
     }
 
-    private void GivenEvents(
-        bool withPublish,
-        params (Guid aggregateId, IEventPayloadCommon payload)[] eventTouples)
+    private void GivenEvents(bool withPublish, params (Guid aggregateId, IEventPayloadCommon payload)[] eventTouples)
     {
         foreach (var (aggregateId, payload) in eventTouples)
         {
@@ -190,10 +180,7 @@ public class TestEventHandler
             {
                 throw new InvalidDataException($"イベント {documentTypeName} の生成に失敗しました。");
             }
-            GivenEvents(
-                new List<IEvent>
-                    { ev },
-                withPublish);
+            GivenEvents(new List<IEvent> { ev }, withPublish);
         }
     }
 }

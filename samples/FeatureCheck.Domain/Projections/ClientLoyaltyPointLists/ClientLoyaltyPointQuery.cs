@@ -4,8 +4,7 @@ using Sekiban.Core.Query.QueryModel.Parameters;
 using System.Collections.Immutable;
 namespace FeatureCheck.Domain.Projections.ClientLoyaltyPointLists;
 
-public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPointListProjection,
-    ClientLoyaltyPointQuery.Parameter,
+public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery.Parameter,
     ClientLoyaltyPointQuery.Response>
 {
     public enum FilterSortKey
@@ -13,9 +12,7 @@ public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPo
         BranchName, ClientName
     }
 
-    public IEnumerable<Response> HandleSort(
-        Parameter param,
-        IEnumerable<Response> filteredList)
+    public IEnumerable<Response> HandleSort(Parameter param, IEnumerable<Response> filteredList)
     {
         var sort = new Dictionary<FilterSortKey, bool>();
         if (param.SortKey1 != null)
@@ -50,20 +47,17 @@ public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPo
                             FilterSortKey.ClientName => m.ClientName,
                             _ => throw new ArgumentOutOfRangeException()
                         });
-            }
-            else
+            } else
             {
                 result = sortKey.Value
-                    ? (result as IOrderedEnumerable<Response> ??
-                        throw new InvalidCastException()).ThenBy(
+                    ? (result as IOrderedEnumerable<Response> ?? throw new InvalidCastException()).ThenBy(
                         m => sortKey.Key switch
                         {
                             FilterSortKey.BranchName => m.BranchName,
                             FilterSortKey.ClientName => m.ClientName,
                             _ => throw new ArgumentOutOfRangeException()
                         })
-                    : (result as IOrderedEnumerable<Response> ??
-                        throw new InvalidCastException()).ThenByDescending(
+                    : (result as IOrderedEnumerable<Response> ?? throw new InvalidCastException()).ThenByDescending(
                         m => sortKey.Key switch
                         {
                             FilterSortKey.BranchName => m.BranchName,
@@ -75,9 +69,7 @@ public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPo
         return result;
     }
 
-    public IEnumerable<Response> HandleFilter(
-        Parameter param,
-        MultiProjectionState<ClientLoyaltyPointListProjection> projection)
+    public IEnumerable<Response> HandleFilter(Parameter param, MultiProjectionState<ClientLoyaltyPointListProjection> projection)
     {
         var result = projection.Payload.Records.Select(m => new Response(m.BranchId, m.BranchName, m.ClientId, m.ClientName, m.Point));
         if (param.BranchId.HasValue)

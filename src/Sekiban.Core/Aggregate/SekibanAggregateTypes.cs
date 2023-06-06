@@ -12,6 +12,9 @@ public class SekibanAggregateTypes
     private readonly List<SingleProjectionAggregateType> _registeredCustomProjectorTypes = new();
     private readonly List<DefaultAggregateType> _registeredTypes = new();
 
+    public IReadOnlyCollection<DefaultAggregateType> AggregateTypes { get; }
+    public IReadOnlyCollection<SingleProjectionAggregateType> SingleProjectionTypes { get; }
+
     public SekibanAggregateTypes(params Assembly[] assemblies)
     {
         foreach (var assembly in assemblies)
@@ -49,13 +52,7 @@ public class SekibanAggregateTypes
         SingleProjectionTypes = _registeredCustomProjectorTypes.AsReadOnly();
     }
 
-    public IReadOnlyCollection<DefaultAggregateType> AggregateTypes { get; }
-    public IReadOnlyCollection<SingleProjectionAggregateType> SingleProjectionTypes { get; }
-
     public record DefaultAggregateType(Type Aggregate, Type Projection);
 
-    public record SingleProjectionAggregateType(Type Aggregate, Type Projection, Type PayloadType) :
-        DefaultAggregateType(
-            Aggregate,
-            Projection);
+    public record SingleProjectionAggregateType(Type Aggregate, Type Projection, Type PayloadType) : DefaultAggregateType(Aggregate, Projection);
 }

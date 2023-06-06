@@ -7,15 +7,12 @@ public record SnapshotManagerRequestAdded(
     int NextSnapshotVersion,
     int? SnapshotVersion) : IEventPayload<SnapshotManager, SnapshotManagerRequestAdded>
 {
-    public SnapshotManager OnEventInstance(SnapshotManager payload, Event<SnapshotManagerRequestAdded> ev) =>
-        OnEvent(payload, ev);
+    public SnapshotManager OnEventInstance(SnapshotManager payload, Event<SnapshotManagerRequestAdded> ev) => OnEvent(payload, ev);
 
-    public static SnapshotManager OnEvent(SnapshotManager payload, Event<SnapshotManagerRequestAdded> ev) => payload with
-    {
-        Requests = payload.Requests.Add(
-            SnapshotManager.SnapshotKey(
-                ev.Payload.AggregateTypeName,
-                ev.Payload.TargetAggregateId,
-                ev.Payload.NextSnapshotVersion))
-    };
+    public static SnapshotManager OnEvent(SnapshotManager payload, Event<SnapshotManagerRequestAdded> ev) =>
+        payload with
+        {
+            Requests = payload.Requests.Add(
+                SnapshotManager.SnapshotKey(ev.Payload.AggregateTypeName, ev.Payload.TargetAggregateId, ev.Payload.NextSnapshotVersion))
+        };
 }

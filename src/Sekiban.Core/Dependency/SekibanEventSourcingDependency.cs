@@ -21,8 +21,7 @@ public static class SekibanEventSourcingDependency
         this IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
         ISekibanDateProducer? sekibanDateProducer = null,
-        ServiceCollectionExtensions.MultiProjectionType multiProjectionType =
-            ServiceCollectionExtensions.MultiProjectionType.MemoryCache,
+        ServiceCollectionExtensions.MultiProjectionType multiProjectionType = ServiceCollectionExtensions.MultiProjectionType.MemoryCache,
         IConfiguration? configuration = null)
 
     {
@@ -33,18 +32,15 @@ public static class SekibanEventSourcingDependency
     public static IEnumerable<(Type serviceType, Type? implementationType)> GetDependencies()
     {
         // AddAggregate: RecentInMemoryActivity
-        yield return (typeof(ICommandHandlerCommon<SnapshotManager, CreateSnapshotManager>),
-            typeof(CreateSnapshotManagerHandler));
-        yield return (typeof(ICommandHandlerCommon<SnapshotManager, ReportVersionToSnapshotManger>),
-            typeof(ReportVersionToSnapshotMangerHandler));
+        yield return (typeof(ICommandHandlerCommon<SnapshotManager, CreateSnapshotManager>), typeof(CreateSnapshotManagerHandler));
+        yield return (typeof(ICommandHandlerCommon<SnapshotManager, ReportVersionToSnapshotManger>), typeof(ReportVersionToSnapshotMangerHandler));
     }
 
     public static void Register(
         IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
         ISekibanDateProducer? sekibanDateProducer = null,
-        ServiceCollectionExtensions.MultiProjectionType multiProjectionType =
-            ServiceCollectionExtensions.MultiProjectionType.MemoryCache,
+        ServiceCollectionExtensions.MultiProjectionType multiProjectionType = ServiceCollectionExtensions.MultiProjectionType.MemoryCache,
         IConfiguration? configuration = null)
     {
         // MediatR
@@ -93,7 +89,7 @@ public static class SekibanEventSourcingDependency
         services.AddSingleton(dependencyDefinition.GetSekibanDependencyOptions().SekibanAggregateTypes);
         services.AddTransient(dependencyDefinition.GetSekibanDependencyOptions().TransientDependencies);
         services.AddTransient(GetDependencies());
-        
+
         services.AddQueriesFromDependencyDefinition(dependencyDefinition);
     }
 
@@ -130,17 +126,14 @@ public static class SekibanEventSourcingDependency
         services.AddQueriesFromDependencyDefinition(dependencyDefinition);
     }
 
-    public static void AddTransient(
-        this IServiceCollection services,
-        IEnumerable<(Type serviceType, Type? implementationType)> dependencies)
+    public static void AddTransient(this IServiceCollection services, IEnumerable<(Type serviceType, Type? implementationType)> dependencies)
     {
         foreach (var (serviceType, implementationType) in dependencies)
         {
             if (implementationType is null)
             {
                 services.AddTransient(serviceType);
-            }
-            else
+            } else
             {
                 services.AddTransient(serviceType, implementationType);
             }

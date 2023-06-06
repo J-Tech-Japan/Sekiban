@@ -10,17 +10,17 @@ public class QueryExceptionTest1 : UnifiedTest<FeatureCheckDependency>
 
     [Fact]
     public void ShouldThrowTest()
-    { 
+    {
         ThenQueryThrowsAnException(new ClientLoyaltyPointExceptionTestQuery.Parameter(2));
     }
     [Fact]
     public void ShouldThrowTest2()
-    { 
+    {
         ThenQueryThrows<InvalidDataException>(new ClientLoyaltyPointExceptionTestQuery.Parameter(2));
-    }    
+    }
     [Fact]
     public void ShouldNotThrowTest()
-    { 
+    {
         ThenQueryNotThrowsAnException(new ClientLoyaltyPointExceptionTestQuery.Parameter(0));
     }
 
@@ -32,6 +32,8 @@ public class QueryExceptionTest1 : UnifiedTest<FeatureCheckDependency>
     [Fact]
     public void GetExceptionTest2()
     {
-        ThenQueryGetException<InvalidDataException>(new ClientLoyaltyPointExceptionTestQuery.Parameter(2), exception => Assert.IsType<InvalidDataException>(exception));
+        ThenQueryGetException<InvalidDataException>(
+            new ClientLoyaltyPointExceptionTestQuery.Parameter(2),
+            exception => Assert.IsType<InvalidDataException>(exception));
     }
 }

@@ -5,10 +5,7 @@ namespace Sekiban.Infrastructure.Dynamo.Documents;
 public class DynamoDbDocumentRemover : IDocumentRemover
 {
     private readonly DynamoDbFactory _dynamoDbFactory;
-    public DynamoDbDocumentRemover(DynamoDbFactory dynamoDbFactory)
-    {
-        _dynamoDbFactory = dynamoDbFactory;
-    }
+    public DynamoDbDocumentRemover(DynamoDbFactory dynamoDbFactory) => _dynamoDbFactory = dynamoDbFactory;
 
     public async Task RemoveAllEventsAsync(AggregateContainerGroup aggregateContainerGroup)
     {

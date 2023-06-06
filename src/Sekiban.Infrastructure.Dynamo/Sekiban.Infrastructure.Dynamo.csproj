@@ -18,15 +18,15 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="AWSSDK.DynamoDBv2" Version="3.7.102.38" />
-      <PackageReference Include="AWSSDK.S3" Version="3.7.104.16" />
-      <PackageReference Include="SharpZipLib" Version="1.4.2" />
-        <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+        <PackageReference Include="AWSSDK.DynamoDBv2" Version="3.7.102.38"/>
+        <PackageReference Include="AWSSDK.S3" Version="3.7.104.16"/>
+        <PackageReference Include="SharpZipLib" Version="1.4.2"/>
+        <None Include="..\..\README.md" Pack="true" PackagePath="\"/>
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj" />
-      <ProjectReference Include="..\Sekiban.Testing\Sekiban.Testing.csproj" />
+        <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj"/>
+        <ProjectReference Include="..\Sekiban.Testing\Sekiban.Testing.csproj"/>
     </ItemGroup>
 
 </Project>

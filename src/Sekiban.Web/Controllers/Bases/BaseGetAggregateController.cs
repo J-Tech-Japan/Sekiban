@@ -7,8 +7,7 @@ namespace Sekiban.Web.Controllers.Bases;
 
 [ApiController]
 [Produces("application/json")]
-public class BaseGetAggregateController<TAggregatePayload> : ControllerBase
-    where TAggregatePayload : IAggregatePayloadCommon
+public class BaseGetAggregateController<TAggregatePayload> : ControllerBase where TAggregatePayload : IAggregatePayloadCommon
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly IWebDependencyDefinition _webDependencyDefinition;
@@ -67,9 +66,7 @@ public class BaseGetAggregateController<TAggregatePayload> : ControllerBase
 
     [HttpGet]
     [Route("getids")]
-    public virtual async Task<ActionResult<IEnumerable<AggregateState<TAggregatePayload>>>> GetIdsAsync(
-        [FromQuery]
-        IEnumerable<Guid> ids)
+    public virtual async Task<ActionResult<IEnumerable<AggregateState<TAggregatePayload>>>> GetIdsAsync([FromQuery] IEnumerable<Guid> ids)
     {
         await Task.CompletedTask;
         if (_webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(

@@ -4,11 +4,8 @@ namespace Sekiban.Core.Shared;
 
 public static class SekibanJsonHelper
 {
-    public static JsonSerializerOptions GetDefaultJsonSerializerOptions()
-    {
-        return new()
-            { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, PropertyNameCaseInsensitive = true };
-    }
+    public static JsonSerializerOptions GetDefaultJsonSerializerOptions() =>
+        new() { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull, PropertyNameCaseInsensitive = true };
 
     public static string? Serialize(dynamic? obj)
     {
@@ -20,11 +17,9 @@ public static class SekibanJsonHelper
         return JsonSerializer.Serialize(obj, GetDefaultJsonSerializerOptions());
     }
 
-    public static string? Serialize(Exception ex)
-    {
+    public static string? Serialize(Exception ex) =>
         // System.Text.JsonはException型を直接シリアライズできないので、匿名型にしてからシリアライズする
-        return Serialize(new { ex.Message, ex.Source, ex.StackTrace });
-    }
+        Serialize(new { ex.Message, ex.Source, ex.StackTrace });
 
     public static object? Deserialize(string? jsonString, Type returnType)
     {
@@ -48,16 +43,13 @@ public static class SekibanJsonHelper
 
     public static IEvent? DeserializeToEvent(JsonElement jsonElement, ReadOnlyCollection<Type> registeredTypes)
     {
-        if (GetValue<string>(jsonElement, nameof(IDocument.DocumentTypeName)) is not string
-            typeName)
+        if (GetValue<string>(jsonElement, nameof(IDocument.DocumentTypeName)) is not string typeName)
         {
             return null;
         }
 
         return registeredTypes.Where(m => m.Name == typeName)
-                .Select(
-                    m =>
-                        ConvertTo(jsonElement, typeof(Event<>).MakeGenericType(m)) as IEvent)
+                .Select(m => ConvertTo(jsonElement, typeof(Event<>).MakeGenericType(m)) as IEvent)
                 .FirstOrDefault(m => m is not null) ??
             EventHelper.GetUnregisteredEvent(jsonElement);
     }
@@ -84,10 +76,7 @@ public static class SekibanJsonHelper
         return Deserialize<T>(jsonString);
     }
 
-    public static T? GetValue<T>(dynamic? jsonObj, string propertyName)
-    {
-        return GetValue<T>(Serialize(jsonObj), propertyName);
-    }
+    public static T? GetValue<T>(dynamic? jsonObj, string propertyName) => GetValue<T>(Serialize(jsonObj), propertyName);
 
     public static T? GetValue<T>(string? jsonString, string propertyName)
     {
@@ -96,9 +85,7 @@ public static class SekibanJsonHelper
             return default;
         }
 
-        var node = JsonNode.Parse(
-            jsonString,
-            new JsonNodeOptions { PropertyNameCaseInsensitive = true })?[propertyName];
+        var node = JsonNode.Parse(jsonString, new JsonNodeOptions { PropertyNameCaseInsensitive = true })?[propertyName];
         if (node is null)
         {
             return default;

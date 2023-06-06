@@ -31,7 +31,8 @@ public class InheritedSubtypeTests : TestBase
 
     public InheritedSubtypeTests(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
         sekibanTestFixture,
-        testOutputHelper, new CosmosSekibanServiceProviderGenerator())
+        testOutputHelper,
+        new CosmosSekibanServiceProviderGenerator())
     {
         _cosmosDbFactory = GetService<CosmosDbFactory>();
         commandExecutor = GetService<ICommandExecutor>();
@@ -52,15 +53,12 @@ public class InheritedSubtypeTests : TestBase
         // 先に全データを削除する
         await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default);
         await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Dissolvable);
-        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(
-            DocumentType.Command,
-            AggregateContainerGroup.Dissolvable);
+        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command, AggregateContainerGroup.Dissolvable);
         await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command);
 
 
 
-        commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
-            new OpenInheritedAggregate { YearMonth = 202001 });
+        commandResponse = await commandExecutor.ExecCommandWithEventsAsync(new OpenInheritedAggregate { YearMonth = 202001 });
         Assert.NotNull(commandResponse?.AggregateId);
         var aggregateId = commandResponse!.AggregateId!.Value;
 
@@ -77,8 +75,7 @@ public class InheritedSubtypeTests : TestBase
         ((MemoryCache)_memoryCache.Cache).Compact(1);
 
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
-            new ReopenInheritedAggregate
-                { Reason = "reopen", AggregateId = aggregateId });
+            new ReopenInheritedAggregate { Reason = "reopen", AggregateId = aggregateId });
 
         _inMemoryDocumentStore.ResetInMemoryStore();
         _hybridStoreManager.ClearHybridPartitions();
@@ -96,15 +93,12 @@ public class InheritedSubtypeTests : TestBase
         // 先に全データを削除する
         await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default);
         await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Dissolvable);
-        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(
-            DocumentType.Command,
-            AggregateContainerGroup.Dissolvable);
+        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command, AggregateContainerGroup.Dissolvable);
         await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command);
 
 
 
-        commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
-            new OpenInheritedAggregate { YearMonth = 202001 });
+        commandResponse = await commandExecutor.ExecCommandWithEventsAsync(new OpenInheritedAggregate { YearMonth = 202001 });
         Assert.NotNull(commandResponse?.AggregateId);
         var aggregateId = commandResponse!.AggregateId!.Value;
 
@@ -121,8 +115,7 @@ public class InheritedSubtypeTests : TestBase
         ((MemoryCache)_memoryCache.Cache).Compact(1);
 
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
-            new ReopenInheritedAggregate
-                { Reason = "reopen", AggregateId = aggregateId });
+            new ReopenInheritedAggregate { Reason = "reopen", AggregateId = aggregateId });
 
         _inMemoryDocumentStore.ResetInMemoryStore();
         _hybridStoreManager.ClearHybridPartitions();

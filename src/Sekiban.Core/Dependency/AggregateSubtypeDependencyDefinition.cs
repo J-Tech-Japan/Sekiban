@@ -6,42 +6,32 @@ using Sekiban.Core.PubSub;
 using System.Collections.Immutable;
 namespace Sekiban.Core.Dependency;
 
-public class AggregateSubtypeDependencyDefinition<TParentAggregatePayload, TAggregateSubtypePayload> : IAggregateSubTypeDependencyDefinition<
-    TParentAggregatePayload>
-    where TParentAggregatePayload : IAggregatePayloadCommon
-    where TAggregateSubtypePayload : IAggregatePayloadCommon
+public class
+    AggregateSubtypeDependencyDefinition<TParentAggregatePayload, TAggregateSubtypePayload> : IAggregateSubTypeDependencyDefinition<
+        TParentAggregatePayload> where TParentAggregatePayload : IAggregatePayloadCommon where TAggregateSubtypePayload : IAggregatePayloadCommon
 {
-    internal AggregateSubtypeDependencyDefinition(AggregateDependencyDefinition<TParentAggregatePayload> parentAggregateDependencyDefinition)
-    {
-        ParentAggregateDependencyDefinition = parentAggregateDependencyDefinition;
-    }
     public AggregateDependencyDefinition<TParentAggregatePayload> ParentAggregateDependencyDefinition
     {
         get;
         init;
     }
+    internal AggregateSubtypeDependencyDefinition(AggregateDependencyDefinition<TParentAggregatePayload> parentAggregateDependencyDefinition) =>
+        ParentAggregateDependencyDefinition = parentAggregateDependencyDefinition;
     public ImmutableList<(Type, Type?)> SubscriberTypes { get; private set; } = ImmutableList<(Type, Type?)>.Empty;
     public ImmutableList<(Type, Type?)> CommandTypes { get; private set; } = ImmutableList<(Type, Type?)>.Empty;
-    public AggregateDependencyDefinition<TParentAggregatePayload> GetParentAggregateDependencyDefinition()
-    {
-        return ParentAggregateDependencyDefinition;
-    }
+    public AggregateDependencyDefinition<TParentAggregatePayload> GetParentAggregateDependencyDefinition() => ParentAggregateDependencyDefinition;
     public AggregateSubtypeDependencyDefinition<TParentAggregatePayload, TAggregateSubtypePayload> AddEventSubscriber<TEvent, TEventSubscriber>()
-        where TEvent : IEventPayloadApplicableTo<TAggregateSubtypePayload>
-        where TEventSubscriber : IEventSubscriber<TEvent>
+        where TEvent : IEventPayloadApplicableTo<TAggregateSubtypePayload> where TEventSubscriber : IEventSubscriber<TEvent>
     {
         SubscriberTypes = SubscriberTypes.Add((typeof(INotificationHandler<Event<TEvent>>), typeof(EventSubscriber<TEvent, TEventSubscriber>)));
         SubscriberTypes = SubscriberTypes.Add((typeof(IEventSubscriber<TEvent>), typeof(TEventSubscriber)));
         return this;
     }
     public AggregateSubtypeDependencyDefinition<TParentAggregatePayload, TAggregateSubtypePayload>
-        AddCommandHandler<TCreateCommand, TCommandHandler>()
-        where TCreateCommand : ICommand<TAggregateSubtypePayload>, new()
+        AddCommandHandler<TCreateCommand, TCommandHandler>() where TCreateCommand : ICommand<TAggregateSubtypePayload>, new()
         where TCommandHandler : ICommandHandlerCommon<TAggregateSubtypePayload, TCreateCommand>
     {
-        CommandTypes = CommandTypes.Add(
-            (typeof(ICommandHandlerCommon<TAggregateSubtypePayload, TCreateCommand>),
-                typeof(TCommandHandler)));
+        CommandTypes = CommandTypes.Add((typeof(ICommandHandlerCommon<TAggregateSubtypePayload, TCreateCommand>), typeof(TCommandHandler)));
         return this;
     }
 }

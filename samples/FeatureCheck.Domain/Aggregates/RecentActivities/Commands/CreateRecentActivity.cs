@@ -20,10 +20,7 @@ public record CreateRecentActivity : ICommand<RecentActivity>
             CreateRecentActivity command)
         {
             await Task.CompletedTask;
-            yield return new RecentActivityCreated(
-                new RecentActivityRecord(
-                    "First Event Created",
-                    _sekibanDateProducer.UtcNow));
+            yield return new RecentActivityCreated(new RecentActivityRecord("First Event Created", _sekibanDateProducer.UtcNow));
         }
     }
 }

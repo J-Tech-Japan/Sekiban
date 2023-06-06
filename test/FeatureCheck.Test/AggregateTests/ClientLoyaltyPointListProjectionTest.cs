@@ -24,8 +24,7 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<FeatureCheckDepe
     [Fact]
     public void RegularProjection()
     {
-        GivenEventsFromFile("TestData1.json")
-            .WriteMultiProjectionStateToFile<ClientLoyaltyPointListProjection>("TestData1ResultOut.json");
+        GivenEventsFromFile("TestData1.json").WriteMultiProjectionStateToFile<ClientLoyaltyPointListProjection>("TestData1ResultOut.json");
     }
 
     [Fact]
@@ -42,8 +41,7 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<FeatureCheckDepe
                 null,
                 null,
                 null),
-            "ClientLoyaltyPointQuery.json"
-        );
+            "ClientLoyaltyPointQuery.json");
     }
 
 
@@ -56,9 +54,7 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<FeatureCheckDepe
         RunCommand(new CreateClient(_branchId, _clientNameBase + 3, "test" + 3 + "@example.com"), _clientId3);
         RunCommand(new CreateClient(_branchId, _clientNameBase + 4, "test" + 4 + "@example.com"), _clientId4);
         RunCommand(new CreateClient(_branchId, _clientNameBase + 5, "test" + 5 + "@example.com"), _clientId5);
-        ThenGetMultiProjectionPayload<ClientLoyaltyPointListProjection>(
-            projection =>
-                Assert.NotEmpty(projection.Branches));
+        ThenGetMultiProjectionPayload<ClientLoyaltyPointListProjection>(projection => Assert.NotEmpty(projection.Branches));
     }
 
     [Fact]
@@ -186,12 +182,7 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<FeatureCheckDepe
                 null,
                 null,
                 null),
-            new ListQueryResult<ClientLoyaltyPointQuery.Response>(
-                5,
-                2,
-                3,
-                3,
-                new List<ClientLoyaltyPointQuery.Response>()));
+            new ListQueryResult<ClientLoyaltyPointQuery.Response>(5, 2, 3, 3, new List<ClientLoyaltyPointQuery.Response>()));
     }
 
     [Fact]
@@ -208,11 +199,6 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<FeatureCheckDepe
                 null,
                 null,
                 null),
-            new ListQueryResult<ClientLoyaltyPointQuery.Response>(
-                5,
-                2,
-                0,
-                3,
-                new List<ClientLoyaltyPointQuery.Response>()));
+            new ListQueryResult<ClientLoyaltyPointQuery.Response>(5, 2, 0, 3, new List<ClientLoyaltyPointQuery.Response>()));
     }
 }

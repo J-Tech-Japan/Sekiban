@@ -4,20 +4,16 @@ using System.Collections.Immutable;
 namespace Sekiban.Core.Snapshot.Aggregate;
 
 [AggregateContainerGroup(AggregateContainerGroup.InMemory)]
-public record SnapshotManager
-    (ImmutableList<string> Requests, ImmutableList<string> RequestTakens, DateTime CreatedAt) : IAggregatePayloadCommon
+public record SnapshotManager(ImmutableList<string> Requests, ImmutableList<string> RequestTakens, DateTime CreatedAt) : IAggregatePayloadCommon
 {
     internal const int SnapshotCount = 40;
     internal const int SnapshotTakeOffset = 15;
 
-    public SnapshotManager() : this(
-        ImmutableList<string>.Empty,
-        ImmutableList<string>.Empty,
-        SekibanDateProducer.GetRegistered().UtcNow)
+    public static Guid SharedId { get; } = Guid.NewGuid();
+
+    public SnapshotManager() : this(ImmutableList<string>.Empty, ImmutableList<string>.Empty, SekibanDateProducer.GetRegistered().UtcNow)
     {
     }
-
-    public static Guid SharedId { get; } = Guid.NewGuid();
 
     internal static string SnapshotKey(string aggregateTypeName, Guid targetAggregateId, int nextSnapshotVersion) =>
         $"{aggregateTypeName}_{targetAggregateId.ToString()}_{nextSnapshotVersion}";

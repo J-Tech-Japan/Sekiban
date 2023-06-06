@@ -9,12 +9,10 @@ public record VersionCheckMultiProjection
     (ImmutableList<VersionCheckMultiProjection.Record> History) : IMultiProjectionPayload<VersionCheckMultiProjection>
 {
     public VersionCheckMultiProjection() : this(ImmutableList<Record>.Empty) { }
-    public VersionCheckMultiProjection? ApplyEventInstance<TEventPayload>(
-        VersionCheckMultiProjection projectionPayload,
-        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon => ApplyEvent(projectionPayload, ev);
-    public static VersionCheckMultiProjection? ApplyEvent<TEventPayload>(
-        VersionCheckMultiProjection projectionPayload,
-        Event<TEventPayload> ev)
+    public VersionCheckMultiProjection? ApplyEventInstance<TEventPayload>(VersionCheckMultiProjection projectionPayload, Event<TEventPayload> ev)
+        where TEventPayload : IEventPayloadCommon =>
+        ApplyEvent(projectionPayload, ev);
+    public static VersionCheckMultiProjection? ApplyEvent<TEventPayload>(VersionCheckMultiProjection projectionPayload, Event<TEventPayload> ev)
         where TEventPayload : IEventPayloadCommon =>
         ev.Payload switch
         {

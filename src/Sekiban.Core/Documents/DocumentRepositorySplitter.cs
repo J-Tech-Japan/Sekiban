@@ -52,12 +52,9 @@ public class DocumentRepositorySplitter : IDocumentRepository
             return;
         }
 
-        if (partitionKey is not null &&
-            _aggregateSettings.CanUseHybrid(aggregatePayloadType) &&
-            _hybridStoreManager.HasPartition(partitionKey))
+        if (partitionKey is not null && _aggregateSettings.CanUseHybrid(aggregatePayloadType) && _hybridStoreManager.HasPartition(partitionKey))
         {
-            if (
-                (string.IsNullOrWhiteSpace(sinceSortableUniqueId) && _hybridStoreManager.FromInitialForPartitionKey(partitionKey)) ||
+            if ((string.IsNullOrWhiteSpace(sinceSortableUniqueId) && _hybridStoreManager.FromInitialForPartitionKey(partitionKey)) ||
                 (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
                     await _documentTemporaryRepository.EventsForAggregateIdHasSortableUniqueIdAsync(
                         aggregateId,
@@ -91,8 +88,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
                         return;
                     }
                     var hasPartitionKey = _hybridStoreManager.HasPartition(partitionKey);
-                    var sinceSortableUniqueIdInPartition =
-                        _hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey);
+                    var sinceSortableUniqueIdInPartition = _hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey);
                     var fromInitial = _hybridStoreManager.FromInitialForPartitionKey(partitionKey);
 
                     if (string.IsNullOrWhiteSpace(sinceSortableUniqueId))
@@ -105,15 +101,10 @@ public class DocumentRepositorySplitter : IDocumentRepository
                         if (!hasPartitionKey)
                         {
                             SaveEvents(eventList, aggregatePayloadType, partitionKey, sinceSortableUniqueId, false);
-                        }
-                        else
+                        } else
                         {
                             if ((!string.IsNullOrWhiteSpace(sinceSortableUniqueIdInPartition) || !fromInitial) &&
-                                string.Compare(
-                                    sinceSortableUniqueIdInPartition!,
-                                    sinceSortableUniqueId!,
-                                    StringComparison.Ordinal) >
-                                0)
+                                string.Compare(sinceSortableUniqueIdInPartition!, sinceSortableUniqueId!, StringComparison.Ordinal) > 0)
                             {
                                 SaveEvents(eventList, aggregatePayloadType, partitionKey, sinceSortableUniqueId, false);
                             }
@@ -181,19 +172,11 @@ public class DocumentRepositorySplitter : IDocumentRepository
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
-            await _documentTemporaryRepository.GetAllEventsAsync(
-                multiProjectionType,
-                targetAggregateNames,
-                sinceSortableUniqueId,
-                resultAction);
+            await _documentTemporaryRepository.GetAllEventsAsync(multiProjectionType, targetAggregateNames, sinceSortableUniqueId, resultAction);
             return;
         }
 
-        await _documentPersistentRepository.GetAllEventsAsync(
-            multiProjectionType,
-            targetAggregateNames,
-            sinceSortableUniqueId,
-            resultAction);
+        await _documentPersistentRepository.GetAllEventsAsync(multiProjectionType, targetAggregateNames, sinceSortableUniqueId, resultAction);
     }
 
     public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
@@ -229,16 +212,10 @@ public class DocumentRepositorySplitter : IDocumentRepository
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionPayloadType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
-            return await _documentTemporaryRepository.GetLatestSnapshotForMultiProjectionAsync(
-                multiProjectionPayloadType,
-                payloadVersionIdentifier);
+            return await _documentTemporaryRepository.GetLatestSnapshotForMultiProjectionAsync(multiProjectionPayloadType, payloadVersionIdentifier);
         }
-        return await _documentTemporaryRepository.GetLatestSnapshotForMultiProjectionAsync(
-                multiProjectionPayloadType,
-                payloadVersionIdentifier) ??
-            await _documentPersistentRepository.GetLatestSnapshotForMultiProjectionAsync(
-                multiProjectionPayloadType,
-                payloadVersionIdentifier);
+        return await _documentTemporaryRepository.GetLatestSnapshotForMultiProjectionAsync(multiProjectionPayloadType, payloadVersionIdentifier) ??
+            await _documentPersistentRepository.GetLatestSnapshotForMultiProjectionAsync(multiProjectionPayloadType, payloadVersionIdentifier);
     }
 
     public Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type aggregatePayloadType, Type projectionPayloadType, string partitionKey)
@@ -251,18 +228,12 @@ public class DocumentRepositorySplitter : IDocumentRepository
         return _documentPersistentRepository.GetSnapshotByIdAsync(id, aggregatePayloadType, projectionPayloadType, partitionKey);
     }
 
-    public Task GetAllEventsForAggregateAsync(
-        Type aggregatePayloadType,
-        string? sinceSortableUniqueId,
-        Action<IEnumerable<IEvent>> resultAction)
+    public Task GetAllEventsForAggregateAsync(Type aggregatePayloadType, string? sinceSortableUniqueId, Action<IEnumerable<IEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
-            return _documentTemporaryRepository.GetAllEventsForAggregateAsync(
-                aggregatePayloadType,
-                sinceSortableUniqueId,
-                resultAction);
+            return _documentTemporaryRepository.GetAllEventsForAggregateAsync(aggregatePayloadType, sinceSortableUniqueId, resultAction);
         }
         return _documentPersistentRepository.GetAllEventsForAggregateAsync(
             aggregatePayloadType,

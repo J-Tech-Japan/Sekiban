@@ -32,8 +32,7 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
     }
     public async Task<SnapshotDocument?> SnapshotDocumentFromSingleProjectionStateAsync<TPayload>(
         SingleProjectionState<TPayload> state,
-        Type aggregateType)
-        where TPayload : ISingleProjectionPayloadCommon, new()
+        Type aggregateType) where TPayload : ISingleProjectionPayloadCommon, new()
     {
         await Task.CompletedTask;
         var snapshotDocument = new SnapshotDocument(
@@ -74,8 +73,7 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
                 var aggregateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.AggregateTypeName);
                 if (aggregateType is null) { return null; }
                 var baseType = aggregateType.Aggregate.GetBaseAggregatePayloadTypeFromAggregate();
-                var subAggregateStateType =
-                    _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.DocumentTypeName);
+                var subAggregateStateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.DocumentTypeName);
                 if (subAggregateStateType is null) { return null; }
                 var aggregateStateType = typeof(AggregateState<>).MakeGenericType(subAggregateStateType.Aggregate);
                 var state = JsonSerializer.Deserialize(snapshotString, aggregateStateType);
@@ -106,11 +104,12 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
 
         return null;
     }
-    public async Task<SnapshotDocument?> FillSnapshotDocumentAsync(SnapshotDocument document) => document.Snapshot switch
-    {
-        null => await FillSnapshotDocumentWithBlobAsync(document),
-        _ => await FillSnapshotDocumentWithJObjectAsync(document)
-    };
+    public async Task<SnapshotDocument?> FillSnapshotDocumentAsync(SnapshotDocument document) =>
+        document.Snapshot switch
+        {
+            null => await FillSnapshotDocumentWithBlobAsync(document),
+            _ => await FillSnapshotDocumentWithJObjectAsync(document)
+        };
     public async Task<SnapshotDocument?> FillSnapshotDocumentWithJObjectAsync(SnapshotDocument document)
     {
         switch (GetStateType(document))
@@ -132,8 +131,7 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
             {
                 var aggregateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.AggregateTypeName);
                 if (aggregateType is null) { return null; }
-                var subAggregateStateType =
-                    _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.DocumentTypeName);
+                var subAggregateStateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.DocumentTypeName);
                 if (subAggregateStateType is null) { return null; }
                 var aggregateStateType = typeof(AggregateState<>).MakeGenericType(subAggregateStateType.Aggregate);
                 var state = SekibanJsonHelper.ConvertTo(document.Snapshot, aggregateStateType);
@@ -147,8 +145,8 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
                 break;
             case StateType.SingleProjection:
             {
-                var projectionType =
-                    _sekibanAggregateTypes.SingleProjectionTypes.FirstOrDefault(m => m.PayloadType.Name == document.DocumentTypeName);
+                var projectionType
+                    = _sekibanAggregateTypes.SingleProjectionTypes.FirstOrDefault(m => m.PayloadType.Name == document.DocumentTypeName);
                 if (projectionType != null)
                 {
                     var targetClassType = typeof(SingleProjectionState<>).MakeGenericType(projectionType.PayloadType);

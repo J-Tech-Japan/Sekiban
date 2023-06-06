@@ -18,5 +18,5 @@ public static class DynamoDbServiceCollectionExtensions
 
         services.AddTransient<IBlobAccessor, S3BlobAccessor>();
         return services;
-    }    
+    }
 }

@@ -105,38 +105,29 @@ public class QueryExecutor : IQueryExecutor
         throw new Exception("Can not find query handler for" + paramType.Name);
     }
 
-    public async Task<TQueryResponse>
-        ForMultiProjectionQueryAsync<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
-            TQueryParameter param)
+    public async Task<TQueryResponse> ForMultiProjectionQueryAsync<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
-        var allProjection =
-            await multiProjectionService.GetMultiProjectionAsync<TProjectionPayload>(
+        var allProjection
+            = await multiProjectionService.GetMultiProjectionAsync<TProjectionPayload>(
                 SortableUniqueIdValue.GetShouldIncludeSortableUniqueIdValue(param));
-        return queryHandler
-            .GetMultiProjectionQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
-                param,
-                allProjection);
+        return queryHandler.GetMultiProjectionQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param, allProjection);
     }
 
     public async Task<ListQueryResult<TQueryResponse>>
-        ForMultiProjectionListQueryAsync<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
-            TQueryParameter param)
+        ForMultiProjectionListQueryAsync<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionListQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IListQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
-        var allProjection =
-            await multiProjectionService.GetMultiProjectionAsync<TProjectionPayload>(
+        var allProjection
+            = await multiProjectionService.GetMultiProjectionAsync<TProjectionPayload>(
                 SortableUniqueIdValue.GetShouldIncludeSortableUniqueIdValue(param));
-        return queryHandler
-            .GetMultiProjectionListQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
-                param,
-                allProjection);
+        return queryHandler.GetMultiProjectionListQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param, allProjection);
     }
 
     public async Task<ListQueryResult<TQueryResponse>>
@@ -146,55 +137,45 @@ public class QueryExecutor : IQueryExecutor
         where TQueryParameter : IListQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
-        var allProjection =
-            await multiProjectionService.GetAggregateList<TAggregatePayload>(SortableUniqueIdValue.GetShouldIncludeSortableUniqueIdValue(param));
-        return queryHandler
-            .GetAggregateListQuery<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
-                param,
-                allProjection);
+        var allProjection
+            = await multiProjectionService.GetAggregateList<TAggregatePayload>(SortableUniqueIdValue.GetShouldIncludeSortableUniqueIdValue(param));
+        return queryHandler.GetAggregateListQuery<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param, allProjection);
     }
 
-    public async Task<TQueryResponse>
-        ForAggregateQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
+    public async Task<TQueryResponse> ForAggregateQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TAggregatePayload : IAggregatePayloadCommon
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
-        var allProjection =
-            await multiProjectionService.GetAggregateList<TAggregatePayload>(SortableUniqueIdValue.GetShouldIncludeSortableUniqueIdValue(param));
-        return queryHandler.GetAggregateQuery<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
-            param,
-            allProjection);
+        var allProjection
+            = await multiProjectionService.GetAggregateList<TAggregatePayload>(SortableUniqueIdValue.GetShouldIncludeSortableUniqueIdValue(param));
+        return queryHandler.GetAggregateQuery<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param, allProjection);
     }
 
     public async Task<ListQueryResult<TQueryResponse>>
-        ForSingleProjectionListQueryAsync<TProjectionPayload, TQuery,
-            TQueryParameter, TQueryResponse>(TQueryParameter param)
+        ForSingleProjectionListQueryAsync<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionListQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IListQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
-        var allProjection = await multiProjectionService
-            .GetSingleProjectionList<TProjectionPayload>(SortableUniqueIdValue.GetShouldIncludeSortableUniqueIdValue(param));
-        return queryHandler
-            .GetSingleProjectionListQuery<TProjectionPayload, TQuery,
-                TQueryParameter, TQueryResponse>(param, allProjection);
+        var allProjection
+            = await multiProjectionService.GetSingleProjectionList<TProjectionPayload>(
+                SortableUniqueIdValue.GetShouldIncludeSortableUniqueIdValue(param));
+        return queryHandler.GetSingleProjectionListQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param, allProjection);
     }
 
     public async Task<TQueryResponse>
-        ForSingleProjectionQueryAsync<TSingleProjectionPayload, TQuery,
-            TQueryParameter, TQueryResponse>(TQueryParameter param)
+        ForSingleProjectionQueryAsync<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
-        var allProjection = await multiProjectionService
-            .GetSingleProjectionList<TSingleProjectionPayload>(SortableUniqueIdValue.GetShouldIncludeSortableUniqueIdValue(param));
-        return queryHandler
-            .GetSingleProjectionQuery<TSingleProjectionPayload, TQuery,
-                TQueryParameter, TQueryResponse>(param, allProjection);
+        var allProjection
+            = await multiProjectionService.GetSingleProjectionList<TSingleProjectionPayload>(
+                SortableUniqueIdValue.GetShouldIncludeSortableUniqueIdValue(param));
+        return queryHandler.GetSingleProjectionQuery<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param, allProjection);
     }
 }

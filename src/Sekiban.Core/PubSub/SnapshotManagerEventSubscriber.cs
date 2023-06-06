@@ -8,8 +8,8 @@ public class SnapshotManagerEventSubscriber<TEvent> : INotificationHandler<TEven
     private readonly SnapshotTakingBackgroundService _snapshotTakingBackgroundService;
 
 
-    public SnapshotManagerEventSubscriber(
-        SnapshotTakingBackgroundService snapshotTakingBackgroundService) => _snapshotTakingBackgroundService = snapshotTakingBackgroundService;
+    public SnapshotManagerEventSubscriber(SnapshotTakingBackgroundService snapshotTakingBackgroundService) =>
+        _snapshotTakingBackgroundService = snapshotTakingBackgroundService;
 
     public async Task Handle(TEvent notification, CancellationToken cancellationToken)
     {

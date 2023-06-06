@@ -5,17 +5,14 @@ using System.Collections.Immutable;
 namespace FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
 
 public class ClientLoyaltyPointMultiProjectionQuery : IMultiProjectionQuery<ClientLoyaltyPointMultiProjection,
-    ClientLoyaltyPointMultiProjectionQuery.Parameter,
-    ClientLoyaltyPointMultiProjectionQuery.Response>
+    ClientLoyaltyPointMultiProjectionQuery.Parameter, ClientLoyaltyPointMultiProjectionQuery.Response>
 {
     public enum QuerySortKeys
     {
         ClientName, Points
     }
 
-    public Response HandleFilter(
-        Parameter param,
-        MultiProjectionState<ClientLoyaltyPointMultiProjection> projection)
+    public Response HandleFilter(Parameter param, MultiProjectionState<ClientLoyaltyPointMultiProjection> projection)
     {
         if (param.BranchId is null)
         {
@@ -26,9 +23,7 @@ public class ClientLoyaltyPointMultiProjectionQuery : IMultiProjectionQuery<Clie
             projection.Payload.Records.Where(m => m.BranchId == param.BranchId).ToImmutableList());
     }
 
-    public ClientLoyaltyPointMultiProjection HandleSortAndPagingIfNeeded(
-        Parameter param,
-        ClientLoyaltyPointMultiProjection response)
+    public ClientLoyaltyPointMultiProjection HandleSortAndPagingIfNeeded(Parameter param, ClientLoyaltyPointMultiProjection response)
     {
         if (param.SortKey == QuerySortKeys.ClientName)
         {

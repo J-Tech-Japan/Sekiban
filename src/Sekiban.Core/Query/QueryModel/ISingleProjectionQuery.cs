@@ -8,7 +8,5 @@ public interface
     where TQueryParameter : IQueryParameter<TQueryResponse>
     where TQueryResponse : IQueryResponse
 {
-    public TQueryResponse HandleFilter(
-        TQueryParameter queryParam,
-        IEnumerable<SingleProjectionState<TSingleProjectionPayload>> list);
+    public TQueryResponse HandleFilter(TQueryParameter queryParam, IEnumerable<SingleProjectionState<TSingleProjectionPayload>> list);
 }

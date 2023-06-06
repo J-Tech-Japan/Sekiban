@@ -14,10 +14,7 @@ public class AddItemToShoppingCartI : ICommand<ShoppingCartI>
     public string Name { get; init; } = string.Empty;
     [Range(1, 1000)]
     public int Quantity { get; init; } = 0;
-    public Guid GetAggregateId()
-    {
-        return CartId;
-    }
+    public Guid GetAggregateId() => CartId;
 
     public class Handler : ICommandHandler<ShoppingCartI, AddItemToShoppingCartI>
     {
@@ -27,12 +24,7 @@ public class AddItemToShoppingCartI : ICommand<ShoppingCartI>
             AddItemToShoppingCartI command)
         {
             await Task.CompletedTask;
-            yield return new ItemAddedToShoppingCartI
-            {
-                Code = command.Code,
-                Name = command.Name,
-                Quantity = command.Quantity
-            };
+            yield return new ItemAddedToShoppingCartI { Code = command.Code, Name = command.Name, Quantity = command.Quantity };
         }
     }
 }

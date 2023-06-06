@@ -13,8 +13,6 @@ public class ClientDeletedSubscriber : IEventSubscriber<ClientDeleted>
 
     public async Task HandleEventAsync(Event<ClientDeleted> ev)
     {
-        await commandExecutor.ExecCommandAsync(
-            new DeleteLoyaltyPoint(ev.AggregateId),
-            ev.GetCallHistoriesIncludesItself());
+        await commandExecutor.ExecCommandAsync(new DeleteLoyaltyPoint(ev.AggregateId), ev.GetCallHistoriesIncludesItself());
     }
 }

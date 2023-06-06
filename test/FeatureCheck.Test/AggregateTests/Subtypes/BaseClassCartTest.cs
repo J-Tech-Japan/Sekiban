@@ -17,11 +17,7 @@ public class BaseClassCartTest : AggregateTest<ICartAggregate, FeatureCheckDepen
     public void CommandExecuteTest()
     {
         Subtype<ShoppingCartI>()
-            .WhenCommand(
-                new AddItemToShoppingCartI
-                {
-                    CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
-                })
+            .WhenCommand(new AddItemToShoppingCartI { CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100 })
             .ThenGetLatestEvents(
                 events =>
                 {
@@ -34,8 +30,7 @@ public class BaseClassCartTest : AggregateTest<ICartAggregate, FeatureCheckDepen
                 {
                     Items = ImmutableSortedDictionary<int, CartItemRecordI>.Empty.Add(
                         0,
-                        new CartItemRecordI
-                            { Code = "TESTCODE", Name = "TESTNAME", Quantity = 100 })
+                        new CartItemRecordI { Code = "TESTCODE", Name = "TESTNAME", Quantity = 100 })
                 });
     }
 
@@ -44,18 +39,9 @@ public class BaseClassCartTest : AggregateTest<ICartAggregate, FeatureCheckDepen
     public void PublishTest()
     {
         Subtype<ShoppingCartI>()
-            .WhenCommand(
-                new AddItemToShoppingCartI
-                {
-                    CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
-                })
+            .WhenCommand(new AddItemToShoppingCartI { CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100 })
             .WhenCommandWithPublish(
-                new SubmitOrderI
-                {
-                    CartId = GetAggregateId(),
-                    OrderSubmittedLocalTime = DateTime.Now,
-                    ReferenceVersion = GetCurrentVersion()
-                })
+                new SubmitOrderI { CartId = GetAggregateId(), OrderSubmittedLocalTime = DateTime.Now, ReferenceVersion = GetCurrentVersion() })
             .ThenPayloadTypeShouldBe<PurchasedCartI>();
     }
 
@@ -66,12 +52,7 @@ public class BaseClassCartTest : AggregateTest<ICartAggregate, FeatureCheckDepen
         GivenScenario(CommandExecuteTest)
             .ThenPayloadTypeShouldBe<ShoppingCartI>()
             .WhenCommandWithPublish(
-                new SubmitOrderI
-                {
-                    CartId = GetAggregateId(),
-                    OrderSubmittedLocalTime = DateTime.Now,
-                    ReferenceVersion = GetCurrentVersion()
-                })
+                new SubmitOrderI { CartId = GetAggregateId(), OrderSubmittedLocalTime = DateTime.Now, ReferenceVersion = GetCurrentVersion() })
             .ThenPayloadTypeShouldBe<PurchasedCartI>();
     }
 
@@ -80,19 +61,10 @@ public class BaseClassCartTest : AggregateTest<ICartAggregate, FeatureCheckDepen
     public void MultiCommandTest()
     {
         var subtype = Subtype<ShoppingCartI>();
-        subtype.WhenCommand(
-            new AddItemToShoppingCartI
-            {
-                CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
-            });
+        subtype.WhenCommand(new AddItemToShoppingCartI { CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100 });
         var aggregateId = GetAggregateId();
         subtype.WhenCommandWithPublish(
-            new SubmitOrderI
-            {
-                CartId = GetAggregateId(),
-                OrderSubmittedLocalTime = DateTime.Now,
-                ReferenceVersion = GetCurrentVersion()
-            });
+            new SubmitOrderI { CartId = GetAggregateId(), OrderSubmittedLocalTime = DateTime.Now, ReferenceVersion = GetCurrentVersion() });
         var sybtype2 = subtype.ThenPayloadTypeShouldBe<PurchasedCartI>()
             .ThenGetState(
                 state =>
@@ -105,16 +77,13 @@ public class BaseClassCartTest : AggregateTest<ICartAggregate, FeatureCheckDepen
     public void CommandExecuteTestAndChangeAggregateType()
     {
         Subtype<ShoppingCartI>()
-            .WhenCommand(
-                new AddItemToShoppingCartI
-                {
-                    CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
-                })
+            .WhenCommand(new AddItemToShoppingCartI { CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100 })
             .ThenPayloadTypeShouldBe<ShoppingCartI>()
             .WhenCommand(
                 new SubmitOrderI
                 {
-                    CartId = CartId, OrderSubmittedLocalTime = new DateTime(
+                    CartId = CartId,
+                    OrderSubmittedLocalTime = new DateTime(
                         2023,
                         2,
                         2,
@@ -128,10 +97,7 @@ public class BaseClassCartTest : AggregateTest<ICartAggregate, FeatureCheckDepen
                 {
                     Items = ImmutableSortedDictionary<int, CartItemRecordI>.Empty.Add(
                         0,
-                        new CartItemRecordI
-                        {
-                            Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
-                        }),
+                        new CartItemRecordI { Code = "TESTCODE", Name = "TESTNAME", Quantity = 100 }),
                     PurchasedDate = new DateTime(
                         2023,
                         2,

@@ -8,22 +8,19 @@ public static class SingleProjectionQueryTypesExtensions
 
     public static Type GetSingleProjectionTypeFromSingleProjectionQueryType(this Type singleProjectionQuery)
     {
-        var baseType =
-            singleProjectionQuery.GetImplementingFromGenericInterfaceType(typeof(ISingleProjectionQuery<,,>));
+        var baseType = singleProjectionQuery.GetImplementingFromGenericInterfaceType(typeof(ISingleProjectionQuery<,,>));
         return baseType.GenericTypeArguments[0];
     }
 
     public static Type GetParamTypeFromSingleProjectionQueryType(this Type singleProjectionQuery)
     {
-        var baseType =
-            singleProjectionQuery.GetImplementingFromGenericInterfaceType(typeof(ISingleProjectionQuery<,,>));
+        var baseType = singleProjectionQuery.GetImplementingFromGenericInterfaceType(typeof(ISingleProjectionQuery<,,>));
         return baseType.GenericTypeArguments[1];
     }
 
     public static Type GetResponseTypeFromSingleProjectionQueryType(this Type singleProjectionQuery)
     {
-        var baseType =
-            singleProjectionQuery.GetImplementingFromGenericInterfaceType(typeof(ISingleProjectionQuery<,,>));
+        var baseType = singleProjectionQuery.GetImplementingFromGenericInterfaceType(typeof(ISingleProjectionQuery<,,>));
         return baseType.GenericTypeArguments[2];
     }
 }

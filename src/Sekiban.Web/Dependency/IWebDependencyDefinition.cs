@@ -57,9 +57,7 @@ public interface IWebDependencyDefinition : IQueryDefinition
         if (ShouldMakeSimpleSingleProjectionListQueries)
         {
             var baseSimpleAggregateListQueryType = typeof(SimpleSingleProjectionListQuery<>);
-            return GetSingleProjectionTypes()
-                .Select(
-                    m => baseSimpleAggregateListQueryType.MakeGenericType(m));
+            return GetSingleProjectionTypes().Select(m => baseSimpleAggregateListQueryType.MakeGenericType(m));
         }
 
         return Enumerable.Empty<Type>();

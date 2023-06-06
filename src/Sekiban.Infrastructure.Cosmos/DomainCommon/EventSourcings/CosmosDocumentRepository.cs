@@ -6,7 +6,6 @@ using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Partition;
 using Sekiban.Core.Query.SingleProjections.Projections;
-using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
 using Sekiban.Core.Types;
@@ -42,17 +41,11 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             aggregateContainerGroup,
             async container =>
             {
-                var options = new QueryRequestOptions
-                {
-                    MaxConcurrency = -1,
-                    MaxItemCount = -1,
-                    MaxBufferedItemCount = -1
-                };
+                var options = new QueryRequestOptions { MaxConcurrency = -1, MaxItemCount = -1, MaxBufferedItemCount = -1 };
                 var query = targetAggregateNames.Count switch
                 {
                     0 => container.GetItemLinqQueryable<IEvent>(),
-                    _ => container.GetItemLinqQueryable<IEvent>()
-                        .Where(b => targetAggregateNames.Contains(b.AggregateType))
+                    _ => container.GetItemLinqQueryable<IEvent>().Where(b => targetAggregateNames.Contains(b.AggregateType))
                 };
                 if (!string.IsNullOrEmpty(sinceSortableUniqueId))
                 {
@@ -68,16 +61,13 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     foreach (var item in response)
                     {
                         // pick out one item
-                        if (SekibanJsonHelper.GetValue<string>(item, nameof(IDocument.DocumentTypeName)) is not string
-                            typeName)
+                        if (SekibanJsonHelper.GetValue<string>(item, nameof(IDocument.DocumentTypeName)) is not string typeName)
                         {
                             continue;
                         }
 
                         var toAdd = _registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
-                                .Select(
-                                    m =>
-                                        SekibanJsonHelper.ConvertTo(item, typeof(Event<>).MakeGenericType(m)) as IEvent)
+                                .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(Event<>).MakeGenericType(m)) as IEvent)
                                 .FirstOrDefault(m => m is not null) ??
                             EventHelper.GetUnregisteredEvent(item);
                         if (toAdd is null)
@@ -85,8 +75,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                             throw new SekibanUnregisterdEventFoundException();
                         }
 
-                        if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
-                            toAdd.GetSortableUniqueId().EarlierThan(sinceSortableUniqueId))
+                        if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().EarlierThan(sinceSortableUniqueId))
                         {
                             continue;
                         }
@@ -112,8 +101,8 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             {
                 var options = new QueryRequestOptions
                 {
-                    PartitionKey =
-                        new PartitionKey(PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType)),
+                    PartitionKey = new PartitionKey(
+                        PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType)),
                     MaxItemCount = 1
                 };
                 var query = container.GetItemLinqQueryable<SnapshotDocument>()
@@ -123,8 +112,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                             b.AggregateTypeName == aggregatePayloadType.Name &&
                             b.PayloadVersionIdentifier == payloadVersionIdentifier)
                     .OrderByDescending(m => m.LastSortableUniqueId);
-                var feedIterator =
-                    container.GetItemQueryIterator<SnapshotDocument>(query.ToQueryDefinition(), null, options);
+                var feedIterator = container.GetItemQueryIterator<SnapshotDocument>(query.ToQueryDefinition(), null, options);
                 while (feedIterator.HasMoreResults)
                 {
                     foreach (var obj in await feedIterator.ReadNextAsync())
@@ -148,17 +136,13 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             {
                 var options = new QueryRequestOptions
                 {
-                    PartitionKey =
-                        new PartitionKey(PartitionKeyGenerator.ForMultiProjectionSnapshot(multiProjectionPayloadType)),
+                    PartitionKey = new PartitionKey(PartitionKeyGenerator.ForMultiProjectionSnapshot(multiProjectionPayloadType)),
                     MaxItemCount = 1
                 };
                 var query = container.GetItemLinqQueryable<MultiProjectionSnapshotDocument>()
-                    .Where(
-                        b => b.DocumentType == DocumentType.MultiProjectionSnapshot &&
-                            b.PayloadVersionIdentifier == payloadVersionIdentifier)
+                    .Where(b => b.DocumentType == DocumentType.MultiProjectionSnapshot && b.PayloadVersionIdentifier == payloadVersionIdentifier)
                     .OrderByDescending(m => m.LastSortableUniqueId);
-                var feedIterator =
-                    container.GetItemQueryIterator<MultiProjectionSnapshotDocument>(query.ToQueryDefinition(), null, options);
+                var feedIterator = container.GetItemQueryIterator<MultiProjectionSnapshotDocument>(query.ToQueryDefinition(), null, options);
                 while (feedIterator.HasMoreResults)
                 {
                     foreach (var obj in await feedIterator.ReadNextAsync())
@@ -178,8 +162,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             aggregateContainerGroup,
             async container =>
             {
-                var response =
-                    await container.ReadItemAsync<SnapshotDocument>(id.ToString(), new PartitionKey(partitionKey));
+                var response = await container.ReadItemAsync<SnapshotDocument>(id.ToString(), new PartitionKey(partitionKey));
                 if (response.Resource is null) { return null; }
                 return await _singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(response.Resource);
             });
@@ -196,14 +179,13 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 var list = new List<SnapshotDocument>();
                 var options = new QueryRequestOptions
                 {
-                    PartitionKey =
-                        new PartitionKey(PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType))
+                    PartitionKey = new PartitionKey(
+                        PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType))
                 };
                 var query = container.GetItemLinqQueryable<SnapshotDocument>()
                     .Where(b => b.DocumentType == DocumentType.AggregateSnapshot && b.AggregateId == aggregateId)
                     .OrderByDescending(m => m.LastSortableUniqueId);
-                var feedIterator =
-                    container.GetItemQueryIterator<SnapshotDocument>(query.ToQueryDefinition(), null, options);
+                var feedIterator = container.GetItemQueryIterator<SnapshotDocument>(query.ToQueryDefinition(), null, options);
                 while (feedIterator.HasMoreResults)
                 {
                     foreach (var obj in await feedIterator.ReadNextAsync())
@@ -235,22 +217,15 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             async container =>
             {
                 var types = _registeredEventTypes.RegisteredTypes;
-                var options = new QueryRequestOptions
-                {
-                    MaxConcurrency = -1,
-                    MaxItemCount = -1,
-                    MaxBufferedItemCount = -1
-                };
+                var options = new QueryRequestOptions { MaxConcurrency = -1, MaxItemCount = -1, MaxBufferedItemCount = -1 };
                 if (partitionKey is not null)
                 {
                     options.PartitionKey = new PartitionKey(partitionKey);
                 }
 
-                var query = container.GetItemLinqQueryable<IEvent>()
-                    .Where(b => b.DocumentType == DocumentType.Event && b.AggregateId == aggregateId);
+                var query = container.GetItemLinqQueryable<IEvent>().Where(b => b.DocumentType == DocumentType.Event && b.AggregateId == aggregateId);
                 query = sinceSortableUniqueId is not null
-                    ? query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0)
-                        .OrderByDescending(m => m.SortableUniqueId)
+                    ? query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0).OrderByDescending(m => m.SortableUniqueId)
                     : query.OrderBy(m => m.SortableUniqueId);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
                 var events = new List<IEvent>();
@@ -260,16 +235,13 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     foreach (var item in response)
                     {
                         // pick out one album
-                        if (SekibanJsonHelper.GetValue<string>(item, nameof(IDocument.DocumentTypeName)) is not string
-                            typeName)
+                        if (SekibanJsonHelper.GetValue<string>(item, nameof(IDocument.DocumentTypeName)) is not string typeName)
                         {
                             continue;
                         }
 
                         var toAdd = types.Where(m => m.Name == typeName)
-                                .Select(
-                                    m =>
-                                        SekibanJsonHelper.ConvertTo(item, typeof(Event<>).MakeGenericType(m)) as IEvent)
+                                .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(Event<>).MakeGenericType(m)) as IEvent)
                                 .FirstOrDefault(m => m is not null) ??
                             EventHelper.GetUnregisteredEvent(item);
                         ;
@@ -278,8 +250,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                             throw new SekibanUnregisterdEventFoundException();
                         }
 
-                        if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
-                            toAdd.GetSortableUniqueId().EarlierThan(sinceSortableUniqueId))
+                        if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().EarlierThan(sinceSortableUniqueId))
                         {
                             continue;
                         }
@@ -323,20 +294,14 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             async container =>
             {
                 var types = _registeredEventTypes.RegisteredTypes;
-                var options = new QueryRequestOptions
-                {
-                    MaxConcurrency = -1,
-                    MaxItemCount = -1,
-                    MaxBufferedItemCount = -1
-                };
+                var options = new QueryRequestOptions { MaxConcurrency = -1, MaxItemCount = -1, MaxBufferedItemCount = -1 };
                 options.PartitionKey = new PartitionKey(
                     PartitionKeyGenerator.ForCommand(aggregateId, aggregatePayloadType.GetBaseAggregatePayloadTypeFromAggregate()));
 
                 var query = container.GetItemLinqQueryable<IAggregateDocument>()
                     .Where(b => b.DocumentType == DocumentType.Command && b.AggregateId == aggregateId);
                 query = sinceSortableUniqueId is not null
-                    ? query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0)
-                        .OrderByDescending(m => m.SortableUniqueId)
+                    ? query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0).OrderByDescending(m => m.SortableUniqueId)
                     : query.OrderBy(m => m.SortableUniqueId);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
                 var commands = new List<string>();
@@ -345,8 +310,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     var response = await feedIterator.ReadNextAsync();
                     foreach (var item in response)
                     {
-                        if (sinceSortableUniqueId is not null &&
-                            new SortableUniqueIdValue(item.SortableUniqueId).EarlierThan(sinceSortableUniqueId))
+                        if (sinceSortableUniqueId is not null && new SortableUniqueIdValue(item.SortableUniqueId).EarlierThan(sinceSortableUniqueId))
                         {
                             continue;
                         }
@@ -370,19 +334,13 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             aggregateContainerGroup,
             async container =>
             {
-                var options = new QueryRequestOptions
-                {
-                    MaxConcurrency = -1,
-                    MaxItemCount = -1,
-                    MaxBufferedItemCount = -1
-                };
+                var options = new QueryRequestOptions { MaxConcurrency = -1, MaxItemCount = -1, MaxBufferedItemCount = -1 };
                 var eventTypes = _registeredEventTypes.RegisteredTypes.Select(m => m.Name);
                 var query = container.GetItemLinqQueryable<IEvent>()
                     .Where(b => b.DocumentType == DocumentType.Event && b.AggregateType == aggregatePayloadType.Name);
 
                 query = sinceSortableUniqueId is not null
-                    ? query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0)
-                        .OrderByDescending(m => m.SortableUniqueId)
+                    ? query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0).OrderByDescending(m => m.SortableUniqueId)
                     : query.OrderByDescending(m => m.SortableUniqueId);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
                 var events = new List<IEvent>();
@@ -392,16 +350,13 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     foreach (var item in response)
                     {
                         // pick out one album
-                        if (SekibanJsonHelper.GetValue<string>(item, nameof(IDocument.DocumentTypeName)) is not string
-                            typeName)
+                        if (SekibanJsonHelper.GetValue<string>(item, nameof(IDocument.DocumentTypeName)) is not string typeName)
                         {
                             continue;
                         }
 
                         var toAdd = _registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
-                                .Select(
-                                    m =>
-                                        SekibanJsonHelper.ConvertTo(item, typeof(Event<>).MakeGenericType(m)) as IEvent)
+                                .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(Event<>).MakeGenericType(m)) as IEvent)
                                 .FirstOrDefault(m => m is not null) ??
                             EventHelper.GetUnregisteredEvent(item);
                         if (toAdd is null)
@@ -409,8 +364,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                             throw new SekibanUnregisterdEventFoundException();
                         }
 
-                        if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
-                            toAdd.GetSortableUniqueId().EarlierThan(sinceSortableUniqueId))
+                        if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().EarlierThan(sinceSortableUniqueId))
                         {
                             continue;
                         }
@@ -437,8 +391,8 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             {
                 var options = new QueryRequestOptions
                 {
-                    PartitionKey =
-                        new PartitionKey(PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType))
+                    PartitionKey = new PartitionKey(
+                        PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType))
                 };
                 var query = container.GetItemLinqQueryable<SnapshotDocument>()
                     .Where(
@@ -448,8 +402,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                             b.DocumentTypeName == projectionPayloadType.Name &&
                             b.PayloadVersionIdentifier == payloadVersionIdentifier)
                     .OrderByDescending(m => m.LastSortableUniqueId);
-                var feedIterator =
-                    container.GetItemQueryIterator<SnapshotDocument>(query.ToQueryDefinition(), null, options);
+                var feedIterator = container.GetItemQueryIterator<SnapshotDocument>(query.ToQueryDefinition(), null, options);
                 while (feedIterator.HasMoreResults)
                 {
                     foreach (var obj in await feedIterator.ReadNextAsync())

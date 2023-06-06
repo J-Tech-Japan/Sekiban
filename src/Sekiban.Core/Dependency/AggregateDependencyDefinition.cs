@@ -14,19 +14,15 @@ namespace Sekiban.Core.Dependency;
 ///     AddAggregate
 /// </summary>
 /// <typeparam name="TAggregatePayload"></typeparam>
-public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDependencyDefinition
-    where TAggregatePayload : IAggregatePayloadCommon
+public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDependencyDefinition where TAggregatePayload : IAggregatePayloadCommon
 {
-
-    public AggregateDependencyDefinition()
-    {
-        AggregateType = typeof(TAggregatePayload);
-    }
-    public ImmutableList<IAggregateSubTypeDependencyDefinition<TAggregatePayload>> SubAggregates { get; protected set; } =
-        ImmutableList<IAggregateSubTypeDependencyDefinition<TAggregatePayload>>.Empty;
+    public ImmutableList<IAggregateSubTypeDependencyDefinition<TAggregatePayload>> SubAggregates { get; protected set; }
+        = ImmutableList<IAggregateSubTypeDependencyDefinition<TAggregatePayload>>.Empty;
 
     protected ImmutableList<(Type, Type?)> SelfCommandTypes { get; set; } = ImmutableList<(Type, Type?)>.Empty;
     protected ImmutableList<(Type, Type?)> SelfSubscriberTypes { get; private set; } = ImmutableList<(Type, Type?)>.Empty;
+
+    public AggregateDependencyDefinition() => AggregateType = typeof(TAggregatePayload);
 
     public ImmutableList<Type> AggregateSubtypes => SubAggregates.Select(m => m.GetType().GetGenericArguments().Last()).ToImmutableList();
     public virtual ImmutableList<(Type, Type?)> CommandTypes
@@ -61,21 +57,17 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
     public Type AggregateType { get; }
 
     public AggregateDependencyDefinition<TAggregatePayload> AddCommandHandler<TCreateCommand, TCommandHandler>()
-        where TCreateCommand : ICommand<TAggregatePayload>, new()
-        where TCommandHandler : ICommandHandlerCommon<TAggregatePayload, TCreateCommand>
+        where TCreateCommand : ICommand<TAggregatePayload>, new() where TCommandHandler : ICommandHandlerCommon<TAggregatePayload, TCreateCommand>
     {
-        SelfCommandTypes = SelfCommandTypes.Add(
-            (typeof(ICommandHandlerCommon<TAggregatePayload, TCreateCommand>),
-                typeof(TCommandHandler)));
+        SelfCommandTypes = SelfCommandTypes.Add((typeof(ICommandHandlerCommon<TAggregatePayload, TCreateCommand>), typeof(TCommandHandler)));
         return this;
     }
 
     public AggregateDependencyDefinition<TAggregatePayload> AddEventSubscriber<TEvent, TEventSubscriber>()
-        where TEvent : IEventPayloadApplicableTo<TAggregatePayload>
-        where TEventSubscriber : IEventSubscriber<TEvent>
+        where TEvent : IEventPayloadApplicableTo<TAggregatePayload> where TEventSubscriber : IEventSubscriber<TEvent>
     {
-        SelfSubscriberTypes =
-            SelfSubscriberTypes.Add((typeof(INotificationHandler<Event<TEvent>>), typeof(EventSubscriber<TEvent, TEventSubscriber>)));
+        SelfSubscriberTypes
+            = SelfSubscriberTypes.Add((typeof(INotificationHandler<Event<TEvent>>), typeof(EventSubscriber<TEvent, TEventSubscriber>)));
         SelfSubscriberTypes = SelfSubscriberTypes.Add((typeof(IEventSubscriber<TEvent>), typeof(TEventSubscriber)));
         return this;
     }
@@ -90,8 +82,7 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         }
         if (singleProjectionType.GetOriginalTypeFromSingleProjectionPayload() != AggregateType)
         {
-            throw new ArgumentException(
-                $"Single projection {singleProjectionType.Name} must be for aggregate {AggregateType.Name}");
+            throw new ArgumentException($"Single projection {singleProjectionType.Name} must be for aggregate {AggregateType.Name}");
         }
         SingleProjectionTypes = SingleProjectionTypes.Add(typeof(TSingleProjection));
         return this;
@@ -102,8 +93,7 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         if (typeof(TQuery).IsAggregateQueryType())
         {
             AggregateQueryTypes = AggregateQueryTypes.Add(typeof(TQuery));
-        }
-        else
+        } else
         {
             throw new ArgumentException("Type must implement IAggregateQuery", typeof(TQuery).Name);
         }
@@ -115,8 +105,7 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         if (typeof(TQuery).IsAggregateListQueryType())
         {
             AggregateListQueryTypes = AggregateListQueryTypes.Add(typeof(TQuery));
-        }
-        else
+        } else
         {
             throw new ArgumentException("Type must implement IAggregateListQuery", typeof(TQuery).Name);
         }
@@ -128,8 +117,7 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         if (typeof(TQuery).IsSingleProjectionQueryType())
         {
             SingleProjectionQueryTypes = SingleProjectionQueryTypes.Add(typeof(TQuery));
-        }
-        else
+        } else
         {
             throw new ArgumentException("Type must implement ISingleProjectionQuery", typeof(TQuery).Name);
         }
@@ -141,8 +129,7 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         if (typeof(TQuery).IsSingleProjectionListQueryType())
         {
             SingleProjectionListQueryTypes = SingleProjectionListQueryTypes.Add(typeof(TQuery));
-        }
-        else
+        } else
         {
             throw new ArgumentException("Type must implement ISingleProjectionListQuery", typeof(TQuery).Name);
         }

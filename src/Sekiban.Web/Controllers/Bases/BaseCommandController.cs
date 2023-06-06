@@ -8,18 +8,14 @@ namespace Sekiban.Web.Controllers.Bases;
 
 [ApiController]
 [Produces("application/json")]
-public class BaseCommandController<TAggregatePayload, TCommand> : ControllerBase
-    where TAggregatePayload : IAggregatePayloadCommon
+public class BaseCommandController<TAggregatePayload, TCommand> : ControllerBase where TAggregatePayload : IAggregatePayloadCommon
     where TCommand : ICommand<TAggregatePayload>
 {
     private readonly ICommandExecutor _executor;
     private readonly IServiceProvider _serviceProvider;
     private readonly IWebDependencyDefinition _webDependencyDefinition;
 
-    public BaseCommandController(
-        ICommandExecutor executor,
-        IWebDependencyDefinition webDependencyDefinition,
-        IServiceProvider serviceProvider)
+    public BaseCommandController(ICommandExecutor executor, IWebDependencyDefinition webDependencyDefinition, IServiceProvider serviceProvider)
     {
         _executor = executor;
         _webDependencyDefinition = webDependencyDefinition;

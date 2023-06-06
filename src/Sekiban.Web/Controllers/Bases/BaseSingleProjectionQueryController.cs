@@ -6,11 +6,9 @@ namespace Sekiban.Web.Controllers.Bases;
 
 [ApiController]
 [Produces("application/json")]
-public class BaseSingleProjectionQueryController<TSingleProjectionPayload,
-    TQuery, TQueryParameter, TQueryResponse> : ControllerBase
+public class BaseSingleProjectionQueryController<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse> : ControllerBase
     where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
-    where TQuery : ISingleProjectionQuery<TSingleProjectionPayload,
-        TQueryParameter, TQueryResponse>
+    where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
     where TQueryParameter : IQueryParameter<TQueryResponse>
     where TQueryResponse : IQueryResponse
 {
@@ -22,8 +20,7 @@ public class BaseSingleProjectionQueryController<TSingleProjectionPayload,
     [Route("")]
     public async Task<ActionResult<TQueryResponse>> GetQueryResult([FromQuery] TQueryParameter queryParam)
     {
-        var result = await QueryExecutor
-            .ExecuteAsync(queryParam);
+        var result = await QueryExecutor.ExecuteAsync(queryParam);
         return Ok(result);
     }
 }

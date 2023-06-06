@@ -10,10 +10,8 @@ public record QuerySingleProjectionState<TSingleProjectionPayload>(SingleProject
 public record SimpleSingleProjectionListQueryParameter<TSingleProjectionPayload>
     (int? PageSize, int? PageNumber) : IListQueryPagingParameter<QuerySingleProjectionState<TSingleProjectionPayload>>
     where TSingleProjectionPayload : ISingleProjectionPayloadCommon;
-public class SimpleSingleProjectionListQuery<TSingleProjectionPayload> :
-    ISingleProjectionListQuery<TSingleProjectionPayload,
-        SimpleSingleProjectionListQueryParameter<TSingleProjectionPayload>,
-        QuerySingleProjectionState<TSingleProjectionPayload>>
+public class SimpleSingleProjectionListQuery<TSingleProjectionPayload> : ISingleProjectionListQuery<TSingleProjectionPayload,
+    SimpleSingleProjectionListQueryParameter<TSingleProjectionPayload>, QuerySingleProjectionState<TSingleProjectionPayload>>
     where TSingleProjectionPayload : ISingleProjectionPayloadCommon
 {
     public IEnumerable<QuerySingleProjectionState<TSingleProjectionPayload>> HandleFilter(

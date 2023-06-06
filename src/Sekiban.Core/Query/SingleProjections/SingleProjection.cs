@@ -4,10 +4,8 @@ using Sekiban.Core.Events;
 using Sekiban.Core.Types;
 namespace Sekiban.Core.Query.SingleProjections;
 
-public class SingleProjection<TProjectionPayload> : ISingleProjection,
-    ISingleProjectionStateConvertible<SingleProjectionState<TProjectionPayload>>, IAggregateCommon,
-    ISingleProjector<SingleProjection<TProjectionPayload>>
-    where TProjectionPayload : ISingleProjectionPayloadCommon, new()
+public class SingleProjection<TProjectionPayload> : ISingleProjection, ISingleProjectionStateConvertible<SingleProjectionState<TProjectionPayload>>,
+    IAggregateCommon, ISingleProjector<SingleProjection<TProjectionPayload>> where TProjectionPayload : ISingleProjectionPayloadCommon, new()
 {
     public TProjectionPayload Payload { get; set; } = new();
     public Guid LastEventId { get; set; }
@@ -53,15 +51,15 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
         var genericMethod = method?.MakeGenericMethod(expect);
         return (bool?)genericMethod?.Invoke(this, null) ?? false;
     }
-    public SingleProjectionState<TProjectionPayload> ToState() => new(
-        Payload,
-        AggregateId,
-        LastEventId,
-        LastSortableUniqueId,
-        AppliedSnapshotVersion,
-        Version);
-    public bool CanApplySnapshot(IAggregateStateCommon? snapshot) =>
-        snapshot is not null && snapshot.GetPayload() is TProjectionPayload;
+    public SingleProjectionState<TProjectionPayload> ToState() =>
+        new(
+            Payload,
+            AggregateId,
+            LastEventId,
+            LastSortableUniqueId,
+            AppliedSnapshotVersion,
+            Version);
+    public bool CanApplySnapshot(IAggregateStateCommon? snapshot) => snapshot is not null && snapshot.GetPayload() is TProjectionPayload;
     public void ApplySnapshot(IAggregateStateCommon snapshot)
     {
         Version = snapshot.Version;
@@ -73,12 +71,12 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection,
 
     public Type GetPayloadType() => typeof(TProjectionPayload);
 
-    public SingleProjection<TProjectionPayload> CreateInitialAggregate(Guid aggregateId) => new()
-        { AggregateId = aggregateId };
+    public SingleProjection<TProjectionPayload> CreateInitialAggregate(Guid aggregateId) => new() { AggregateId = aggregateId };
     public SingleProjection<TProjectionPayload> CreateAggregateFromState(
         SingleProjection<TProjectionPayload> current,
         object state,
-        SekibanAggregateTypes sekibanAggregateTypes) => throw new NotImplementedException();
+        SekibanAggregateTypes sekibanAggregateTypes) =>
+        throw new NotImplementedException();
 
     public Type GetOriginalAggregatePayloadType() =>
         typeof(TProjectionPayload).GetOriginalTypeFromSingleProjectionPayload().GetBaseAggregatePayloadTypeFromAggregate();

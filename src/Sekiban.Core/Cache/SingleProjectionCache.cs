@@ -21,9 +21,7 @@ public class SingleProjectionCache : ISingleProjectionCache
         _memoryCacheSettings = memoryCacheSettings;
     }
 
-    public void SetContainer<TAggregate, TState>(
-        Guid aggregateId,
-        SingleMemoryCacheProjectionContainer<TAggregate, TState> container)
+    public void SetContainer<TAggregate, TState>(Guid aggregateId, SingleMemoryCacheProjectionContainer<TAggregate, TState> container)
         where TAggregate : IAggregateCommon, ISingleProjection where TState : IAggregateStateCommon
     {
         _memoryCache.Cache.Set(
@@ -37,13 +35,14 @@ public class SingleProjectionCache : ISingleProjectionCache
         _memoryCache.Cache.Get<SingleMemoryCacheProjectionContainer<TAggregate, TState>>(
             GetCacheKeyForSingleProjectionContainer<TAggregate>(aggregateId));
 
-    private MemoryCacheEntryOptions GetMemoryCacheOptionsForSingleProjectionContainer() => new()
-    {
-        AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(_memoryCacheSettings.SingleProjectionAbsoluteExpirationMinutes),
-        SlidingExpiration = TimeSpan.FromMinutes(_memoryCacheSettings.SingleProjectionSlidingExpirationMinutes)
-        // If not accessed 5 minutes it will be deleted. Anyway it will be d
-        // eleted after two hours
-    };
+    private MemoryCacheEntryOptions GetMemoryCacheOptionsForSingleProjectionContainer() =>
+        new()
+        {
+            AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(_memoryCacheSettings.SingleProjectionAbsoluteExpirationMinutes),
+            SlidingExpiration = TimeSpan.FromMinutes(_memoryCacheSettings.SingleProjectionSlidingExpirationMinutes)
+            // If not accessed 5 minutes it will be deleted. Anyway it will be d
+            // eleted after two hours
+        };
 
     public string GetCacheKeyForSingleProjectionContainer<TSingleProjectionOrAggregate>(Guid aggregateId)
     {
@@ -52,8 +51,6 @@ public class SingleProjectionCache : ISingleProjectionCache
             return
                 $"{typeof(TSingleProjectionOrAggregate).GetSingleProjectionPayloadFromSingleProjectionType().GetOriginalTypeFromSingleProjectionPayload().Name}_{aggregateId}";
         }
-        return "Aggregate" +
-            typeof(TSingleProjectionOrAggregate).GetAggregatePayloadTypeFromAggregate().Name +
-            aggregateId;
+        return "Aggregate" + typeof(TSingleProjectionOrAggregate).GetAggregatePayloadTypeFromAggregate().Name + aggregateId;
     }
 }

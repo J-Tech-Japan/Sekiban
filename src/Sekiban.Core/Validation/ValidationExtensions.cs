@@ -24,17 +24,13 @@ public static class ValidationExtensions
         }
     }
 
-    public static bool TryValidateEnumerable(
-        this IEnumerable collection,
-        out IEnumerable<(int, ValidationResult)> validationResults)
+    public static bool TryValidateEnumerable(this IEnumerable collection, out IEnumerable<(int, ValidationResult)> validationResults)
     {
         validationResults = collection.ValidateEnumerable();
         return !validationResults.Any();
     }
 
-    public static bool TryValidateEnumerable<T>(
-        this IEnumerable<T> collection,
-        out IEnumerable<(int, ValidationResult)> validationResults)
+    public static bool TryValidateEnumerable<T>(this IEnumerable<T> collection, out IEnumerable<(int, ValidationResult)> validationResults)
     {
         validationResults = collection.ValidateEnumerable();
         return !validationResults.Any();
@@ -59,10 +55,7 @@ public static class ValidationExtensions
         }
     }
 
-    public static bool TryValidateProperties(
-        this object targetClass,
-        out IEnumerable<ValidationResult> validationResults,
-        string baseKeyPath = "")
+    public static bool TryValidateProperties(this object targetClass, out IEnumerable<ValidationResult> validationResults, string baseKeyPath = "")
     {
         validationResults = targetClass.ValidateProperties(baseKeyPath);
         return !validationResults.Any();
@@ -79,9 +72,7 @@ public static class ValidationExtensions
             {
                 yield return new ValidationResult(
                     validationResult.ErrorMessage,
-                    validationResult.MemberNames
-                        .Select(m => string.IsNullOrEmpty(baseKeyPath) ? m : $"{baseKeyPath}[{index}].{m}")
-                        .ToArray());
+                    validationResult.MemberNames.Select(m => string.IsNullOrEmpty(baseKeyPath) ? m : $"{baseKeyPath}[{index}].{m}").ToArray());
             }
 
             yield break;
@@ -93,8 +84,7 @@ public static class ValidationExtensions
         {
             yield return new ValidationResult(
                 validationResult.ErrorMessage,
-                validationResult.MemberNames.Select(m => string.IsNullOrEmpty(baseKeyPath) ? m : $"{baseKeyPath}.{m}")
-                    .ToArray());
+                validationResult.MemberNames.Select(m => string.IsNullOrEmpty(baseKeyPath) ? m : $"{baseKeyPath}.{m}").ToArray());
         }
 
         static bool isReferenceType(Type type)
@@ -130,8 +120,7 @@ public static class ValidationExtensions
             }
 
             validationResults.Clear();
-            validationResults.AddRange(
-                pvalue.ValidateProperties(string.IsNullOrEmpty(baseKeyPath) ? pi.Name : $"{baseKeyPath}.{pi.Name}"));
+            validationResults.AddRange(pvalue.ValidateProperties(string.IsNullOrEmpty(baseKeyPath) ? pi.Name : $"{baseKeyPath}.{pi.Name}"));
             foreach (var validationResult in validationResults)
             {
                 yield return validationResult;

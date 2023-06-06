@@ -13,12 +13,7 @@ public record AddLoyaltyPoint(
     int PointAmount,
     string Note) : IVersionValidationCommand<LoyaltyPoint>
 {
-    public AddLoyaltyPoint() : this(
-        Guid.Empty,
-        DateTime.MinValue,
-        LoyaltyPointReceiveTypeKeys.CreditcardUsage,
-        0,
-        string.Empty)
+    public AddLoyaltyPoint() : this(Guid.Empty, DateTime.MinValue, LoyaltyPointReceiveTypeKeys.CreditcardUsage, 0, string.Empty)
     {
     }
 
@@ -33,8 +28,7 @@ public record AddLoyaltyPoint(
             AddLoyaltyPoint command)
         {
             await Task.CompletedTask;
-            if (getAggregateState().Payload.LastOccuredTime is not null &&
-                getAggregateState().Payload.LastOccuredTime > command.HappenedDate)
+            if (getAggregateState().Payload.LastOccuredTime is not null && getAggregateState().Payload.LastOccuredTime > command.HappenedDate)
             {
                 throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
             }

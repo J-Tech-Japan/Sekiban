@@ -42,14 +42,11 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         await Task.CompletedTask;
         var list = partitionKey is null
             ? _inMemoryDocumentStore.GetAllEvents(sekibanIdentifier).Where(m => m.AggregateId == aggregateId).ToList()
-            : _inMemoryDocumentStore.GetEventPartition(partitionKey, sekibanIdentifier)
-                .OrderBy(m => m.SortableUniqueId)
-                .ToList();
+            : _inMemoryDocumentStore.GetEventPartition(partitionKey, sekibanIdentifier).OrderBy(m => m.SortableUniqueId).ToList();
         if (string.IsNullOrWhiteSpace(sinceSortableUniqueId))
         {
             resultAction(list.OrderBy(m => m.SortableUniqueId));
-        }
-        else
+        } else
         {
             var index = list.Any(m => m.SortableUniqueId == sinceSortableUniqueId)
                 ? list.FindIndex(m => m.SortableUniqueId == sinceSortableUniqueId)
@@ -59,9 +56,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
                 resultAction(new List<IEvent>());
             }
             resultAction(
-                list.GetRange(index, list.Count - index)
-                    .Where(m => m.SortableUniqueId != sinceSortableUniqueId)
-                    .OrderBy(m => m.SortableUniqueId));
+                list.GetRange(index, list.Count - index).Where(m => m.SortableUniqueId != sinceSortableUniqueId).OrderBy(m => m.SortableUniqueId));
         }
     }
 
@@ -111,20 +106,17 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             if (index == list.Count - 1)
             {
                 resultAction(new List<IEvent>());
-            }
-            else
+            } else
             {
                 resultAction(
                     list.GetRange(index + 1, list.Count - index - 1)
                         .Where(m => targetAggregateNames.Count == 0 || targetAggregateNames.Contains(m.AggregateType))
                         .OrderBy(m => m.SortableUniqueId));
             }
-        }
-        else
+        } else
         {
             resultAction(
-                list.Where(m => targetAggregateNames.Count == 0 || targetAggregateNames.Contains(m.AggregateType))
-                    .OrderBy(m => m.SortableUniqueId));
+                list.Where(m => targetAggregateNames.Count == 0 || targetAggregateNames.Contains(m.AggregateType)).OrderBy(m => m.SortableUniqueId));
         }
     }
 
@@ -149,10 +141,8 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         return default;
     }
 
-    public Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type aggregatePayloadType, Type projectionPayloadType, string partitionKey)
-    {
+    public Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type aggregatePayloadType, Type projectionPayloadType, string partitionKey) =>
         throw new NotImplementedException();
-    }
 
     public async Task<bool> EventsForAggregateIdHasSortableUniqueIdAsync(
         Guid aggregateId,
@@ -189,22 +179,18 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             ? string.Empty
             : sekibanContext.SettingGroupIdentifier;
 
-        var list = _inMemoryDocumentStore.GetAllEvents(sekibanIdentifier)
-            .Where(m => m.AggregateType == aggregatePayloadType.Name)
-            .ToList();
+        var list = _inMemoryDocumentStore.GetAllEvents(sekibanIdentifier).Where(m => m.AggregateType == aggregatePayloadType.Name).ToList();
         if (sinceSortableUniqueId is not null)
         {
             var index = list.FindIndex(m => m.SortableUniqueId == sinceSortableUniqueId);
             if (index == list.Count - 1)
             {
                 resultAction(new List<IEvent>());
-            }
-            else
+            } else
             {
                 resultAction(list.GetRange(index + 1, list.Count - index - 1).OrderBy(m => m.SortableUniqueId));
             }
-        }
-        else
+        } else
         {
             resultAction(list.OrderBy(m => m.SortableUniqueId));
         }
@@ -215,8 +201,6 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         Type aggregatePayloadType,
         Type projectionPayloadType,
         int version,
-        string payloadVersionIdentifier)
-    {
-        return Task.FromResult(false);
-    }
+        string payloadVersionIdentifier) =>
+        Task.FromResult(false);
 }

@@ -7,11 +7,11 @@ namespace FeatureCheck.Domain.Aggregates.RecentActivities.Commands;
 
 public record AddRecentActivity(Guid RecentActivityId, string Activity) : ICommand<RecentActivity>
 {
+
+    public int ReferenceVersion { get; init; }
     public AddRecentActivity() : this(Guid.Empty, string.Empty)
     {
     }
-
-    public int ReferenceVersion { get; init; }
 
     public Guid GetAggregateId() => RecentActivityId;
 
@@ -26,8 +26,7 @@ public record AddRecentActivity(Guid RecentActivityId, string Activity) : IComma
             AddRecentActivity command)
         {
             await Task.CompletedTask;
-            yield return new RecentActivityAdded(
-                new RecentActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
+            yield return new RecentActivityAdded(new RecentActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
         }
     }
 }

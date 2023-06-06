@@ -4,7 +4,7 @@ namespace FeatureCheck.Domain.Aggregates.RecentActivities.Events;
 
 public record RecentActivityCreated(RecentActivityRecord Activity) : IEventPayload<RecentActivity, RecentActivityCreated>
 {
+    public RecentActivity OnEventInstance(RecentActivity aggregatePayload, Event<RecentActivityCreated> ev) => OnEvent(aggregatePayload, ev);
     public static RecentActivity OnEvent(RecentActivity aggregatePayload, Event<RecentActivityCreated> ev) =>
         new(ImmutableList<RecentActivityRecord>.Empty.Add(ev.Payload.Activity));
-    public RecentActivity OnEventInstance(RecentActivity aggregatePayload, Event<RecentActivityCreated> ev) => OnEvent(aggregatePayload, ev);
 }

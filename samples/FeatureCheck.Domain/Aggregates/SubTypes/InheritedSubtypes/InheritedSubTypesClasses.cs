@@ -18,15 +18,15 @@ public record InheritedAggregateOpened(int YearMonth) : IEventPayload<Processing
 {
     public ProcessingSubAggregate OnEventInstance(ProcessingSubAggregate aggregatePayload, Event<InheritedAggregateOpened> ev) =>
         OnEvent(aggregatePayload, ev);
-    public static ProcessingSubAggregate OnEvent(ProcessingSubAggregate aggregatePayload, Event<InheritedAggregateOpened> ev) => new()
-        { YearMonth = ev.Payload.YearMonth };
+    public static ProcessingSubAggregate OnEvent(ProcessingSubAggregate aggregatePayload, Event<InheritedAggregateOpened> ev) =>
+        new() { YearMonth = ev.Payload.YearMonth };
 }
 public record InheritedAggregateClosed(string Reason) : IEventPayload<ProcessingSubAggregate, ClosedSubAggregate, InheritedAggregateClosed>
 {
     public ClosedSubAggregate OnEventInstance(ProcessingSubAggregate aggregatePayload, Event<InheritedAggregateClosed> ev) =>
         OnEvent(aggregatePayload, ev);
-    public static ClosedSubAggregate OnEvent(ProcessingSubAggregate aggregatePayload, Event<InheritedAggregateClosed> ev) => new()
-        { YearMonth = aggregatePayload.YearMonth };
+    public static ClosedSubAggregate OnEvent(ProcessingSubAggregate aggregatePayload, Event<InheritedAggregateClosed> ev) =>
+        new() { YearMonth = aggregatePayload.YearMonth };
 }
 public record InheritedAggregateReopened(string Reason) : IEventPayload<ClosedSubAggregate, ProcessingSubAggregate, InheritedAggregateReopened>
 {
