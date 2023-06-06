@@ -22,27 +22,17 @@ public class SnapshotDocumentCache : ISnapshotDocumentCache
         _memoryCache.Cache.Set(GetCacheKey(document), document, GetMemoryCacheOptions());
     }
 
-    public SnapshotDocument? Get(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType)
-    {
-        return _memoryCache.Cache.Get<SnapshotDocument>(GetCacheKey(aggregateId, aggregatePayloadType, projectionPayloadType));
-    }
+    public SnapshotDocument? Get(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType) =>
+        _memoryCache.Cache.Get<SnapshotDocument>(GetCacheKey(aggregateId, aggregatePayloadType, projectionPayloadType));
 
-    public string GetCacheKey(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType)
-    {
-        return "SnapshotDocument" +
-            PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType);
-    }
-    private MemoryCacheEntryOptions GetMemoryCacheOptions()
-    {
-        return new MemoryCacheEntryOptions
+    public string GetCacheKey(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType) =>
+        "SnapshotDocument" + PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType);
+    private MemoryCacheEntryOptions GetMemoryCacheOptions() =>
+        new()
         {
             AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(_memoryCacheSettings.SnapshotAbsoluteExpirationMinutes),
             SlidingExpiration = TimeSpan.FromMinutes(_memoryCacheSettings.SnapshotSlidingExpirationMinutes)
             // If not accessed 5 minutes it will be deleted. Anyway it will be deleted after two hours
         };
-    }
-    public string GetCacheKey(SnapshotDocument document)
-    {
-        return "SnapshotDocument" + document.PartitionKey;
-    }
+    public string GetCacheKey(SnapshotDocument document) => "SnapshotDocument" + document.PartitionKey;
 }

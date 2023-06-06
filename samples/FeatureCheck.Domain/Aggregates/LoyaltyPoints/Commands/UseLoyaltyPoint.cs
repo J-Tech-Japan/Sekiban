@@ -13,12 +13,7 @@ public record UseLoyaltyPoint(
     int PointAmount,
     string Note) : IVersionValidationCommand<LoyaltyPoint>
 {
-    public UseLoyaltyPoint() : this(
-        Guid.Empty,
-        DateTime.MinValue,
-        LoyaltyPointUsageTypeKeys.FlightDomestic,
-        0,
-        string.Empty)
+    public UseLoyaltyPoint() : this(Guid.Empty, DateTime.MinValue, LoyaltyPointUsageTypeKeys.FlightDomestic, 0, string.Empty)
     {
     }
 

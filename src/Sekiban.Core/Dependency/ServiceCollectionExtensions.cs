@@ -74,8 +74,7 @@ public static class ServiceCollectionExtensions
         if (configuration is not null)
         {
             services.AddSingleton<IMemoryCacheSettings>(new MemoryCacheSetting(configuration));
-        }
-        else
+        } else
         {
             services.AddScoped<IMemoryCacheSettings, MemoryCacheSetting>();
         }
@@ -97,9 +96,7 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    public static IServiceCollection AddSekibanCoreInMemory(
-        this IServiceCollection services,
-        ISekibanDateProducer? sekibanDateProducer = null)
+    public static IServiceCollection AddSekibanCoreInMemory(this IServiceCollection services, ISekibanDateProducer? sekibanDateProducer = null)
     {
         services.AddMemoryCache();
         services.AddTransient<IMemoryCacheAccessor, MemoryCacheAccessor>();
@@ -150,9 +147,7 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    public static IServiceCollection AddSekibanCoreAggregateTest(
-        this IServiceCollection services,
-        ISekibanDateProducer? sekibanDateProducer = null)
+    public static IServiceCollection AddSekibanCoreAggregateTest(this IServiceCollection services, ISekibanDateProducer? sekibanDateProducer = null)
     {
         services.AddMemoryCache();
         services.AddTransient<IMemoryCacheAccessor, MemoryCacheAccessor>();
@@ -202,9 +197,7 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    public static IServiceCollection AddSekibanHTTPUser(
-        this IServiceCollection services,
-        HttpContextType contextType = HttpContextType.Local)
+    public static IServiceCollection AddSekibanHTTPUser(this IServiceCollection services, HttpContextType contextType = HttpContextType.Local)
     {
         // ユーザー情報
         services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
@@ -228,9 +221,7 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    public static IServiceCollection AddSekibanAppSettingsFromObject(
-        this IServiceCollection services,
-        AggregateSettings settings)
+    public static IServiceCollection AddSekibanAppSettingsFromObject(this IServiceCollection services, AggregateSettings settings)
     {
         // 例
         // services.AddSingleton<IAggregateSettings>(

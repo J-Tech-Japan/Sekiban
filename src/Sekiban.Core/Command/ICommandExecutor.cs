@@ -16,9 +16,7 @@ public interface ICommandExecutor
     /// <param name="callHistories">Attaching Command History : ev.GetCallHistoriesIncludesItself() can create current history</param>
     /// <typeparam name="TCommand">Command should imprelemt <see cref="ICommandCommon" /></typeparam>
     /// <returns>Executed command response.</returns>
-    Task<CommandExecutorResponse> ExecCommandAsync<TCommand>(
-        TCommand command,
-        List<CallHistory>? callHistories = null)
+    Task<CommandExecutorResponse> ExecCommandAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null)
         where TCommand : ICommandCommon;
 
     /// <summary>
@@ -30,9 +28,7 @@ public interface ICommandExecutor
     /// <param name="callHistories">Attaching Command History : ev.GetCallHistoriesIncludesItself() can create current history</param>
     /// <typeparam name="TCommand">Command should imprelemt <see cref="ICommandCommon" /></typeparam>
     /// <returns>Executed command response.</returns>
-    Task<CommandExecutorResponseWithEvents> ExecCommandWithEventsAsync<TCommand>(
-        TCommand command,
-        List<CallHistory>? callHistories = null)
+    Task<CommandExecutorResponseWithEvents> ExecCommandWithEventsAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null)
         where TCommand : ICommandCommon;
     /// <summary>
     ///     Execute a command (basic)
@@ -43,9 +39,7 @@ public interface ICommandExecutor
     /// <param name="callHistories">Attaching Command History : ev.GetCallHistoriesIncludesItself() can create current history</param>
     /// <typeparam name="TCommand">Command should imprelemt <see cref="ICommandCommon" /></typeparam>
     /// <returns>Executed command response.</returns>
-    Task<CommandExecutorResponse> ExecCommandWithoutValidationAsync<TCommand>(
-        TCommand command,
-        List<CallHistory>? callHistories = null)
+    Task<CommandExecutorResponse> ExecCommandWithoutValidationAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null)
         where TCommand : ICommandCommon;
 
     /// <summary>
@@ -59,6 +53,5 @@ public interface ICommandExecutor
     /// <returns>Executed command response.</returns>
     Task<CommandExecutorResponseWithEvents> ExecCommandWithoutValidationWithEventsAsync<TCommand>(
         TCommand command,
-        List<CallHistory>? callHistories = null)
-        where TCommand : ICommandCommon;
+        List<CallHistory>? callHistories = null) where TCommand : ICommandCommon;
 }

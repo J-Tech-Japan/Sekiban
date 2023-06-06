@@ -33,20 +33,18 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
         Guid aggregateId,
         int? toVersion = null,
         SortableUniqueIdValue? includesSortableUniqueId = null)
-        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection,
-        ISingleProjectionStateConvertible<TState>
+        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<TState>
         where TState : IAggregateStateCommon
         where TProjector : ISingleProjector<TProjection>, new()
     {
         var projector = new TProjector();
         var aggregate = projector.CreateInitialAggregate(aggregateId);
         var payloadVersion = projector.GetPayloadVersionIdentifier();
-        var snapshotDocument =
-            await _documentRepository.GetLatestSnapshotForAggregateAsync(
-                aggregateId,
-                projector.GetOriginalAggregatePayloadType(),
-                projector.GetPayloadType(),
-                payloadVersion);
+        var snapshotDocument = await _documentRepository.GetLatestSnapshotForAggregateAsync(
+            aggregateId,
+            projector.GetOriginalAggregatePayloadType(),
+            projector.GetPayloadType(),
+            payloadVersion);
         IAggregateStateCommon? state = null;
         if (snapshotDocument is not null && aggregate.CanApplySnapshot(snapshotDocument.Snapshot))
         {
@@ -54,9 +52,7 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
         }
         if (toVersion.HasValue && aggregate.Version >= toVersion.Value)
         {
-            return await singleProjectionFromInitial.GetAggregateFromInitialAsync<TProjection, TProjector>(
-                aggregateId,
-                toVersion.Value);
+            return await singleProjectionFromInitial.GetAggregateFromInitialAsync<TProjection, TProjector>(aggregateId, toVersion.Value);
         }
         await _documentRepository.GetAllEventsForAggregateIdAsync(
             aggregateId,

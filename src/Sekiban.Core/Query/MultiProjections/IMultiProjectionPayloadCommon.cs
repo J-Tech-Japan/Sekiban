@@ -10,8 +10,5 @@ public interface IMultiProjectionPayloadCommon
     ///     public string GetPayloadVersionIdentifier() => "20230101 1.0.0";
     /// </summary>
     /// <returns>Payload Version</returns>
-    public string GetPayloadVersionIdentifier()
-    {
-        return "initial";
-    }
+    public string GetPayloadVersionIdentifier() => "initial";
 }

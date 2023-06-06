@@ -5,5 +5,9 @@ namespace Sekiban.Testing.Story;
 
 public interface ISekibanServiceProviderGenerator
 {
-    public IServiceProvider Generate(ISekibanTestFixture fixture, IDependencyDefinition dependencyDefinition, Action<IServiceCollection>? configureServices = null,ISekibanDateProducer? sekibanDateProducer = null);
+    public IServiceProvider Generate(
+        ISekibanTestFixture fixture,
+        IDependencyDefinition dependencyDefinition,
+        Action<IServiceCollection>? configureServices = null,
+        ISekibanDateProducer? sekibanDateProducer = null);
 }

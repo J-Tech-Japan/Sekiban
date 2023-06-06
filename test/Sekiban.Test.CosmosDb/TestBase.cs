@@ -23,12 +23,11 @@ public class TestBase : IClassFixture<TestBase.SekibanTestFixture>, IDisposable
         SekibanTestFixture sekibanTestFixture,
         ITestOutputHelper output,
         ISekibanServiceProviderGenerator providerGenerator,
-        ServiceCollectionExtensions.MultiProjectionType multiProjectionType =
-            ServiceCollectionExtensions.MultiProjectionType.MemoryCache)
+        ServiceCollectionExtensions.MultiProjectionType multiProjectionType = ServiceCollectionExtensions.MultiProjectionType.MemoryCache)
     {
         sekibanTestFixture.TestOutputHelper = output;
         _sekibanTestFixture = sekibanTestFixture;
-        _serviceProvider = providerGenerator.Generate(sekibanTestFixture, new FeatureCheckDependency(), null, null);
+        _serviceProvider = providerGenerator.Generate(sekibanTestFixture, new FeatureCheckDependency());
         var backgroundService = _serviceProvider.GetRequiredService<SnapshotTakingBackgroundService>();
         backgroundService.ServiceProvider = _serviceProvider;
         Task.Run(() => backgroundService.StartAsync(CancellationToken.None));

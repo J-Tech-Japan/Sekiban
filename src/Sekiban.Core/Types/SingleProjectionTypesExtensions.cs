@@ -7,8 +7,7 @@ public static class SingleProjectionTypesExtensions
 {
     public static IEnumerable<TypeInfo> GetSingleProjectorTypes(this IEnumerable<TypeInfo> types)
     {
-        return types.Where(
-            x => x.IsSingleProjectionPayloadType());
+        return types.Where(x => x.IsSingleProjectionPayloadType());
     }
 
     public static bool IsSingleProjectionType(this TypeInfo type) =>

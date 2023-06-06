@@ -49,8 +49,7 @@ public class TargetAggregatePayloadCollection
         return this;
     }
     public TargetAggregatePayloadCollection Add<TAggregatePayload, TAggregatePayload2, TAggregatePayload3, TAggregatePayload4, TAggregatePayload5,
-        TAggregatePayload6>()
-        where TAggregatePayload : IAggregatePayloadCommon
+        TAggregatePayload6>() where TAggregatePayload : IAggregatePayloadCommon
         where TAggregatePayload2 : IAggregatePayloadCommon
         where TAggregatePayload3 : IAggregatePayloadCommon
         where TAggregatePayload4 : IAggregatePayloadCommon
@@ -62,8 +61,7 @@ public class TargetAggregatePayloadCollection
         return this;
     }
     public TargetAggregatePayloadCollection Add<TAggregatePayload, TAggregatePayload2, TAggregatePayload3, TAggregatePayload4, TAggregatePayload5,
-        TAggregatePayload6, TAggregatePayload7>()
-        where TAggregatePayload : IAggregatePayloadCommon
+        TAggregatePayload6, TAggregatePayload7>() where TAggregatePayload : IAggregatePayloadCommon
         where TAggregatePayload2 : IAggregatePayloadCommon
         where TAggregatePayload3 : IAggregatePayloadCommon
         where TAggregatePayload4 : IAggregatePayloadCommon

@@ -7,15 +7,15 @@ namespace FeatureCheck.Domain.Aggregates.Branches.Commands;
 
 public record CreateBranch : ICommand<Branch>, ICleanupNecessaryCommand<CreateBranch>
 {
+
+    [Required]
+    [MaxLength(20)]
+    public string Name { get; init; } = string.Empty;
     public CreateBranch() : this(string.Empty)
     {
     }
 
     public CreateBranch(string name) => Name = name;
-
-    [Required]
-    [MaxLength(20)]
-    public string Name { get; init; } = string.Empty;
 
     public CreateBranch CleanupCommand(CreateBranch command) => command with { Name = string.Empty };
 

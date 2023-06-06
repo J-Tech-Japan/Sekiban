@@ -2,8 +2,7 @@ using MediatR;
 using Sekiban.Core.Events;
 namespace Sekiban.Core.PubSub;
 
-public class EventSubscriber<TEventPayload, TEventSubscriber> : INotificationHandler<Event<TEventPayload>>
-    where TEventPayload : IEventPayloadCommon
+public class EventSubscriber<TEventPayload, TEventSubscriber> : INotificationHandler<Event<TEventPayload>> where TEventPayload : IEventPayloadCommon
     where TEventSubscriber : IEventSubscriber<TEventPayload>
 {
     private readonly IEventSubscriber<TEventPayload> _eventSubscriber;

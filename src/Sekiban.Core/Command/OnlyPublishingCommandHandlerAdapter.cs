@@ -9,8 +9,7 @@ namespace Sekiban.Core.Command;
 /// </summary>
 /// <typeparam name="TAggregatePayload"></typeparam>
 /// <typeparam name="TCommand"></typeparam>
-public class OnlyPublishingCommandHandlerAdapter<TAggregatePayload, TCommand>
-    where TAggregatePayload : IAggregatePayloadCommon
+public class OnlyPublishingCommandHandlerAdapter<TAggregatePayload, TCommand> where TAggregatePayload : IAggregatePayloadCommon
     where TCommand : IOnlyPublishingCommand<TAggregatePayload>
 {
     public async Task<CommandResponse> HandleCommandAsync(
@@ -26,10 +25,7 @@ public class OnlyPublishingCommandHandlerAdapter<TAggregatePayload, TCommand>
         var events = new List<IEvent>();
         await foreach (var eventPayload in publishHandler.HandleCommandAsync(aggregateId, commandDocument.Payload))
         {
-            events.Add(
-                EventHelper.GenerateEventToSave<IEventPayloadApplicableTo<TAggregatePayload>, TAggregatePayload>(
-                    aggregateId,
-                    eventPayload));
+            events.Add(EventHelper.GenerateEventToSave<IEventPayloadApplicableTo<TAggregatePayload>, TAggregatePayload>(aggregateId, eventPayload));
         }
         await Task.CompletedTask;
         return new CommandResponse(aggregateId, events.ToImmutableList(), 0, events.Max(m => m.SortableUniqueId));

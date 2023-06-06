@@ -14,7 +14,6 @@ using Sekiban.Core.Documents;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.MultiProjections.Projections;
 using Sekiban.Core.Query.SingleProjections;
-using Sekiban.Infrastructure.Cosmos;
 using Sekiban.Testing.Story;
 using System;
 using System.Linq;
@@ -33,9 +32,10 @@ public abstract class MultiProjectionSnapshotTests : TestBase
     private readonly ICommandExecutor commandExecutor;
     private readonly IMultiProjectionService multiProjectionService;
     private readonly IMultiProjectionSnapshotGenerator multiProjectionSnapshotGenerator;
-    public MultiProjectionSnapshotTests(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper,ISekibanServiceProviderGenerator providerGenerator) : base(
-        sekibanTestFixture,
-        testOutputHelper, providerGenerator)
+    public MultiProjectionSnapshotTests(
+        SekibanTestFixture sekibanTestFixture,
+        ITestOutputHelper testOutputHelper,
+        ISekibanServiceProviderGenerator providerGenerator) : base(sekibanTestFixture, testOutputHelper, providerGenerator)
     {
         _documentRemover = GetService<IDocumentRemover>();
         commandExecutor = GetService<ICommandExecutor>();
@@ -72,12 +72,13 @@ public abstract class MultiProjectionSnapshotTests : TestBase
         {
             response = await commandExecutor.ExecCommandAsync(
                 new AddLoyaltyPoint(clientId, DateTime.Now, LoyaltyPointReceiveTypeKeys.CreditcardUsage, number, $"note {number}")
-                    { ReferenceVersion = pointVersion });
+                {
+                    ReferenceVersion = pointVersion
+                });
             pointVersion = response.Version;
         }
         await Task.Delay(5000);
-        var projection = await multiProjectionSnapshotGenerator
-            .GenerateMultiProjectionSnapshotAsync<ClientLoyaltyPointListProjection>(50);
+        var projection = await multiProjectionSnapshotGenerator.GenerateMultiProjectionSnapshotAsync<ClientLoyaltyPointListProjection>(50);
         Assert.True(projection.Version > 100);
 
         // Remove in memory data
@@ -88,8 +89,7 @@ public abstract class MultiProjectionSnapshotTests : TestBase
         projection = await multiProjectionService.GetMultiProjectionAsync<ClientLoyaltyPointListProjection>();
         Assert.True(projection.AppliedSnapshotVersion > 0);
 
-        var listProjection = await multiProjectionSnapshotGenerator
-            .GenerateAggregateListSnapshotAsync<Client>(50);
+        var listProjection = await multiProjectionSnapshotGenerator.GenerateAggregateListSnapshotAsync<Client>(50);
         Assert.True(listProjection.Version > 50);
 
         // Remove in memory data
@@ -101,8 +101,7 @@ public abstract class MultiProjectionSnapshotTests : TestBase
         Assert.True(listProjection.AppliedSnapshotVersion > 0);
 
 
-        var listProjection2 = await multiProjectionSnapshotGenerator
-            .GenerateSingleProjectionListSnapshotAsync<ClientNameHistoryProjection>(50);
+        var listProjection2 = await multiProjectionSnapshotGenerator.GenerateSingleProjectionListSnapshotAsync<ClientNameHistoryProjection>(50);
         Assert.True(listProjection2.Version > 50);
 
         // Remove in memory data

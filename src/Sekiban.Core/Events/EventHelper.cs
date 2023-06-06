@@ -7,17 +7,14 @@ namespace Sekiban.Core.Events;
 
 public static class EventHelper
 {
-    public static IEvent HandleEvent<TAggregatePayload>(
-        Aggregate<TAggregatePayload> aggregate,
-        IEventPayloadCommon eventPayload)
+    public static IEvent HandleEvent<TAggregatePayload>(Aggregate<TAggregatePayload> aggregate, IEventPayloadCommon eventPayload)
         where TAggregatePayload : IAggregatePayloadCommon
     {
         var aggregateType = aggregate.GetType();
         var methodName = nameof(Aggregate<TAggregatePayload>.AddAndApplyEvent);
         var aggregateMethodBase = aggregateType.GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Instance);
         var aggregateMethod = aggregateMethodBase?.MakeGenericMethod(eventPayload.GetType());
-        return aggregateMethod?.Invoke(aggregate, new object?[] { eventPayload }) as IEvent ??
-            throw new SekibanEventFailedToActivateException();
+        return aggregateMethod?.Invoke(aggregate, new object?[] { eventPayload }) as IEvent ?? throw new SekibanEventFailedToActivateException();
     }
 
     public static IEvent GenerateEventToSave<TEventPayload, TAggregatePayload>(Guid aggregateId, TEventPayload payload)
@@ -53,8 +50,8 @@ public static class EventHelper
             JsonString = payloadJson ?? string.Empty,
             EventTypeName = dynamicObject.GetProperty(nameof(Event<EmptyEventPayload>.DocumentTypeName)).GetString() ?? string.Empty
         };
-        var ev =
-            SekibanJsonHelper.Deserialize(SekibanJsonHelper.Serialize(dynamicObject), typeof(Event<EmptyEventPayload>)) as Event<EmptyEventPayload>;
+        var ev
+            = SekibanJsonHelper.Deserialize(SekibanJsonHelper.Serialize(dynamicObject), typeof(Event<EmptyEventPayload>)) as Event<EmptyEventPayload>;
         return ev?.ChangePayload(eventPayload);
     }
 }

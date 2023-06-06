@@ -19,7 +19,9 @@ public class MultipleDbStoryTest : TestBase
 
     public MultipleDbStoryTest(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
         sekibanTestFixture,
-        testOutputHelper, new CosmosSekibanServiceProviderGenerator()) => _sekibanContext = GetService<ISekibanContext>();
+        testOutputHelper,
+        new CosmosSekibanServiceProviderGenerator()) =>
+        _sekibanContext = GetService<ISekibanContext>();
 
     [Fact(DisplayName = "CosmosDb ストーリーテスト 複数データベースでの動作を検証する")]
     public async Task CosmosDbStory()
@@ -32,9 +34,7 @@ public class MultipleDbStoryTest : TestBase
         // 先に全データを削除する
         await cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default);
         await cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Dissolvable);
-        await cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(
-            DocumentType.Command,
-            AggregateContainerGroup.Dissolvable);
+        await cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command, AggregateContainerGroup.Dissolvable);
         await cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command);
 
         // Secondary の設定ないで実行する
@@ -50,14 +50,11 @@ public class MultipleDbStoryTest : TestBase
             DefaultDb,
             async () =>
             {
-                await commandExecutor.ExecCommandAsync(
-                    new CreateBranch("TEST"));
+                await commandExecutor.ExecCommandAsync(new CreateBranch("TEST"));
             });
 
         // Default で Listを取得すると1件取得
-        var list = await _sekibanContext.SekibanActionAsync(
-            DefaultDb,
-            async () => await multiProjectionService.GetAggregateList<Branch>());
+        var list = await _sekibanContext.SekibanActionAsync(DefaultDb, async () => await multiProjectionService.GetAggregateList<Branch>());
         Assert.Single(list);
 
         // 何もつけない場合も Default のDbから取得
@@ -65,9 +62,7 @@ public class MultipleDbStoryTest : TestBase
         Assert.Single(list);
 
         // Secondary で Listを取得すると0件取得
-        list = await _sekibanContext.SekibanActionAsync(
-            SecondaryDb,
-            async () => await multiProjectionService.GetAggregateList<Branch>());
+        list = await _sekibanContext.SekibanActionAsync(SecondaryDb, async () => await multiProjectionService.GetAggregateList<Branch>());
         Assert.Empty(list);
 
         // Secondaryで3件データを作成
@@ -81,9 +76,7 @@ public class MultipleDbStoryTest : TestBase
             });
 
         // Default で Listを取得すると1件取得
-        list = await _sekibanContext.SekibanActionAsync(
-            DefaultDb,
-            async () => await multiProjectionService.GetAggregateList<Branch>());
+        list = await _sekibanContext.SekibanActionAsync(DefaultDb, async () => await multiProjectionService.GetAggregateList<Branch>());
         Assert.Single(list);
 
         // 何もつけない場合も Default のDbから取得
@@ -91,9 +84,7 @@ public class MultipleDbStoryTest : TestBase
         Assert.Single(list);
 
         // Secondary で Listを取得すると3件取得
-        list = await _sekibanContext.SekibanActionAsync(
-            SecondaryDb,
-            async () => await multiProjectionService.GetAggregateList<Branch>());
+        list = await _sekibanContext.SekibanActionAsync(SecondaryDb, async () => await multiProjectionService.GetAggregateList<Branch>());
         Assert.Equal(3, list.Count);
     }
 }

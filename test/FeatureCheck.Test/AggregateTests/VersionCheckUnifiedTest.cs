@@ -16,23 +16,14 @@ public class VersionCheckUnifiedTest : UnifiedTest<FeatureCheckDependency>
     public void V1Test()
     {
         var aggregateId = Guid.NewGuid();
-        RunCommand(
-            new OldV1Command
-                { AggregateId = aggregateId, Amount = 100 });
-        RunCommand(
-            new OldV2Command
-                { AggregateId = aggregateId, Amount = 200, PaymentKind = PaymentKind.CreditCard });
-        RunCommand(
-            new CurrentV3Command
-                { AggregateId = aggregateId, Amount = 300, PaymentKind = PaymentKind.PayPal, Description = "Test" });
+        RunCommand(new OldV1Command { AggregateId = aggregateId, Amount = 100 });
+        RunCommand(new OldV2Command { AggregateId = aggregateId, Amount = 200, PaymentKind = PaymentKind.CreditCard });
+        RunCommand(new CurrentV3Command { AggregateId = aggregateId, Amount = 300, PaymentKind = PaymentKind.PayPal, Description = "Test" });
         ThenMultiProjectionPayloadIs(
             new VersionCheckMultiProjection(
                 new List<VersionCheckMultiProjection.Record>
                 {
-                    new(100, PaymentKind.Cash, "Updated"),
-                    new(200, PaymentKind.CreditCard, "Updated"),
-                    new(300, PaymentKind.PayPal, "Test")
-                }.ToImmutableList()
-            ));
+                    new(100, PaymentKind.Cash, "Updated"), new(200, PaymentKind.CreditCard, "Updated"), new(300, PaymentKind.PayPal, "Test")
+                }.ToImmutableList()));
     }
 }

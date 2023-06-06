@@ -9,7 +9,8 @@ public class DefaultSingleProjector<TAggregatePayload> : ISingleProjector<Aggreg
     public Aggregate<TAggregatePayload> CreateAggregateFromState(
         Aggregate<TAggregatePayload> current,
         object state,
-        SekibanAggregateTypes sekibanAggregateTypes) => throw new NotImplementedException();
+        SekibanAggregateTypes sekibanAggregateTypes) =>
+        throw new NotImplementedException();
 
     public Type GetOriginalAggregatePayloadType() => typeof(TAggregatePayload).GetBaseAggregatePayloadTypeFromAggregate();
     public Type GetPayloadType() => typeof(TAggregatePayload).GetBaseAggregatePayloadTypeFromAggregate();

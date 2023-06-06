@@ -12,11 +12,9 @@ public class QueryHandler
 
     public QueryHandler(IServiceProvider serviceProvider) => _serviceProvider = serviceProvider;
 
-    public ListQueryResult<TQueryResponse>
-        GetMultiProjectionListQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
-            TQueryParameter param,
-            MultiProjectionState<TProjectionPayload> projection)
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+    public ListQueryResult<TQueryResponse> GetMultiProjectionListQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
+        TQueryParameter param,
+        MultiProjectionState<TProjectionPayload> projection) where TProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionListQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IListQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
@@ -29,7 +27,7 @@ public class QueryHandler
         var filtered = query.HandleFilter(param, projection);
         var sorted = query.HandleSort(param, filtered);
         var queryResponses = sorted.ToList();
-        if (param is IQueryPagingParameterCommon { PageNumber: { }, PageSize: { } } pagingParam)
+        if (param is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam)
         {
             return makeQueryListResult(pagingParam, queryResponses);
         }
@@ -38,8 +36,7 @@ public class QueryHandler
 
     public TQueryResponse GetMultiProjectionQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
         TQueryParameter param,
-        MultiProjectionState<TProjectionPayload> projection)
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+        MultiProjectionState<TProjectionPayload> projection) where TProjectionPayload : IMultiProjectionPayloadCommon, new()
         where TQuery : IMultiProjectionQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
@@ -54,11 +51,9 @@ public class QueryHandler
     }
 
 
-    public ListQueryResult<TQueryResponse>
-        GetAggregateListQuery<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
-            TQueryParameter param,
-            IEnumerable<AggregateState<TAggregatePayload>> list)
-        where TAggregatePayload : IAggregatePayloadCommon
+    public ListQueryResult<TQueryResponse> GetAggregateListQuery<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
+        TQueryParameter param,
+        IEnumerable<AggregateState<TAggregatePayload>> list) where TAggregatePayload : IAggregatePayloadCommon
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IListQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
@@ -75,7 +70,7 @@ public class QueryHandler
         var filtered = queryImplement.HandleFilter(param, list);
         var sorted = queryImplement.HandleSort(param, filtered);
         var queryResponses = sorted.ToList();
-        if (param is IQueryPagingParameterCommon { PageNumber: { }, PageSize: { } } pagingParam)
+        if (param is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam)
         {
             return makeQueryListResult(pagingParam, queryResponses);
         }
@@ -84,8 +79,7 @@ public class QueryHandler
 
     public TQueryResponse GetAggregateQuery<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
         TQueryParameter param,
-        IEnumerable<AggregateState<TAggregatePayload>> list)
-        where TAggregatePayload : IAggregatePayloadCommon
+        IEnumerable<AggregateState<TAggregatePayload>> list) where TAggregatePayload : IAggregatePayloadCommon
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
@@ -99,12 +93,9 @@ public class QueryHandler
         return filtered;
     }
 
-    public ListQueryResult<TQueryResponse>
-        GetSingleProjectionListQuery<TSingleProjectionPayload, TQuery,
-            TQueryParameter, TQueryResponse>(
-            TQueryParameter param,
-            IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon
+    public ListQueryResult<TQueryResponse> GetSingleProjectionListQuery<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
+        TQueryParameter param,
+        IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections) where TSingleProjectionPayload : ISingleProjectionPayloadCommon
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IListQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
@@ -117,7 +108,7 @@ public class QueryHandler
         var filtered = query.HandleFilter(param, projections);
         var sorted = query.HandleSort(param, filtered);
         var queryResponses = sorted.ToList();
-        if (param is IQueryPagingParameterCommon { PageNumber: { }, PageSize: { } } pagingParam)
+        if (param is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam)
         {
             return makeQueryListResult(pagingParam, queryResponses);
         }
@@ -138,12 +129,7 @@ public class QueryHandler
         var totalPages = total / pagingParam.PageSize.Value + (total % pagingParam.PageSize.Value > 0 ? 1 : 0);
         if (pageNumber < 1 || pageNumber > totalPages)
         {
-            return new ListQueryResult<TQueryResponse>(
-                total,
-                totalPages,
-                pageNumber,
-                pageSize,
-                new List<TQueryResponse>());
+            return new ListQueryResult<TQueryResponse>(total, totalPages, pageNumber, pageSize, new List<TQueryResponse>());
         }
         return new ListQueryResult<TQueryResponse>(
             total,
@@ -153,12 +139,9 @@ public class QueryHandler
             queryResponses.Skip((pageNumber - 1) * pagingParam.PageSize.Value).Take(pageSize));
     }
 
-    public TQueryResponse
-        GetSingleProjectionQuery<TSingleProjectionPayload, TQuery,
-            TQueryParameter, TQueryResponse>(
-            TQueryParameter param,
-            IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon
+    public TQueryResponse GetSingleProjectionQuery<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
+        TQueryParameter param,
+        IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections) where TSingleProjectionPayload : ISingleProjectionPayloadCommon
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse

@@ -17,5 +17,5 @@ public record EmailString : IValueObject<string>
 
     public static implicit operator string(EmailString vo) => vo.Value;
 
-    public static implicit operator EmailString(string v) => new EmailString(v);
+    public static implicit operator EmailString(string v) => new(v);
 }

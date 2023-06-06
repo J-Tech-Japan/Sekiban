@@ -11,11 +11,13 @@ public record VersionCheckAggregateLastInfo
     public VersionCheckAggregateLastInfo() : this(0, PaymentKind.Cash, string.Empty)
     {
     }
+    public VersionCheckAggregateLastInfo? ApplyEventInstance<TEventPayload>(VersionCheckAggregateLastInfo projectionPayload, Event<TEventPayload> ev)
+        where TEventPayload : IEventPayloadCommon =>
+        ApplyEvent(projectionPayload, ev);
 
 
-    public static VersionCheckAggregateLastInfo? ApplyEvent<TEventPayload>(
-        VersionCheckAggregateLastInfo projectionPayload,
-        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon =>
+    public static VersionCheckAggregateLastInfo? ApplyEvent<TEventPayload>(VersionCheckAggregateLastInfo projectionPayload, Event<TEventPayload> ev)
+        where TEventPayload : IEventPayloadCommon =>
         ev.Payload switch
         {
             PaymentAdded_V3 paymentAdded => projectionPayload with
@@ -24,8 +26,4 @@ public record VersionCheckAggregateLastInfo
             },
             _ => null
         };
-    public VersionCheckAggregateLastInfo? ApplyEventInstance<TEventPayload>(
-        VersionCheckAggregateLastInfo projectionPayload,
-        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon =>
-        ApplyEvent(projectionPayload, ev);
 }

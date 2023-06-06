@@ -2,6 +2,13 @@ namespace Sekiban.Core.Setting;
 
 public class AggregateSettingHelper
 {
+
+    public bool UseHybridDefault { get; }
+    public bool TakeSnapshotDefault { get; }
+    public int SnapshotFrequencyDefault { get; }
+    public int SnapshotOffsetDefault { get; }
+    public bool UseUpdateMarker { get; }
+    public IEnumerable<AggregateSetting> Exceptions { get; } = new List<AggregateSetting>();
     public AggregateSettingHelper()
     {
         UseHybridDefault = false;
@@ -26,11 +33,4 @@ public class AggregateSettingHelper
         UseUpdateMarker = useUpdateMarker;
         Exceptions = exceptions;
     }
-
-    public bool UseHybridDefault { get; }
-    public bool TakeSnapshotDefault { get; }
-    public int SnapshotFrequencyDefault { get; }
-    public int SnapshotOffsetDefault { get; }
-    public bool UseUpdateMarker { get; }
-    public IEnumerable<AggregateSetting> Exceptions { get; } = new List<AggregateSetting>();
 }

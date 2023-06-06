@@ -8,9 +8,7 @@ public interface
     where TQueryParameter : IListQueryParameter<TQueryResponse>
     where TQueryResponse : IQueryResponse
 {
-    public IEnumerable<TQueryResponse> HandleFilter(
-        TQueryParameter queryParam,
-        MultiProjectionState<TProjectionPayload> projection);
+    public IEnumerable<TQueryResponse> HandleFilter(TQueryParameter queryParam, MultiProjectionState<TProjectionPayload> projection);
 
     public IEnumerable<TQueryResponse> HandleSort(TQueryParameter queryParam, IEnumerable<TQueryResponse> filteredList);
 }

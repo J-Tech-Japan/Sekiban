@@ -63,8 +63,7 @@ public class SekibanApiListController<T> : ControllerBase
                     GetUrl = $"/{_webDependencyDefinition.Options.QueryPrefix}/{aggregateType.Name}/get",
                     ListUrl = $"/{_webDependencyDefinition.Options.QueryPrefix}/{aggregateType.Name}/list",
                     GetEventsUrl = $"/{_webDependencyDefinition.Options.InfoPrefix}/events/{aggregateType.Name}/{{id}}",
-                    GetCommandsUrl =
-                        $"/{_webDependencyDefinition.Options.InfoPrefix}/commands/{aggregateType.Name}/{{id}}",
+                    GetCommandsUrl = $"/{_webDependencyDefinition.Options.InfoPrefix}/commands/{aggregateType.Name}/{{id}}",
                     Method = "GET",
                     SampleResponseObject = Activator.CreateInstance(stateResponseType)!
                 },
@@ -83,8 +82,7 @@ public class SekibanApiListController<T> : ControllerBase
                     aggregateInfo.commands.Add(
                         new SekibanCommandInfo
                         {
-                            Url =
-                                $"/{_webDependencyDefinition.Options.CreateCommandPrefix}/{aggregateType.Name}/{commandType.Name}",
+                            Url = $"/{_webDependencyDefinition.Options.CreateCommandPrefix}/{aggregateType.Name}/{commandType.Name}",
                             JsonBodyType = commandType.Name,
                             Method = "POST",
                             SampleBodyObject = Activator.CreateInstance(commandType)!,

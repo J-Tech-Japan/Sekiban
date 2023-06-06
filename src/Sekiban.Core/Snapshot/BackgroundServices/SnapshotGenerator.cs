@@ -42,15 +42,13 @@ public class SnapshotGenerator
 
     public async Task Generate<TEvent>(TEvent notification) where TEvent : IEvent
     {
-        var aggregateType =
-            _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == notification.AggregateType);
+        var aggregateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == notification.AggregateType);
         if (aggregateType is null)
         {
             return;
         }
 
-        var aggregateContainerGroup =
-            AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType.Aggregate);
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType.Aggregate);
 
         if (aggregateContainerGroup != AggregateContainerGroup.InMemory)
         {
@@ -65,15 +63,13 @@ public class SnapshotGenerator
 
             if (_aggregateSettings.ShouldTakeSnapshotForType(aggregateType.Aggregate))
             {
-                var snapshotManagerResponse
-                    = await commandExecutor
-                        .ExecCommandWithEventsAsync(
-                            new ReportVersionToSnapshotManger(
-                                SnapshotManager.SharedId,
-                                aggregateType.Aggregate,
-                                notification.AggregateId,
-                                notification.Version,
-                                null));
+                var snapshotManagerResponse = await commandExecutor.ExecCommandWithEventsAsync(
+                    new ReportVersionToSnapshotManger(
+                        SnapshotManager.SharedId,
+                        aggregateType.Aggregate,
+                        notification.AggregateId,
+                        notification.Version,
+                        null));
                 if (snapshotManagerResponse.Events.Any(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken)))
                 {
                     foreach (var taken in snapshotManagerResponse.Events.Where(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken))
@@ -83,9 +79,7 @@ public class SnapshotGenerator
                         dynamic? awaitable = aggregateLoader.GetType()
                             ?.GetMethod(nameof(aggregateLoader.AsDefaultStateAsync))
                             ?.MakeGenericMethod(aggregateType.Aggregate)
-                            .Invoke(
-                                aggregateLoader,
-                                new object?[] { notification.AggregateId, taken.Payload.NextSnapshotVersion, null });
+                            .Invoke(aggregateLoader, new object?[] { notification.AggregateId, taken.Payload.NextSnapshotVersion, null });
                         if (awaitable is null)
                         {
                             continue;
@@ -134,15 +128,13 @@ public class SnapshotGenerator
                 {
                     continue;
                 }
-                var snapshotManagerResponseP
-                    = await commandExecutor
-                        .ExecCommandWithEventsAsync(
-                            new ReportVersionToSnapshotManger(
-                                SnapshotManager.SharedId,
-                                projection.PayloadType,
-                                notification.AggregateId,
-                                notification.Version,
-                                null));
+                var snapshotManagerResponseP = await commandExecutor.ExecCommandWithEventsAsync(
+                    new ReportVersionToSnapshotManger(
+                        SnapshotManager.SharedId,
+                        projection.PayloadType,
+                        notification.AggregateId,
+                        notification.Version,
+                        null));
                 if (snapshotManagerResponseP.Events.All(m => m.DocumentTypeName != nameof(SnapshotManagerSnapshotTaken)))
                 {
                     continue;
@@ -154,9 +146,7 @@ public class SnapshotGenerator
                     dynamic? awaitable = aggregateLoader.GetType()
                         ?.GetMethod(nameof(aggregateLoader.AsSingleProjectionStateAsync))
                         ?.MakeGenericMethod(projection.PayloadType)
-                        .Invoke(
-                            aggregateLoader,
-                            new object?[] { notification.AggregateId, taken.Payload.NextSnapshotVersion, null });
+                        .Invoke(aggregateLoader, new object?[] { notification.AggregateId, taken.Payload.NextSnapshotVersion, null });
                     if (awaitable is null)
                     {
                         continue;
@@ -180,8 +170,8 @@ public class SnapshotGenerator
                     {
                         continue;
                     }
-                    var snapshotDocument =
-                        await singleProjectionSnapshotAccessor.SnapshotDocumentFromSingleProjectionStateAsync(
+                    var snapshotDocument
+                        = await singleProjectionSnapshotAccessor.SnapshotDocumentFromSingleProjectionStateAsync(
                             aggregateToSnapshot,
                             projection.Aggregate);
                     await _documentWriter.SaveAsync(snapshotDocument, projection.Aggregate);

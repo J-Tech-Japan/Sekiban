@@ -13,9 +13,7 @@ public interface IAggregateLoader
     /// <param name="toVersion"></param>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Task<AggregateState<TAggregatePayload>?> AsDefaultStateFromInitialAsync<TAggregatePayload>(
-        Guid aggregateId,
-        int? toVersion = null)
+    public Task<AggregateState<TAggregatePayload>?> AsDefaultStateFromInitialAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)
         where TAggregatePayload : IAggregatePayloadCommon;
 
     /// <summary>
@@ -26,14 +24,14 @@ public interface IAggregateLoader
     /// <param name="includesSortableUniqueId"></param>
     /// <typeparam name="TSingleProjectionPayload"></typeparam>
     /// <returns></returns>
-    public Task<SingleProjectionState<TSingleProjectionPayload>?>
-        AsSingleProjectionStateAsync<TSingleProjectionPayload>(Guid aggregateId, int? toVersion = null, string? includesSortableUniqueId = null)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new();
+    public Task<SingleProjectionState<TSingleProjectionPayload>?> AsSingleProjectionStateAsync<TSingleProjectionPayload>(
+        Guid aggregateId,
+        int? toVersion = null,
+        string? includesSortableUniqueId = null) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new();
 
     public Task<SingleProjectionState<TSingleProjectionPayload>?> AsSingleProjectionStateFromInitialAsync<TSingleProjectionPayload>(
         Guid aggregateId,
-        int? toVersion = null)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new();
+        int? toVersion = null) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new();
 
     /// <summary>
     ///     スナップショット、メモリキャッシュを使用する通常版
@@ -48,8 +46,7 @@ public interface IAggregateLoader
     public Task<Aggregate<TAggregatePayload>?> AsAggregateAsync<TAggregatePayload>(
         Guid aggregateId,
         int? toVersion = null,
-        string? includesSortableUniqueId = null)
-        where TAggregatePayload : IAggregatePayloadCommon;
+        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommon;
 
     /// <summary>
     ///     スナップショット、メモリキャッシュを使用する通常版
@@ -64,13 +61,11 @@ public interface IAggregateLoader
     public Task<AggregateState<TAggregatePayload>?> AsDefaultStateAsync<TAggregatePayload>(
         Guid aggregateId,
         int? toVersion = null,
-        string? includesSortableUniqueId = null)
-        where TAggregatePayload : IAggregatePayloadCommon;
+        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommon;
 
 
     public Task<IEnumerable<IEvent>?> AllEventsAsync<TAggregatePayload>(
         Guid aggregateId,
         int? toVersion = null,
-        string? includesSortableUniqueId = null)
-        where TAggregatePayload : IAggregatePayloadCommon;
+        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommon;
 }

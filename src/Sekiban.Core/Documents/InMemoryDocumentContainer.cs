@@ -26,13 +26,9 @@ public class InMemoryDocumentStore
             {
                 eventContainer.Partitions[partition].Add(document);
             }
-        }
-        else
+        } else
         {
-            var partitionCollection = new BlockingCollection<IEvent>
-            {
-                document
-            };
+            var partitionCollection = new BlockingCollection<IEvent> { document };
             eventContainer.Partitions[partition] = partitionCollection;
         }
 

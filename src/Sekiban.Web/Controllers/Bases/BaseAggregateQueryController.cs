@@ -14,17 +14,13 @@ public class BaseAggregateQueryController<TAggregatePayload, TQuery, TQueryParam
 {
     protected readonly IQueryExecutor QueryExecutor;
 
-    public BaseAggregateQueryController(IQueryExecutor queryExecutor)
-    {
-        QueryExecutor = queryExecutor;
-    }
+    public BaseAggregateQueryController(IQueryExecutor queryExecutor) => QueryExecutor = queryExecutor;
 
     [HttpGet]
     [Route("")]
     public async Task<ActionResult<TQueryResponse>> GetQueryResult([FromQuery] TQueryParameter queryParam)
     {
-        var result = await QueryExecutor
-            .ExecuteAsync(queryParam);
+        var result = await QueryExecutor.ExecuteAsync(queryParam);
         return Ok(result);
     }
 }

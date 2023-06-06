@@ -6,8 +6,7 @@ using Sekiban.Web.Dependency;
 namespace Sekiban.Web.Controllers.Bases;
 
 [Produces("application/json")]
-public class BaseMultiProjectionController<TProjectionPayload> : ControllerBase
-    where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+public class BaseMultiProjectionController<TProjectionPayload> : ControllerBase where TProjectionPayload : IMultiProjectionPayloadCommon, new()
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly IWebDependencyDefinition _webDependencyDefinition;

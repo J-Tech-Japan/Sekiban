@@ -44,14 +44,10 @@ public class ClientSpec : AggregateTest<Client, FeatureCheckDependency>
         ThenStateIs(
             new AggregateState<Client>
             {
-                AggregateId = GetAggregateId(),
-                Version = GetCurrentVersion(),
-                Payload = new Client(branchId, testClientName, testEmail)
+                AggregateId = GetAggregateId(), Version = GetCurrentVersion(), Payload = new Client(branchId, testClientName, testEmail)
             });
         // 名前変更コマンドを実行する
-        WhenCommand(
-            client => new ChangeClientName(client.AggregateId, testClientChangedName)
-                { ReferenceVersion = client.Version });
+        WhenCommand(client => new ChangeClientName(client.AggregateId, testClientChangedName) { ReferenceVersion = client.Version });
         WriteStateToFile("ClientCreateSpec.json");
         // コマンドによって生成されたイベントを検証する
         ThenLastSingleEventPayloadIs(new ClientNameChanged(testClientChangedName));
@@ -59,9 +55,7 @@ public class ClientSpec : AggregateTest<Client, FeatureCheckDependency>
         ThenStateIs(
             new AggregateState<Client>
             {
-                AggregateId = GetAggregateId(),
-                Version = GetCurrentVersion(),
-                Payload = new Client(branchId, testClientChangedName, testEmail)
+                AggregateId = GetAggregateId(), Version = GetCurrentVersion(), Payload = new Client(branchId, testClientChangedName, testEmail)
             });
     }
 
@@ -77,11 +71,7 @@ public class ClientSpec : AggregateTest<Client, FeatureCheckDependency>
     public void UseCommandExecutor()
     {
         GivenEnvironmentCommandExecutorAction(BranchClientCommandsHelper.CreateClient)
-            .WhenCommand(
-                new CreateClient(
-                    BranchClientCommandsHelper.BranchId,
-                    "CreateClient Name New",
-                    BranchClientCommandsHelper.FirstClientEmail))
+            .WhenCommand(new CreateClient(BranchClientCommandsHelper.BranchId, "CreateClient Name New", BranchClientCommandsHelper.FirstClientEmail))
             .ThenThrows<SekibanEmailAlreadyRegistered>();
     }
 
@@ -89,11 +79,7 @@ public class ClientSpec : AggregateTest<Client, FeatureCheckDependency>
     public void UseCommandExecutorSimpleThrows()
     {
         GivenEnvironmentCommandExecutorAction(BranchClientCommandsHelper.CreateClient)
-            .WhenCommand(
-                new CreateClient(
-                    BranchClientCommandsHelper.BranchId,
-                    "CreateClient Name New",
-                    BranchClientCommandsHelper.FirstClientEmail))
+            .WhenCommand(new CreateClient(BranchClientCommandsHelper.BranchId, "CreateClient Name New", BranchClientCommandsHelper.FirstClientEmail))
             .ThenThrowsAnException();
     }
 
@@ -102,19 +88,10 @@ public class ClientSpec : AggregateTest<Client, FeatureCheckDependency>
     {
         var branchId = RunEnvironmentCommand(new CreateBranch("TEST"));
         var otherClientId = Guid.NewGuid();
-        RunEnvironmentCommand(
-            new CreateClient
-                { BranchId = branchId, ClientName = "NameFirst", ClientEmail = "test@example.com" },
-            otherClientId);
+        RunEnvironmentCommand(new CreateClient { BranchId = branchId, ClientName = "NameFirst", ClientEmail = "test@example.com" }, otherClientId);
         RunEnvironmentCommand(new ChangeClientName(otherClientId, "Other CreateClient Name"));
         RunEnvironmentCommand(new CreateLoyaltyPoint(otherClientId, 100));
-        RunEnvironmentCommand(
-            new UseLoyaltyPoint(
-                otherClientId,
-                DateTime.Today,
-                LoyaltyPointUsageTypeKeys.TravelCarRental,
-                30,
-                "test"));
+        RunEnvironmentCommand(new UseLoyaltyPoint(otherClientId, DateTime.Today, LoyaltyPointUsageTypeKeys.TravelCarRental, 30, "test"));
     }
 
     [Fact(DisplayName = "Can not delete client twice")]
@@ -139,10 +116,7 @@ public class ClientSpec : AggregateTest<Client, FeatureCheckDependency>
             .ThenNotThrowsAnException()
             .ThenGetPayload(payload => Assert.True(payload.IsDeleted))
             .WhenCommand(
-                new CancelDeleteClient
-                {
-                    ReferenceVersion = GetCurrentVersion(), ClientId = GetAggregateId(), Reason = "Deleted by mistake"
-                })
+                new CancelDeleteClient { ReferenceVersion = GetCurrentVersion(), ClientId = GetAggregateId(), Reason = "Deleted by mistake" })
             .ThenNotThrowsAnException()
             .ThenGetPayload(payload => Assert.False(payload.IsDeleted));
     }

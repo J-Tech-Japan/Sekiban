@@ -9,10 +9,11 @@ namespace Sekiban.Core.Dependency;
 /// </summary>
 public interface IDependencyDefinition : IQueryDefinition
 {
-    public SekibanDependencyOptions GetSekibanDependencyOptions() => new(
-        new RegisteredEventTypes(GetExecutingAssembly(), SekibanEventSourcingDependency.GetAssembly()),
-        new SekibanAggregateTypes(GetExecutingAssembly(), SekibanEventSourcingDependency.GetAssembly()),
-        GetCommandDependencies().Concat(GetSubscriberDependencies()));
+    public SekibanDependencyOptions GetSekibanDependencyOptions() =>
+        new(
+            new RegisteredEventTypes(GetExecutingAssembly(), SekibanEventSourcingDependency.GetAssembly()),
+            new SekibanAggregateTypes(GetExecutingAssembly(), SekibanEventSourcingDependency.GetAssembly()),
+            GetCommandDependencies().Concat(GetSubscriberDependencies()));
 
     Assembly GetExecutingAssembly();
     IEnumerable<(Type serviceType, Type? implementationType)> GetCommandDependencies();

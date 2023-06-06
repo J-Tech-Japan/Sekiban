@@ -5,14 +5,14 @@ public class MemoryCacheSetting : IMemoryCacheSettings
 {
     public MemoryCacheSetting(IConfiguration configuration)
     {
-        SingleProjectionAbsoluteExpirationMinutes =
-            configuration.GetValue<int?>("Sekiban:MemoryCache:SingleProjection:AbsoluteExpirationMinutes") ?? 120;
-        SingleProjectionSlidingExpirationMinutes =
-            configuration.GetValue<int?>("Sekiban:MemoryCache:SingleProjection:SlidingExpirationMinutes") ?? 15;
+        SingleProjectionAbsoluteExpirationMinutes
+            = configuration.GetValue<int?>("Sekiban:MemoryCache:SingleProjection:AbsoluteExpirationMinutes") ?? 120;
+        SingleProjectionSlidingExpirationMinutes
+            = configuration.GetValue<int?>("Sekiban:MemoryCache:SingleProjection:SlidingExpirationMinutes") ?? 15;
         SnapshotAbsoluteExpirationMinutes = configuration.GetValue<int?>("Sekiban:MemoryCache:Snapshot:AbsoluteExpirationMinutes") ?? 120;
         SnapshotSlidingExpirationMinutes = configuration.GetValue<int?>("Sekiban:MemoryCache:Snapshot:SlidingExpirationMinutes") ?? 15;
-        MultiProjectionAbsoluteExpirationMinutes =
-            configuration.GetValue<int?>("Sekiban:MemoryCache:MultiProjection:AbsoluteExpirationMinutes") ?? 120;
+        MultiProjectionAbsoluteExpirationMinutes
+            = configuration.GetValue<int?>("Sekiban:MemoryCache:MultiProjection:AbsoluteExpirationMinutes") ?? 120;
         MultiProjectionSlidingExpirationMinutes = configuration.GetValue<int?>("Sekiban:MemoryCache:MultiProjection:SlidingExpirationMinutes") ?? 15;
     }
 

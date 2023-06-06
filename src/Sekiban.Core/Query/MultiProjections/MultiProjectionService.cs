@@ -11,19 +11,16 @@ public class MultiProjectionService : IMultiProjectionService
     public MultiProjectionService(IMultiProjection multiProjection) => this.multiProjection = multiProjection;
 
     public Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjectionPayload>(
-        SortableUniqueIdValue? includesSortableUniqueIdValue)
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new() =>
+        SortableUniqueIdValue? includesSortableUniqueIdValue) where TProjectionPayload : IMultiProjectionPayloadCommon, new() =>
         multiProjection.GetMultiProjectionAsync<MultiProjection<TProjectionPayload>, TProjectionPayload>(includesSortableUniqueIdValue);
 
-    public async Task<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>>
-        GetAggregateListObject<TAggregatePayload>(SortableUniqueIdValue? includesSortableUniqueIdValue)
-        where TAggregatePayload : IAggregatePayloadCommon
+    public async Task<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>> GetAggregateListObject<TAggregatePayload>(
+        SortableUniqueIdValue? includesSortableUniqueIdValue) where TAggregatePayload : IAggregatePayloadCommon
     {
         var list = await multiProjection
             .GetMultiProjectionAsync<SingleProjectionListProjector<Aggregate<TAggregatePayload>,
-                    AggregateState<TAggregatePayload>,
-                    DefaultSingleProjector<TAggregatePayload>>
-                , SingleProjectionListState<AggregateState<TAggregatePayload>>>(includesSortableUniqueIdValue);
+                    AggregateState<TAggregatePayload>, DefaultSingleProjector<TAggregatePayload>>,
+                SingleProjectionListState<AggregateState<TAggregatePayload>>>(includesSortableUniqueIdValue);
         return list;
     }
 
@@ -41,22 +38,18 @@ public class MultiProjectionService : IMultiProjectionService
         };
     }
 
-    public
-        Task<MultiProjectionState<
-            SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>
+    public Task<MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>
         GetSingleProjectionListObject<TSingleProjectionPayload>(SortableUniqueIdValue? includesSortableUniqueIdValue)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new() => multiProjection
-        .GetMultiProjectionAsync<
-            SingleProjectionListProjector<SingleProjection<TSingleProjectionPayload>,
-                SingleProjectionState<TSingleProjectionPayload>,
-                SingleProjection<TSingleProjectionPayload>>,
-            SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>(includesSortableUniqueIdValue);
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new() =>
+        multiProjection
+            .GetMultiProjectionAsync<
+                SingleProjectionListProjector<SingleProjection<TSingleProjectionPayload>, SingleProjectionState<TSingleProjectionPayload>,
+                    SingleProjection<TSingleProjectionPayload>>, SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>(
+                includesSortableUniqueIdValue);
 
-    public async Task<List<SingleProjectionState<TSingleProjectionPayload>>>
-        GetSingleProjectionList<TSingleProjectionPayload>(
-            SortableUniqueIdValue? includesSortableUniqueIdValue,
-            QueryListType queryListType = QueryListType.ActiveOnly)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
+    public async Task<List<SingleProjectionState<TSingleProjectionPayload>>> GetSingleProjectionList<TSingleProjectionPayload>(
+        SortableUniqueIdValue? includesSortableUniqueIdValue,
+        QueryListType queryListType = QueryListType.ActiveOnly) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
         var projection = await GetSingleProjectionListObject<TSingleProjectionPayload>(includesSortableUniqueIdValue);
         return queryListType switch

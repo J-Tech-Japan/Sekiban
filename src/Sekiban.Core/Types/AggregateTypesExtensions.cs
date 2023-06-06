@@ -7,28 +7,17 @@ public static class AggregateTypesExtensions
 {
     public static IEnumerable<TypeInfo> GetAggregateTypes(this IEnumerable<TypeInfo> types)
     {
-        return types.Where(
-            x => x.IsAggregatePayloadType());
+        return types.Where(x => x.IsAggregatePayloadType());
     }
 
-    public static bool IsAggregatePayloadType(this TypeInfo type)
-    {
-        return type.ImplementedInterfaces.Contains(typeof(IAggregatePayloadCommon)) &&
-            !type.ImplementedInterfaces.Contains(typeof(ISingleProjectionPayloadCommon));
-    }
+    public static bool IsAggregatePayloadType(this TypeInfo type) =>
+        type.ImplementedInterfaces.Contains(typeof(IAggregatePayloadCommon)) &&
+        !type.ImplementedInterfaces.Contains(typeof(ISingleProjectionPayloadCommon));
 
-    public static bool IsParentAggregatePayload(this Type type)
-    {
-        return type.DoesImplementingFromGenericInterfaceType(typeof(IParentAggregatePayload<,>));
-    }
-    public static bool IsAggregateSubtypePayload(this Type type)
-    {
-        return type.DoesImplementingFromGenericInterfaceType(typeof(IAggregateSubtypePayload<>));
-    }
-    public static Type GetBaseAggregatePayloadType(this IAggregatePayloadCommon aggregatePayload)
-    {
-        return aggregatePayload.GetType().GetBaseAggregatePayloadTypeFromAggregate();
-    }
+    public static bool IsParentAggregatePayload(this Type type) => type.DoesImplementingFromGenericInterfaceType(typeof(IParentAggregatePayload<,>));
+    public static bool IsAggregateSubtypePayload(this Type type) => type.DoesImplementingFromGenericInterfaceType(typeof(IAggregateSubtypePayload<>));
+    public static Type GetBaseAggregatePayloadType(this IAggregatePayloadCommon aggregatePayload) =>
+        aggregatePayload.GetType().GetBaseAggregatePayloadTypeFromAggregate();
     public static Type GetBaseAggregatePayloadTypeFromAggregate(this Type aggregateType)
     {
         if (aggregateType.IsAggregateSubtypePayload())
@@ -60,15 +49,9 @@ public static class AggregateTypesExtensions
         }
         throw new Exception(aggregateType.FullName + " is not an aggregate");
     }
-    public static bool IsAggregatePayloadType(this Type type)
-    {
-        return type.GetTypeInfo().IsAggregatePayloadType();
-    }
+    public static bool IsAggregatePayloadType(this Type type) => type.GetTypeInfo().IsAggregatePayloadType();
 
-    public static bool IsAggregateType(this IAggregateCommon aggregate)
-    {
-        return aggregate.GetType().GetGenericTypeDefinition() == typeof(Aggregate<>);
-    }
+    public static bool IsAggregateType(this IAggregateCommon aggregate) => aggregate.GetType().GetGenericTypeDefinition() == typeof(Aggregate<>);
     public static Type GetAggregatePayloadTypeFromAggregate(this IAggregateCommon aggregate)
     {
         if (aggregate.IsAggregateType() || aggregate.IsAggregateStateType())
@@ -78,10 +61,8 @@ public static class AggregateTypesExtensions
         }
         throw new Exception("Not an aggregate");
     }
-    public static bool IsAggregateStateType(this IAggregateCommon aggregate)
-    {
-        return aggregate.GetType().GetGenericTypeDefinition() == typeof(AggregateState<>);
-    }
+    public static bool IsAggregateStateType(this IAggregateCommon aggregate) =>
+        aggregate.GetType().GetGenericTypeDefinition() == typeof(AggregateState<>);
 
     public static Type GetAggregatePayloadTypeFromAggregate(this Type aggregateType)
     {

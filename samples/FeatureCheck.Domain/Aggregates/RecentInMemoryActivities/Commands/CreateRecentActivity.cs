@@ -20,8 +20,7 @@ public record CreateRecentInMemoryActivity : ICommand<RecentInMemoryActivity>
             CreateRecentInMemoryActivity command)
         {
             await Task.CompletedTask;
-            yield return new RecentInMemoryActivityCreated(
-                new RecentInMemoryActivityRecord("First Event Created", _sekibanDateProducer.UtcNow));
+            yield return new RecentInMemoryActivityCreated(new RecentInMemoryActivityRecord("First Event Created", _sekibanDateProducer.UtcNow));
         }
     }
 }

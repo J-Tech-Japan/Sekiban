@@ -18,20 +18,15 @@ public record BasicClientQueryParameter(
     bool? SortKey1Asc,
     bool? SortKey2Asc) : IListQueryPagingParameter<BasicClientQueryModel>;
 public record BasicClientQueryModel(Guid BranchId, string ClientName, string ClientEmail) : IQueryResponse;
-public class BasicClientQuery : IAggregateListQuery<Client, BasicClientQueryParameter,
-    BasicClientQueryModel>
+public class BasicClientQuery : IAggregateListQuery<Client, BasicClientQueryParameter, BasicClientQueryModel>
 {
-    public IEnumerable<BasicClientQueryModel> HandleFilter(
-        BasicClientQueryParameter queryParam,
-        IEnumerable<AggregateState<Client>> list)
+    public IEnumerable<BasicClientQueryModel> HandleFilter(BasicClientQueryParameter queryParam, IEnumerable<AggregateState<Client>> list)
     {
         return list.Where(m => queryParam.BranchId is null || m.Payload.BranchId == queryParam.BranchId)
             .Select(m => new BasicClientQueryModel(m.Payload.BranchId, m.Payload.ClientName, m.Payload.ClientEmail));
     }
 
-    public IEnumerable<BasicClientQueryModel> HandleSort(
-        BasicClientQueryParameter queryParam,
-        IEnumerable<BasicClientQueryModel> filteredList)
+    public IEnumerable<BasicClientQueryModel> HandleSort(BasicClientQueryParameter queryParam, IEnumerable<BasicClientQueryModel> filteredList)
     {
         var sort = new Dictionary<BasicClientQuerySortKey, bool>();
         if (queryParam.SortKey1 != null)
@@ -66,8 +61,7 @@ public class BasicClientQuery : IAggregateListQuery<Client, BasicClientQueryPara
                             BasicClientQuerySortKey.Email => m.ClientEmail,
                             _ => throw new ArgumentOutOfRangeException()
                         });
-            }
-            else
+            } else
             {
                 result = sortKey.Value
                     ? (result as IOrderedEnumerable<BasicClientQueryModel> ?? throw new InvalidCastException()).ThenBy(
@@ -77,8 +71,7 @@ public class BasicClientQuery : IAggregateListQuery<Client, BasicClientQueryPara
                             BasicClientQuerySortKey.Email => m.ClientEmail,
                             _ => throw new ArgumentOutOfRangeException()
                         })
-                    : (result as IOrderedEnumerable<BasicClientQueryModel> ?? throw new InvalidCastException())
-                    .ThenByDescending(
+                    : (result as IOrderedEnumerable<BasicClientQueryModel> ?? throw new InvalidCastException()).ThenByDescending(
                         m => sortKey.Key switch
                         {
                             BasicClientQuerySortKey.Name => m.ClientName,

@@ -7,8 +7,7 @@ public static class MultiProjectionTypesExtensions
 
     public static bool IsMultiProjectionType(this Type type) => type.GetTypeInfo().IsMultiProjectionType();
 
-    public static bool IsMultiProjectionType(this TypeInfo type) => type.IsClass &&
-        type.DoesInheritFromGenericType(typeof(MultiProjection<>));
+    public static bool IsMultiProjectionType(this TypeInfo type) => type.IsClass && type.DoesInheritFromGenericType(typeof(MultiProjection<>));
 
     public static Type GetMultiProjectionPayloadTypeFromMultiProjection(this Type projectionType)
     {

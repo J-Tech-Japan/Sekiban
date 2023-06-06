@@ -17,11 +17,7 @@ public class CartAggregateRTest : AggregateTest<CartAggregateR, FeatureCheckDepe
     public void CommandExecuteTest()
     {
         Subtype<ShoppingCartR>()
-            .WhenCommand(
-                new AddItemToShoppingCartR
-                {
-                    CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
-                })
+            .WhenCommand(new AddItemToShoppingCartR { CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100 })
             .ThenGetLatestEvents(
                 events =>
                 {
@@ -34,24 +30,20 @@ public class CartAggregateRTest : AggregateTest<CartAggregateR, FeatureCheckDepe
                 {
                     Items = ImmutableSortedDictionary<int, CartItemRecordR>.Empty.Add(
                         0,
-                        new CartItemRecordR
-                            { Code = "TESTCODE", Name = "TESTNAME", Quantity = 100 })
+                        new CartItemRecordR { Code = "TESTCODE", Name = "TESTNAME", Quantity = 100 })
                 });
     }
     [Fact]
     public void CommandExecuteTestAndChangeAggregateType()
     {
         Subtype<ShoppingCartR>()
-            .WhenCommand(
-                new AddItemToShoppingCartR
-                {
-                    CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
-                })
+            .WhenCommand(new AddItemToShoppingCartR { CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100 })
             .ThenPayloadTypeShouldBe<ShoppingCartR>()
             .WhenCommand(
                 new SubmitOrderR
                 {
-                    CartId = CartId, OrderSubmittedLocalTime = new DateTime(
+                    CartId = CartId,
+                    OrderSubmittedLocalTime = new DateTime(
                         2023,
                         2,
                         2,
@@ -65,10 +57,7 @@ public class CartAggregateRTest : AggregateTest<CartAggregateR, FeatureCheckDepe
                 {
                     Items = ImmutableSortedDictionary<int, CartItemRecordR>.Empty.Add(
                         0,
-                        new CartItemRecordR
-                        {
-                            Code = "TESTCODE", Name = "TESTNAME", Quantity = 100
-                        }),
+                        new CartItemRecordR { Code = "TESTCODE", Name = "TESTNAME", Quantity = 100 }),
                     PurchasedDate = new DateTime(
                         2023,
                         2,

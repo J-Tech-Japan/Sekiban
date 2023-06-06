@@ -39,8 +39,11 @@ public class LoyaltyPointTest : AggregateTest<LoyaltyPoint, FeatureCheckDependen
             .WhenCommand(
                 new AddLoyaltyPointWithVO
                 {
-                    ClientId = clientId, HappenedDate = SekibanDateProducer.GetRegistered().UtcNow, LoyaltyPointValue = new LoyaltyPointValue(100),
-                    Note = "test", Reason = new LoyaltyPointReceiveType(LoyaltyPointReceiveTypeKeys.InsuranceUsage),
+                    ClientId = clientId,
+                    HappenedDate = SekibanDateProducer.GetRegistered().UtcNow,
+                    LoyaltyPointValue = new LoyaltyPointValue(100),
+                    Note = "test",
+                    Reason = new LoyaltyPointReceiveType(LoyaltyPointReceiveTypeKeys.InsuranceUsage),
                     ReferenceVersion = GetCurrentVersion()
                 })
             .ThenNotThrowsAnException();
@@ -69,9 +72,11 @@ public class LoyaltyPointTest : AggregateTest<LoyaltyPoint, FeatureCheckDependen
                 WhenCommand(
                     new AddLoyaltyPointWithVO
                     {
-                        ClientId = clientId, HappenedDate = SekibanDateProducer.GetRegistered().UtcNow,
+                        ClientId = clientId,
+                        HappenedDate = SekibanDateProducer.GetRegistered().UtcNow,
                         LoyaltyPointValue = new LoyaltyPointValue(100),
-                        Note = "test", Reason = new LoyaltyPointReceiveType((LoyaltyPointReceiveTypeKeys)10000), // should cause exception
+                        Note = "test",
+                        Reason = new LoyaltyPointReceiveType((LoyaltyPointReceiveTypeKeys)10000), // should cause exception
                         ReferenceVersion = GetCurrentVersion()
                     });
             });

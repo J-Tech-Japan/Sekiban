@@ -1,7 +1,6 @@
 using Amazon.DynamoDBv2.DocumentModel;
 using Amazon.DynamoDBv2.Model;
 using Sekiban.Core.Aggregate;
-using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
@@ -15,15 +14,16 @@ using System.Text.Json;
 using Document = Sekiban.Core.Documents.Document;
 namespace Sekiban.Infrastructure.Dynamo.Documents;
 
-
-
 public class DynamoDocumentRepository : IDocumentPersistentRepository
 {
     private readonly DynamoDbFactory _dbFactory;
     private readonly RegisteredEventTypes _registeredEventTypes;
     private readonly ISingleProjectionSnapshotAccessor _singleProjectionSnapshotAccessor;
 
-    public DynamoDocumentRepository(DynamoDbFactory dbFactory, RegisteredEventTypes registeredEventTypes, ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor)
+    public DynamoDocumentRepository(
+        DynamoDbFactory dbFactory,
+        RegisteredEventTypes registeredEventTypes,
+        ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor)
     {
         _dbFactory = dbFactory;
         _registeredEventTypes = registeredEventTypes;
@@ -52,11 +52,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 {
                     filter.AddCondition(nameof(Document.SortableUniqueId), QueryOperator.GreaterThan, sinceSortableUniqueId);
                 }
-                var config = new QueryOperationConfig
-                {
-                    Filter = filter,
-                    BackwardSearch = false
-                };
+                var config = new QueryOperationConfig { Filter = filter, BackwardSearch = false };
                 var search = table.Query(config);
 
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
@@ -73,24 +69,21 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                     var documentTypeName = document[nameof(IDocument.DocumentTypeName)].AsString();
                     if (documentTypeName is null) { continue; }
                     var toAdd = types.Where(m => m.Name == documentTypeName)
-                            .Select(
-                                m =>
-                                    SekibanJsonHelper.Deserialize(json, typeof(Event<>).MakeGenericType(m)) as IEvent)
+                            .Select(m => SekibanJsonHelper.Deserialize(json, typeof(Event<>).MakeGenericType(m)) as IEvent)
                             .FirstOrDefault(m => m is not null) ??
                         EventHelper.GetUnregisteredEvent(jsonElement);
                     if (toAdd is null)
                     {
                         throw new SekibanUnregisterdEventFoundException();
                     }
-                    if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
-                        toAdd.GetSortableUniqueId().EarlierThan(sinceSortableUniqueId))
+                    if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().EarlierThan(sinceSortableUniqueId))
                     {
                         continue;
                     }
                     events.Add(toAdd);
                 }
                 resultAction(events.OrderBy(m => m.SortableUniqueId));
-                
+
 
             });
 
@@ -118,7 +111,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
         string? sinceSortableUniqueId,
         Action<IEnumerable<string>> resultAction)
     {
-                var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
 
         await _dbFactory.DynamoActionAsync(
             DocumentType.Command,
@@ -132,11 +125,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 {
                     filter.AddCondition(nameof(Document.SortableUniqueId), QueryOperator.GreaterThan, sinceSortableUniqueId);
                 }
-                var config = new QueryOperationConfig
-                {
-                    Filter = filter,
-                    BackwardSearch = false
-                };
+                var config = new QueryOperationConfig { Filter = filter, BackwardSearch = false };
                 var search = table.Query(config);
 
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
@@ -148,14 +137,16 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 var commands = (from document in resultList
                                 let json = document.ToJson()
                                 let sortableUniqueId = document[nameof(IDocument.SortableUniqueId)].AsString()
-                                where sinceSortableUniqueId is null ||
-                                    !new SortableUniqueIdValue(sortableUniqueId).EarlierThan(sinceSortableUniqueId)
+                                where sinceSortableUniqueId is null || !new SortableUniqueIdValue(sortableUniqueId).EarlierThan(sinceSortableUniqueId)
                                 select json).ToList();
                 resultAction(commands);
             });
 
     }
-    public async Task GetAllEventsForAggregateAsync(Type aggregatePayloadType, string? sinceSortableUniqueId, Action<IEnumerable<IEvent>> resultAction)
+    public async Task GetAllEventsForAggregateAsync(
+        Type aggregatePayloadType,
+        string? sinceSortableUniqueId,
+        Action<IEnumerable<IEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
 
@@ -172,11 +163,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 {
                     filter.AddCondition(nameof(Document.SortableUniqueId), QueryOperator.GreaterThan, sinceSortableUniqueId);
                 }
-                var config = new QueryOperationConfig
-                {
-                    Filter = filter,
-                    BackwardSearch = true
-                };
+                var config = new QueryOperationConfig { Filter = filter, BackwardSearch = true };
                 var search = table.Query(config);
 
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
@@ -193,17 +180,14 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                     var documentTypeName = document[nameof(IDocument.DocumentTypeName)].AsString();
                     if (documentTypeName is null) { continue; }
                     var toAdd = types.Where(m => m.Name == documentTypeName)
-                            .Select(
-                                m =>
-                                    SekibanJsonHelper.Deserialize(json, typeof(Event<>).MakeGenericType(m)) as IEvent)
+                            .Select(m => SekibanJsonHelper.Deserialize(json, typeof(Event<>).MakeGenericType(m)) as IEvent)
                             .FirstOrDefault(m => m is not null) ??
                         EventHelper.GetUnregisteredEvent(jsonElement);
                     if (toAdd is null)
                     {
                         throw new SekibanUnregisterdEventFoundException();
                     }
-                    if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
-                        toAdd.GetSortableUniqueId().EarlierThan(sinceSortableUniqueId))
+                    if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().EarlierThan(sinceSortableUniqueId))
                     {
                         continue;
                     }
@@ -233,10 +217,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 {
                     filter.AddCondition(nameof(Document.SortableUniqueId), ScanOperator.GreaterThan, sinceSortableUniqueId);
                 }
-                var config = new ScanOperationConfig()
-                {
-                    Filter = filter,
-                };
+                var config = new ScanOperationConfig { Filter = filter };
                 var search = table.Scan(config);
 
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
@@ -253,17 +234,14 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                     var documentTypeName = document[nameof(IDocument.DocumentTypeName)].AsString();
                     if (documentTypeName is null) { continue; }
                     var toAdd = types.Where(m => m.Name == documentTypeName)
-                            .Select(
-                                m =>
-                                    SekibanJsonHelper.Deserialize(json, typeof(Event<>).MakeGenericType(m)) as IEvent)
+                            .Select(m => SekibanJsonHelper.Deserialize(json, typeof(Event<>).MakeGenericType(m)) as IEvent)
                             .FirstOrDefault(m => m is not null) ??
                         EventHelper.GetUnregisteredEvent(jsonElement);
                     if (toAdd is null)
                     {
                         throw new SekibanUnregisterdEventFoundException();
                     }
-                    if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
-                        toAdd.GetSortableUniqueId().EarlierThan(sinceSortableUniqueId))
+                    if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().EarlierThan(sinceSortableUniqueId))
                     {
                         continue;
                     }
@@ -289,11 +267,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
                 filter.AddCondition(nameof(SnapshotDocument.PayloadVersionIdentifier), QueryOperator.Equal, payloadVersionIdentifier);
 
-                var config = new QueryOperationConfig
-                {
-                    Filter = filter,
-                    BackwardSearch = true
-                };
+                var config = new QueryOperationConfig { Filter = filter, BackwardSearch = true };
                 var search = table.Query(config);
 
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
@@ -304,9 +278,9 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                     if (resultList.Any()) { break; }
                 } while (!search.IsDone);
                 var snapshots = (from document in resultList
-                                let json = document.ToJson()
-                                let sortableUniqueId = document[nameof(IDocument.SortableUniqueId)].AsString()
-                                select json).ToList();
+                                 let json = document.ToJson()
+                                 let sortableUniqueId = document[nameof(IDocument.SortableUniqueId)].AsString()
+                                 select json).ToList();
                 var snapshotJson = snapshots.FirstOrDefault();
                 if (string.IsNullOrEmpty(snapshotJson)) { return null; }
                 var snapshot = SekibanJsonHelper.Deserialize<SnapshotDocument>(snapshotJson);
@@ -329,11 +303,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
                 filter.AddCondition(nameof(MultiProjectionSnapshotDocument.PayloadVersionIdentifier), QueryOperator.Equal, payloadVersionIdentifier);
 
-                var config = new QueryOperationConfig
-                {
-                    Filter = filter,
-                    BackwardSearch = true
-                };
+                var config = new QueryOperationConfig { Filter = filter, BackwardSearch = true };
                 var search = table.Query(config);
 
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
@@ -346,7 +316,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
 
                 foreach (var result in resultList)
                 {
-                    
+
                     var snapshot = SekibanJsonHelper.Deserialize<MultiProjectionSnapshotDocument>(result.ToJson());
                     if (snapshot is null) { continue; }
                     return snapshot;
@@ -373,11 +343,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 filter.AddCondition(nameof(SnapshotDocument.PayloadVersionIdentifier), QueryOperator.Equal, payloadVersionIdentifier);
                 filter.AddCondition(nameof(SnapshotDocument.SavedVersion), QueryOperator.Equal, version);
 
-                var config = new QueryOperationConfig
-                {
-                    Filter = filter,
-                    BackwardSearch = true
-                };
+                var config = new QueryOperationConfig { Filter = filter, BackwardSearch = true };
                 var search = table.Query(config);
 
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
@@ -410,11 +376,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 var filter = new QueryFilter();
                 filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
                 filter.AddCondition(nameof(SnapshotDocument.Id), QueryOperator.Equal, id);
-                var config = new QueryOperationConfig
-                {
-                    Filter = filter,
-                    BackwardSearch = true
-                };
+                var config = new QueryOperationConfig { Filter = filter, BackwardSearch = true };
                 var search = table.Query(config);
 
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
@@ -446,11 +408,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 var partitionKey = PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType);
                 var filter = new QueryFilter();
                 filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
-                var config = new QueryOperationConfig
-                {
-                    Filter = filter,
-                    BackwardSearch = true
-                };
+                var config = new QueryOperationConfig { Filter = filter, BackwardSearch = true };
                 var search = table.Query(config);
 
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
@@ -476,6 +434,6 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 }
                 return toReturn;
             });
-        
+
     }
 }

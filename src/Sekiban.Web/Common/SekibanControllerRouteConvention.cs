@@ -15,9 +15,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
     public void Apply(ControllerModel controller)
     {
         if (controller.ControllerType.IsGenericType &&
-            new List<string> { _webDependencyDefinition.Options.BaseControllerType.Name }.Contains(
-                controller
-                    .ControllerType.Name))
+            new List<string> { _webDependencyDefinition.Options.BaseControllerType.Name }.Contains(controller.ControllerType.Name))
         {
             var aggregateType = controller.ControllerType.GenericTypeArguments[0];
             var commandType = controller.ControllerType.GenericTypeArguments[1];
@@ -35,8 +33,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
         }
 
         if (controller.ControllerType.IsGenericType &&
-            new List<string> { _webDependencyDefinition.Options.BaseGetAggregateControllerType.Name }.Contains(
-                controller.ControllerType.Name))
+            new List<string> { _webDependencyDefinition.Options.BaseGetAggregateControllerType.Name }.Contains(controller.ControllerType.Name))
         {
             var aggregateType = controller.ControllerType.GenericTypeArguments[0];
             controller.ControllerName = aggregateType.Name;
@@ -44,8 +41,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                 new SelectorModel
                 {
                     AttributeRouteModel = new AttributeRouteModel(
-                        new RouteAttribute(
-                            $"{_webDependencyDefinition.Options.QueryPrefix}/{aggregateType.Name.ToLower()}")
+                        new RouteAttribute($"{_webDependencyDefinition.Options.QueryPrefix}/{aggregateType.Name.ToLower()}")
                         {
                             Name = aggregateType.Name + "AddQuery"
                         })
@@ -53,14 +49,11 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
         }
 
         if (controller.ControllerType.IsGenericType &&
-            new List<string> { _webDependencyDefinition.Options.BaseSingleProjectionControllerType.Name }.Contains(
-                controller.ControllerType.Name))
+            new List<string> { _webDependencyDefinition.Options.BaseSingleProjectionControllerType.Name }.Contains(controller.ControllerType.Name))
         {
             var projectionPayloadType = controller.ControllerType.GenericTypeArguments[0];
             var originalType = projectionPayloadType?.GetOriginalTypeFromSingleProjectionPayload() ??
-                throw new SekibanTypeNotFoundException(
-                    "Can not find original type of " +
-                    projectionPayloadType?.Name);
+                throw new SekibanTypeNotFoundException("Can not find original type of " + projectionPayloadType?.Name);
             controller.ControllerName = originalType.Name;
             controller.Selectors.Add(
                 new SelectorModel
@@ -75,8 +68,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
         }
 
         if (controller.ControllerType.IsGenericType &&
-            new List<string> { _webDependencyDefinition.Options.BaseAggregateListQueryControllerType.Name }.Contains(
-                controller.ControllerType.Name))
+            new List<string> { _webDependencyDefinition.Options.BaseAggregateListQueryControllerType.Name }.Contains(controller.ControllerType.Name))
         {
             var aggregateType = controller.ControllerType.GenericTypeArguments[0];
             var queryType = controller.ControllerType.GenericTypeArguments[1];
@@ -86,7 +78,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                 {
                     AttributeRouteModel = new AttributeRouteModel(
                         new RouteAttribute(
-                            $"{_webDependencyDefinition.Options.QueryPrefix}/{aggregateType.Name.ToLower()}/{queryType.Name.Replace("`","").ToLower()}"))
+                            $"{_webDependencyDefinition.Options.QueryPrefix}/{aggregateType.Name.ToLower()}/{queryType.Name.Replace("`", "").ToLower()}"))
                     {
                         Name = aggregateType.Name + queryType.Name
                     }
@@ -94,8 +86,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
         }
 
         if (controller.ControllerType.IsGenericType &&
-            new List<string> { _webDependencyDefinition.Options.BaseAggregateQueryControllerType.Name }.Contains(
-                controller.ControllerType.Name))
+            new List<string> { _webDependencyDefinition.Options.BaseAggregateQueryControllerType.Name }.Contains(controller.ControllerType.Name))
         {
             var aggregateType = controller.ControllerType.GenericTypeArguments[0];
             var queryType = controller.ControllerType.GenericTypeArguments[1];
@@ -105,7 +96,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                 {
                     AttributeRouteModel = new AttributeRouteModel(
                         new RouteAttribute(
-                            $"{_webDependencyDefinition.Options.QueryPrefix}/{aggregateType.Name.ToLower()}/{queryType.Name.Replace("`","").ToLower()}"))
+                            $"{_webDependencyDefinition.Options.QueryPrefix}/{aggregateType.Name.ToLower()}/{queryType.Name.Replace("`", "").ToLower()}"))
                     {
                         Name = aggregateType.Name + queryType.Name
                     }
@@ -113,18 +104,13 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
         }
 
         if (controller.ControllerType.IsGenericType &&
-            new List<string> { _webDependencyDefinition.Options.BaseSingleProjectionListQueryControllerType.Name }
-                .Contains(
-                    controller.ControllerType.Name))
+            new List<string> { _webDependencyDefinition.Options.BaseSingleProjectionListQueryControllerType.Name }.Contains(
+                controller.ControllerType.Name))
         {
             var projectionType = controller.ControllerType.GenericTypeArguments[0] ??
-                throw new SekibanTypeNotFoundException(
-                    "Can not find projection type of " +
-                    controller.ControllerType?.Name);
+                throw new SekibanTypeNotFoundException("Can not find projection type of " + controller.ControllerType?.Name);
             var originalType = projectionType?.GetOriginalTypeFromSingleProjectionPayload() ??
-                throw new SekibanTypeNotFoundException(
-                    "Can not find original type of " +
-                    projectionType?.Name);
+                throw new SekibanTypeNotFoundException("Can not find original type of " + projectionType?.Name);
             var queryType = controller.ControllerType.GenericTypeArguments[1];
             controller.ControllerName = originalType.Name;
             controller.Selectors.Add(
@@ -132,7 +118,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                 {
                     AttributeRouteModel = new AttributeRouteModel(
                         new RouteAttribute(
-                            $"{_webDependencyDefinition.Options.QueryPrefix}/{originalType.Name.ToLower()}/{projectionType.Name.ToLower()}/{queryType.Name.Replace("`","").ToLower()}"))
+                            $"{_webDependencyDefinition.Options.QueryPrefix}/{originalType.Name.ToLower()}/{projectionType.Name.ToLower()}/{queryType.Name.Replace("`", "").ToLower()}"))
                     {
                         Name = projectionType.Name + queryType.Name
                     }
@@ -144,13 +130,9 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                 controller.ControllerType.Name))
         {
             var projectionType = controller.ControllerType.GenericTypeArguments[0] ??
-                throw new SekibanTypeNotFoundException(
-                    "Can not find projection type of " +
-                    controller.ControllerType?.Name);
+                throw new SekibanTypeNotFoundException("Can not find projection type of " + controller.ControllerType?.Name);
             var originalType = projectionType?.GetOriginalTypeFromSingleProjectionPayload() ??
-                throw new SekibanTypeNotFoundException(
-                    "Can not find original type of " +
-                    projectionType?.Name);
+                throw new SekibanTypeNotFoundException("Can not find original type of " + projectionType?.Name);
             var queryType = controller.ControllerType.GenericTypeArguments[1];
             controller.ControllerName = originalType.Name;
             controller.Selectors.Add(
@@ -158,7 +140,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                 {
                     AttributeRouteModel = new AttributeRouteModel(
                         new RouteAttribute(
-                            $"{_webDependencyDefinition.Options.QueryPrefix}/{originalType.Name.ToLower()}/{projectionType.Name.ToLower()}/{queryType.Name.Replace("`","").ToLower()}"))
+                            $"{_webDependencyDefinition.Options.QueryPrefix}/{originalType.Name.ToLower()}/{projectionType.Name.ToLower()}/{queryType.Name.Replace("`", "").ToLower()}"))
                     {
                         Name = projectionType.Name + queryType.Name
                     }
@@ -166,9 +148,8 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
         }
 
         if (controller.ControllerType.IsGenericType &&
-            new List<string> { _webDependencyDefinition.Options.BaseMultiProjectionListQueryControllerType.Name }
-                .Contains(
-                    controller.ControllerType.Name))
+            new List<string> { _webDependencyDefinition.Options.BaseMultiProjectionListQueryControllerType.Name }.Contains(
+                controller.ControllerType.Name))
         {
             var projectionType = controller.ControllerType.GenericTypeArguments[0];
             var queryType = controller.ControllerType.GenericTypeArguments[1];
@@ -178,7 +159,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                 {
                     AttributeRouteModel = new AttributeRouteModel(
                         new RouteAttribute(
-                            $"{_webDependencyDefinition.Options.QueryPrefix}/{projectionType.Name.ToLower()}/{queryType.Name.Replace("`","").ToLower()}"))
+                            $"{_webDependencyDefinition.Options.QueryPrefix}/{projectionType.Name.ToLower()}/{queryType.Name.Replace("`", "").ToLower()}"))
                     {
                         Name = projectionType.Name + queryType.Name
                     }
@@ -186,8 +167,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
         }
 
         if (controller.ControllerType.IsGenericType &&
-            new List<string>
-                    { _webDependencyDefinition.Options.BaseMultiProjectionQueryControllerType.Name }
+            new List<string> { _webDependencyDefinition.Options.BaseMultiProjectionQueryControllerType.Name }
                 .Contains(controller.ControllerType.Name))
         {
             var projectionType = controller.ControllerType.GenericTypeArguments[0];
@@ -198,7 +178,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                 {
                     AttributeRouteModel = new AttributeRouteModel(
                         new RouteAttribute(
-                            $"{_webDependencyDefinition.Options.QueryPrefix}/{projectionType.Name.ToLower()}/{queryType.Name.Replace("`","").ToLower()}"))
+                            $"{_webDependencyDefinition.Options.QueryPrefix}/{projectionType.Name.ToLower()}/{queryType.Name.Replace("`", "").ToLower()}"))
                     {
                         Name = projectionType.Name + queryType.Name
                     }
@@ -209,11 +189,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
         {
             controller.ControllerName = "SekibanInfo";
             controller.Selectors.Add(
-                new SelectorModel
-                {
-                    AttributeRouteModel =
-                        new AttributeRouteModel(new RouteAttribute(_webDependencyDefinition.Options.InfoPrefix))
-                });
+                new SelectorModel { AttributeRouteModel = new AttributeRouteModel(new RouteAttribute(_webDependencyDefinition.Options.InfoPrefix)) });
         }
     }
 }

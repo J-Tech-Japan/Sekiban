@@ -13,9 +13,9 @@ namespace Sekiban.Core.Aggregate;
 [AttributeUsage(AttributeTargets.Class)]
 public class AggregateContainerGroupAttribute : Attribute
 {
-    public AggregateContainerGroupAttribute(AggregateContainerGroup group = AggregateContainerGroup.Default) => Group = group;
 
     public AggregateContainerGroup Group { get; init; }
+    public AggregateContainerGroupAttribute(AggregateContainerGroup group = AggregateContainerGroup.Default) => Group = group;
 
     public static AggregateContainerGroup FindAggregateContainerGroup(Type type)
     {
@@ -41,9 +41,7 @@ public class AggregateContainerGroupAttribute : Attribute
                 continue;
             }
 
-            var attributes = (AggregateContainerGroupAttribute[])type.GetCustomAttributes(
-                typeof(AggregateContainerGroupAttribute),
-                true);
+            var attributes = (AggregateContainerGroupAttribute[])type.GetCustomAttributes(typeof(AggregateContainerGroupAttribute), true);
             var max = attributes.Max(m => m.Group);
             return max;
         }

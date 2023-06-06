@@ -31,10 +31,7 @@ public class RecentActivityTest : AggregateTest<RecentActivity, FeatureCheckDepe
             .WhenCommand(new AddRecentActivity(GetAggregateId(), "Regular Event"))
             .ThenNotThrowsAnException()
             .ThenGetLatestSingleEvent<RecentActivityAdded>(ev => regularRecord = ev.Payload.Record)
-            .ThenPayloadIs(
-                new RecentActivity(
-                    new List<RecentActivityRecord> { regularRecord, firstRecord }
-                        .ToImmutableList()));
+            .ThenPayloadIs(new RecentActivity(new List<RecentActivityRecord> { regularRecord, firstRecord }.ToImmutableList()));
     }
 
     [Fact]
@@ -44,9 +41,6 @@ public class RecentActivityTest : AggregateTest<RecentActivity, FeatureCheckDepe
             .WhenCommand(new OnlyPublishingAddRecentActivity(GetAggregateId(), "Publish Only Event"))
             .ThenNotThrowsAnException()
             .ThenGetLatestSingleEvent<RecentActivityAdded>(ev => publishOnlyRecord = ev.Payload.Record)
-            .ThenPayloadIs(
-                new RecentActivity(
-                    new List<RecentActivityRecord>
-                        { publishOnlyRecord, regularRecord, firstRecord }.ToImmutableList()));
+            .ThenPayloadIs(new RecentActivity(new List<RecentActivityRecord> { publishOnlyRecord, regularRecord, firstRecord }.ToImmutableList()));
     }
 }

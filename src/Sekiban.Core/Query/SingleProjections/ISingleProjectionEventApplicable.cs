@@ -10,8 +10,7 @@ public interface ISingleProjectionEventApplicable<TProjectionPayload> : ISingleP
         TProjectionPayload projectionPayload,
         Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon;
 #else
-    TProjectionPayload? ApplyEventInstance<TEventPayload>(
-        TProjectionPayload projectionPayload,
-        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon;
+    TProjectionPayload? ApplyEventInstance<TEventPayload>(TProjectionPayload projectionPayload, Event<TEventPayload> ev)
+        where TEventPayload : IEventPayloadCommon;
 #endif
 }

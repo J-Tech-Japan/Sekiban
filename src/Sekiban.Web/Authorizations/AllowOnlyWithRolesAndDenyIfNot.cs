@@ -5,6 +5,8 @@ namespace Sekiban.Web.Authorizations;
 public class AllowOnlyWithRolesAndDenyIfNot<TDefinitionType, TRoleEnum> : IAuthorizeDefinition
     where TDefinitionType : IAuthorizationDefinitionType, new() where TRoleEnum : struct, Enum
 {
+
+    public IEnumerable<string> Roles { get; }
     public AllowOnlyWithRolesAndDenyIfNot(IEnumerable<TRoleEnum> roles)
     {
         Roles = roles.Select(s => Enum.GetName(s)!.ToLower());
@@ -14,8 +16,6 @@ public class AllowOnlyWithRolesAndDenyIfNot<TDefinitionType, TRoleEnum> : IAutho
     {
         Roles = roles.Select(m => Enum.GetName(m)!.ToLower());
     }
-
-    public IEnumerable<string> Roles { get; }
 
     public AuthorizeResultType Check(
         AuthorizeMethodType authorizeMethodType,

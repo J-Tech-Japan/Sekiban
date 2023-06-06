@@ -25,8 +25,7 @@ public record ReportVersionToSnapshotManger(
 
     public Guid GetAggregateId() => SnapshotManagerId;
 }
-public class ReportVersionToSnapshotMangerHandler : ICommandHandler<SnapshotManager,
-    ReportVersionToSnapshotManger>
+public class ReportVersionToSnapshotMangerHandler : ICommandHandler<SnapshotManager, ReportVersionToSnapshotManger>
 {
     private readonly IAggregateSettings _aggregateSettings;
 
@@ -46,12 +45,8 @@ public class ReportVersionToSnapshotMangerHandler : ICommandHandler<SnapshotMana
         {
             yield break;
         }
-        var key = SnapshotManager.SnapshotKey(
-            command.AggregateType.Name,
-            command.TargetAggregateId,
-            nextSnapshotVersion);
-        if (!getAggregateState().Payload.Requests.Contains(key) &&
-            !getAggregateState().Payload.RequestTakens.Contains(key))
+        var key = SnapshotManager.SnapshotKey(command.AggregateType.Name, command.TargetAggregateId, nextSnapshotVersion);
+        if (!getAggregateState().Payload.Requests.Contains(key) && !getAggregateState().Payload.RequestTakens.Contains(key))
         {
             yield return new SnapshotManagerRequestAdded(
                 command.AggregateType.Name,
@@ -59,9 +54,7 @@ public class ReportVersionToSnapshotMangerHandler : ICommandHandler<SnapshotMana
                 nextSnapshotVersion,
                 command.SnapshotVersion);
         }
-        if (getAggregateState().Payload.Requests.Contains(key) &&
-            !getAggregateState().Payload.RequestTakens.Contains(key) &&
-            offset > snapshotOffset)
+        if (getAggregateState().Payload.Requests.Contains(key) && !getAggregateState().Payload.RequestTakens.Contains(key) && offset > snapshotOffset)
         {
             yield return new SnapshotManagerSnapshotTaken(
                 command.AggregateType.Name,

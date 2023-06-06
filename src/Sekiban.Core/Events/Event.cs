@@ -6,6 +6,8 @@ namespace Sekiban.Core.Events;
 
 public record Event<TEventPayload> : Document, IEvent where TEventPayload : IEventPayloadCommon
 {
+
+    public TEventPayload Payload { get; init; } = default!;
     public Event()
     {
     }
@@ -19,8 +21,6 @@ public record Event<TEventPayload> : Document, IEvent where TEventPayload : IEve
         Payload = eventPayload;
         AggregateType = aggregateType.Name;
     }
-
-    public TEventPayload Payload { get; init; } = default!;
 
     public string AggregateType { get; init; } = null!;
 
@@ -69,18 +69,19 @@ public record Event<TEventPayload> : Document, IEvent where TEventPayload : IEve
     public static Event<TEventPayload> GenerateEvent(Guid aggregateId, Type aggregateType, TEventPayload eventPayload) =>
         new(aggregateId, aggregateType, eventPayload);
 
-    public Event<TNewPayload> ChangePayload<TNewPayload>(TNewPayload newPayload) where TNewPayload : IEventPayloadCommon => new()
-    {
-        Id = Id,
-        AggregateId = AggregateId,
-        PartitionKey = PartitionKey,
-        DocumentType = DocumentType,
-        DocumentTypeName = typeof(TNewPayload).Name,
-        TimeStamp = TimeStamp,
-        SortableUniqueId = SortableUniqueId,
-        Payload = newPayload,
-        AggregateType = AggregateType,
-        Version = Version,
-        CallHistories = CallHistories
-    };
+    public Event<TNewPayload> ChangePayload<TNewPayload>(TNewPayload newPayload) where TNewPayload : IEventPayloadCommon =>
+        new()
+        {
+            Id = Id,
+            AggregateId = AggregateId,
+            PartitionKey = PartitionKey,
+            DocumentType = DocumentType,
+            DocumentTypeName = typeof(TNewPayload).Name,
+            TimeStamp = TimeStamp,
+            SortableUniqueId = SortableUniqueId,
+            Payload = newPayload,
+            AggregateType = AggregateType,
+            Version = Version,
+            CallHistories = CallHistories
+        };
 }

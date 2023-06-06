@@ -11,6 +11,10 @@ namespace Sekiban.Core.Aggregate;
 /// <typeparam name="TPayload">Aggregate Payload</typeparam>
 public sealed record AggregateState<TPayload> : IAggregateStateCommon where TPayload : IAggregatePayloadCommon
 {
+
+    public string PayloadTypeName => Payload.GetType().Name;
+
+    public TPayload Payload { get; init; } = CreatePayload();
     public AggregateState()
     {
     }
@@ -24,10 +28,6 @@ public sealed record AggregateState<TPayload> : IAggregateStateCommon where TPay
     }
 
     public AggregateState(IAggregateCommon aggregateCommon, TPayload payload) : this(aggregateCommon) => Payload = payload;
-
-    public string PayloadTypeName => Payload.GetType().Name;
-
-    public TPayload Payload { get; init; } = CreatePayload();
 
     [Required]
     [Description("AggregateId")]
@@ -75,12 +75,13 @@ public sealed record AggregateState<TPayload> : IAggregateStateCommon where TPay
 
     public bool GetIsDeleted() => Payload is IDeletable { IsDeleted: true };
 
-    public dynamic GetComparableObject(AggregateState<TPayload> original, bool copyVersion = true) => this with
-    {
-        AggregateId = original.AggregateId,
-        Version = copyVersion ? original.Version : Version,
-        LastEventId = original.LastEventId,
-        AppliedSnapshotVersion = original.AppliedSnapshotVersion,
-        LastSortableUniqueId = original.LastSortableUniqueId
-    };
+    public dynamic GetComparableObject(AggregateState<TPayload> original, bool copyVersion = true) =>
+        this with
+        {
+            AggregateId = original.AggregateId,
+            Version = copyVersion ? original.Version : Version,
+            LastEventId = original.LastEventId,
+            AppliedSnapshotVersion = original.AppliedSnapshotVersion,
+            LastSortableUniqueId = original.LastSortableUniqueId
+        };
 }

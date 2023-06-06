@@ -9,7 +9,6 @@ public interface IParentAggregatePayloadCommon<TParentAggregatePayload> : IAggre
 {
 }
 public interface IParentAggregatePayload<TParentAggregatePayload, IFirstAggregatePayload> : IParentAggregatePayloadCommon<TParentAggregatePayload>
-    where TParentAggregatePayload : IAggregatePayloadCommon
-    where IFirstAggregatePayload : IAggregatePayloadCommon, new()
+    where TParentAggregatePayload : IAggregatePayloadCommon where IFirstAggregatePayload : IAggregatePayloadCommon, new()
 {
 }

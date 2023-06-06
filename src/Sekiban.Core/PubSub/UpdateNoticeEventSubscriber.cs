@@ -12,10 +12,6 @@ public class UpdateNoticeEventSubscriber<TEvent> : INotificationHandler<TEvent> 
     public async Task Handle(TEvent notification, CancellationToken cancellationToken)
     {
         await Task.CompletedTask;
-        _updateNotice.SendUpdate(
-            notification.AggregateType,
-            notification.AggregateId,
-            notification.SortableUniqueId,
-            UpdatedLocationType.Local);
+        _updateNotice.SendUpdate(notification.AggregateType, notification.AggregateId, notification.SortableUniqueId, UpdatedLocationType.Local);
     }
 }

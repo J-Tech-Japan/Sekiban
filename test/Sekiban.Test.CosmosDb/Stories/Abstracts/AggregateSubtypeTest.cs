@@ -22,8 +22,8 @@ namespace Sekiban.Test.CosmosDb.Stories.Abstracts;
 
 public abstract class AggregateSubtypeTest : TestBase
 {
-    private readonly IDocumentRemover _documentRemover;
     private readonly IDocumentPersistentWriter _documentPersistentWriter;
+    private readonly IDocumentRemover _documentRemover;
     private readonly HybridStoreManager _hybridStoreManager;
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
     private readonly IMemoryCacheAccessor _memoryCache;
@@ -35,9 +35,10 @@ public abstract class AggregateSubtypeTest : TestBase
     private readonly ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor;
     private CommandExecutorResponseWithEvents commandResponse = default!;
 
-    public AggregateSubtypeTest(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper, ISekibanServiceProviderGenerator providerGenerator) : base(
-        sekibanTestFixture,
-        testOutputHelper, providerGenerator)
+    public AggregateSubtypeTest(
+        SekibanTestFixture sekibanTestFixture,
+        ITestOutputHelper testOutputHelper,
+        ISekibanServiceProviderGenerator providerGenerator) : base(sekibanTestFixture, testOutputHelper, providerGenerator)
     {
         _documentRemover = GetService<IDocumentRemover>();
         commandExecutor = GetService<ICommandExecutor>();
@@ -63,8 +64,7 @@ public abstract class AggregateSubtypeTest : TestBase
 
 
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
-            new AddItemToShoppingCartI
-                { CartId = cartId, Code = "TEST1", Name = "Name1", Quantity = 1 });
+            new AddItemToShoppingCartI { CartId = cartId, Code = "TEST1", Name = "Name1", Quantity = 1 });
         Assert.Equal(1, commandResponse.Version);
         Assert.Single(commandResponse.Events);
         Assert.Equal(nameof(ICartAggregate), commandResponse.Events.First().AggregateType);
@@ -105,8 +105,7 @@ public abstract class AggregateSubtypeTest : TestBase
         await CosmosDbStory();
         var purchasedTime = DateTime.Now;
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
-            new SubmitOrderI
-                { CartId = cartId, OrderSubmittedLocalTime = purchasedTime, ReferenceVersion = commandResponse.Version });
+            new SubmitOrderI { CartId = cartId, OrderSubmittedLocalTime = purchasedTime, ReferenceVersion = commandResponse.Version });
 
 
         // this time, the aggregate is created as ShoppingCartI
@@ -140,19 +139,22 @@ public abstract class AggregateSubtypeTest : TestBase
     public async Task SimpleCommandsTest()
     {
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
-            new AddItemToShoppingCartI
-                { CartId = cartId, Code = "TEST1", Name = "Name1", Quantity = 1 });
+            new AddItemToShoppingCartI { CartId = cartId, Code = "TEST1", Name = "Name1", Quantity = 1 });
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
-            new AddItemToShoppingCartI
-                { CartId = cartId, Code = "TEST2", Name = "Name2", Quantity = 1 });
+            new AddItemToShoppingCartI { CartId = cartId, Code = "TEST2", Name = "Name2", Quantity = 1 });
         var purchasedTime = DateTime.Now;
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
-            new SubmitOrderI
-                { CartId = cartId, OrderSubmittedLocalTime = purchasedTime, ReferenceVersion = commandResponse.Version });
+            new SubmitOrderI { CartId = cartId, OrderSubmittedLocalTime = purchasedTime, ReferenceVersion = commandResponse.Version });
 
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
             new ReceivePaymentToPurchasedCartI
-                { CartId = cartId, PaymentMethod = "Credit Card", Amount = 1000, Currency = "USD", ReferenceVersion = commandResponse.Version });
+            {
+                CartId = cartId,
+                PaymentMethod = "Credit Card",
+                Amount = 1000,
+                Currency = "USD",
+                ReferenceVersion = commandResponse.Version
+            });
 
         var state = await aggregateLoader.AsDefaultStateAsync<ICartAggregate>(cartId);
         Assert.NotNull(state);
@@ -173,8 +175,7 @@ public abstract class AggregateSubtypeTest : TestBase
         for (var i = 0; i < 140; i++)
         {
             commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
-                new AddItemToShoppingCartI
-                    { CartId = snapshotCartId, Code = $"TEST{i:000}", Name = $"Name{i:000}", Quantity = i + 1 });
+                new AddItemToShoppingCartI { CartId = snapshotCartId, Code = $"TEST{i:000}", Name = $"Name{i:000}", Quantity = i + 1 });
             var state = await aggregateLoader.AsDefaultStateAsync<ICartAggregate>(snapshotCartId);
             Assert.NotNull(state);
             Assert.Equal(nameof(ShoppingCartI), state?.PayloadTypeName);
@@ -208,10 +209,7 @@ public abstract class AggregateSubtypeTest : TestBase
         _hybridStoreManager.ClearHybridPartitions();
         ((MemoryCache)_memoryCache.Cache).Compact(1);
 
-        snapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(
-            snapshotCartId,
-            typeof(ICartAggregate),
-            typeof(ICartAggregate));
+        snapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(snapshotCartId, typeof(ICartAggregate), typeof(ICartAggregate));
         Assert.NotEmpty(snapshots);
         foreach (var snapshot in snapshots)
         {
@@ -234,8 +232,7 @@ public abstract class AggregateSubtypeTest : TestBase
             async () =>
             {
                 commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
-                    new AddItemToShoppingCartI
-                        { CartId = cartId, Code = "TEST2", Name = "Name2", Quantity = 2 });
+                    new AddItemToShoppingCartI { CartId = cartId, Code = "TEST2", Name = "Name2", Quantity = 2 });
             });
 
     }
@@ -246,8 +243,7 @@ public abstract class AggregateSubtypeTest : TestBase
         await SecondCommandTest();
 
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
-            new ReceivePaymentToPurchasedCartI
-                { CartId = cartId, Amount = 1000, Currency = "JPY", ReferenceVersion = commandResponse.Version });
+            new ReceivePaymentToPurchasedCartI { CartId = cartId, Amount = 1000, Currency = "JPY", ReferenceVersion = commandResponse.Version });
     }
 
     [Fact]
@@ -266,40 +262,32 @@ public abstract class AggregateSubtypeTest : TestBase
         var cartId4 = Guid.NewGuid();
 
         commandResponse = commandExecutor.ExecCommandWithEventsAsync(
-                new AddItemToShoppingCartI
-                    { CartId = cartId1, Name = "Name1", Code = "Code1", Quantity = 1 })
+                new AddItemToShoppingCartI { CartId = cartId1, Name = "Name1", Code = "Code1", Quantity = 1 })
             .Result;
         commandResponse = commandExecutor.ExecCommandWithEventsAsync(
-                new AddItemToShoppingCartI
-                    { CartId = cartId1, Name = "Name2", Code = "Code2", Quantity = 2 })
+                new AddItemToShoppingCartI { CartId = cartId1, Name = "Name2", Code = "Code2", Quantity = 2 })
             .Result;
         commandResponse = commandExecutor.ExecCommandWithEventsAsync(
-                new SubmitOrderI
-                    { CartId = cartId1, OrderSubmittedLocalTime = DateTime.Now, ReferenceVersion = commandResponse.Version })
+                new SubmitOrderI { CartId = cartId1, OrderSubmittedLocalTime = DateTime.Now, ReferenceVersion = commandResponse.Version })
             .Result;
 
 
         commandResponse = commandExecutor.ExecCommandWithEventsAsync(
-                new AddItemToShoppingCartI
-                    { CartId = cartId2, Name = "Name2", Code = "Code2", Quantity = 1 })
+                new AddItemToShoppingCartI { CartId = cartId2, Name = "Name2", Code = "Code2", Quantity = 1 })
             .Result;
         commandResponse = commandExecutor.ExecCommandWithEventsAsync(
-                new SubmitOrderI
-                    { CartId = cartId2, OrderSubmittedLocalTime = DateTime.Now, ReferenceVersion = commandResponse.Version })
+                new SubmitOrderI { CartId = cartId2, OrderSubmittedLocalTime = DateTime.Now, ReferenceVersion = commandResponse.Version })
             .Result;
 
         commandResponse = commandExecutor.ExecCommandWithEventsAsync(
-                new AddItemToShoppingCartI
-                    { CartId = cartId3, Name = "Name3", Code = "Code3", Quantity = 1 })
+                new AddItemToShoppingCartI { CartId = cartId3, Name = "Name3", Code = "Code3", Quantity = 1 })
             .Result;
         commandResponse = commandExecutor.ExecCommandWithEventsAsync(
-                new AddItemToShoppingCartI
-                    { CartId = cartId3, Name = "Name2", Code = "Code2", Quantity = 2 })
+                new AddItemToShoppingCartI { CartId = cartId3, Name = "Name2", Code = "Code2", Quantity = 2 })
             .Result;
 
         commandResponse = commandExecutor.ExecCommandWithEventsAsync(
-                new AddItemToShoppingCartI
-                    { CartId = cartId4, Name = "Name4", Code = "Code4", Quantity = 1 })
+                new AddItemToShoppingCartI { CartId = cartId4, Name = "Name4", Code = "Code4", Quantity = 1 })
             .Result;
 
         var list = await multiProjectionService.GetAggregateList<ICartAggregate>();

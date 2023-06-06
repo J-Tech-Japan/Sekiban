@@ -6,17 +6,11 @@ public record PaymentReceivedToCartR : IEventPayload<PurchasedCartR, PaymentRece
     public string PaymentMethod { get; init; } = "Cash";
     public decimal Amount { get; init; } = 0;
     public string Currency { get; init; } = "JPY";
-    public PurchasedCartR OnEventInstance(PurchasedCartR aggregatePayload, Event<PaymentReceivedToCartR> ev)
-    {
-        return OnEvent(aggregatePayload, ev);
-    }
-    public static PurchasedCartR OnEvent(PurchasedCartR aggregatePayload, Event<PaymentReceivedToCartR> ev)
-    {
-        return aggregatePayload with
+    public PurchasedCartR OnEventInstance(PurchasedCartR aggregatePayload, Event<PaymentReceivedToCartR> ev) => OnEvent(aggregatePayload, ev);
+    public static PurchasedCartR OnEvent(PurchasedCartR aggregatePayload, Event<PaymentReceivedToCartR> ev) =>
+        aggregatePayload with
         {
             Payments = aggregatePayload.Payments.Add(
-                new PaymentRecordR
-                    { PaymentMethod = ev.Payload.PaymentMethod, Amount = ev.Payload.Amount, Currency = ev.Payload.Currency })
+                new PaymentRecordR { PaymentMethod = ev.Payload.PaymentMethod, Amount = ev.Payload.Amount, Currency = ev.Payload.Currency })
         };
-    }
 }

@@ -9,6 +9,7 @@ public record SingleProjectionState<TPayload>(
     int AppliedSnapshotVersion,
     int Version) : ISingleProjectionPayloadCommon, IAggregateStateCommon where TPayload : ISingleProjectionPayloadCommon
 {
+    public string PayloadTypeName => Payload.GetType().Name;
 
 
     public SingleProjectionState() : this(
@@ -31,7 +32,6 @@ public record SingleProjectionState<TPayload>(
     }
 
     public SingleProjectionState(IAggregateCommon aggregateCommon, TPayload payload) : this(aggregateCommon) => Payload = payload;
-    public string PayloadTypeName => Payload.GetType().Name;
     public dynamic GetPayload() => Payload;
     public string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();
     public bool GetIsDeleted() => Payload is IDeletable { IsDeleted: true };

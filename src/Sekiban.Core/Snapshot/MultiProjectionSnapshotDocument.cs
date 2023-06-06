@@ -7,6 +7,13 @@ namespace Sekiban.Core.Snapshot;
 
 public record MultiProjectionSnapshotDocument : IDocument
 {
+    public Guid LastEventId { get; init; }
+
+    public string LastSortableUniqueId { get; init; } = string.Empty;
+
+    public int SavedVersion { get; init; }
+
+    public string PayloadVersionIdentifier { get; init; } = string.Empty;
     public MultiProjectionSnapshotDocument() { }
 
     public MultiProjectionSnapshotDocument(Type projectionType, Guid id, IMultiProjectionCommon projection)
@@ -22,13 +29,6 @@ public record MultiProjectionSnapshotDocument : IDocument
         SavedVersion = projection.Version;
         PayloadVersionIdentifier = projection.GetPayloadVersionIdentifier();
     }
-    public Guid LastEventId { get; init; }
-
-    public string LastSortableUniqueId { get; init; } = string.Empty;
-
-    public int SavedVersion { get; init; }
-
-    public string PayloadVersionIdentifier { get; init; } = string.Empty;
     [JsonPropertyName("id")]
     public Guid Id { get; init; } = Guid.NewGuid();
     public string PartitionKey { get; init; } = default!;

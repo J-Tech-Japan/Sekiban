@@ -7,7 +7,11 @@ namespace Sekiban.Testing.Shared;
 
 public class InMemorySekibanServiceProviderGenerator : ISekibanServiceProviderGenerator
 {
-    public IServiceProvider Generate(ISekibanTestFixture fixture, IDependencyDefinition dependencyDefinition, Action<IServiceCollection>? configureServices = null, ISekibanDateProducer? sekibanDateProducer = null)
+    public IServiceProvider Generate(
+        ISekibanTestFixture fixture,
+        IDependencyDefinition dependencyDefinition,
+        Action<IServiceCollection>? configureServices = null,
+        ISekibanDateProducer? sekibanDateProducer = null)
     {
         IServiceCollection services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(fixture.Configuration);

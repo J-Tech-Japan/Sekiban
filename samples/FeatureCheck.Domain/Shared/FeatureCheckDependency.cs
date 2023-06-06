@@ -44,9 +44,7 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
 
     protected override void Define()
     {
-        AddAggregate<Branch>()
-            .AddCommandHandler<CreateBranch, CreateBranch.Handler>()
-            .AddAggregateQuery<BranchExistsQuery>();
+        AddAggregate<Branch>().AddCommandHandler<CreateBranch, CreateBranch.Handler>().AddAggregateQuery<BranchExistsQuery>();
 
         AddAggregate<Client>()
             .AddCommandHandler<CreateClient, CreateClient.Handler>()
@@ -87,23 +85,19 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
 
         AddAggregate<ICartAggregate>()
             .AddSubtype<ShoppingCartI>(
-                subType =>
-                    subType.AddCommandHandler<AddItemToShoppingCartI, AddItemToShoppingCartI.Handler>()
-                        .AddCommandHandler<SubmitOrderI, SubmitOrderI.Handler>()
-                        .AddEventSubscriber<OrderSubmittedI, OrderSubmittedI.Subscriber>())
+                subType => subType.AddCommandHandler<AddItemToShoppingCartI, AddItemToShoppingCartI.Handler>()
+                    .AddCommandHandler<SubmitOrderI, SubmitOrderI.Handler>()
+                    .AddEventSubscriber<OrderSubmittedI, OrderSubmittedI.Subscriber>())
             .AddSubtype<PurchasedCartI>(
-                subType =>
-                    subType.AddCommandHandler<ReceivePaymentToPurchasedCartI, ReceivePaymentToPurchasedCartI.Handler>())
+                subType => subType.AddCommandHandler<ReceivePaymentToPurchasedCartI, ReceivePaymentToPurchasedCartI.Handler>())
             .AddSubtype<ShippingCartI>(subType => { });
 
         AddAggregate<CartAggregateR>()
             .AddSubtype<ShoppingCartR>(
-                subType =>
-                    subType.AddCommandHandler<AddItemToShoppingCartR, AddItemToShoppingCartR.Handler>()
-                        .AddCommandHandler<SubmitOrderR, SubmitOrderR.Handler>())
+                subType => subType.AddCommandHandler<AddItemToShoppingCartR, AddItemToShoppingCartR.Handler>()
+                    .AddCommandHandler<SubmitOrderR, SubmitOrderR.Handler>())
             .AddSubtype<PurchasedCartR>(
-                subType =>
-                    subType.AddCommandHandler<ReceivePaymentToPurchasedCartR, ReceivePaymentToPurchasedCartR.Handler>())
+                subType => subType.AddCommandHandler<ReceivePaymentToPurchasedCartR, ReceivePaymentToPurchasedCartR.Handler>())
             .AddSubtype<ShippingCartR>(subType => { });
 
         AddMultiProjectionQuery<ClientLoyaltyPointMultiProjectionQuery>();
@@ -114,14 +108,9 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
 
         AddAggregate<IInheritedAggregate>()
             .AddSubtype<ProcessingSubAggregate>(
-                subType =>
-                    subType.AddCommandHandler<OpenInheritedAggregate, OpenInheritedAggregate.Handler>()
-                        .AddCommandHandler<CloseInheritedAggregate, CloseInheritedAggregate.Handler>()
-            )
-            .AddSubtype<ClosedSubAggregate>(
-                subType =>
-                    subType.AddCommandHandler<ReopenInheritedAggregate, ReopenInheritedAggregate.Handler>()
-            );
+                subType => subType.AddCommandHandler<OpenInheritedAggregate, OpenInheritedAggregate.Handler>()
+                    .AddCommandHandler<CloseInheritedAggregate, CloseInheritedAggregate.Handler>())
+            .AddSubtype<ClosedSubAggregate>(subType => subType.AddCommandHandler<ReopenInheritedAggregate, ReopenInheritedAggregate.Handler>());
 
     }
 }

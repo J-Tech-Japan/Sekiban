@@ -9,19 +9,20 @@ public class DynamoSekibanServiceProviderGenerator : ISekibanServiceProviderGene
 {
 
     public IServiceProvider Generate(
-        ISekibanTestFixture fixture, IDependencyDefinition dependencyDefinition,
+        ISekibanTestFixture fixture,
+        IDependencyDefinition dependencyDefinition,
         Action<IServiceCollection>? configureServices = null,
         ISekibanDateProducer? sekibanDateProducer = null)
     {
         IServiceCollection services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(fixture.Configuration);
-        services.AddSekibanCoreWithDependency(dependencyDefinition, sekibanDateProducer, ServiceCollectionExtensions.MultiProjectionType.MemoryCache);
+        services.AddSekibanCoreWithDependency(dependencyDefinition, sekibanDateProducer);
         services.AddSekibanDynamoDB();
         if (fixture.TestOutputHelper is not null)
         {
             services.AddSingleton(fixture.TestOutputHelper);
         }
-        
+
         if (configureServices is not null)
         {
             configureServices(services);

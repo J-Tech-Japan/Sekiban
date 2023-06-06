@@ -27,8 +27,7 @@ public record AddLoyaltyPointWithVO : IVersionValidationCommand<LoyaltyPoint>
             AddLoyaltyPointWithVO command)
         {
             await Task.CompletedTask;
-            if (getAggregateState().Payload.LastOccuredTime is not null &&
-                getAggregateState().Payload.LastOccuredTime > command.HappenedDate)
+            if (getAggregateState().Payload.LastOccuredTime is not null && getAggregateState().Payload.LastOccuredTime > command.HappenedDate)
             {
                 throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
             }

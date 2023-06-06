@@ -9,10 +9,7 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
 {
     private readonly IWebDependencyDefinition _webDependencyDefinition;
 
-    public SekibanControllerFeatureProvider(IWebDependencyDefinition webDependencyDefinition)
-    {
-        _webDependencyDefinition = webDependencyDefinition;
-    }
+    public SekibanControllerFeatureProvider(IWebDependencyDefinition webDependencyDefinition) => _webDependencyDefinition = webDependencyDefinition;
 
     public void PopulateFeature(IEnumerable<ApplicationPart> parts, ControllerFeature feature)
     {
@@ -29,24 +26,18 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
         }
         foreach (var aggregateType in _webDependencyDefinition.GetAggregatePayloadTypes())
         {
-            feature.Controllers.Add(
-                _webDependencyDefinition.Options.BaseGetAggregateControllerType.MakeGenericType(aggregateType)
-                    .GetTypeInfo());
+            feature.Controllers.Add(_webDependencyDefinition.Options.BaseGetAggregateControllerType.MakeGenericType(aggregateType).GetTypeInfo());
         }
         foreach (var aggregateType in _webDependencyDefinition.GetAggregatePayloadSubtypes())
         {
-            feature.Controllers.Add(
-                _webDependencyDefinition.Options.BaseGetAggregateControllerType.MakeGenericType(aggregateType)
-                    .GetTypeInfo());
+            feature.Controllers.Add(_webDependencyDefinition.Options.BaseGetAggregateControllerType.MakeGenericType(aggregateType).GetTypeInfo());
         }
         foreach (var projectionType in _webDependencyDefinition.GetSingleProjectionTypes())
         {
             if (projectionType.IsSingleProjectionPayloadType())
             {
                 feature.Controllers.Add(
-                    _webDependencyDefinition.Options.BaseSingleProjectionControllerType
-                        .MakeGenericType(projectionType)
-                        .GetTypeInfo());
+                    _webDependencyDefinition.Options.BaseSingleProjectionControllerType.MakeGenericType(projectionType).GetTypeInfo());
             }
         }
         foreach (var projectionType in _webDependencyDefinition.GetAggregateListQueryTypes()
@@ -140,8 +131,6 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
                     .GetTypeInfo());
         }
 
-        feature.Controllers.Add(
-            _webDependencyDefinition.Options.BaseIndexControllerType.MakeGenericType(typeof(object))
-                .GetTypeInfo());
+        feature.Controllers.Add(_webDependencyDefinition.Options.BaseIndexControllerType.MakeGenericType(typeof(object)).GetTypeInfo());
     }
 }

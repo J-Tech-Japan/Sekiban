@@ -8,8 +8,7 @@ namespace Sekiban.Web.Controllers.Bases;
 
 [ApiController]
 [Produces("application/json")]
-public class
-    BaseMultiProjectionQueryController<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse> : ControllerBase
+public class BaseMultiProjectionQueryController<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse> : ControllerBase
     where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     where TQuery : IMultiProjectionQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
     where TQueryParameter : IQueryParameter<TQueryResponse>
@@ -45,8 +44,7 @@ public class
         {
             return Unauthorized();
         }
-        var result = await QueryExecutor
-            .ExecuteAsync(queryParam);
+        var result = await QueryExecutor.ExecuteAsync(queryParam);
         return Ok(result);
     }
 }

@@ -21,32 +21,27 @@ public class MultiProjectionCache : IMultiProjectionCache
         _memoryCacheSettings = memoryCacheSettings;
     }
 
-    public void Set<TProjection, TProjectionPayload>(
-        MultipleMemoryProjectionContainer<TProjection, TProjectionPayload> container)
-        where TProjection : IMultiProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+    public void Set<TProjection, TProjectionPayload>(MultipleMemoryProjectionContainer<TProjection, TProjectionPayload> container)
+        where TProjection : IMultiProjector<TProjectionPayload>, new() where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         _memoryCache.Cache.Set(GetInMemoryKey<TProjection, TProjectionPayload>(), container, GetMemoryCacheOptions());
     }
 
     public MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>? Get<TProjection, TProjectionPayload>()
-        where TProjection : IMultiProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+        where TProjection : IMultiProjector<TProjectionPayload>, new() where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         var toReturn = _memoryCache.Cache.Get<MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>>(
             GetInMemoryKey<TProjection, TProjectionPayload>());
         return toReturn;
     }
 
-    private MemoryCacheEntryOptions GetMemoryCacheOptions()
-    {
-        return new MemoryCacheEntryOptions
+    private MemoryCacheEntryOptions GetMemoryCacheOptions() =>
+        new()
         {
             AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(_memoryCacheSettings.MultiProjectionAbsoluteExpirationMinutes),
             SlidingExpiration = TimeSpan.FromMinutes(_memoryCacheSettings.MultiProjectionSlidingExpirationMinutes)
             // If not accessed 5 minutes it will be deleted. Anyway it will be deleted after two hours
         };
-    }
 
     private string GetInMemoryKey<TProjector, TPayload>() where TProjector : IMultiProjector<TPayload>, new()
         where TPayload : IMultiProjectionPayloadCommon, new()

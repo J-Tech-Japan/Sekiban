@@ -2,8 +2,7 @@ using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 namespace Sekiban.Core.Query.MultiProjections.Projections;
 
-public record MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>
-    where TProjection : IMultiProjector<TProjectionPayload>, new()
+public record MultipleMemoryProjectionContainer<TProjection, TProjectionPayload> where TProjection : IMultiProjector<TProjectionPayload>, new()
     where TProjectionPayload : IMultiProjectionPayloadCommon, new()
 {
     public List<IEvent> UnsafeEvents { get; init; } = new();

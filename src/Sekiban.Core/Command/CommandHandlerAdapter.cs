@@ -30,12 +30,10 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> where TAg
     {
         var command = commandDocument.Payload;
         _aggregate = await _aggregateLoader.AsAggregateAsync<TAggregatePayload>(aggregateId) ??
-            new Aggregate<TAggregatePayload>
-                { AggregateId = aggregateId };
+            new Aggregate<TAggregatePayload> { AggregateId = aggregateId };
         if (handler is not ICommandHandler<TAggregatePayload, TCommand> regularHandler)
         {
-            throw new SekibanCommandHandlerNotMatchException(
-                handler.GetType().Name + "handler should inherit " + typeof(ICommandHandler<,>).Name);
+            throw new SekibanCommandHandlerNotMatchException(handler.GetType().Name + "handler should inherit " + typeof(ICommandHandler<,>).Name);
         }
         var state = _aggregate.ToState();
         // Validate AddAggregate is deleted
@@ -45,14 +43,9 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> where TAg
         }
 
         // Validate AddAggregate Version
-        if (_checkVersion &&
-            command is IVersionValidationCommandCommon validationCommand &&
-            validationCommand.ReferenceVersion != _aggregate.Version)
+        if (_checkVersion && command is IVersionValidationCommandCommon validationCommand && validationCommand.ReferenceVersion != _aggregate.Version)
         {
-            throw new SekibanCommandInconsistentVersionException(
-                _aggregate.AggregateId,
-                validationCommand.ReferenceVersion,
-                _aggregate.Version);
+            throw new SekibanCommandInconsistentVersionException(_aggregate.AggregateId, validationCommand.ReferenceVersion, _aggregate.Version);
         }
         await foreach (var eventPayload in regularHandler.HandleCommandAsync(GetAggregateState, command))
         {

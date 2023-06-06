@@ -23,14 +23,8 @@ public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPa
         state = state.ApplyEvent(ev);
     }
 
-    public MultiProjectionState<TProjectionPayload> ToState()
-    {
-        return state;
-    }
-    public bool EventShouldBeApplied(IEvent ev)
-    {
-        return ev.GetSortableUniqueId().LaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
-    }
+    public MultiProjectionState<TProjectionPayload> ToState() => state;
+    public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().LaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
 
     public void ApplySnapshot(MultiProjectionState<TProjectionPayload> snapshot)
     {
@@ -43,8 +37,5 @@ public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPa
             throw new SekibanMultiProjectionMustInheritISingleProjectionEventApplicable();
         return projectionPayload.GetTargetAggregatePayloads().GetAggregateNames();
     }
-    public string GetPayloadVersionIdentifier()
-    {
-        return Payload.GetPayloadVersionIdentifier();
-    }
+    public string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();
 }

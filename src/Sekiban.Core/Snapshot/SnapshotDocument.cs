@@ -6,6 +6,18 @@ namespace Sekiban.Core.Snapshot;
 
 public record SnapshotDocument : Document, IDocument
 {
+
+    public dynamic? Snapshot { get; init; }
+
+    public string AggregateTypeName { get; init; } = string.Empty;
+
+    public Guid LastEventId { get; init; }
+
+    public string LastSortableUniqueId { get; init; } = string.Empty;
+
+    public int SavedVersion { get; init; }
+
+    public string PayloadVersionIdentifier { get; init; } = string.Empty;
     public SnapshotDocument()
     {
     }
@@ -32,18 +44,6 @@ public record SnapshotDocument : Document, IDocument
         SavedVersion = savedVersion;
         PayloadVersionIdentifier = payloadVersionIdentifier;
     }
-
-    public dynamic? Snapshot { get; init; }
-
-    public string AggregateTypeName { get; init; } = string.Empty;
-
-    public Guid LastEventId { get; init; }
-
-    public string LastSortableUniqueId { get; init; } = string.Empty;
-
-    public int SavedVersion { get; init; }
-
-    public string PayloadVersionIdentifier { get; init; } = string.Empty;
 
     public IAggregateStateCommon? GetState() => Snapshot as IAggregateStateCommon;
 

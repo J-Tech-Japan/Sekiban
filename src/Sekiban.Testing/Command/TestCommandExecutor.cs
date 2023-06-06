@@ -15,12 +15,9 @@ public class TestCommandExecutor
 {
     private readonly IServiceProvider _serviceProvider;
 
-    public TestCommandExecutor(IServiceProvider serviceProvider)
-    {
-        _serviceProvider = serviceProvider;
-    }
-
     public ImmutableList<IEvent> LatestEvents { get; set; } = ImmutableList<IEvent>.Empty;
+
+    public TestCommandExecutor(IServiceProvider serviceProvider) => _serviceProvider = serviceProvider;
 
     //public (IEnumerable<IEvent>, Guid) ExecuteCreateCommand<TAggregatePayload>(
     //    ICommand<TAggregatePayload> command,
@@ -80,8 +77,7 @@ public class TestCommandExecutor
     //    return (latestEvents, aggregateId);
     //}
 
-    private Aggregate<TAggregatePayload>? GetAggregate<TAggregatePayload>(Guid aggregateId)
-        where TAggregatePayload : IAggregatePayload, new()
+    private Aggregate<TAggregatePayload>? GetAggregate<TAggregatePayload>(Guid aggregateId) where TAggregatePayload : IAggregatePayload, new()
     {
         var singleProjectionService = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader;
         if (singleProjectionService is null)
@@ -94,8 +90,7 @@ public class TestCommandExecutor
             throw new Exception("Failed to get AddAggregate Service");
         }
         var genericMethod = method.MakeGenericMethod(typeof(TAggregatePayload));
-        var aggregateTask =
-            genericMethod.Invoke(singleProjectionService, new object?[] { aggregateId, null }) as dynamic;
+        var aggregateTask = genericMethod.Invoke(singleProjectionService, new object?[] { aggregateId, null }) as dynamic;
         if (aggregateTask is null)
         {
             throw new Exception("Failed to get AddAggregate Service");
@@ -104,26 +99,15 @@ public class TestCommandExecutor
         return aggregate;
     }
 
-    public Guid ExecuteCommand<TAggregatePayload>(
-        ICommand<TAggregatePayload> command,
-        Guid? injectingAggregateId = null)
-        where TAggregatePayload : IAggregatePayloadCommon
-    {
-        return ExecuteCommand(command, injectingAggregateId, false);
-    }
+    public Guid ExecuteCommand<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
+        where TAggregatePayload : IAggregatePayloadCommon =>
+        ExecuteCommand(command, injectingAggregateId, false);
 
-    public Guid ExecuteCommandWithPublish<TAggregatePayload>(
-        ICommand<TAggregatePayload> command,
-        Guid? injectingAggregateId = null)
-        where TAggregatePayload : IAggregatePayloadCommon
-    {
-        return ExecuteCommand(command, injectingAggregateId, true);
-    }
+    public Guid ExecuteCommandWithPublish<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
+        where TAggregatePayload : IAggregatePayloadCommon =>
+        ExecuteCommand(command, injectingAggregateId, true);
 
-    private Guid ExecuteCommand<TAggregatePayload>(
-        ICommand<TAggregatePayload> command,
-        Guid? injectingAggregateId,
-        bool withPublish)
+    private Guid ExecuteCommand<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId, bool withPublish)
         where TAggregatePayload : IAggregatePayloadCommon
     {
         var validationResults = command.ValidateProperties().ToList();
@@ -145,12 +129,7 @@ public class TestCommandExecutor
         {
             var commandDocumentBaseType = typeof(CommandDocument<>);
             var commandDocumentType = commandDocumentBaseType.MakeGenericType(command.GetType());
-            var commandDocument = Activator.CreateInstance(
-                commandDocumentType,
-                aggregateId,
-                command,
-                typeof(TAggregatePayload),
-                null);
+            var commandDocument = Activator.CreateInstance(commandDocumentType, aggregateId, command, typeof(TAggregatePayload), null);
 
             var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader;
             if (aggregateLoader is null)
@@ -160,41 +139,26 @@ public class TestCommandExecutor
 
             var baseClass = typeof(CommandHandlerAdapter<,>);
             var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), command.GetType());
-            var adapter = Activator.CreateInstance(adapterClass, aggregateLoader, false) ??
-                throw new Exception("Adapter not found");
+            var adapter = Activator.CreateInstance(adapterClass, aggregateLoader, false) ?? throw new Exception("Adapter not found");
 
-            var method = adapterClass.GetMethod("HandleCommandAsync") ??
-                throw new Exception("HandleCommandAsync not found");
+            var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new Exception("HandleCommandAsync not found");
 
-            var commandResponse =
-                (CommandResponse)((dynamic?)method.Invoke(adapter, new[] { commandDocument, handler, aggregateId }) ??
-                    throw new SekibanCommandHandlerNotMatchException(
-                        "Command failed to execute " +
-                        command.GetType().Name)).Result;
+            var commandResponse = (CommandResponse)((dynamic?)method.Invoke(adapter, new[] { commandDocument, handler, aggregateId }) ??
+                throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
 
             LatestEvents = commandResponse.Events;
-        }
-        else
+        } else
         {
             var commandDocumentBaseType = typeof(CommandDocument<>);
             var commandDocumentType = commandDocumentBaseType.MakeGenericType(command.GetType());
-            var commandDocument = Activator.CreateInstance(
-                commandDocumentType,
-                aggregateId,
-                command,
-                typeof(TAggregatePayload),
-                null);
+            var commandDocument = Activator.CreateInstance(commandDocumentType, aggregateId, command, typeof(TAggregatePayload), null);
 
             var baseClass = typeof(OnlyPublishingCommandHandlerAdapter<,>);
             var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), command.GetType());
             var adapter = Activator.CreateInstance(adapterClass) ?? throw new Exception("Method not found");
-            var method = adapterClass.GetMethod("HandleCommandAsync") ??
-                throw new Exception("HandleCommandAsync not found");
-            var commandResponse =
-                (CommandResponse)((dynamic?)method.Invoke(adapter, new[] { commandDocument, handler, aggregateId }) ??
-                    throw new SekibanCommandHandlerNotMatchException(
-                        "Command failed to execute " +
-                        command.GetType().Name)).Result;
+            var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new Exception("HandleCommandAsync not found");
+            var commandResponse = (CommandResponse)((dynamic?)method.Invoke(adapter, new[] { commandDocument, handler, aggregateId }) ??
+                throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
             LatestEvents = commandResponse.Events;
         }
 
@@ -208,8 +172,7 @@ public class TestCommandExecutor
             if (withPublish)
             {
                 documentWriter.SaveAndPublishEvent(e, typeof(TAggregatePayload)).Wait();
-            }
-            else
+            } else
             {
                 documentWriter.SaveAsync(e, typeof(TAggregatePayload)).Wait();
             }
@@ -217,12 +180,10 @@ public class TestCommandExecutor
         return aggregateId;
     }
 
-    public IReadOnlyCollection<IEvent> GetAllAggregateEvents<TAggregatePayload>(Guid aggregateId)
-        where TAggregatePayload : IAggregatePayload, new()
+    public IReadOnlyCollection<IEvent> GetAllAggregateEvents<TAggregatePayload>(Guid aggregateId) where TAggregatePayload : IAggregatePayload, new()
     {
         var toReturn = new List<IEvent>();
-        var documentRepository =
-            _serviceProvider.GetRequiredService(typeof(IDocumentRepository)) as IDocumentRepository ??
+        var documentRepository = _serviceProvider.GetRequiredService(typeof(IDocumentRepository)) as IDocumentRepository ??
             throw new Exception("Failed to get document repository");
         documentRepository.GetAllEventsForAggregateIdAsync(
                 aggregateId,

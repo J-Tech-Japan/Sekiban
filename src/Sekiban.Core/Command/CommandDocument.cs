@@ -10,12 +10,11 @@ namespace Sekiban.Core.Command;
 /// <typeparam name="T"></typeparam>
 public sealed record CommandDocument<T> : Document, ICallHistories where T : ICommandCommon
 {
+    public T Payload { get; init; } = default!;
+    public string? ExecutedUser { get; init; } = string.Empty;
+    public string? Exception { get; init; } = null;
     public CommandDocument() { }
-    public CommandDocument(
-        Guid aggregateId,
-        T commandPayload,
-        Type aggregateType,
-        List<CallHistory>? callHistories = null) : base(
+    public CommandDocument(Guid aggregateId, T commandPayload, Type aggregateType, List<CallHistory>? callHistories = null) : base(
         aggregateId,
         PartitionKeyGenerator.ForCommand(aggregateId, aggregateType.GetBaseAggregatePayloadTypeFromAggregate()),
         DocumentType.Command,
@@ -24,9 +23,6 @@ public sealed record CommandDocument<T> : Document, ICallHistories where T : ICo
         Payload = commandPayload;
         CallHistories = callHistories ?? new List<CallHistory>();
     }
-    public T Payload { get; init; } = default!;
-    public string? ExecutedUser { get; init; } = string.Empty;
-    public string? Exception { get; init; } = null;
     public List<CallHistory> CallHistories { get; init; } = new();
     public List<CallHistory> GetCallHistoriesIncludesItself()
     {

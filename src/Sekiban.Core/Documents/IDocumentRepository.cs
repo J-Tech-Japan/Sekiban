@@ -24,10 +24,7 @@ public interface IDocumentRepository
         string? sinceSortableUniqueId,
         Action<IEnumerable<string>> resultAction);
 
-    Task GetAllEventsForAggregateAsync(
-        Type aggregatePayloadType,
-        string? sinceSortableUniqueId,
-        Action<IEnumerable<IEvent>> resultAction);
+    Task GetAllEventsForAggregateAsync(Type aggregatePayloadType, string? sinceSortableUniqueId, Action<IEnumerable<IEvent>> resultAction);
 
     Task GetAllEventsAsync(
         Type multiProjectionType,
@@ -41,9 +38,7 @@ public interface IDocumentRepository
         Type projectionPayloadType,
         string payloadVersionIdentifier);
 
-    Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(
-        Type multiProjectionPayloadType,
-        string payloadVersionIdentifier);
+    Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(Type multiProjectionPayloadType, string payloadVersionIdentifier);
 
     Task<bool> ExistsSnapshotForAggregateAsync(
         Guid aggregateId,
@@ -60,9 +55,5 @@ public interface IDocumentPersistentRepository : IDocumentRepository
 }
 public interface IDocumentTemporaryRepository : IDocumentRepository
 {
-    Task<bool> EventsForAggregateIdHasSortableUniqueIdAsync(
-        Guid aggregateId,
-        Type originalType,
-        string? partitionKey,
-        string? sortableUniqueId);
+    Task<bool> EventsForAggregateIdHasSortableUniqueIdAsync(Guid aggregateId, Type originalType, string? partitionKey, string? sortableUniqueId);
 }
