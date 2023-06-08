@@ -14,11 +14,14 @@ public sealed record CommandDocument<T> : Document, ICallHistories where T : ICo
     public string? ExecutedUser { get; init; } = string.Empty;
     public string? Exception { get; init; } = null;
     public CommandDocument() { }
-    public CommandDocument(Guid aggregateId, T commandPayload, Type aggregateType, List<CallHistory>? callHistories = null) : base(
-        aggregateId,
-        PartitionKeyGenerator.ForCommand(aggregateId, aggregateType.GetBaseAggregatePayloadTypeFromAggregate()),
-        DocumentType.Command,
-        typeof(T).Name)
+    public CommandDocument(Guid aggregateId, T commandPayload, Type aggregateType, string rootPartitionKey, List<CallHistory>? callHistories = null) :
+        base(
+            aggregateId,
+            PartitionKeyGenerator.ForCommand(aggregateId, aggregateType.GetBaseAggregatePayloadTypeFromAggregate(), rootPartitionKey),
+            DocumentType.Command,
+            typeof(T).Name,
+            aggregateType.GetBaseAggregatePayloadTypeFromAggregate().Name,
+            rootPartitionKey)
     {
         Payload = commandPayload;
         CallHistories = callHistories ?? new List<CallHistory>();

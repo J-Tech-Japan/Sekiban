@@ -7,6 +7,7 @@ namespace Sekiban.Core.Snapshot;
 
 public record MultiProjectionSnapshotDocument : IDocument
 {
+    public const string AllRootPartitionKey = "all";
     public Guid LastEventId { get; init; }
 
     public string LastSortableUniqueId { get; init; } = string.Empty;
@@ -16,18 +17,20 @@ public record MultiProjectionSnapshotDocument : IDocument
     public string PayloadVersionIdentifier { get; init; } = string.Empty;
     public MultiProjectionSnapshotDocument() { }
 
-    public MultiProjectionSnapshotDocument(Type projectionType, Guid id, IMultiProjectionCommon projection)
+    public MultiProjectionSnapshotDocument(Type projectionType, Guid id, IMultiProjectionCommon projection, string? rootPartitionKey)
     {
         Id = id;
+        RootPartitionKey = rootPartitionKey ?? AllRootPartitionKey;
         DocumentTypeName = DocumentTypeNameFromProjectionType(projectionType);
         DocumentType = DocumentType.MultiProjectionSnapshot;
-        PartitionKey = PartitionKeyGenerator.ForMultiProjectionSnapshot(projectionType);
+        PartitionKey = PartitionKeyGenerator.ForMultiProjectionSnapshot(projectionType, RootPartitionKey);
         TimeStamp = SekibanDateProducer.GetRegistered().UtcNow;
         SortableUniqueId = SortableUniqueIdValue.Generate(TimeStamp, Id);
         LastEventId = projection.LastEventId;
         LastSortableUniqueId = projection.LastSortableUniqueId;
         SavedVersion = projection.Version;
         PayloadVersionIdentifier = projection.GetPayloadVersionIdentifier();
+        AggregateType = DocumentTypeName;
     }
     [JsonPropertyName("id")]
     public Guid Id { get; init; } = Guid.NewGuid();
@@ -36,6 +39,8 @@ public record MultiProjectionSnapshotDocument : IDocument
     public string DocumentTypeName { get; init; } = default!;
     public DateTime TimeStamp { get; init; }
     public string SortableUniqueId { get; init; } = default!;
+    public string AggregateType { get; init; } = string.Empty;
+    public string RootPartitionKey { get; init; } = string.Empty;
     public SortableUniqueIdValue GetSortableUniqueId() => SortableUniqueId;
     public static string DocumentTypeNameFromProjectionType(Type projectionType)
     {

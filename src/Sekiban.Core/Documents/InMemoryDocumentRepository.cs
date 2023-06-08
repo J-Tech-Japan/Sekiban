@@ -92,6 +92,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         Type multiProjectionType,
         IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
+        string? rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction)
     {
         var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
@@ -124,10 +125,11 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         Guid aggregateId,
         Type aggregatePayloadType,
         Type projectionPayloadType,
+        string rootPartitionKey,
         string payloadVersionIdentifier)
     {
         await Task.CompletedTask;
-        if (_snapshotDocumentCache.Get(aggregateId, projectionPayloadType, projectionPayloadType) is { } snapshotDocument)
+        if (_snapshotDocumentCache.Get(aggregateId, projectionPayloadType, projectionPayloadType, rootPartitionKey) is { } snapshotDocument)
         {
             return snapshotDocument;
         }

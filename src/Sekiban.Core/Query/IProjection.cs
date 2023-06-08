@@ -6,4 +6,5 @@ public interface IProjection
     string LastSortableUniqueId { get; }
     public int AppliedSnapshotVersion { get; }
     int Version { get; }
+    string RootPartitionKey { get; }
 }

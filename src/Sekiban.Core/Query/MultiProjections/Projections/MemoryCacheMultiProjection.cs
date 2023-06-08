@@ -33,11 +33,13 @@ public class MemoryCacheMultiProjection : IMultiProjection
     }
 
     public async Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjection, TProjectionPayload>(
+        string? rootPartitionKey,
         SortableUniqueIdValue? includesSortableUniqueIdValue) where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         var savedContainerCache = multiProjectionCache.Get<TProjection, TProjectionPayload>();
-        var savedContainerBlob = savedContainerCache != null ? null : await GetContainerFromSnapshot<TProjection, TProjectionPayload>();
+        var savedContainerBlob
+            = savedContainerCache != null ? null : await GetContainerFromSnapshot<TProjection, TProjectionPayload>(rootPartitionKey);
 
         if (savedContainerBlob is not null && savedContainerCache is null)
         {
@@ -47,13 +49,13 @@ public class MemoryCacheMultiProjection : IMultiProjection
         var savedContainer = savedContainerCache ?? savedContainerBlob;
         if (savedContainer == null)
         {
-            return await GetInitialProjection<TProjection, TProjectionPayload>();
+            return await GetInitialProjection<TProjection, TProjectionPayload>(rootPartitionKey);
         }
 
         var projector = new TProjection();
         if (savedContainer.SafeState is null && savedContainer?.SafeSortableUniqueId?.Value is null)
         {
-            return await GetInitialProjection<TProjection, TProjectionPayload>();
+            return await GetInitialProjection<TProjection, TProjectionPayload>(rootPartitionKey);
         }
         if (includesSortableUniqueIdValue is not null &&
             savedContainer.SafeSortableUniqueId is not null &&
@@ -97,6 +99,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
                 typeof(TProjection),
                 projector.TargetAggregateNames(),
                 savedContainer.SafeSortableUniqueId?.Value,
+                rootPartitionKey,
                 events =>
                 {
                     var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
@@ -129,7 +132,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
         }
         catch (SekibanEventOrderMixedUpException)
         {
-            return await GetInitialProjection<TProjection, TProjectionPayload>();
+            return await GetInitialProjection<TProjection, TProjectionPayload>(rootPartitionKey);
         }
         container = container with { State = projector.ToState() };
         if (container.LastSortableUniqueId != null && container.SafeSortableUniqueId == null)
@@ -221,10 +224,10 @@ public class MemoryCacheMultiProjection : IMultiProjection
     }
 
     private async Task<MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>?>
-        GetContainerFromSnapshot<TProjection, TProjectionPayload>() where TProjection : IMultiProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+        GetContainerFromSnapshot<TProjection, TProjectionPayload>(string? rootPartitionKey)
+        where TProjection : IMultiProjector<TProjectionPayload>, new() where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
-        var state = await multiProjectionSnapshotGenerator.GetCurrentStateAsync<TProjectionPayload>();
+        var state = await multiProjectionSnapshotGenerator.GetCurrentStateAsync<TProjectionPayload>(rootPartitionKey);
         if (state.Version == 0)
         {
             return null;
@@ -241,7 +244,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
         return container;
     }
 
-    private async Task<MultiProjectionState<TProjectionPayload>> GetInitialProjection<TProjection, TProjectionPayload>()
+    private async Task<MultiProjectionState<TProjectionPayload>> GetInitialProjection<TProjection, TProjectionPayload>(string? rootPartitionKey)
         where TProjection : IMultiProjector<TProjectionPayload>, new() where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         var projector = new TProjection();
@@ -250,6 +253,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
             typeof(TProjection),
             projector.TargetAggregateNames(),
             null,
+            rootPartitionKey,
             events =>
             {
                 var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();

@@ -44,7 +44,13 @@ public class SingleProjectionListProjector<TProjection, TState, TProjector> : IM
     public MultiProjectionState<SingleProjectionListState<TState>> ToState()
     {
         State = new SingleProjectionListState<TState> { List = List.Select(m => m.ToState()).ToList() };
-        return new MultiProjectionState<SingleProjectionListState<TState>>(State, LastEventId, LastSortableUniqueId, AppliedSnapshotVersion, Version);
+        return new MultiProjectionState<SingleProjectionListState<TState>>(
+            State,
+            LastEventId,
+            LastSortableUniqueId,
+            AppliedSnapshotVersion,
+            Version,
+            RootPartitionKey);
     }
 
     public void ApplySnapshot(MultiProjectionState<SingleProjectionListState<TState>> snapshot)
@@ -70,5 +76,9 @@ public class SingleProjectionListProjector<TProjection, TState, TProjector> : IM
     public string LastSortableUniqueId { get; private set; } = string.Empty;
     public int AppliedSnapshotVersion { get; private set; }
     public int Version { get; private set; }
+    public string RootPartitionKey
+    {
+        get;
+    } = string.Empty;
     public string GetPayloadVersionIdentifier() => _projector.GetPayloadVersionIdentifier();
 }

@@ -38,6 +38,10 @@ public sealed record AggregateState<TPayload> : IAggregateStateCommon where TPay
     public int Version { get; init; }
 
     [Required]
+    [Description("Root Partition Key")]
+    public string RootPartitionKey { get; init; } = string.Empty;
+
+    [Required]
     [Description("Last Event Id")]
     public Guid LastEventId { get; init; }
 
@@ -82,6 +86,7 @@ public sealed record AggregateState<TPayload> : IAggregateStateCommon where TPay
             Version = copyVersion ? original.Version : Version,
             LastEventId = original.LastEventId,
             AppliedSnapshotVersion = original.AppliedSnapshotVersion,
-            LastSortableUniqueId = original.LastSortableUniqueId
+            LastSortableUniqueId = original.LastSortableUniqueId,
+            RootPartitionKey = original.RootPartitionKey
         };
 }

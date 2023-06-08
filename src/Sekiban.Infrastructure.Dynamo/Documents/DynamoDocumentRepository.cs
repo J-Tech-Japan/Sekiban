@@ -200,6 +200,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
         Type multiProjectionType,
         IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
+        string? rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionType);
@@ -254,6 +255,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
         Guid aggregateId,
         Type aggregatePayloadType,
         Type projectionPayloadType,
+        string rootPartitionKey,
         string payloadVersionIdentifier)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
@@ -262,7 +264,11 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
             aggregateContainerGroup,
             async table =>
             {
-                var partitionKey = PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType);
+                var partitionKey = PartitionKeyGenerator.ForAggregateSnapshot(
+                    aggregateId,
+                    aggregatePayloadType,
+                    projectionPayloadType,
+                    rootPartitionKey);
                 var filter = new QueryFilter();
                 filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
                 filter.AddCondition(nameof(SnapshotDocument.PayloadVersionIdentifier), QueryOperator.Equal, payloadVersionIdentifier);

@@ -12,6 +12,7 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection, ISinglePr
     public string LastSortableUniqueId { get; set; } = string.Empty;
     public int AppliedSnapshotVersion { get; set; }
     public int Version { get; set; }
+    public string RootPartitionKey { get; set; } = string.Empty;
     public Guid AggregateId { get; init; }
     public string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();
     public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().LaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
@@ -36,8 +37,6 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection, ISinglePr
         var genericMethod = method?.MakeGenericMethod(ev.GetEventPayloadType());
         Payload = (TProjectionPayload)(genericMethod?.Invoke(Payload, new object[] { Payload, ev }) ?? Payload);
 #endif
-
-
         LastEventId = ev.Id;
         LastSortableUniqueId = ev.SortableUniqueId;
         Version++;
@@ -58,7 +57,8 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection, ISinglePr
             LastEventId,
             LastSortableUniqueId,
             AppliedSnapshotVersion,
-            Version);
+            Version,
+            RootPartitionKey);
     public bool CanApplySnapshot(IAggregateStateCommon? snapshot) => snapshot is not null && snapshot.GetPayload() is TProjectionPayload;
     public void ApplySnapshot(IAggregateStateCommon snapshot)
     {
@@ -66,6 +66,7 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection, ISinglePr
         LastEventId = snapshot.LastEventId;
         LastSortableUniqueId = snapshot.LastSortableUniqueId;
         AppliedSnapshotVersion = snapshot.Version;
+        RootPartitionKey = snapshot.RootPartitionKey;
         Payload = snapshot.GetPayload();
     }
 

@@ -167,22 +167,34 @@ public class DocumentRepositorySplitter : IDocumentRepository
         Type multiProjectionType,
         IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
+        string? rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
-            await _documentTemporaryRepository.GetAllEventsAsync(multiProjectionType, targetAggregateNames, sinceSortableUniqueId, resultAction);
+            await _documentTemporaryRepository.GetAllEventsAsync(
+                multiProjectionType,
+                targetAggregateNames,
+                sinceSortableUniqueId,
+                rootPartitionKey,
+                resultAction);
             return;
         }
 
-        await _documentPersistentRepository.GetAllEventsAsync(multiProjectionType, targetAggregateNames, sinceSortableUniqueId, resultAction);
+        await _documentPersistentRepository.GetAllEventsAsync(
+            multiProjectionType,
+            targetAggregateNames,
+            sinceSortableUniqueId,
+            rootPartitionKey,
+            resultAction);
     }
 
     public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
         Guid aggregateId,
         Type aggregatePayloadType,
         Type projectionPayloadType,
+        string rootPartitionKey,
         string payloadVersionIdentifier)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
@@ -192,17 +204,20 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 aggregateId,
                 aggregatePayloadType,
                 projectionPayloadType,
+                rootPartitionKey,
                 payloadVersionIdentifier);
         }
         return await _documentTemporaryRepository.GetLatestSnapshotForAggregateAsync(
                 aggregateId,
                 aggregatePayloadType,
                 projectionPayloadType,
+                rootPartitionKey,
                 payloadVersionIdentifier) ??
             await _documentPersistentRepository.GetLatestSnapshotForAggregateAsync(
                 aggregateId,
                 aggregatePayloadType,
                 projectionPayloadType,
+                rootPartitionKey,
                 payloadVersionIdentifier);
     }
     public async Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(

@@ -23,6 +23,7 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
     ///     スナップショット、メモリキャッシュを使用する通常版
     /// </summary>
     /// <param name="aggregateId"></param>
+    /// <param name="rootPartitionKey"></param>
     /// <param name="toVersion"></param>
     /// <param name="includesSortableUniqueId"></param>
     /// <typeparam name="TProjection"></typeparam>
@@ -31,6 +32,7 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
     /// <returns></returns>
     public async Task<TProjection?> GetAggregateAsync<TProjection, TState, TProjector>(
         Guid aggregateId,
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
         SortableUniqueIdValue? includesSortableUniqueId = null)
         where TProjection : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<TState>
@@ -44,6 +46,7 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
             aggregateId,
             projector.GetOriginalAggregatePayloadType(),
             projector.GetPayloadType(),
+            rootPartitionKey,
             payloadVersion);
         IAggregateStateCommon? state = null;
         if (snapshotDocument is not null && aggregate.CanApplySnapshot(snapshotDocument.Snapshot))
@@ -52,12 +55,15 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
         }
         if (toVersion.HasValue && aggregate.Version >= toVersion.Value)
         {
-            return await singleProjectionFromInitial.GetAggregateFromInitialAsync<TProjection, TProjector>(aggregateId, toVersion.Value);
+            return await singleProjectionFromInitial.GetAggregateFromInitialAsync<TProjection, TProjector>(
+                aggregateId,
+                rootPartitionKey,
+                toVersion.Value);
         }
         await _documentRepository.GetAllEventsForAggregateIdAsync(
             aggregateId,
             projector.GetOriginalAggregatePayloadType(),
-            PartitionKeyGenerator.ForEvent(aggregateId, projector.GetOriginalAggregatePayloadType()),
+            PartitionKeyGenerator.ForEvent(aggregateId, projector.GetOriginalAggregatePayloadType(), rootPartitionKey),
             state?.LastSortableUniqueId,
             events =>
             {

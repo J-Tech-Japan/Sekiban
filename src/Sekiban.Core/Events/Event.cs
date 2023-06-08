@@ -12,17 +12,14 @@ public record Event<TEventPayload> : Document, IEvent where TEventPayload : IEve
     {
     }
 
-    public Event(Guid aggregateId, Type aggregateType, TEventPayload eventPayload) : base(
+    public Event(Guid aggregateId, Type aggregateType, TEventPayload eventPayload, string rootPartitionKey) : base(
         aggregateId,
-        PartitionKeyGenerator.ForEvent(aggregateId, aggregateType),
+        PartitionKeyGenerator.ForEvent(aggregateId, aggregateType, rootPartitionKey),
         DocumentType.Event,
-        typeof(TEventPayload).Name)
-    {
+        typeof(TEventPayload).Name,
+        aggregateType.Name,
+        rootPartitionKey) =>
         Payload = eventPayload;
-        AggregateType = aggregateType.Name;
-    }
-
-    public string AggregateType { get; init; } = null!;
 
     /// <summary>
     ///     集約のイベント適用後のバージョン
@@ -66,8 +63,8 @@ public record Event<TEventPayload> : Document, IEvent where TEventPayload : IEve
         return histories;
     }
 
-    public static Event<TEventPayload> GenerateEvent(Guid aggregateId, Type aggregateType, TEventPayload eventPayload) =>
-        new(aggregateId, aggregateType, eventPayload);
+    public static Event<TEventPayload> GenerateEvent(Guid aggregateId, Type aggregateType, TEventPayload eventPayload, string rootPartitionKey) =>
+        new(aggregateId, aggregateType, eventPayload, rootPartitionKey);
 
     public Event<TNewPayload> ChangePayload<TNewPayload>(TNewPayload newPayload) where TNewPayload : IEventPayloadCommon =>
         new()

@@ -6,7 +6,13 @@ public abstract record Document : IAggregateDocument
 {
     public Document() { }
 
-    public Document(Guid aggregateId, string partitionKey, DocumentType documentType, string documentTypeName)
+    public Document(
+        Guid aggregateId,
+        string partitionKey,
+        DocumentType documentType,
+        string documentTypeName,
+        string aggregateType,
+        string rootPartitionKey)
     {
         Id = Guid.NewGuid();
         AggregateId = aggregateId;
@@ -15,6 +21,8 @@ public abstract record Document : IAggregateDocument
         DocumentTypeName = documentTypeName;
         TimeStamp = SekibanDateProducer.GetRegistered().UtcNow;
         SortableUniqueId = SortableUniqueIdValue.Generate(TimeStamp, Id);
+        AggregateType = aggregateType;
+        RootPartitionKey = rootPartitionKey;
     }
 
     [JsonPropertyName("id")]
@@ -31,6 +39,7 @@ public abstract record Document : IAggregateDocument
     public DateTime TimeStamp { get; init; }
 
     public string SortableUniqueId { get; init; } = default!;
-
+    public string AggregateType { get; init; } = string.Empty;
+    public string RootPartitionKey { get; init; } = string.Empty;
     public SortableUniqueIdValue GetSortableUniqueId() => SortableUniqueId;
 }

@@ -1,4 +1,5 @@
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Documents;
 using Sekiban.Core.Events;
 namespace Sekiban.Core.Query.SingleProjections;
 
@@ -10,27 +11,33 @@ public interface IAggregateLoader
     ///     検証などのためにこちらを残しています。
     /// </summary>
     /// <param name="aggregateId"></param>
+    /// <param name="rootPartitionKey"></param>
     /// <param name="toVersion"></param>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Task<AggregateState<TAggregatePayload>?> AsDefaultStateFromInitialAsync<TAggregatePayload>(Guid aggregateId, int? toVersion = null)
-        where TAggregatePayload : IAggregatePayloadCommon;
+    public Task<AggregateState<TAggregatePayload>?> AsDefaultStateFromInitialAsync<TAggregatePayload>(
+        Guid aggregateId,
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
+        int? toVersion = null) where TAggregatePayload : IAggregatePayloadCommon;
 
     /// <summary>
     ///     カスタムプロジェククションを取得
     /// </summary>
     /// <param name="aggregateId"></param>
+    /// <param name="rootPartitionKey"></param>
     /// <param name="toVersion"></param>
     /// <param name="includesSortableUniqueId"></param>
     /// <typeparam name="TSingleProjectionPayload"></typeparam>
     /// <returns></returns>
     public Task<SingleProjectionState<TSingleProjectionPayload>?> AsSingleProjectionStateAsync<TSingleProjectionPayload>(
         Guid aggregateId,
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
         string? includesSortableUniqueId = null) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new();
 
     public Task<SingleProjectionState<TSingleProjectionPayload>?> AsSingleProjectionStateFromInitialAsync<TSingleProjectionPayload>(
         Guid aggregateId,
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new();
 
     /// <summary>
@@ -38,6 +45,7 @@ public interface IAggregateLoader
     ///     こちらはデフォルトプロジェクトション（集約のデフォルトステータス）
     /// </summary>
     /// <param name="aggregateId"></param>
+    /// <param name="rootPartitionKey"></param>
     /// <param name="toVersion"></param>
     /// <param name="includesSortableUniqueId"></param>
     /// <typeparam name="T"></typeparam>
@@ -45,6 +53,7 @@ public interface IAggregateLoader
     /// <returns></returns>
     public Task<Aggregate<TAggregatePayload>?> AsAggregateAsync<TAggregatePayload>(
         Guid aggregateId,
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
         string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommon;
 
@@ -53,6 +62,7 @@ public interface IAggregateLoader
     ///     こちらはデフォルトプロジェクトション（集約のデフォルトステータス）
     /// </summary>
     /// <param name="aggregateId"></param>
+    /// <param name="rootPartitionKey"></param>
     /// <param name="toVersion"></param>
     /// <param name="includesSortableUniqueId"></param>
     /// <typeparam name="T"></typeparam>
@@ -60,12 +70,14 @@ public interface IAggregateLoader
     /// <returns></returns>
     public Task<AggregateState<TAggregatePayload>?> AsDefaultStateAsync<TAggregatePayload>(
         Guid aggregateId,
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
         string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommon;
 
 
     public Task<IEnumerable<IEvent>?> AllEventsAsync<TAggregatePayload>(
         Guid aggregateId,
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
         string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommon;
 }

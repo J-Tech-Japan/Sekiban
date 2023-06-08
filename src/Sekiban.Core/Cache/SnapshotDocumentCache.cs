@@ -22,11 +22,11 @@ public class SnapshotDocumentCache : ISnapshotDocumentCache
         _memoryCache.Cache.Set(GetCacheKey(document), document, GetMemoryCacheOptions());
     }
 
-    public SnapshotDocument? Get(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType) =>
-        _memoryCache.Cache.Get<SnapshotDocument>(GetCacheKey(aggregateId, aggregatePayloadType, projectionPayloadType));
+    public SnapshotDocument? Get(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType, string rootPartitionKey) =>
+        _memoryCache.Cache.Get<SnapshotDocument>(GetCacheKey(aggregateId, aggregatePayloadType, projectionPayloadType, rootPartitionKey));
 
-    public string GetCacheKey(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType) =>
-        "SnapshotDocument" + PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType);
+    public string GetCacheKey(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType, string rootPartitionKey) =>
+        "SnapshotDocument" + PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType, rootPartitionKey);
     private MemoryCacheEntryOptions GetMemoryCacheOptions() =>
         new()
         {

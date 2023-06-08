@@ -30,12 +30,14 @@ public interface IDocumentRepository
         Type multiProjectionType,
         IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
+        string? rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction);
 
     Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
         Guid aggregateId,
         Type aggregatePayloadType,
         Type projectionPayloadType,
+        string rootPartitionKey,
         string payloadVersionIdentifier);
 
     Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(Type multiProjectionPayloadType, string payloadVersionIdentifier);

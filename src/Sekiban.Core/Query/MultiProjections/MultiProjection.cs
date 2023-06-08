@@ -6,13 +6,19 @@ namespace Sekiban.Core.Query.MultiProjections;
 public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPayload>, IMultiProjectionBase
     where TProjectionPayload : IMultiProjectionPayloadCommon, new()
 {
-    private MultiProjectionState<TProjectionPayload> state = new(new TProjectionPayload(), Guid.Empty, string.Empty, 0, 0);
+    private MultiProjectionState<TProjectionPayload> state = new(
+        new TProjectionPayload(),
+        Guid.Empty,
+        string.Empty,
+        0,
+        0,
+        string.Empty);
     private TProjectionPayload Payload => state.Payload;
     public Guid LastEventId => state.LastEventId;
     public string LastSortableUniqueId => state.LastSortableUniqueId;
     public int AppliedSnapshotVersion => state.AppliedSnapshotVersion;
     public int Version => state.Version;
-
+    public string RootPartitionKey => state.RootPartitionKey;
     public void ApplyEvent(IEvent ev)
     {
         (ev, var payload) = EventHelper.GetConvertedEventAndPayloadIfConverted(ev, ev.GetPayload());

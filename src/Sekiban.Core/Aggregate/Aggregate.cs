@@ -39,7 +39,8 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon, ISingleProje
             Version = snapshot.Version,
             LastEventId = snapshot.LastEventId,
             LastSortableUniqueId = snapshot.LastSortableUniqueId,
-            AppliedSnapshotVersion = snapshot.Version
+            AppliedSnapshotVersion = snapshot.Version,
+            RootPartitionKey = snapshot.RootPartitionKey
         };
     }
 
@@ -60,7 +61,10 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon, ISingleProje
             return;
         }
         Payload = result;
-        _basicInfo = _basicInfo with { LastEventId = ev.Id, LastSortableUniqueId = ev.SortableUniqueId, Version = Version + 1 };
+        _basicInfo = _basicInfo with
+        {
+            LastEventId = ev.Id, LastSortableUniqueId = ev.SortableUniqueId, Version = Version + 1, RootPartitionKey = ev.RootPartitionKey
+        };
     }
     public AggregateState<TAggregatePayloadOut> ToState<TAggregatePayloadOut>() where TAggregatePayloadOut : IAggregatePayloadCommon =>
         Payload is TAggregatePayloadOut payloadOut
@@ -115,11 +119,11 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon, ISingleProje
 #endif
     }
 
-    internal IEvent AddAndApplyEvent<TEventPayload>(TEventPayload eventPayload) where TEventPayload : IEventPayloadCommon
+    internal IEvent AddAndApplyEvent<TEventPayload>(TEventPayload eventPayload, string rootPartitionKey) where TEventPayload : IEventPayloadCommon
     {
         var aggregatePayloadBase = Payload.GetBaseAggregatePayloadType();
         // var aggregatePayloadBase = typeof(TEventPayload);
-        var ev = Event<TEventPayload>.GenerateEvent(AggregateId, aggregatePayloadBase, eventPayload);
+        var ev = Event<TEventPayload>.GenerateEvent(AggregateId, aggregatePayloadBase, eventPayload, rootPartitionKey);
         var result = GetAggregatePayloadWithAppliedEvent(Payload, ev);
         if (result is null)
         {

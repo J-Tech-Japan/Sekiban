@@ -6,9 +6,18 @@ public record MultiProjectionState<TProjectionPayload>(
     Guid LastEventId,
     string LastSortableUniqueId,
     int AppliedSnapshotVersion,
-    int Version) : IProjection where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+    int Version,
+    string RootPartitionKey) : IProjection where TProjectionPayload : IMultiProjectionPayloadCommon, new()
 {
-    public MultiProjectionState() : this(new TProjectionPayload(), Guid.Empty, string.Empty, 0, 0) { }
+    public MultiProjectionState() : this(
+        new TProjectionPayload(),
+        Guid.Empty,
+        string.Empty,
+        0,
+        0,
+        string.Empty)
+    {
+    }
     public string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();
     public MultiProjectionState<TProjectionPayload> ApplyEvent(IEvent ev) =>
         this with

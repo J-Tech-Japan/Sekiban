@@ -21,6 +21,7 @@ public abstract class AggregateCommon : IAggregate
     public string LastSortableUniqueId => _basicInfo.LastSortableUniqueId;
     public int AppliedSnapshotVersion => _basicInfo.AppliedSnapshotVersion;
     public int Version => _basicInfo.Version;
+    public string RootPartitionKey => _basicInfo.RootPartitionKey;
 
     public abstract void ApplyEvent(IEvent ev);
 

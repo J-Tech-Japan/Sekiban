@@ -32,6 +32,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
         Type multiProjectionType,
         IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
+        string? rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionType);
@@ -84,44 +85,6 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     }
                     resultAction(events.OrderBy(m => m.SortableUniqueId));
                 }
-            });
-    }
-
-    public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
-        Guid aggregateId,
-        Type aggregatePayloadType,
-        Type projectionPayloadType,
-        string payloadVersionIdentifier)
-    {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-        return await _cosmosDbFactory.CosmosActionAsync(
-            DocumentType.AggregateSnapshot,
-            aggregateContainerGroup,
-            async container =>
-            {
-                var options = new QueryRequestOptions
-                {
-                    PartitionKey = new PartitionKey(
-                        PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType)),
-                    MaxItemCount = 1
-                };
-                var query = container.GetItemLinqQueryable<SnapshotDocument>()
-                    .Where(
-                        b => b.DocumentType == DocumentType.AggregateSnapshot &&
-                            b.AggregateId == aggregateId &&
-                            b.AggregateTypeName == aggregatePayloadType.Name &&
-                            b.PayloadVersionIdentifier == payloadVersionIdentifier)
-                    .OrderByDescending(m => m.LastSortableUniqueId);
-                var feedIterator = container.GetItemQueryIterator<SnapshotDocument>(query.ToQueryDefinition(), null, options);
-                while (feedIterator.HasMoreResults)
-                {
-                    foreach (var obj in await feedIterator.ReadNextAsync())
-                    {
-                        if (obj is null) { continue; }
-                        return await _singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(obj);
-                    }
-                }
-                return null;
             });
     }
     public async Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(
@@ -411,6 +374,44 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     }
                 }
                 return false;
+            });
+    }
+
+    public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
+        Guid aggregateId,
+        Type aggregatePayloadType,
+        Type projectionPayloadType,
+        string payloadVersionIdentifier)
+    {
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+        return await _cosmosDbFactory.CosmosActionAsync(
+            DocumentType.AggregateSnapshot,
+            aggregateContainerGroup,
+            async container =>
+            {
+                var options = new QueryRequestOptions
+                {
+                    PartitionKey = new PartitionKey(
+                        PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType)),
+                    MaxItemCount = 1
+                };
+                var query = container.GetItemLinqQueryable<SnapshotDocument>()
+                    .Where(
+                        b => b.DocumentType == DocumentType.AggregateSnapshot &&
+                            b.AggregateId == aggregateId &&
+                            b.AggregateTypeName == aggregatePayloadType.Name &&
+                            b.PayloadVersionIdentifier == payloadVersionIdentifier)
+                    .OrderByDescending(m => m.LastSortableUniqueId);
+                var feedIterator = container.GetItemQueryIterator<SnapshotDocument>(query.ToQueryDefinition(), null, options);
+                while (feedIterator.HasMoreResults)
+                {
+                    foreach (var obj in await feedIterator.ReadNextAsync())
+                    {
+                        if (obj is null) { continue; }
+                        return await _singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(obj);
+                    }
+                }
+                return null;
             });
     }
 }
