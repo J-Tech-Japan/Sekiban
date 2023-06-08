@@ -8,7 +8,7 @@ namespace Sekiban.Core.Command;
 ///     Class to persistence commands.
 /// </summary>
 /// <typeparam name="T"></typeparam>
-public sealed record CommandDocument<T> : Document, ICallHistories where T : ICommandCommon
+public sealed record CommandDocument<T> : Document, ICommandDocumentCommon, ICallHistories where T : ICommandCommon
 {
     public T Payload { get; init; } = default!;
     public string? ExecutedUser { get; init; } = string.Empty;

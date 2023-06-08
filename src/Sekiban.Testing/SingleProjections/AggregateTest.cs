@@ -155,6 +155,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
     public IAggregateTestHelper<TAggregatePayload> ThenPayloadIsFromFile(string payloadFileName) => _helper.ThenPayloadIsFromFile(payloadFileName);
 
     public Guid GetAggregateId() => _helper.GetAggregateId();
+    public string GetRootPartitionKey() => _helper.GetRootPartitionKey();
 
     public int GetCurrentVersion() => _helper.GetCurrentVersion();
 

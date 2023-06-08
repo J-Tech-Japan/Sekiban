@@ -110,6 +110,7 @@ public class TestCommandExecutor
     private Guid ExecuteCommand<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId, bool withPublish)
         where TAggregatePayload : IAggregatePayloadCommon
     {
+        var rootPartitionKey = command.GetRootPartitionKey();
         var validationResults = command.ValidateProperties().ToList();
         if (validationResults.Any())
         {
@@ -141,10 +142,12 @@ public class TestCommandExecutor
             var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), command.GetType());
             var adapter = Activator.CreateInstance(adapterClass, aggregateLoader, false) ?? throw new Exception("Adapter not found");
 
-            var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new Exception("HandleCommandAsync not found");
+            var method = adapterClass.GetMethod(nameof(ICommandHandlerAdapterCommon.HandleCommandAsync)) ??
+                throw new Exception("HandleCommandAsync not found");
 
-            var commandResponse = (CommandResponse)((dynamic?)method.Invoke(adapter, new[] { commandDocument, handler, aggregateId }) ??
-                throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
+            var commandResponse
+                = (CommandResponse)((dynamic?)method.Invoke(adapter, new[] { commandDocument, handler, aggregateId, rootPartitionKey }) ??
+                    throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
 
             LatestEvents = commandResponse.Events;
         } else
@@ -156,9 +159,11 @@ public class TestCommandExecutor
             var baseClass = typeof(OnlyPublishingCommandHandlerAdapter<,>);
             var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), command.GetType());
             var adapter = Activator.CreateInstance(adapterClass) ?? throw new Exception("Method not found");
-            var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new Exception("HandleCommandAsync not found");
-            var commandResponse = (CommandResponse)((dynamic?)method.Invoke(adapter, new[] { commandDocument, handler, aggregateId }) ??
-                throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
+            var method = adapterClass.GetMethod(
+                nameof(ICommandHandlerAdapterCommon.HandleCommandAsync) ?? throw new Exception("HandleCommandAsync not found"));
+            var commandResponse
+                = (CommandResponse)((dynamic?)method?.Invoke(adapter, new[] { commandDocument, handler, aggregateId, rootPartitionKey }) ??
+                    throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
             LatestEvents = commandResponse.Events;
         }
 

@@ -256,6 +256,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     }
 
     public Guid GetAggregateId() => AggregateIdHolder.AggregateId;
+    public string GetRootPartitionKey() => AggregateIdHolder.GetRootPartitionKey();
 
     public int GetCurrentVersion() => GetAggregateState().Version;
 
