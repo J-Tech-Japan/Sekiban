@@ -33,6 +33,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
         Type aggregatePayloadType,
         string? partitionKey,
         string? sinceSortableUniqueId,
+        string rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction)
     {
         if (!aggregatePayloadType.IsAggregatePayloadType())
@@ -48,6 +49,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 aggregatePayloadType,
                 partitionKey,
                 sinceSortableUniqueId,
+                rootPartitionKey,
                 resultAction);
             return;
         }
@@ -69,6 +71,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
                     aggregatePayloadType,
                     partitionKey,
                     sinceSortableUniqueId,
+                    rootPartitionKey,
                     resultAction);
                 return;
             }
@@ -78,6 +81,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
             aggregatePayloadType,
             partitionKey,
             sinceSortableUniqueId,
+            rootPartitionKey,
             events =>
             {
                 var eventList = events.ToList();
@@ -121,6 +125,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
         Type aggregatePayloadType,
         string? partitionKey,
         string? sinceSortableUniqueId,
+        string rootPartitionKey,
         Action<IEnumerable<string>> resultAction)
     {
         await GetAllEventsForAggregateIdAsync(
@@ -128,6 +133,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
             aggregatePayloadType,
             partitionKey,
             sinceSortableUniqueId,
+            rootPartitionKey,
             events =>
             {
                 resultAction(events.Select(SekibanJsonHelper.Serialize).Where(m => !string.IsNullOrEmpty(m))!);
@@ -138,6 +144,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
         Guid aggregateId,
         Type aggregatePayloadType,
         string? sinceSortableUniqueId,
+        string rootPartitionKey,
         Action<IEnumerable<string>> resultAction)
     {
         if (!aggregatePayloadType.IsAggregatePayloadType())
@@ -152,6 +159,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 aggregateId,
                 aggregatePayloadType,
                 sinceSortableUniqueId,
+                rootPartitionKey,
                 resultAction);
             return;
         }
@@ -160,6 +168,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
             aggregateId,
             aggregatePayloadType,
             sinceSortableUniqueId,
+            rootPartitionKey,
             resultAction);
     }
 
@@ -222,25 +231,53 @@ public class DocumentRepositorySplitter : IDocumentRepository
     }
     public async Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(
         Type multiProjectionPayloadType,
-        string payloadVersionIdentifier)
+        string payloadVersionIdentifier,
+        string rootPartitionKey)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionPayloadType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
-            return await _documentTemporaryRepository.GetLatestSnapshotForMultiProjectionAsync(multiProjectionPayloadType, payloadVersionIdentifier);
+            return await _documentTemporaryRepository.GetLatestSnapshotForMultiProjectionAsync(
+                multiProjectionPayloadType,
+                payloadVersionIdentifier,
+                rootPartitionKey);
         }
-        return await _documentTemporaryRepository.GetLatestSnapshotForMultiProjectionAsync(multiProjectionPayloadType, payloadVersionIdentifier) ??
-            await _documentPersistentRepository.GetLatestSnapshotForMultiProjectionAsync(multiProjectionPayloadType, payloadVersionIdentifier);
+        return await _documentTemporaryRepository.GetLatestSnapshotForMultiProjectionAsync(
+                multiProjectionPayloadType,
+                payloadVersionIdentifier,
+                rootPartitionKey) ??
+            await _documentPersistentRepository.GetLatestSnapshotForMultiProjectionAsync(
+                multiProjectionPayloadType,
+                payloadVersionIdentifier,
+                rootPartitionKey);
     }
 
-    public Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type aggregatePayloadType, Type projectionPayloadType, string partitionKey)
+    public Task<SnapshotDocument?> GetSnapshotByIdAsync(
+        Guid id,
+        Guid aggregateId,
+        Type aggregatePayloadType,
+        Type projectionPayloadType,
+        string partitionKey,
+        string rootPartitionKey)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
-            return _documentTemporaryRepository.GetSnapshotByIdAsync(id, aggregatePayloadType, projectionPayloadType, partitionKey);
+            return _documentTemporaryRepository.GetSnapshotByIdAsync(
+                id,
+                aggregateId,
+                aggregatePayloadType,
+                projectionPayloadType,
+                partitionKey,
+                rootPartitionKey);
         }
-        return _documentPersistentRepository.GetSnapshotByIdAsync(id, aggregatePayloadType, projectionPayloadType, partitionKey);
+        return _documentPersistentRepository.GetSnapshotByIdAsync(
+            id,
+            aggregateId,
+            aggregatePayloadType,
+            projectionPayloadType,
+            partitionKey,
+            rootPartitionKey);
     }
 
     public Task GetAllEventsForAggregateAsync(Type aggregatePayloadType, string? sinceSortableUniqueId, Action<IEnumerable<IEvent>> resultAction)
@@ -261,6 +298,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
         Type aggregatePayloadType,
         Type projectionPayloadType,
         int version,
+        string rootPartitionKey,
         string payloadVersionIdentifier)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
@@ -273,6 +311,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
             aggregatePayloadType,
             projectionPayloadType,
             version,
+            rootPartitionKey,
             payloadVersionIdentifier);
     }
 

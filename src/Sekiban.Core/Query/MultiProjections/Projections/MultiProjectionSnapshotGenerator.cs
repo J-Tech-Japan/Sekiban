@@ -19,13 +19,13 @@ public class MultiProjectionSnapshotGenerator : IMultiProjectionSnapshotGenerato
     }
 
     public async Task<MultiProjectionState<TProjectionPayload>> GenerateMultiProjectionSnapshotAsync<TProjection, TProjectionPayload>(
-        string? rootPartitionKey,
-        int minimumNumberOfEventsToGenerateSnapshot) where TProjection : IMultiProjector<TProjectionPayload>, new()
+        int minimumNumberOfEventsToGenerateSnapshot,
+        string? rootPartitionKey) where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         var projector = new TProjection();
         // if there is snapshot, load it, if not make a new one
-        var state = await GetCurrentStateAsync<TProjectionPayload>(rootPartitionKey);
+        var state = await GetCurrentStateAsync<TProjectionPayload>(rootPartitionKey ?? MultiProjectionSnapshotDocument.AllRootPartitionKey);
         projector.ApplySnapshot(state);
         // get events from after snapshot or the initial and project them
         await _documentRepository.GetAllEventsAsync(
@@ -64,13 +64,14 @@ public class MultiProjectionSnapshotGenerator : IMultiProjectionSnapshotGenerato
         return projector.ToState();
     }
 
-    public async Task<MultiProjectionState<TProjectionPayload>> GetCurrentStateAsync<TProjectionPayload>(string? rootPartitionKey)
+    public async Task<MultiProjectionState<TProjectionPayload>> GetCurrentStateAsync<TProjectionPayload>(string rootPartitionKey)
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         var payload = new TProjectionPayload();
         var snapshotDocument = await _documentRepository.GetLatestSnapshotForMultiProjectionAsync(
             typeof(TProjectionPayload),
-            payload.GetPayloadVersionIdentifier());
+            payload.GetPayloadVersionIdentifier(),
+            rootPartitionKey);
 
         // if snapshot document is not null, load it from blob storage
         if (snapshotDocument != null)

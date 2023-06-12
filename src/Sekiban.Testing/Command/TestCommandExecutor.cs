@@ -185,7 +185,9 @@ public class TestCommandExecutor
         return aggregateId;
     }
 
-    public IReadOnlyCollection<IEvent> GetAllAggregateEvents<TAggregatePayload>(Guid aggregateId) where TAggregatePayload : IAggregatePayload, new()
+    public IReadOnlyCollection<IEvent> GetAllAggregateEvents<TAggregatePayload>(
+        Guid aggregateId,
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey) where TAggregatePayload : IAggregatePayload, new()
     {
         var toReturn = new List<IEvent>();
         var documentRepository = _serviceProvider.GetRequiredService(typeof(IDocumentRepository)) as IDocumentRepository ??
@@ -193,8 +195,9 @@ public class TestCommandExecutor
         documentRepository.GetAllEventsForAggregateIdAsync(
                 aggregateId,
                 typeof(TAggregatePayload),
-                PartitionKeyGenerator.ForEvent(aggregateId, typeof(TAggregatePayload)),
+                PartitionKeyGenerator.ForEvent(aggregateId, typeof(TAggregatePayload), rootPartitionKey),
                 null,
+                rootPartitionKey,
                 eventObjects => { toReturn.AddRange(eventObjects); })
             .Wait();
         return toReturn;

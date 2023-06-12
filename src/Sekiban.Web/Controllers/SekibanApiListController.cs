@@ -98,7 +98,10 @@ public class SekibanApiListController<T> : ControllerBase
 
     [HttpGet]
     [Route("events/{aggregateName}/{id}", Name = "SekibanEvents")]
-    public virtual async Task<ActionResult<IEnumerable<dynamic>>> EventsAsync(string aggregateName, Guid id)
+    public virtual async Task<ActionResult<IEnumerable<dynamic>>> EventsAsync(
+        string aggregateName,
+        Guid id,
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey)
     {
         foreach (var aggregateType in _webDependencyDefinition.GetAggregatePayloadTypes())
         {
@@ -122,7 +125,7 @@ public class SekibanApiListController<T> : ControllerBase
             await _documentRepository.GetAllEventsForAggregateIdAsync(
                 id,
                 aggregateType,
-                PartitionKeyGenerator.ForEvent(id, aggregateType),
+                PartitionKeyGenerator.ForEvent(id, aggregateType, rootPartitionKey),
                 null,
                 eventObjects => { events.AddRange(eventObjects); });
             return Ok(events);
@@ -133,7 +136,7 @@ public class SekibanApiListController<T> : ControllerBase
 
     [HttpGet]
     [Route("commands/{aggregateName}/{id}", Name = "SekibanCommands")]
-    public virtual async Task<ActionResult<IEnumerable<dynamic>>> CommandsAsync(string aggregateName, Guid id)
+    public virtual async Task<ActionResult<IEnumerable<dynamic>>> CommandsAsync(string aggregateName, Guid id, string rootPartitionKey)
     {
         foreach (var aggregateType in _webDependencyDefinition.GetAggregatePayloadTypes())
         {
@@ -158,6 +161,7 @@ public class SekibanApiListController<T> : ControllerBase
                 id,
                 aggregateType,
                 null,
+                rootPartitionKey,
                 eventObjects =>
                 {
                     events.AddRange(eventObjects.Select(m => SekibanJsonHelper.Deserialize(m, typeof(object))!));
@@ -170,7 +174,10 @@ public class SekibanApiListController<T> : ControllerBase
 
     [HttpGet]
     [Route("snapshots/{aggregateName}/{aggregateId}", Name = "SekibanSnapshots")]
-    public virtual async Task<ActionResult<IEnumerable<SnapshotDocument>>> SnapshotsAsync(string aggregateName, Guid aggregateId)
+    public virtual async Task<ActionResult<IEnumerable<SnapshotDocument>>> SnapshotsAsync(
+        string aggregateName,
+        Guid aggregateId,
+        string rootPartitionKey)
     {
         foreach (var aggregatePayloadType in _webDependencyDefinition.GetAggregatePayloadTypes())
         {
@@ -190,7 +197,11 @@ public class SekibanApiListController<T> : ControllerBase
             {
                 return Unauthorized();
             }
-            var snapshots = await _documentRepository.GetSnapshotsForAggregateAsync(aggregateId, aggregatePayloadType, aggregatePayloadType);
+            var snapshots = await _documentRepository.GetSnapshotsForAggregateAsync(
+                aggregateId,
+                aggregatePayloadType,
+                aggregatePayloadType,
+                rootPartitionKey);
             return Ok(snapshots);
         }
 

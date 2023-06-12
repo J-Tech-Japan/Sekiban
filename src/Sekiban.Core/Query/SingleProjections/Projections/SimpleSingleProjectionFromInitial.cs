@@ -31,6 +31,7 @@ public class SimpleSingleProjectionFromInitial : ISingleProjectionFromInitial
             projector.GetOriginalAggregatePayloadType(),
             PartitionKeyGenerator.ForEvent(aggregateId, projector.GetOriginalAggregatePayloadType(), rootPartitionKey),
             null,
+            rootPartitionKey,
             events =>
             {
                 if (events.Count() != events.Select(m => m.Id).Distinct().Count())

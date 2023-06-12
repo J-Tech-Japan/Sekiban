@@ -84,6 +84,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
                 projector.GetOriginalAggregatePayloadType(),
                 PartitionKeyGenerator.ForEvent(aggregateId, projector.GetOriginalAggregatePayloadType(), rootPartitionKey),
                 savedContainer?.SafeSortableUniqueId?.Value,
+                rootPartitionKey,
                 events =>
                 {
                     var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
@@ -180,6 +181,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
             projector.GetOriginalAggregatePayloadType(),
             PartitionKeyGenerator.ForEvent(aggregateId, projector.GetOriginalAggregatePayloadType(), rootPartitionKey),
             state?.LastSortableUniqueId,
+            rootPartitionKey,
             events =>
             {
                 var someSafeId = SortableUniqueIdValue.Generate(SekibanDateProducer.GetRegistered().UtcNow, Guid.Empty);
@@ -256,6 +258,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
             projector.GetOriginalAggregatePayloadType(),
             PartitionKeyGenerator.ForEvent(aggregateId, projector.GetOriginalAggregatePayloadType(), rootPartitionKey),
             null,
+            rootPartitionKey,
             events =>
             {
                 events = events?.ToList() ?? new List<IEvent>();

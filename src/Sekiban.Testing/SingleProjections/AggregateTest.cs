@@ -45,10 +45,6 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
     public IAggregateTestHelper<TAggregateSubtypePayload> Subtype<TAggregateSubtypePayload>()
         where TAggregateSubtypePayload : IAggregatePayloadCommon, IApplicableAggregatePayload<TAggregatePayload> =>
         _helper.Subtype<TAggregateSubtypePayload>();
-    // public IAggregateTestHelper<TAggregatePayload> Subtype<TAggregateSubtypePayload>(
-    //     Action<IAggregateTestHelper<TAggregateSubtypePayload>> subtypeTestHelperAction)
-    //     where TAggregateSubtypePayload : IAggregatePayloadCommon, IApplicableAggregatePayload<TAggregatePayload> =>
-    //     _helper.Subtype(subtypeTestHelperAction);
 
     public IAggregateTestHelper<TAggregatePayload> GivenScenario(Action initialAction) => _helper.GivenScenario(initialAction);
 

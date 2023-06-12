@@ -42,7 +42,7 @@ public class CommandExecutor : ICommandExecutor
         if (!command.GetType().IsCommandType()) { throw new SekibanCommandNotRegisteredException(command.GetType().Name); }
         var method = GetType().GetMethod(nameof(ExecCommandAsyncTyped)) ?? throw new Exception("Method not found");
         var genericMethod = method.MakeGenericMethod(command.GetType().GetAggregatePayloadTypeFromCommandType(), command.GetType());
-        var (response, generatedEvents)
+        var (response, _)
             = ((CommandExecutorResponse, List<IEvent>))await (dynamic)(genericMethod.Invoke(this, new object?[] { command, callHistories }) ??
                 throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
         return response;
@@ -68,7 +68,7 @@ public class CommandExecutor : ICommandExecutor
         if (!command.GetType().IsCommandType()) { throw new SekibanCommandNotRegisteredException(command.GetType().Name); }
         var method = GetType().GetMethod(nameof(ExecCommandWithoutValidationAsyncTyped)) ?? throw new Exception("Method not found");
         var genericMethod = method.MakeGenericMethod(command.GetType().GetAggregatePayloadTypeFromCommandType(), command.GetType());
-        var (response, generatedEvents)
+        var (response, _)
             = ((CommandExecutorResponse, List<IEvent>))await (dynamic)(genericMethod.Invoke(this, new object?[] { command, callHistories }) ??
                 throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
         return response;
@@ -91,8 +91,8 @@ public class CommandExecutor : ICommandExecutor
         TCommand command,
         List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayload>
     {
-        var validationResult = command.ValidateProperties()?.ToList();
-        if (validationResult?.Any() == true)
+        var validationResult = command.ValidateProperties().ToList();
+        if (validationResult.Any())
         {
             return (new CommandExecutorResponse(
                 null,
@@ -117,8 +117,8 @@ public class CommandExecutor : ICommandExecutor
             };
         List<IEvent> events;
         var commandToSave = command is ICleanupNecessaryCommand<TCommand> cleanupCommand ? cleanupCommand.CleanupCommand(command) : command;
-        var version = 0;
-        string? lastSortableUniqueId = null;
+        int version;
+        string? lastSortableUniqueId;
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(TAggregatePayload));
         if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {

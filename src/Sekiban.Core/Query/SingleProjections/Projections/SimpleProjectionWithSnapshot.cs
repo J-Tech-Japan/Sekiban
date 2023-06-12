@@ -65,6 +65,7 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
             projector.GetOriginalAggregatePayloadType(),
             PartitionKeyGenerator.ForEvent(aggregateId, projector.GetOriginalAggregatePayloadType(), rootPartitionKey),
             state?.LastSortableUniqueId,
+            rootPartitionKey,
             events =>
             {
                 foreach (var e in events)

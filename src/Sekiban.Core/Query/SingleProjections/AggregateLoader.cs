@@ -93,6 +93,7 @@ public class AggregateLoader : IAggregateLoader
             typeof(TAggregatePayload),
             PartitionKeyGenerator.ForEvent(aggregateId, typeof(TAggregatePayload), rootPartitionKey),
             null,
+            rootPartitionKey,
             eventObjects => { toReturn.AddRange(eventObjects); });
         return toVersion is null ? toReturn : toReturn.ToList().Take(toVersion.Value);
     }

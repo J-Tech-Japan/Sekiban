@@ -102,6 +102,7 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon, ISingleProje
         return (IAggregatePayloadCommon?)genericMethod.Invoke(this, new object[] { Payload, ev });
     }
 
+    // ReSharper disable once ReturnTypeCanBeNotNullable
     private static TAggregatePayloadOut? ApplyEventToAggregatePayload<TAggregatePayloadIn, TAggregatePayloadOut, TEventPayload>(
         TAggregatePayloadIn aggregatePayload,
         Event<TEventPayload> ev) where TAggregatePayloadIn : IAggregatePayloadCommon

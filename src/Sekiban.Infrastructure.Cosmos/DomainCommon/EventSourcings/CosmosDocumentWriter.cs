@@ -32,7 +32,7 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
                     aggregateContainerGroup,
                     async container =>
                     {
-                        await container.CreateItemAsync(document, new PartitionKey(document.PartitionKey));
+                        await container.CreateItemAsync(document, CosmosPartitionGenerator.ForDocument(document));
                     });
                 break;
             case DocumentType.AggregateSnapshot:
@@ -50,7 +50,7 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
                     aggregateContainerGroup,
                     async container =>
                     {
-                        await container.CreateItemAsync(document, new PartitionKey(document.PartitionKey));
+                        await container.CreateItemAsync(document, CosmosPartitionGenerator.ForDocument(document));
                     });
                 break;
         }
@@ -80,7 +80,7 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
                 aggregateContainerGroup,
                 async container =>
                 {
-                    await container.CreateItemAsync(blobSnapshot, new PartitionKey(blobSnapshot.PartitionKey));
+                    await container.CreateItemAsync(blobSnapshot, CosmosPartitionGenerator.ForDocument(document));
                 });
 
         } else
@@ -90,7 +90,7 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
                 aggregateContainerGroup,
                 async container =>
                 {
-                    await container.CreateItemAsync(document, new PartitionKey(document.PartitionKey));
+                    await container.CreateItemAsync(document, CosmosPartitionGenerator.ForDocument(document));
                 });
         }
     }

@@ -7,7 +7,7 @@ public class CommandExecuteAwaiter : ICommandExecuteAwaiter
     public CommandExecuteAwaiter() => _taskCompletionSources = new ConcurrentDictionary<string, TaskCompletionSource<bool>>();
     public void StartTask<TAggregatePayload>(Guid aggregateId)
     {
-        _taskCompletionSources.AddOrUpdate(GetKey<TAggregatePayload>(aggregateId), new TaskCompletionSource<bool>(), (k, oldValue) => oldValue);
+        _taskCompletionSources.AddOrUpdate(GetKey<TAggregatePayload>(aggregateId), new TaskCompletionSource<bool>(), (_, oldValue) => oldValue);
     }
     public async Task WaitUntilOtherThreadFinished<TAggregatePayload>(Guid aggregateId)
     {

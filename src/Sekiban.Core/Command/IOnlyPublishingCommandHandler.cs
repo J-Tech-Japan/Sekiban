@@ -2,6 +2,7 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Events;
 namespace Sekiban.Core.Command;
 
+// ReSharper disable once InvalidXmlDocComment
 /// <summary>
 ///     Command Handler Interface for　<see cref="IOnlyPublishingCommand" />
 ///     Application developer can implement this interface to define a command handler

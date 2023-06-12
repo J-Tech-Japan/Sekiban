@@ -97,6 +97,7 @@ public class SnapshotGenerator
                             aggregateType.Aggregate,
                             aggregateType.Aggregate,
                             taken.Payload.NextSnapshotVersion,
+                            taken.RootPartitionKey,
                             aggregateToSnapshot.GetPayloadVersionIdentifier()))
                         {
                             continue;
@@ -162,6 +163,7 @@ public class SnapshotGenerator
                         projection.Aggregate,
                         projection.PayloadType,
                         taken.Payload.NextSnapshotVersion,
+                        taken.RootPartitionKey,
                         aggregateToSnapshot.GetPayloadVersionIdentifier()))
                     {
                         continue;

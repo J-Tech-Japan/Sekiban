@@ -60,19 +60,6 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var subTypeTest = new AggregateTestHelper<TAggregateSubtypePayload>(_serviceProvider, AggregateIdHolder);
         return subTypeTest;
     }
-    // public IAggregateTestHelper<TAggregatePayload> Subtype<TAggregateSubtypePayload>(
-    //     Action<IAggregateTestHelper<TAggregateSubtypePayload>> subtypeTestHelperAction)
-    //     where TAggregateSubtypePayload : IAggregatePayloadCommon, IApplicableAggregatePayload<TAggregatePayload>
-    // {
-    //     var subTypeTest = new AggregateTestHelper<TAggregateSubtypePayload>(_serviceProvider, GetAggregateId());
-    //     subtypeTestHelperAction(subTypeTest);
-    //     var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
-    //         throw new Exception("Failed to get aggregate loader");
-    //     Aggregate = aggregateLoader.AsAggregateAsync<TAggregatePayload>(subTypeTest.Aggregate.AggregateId).Result ??
-    //         new Aggregate<TAggregatePayload>
-    //             { AggregateId = subTypeTest.Aggregate.AggregateId };
-    //     return this;
-    // }
     public IAggregateTestHelper<TAggregatePayload> GivenScenario(Action initialAction)
     {
         initialAction();
@@ -113,7 +100,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     {
         var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
             throw new Exception("Failed to get aggregate loader");
-        return aggregateLoader.AllEventsAsync<TAggregatePayload>(GetAggregateId(), toVersion).Result?.ToList() ?? new List<IEvent>();
+        return aggregateLoader.AllEventsAsync<TAggregatePayload>(GetAggregateId(), GetRootPartitionKey(), toVersion).Result?.ToList() ??
+            new List<IEvent>();
     }
 
     public void ThrowIfTestHasUnhandledErrors()
@@ -461,7 +449,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         }
         AggregateIdHolder.AggregateId = command.GetAggregateId();
 
-        var commandDocument = new CommandDocument<TCommand>(GetAggregateId(), command, typeof(TAggregatePayload));
+        var commandDocument = new CommandDocument<TCommand>(GetAggregateId(), command, typeof(TAggregatePayload), GetRootPartitionKey());
         CheckCommandJSONSupports(commandDocument);
 
         var aggregateId = GetAggregateId();

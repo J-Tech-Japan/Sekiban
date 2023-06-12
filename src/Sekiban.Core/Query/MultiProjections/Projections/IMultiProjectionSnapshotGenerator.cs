@@ -5,31 +5,32 @@ namespace Sekiban.Core.Query.MultiProjections.Projections;
 public interface IMultiProjectionSnapshotGenerator
 {
     Task<MultiProjectionState<TProjectionPayload>> GenerateMultiProjectionSnapshotAsync<TProjection, TProjectionPayload>(
-        string? rootPartitionKey,
-        int minimumNumberOfEventsToGenerateSnapshot) where TProjection : IMultiProjector<TProjectionPayload>, new()
+        int minimumNumberOfEventsToGenerateSnapshot,
+        string? rootPartitionKey = null) where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon, new();
 
     Task<MultiProjectionState<TProjectionPayload>> GenerateMultiProjectionSnapshotAsync<TProjectionPayload>(
-        string? rootPartitionKey,
-        int minimumNumberOfEventsToGenerateSnapshot) where TProjectionPayload : IMultiProjectionPayloadCommon, new() =>
+        int minimumNumberOfEventsToGenerateSnapshot,
+        string? rootPartitionKey = null) where TProjectionPayload : IMultiProjectionPayloadCommon, new() =>
         GenerateMultiProjectionSnapshotAsync<MultiProjection<TProjectionPayload>, TProjectionPayload>(
-            rootPartitionKey,
-            minimumNumberOfEventsToGenerateSnapshot);
+            minimumNumberOfEventsToGenerateSnapshot,
+            rootPartitionKey);
 
     Task<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>>
-        GenerateAggregateListSnapshotAsync<TAggregatePayload>(string? rootPartitionKey, int minimumNumberOfEventsToGenerateSnapshot)
+        GenerateAggregateListSnapshotAsync<TAggregatePayload>(int minimumNumberOfEventsToGenerateSnapshot, string? rootPartitionKey = null)
         where TAggregatePayload : IAggregatePayloadCommon, new() =>
         GenerateMultiProjectionSnapshotAsync<SingleProjectionListProjector<Aggregate<TAggregatePayload>,
                 AggregateState<TAggregatePayload>, DefaultSingleProjector<TAggregatePayload>>,
-            SingleProjectionListState<AggregateState<TAggregatePayload>>>(rootPartitionKey, minimumNumberOfEventsToGenerateSnapshot);
+            SingleProjectionListState<AggregateState<TAggregatePayload>>>(minimumNumberOfEventsToGenerateSnapshot, rootPartitionKey);
 
     Task<MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>
-        GenerateSingleProjectionListSnapshotAsync<TSingleProjectionPayload>(string? rootPartitionKey, int minimumNumberOfEventsToGenerateSnapshot)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new() =>
+        GenerateSingleProjectionListSnapshotAsync<TSingleProjectionPayload>(
+            int minimumNumberOfEventsToGenerateSnapshot,
+            string? rootPartitionKey = null) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new() =>
         GenerateMultiProjectionSnapshotAsync<SingleProjectionListProjector<SingleProjection<TSingleProjectionPayload>,
                 SingleProjectionState<TSingleProjectionPayload>, SingleProjection<TSingleProjectionPayload>>,
-            SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>(rootPartitionKey, minimumNumberOfEventsToGenerateSnapshot);
+            SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>(minimumNumberOfEventsToGenerateSnapshot, rootPartitionKey);
 
-    Task<MultiProjectionState<TProjectionPayload>> GetCurrentStateAsync<TProjectionPayload>(string? rootPartitionKey)
+    Task<MultiProjectionState<TProjectionPayload>> GetCurrentStateAsync<TProjectionPayload>(string rootPartitionKey)
         where TProjectionPayload : IMultiProjectionPayloadCommon, new();
 }
