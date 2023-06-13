@@ -20,7 +20,7 @@ public class MultiProjectionSnapshotGenerator : IMultiProjectionSnapshotGenerato
 
     public async Task<MultiProjectionState<TProjectionPayload>> GenerateMultiProjectionSnapshotAsync<TProjection, TProjectionPayload>(
         int minimumNumberOfEventsToGenerateSnapshot,
-        string? rootPartitionKey) where TProjection : IMultiProjector<TProjectionPayload>, new()
+        string rootPartitionKey) where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         var projector = new TProjection();

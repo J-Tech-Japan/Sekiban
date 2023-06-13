@@ -17,7 +17,7 @@ public record MultiProjectionSnapshotDocument : IDocument
     public string PayloadVersionIdentifier { get; init; } = string.Empty;
     public MultiProjectionSnapshotDocument() { }
 
-    public MultiProjectionSnapshotDocument(Type projectionType, Guid id, IMultiProjectionCommon projection, string? rootPartitionKey)
+    public MultiProjectionSnapshotDocument(Type projectionType, Guid id, IMultiProjectionCommon projection, string rootPartitionKey)
     {
         Id = id;
         RootPartitionKey = rootPartitionKey ?? AllRootPartitionKey;

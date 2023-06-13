@@ -15,7 +15,7 @@ public class SimpleMultiProjection : IMultiProjection
     }
 
     public async Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjection, TProjectionPayload>(
-        string? rootPartitionKey,
+        string rootPartitionKey,
         SortableUniqueIdValue? includesSortableUniqueIdValue) where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
@@ -36,6 +36,7 @@ public class SimpleMultiProjection : IMultiProjection
     }
     public async Task<MultiProjectionState<TProjectionPayload>> GetInitialMultiProjectionFromStreamAsync<TProjection, TProjectionPayload>(
         Stream stream,
+        string rootPartitionKey,
         SortableUniqueIdValue? includesSortableUniqueIdValue) where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
@@ -48,6 +49,7 @@ public class SimpleMultiProjection : IMultiProjection
     }
     public async Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionFromMultipleStreamAsync<TProjection, TProjectionPayload>(
         Func<Task<Stream?>> stream,
+        string rootPartitionKey,
         SortableUniqueIdValue? includesSortableUniqueIdValue) where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {

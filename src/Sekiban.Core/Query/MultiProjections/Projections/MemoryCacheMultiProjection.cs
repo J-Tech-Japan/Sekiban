@@ -33,17 +33,17 @@ public class MemoryCacheMultiProjection : IMultiProjection
     }
 
     public async Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjection, TProjectionPayload>(
-        string? rootPartitionKey,
+        string rootPartitionKey,
         SortableUniqueIdValue? includesSortableUniqueIdValue) where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
-        var savedContainerCache = multiProjectionCache.Get<TProjection, TProjectionPayload>();
+        var savedContainerCache = multiProjectionCache.Get<TProjection, TProjectionPayload>(rootPartitionKey);
         var savedContainerBlob
             = savedContainerCache != null ? null : await GetContainerFromSnapshot<TProjection, TProjectionPayload>(rootPartitionKey);
 
         if (savedContainerBlob is not null && savedContainerCache is null)
         {
-            multiProjectionCache.Set(savedContainerBlob);
+            multiProjectionCache.Set(rootPartitionKey, savedContainerBlob);
         }
 
         var savedContainer = savedContainerCache ?? savedContainerBlob;
@@ -142,12 +142,13 @@ public class MemoryCacheMultiProjection : IMultiProjection
 
         if (container.SafeState is not null && container.SafeSortableUniqueId != savedContainer?.SafeSortableUniqueId)
         {
-            multiProjectionCache.Set(container);
+            multiProjectionCache.Set(rootPartitionKey, container);
         }
         return container.State;
     }
     public async Task<MultiProjectionState<TProjectionPayload>> GetInitialMultiProjectionFromStreamAsync<TProjection, TProjectionPayload>(
         Stream stream,
+        string rootPartitionKey,
         SortableUniqueIdValue? includesSortableUniqueIdValue) where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
@@ -173,13 +174,14 @@ public class MemoryCacheMultiProjection : IMultiProjection
 
         if (container.SafeState is not null)
         {
-            multiProjectionCache.Set(container);
+            multiProjectionCache.Set(rootPartitionKey, container);
         }
 
         return container.State;
     }
     public async Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionFromMultipleStreamAsync<TProjection, TProjectionPayload>(
         Func<Task<Stream?>> stream,
+        string rootPartitionKey,
         SortableUniqueIdValue? includesSortableUniqueIdValue) where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
@@ -218,13 +220,13 @@ public class MemoryCacheMultiProjection : IMultiProjection
         };
         if (container.SafeState is not null)
         {
-            multiProjectionCache.Set(container);
+            multiProjectionCache.Set(rootPartitionKey, container);
         }
         return multiProjectionState;
     }
 
     private async Task<MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>?>
-        GetContainerFromSnapshot<TProjection, TProjectionPayload>(string? rootPartitionKey)
+        GetContainerFromSnapshot<TProjection, TProjectionPayload>(string rootPartitionKey)
         where TProjection : IMultiProjector<TProjectionPayload>, new() where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         var state = await multiProjectionSnapshotGenerator.GetCurrentStateAsync<TProjectionPayload>(rootPartitionKey);
@@ -244,7 +246,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
         return container;
     }
 
-    private async Task<MultiProjectionState<TProjectionPayload>> GetInitialProjection<TProjection, TProjectionPayload>(string? rootPartitionKey)
+    private async Task<MultiProjectionState<TProjectionPayload>> GetInitialProjection<TProjection, TProjectionPayload>(string rootPartitionKey)
         where TProjection : IMultiProjector<TProjectionPayload>, new() where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         var projector = new TProjection();
@@ -288,7 +290,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
 
         if (container.SafeState is not null)
         {
-            multiProjectionCache.Set(container);
+            multiProjectionCache.Set(rootPartitionKey, container);
         }
         return container.State;
     }

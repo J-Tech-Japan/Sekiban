@@ -11,14 +11,14 @@ public class MultiProjectionService : IMultiProjectionService
     public MultiProjectionService(IMultiProjection multiProjection) => this.multiProjection = multiProjection;
 
     public Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjectionPayload>(
-        string? rootPartitionKey,
+        string rootPartitionKey,
         SortableUniqueIdValue? includesSortableUniqueIdValue) where TProjectionPayload : IMultiProjectionPayloadCommon, new() =>
         multiProjection.GetMultiProjectionAsync<MultiProjection<TProjectionPayload>, TProjectionPayload>(
             rootPartitionKey,
             includesSortableUniqueIdValue);
 
     public async Task<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>> GetAggregateListObject<TAggregatePayload>(
-        string? rootPartitionKey,
+        string rootPartitionKey,
         SortableUniqueIdValue? includesSortableUniqueIdValue) where TAggregatePayload : IAggregatePayloadCommon
     {
         var list = await multiProjection
@@ -29,7 +29,7 @@ public class MultiProjectionService : IMultiProjectionService
     }
 
     public async Task<List<AggregateState<TAggregatePayload>>> GetAggregateList<TAggregatePayload>(
-        string? rootPartitionKey,
+        string rootPartitionKey,
         SortableUniqueIdValue? includesSortableUniqueIdValue,
         QueryListType queryListType = QueryListType.ActiveOnly) where TAggregatePayload : IAggregatePayloadCommon
     {
@@ -44,7 +44,7 @@ public class MultiProjectionService : IMultiProjectionService
     }
 
     public Task<MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>
-        GetSingleProjectionListObject<TSingleProjectionPayload>(string? rootPartitionKey, SortableUniqueIdValue? includesSortableUniqueIdValue)
+        GetSingleProjectionListObject<TSingleProjectionPayload>(string rootPartitionKey, SortableUniqueIdValue? includesSortableUniqueIdValue)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new() =>
         multiProjection
             .GetMultiProjectionAsync<
@@ -54,7 +54,7 @@ public class MultiProjectionService : IMultiProjectionService
                 includesSortableUniqueIdValue);
 
     public async Task<List<SingleProjectionState<TSingleProjectionPayload>>> GetSingleProjectionList<TSingleProjectionPayload>(
-        string? rootPartitionKey,
+        string rootPartitionKey,
         SortableUniqueIdValue? includesSortableUniqueIdValue,
         QueryListType queryListType = QueryListType.ActiveOnly) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {

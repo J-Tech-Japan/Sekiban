@@ -33,7 +33,7 @@ public interface IDocumentRepository
         Type multiProjectionType,
         IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
-        string? rootPartitionKey,
+        string rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction);
 
     Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(

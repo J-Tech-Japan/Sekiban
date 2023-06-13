@@ -100,7 +100,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         Type multiProjectionType,
         IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
-        string? rootPartitionKey,
+        string rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction)
     {
         var sekibanContext = _serviceProvider.GetService<ISekibanContext>();

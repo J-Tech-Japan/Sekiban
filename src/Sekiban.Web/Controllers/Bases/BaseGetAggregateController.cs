@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Documents;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Web.Authorizations;
 using Sekiban.Web.Dependency;
@@ -27,6 +28,7 @@ public class BaseGetAggregateController<TAggregatePayload> : ControllerBase wher
     [Route("get/{id}")]
     public virtual async Task<ActionResult<AggregateState<TAggregatePayload>>> GetAsync(
         Guid id,
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
         string? includesSortableUniqueId = null)
     {
@@ -42,12 +44,15 @@ public class BaseGetAggregateController<TAggregatePayload> : ControllerBase wher
         {
             return Unauthorized();
         }
-        var result = await aggregateLoader.AsDefaultStateAsync<TAggregatePayload>(id, toVersion, includesSortableUniqueId);
+        var result = await aggregateLoader.AsDefaultStateAsync<TAggregatePayload>(id, rootPartitionKey, toVersion, includesSortableUniqueId);
         return result is null ? NotFound() : Ok(result);
     }
     [HttpGet]
     [Route("getWithoutSnapshot/{id}")]
-    public virtual async Task<ActionResult<AggregateState<TAggregatePayload>>> GetWithoutSnapshotAsync(Guid id, int? toVersion = null)
+    public virtual async Task<ActionResult<AggregateState<TAggregatePayload>>> GetWithoutSnapshotAsync(
+        Guid id,
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
+        int? toVersion = null)
     {
         if (_webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.Get,
@@ -61,7 +66,7 @@ public class BaseGetAggregateController<TAggregatePayload> : ControllerBase wher
         {
             return Unauthorized();
         }
-        return Ok(await aggregateLoader.AsDefaultStateFromInitialAsync<TAggregatePayload>(id, toVersion));
+        return Ok(await aggregateLoader.AsDefaultStateFromInitialAsync<TAggregatePayload>(id, rootPartitionKey, toVersion));
     }
 
     [HttpGet]

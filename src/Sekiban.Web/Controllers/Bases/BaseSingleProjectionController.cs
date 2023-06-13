@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Sekiban.Core.Documents;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Web.Authorizations;
 using Sekiban.Web.Dependency;
@@ -27,6 +28,7 @@ public class BaseSingleProjectionController<TSingleProjectionPayload> : Controll
     [Route("get/{id}")]
     public virtual async Task<ActionResult<SingleProjectionState<TSingleProjectionPayload>?>> GetAsync(
         Guid id,
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
         string? includesSortableUniqueId = null)
     {
@@ -42,12 +44,19 @@ public class BaseSingleProjectionController<TSingleProjectionPayload> : Controll
         {
             return Unauthorized();
         }
-        var result = await aggregateLoader.AsSingleProjectionStateAsync<TSingleProjectionPayload>(id, toVersion, includesSortableUniqueId);
+        var result = await aggregateLoader.AsSingleProjectionStateAsync<TSingleProjectionPayload>(
+            id,
+            rootPartitionKey,
+            toVersion,
+            includesSortableUniqueId);
         return Ok(result);
     }
     [HttpGet]
     [Route("getWithoutSnapshot/{id}")]
-    public virtual async Task<ActionResult<SingleProjectionState<TSingleProjectionPayload>?>> GetWithoutSnapshotAsync(Guid id, int? toVersion = null)
+    public virtual async Task<ActionResult<SingleProjectionState<TSingleProjectionPayload>?>> GetWithoutSnapshotAsync(
+        Guid id,
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
+        int? toVersion = null)
     {
         if (_webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.SingleProjection,
@@ -61,7 +70,7 @@ public class BaseSingleProjectionController<TSingleProjectionPayload> : Controll
         {
             return Unauthorized();
         }
-        var result = await aggregateLoader.AsSingleProjectionStateFromInitialAsync<TSingleProjectionPayload>(id, toVersion);
+        var result = await aggregateLoader.AsSingleProjectionStateFromInitialAsync<TSingleProjectionPayload>(id, rootPartitionKey, toVersion);
         return Ok(result);
     }
 }

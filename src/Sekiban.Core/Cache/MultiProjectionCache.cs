@@ -21,17 +21,19 @@ public class MultiProjectionCache : IMultiProjectionCache
         _memoryCacheSettings = memoryCacheSettings;
     }
 
-    public void Set<TProjection, TProjectionPayload>(MultipleMemoryProjectionContainer<TProjection, TProjectionPayload> container)
-        where TProjection : IMultiProjector<TProjectionPayload>, new() where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+    public void Set<TProjection, TProjectionPayload>(
+        string rootPartitionKey,
+        MultipleMemoryProjectionContainer<TProjection, TProjectionPayload> container) where TProjection : IMultiProjector<TProjectionPayload>, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
-        _memoryCache.Cache.Set(GetInMemoryKey<TProjection, TProjectionPayload>(), container, GetMemoryCacheOptions());
+        _memoryCache.Cache.Set(GetInMemoryKey<TProjection, TProjectionPayload>(rootPartitionKey), container, GetMemoryCacheOptions());
     }
 
-    public MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>? Get<TProjection, TProjectionPayload>()
+    public MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>? Get<TProjection, TProjectionPayload>(string rootPartitionKey)
         where TProjection : IMultiProjector<TProjectionPayload>, new() where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         var toReturn = _memoryCache.Cache.Get<MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>>(
-            GetInMemoryKey<TProjection, TProjectionPayload>());
+            GetInMemoryKey<TProjection, TProjectionPayload>(rootPartitionKey));
         return toReturn;
     }
 
@@ -43,11 +45,16 @@ public class MultiProjectionCache : IMultiProjectionCache
             // If not accessed 5 minutes it will be deleted. Anyway it will be deleted after two hours
         };
 
-    private string GetInMemoryKey<TProjector, TPayload>() where TProjector : IMultiProjector<TPayload>, new()
+    private string GetInMemoryKey<TProjector, TPayload>(string rootPartitionKey) where TProjector : IMultiProjector<TPayload>, new()
         where TPayload : IMultiProjectionPayloadCommon, new()
     {
         var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
-        var name = "MultiProjection-" + sekibanContext?.SettingGroupIdentifier + "-" + typeof(TPayload).FullName;
+        var name = "MultiProjection-" +
+            (string.IsNullOrEmpty(rootPartitionKey) ? "[all]" : rootPartitionKey) +
+            "-" +
+            sekibanContext?.SettingGroupIdentifier +
+            "-" +
+            typeof(TPayload).FullName;
         return name;
     }
 }

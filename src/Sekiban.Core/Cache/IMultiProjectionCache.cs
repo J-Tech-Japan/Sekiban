@@ -11,24 +11,29 @@ namespace Sekiban.Core.Cache;
 /// </summary>
 public interface IMultiProjectionCache
 {
-    public void Set<TProjection, TProjectionPayload>(MultipleMemoryProjectionContainer<TProjection, TProjectionPayload> container)
-        where TProjection : IMultiProjector<TProjectionPayload>, new() where TProjectionPayload : IMultiProjectionPayloadCommon, new();
+    public void Set<TProjection, TProjectionPayload>(
+        string rootPartitionKey,
+        MultipleMemoryProjectionContainer<TProjection, TProjectionPayload> container) where TProjection : IMultiProjector<TProjectionPayload>, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon, new();
 
-    public MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>? Get<TProjection, TProjectionPayload>()
+    public MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>? Get<TProjection, TProjectionPayload>(string rootPartitionKey)
         where TProjection : IMultiProjector<TProjectionPayload>, new() where TProjectionPayload : IMultiProjectionPayloadCommon, new();
 
 
     public MultipleMemoryProjectionContainer<SingleProjectionListProjector<Aggregate<TAggregatePayload>,
             AggregateState<TAggregatePayload>, DefaultSingleProjector<TAggregatePayload>>,
         SingleProjectionListState<AggregateState<TAggregatePayload>>>?
-        GetAggregateList<TAggregatePayload>() where TAggregatePayload : IAggregatePayloadCommon, new() =>
+        GetAggregateList<TAggregatePayload>(string rootPartitionKey) where TAggregatePayload : IAggregatePayloadCommon, new() =>
         Get<SingleProjectionListProjector<Aggregate<TAggregatePayload>, AggregateState<TAggregatePayload>, DefaultSingleProjector<TAggregatePayload>>,
-            SingleProjectionListState<AggregateState<TAggregatePayload>>>();
+            SingleProjectionListState<AggregateState<TAggregatePayload>>>(rootPartitionKey);
 
-    public MultipleMemoryProjectionContainer<SingleProjectionListProjector<SingleProjection<TSingleProjectionPayload>,
-            SingleProjectionState<TSingleProjectionPayload>, SingleProjection<TSingleProjectionPayload>>,
-        SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>? GetSingleProjectionList<TSingleProjectionPayload>()
+    public
+        MultipleMemoryProjectionContainer<
+            SingleProjectionListProjector<SingleProjection<TSingleProjectionPayload>, SingleProjectionState<TSingleProjectionPayload>,
+                SingleProjection<TSingleProjectionPayload>>, SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>?
+        GetSingleProjectionList<TSingleProjectionPayload>(string rootPartitionKey)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new() =>
         Get<SingleProjectionListProjector<SingleProjection<TSingleProjectionPayload>, SingleProjectionState<TSingleProjectionPayload>,
-            SingleProjection<TSingleProjectionPayload>>, SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>();
+            SingleProjection<TSingleProjectionPayload>>, SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>(
+            rootPartitionKey);
 }

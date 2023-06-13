@@ -14,7 +14,7 @@ public static class PartitionKeyGenerator
             ? $"s_{rootPartitionKey}_{aggregateType.Name}_{aggregateId}"
             : $"s_{rootPartitionKey}_{aggregateType.Name}_{projectionType.Name}_{aggregateId}";
 
-    public static string ForMultiProjectionSnapshot(Type projectionType, string? rootPartitionKey)
+    public static string ForMultiProjectionSnapshot(Type projectionType, string rootPartitionKey)
     {
         if (projectionType.IsSingleProjectionListStateType())
         {
