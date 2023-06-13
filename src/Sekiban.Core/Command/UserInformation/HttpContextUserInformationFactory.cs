@@ -12,7 +12,7 @@ public class HttpContextUserInformationFactory : IUserInformationFactory
     {
         var ip = _httpContextAccessor.HttpContext?.Connection?.RemoteIpAddress?.ToString();
         // Identityを取得し、未認証の場合はエラーとする
-        var identity = _httpContextAccessor?.HttpContext?.User?.Identity;
+        var identity = _httpContextAccessor.HttpContext?.User?.Identity;
         var userId = identity is null || identity.IsAuthenticated == false
             ? null
             : (identity as ClaimsIdentity)?.Claims.FirstOrDefault(m => m.Properties.FirstOrDefault().Value == "sub")?.Value;

@@ -1,8 +1,6 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Events;
-using Sekiban.Core.Partition;
 using Sekiban.Core.Setting;
-using Sekiban.Core.Snapshot;
 namespace Sekiban.Core.Documents;
 
 public class DocumentWriterSplitter : IDocumentWriter
@@ -68,13 +66,5 @@ public class DocumentWriterSplitter : IDocumentWriter
             _hybridStoreManager.AddPartitionKey(ev.PartitionKey, string.Empty, false);
         }
         await _documentTemporaryWriter.SaveAsync(ev, aggregateType);
-    }
-
-    private async Task SaveSnapshotToHybridIfPossible(SnapshotDocument snapshot, Type aggregateType)
-    {
-        if (_hybridStoreManager.HasPartition(PartitionKeyGenerator.ForEvent(snapshot.AggregateId, aggregateType, snapshot.RootPartitionKey)))
-        {
-            await _documentTemporaryWriter.SaveAsync(snapshot, aggregateType);
-        }
     }
 }

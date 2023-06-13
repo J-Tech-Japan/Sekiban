@@ -8,7 +8,6 @@ using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Query.SingleProjections.Projections;
 using Sekiban.Infrastructure.Cosmos;
-using System;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
@@ -22,10 +21,7 @@ public class InheritedSubtypeTests : TestBase
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
     private readonly IMemoryCacheAccessor _memoryCache;
     private readonly IAggregateLoader aggregateLoader;
-    private readonly Guid cartId = Guid.NewGuid();
     private readonly ICommandExecutor commandExecutor;
-    private readonly IDocumentPersistentRepository documentPersistentRepository;
-    private readonly IMultiProjectionService multiProjectionService;
     private readonly ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor;
     private CommandExecutorResponseWithEvents commandResponse = default!;
 
@@ -37,11 +33,11 @@ public class InheritedSubtypeTests : TestBase
         _cosmosDbFactory = GetService<CosmosDbFactory>();
         commandExecutor = GetService<ICommandExecutor>();
         aggregateLoader = GetService<IAggregateLoader>();
-        multiProjectionService = GetService<IMultiProjectionService>();
+        GetService<IMultiProjectionService>();
         _hybridStoreManager = GetService<HybridStoreManager>();
         _inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
         _memoryCache = GetService<IMemoryCacheAccessor>();
-        documentPersistentRepository = GetService<IDocumentPersistentRepository>();
+        GetService<IDocumentPersistentRepository>();
         singleProjectionSnapshotAccessor = GetService<ISingleProjectionSnapshotAccessor>();
         _documentPersistentWriter = GetService<IDocumentPersistentWriter>();
 
@@ -59,8 +55,8 @@ public class InheritedSubtypeTests : TestBase
 
 
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(new OpenInheritedAggregate { YearMonth = 202001 });
-        Assert.NotNull(commandResponse?.AggregateId);
-        var aggregateId = commandResponse!.AggregateId!.Value;
+        Assert.NotNull(commandResponse.AggregateId);
+        var aggregateId = commandResponse.AggregateId!.Value;
 
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
             new CloseInheritedAggregate { Reason = "test", AggregateId = aggregateId });
@@ -84,7 +80,7 @@ public class InheritedSubtypeTests : TestBase
         aggregateState = await aggregateLoader.AsDefaultStateAsync<IInheritedAggregate>(aggregateId);
 
         Assert.Equal(3, aggregateState!.Version);
-        Assert.Equal(2, aggregateState!.AppliedSnapshotVersion);
+        Assert.Equal(2, aggregateState.AppliedSnapshotVersion);
         Assert.True(aggregateState.Payload is ProcessingSubAggregate);
     }
     [Fact]
@@ -99,8 +95,8 @@ public class InheritedSubtypeTests : TestBase
 
 
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(new OpenInheritedAggregate { YearMonth = 202001 });
-        Assert.NotNull(commandResponse?.AggregateId);
-        var aggregateId = commandResponse!.AggregateId!.Value;
+        Assert.NotNull(commandResponse.AggregateId);
+        var aggregateId = commandResponse.AggregateId!.Value;
 
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
             new CloseInheritedAggregate { Reason = "test", AggregateId = aggregateId });
@@ -124,7 +120,7 @@ public class InheritedSubtypeTests : TestBase
         aggregateState = await aggregateLoader.AsDefaultStateAsync<IInheritedAggregate>(aggregateId);
 
         Assert.Equal(3, aggregateState!.Version);
-        Assert.Equal(2, aggregateState!.AppliedSnapshotVersion);
+        Assert.Equal(2, aggregateState.AppliedSnapshotVersion);
         Assert.True(aggregateState.Payload is ProcessingSubAggregate);
     }
 }

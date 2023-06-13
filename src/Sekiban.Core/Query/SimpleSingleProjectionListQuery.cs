@@ -4,9 +4,7 @@ using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Query;
 
 public record QuerySingleProjectionState<TSingleProjectionPayload>(SingleProjectionState<TSingleProjectionPayload> State) : IQueryResponse
-    where TSingleProjectionPayload : ISingleProjectionPayloadCommon
-{
-}
+    where TSingleProjectionPayload : ISingleProjectionPayloadCommon;
 public record SimpleSingleProjectionListQueryParameter<TSingleProjectionPayload>
     (int? PageSize, int? PageNumber) : IListQueryPagingParameter<QuerySingleProjectionState<TSingleProjectionPayload>>
     where TSingleProjectionPayload : ISingleProjectionPayloadCommon;

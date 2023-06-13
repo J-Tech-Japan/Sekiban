@@ -4,8 +4,7 @@ using Sekiban.Core.Events;
 using Sekiban.Core.Shared;
 namespace FeatureCheck.Domain.Aggregates.RecentActivities.Commands;
 
-public record OnlyPublishingAddRecentActivity(Guid RecentActivityId, string Activity) : IOnlyPublishingCommand<RecentActivity>,
-    IOnlyPublishingCommandCommon
+public record OnlyPublishingAddRecentActivity(Guid RecentActivityId, string Activity) : IOnlyPublishingCommand<RecentActivity>
 {
 
     public int ReferenceVersion { get; init; }

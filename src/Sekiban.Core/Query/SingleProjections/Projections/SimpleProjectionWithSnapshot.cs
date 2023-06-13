@@ -9,11 +9,7 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
 {
     private readonly IDocumentRepository _documentRepository;
     private readonly ISingleProjectionFromInitial singleProjectionFromInitial;
-    public SimpleProjectionWithSnapshot(
-        IDocumentRepository documentRepository,
-        ISingleProjectionFromInitial singleProjectionFromInitial,
-        SekibanAggregateTypes sekibanAggregateTypes,
-        ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor)
+    public SimpleProjectionWithSnapshot(IDocumentRepository documentRepository, ISingleProjectionFromInitial singleProjectionFromInitial)
     {
         _documentRepository = documentRepository;
         this.singleProjectionFromInitial = singleProjectionFromInitial;
@@ -71,7 +67,7 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
                 foreach (var e in events)
                 {
                     if (!string.IsNullOrWhiteSpace(state?.LastSortableUniqueId) &&
-                        string.CompareOrdinal(state?.LastSortableUniqueId, e.SortableUniqueId) > 0)
+                        string.CompareOrdinal(state.LastSortableUniqueId, e.SortableUniqueId) > 0)
                     {
                         throw new SekibanEventDuplicateException();
                     }

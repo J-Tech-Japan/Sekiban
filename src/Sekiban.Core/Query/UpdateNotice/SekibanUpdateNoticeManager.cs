@@ -17,8 +17,8 @@ public class SekibanUpdateNoticeManager : IUpdateNotice
             ? new SortableUniqueIdValue(SortableUniqueIdValue.Generate(_sekibanDateProducer.UtcNow, Guid.Empty))
             : new SortableUniqueIdValue(sortableUniqueId);
         var toSave = new NoticeRecord(sortableUniqueIdValue, type);
-        UpdateDictionary.AddOrUpdate(GetKeyForAggregate(aggregateName, aggregateId), s => toSave, (s, record) => toSave);
-        UpdateDictionary.AddOrUpdate(GetKeyForType(aggregateName), s => toSave, (s, record) => toSave);
+        UpdateDictionary.AddOrUpdate(GetKeyForAggregate(aggregateName, aggregateId), _ => toSave, (_, _) => toSave);
+        UpdateDictionary.AddOrUpdate(GetKeyForType(aggregateName), _ => toSave, (_, _) => toSave);
     }
 
     public (bool, UpdatedLocationType?) HasUpdateAfter(string aggregateName, Guid aggregateId, SortableUniqueIdValue? sortableUniqueId)
@@ -28,7 +28,7 @@ public class SekibanUpdateNoticeManager : IUpdateNotice
         {
             return (false, null);
         }
-        return (!current.SortableUniqueId.Value?.Equals(sortableUniqueId?.Value ?? string.Empty) ?? true, current?.LocationType);
+        return (current.SortableUniqueId.Value.Equals(sortableUniqueId?.Value), current.LocationType);
     }
 
     public (bool, UpdatedLocationType?) HasUpdateAfter(string aggregateName, SortableUniqueIdValue? sortableUniqueId)
@@ -42,7 +42,7 @@ public class SekibanUpdateNoticeManager : IUpdateNotice
         {
             return (false, null);
         }
-        return (!current.SortableUniqueId.Value?.Equals(sortableUniqueId) ?? true, current?.LocationType);
+        return (current.SortableUniqueId.Value.Equals(sortableUniqueId), current.LocationType);
     }
 
     public static string GetKeyForAggregate(string aggregateName, Guid aggregateId) => "UpdateNotice-" + aggregateName + "-" + aggregateId;

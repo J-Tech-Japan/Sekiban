@@ -108,7 +108,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
                         } else
                         {
                             if ((!string.IsNullOrWhiteSpace(sinceSortableUniqueIdInPartition) || !fromInitial) &&
-                                string.Compare(sinceSortableUniqueIdInPartition!, sinceSortableUniqueId!, StringComparison.Ordinal) > 0)
+                                string.Compare(sinceSortableUniqueIdInPartition!, sinceSortableUniqueId, StringComparison.Ordinal) > 0)
                             {
                                 SaveEvents(eventList, aggregatePayloadType, partitionKey, sinceSortableUniqueId, false);
                             }

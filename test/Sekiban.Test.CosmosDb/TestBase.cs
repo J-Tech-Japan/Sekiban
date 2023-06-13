@@ -2,7 +2,6 @@ using FeatureCheck.Domain.Shared;
 using Microsoft.DotNet.PlatformAbstractions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Sekiban.Core.Dependency;
 using Sekiban.Core.Snapshot.BackgroundServices;
 using Sekiban.Testing.Story;
 using System;
@@ -19,11 +18,7 @@ public class TestBase : IClassFixture<TestBase.SekibanTestFixture>, IDisposable
     protected readonly SekibanTestFixture _sekibanTestFixture;
     protected readonly IServiceProvider _serviceProvider;
 
-    public TestBase(
-        SekibanTestFixture sekibanTestFixture,
-        ITestOutputHelper output,
-        ISekibanServiceProviderGenerator providerGenerator,
-        ServiceCollectionExtensions.MultiProjectionType multiProjectionType = ServiceCollectionExtensions.MultiProjectionType.MemoryCache)
+    public TestBase(SekibanTestFixture sekibanTestFixture, ITestOutputHelper output, ISekibanServiceProviderGenerator providerGenerator)
     {
         sekibanTestFixture.TestOutputHelper = output;
         _sekibanTestFixture = sekibanTestFixture;

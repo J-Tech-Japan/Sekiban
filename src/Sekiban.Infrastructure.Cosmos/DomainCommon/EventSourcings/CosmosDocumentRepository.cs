@@ -8,7 +8,6 @@ using Sekiban.Core.Partition;
 using Sekiban.Core.Query.SingleProjections.Projections;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
-using Sekiban.Core.Types;
 // ReSharper disable StringCompareToIsCultureSpecific
 
 namespace Sekiban.Infrastructure.Cosmos.DomainCommon.EventSourcings;
@@ -185,7 +184,6 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     MaxBufferedItemCount = -1,
                     PartitionKey = CosmosPartitionGenerator.ForEvent(rootPartitionKey, aggregatePayloadType, aggregateId)
                 };
-                var aggregateTypeName = aggregatePayloadType.GetBaseAggregatePayloadTypeFromAggregate().Name;
                 var query = container.GetItemLinqQueryable<IEvent>();
                 query = sinceSortableUniqueId is not null
                     ? query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0).OrderByDescending(m => m.SortableUniqueId)
@@ -207,7 +205,6 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                                 .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(Event<>).MakeGenericType(m)) as IEvent)
                                 .FirstOrDefault(m => m is not null) ??
                             EventHelper.GetUnregisteredEvent(item);
-                        ;
                         if (toAdd is null)
                         {
                             throw new SekibanUnregisterdEventFoundException();
@@ -239,7 +236,6 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             aggregateContainerGroup,
             async container =>
             {
-                var types = _registeredEventTypes.RegisteredTypes;
                 var options = new QueryRequestOptions { MaxConcurrency = -1, MaxItemCount = -1, MaxBufferedItemCount = -1 };
                 options.PartitionKey = CosmosPartitionGenerator.ForCommand(rootPartitionKey, aggregatePayloadType, aggregateId);
 
@@ -280,7 +276,6 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
             async container =>
             {
                 var options = new QueryRequestOptions { MaxConcurrency = -1, MaxItemCount = -1, MaxBufferedItemCount = -1 };
-                var eventTypes = _registeredEventTypes.RegisteredTypes.Select(m => m.Name);
                 var query = container.GetItemLinqQueryable<IEvent>()
                     .Where(b => b.DocumentType == DocumentType.Event && b.AggregateType == aggregatePayloadType.Name);
 
@@ -354,7 +349,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 var feedIterator = container.GetItemQueryIterator<SnapshotDocument>(query.ToQueryDefinition(), null, options);
                 while (feedIterator.HasMoreResults)
                 {
-                    foreach (var obj in await feedIterator.ReadNextAsync())
+                    foreach (var _ in await feedIterator.ReadNextAsync())
                     {
                         return true;
                     }

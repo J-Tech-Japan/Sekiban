@@ -4,7 +4,7 @@ using Sekiban.Core.Partition;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Snapshot;
 
-public record SnapshotDocument : Document, IDocument
+public record SnapshotDocument : Document
 {
 
     public dynamic? Snapshot { get; init; }

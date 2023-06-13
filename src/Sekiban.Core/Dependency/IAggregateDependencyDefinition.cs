@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 namespace Sekiban.Core.Dependency;
 
+// ReSharper disable once InvalidXmlDocComment
 /// <summary>
 ///     system use base class for <see cref="AggregateDependencyDefinition" />
 ///     Application developer does not need to use this class directly.

@@ -13,7 +13,7 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
 
     public void PopulateFeature(IEnumerable<ApplicationPart> parts, ControllerFeature feature)
     {
-        foreach (var (serviceType, implementationType) in _webDependencyDefinition.GetCommandDependencies())
+        foreach (var (_, implementationType) in _webDependencyDefinition.GetCommandDependencies())
         {
             if (implementationType != null && implementationType.IsCommandHandlerType())
             {
@@ -50,7 +50,7 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
             feature.Controllers.Add(
                 _webDependencyDefinition.Options.BaseAggregateListQueryControllerType.MakeGenericType(
                         projectionType.GetAggregateTypeFromAggregateListQueryType(),
-                        projectionType!,
+                        projectionType,
                         projectionType.GetParamTypeFromAggregateListQueryType(),
                         projectionType.GetResponseTypeFromAggregateListQueryType())
                     .GetTypeInfo());
@@ -65,7 +65,7 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
             feature.Controllers.Add(
                 _webDependencyDefinition.Options.BaseAggregateQueryControllerType.MakeGenericType(
                         projectionType.GetAggregateTypeFromAggregateQueryType(),
-                        projectionType!,
+                        projectionType,
                         projectionType.GetParamTypeFromAggregateQueryType(),
                         projectionType.GetResponseTypeFromAggregateQueryType())
                     .GetTypeInfo());
@@ -80,7 +80,7 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
             feature.Controllers.Add(
                 _webDependencyDefinition.Options.BaseSingleProjectionListQueryControllerType.MakeGenericType(
                         queryType.GetSingleProjectionTypeFromSingleProjectionListQueryType(),
-                        queryType!,
+                        queryType,
                         queryType.GetParamTypeFromSingleProjectionListQueryType(),
                         queryType.GetResponseTypeFromSingleProjectionListQueryType())
                     .GetTypeInfo());
@@ -95,7 +95,7 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
             feature.Controllers.Add(
                 _webDependencyDefinition.Options.BaseSingleProjectionQueryControllerType.MakeGenericType(
                         queryType.GetSingleProjectionTypeFromSingleProjectionQueryType(),
-                        queryType!,
+                        queryType,
                         queryType.GetParamTypeFromSingleProjectionQueryType(),
                         queryType.GetResponseTypeFromSingleProjectionQueryType())
                     .GetTypeInfo());
@@ -110,7 +110,7 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
             feature.Controllers.Add(
                 _webDependencyDefinition.Options.BaseMultiProjectionListQueryControllerType.MakeGenericType(
                         queryType.GetMultiProjectionTypeFromMultiProjectionListQueryType(),
-                        queryType!,
+                        queryType,
                         queryType.GetParamTypeFromMultiProjectionListQueryType(),
                         queryType.GetResponseTypeFromMultiProjectionListQueryType())
                     .GetTypeInfo());
@@ -125,7 +125,7 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
             feature.Controllers.Add(
                 _webDependencyDefinition.Options.BaseMultiProjectionQueryControllerType.MakeGenericType(
                         queryType.GetMultiProjectionTypeFromMultiProjectionQueryType(),
-                        queryType!,
+                        queryType,
                         queryType.GetParamTypeFromMultiProjectionQueryType(),
                         queryType.GetResponseTypeFromMultiProjectionQueryType())
                     .GetTypeInfo());

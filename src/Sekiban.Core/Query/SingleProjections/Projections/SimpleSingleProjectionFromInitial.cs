@@ -34,7 +34,8 @@ public class SimpleSingleProjectionFromInitial : ISingleProjectionFromInitial
             rootPartitionKey,
             events =>
             {
-                if (events.Count() != events.Select(m => m.Id).Distinct().Count())
+                var enumerable = events.ToList();
+                if (enumerable.Count() != enumerable.Select(m => m.Id).Distinct().Count())
                 {
                     throw new SekibanEventDuplicateException();
                 }
@@ -42,7 +43,7 @@ public class SimpleSingleProjectionFromInitial : ISingleProjectionFromInitial
                 {
                     return;
                 }
-                foreach (var e in events)
+                foreach (var e in enumerable)
                 {
                     aggregate.ApplyEvent(e);
                     if (toVersion.HasValue && toVersion.Value == aggregate.Version)

@@ -4,6 +4,7 @@ using Sekiban.Core.Exceptions;
 using System.Collections.Immutable;
 namespace Sekiban.Core.Command;
 
+// ReSharper disable once InvalidXmlDocComment
 /// <summary>
 ///     System use for internal handler for <see cref="IOnlyPublishingCommand" />
 /// </summary>

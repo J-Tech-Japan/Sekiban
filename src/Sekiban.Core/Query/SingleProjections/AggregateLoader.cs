@@ -78,7 +78,7 @@ public class AggregateLoader : IAggregateLoader
         string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommon
     {
         var aggregate = await AsAggregateAsync<TAggregatePayload>(aggregateId, rootPartitionKey, toVersion);
-        return aggregate?.GetPayloadTypeIs<TAggregatePayload>() == true ? aggregate?.ToState() : null;
+        return aggregate?.GetPayloadTypeIs<TAggregatePayload>() == true ? aggregate.ToState() : null;
     }
 
     public async Task<IEnumerable<IEvent>?> AllEventsAsync<TAggregatePayload>(
@@ -113,22 +113,4 @@ public class AggregateLoader : IAggregateLoader
             aggregateId,
             rootPartitionKey,
             toVersion);
-
-
-    private async Task<TAggregateState?> GetAggregateStateAsync<TAggregate, TAggregateState, TSingleProjector>(
-        Guid aggregateId,
-        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
-        int? toVersion = null,
-        string? includesSortableUniqueId = null)
-        where TAggregate : IAggregateCommon, ISingleProjection, ISingleProjectionStateConvertible<TAggregateState>
-        where TAggregateState : IAggregateStateCommon
-        where TSingleProjector : ISingleProjector<TAggregate>, new()
-    {
-        var aggregate = await _singleProjection.GetAggregateAsync<TAggregate, TAggregateState, TSingleProjector>(
-            aggregateId,
-            rootPartitionKey,
-            toVersion,
-            SortableUniqueIdValue.NullableValue(includesSortableUniqueId));
-        return aggregate is null ? default : aggregate.ToState();
-    }
 }

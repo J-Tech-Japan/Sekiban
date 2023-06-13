@@ -7,7 +7,6 @@ using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Consts;
 using FeatureCheck.Domain.Shared;
 using FeatureCheck.Domain.Shared.Exceptions;
 using FeatureCheck.Test.AggregateTests.CommandsHelpers;
-using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Exceptions;
 using Sekiban.Testing.SingleProjections;
@@ -20,13 +19,6 @@ public class ClientSpec : AggregateTest<Client, FeatureCheckDependency>
     private const string testClientName = "TestName";
     private const string testClientChangedName = "TestName2";
     private const string testEmail = "test@example.com";
-    private const string testClientChangedNameV3 = "TestName3";
-    private static readonly Guid clientId = Guid.NewGuid();
-
-    protected override void SetupDependency(IServiceCollection serviceCollection)
-    {
-        base.SetupDependency(serviceCollection);
-    }
 
     [Fact(DisplayName = "集約コマンドを実行してテストする")]
     public void ClientCreateSpec()

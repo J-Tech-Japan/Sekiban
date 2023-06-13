@@ -12,7 +12,7 @@ public class AzureAdUserInformationFactory : IUserInformationFactory
     {
         var ip = _httpContextAccessor.HttpContext?.Connection?.RemoteIpAddress?.ToString();
         // Identityを取得し、未認証の場合はエラーとする
-        var identity = _httpContextAccessor?.HttpContext?.User?.Identity;
+        var identity = _httpContextAccessor.HttpContext?.User?.Identity;
         var userId = identity is null || identity.IsAuthenticated == false ? null : (identity as ClaimsIdentity)?.Name;
         return $"{userId ?? "Unauthenticated User"} from {ip ?? "ip address not found"}";
     }

@@ -733,7 +733,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         IListQueryInput<TQueryResponse> param,
         Action<ListQueryResult<TQueryResponse>> responseAction) where TQueryResponse : IQueryResponse
     {
-        responseAction(GetListQueryResponse(param)!);
+        responseAction(GetListQueryResponse(param));
         return this;
     }
 
@@ -844,7 +844,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         IQueryInput<TQueryResponse> param,
         Action<TQueryResponse> responseAction) where TQueryResponse : IQueryResponse
     {
-        responseAction(GetQueryResponse(param)!);
+        responseAction(GetQueryResponse(param));
         return this;
     }
 

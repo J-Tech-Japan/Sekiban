@@ -38,7 +38,13 @@ public class TestEventHandler
             {
                 throw new Exception($"Failed to find aggregate type {e.AggregateType}");
             }
-            documentWriter.SaveAsync(e, aggregateType.Aggregate).Wait();
+            if (withPublish)
+            {
+                documentWriter.SaveAsync(e, aggregateType.Aggregate).Wait();
+            } else
+            {
+                documentWriter.SaveAndPublishEvent(e, aggregateType.Aggregate).Wait();
+            }
         }
     }
 

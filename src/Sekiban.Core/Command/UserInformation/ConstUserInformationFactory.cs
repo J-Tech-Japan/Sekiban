@@ -10,5 +10,5 @@ public class ConstUserInformationFactory : IUserInformationFactory
 
     public ConstUserInformationFactory(string userInfo) => _userInfo = userInfo;
 
-    public string GetCurrentUserInformation() => _userInfo ?? string.Empty;
+    public string GetCurrentUserInformation() => _userInfo;
 }

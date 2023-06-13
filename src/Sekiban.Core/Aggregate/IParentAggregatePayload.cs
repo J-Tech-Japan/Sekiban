@@ -8,6 +8,7 @@ public interface IParentAggregatePayloadCommon<TParentAggregatePayload> : IAggre
     where TParentAggregatePayload : IAggregatePayloadCommon
 {
 }
+// ReSharper disable once UnusedTypeParameter
 public interface IParentAggregatePayload<TParentAggregatePayload, IFirstAggregatePayload> : IParentAggregatePayloadCommon<TParentAggregatePayload>
     where TParentAggregatePayload : IAggregatePayloadCommon where IFirstAggregatePayload : IAggregatePayloadCommon, new()
 {

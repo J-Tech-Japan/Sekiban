@@ -91,7 +91,7 @@ public abstract class CustomerDbStoryBasic : TestBase
         var branchFromList = branchList.First(m => m.AggregateId == branchId);
         Assert.NotNull(branchFromList);
 
-        var branchResult2 = await commandExecutor.ExecCommandAsync(new CreateBranch("USA"));
+        await commandExecutor.ExecCommandAsync(new CreateBranch("USA"));
         branchList = await multiProjectionService.GetAggregateList<Branch>();
         Assert.Equal(2, branchList.Count);
         var branchListFromMultiple = await multiProjectionService.GetAggregateList<Branch>();
@@ -126,8 +126,8 @@ public abstract class CustomerDbStoryBasic : TestBase
         Assert.Single(clientNameListFromMultiple);
         Assert.Equal(clientNameList.First().AggregateId, clientNameListFromMultiple.First().AggregateId);
 
-        var branchResult3 = await commandExecutor.ExecCommandAsync(new CreateBranch("California"));
-        branchList = await multiProjectionService.GetAggregateList<Branch>();
+        await commandExecutor.ExecCommandAsync(new CreateBranch("California"));
+        var _ = await multiProjectionService.GetAggregateList<Branch>();
 
         var secondName = "田中 太郎";
         // should throw version error 
@@ -168,7 +168,7 @@ public abstract class CustomerDbStoryBasic : TestBase
         // first point = 0
         var loyaltyPoint = await projectionService.AsDefaultStateAsync<LoyaltyPoint>(clientId);
         Assert.NotNull(loyaltyPoint);
-        Assert.Equal(0, loyaltyPoint!.Payload.CurrentPoint);
+        Assert.Equal(0, loyaltyPoint.Payload.CurrentPoint);
 
         var datetimeFirst = DateTime.Now;
         var addPointResult = await commandExecutor.ExecCommandAsync(
@@ -181,7 +181,7 @@ public abstract class CustomerDbStoryBasic : TestBase
 
         loyaltyPoint = await projectionService.AsDefaultStateAsync<LoyaltyPoint>(clientId);
         Assert.NotNull(loyaltyPoint);
-        Assert.Equal(1000, loyaltyPoint!.Payload.CurrentPoint);
+        Assert.Equal(1000, loyaltyPoint.Payload.CurrentPoint);
 
         // should throw not enough point error 
         await Assert.ThrowsAsync<SekibanLoyaltyPointNotEnoughException>(
@@ -203,7 +203,7 @@ public abstract class CustomerDbStoryBasic : TestBase
 
         loyaltyPoint = await projectionService.AsDefaultStateAsync<LoyaltyPoint>(clientId);
         Assert.NotNull(loyaltyPoint);
-        Assert.Equal(800, loyaltyPoint!.Payload.CurrentPoint);
+        Assert.Equal(800, loyaltyPoint.Payload.CurrentPoint);
 
         var p = await multiProjectionService.GetMultiProjectionAsync<ClientLoyaltyPointMultiProjection>();
         Assert.NotNull(p);
@@ -268,12 +268,12 @@ public abstract class CustomerDbStoryBasic : TestBase
         } else
         {
             _testOutputHelper.WriteLine("-requests-");
-            foreach (var key in snapshotManager!.Payload.Requests)
+            foreach (var key in snapshotManager.Payload.Requests)
             {
                 _testOutputHelper.WriteLine(key);
             }
             _testOutputHelper.WriteLine("-request takens-");
-            foreach (var key in snapshotManager!.Payload.RequestTakens)
+            foreach (var key in snapshotManager.Payload.RequestTakens)
             {
                 _testOutputHelper.WriteLine(key);
             }
@@ -311,7 +311,7 @@ public abstract class CustomerDbStoryBasic : TestBase
     public void CheckBlobAccessorBlobConnectionString()
     {
         var connectionString = blobAccessor.BlobConnectionString();
-        Console.WriteLine("BlobConnectionString: " + connectionString);
+        _testOutputHelper.WriteLine("BlobConnectionString: " + connectionString);
         Assert.NotNull(connectionString);
     }
     [Fact]
@@ -406,7 +406,6 @@ public abstract class CustomerDbStoryBasic : TestBase
 
         // create recent activity
         var createRecentActivityResult = await commandExecutor.ExecCommandAsync(new CreateRecentActivity());
-        var recentActivityId = createRecentActivityResult.AggregateId;
 
         var recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
         Assert.Single(recentActivityList);
@@ -437,7 +436,7 @@ public abstract class CustomerDbStoryBasic : TestBase
         var aggregateRecentActivity2 = await projectionService.AsDefaultStateAsync<RecentActivity>(createRecentActivityResult.AggregateId!.Value);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
-        Assert.Equal(count + 1, aggregateRecentActivity!.Version);
+        Assert.Equal(count + 1, aggregateRecentActivity.Version);
         Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
 
         var snapshotManager = await projectionService.AsDefaultStateFromInitialAsync<SnapshotManager>(SnapshotManager.SharedId);
@@ -447,7 +446,7 @@ public abstract class CustomerDbStoryBasic : TestBase
             _testOutputHelper.WriteLine(key);
         }
         _testOutputHelper.WriteLine("-request takens-");
-        foreach (var key in snapshotManager!.Payload.RequestTakens)
+        foreach (var key in snapshotManager.Payload.RequestTakens)
         {
             _testOutputHelper.WriteLine(key);
         }
@@ -504,7 +503,7 @@ public abstract class CustomerDbStoryBasic : TestBase
     private async Task CheckProjectionSnapshots<TAggregatePayload>(List<SnapshotDocument> snapshots, Guid aggregateId)
         where TAggregatePayload : ISingleProjectionPayloadCommon, new()
     {
-        var aggregateType = typeof(TAggregatePayload).GetOriginalTypeFromSingleProjectionPayload();
+        typeof(TAggregatePayload).GetOriginalTypeFromSingleProjectionPayload();
         _testOutputHelper.WriteLine($"snapshots {typeof(TAggregatePayload).Name} {snapshots.Count} ");
         foreach (var snapshot in snapshots)
         {
@@ -519,7 +518,8 @@ public abstract class CustomerDbStoryBasic : TestBase
             }
             _testOutputHelper.WriteLine(
                 $"Snapshot {snapshot.AggregateType} {snapshot.DocumentTypeName} {snapshot.Id}  {snapshot.SavedVersion}  is not null");
-            var fromInitial = await projectionService.AsSingleProjectionStateFromInitialAsync<TAggregatePayload>(aggregateId, toVersion: state.Version);
+            var fromInitial
+                = await projectionService.AsSingleProjectionStateFromInitialAsync<TAggregatePayload>(aggregateId, toVersion: state.Version);
             if (fromInitial is null)
             {
                 throw new SekibanInvalidArgumentException();
@@ -565,7 +565,7 @@ public abstract class CustomerDbStoryBasic : TestBase
             = await projectionService.AsDefaultStateAsync<RecentInMemoryActivity>(createRecentActivityResult.AggregateId!.Value);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
-        Assert.Equal(count + 1, aggregateRecentActivity!.Version);
+        Assert.Equal(count + 1, aggregateRecentActivity.Version);
         Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
     }
 
@@ -627,7 +627,7 @@ public abstract class CustomerDbStoryBasic : TestBase
         var aggregateRecentActivity2 = await projectionService.AsDefaultStateAsync<RecentActivity>(aggregateId);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
-        Assert.Equal(count + aggregate!.ToState().Version, aggregateRecentActivity!.Version);
+        Assert.Equal(count + aggregate.ToState().Version, aggregateRecentActivity.Version);
         Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
 
         var snapshotManager = await projectionService.AsDefaultStateFromInitialAsync<SnapshotManager>(SnapshotManager.SharedId);
@@ -637,7 +637,7 @@ public abstract class CustomerDbStoryBasic : TestBase
             _testOutputHelper.WriteLine(key);
         }
         _testOutputHelper.WriteLine("-request takens-");
-        foreach (var key in snapshotManager!.Payload.RequestTakens)
+        foreach (var key in snapshotManager.Payload.RequestTakens)
         {
             _testOutputHelper.WriteLine(key);
         }

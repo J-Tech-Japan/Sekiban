@@ -35,7 +35,7 @@ public class UnifiedProjectionsTest : UnifiedTest<FeatureCheckDependency>
             .ForEach(
                 m =>
                 {
-                    if (m.GetPayload() is ClientCreated created)
+                    if (m.GetPayload() is ClientCreated)
                     {
                         dateNameSet = m.TimeStamp;
                     }

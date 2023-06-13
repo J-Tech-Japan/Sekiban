@@ -1,5 +1,6 @@
 namespace Sekiban.Core.Command;
 
+// ReSharper disable once InvalidXmlDocComment
 /// <summary>
 ///     System use for add command validation feature
 ///     Application developer does not need to implement this interface directly,

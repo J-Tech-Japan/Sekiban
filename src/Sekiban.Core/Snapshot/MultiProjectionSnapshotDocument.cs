@@ -20,7 +20,7 @@ public record MultiProjectionSnapshotDocument : IDocument
     public MultiProjectionSnapshotDocument(Type projectionType, Guid id, IMultiProjectionCommon projection, string rootPartitionKey)
     {
         Id = id;
-        RootPartitionKey = rootPartitionKey ?? AllRootPartitionKey;
+        RootPartitionKey = rootPartitionKey;
         DocumentTypeName = DocumentTypeNameFromProjectionType(projectionType);
         DocumentType = DocumentType.MultiProjectionSnapshot;
         PartitionKey = PartitionKeyGenerator.ForMultiProjectionSnapshot(projectionType, RootPartitionKey);

@@ -45,6 +45,7 @@ public class MultiProjectionCache : IMultiProjectionCache
             // If not accessed 5 minutes it will be deleted. Anyway it will be deleted after two hours
         };
 
+    // ReSharper disable once UnusedTypeParameter
     private string GetInMemoryKey<TProjector, TPayload>(string rootPartitionKey) where TProjector : IMultiProjector<TPayload>, new()
         where TPayload : IMultiProjectionPayloadCommon, new()
     {

@@ -43,7 +43,7 @@ public static class SekibanJsonHelper
 
     public static IEvent? DeserializeToEvent(JsonElement jsonElement, ReadOnlyCollection<Type> registeredTypes)
     {
-        if (GetValue<string>(jsonElement, nameof(IDocument.DocumentTypeName)) is not string typeName)
+        if (GetValue<string>(jsonElement, nameof(IDocument.DocumentTypeName)) is not { } typeName)
         {
             return null;
         }

@@ -25,7 +25,7 @@ public class MultiProjectionSnapshotGenerator : IMultiProjectionSnapshotGenerato
     {
         var projector = new TProjection();
         // if there is snapshot, load it, if not make a new one
-        var state = await GetCurrentStateAsync<TProjectionPayload>(rootPartitionKey ?? MultiProjectionSnapshotDocument.AllRootPartitionKey);
+        var state = await GetCurrentStateAsync<TProjectionPayload>(rootPartitionKey);
         projector.ApplySnapshot(state);
         // get events from after snapshot or the initial and project them
         await _documentRepository.GetAllEventsAsync(

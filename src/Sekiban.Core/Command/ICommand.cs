@@ -6,6 +6,7 @@ namespace Sekiban.Core.Command;
 ///     Interface for defining a command
 /// </summary>
 /// <typeparam name="TAggregatePayload">Target Aggregate Payload to execute the command</typeparam>
+// ReSharper disable once UnusedTypeParameter
 public interface ICommand<TAggregatePayload> : ICommandCommon where TAggregatePayload : IAggregatePayloadCommon
 {
     /// <summary>

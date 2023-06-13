@@ -147,7 +147,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         IListQueryInput<TQueryResponse> param,
         Action<ListQueryResult<TQueryResponse>> responseAction) where TQueryResponse : IQueryResponse
     {
-        responseAction(GetListQueryResponse(param)!);
+        responseAction(GetListQueryResponse(param));
         return this;
     }
 
@@ -256,7 +256,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         IQueryInput<TQueryResponse> param,
         Action<TQueryResponse> responseAction) where TQueryResponse : IQueryResponse
     {
-        responseAction(GetQueryResponse(param)!);
+        responseAction(GetQueryResponse(param));
         return this;
     }
 
@@ -313,7 +313,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
 
     public UnifiedTest<TDependencyDefinition> ThenGetMultiProjectionPayload<TMultiProjectionPayload>(Action<TMultiProjectionPayload> payloadAction)
         where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new() =>
-        ThenGetMultiProjectionPayload(payloadAction);
+        ThenGetMultiProjectionPayload(IMultiProjectionService.ProjectionAllPartitions, payloadAction);
 
     public UnifiedTest<TDependencyDefinition> ThenGetMultiProjectionPayload<TMultiProjectionPayload>(
         string rootPartitionKey,

@@ -69,7 +69,7 @@ public class SekibanApiListController<T> : ControllerBase
                 },
                 new List<SekibanCommandInfo>());
             list.Add(aggregateInfo);
-            foreach (var (serviceType, implementationType) in _webDependencyDefinition.GetCommandDependencies())
+            foreach (var (_, implementationType) in _webDependencyDefinition.GetCommandDependencies())
             {
                 if (implementationType != null && implementationType.IsCommandHandlerType())
                 {

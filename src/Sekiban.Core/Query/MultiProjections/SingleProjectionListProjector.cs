@@ -9,7 +9,6 @@ public class SingleProjectionListProjector<TProjection, TState, TProjector> : IM
     where TState : IAggregateStateCommon
     where TProjector : ISingleProjector<TProjection>, new()
 {
-    private TProjection _eventChecker;
     private TProjector _projector = new();
 
     private SingleProjectionListState<TState> State { get; set; }
@@ -18,7 +17,6 @@ public class SingleProjectionListProjector<TProjection, TState, TProjector> : IM
 
     public SingleProjectionListProjector()
     {
-        _eventChecker = _projector.CreateInitialAggregate(Guid.Empty);
         State = new SingleProjectionListState<TState> { List = List.Select(m => m.ToState()).ToList() };
     }
     public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().LaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));

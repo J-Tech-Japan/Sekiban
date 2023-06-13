@@ -6,6 +6,7 @@ namespace Sekiban.Web.Controllers.Bases;
 
 [ApiController]
 [Produces("application/json")]
+// ReSharper disable once UnusedTypeParameter
 public class BaseSingleProjectionQueryController<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse> : ControllerBase
     where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>

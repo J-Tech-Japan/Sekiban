@@ -53,7 +53,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
         }
 
         var projector = new TProjection();
-        if (savedContainer.SafeState is null && savedContainer?.SafeSortableUniqueId?.Value is null)
+        if (savedContainer.SafeState is null && savedContainer.SafeSortableUniqueId?.Value is null)
         {
             return await GetInitialProjection<TProjection, TProjectionPayload>(rootPartitionKey);
         }
@@ -80,7 +80,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
                     continue;
                 }
 
-                var (updated, type) = _updateNotice.HasUpdateAfter(targetAggregateName, savedContainer.SafeSortableUniqueId!);
+                var (updated, _) = _updateNotice.HasUpdateAfter(targetAggregateName, savedContainer.SafeSortableUniqueId!);
                 canUseCache = !updated;
             }
 
@@ -140,7 +140,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
             container = container with { SafeState = container.State, SafeSortableUniqueId = container.LastSortableUniqueId };
         }
 
-        if (container.SafeState is not null && container.SafeSortableUniqueId != savedContainer?.SafeSortableUniqueId)
+        if (container.SafeState is not null && container.SafeSortableUniqueId != savedContainer.SafeSortableUniqueId)
         {
             multiProjectionCache.Set(rootPartitionKey, container);
         }
@@ -190,16 +190,12 @@ public class MemoryCacheMultiProjection : IMultiProjection
 
         var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
         var unsafeEvents = new List<IEvent>();
-        SortableUniqueIdValue? lastSortableUniqueId = null;
-
-
         while (eventStream != null)
         {
             var list = JsonSerializer.Deserialize<List<JsonElement>>(eventStream) ?? throw new Exception("Could not deserialize file");
             var events = (IList<IEvent>)list.Select(m => SekibanJsonHelper.DeserializeToEvent(m, _registeredEventTypes.RegisteredTypes))
                 .Where(m => m is not null)
                 .ToList();
-            lastSortableUniqueId = events.LastOrDefault()?.GetSortableUniqueId();
             var safeEvents = events.Where(m => m.GetSortableUniqueId().EarlierThan(targetSafeId)).ToList();
             multiProjectionState = safeEvents.Aggregate(multiProjectionState, (projection, ev) => projection.ApplyEvent(ev));
 

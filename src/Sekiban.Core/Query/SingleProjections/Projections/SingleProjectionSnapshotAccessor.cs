@@ -74,7 +74,6 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
             {
                 var aggregateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.AggregateType);
                 if (aggregateType is null) { return null; }
-                var baseType = aggregateType.Aggregate.GetBaseAggregatePayloadTypeFromAggregate();
                 var subAggregateStateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.DocumentTypeName);
                 if (subAggregateStateType is null) { return null; }
                 var aggregateStateType = typeof(AggregateState<>).MakeGenericType(subAggregateStateType.Aggregate);

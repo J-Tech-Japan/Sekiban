@@ -20,10 +20,10 @@ public record VersionCheckAggregateLastInfo
         where TEventPayload : IEventPayloadCommon =>
         ev.Payload switch
         {
-            PaymentAdded_V3 paymentAdded => projectionPayload with
-            {
-                LastAmount = paymentAdded.Amount, LastPaymentKind = paymentAdded.PaymentKind, LastDescription = paymentAdded.Description
-            },
+            PaymentAdded_V3 paymentAdded => new VersionCheckAggregateLastInfo(
+                paymentAdded.Amount,
+                paymentAdded.PaymentKind,
+                paymentAdded.Description),
             _ => null
         };
 }

@@ -93,7 +93,7 @@ public class ClientAndProjectionSpec : AggregateTest<Client, FeatureCheckDepende
                     null,
                     null,
                     new[] { new BasicClientQueryModel(branchId, clientNameChanged, clientEmail) }))
-            .ThenGetQueryResponse(new ClientNameHistoryProjectionQuery.Parameter(null, null, null, null, null), value => { });
+            .ThenGetQueryResponse(new ClientNameHistoryProjectionQuery.Parameter(null, null, null, null, null), _ => { });
     }
 
     [Fact]

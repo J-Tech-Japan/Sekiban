@@ -28,7 +28,6 @@ public class SnapshotGenerator
         IAggregateLoader aggregateLoader,
         IDocumentWriter documentWriter,
         IAggregateSettings aggregateSettings,
-        ISekibanContext sekibanContext,
         ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor)
     {
         _sekibanAggregateTypes = sekibanAggregateTypes;
@@ -77,7 +76,7 @@ public class SnapshotGenerator
                     {
 
                         dynamic? awaitable = aggregateLoader.GetType()
-                            ?.GetMethod(nameof(aggregateLoader.AsDefaultStateAsync))
+                            .GetMethod(nameof(aggregateLoader.AsDefaultStateAsync))
                             ?.MakeGenericMethod(aggregateType.Aggregate)
                             .Invoke(aggregateLoader, new object?[] { notification.AggregateId, taken.Payload.NextSnapshotVersion, null });
                         if (awaitable is null)
@@ -145,7 +144,7 @@ public class SnapshotGenerator
                     .Select(m => (Event<SnapshotManagerSnapshotTaken>)m))
                 {
                     dynamic? awaitable = aggregateLoader.GetType()
-                        ?.GetMethod(nameof(aggregateLoader.AsSingleProjectionStateAsync))
+                        .GetMethod(nameof(aggregateLoader.AsSingleProjectionStateAsync))
                         ?.MakeGenericMethod(projection.PayloadType)
                         .Invoke(aggregateLoader, new object?[] { notification.AggregateId, taken.Payload.NextSnapshotVersion, null });
                     if (awaitable is null)

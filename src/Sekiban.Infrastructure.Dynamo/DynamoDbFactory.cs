@@ -80,7 +80,7 @@ public class DynamoDbFactory
         throw new Exception("CosmosDbEndPointUrl not found");
 
 
-    private RegionEndpoint GetDynamoDbRegion(DocumentType documentType)
+    private RegionEndpoint GetDynamoDbRegion()
     {
         return RegionEndpoint.EnumerableAllRegions.FirstOrDefault(m => m.SystemName == _section.GetValue<string>("DynamoDbRegion")) ??
             throw new Exception("CosmosDbEndPointUrl not found");
@@ -98,7 +98,7 @@ public class DynamoDbFactory
 
         var awsAccessKeyId = GetAwsAccessKeyId(documentType);
         var awsAccessKey = GetAwsAccessKey(documentType);
-        var region = GetDynamoDbRegion(documentType);
+        var region = GetDynamoDbRegion();
 
         var client = (AmazonDynamoDBClient?)_memoryCache.Cache.Get(GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier)) ??
             new AmazonDynamoDBClient(awsAccessKeyId, awsAccessKey, region);

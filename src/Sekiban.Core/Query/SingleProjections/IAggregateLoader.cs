@@ -48,7 +48,6 @@ public interface IAggregateLoader
     /// <param name="rootPartitionKey"></param>
     /// <param name="toVersion"></param>
     /// <param name="includesSortableUniqueId"></param>
-    /// <typeparam name="T"></typeparam>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
     public Task<Aggregate<TAggregatePayload>?> AsAggregateAsync<TAggregatePayload>(
@@ -65,7 +64,6 @@ public interface IAggregateLoader
     /// <param name="rootPartitionKey"></param>
     /// <param name="toVersion"></param>
     /// <param name="includesSortableUniqueId"></param>
-    /// <typeparam name="T"></typeparam>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
     public Task<AggregateState<TAggregatePayload>?> AsDefaultStateAsync<TAggregatePayload>(

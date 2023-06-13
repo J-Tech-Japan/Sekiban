@@ -2,6 +2,7 @@ using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 namespace Sekiban.Core.Query.MultiProjections.Projections;
 
+// ReSharper disable once UnusedTypeParameter
 public record MultipleMemoryProjectionContainer<TProjection, TProjectionPayload> where TProjection : IMultiProjector<TProjectionPayload>, new()
     where TProjectionPayload : IMultiProjectionPayloadCommon, new()
 {

@@ -51,7 +51,5 @@ public class ClientLoyaltyPointMultiProjectionQuery : IMultiProjectionQuery<Clie
     public record Response(
         ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch> Branches,
         ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord> Records) : ClientLoyaltyPointMultiProjection(Branches, Records),
-        IQueryResponse
-    {
-    }
+        IQueryResponse;
 }

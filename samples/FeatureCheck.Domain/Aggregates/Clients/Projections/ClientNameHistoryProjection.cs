@@ -33,8 +33,6 @@ public record ClientNameHistoryProjection(
 
             ClientNameChanged clientNameChanged => () =>
             {
-                var a = 1;
-                a++;
                 return projectionPayload with
                 {
                     ClientNames = projectionPayload.ClientNames.Add(

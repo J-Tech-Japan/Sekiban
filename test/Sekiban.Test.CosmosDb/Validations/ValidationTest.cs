@@ -40,7 +40,7 @@ public class ValidationTest
     {
         var m = new Member { Name = "YAMADA Taro", Age = 25, Tel = "090-1111-2222", Email = "hoge@example.com" };
         var vresults = m.ValidateProperties();
-        Assert.False(vresults?.Any() ?? false);
+        Assert.False(vresults.Any());
         Assert.True(m.TryValidateProperties(out _));
     }
     [Fact]
@@ -48,14 +48,14 @@ public class ValidationTest
     {
         var m = new Box { Contents = new Contents() };
         var vresults = m.ValidateProperties();
-        Assert.False(vresults?.Any() ?? false);
+        Assert.False(vresults.Any());
     }
     [Fact]
     public void TestDateOnly2()
     {
         var m = new Contents();
         var vresults = m.ValidateProperties();
-        Assert.False(vresults?.Any() ?? false);
+        Assert.False(vresults.Any());
     }
 
     [Fact(DisplayName = "検証失敗_名前未入力")]
@@ -63,7 +63,7 @@ public class ValidationTest
     {
         var m = new Member { Name = string.Empty, Age = 25, Tel = "090-1111-2222", Email = "hoge@example.com" };
         var vresults = m.ValidateProperties();
-        Assert.True(vresults?.Any() ?? false);
+        Assert.True(vresults.Any());
     }
 
     [Fact(DisplayName = "検証失敗_名前の桁あふれ")]
@@ -71,7 +71,7 @@ public class ValidationTest
     {
         var m = new Member { Name = "YAMADA Taroooooooooooooooo", Age = 25, Tel = "090-1111-2222", Email = "hoge@example.com" };
         var vresults = m.ValidateProperties();
-        Assert.True(vresults?.Any() ?? false);
+        Assert.True(vresults.Any());
     }
 
     [Fact(DisplayName = "検証失敗_年齢の数値範囲外")]
@@ -79,7 +79,7 @@ public class ValidationTest
     {
         var m = new Member { Name = "YAMADA Taro", Age = 80, Tel = "090-1111-2222", Email = "hoge@example.com" };
         var vresults = m.ValidateProperties();
-        Assert.True(vresults?.Any() ?? false);
+        Assert.True(vresults.Any());
     }
 
     [Fact(DisplayName = "検証失敗_電話番号の文字種")]
@@ -87,7 +87,7 @@ public class ValidationTest
     {
         var m = new Member { Name = "YAMADA Taro", Age = 25, Tel = "090-1111-abcd", Email = "hoge@example.com" };
         var vresults = m.ValidateProperties();
-        Assert.True(vresults?.Any() ?? false);
+        Assert.True(vresults.Any());
     }
 
     [Fact(DisplayName = "検証失敗_メールアドレスの形式")]
@@ -95,7 +95,7 @@ public class ValidationTest
     {
         var m = new Member { Name = "YAMADA Taro", Age = 25, Tel = "090-1111-2222", Email = "hoge@example@com" };
         var vresults = m.ValidateProperties();
-        Assert.True(vresults?.Any() ?? false);
+        Assert.True(vresults.Any());
     }
 
     [Fact(DisplayName = "検証成功_参照型プロパティあり")]
@@ -110,7 +110,7 @@ public class ValidationTest
             Partner = new Member { Name = "YAMADA Hanako", Age = 25, Tel = "080-1111-2222", Email = "hana@example.com" }
         };
         var vresults = m.ValidateProperties();
-        Assert.False(vresults?.Any() ?? false);
+        Assert.False(vresults.Any());
     }
 
     [Fact(DisplayName = "検証失敗_参照型プロパティのプロパティ")]
@@ -125,8 +125,9 @@ public class ValidationTest
             Partner = new Member { Name = "YAMADA Hanakoooooooooooooo", Age = 25, Tel = "080-1111-2222", Email = "hana@example.com" }
         };
         var vresults = m.ValidateProperties();
-        Assert.True(vresults?.Any() ?? false);
-        Assert.Equal("Partner.Name", vresults?.First()?.MemberNames?.First());
+        var validationResults = vresults.ToList();
+        Assert.True(validationResults.Any());
+        Assert.Equal("Partner.Name", validationResults.First().MemberNames.First());
     }
 
     [Fact(DisplayName = "検証成功_配列型のプロパティあり")]
@@ -142,7 +143,7 @@ public class ValidationTest
             Friends = new List<Member> { new() { Name = "SUZUKI Ichiro", Age = 30 }, new() { Name = "Nakata Hidetoshi", Age = 28 } }
         };
         var vresults = m.ValidateProperties();
-        Assert.False(vresults?.Any() ?? false);
+        Assert.False(vresults.Any());
     }
 
     [Fact(DisplayName = "検証失敗_配列型のプロパティに検証に失敗する要素あり")]
@@ -158,10 +159,11 @@ public class ValidationTest
             Friends = new List<Member> { new() { Name = "SUZUKI Ichiro", Age = 30 }, new() { Name = "Nakata Hidetoshi", Age = 90 } }
         };
         var vresults = m.ValidateProperties();
-        Assert.True(vresults?.Any() ?? false);
-        Assert.Equal("Friends[1].Age", vresults?.First()?.MemberNames?.First());
+        var validationResults = vresults.ToList();
+        Assert.True(validationResults.Any());
+        Assert.Equal("Friends[1].Age", validationResults.First().MemberNames.First());
         Debug.Assert(vresults != null, nameof(vresults) + " != null");
-        Assert.Single(vresults);
+        Assert.Single(validationResults);
     }
 
     public record Contents

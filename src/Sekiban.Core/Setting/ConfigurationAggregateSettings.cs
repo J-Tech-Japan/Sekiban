@@ -8,7 +8,7 @@ public class ConfigurationAggregateSettings : AggregateSettings
 
     public ConfigurationAggregateSettings(IConfiguration configuration, ISekibanContext sekibanContext)
     {
-        var section = configuration?.GetSection(SekibanSection);
+        var section = configuration.GetSection(SekibanSection);
         if (!string.IsNullOrWhiteSpace(sekibanContext.SettingGroupIdentifier))
         {
             section = section?.GetSection(sekibanContext.SettingGroupIdentifier);
