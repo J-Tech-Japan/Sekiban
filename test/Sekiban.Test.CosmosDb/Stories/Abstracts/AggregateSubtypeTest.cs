@@ -181,7 +181,7 @@ public abstract class AggregateSubtypeTest : TestBase
             Assert.Equal(nameof(ShoppingCartI), state?.PayloadTypeName);
         }
 
-        var cart1 = await aggregateLoader.AsDefaultStateFromInitialAsync<ICartAggregate>(snapshotCartId, 90);
+        var cart1 = await aggregateLoader.AsDefaultStateFromInitialAsync<ICartAggregate>(snapshotCartId, toVersion: 90);
         var cartSnapshot = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(cart1!);
         await _documentPersistentWriter.SaveSingleSnapshotAsync(cartSnapshot!, typeof(ICartAggregate), false);
         var cart2 = await aggregateLoader.AsDefaultStateFromInitialAsync<ICartAggregate>(snapshotCartId);

@@ -70,7 +70,7 @@ public interface IDocumentPersistentRepository : IDocumentRepository
         Guid aggregateId,
         Type aggregatePayloadType,
         Type projectionPayloadType,
-        string rootPartitionKey);
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey);
 }
 public interface IDocumentTemporaryRepository : IDocumentRepository
 {

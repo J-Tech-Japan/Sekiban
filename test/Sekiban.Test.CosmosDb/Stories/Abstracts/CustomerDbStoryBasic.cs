@@ -218,15 +218,15 @@ public abstract class CustomerDbStoryBasic : TestBase
         clientList = await multiProjectionService.GetAggregateList<Client>();
         Assert.Empty(clientList);
         // can find deleted client
-        clientList = await multiProjectionService.GetAggregateList<Client>(null, QueryListType.DeletedOnly);
+        clientList = await multiProjectionService.GetAggregateList<Client>(QueryListType.DeletedOnly);
         Assert.Single(clientList);
-        clientList = await multiProjectionService.GetAggregateList<Client>(null, QueryListType.ActiveAndDeleted);
+        clientList = await multiProjectionService.GetAggregateList<Client>(QueryListType.ActiveAndDeleted);
         Assert.Single(clientList);
 
         // loyalty point should be created with event subscribe
         loyaltyPointList = await multiProjectionService.GetAggregateList<LoyaltyPoint>();
         Assert.Empty(loyaltyPointList);
-        loyaltyPointList = await multiProjectionService.GetAggregateList<LoyaltyPoint>(null, QueryListType.DeletedOnly);
+        loyaltyPointList = await multiProjectionService.GetAggregateList<LoyaltyPoint>(QueryListType.DeletedOnly);
         Assert.Single(loyaltyPointList);
 
         // create recent activity
@@ -331,7 +331,7 @@ public abstract class CustomerDbStoryBasic : TestBase
 
         var aggregateId = clientResult.AggregateId!.Value;
 
-        var client1 = await projectionService.AsDefaultStateFromInitialAsync<Client>(aggregateId, 80);
+        var client1 = await projectionService.AsDefaultStateFromInitialAsync<Client>(aggregateId, toVersion: 80);
         var clientSnapshot = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(client1!);
         await _documentPersistentWriter.SaveSingleSnapshotAsync(clientSnapshot!, typeof(Client), false);
         var client2 = await projectionService.AsDefaultStateFromInitialAsync<Client>(aggregateId);
@@ -349,7 +349,9 @@ public abstract class CustomerDbStoryBasic : TestBase
         Assert.NotNull(clientFromSnapshot2);
 
         var projection1
-            = await projectionService.AsSingleProjectionStateFromInitialAsync<ClientNameHistoryProjection>(clientResult.AggregateId!.Value, 80);
+            = await projectionService.AsSingleProjectionStateFromInitialAsync<ClientNameHistoryProjection>(
+                clientResult.AggregateId!.Value,
+                toVersion: 80);
         var projectionSnapshot = await singleProjectionSnapshotAccessor.SnapshotDocumentFromSingleProjectionStateAsync(projection1!, typeof(Client));
         await _documentPersistentWriter.SaveSingleSnapshotAsync(projectionSnapshot!, typeof(Client), false);
         var projection2
@@ -481,15 +483,15 @@ public abstract class CustomerDbStoryBasic : TestBase
         _testOutputHelper.WriteLine($"snapshots {typeof(TAggregatePayload).Name} {snapshots.Count} ");
         foreach (var snapshot in snapshots)
         {
-            _testOutputHelper.WriteLine($"snapshot {snapshot.AggregateTypeName}  {snapshot.Id}  {snapshot.SavedVersion} is checking");
+            _testOutputHelper.WriteLine($"snapshot {snapshot.AggregateType}  {snapshot.Id}  {snapshot.SavedVersion} is checking");
             var state = snapshot.GetState();
             if (state is null)
             {
-                _testOutputHelper.WriteLine($"Snapshot {snapshot.AggregateTypeName} {snapshot.Id} {snapshot.SavedVersion}  is null");
-                throw new SekibanInvalidArgumentException($"Snapshot {snapshot.AggregateTypeName} {snapshot.SavedVersion}  is null");
+                _testOutputHelper.WriteLine($"Snapshot {snapshot.AggregateType} {snapshot.Id} {snapshot.SavedVersion}  is null");
+                throw new SekibanInvalidArgumentException($"Snapshot {snapshot.AggregateType} {snapshot.SavedVersion}  is null");
             }
-            _testOutputHelper.WriteLine($"Snapshot {snapshot.AggregateTypeName}  {snapshot.Id}  {snapshot.SavedVersion}  is not null");
-            var fromInitial = await projectionService.AsDefaultStateFromInitialAsync<TAggregatePayload>(aggregateId, state.Version);
+            _testOutputHelper.WriteLine($"Snapshot {snapshot.AggregateType}  {snapshot.Id}  {snapshot.SavedVersion}  is not null");
+            var fromInitial = await projectionService.AsDefaultStateFromInitialAsync<TAggregatePayload>(aggregateId, toVersion: state.Version);
             if (fromInitial is null)
             {
                 throw new SekibanInvalidArgumentException();
@@ -507,17 +509,17 @@ public abstract class CustomerDbStoryBasic : TestBase
         foreach (var snapshot in snapshots)
         {
             _testOutputHelper.WriteLine(
-                $"snapshot {snapshot.AggregateTypeName} {snapshot.DocumentTypeName} {snapshot.Id}  {snapshot.SavedVersion} is checking");
+                $"snapshot {snapshot.AggregateType} {snapshot.DocumentTypeName} {snapshot.Id}  {snapshot.SavedVersion} is checking");
             var state = snapshot.GetState();
             if (state is null)
             {
                 _testOutputHelper.WriteLine(
-                    $"Snapshot {snapshot.AggregateTypeName} {snapshot.DocumentTypeName} {snapshot.Id} {snapshot.SavedVersion}  is null");
-                throw new SekibanInvalidArgumentException($"Snapshot {snapshot.AggregateTypeName} {snapshot.SavedVersion}  is null");
+                    $"Snapshot {snapshot.AggregateType} {snapshot.DocumentTypeName} {snapshot.Id} {snapshot.SavedVersion}  is null");
+                throw new SekibanInvalidArgumentException($"Snapshot {snapshot.AggregateType} {snapshot.SavedVersion}  is null");
             }
             _testOutputHelper.WriteLine(
-                $"Snapshot {snapshot.AggregateTypeName} {snapshot.DocumentTypeName} {snapshot.Id}  {snapshot.SavedVersion}  is not null");
-            var fromInitial = await projectionService.AsSingleProjectionStateFromInitialAsync<TAggregatePayload>(aggregateId, state.Version);
+                $"Snapshot {snapshot.AggregateType} {snapshot.DocumentTypeName} {snapshot.Id}  {snapshot.SavedVersion}  is not null");
+            var fromInitial = await projectionService.AsSingleProjectionStateFromInitialAsync<TAggregatePayload>(aggregateId, toVersion: state.Version);
             if (fromInitial is null)
             {
                 throw new SekibanInvalidArgumentException();

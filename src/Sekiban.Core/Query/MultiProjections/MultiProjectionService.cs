@@ -29,9 +29,9 @@ public class MultiProjectionService : IMultiProjectionService
     }
 
     public async Task<List<AggregateState<TAggregatePayload>>> GetAggregateList<TAggregatePayload>(
-        string rootPartitionKey,
-        SortableUniqueIdValue? includesSortableUniqueIdValue,
-        QueryListType queryListType = QueryListType.ActiveOnly) where TAggregatePayload : IAggregatePayloadCommon
+        QueryListType queryListType = QueryListType.ActiveOnly,
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllPartitions,
+        SortableUniqueIdValue? includesSortableUniqueIdValue = null) where TAggregatePayload : IAggregatePayloadCommon
     {
         var projection = await GetAggregateListObject<TAggregatePayload>(rootPartitionKey, includesSortableUniqueIdValue);
         return queryListType switch
@@ -54,9 +54,9 @@ public class MultiProjectionService : IMultiProjectionService
                 includesSortableUniqueIdValue);
 
     public async Task<List<SingleProjectionState<TSingleProjectionPayload>>> GetSingleProjectionList<TSingleProjectionPayload>(
-        string rootPartitionKey,
-        SortableUniqueIdValue? includesSortableUniqueIdValue,
-        QueryListType queryListType = QueryListType.ActiveOnly) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
+        QueryListType queryListType = QueryListType.ActiveOnly,
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllPartitions,
+        SortableUniqueIdValue? includesSortableUniqueIdValue = null) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
         var projection = await GetSingleProjectionListObject<TSingleProjectionPayload>(rootPartitionKey, includesSortableUniqueIdValue);
         return queryListType switch
