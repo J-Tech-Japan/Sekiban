@@ -61,6 +61,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
         if (_aggregateSettings.UseUpdateMarkerForType(projector.GetOriginalAggregatePayloadType().Name))
         {
             var (updated, _) = _updateNotice.HasUpdateAfter(
+                rootPartitionKey,
                 projector.GetOriginalAggregatePayloadType().Name,
                 aggregateId,
                 savedContainer.SafeSortableUniqueId!);

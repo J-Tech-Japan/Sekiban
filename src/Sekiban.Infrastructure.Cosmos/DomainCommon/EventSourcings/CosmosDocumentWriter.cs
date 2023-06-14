@@ -62,7 +62,7 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
         await _cosmosDbFactory.CosmosActionAsync(
             DocumentType.Event,
             aggregateContainerGroup,
-            async container => { await container.UpsertItemAsync<dynamic>(ev, new PartitionKey(ev.PartitionKey)); });
+            async container => { await container.UpsertItemAsync<dynamic>(ev, CosmosPartitionGenerator.ForDocument(ev)); });
         await _eventPublisher.PublishAsync(ev);
     }
     public async Task SaveSingleSnapshotAsync(SnapshotDocument document, Type aggregateType, bool useBlob)

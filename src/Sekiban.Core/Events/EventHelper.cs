@@ -20,14 +20,14 @@ public static class EventHelper
             throw new SekibanEventFailedToActivateException();
     }
 
-    public static IEvent GenerateEventToSave<TEventPayload, TAggregatePayload>(Guid aggregateId, TEventPayload payload)
+    public static IEvent GenerateEventToSave<TEventPayload, TAggregatePayload>(Guid aggregateId, string rootPartitionKey, TEventPayload payload)
         where TEventPayload : IEventPayloadApplicableTo<TAggregatePayload> where TAggregatePayload : IAggregatePayloadCommon
     {
         var eventPayloadType = payload.GetType();
         // ReSharper disable once SuspiciousTypeConversion.Global
         var eventBaseType = typeof(Event<>);
         var eventType = eventBaseType.MakeGenericType(eventPayloadType);
-        return Activator.CreateInstance(eventType, aggregateId, typeof(TAggregatePayload), payload) as IEvent ??
+        return Activator.CreateInstance(eventType, aggregateId, typeof(TAggregatePayload), payload, rootPartitionKey) as IEvent ??
             throw new SekibanEventFailedToActivateException();
     }
 

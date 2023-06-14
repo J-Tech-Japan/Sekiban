@@ -252,6 +252,7 @@ public class SekibanApiListController<T> : ControllerBase
         string aggregateName,
         Guid id,
         string sortableUniqueId,
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         UpdatedLocationType locationType = UpdatedLocationType.ExternalFunction)
     {
         await Task.CompletedTask;
@@ -273,7 +274,7 @@ public class SekibanApiListController<T> : ControllerBase
             {
                 return Unauthorized();
             }
-            _updateNotice.SendUpdate(aggregateName, id, sortableUniqueId, locationType);
+            _updateNotice.SendUpdate(rootPartitionKey, aggregateName, id, sortableUniqueId, locationType);
             return Ok(sortableUniqueId);
         }
 

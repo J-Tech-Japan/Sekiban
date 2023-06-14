@@ -80,7 +80,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
                     continue;
                 }
 
-                var (updated, _) = _updateNotice.HasUpdateAfter(targetAggregateName, savedContainer.SafeSortableUniqueId!);
+                var (updated, _) = _updateNotice.HasUpdateAfter(rootPartitionKey, targetAggregateName, savedContainer.SafeSortableUniqueId!);
                 canUseCache = !updated;
             }
 

@@ -283,6 +283,92 @@ public abstract class CustomerDbStoryBasic : TestBase
         Assert.Equal(3, branchList.Count);
     }
 
+
+    [Fact]
+    public async Task DocumentDbStoryLoyaltyPointThrows()
+    {
+        // 先に全データを削除する
+        await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Default);
+        await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Dissolvable);
+        await _documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Default);
+        await _documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Dissolvable);
+
+        // create list branch
+        var branchList = await multiProjectionService.GetAggregateList<Branch>();
+        Assert.Empty(branchList);
+        var branchResult = await commandExecutor.ExecCommandAsync(new CreateBranch("Japan"));
+        var branchId = branchResult.AggregateId!.Value;
+        // create client
+        var originalName = "Tanaka Taro";
+        var createClientResult = await commandExecutor.ExecCommandAsync(new CreateClient(branchId, originalName, "tanaka@example.com"));
+        var clientId = createClientResult.AggregateId!.Value;
+
+        var loyaltyPoint = await projectionService.AsDefaultStateAsync<LoyaltyPoint>(clientId);
+        Assert.NotNull(loyaltyPoint);
+        Assert.Equal(0, loyaltyPoint.Payload.CurrentPoint);
+
+        var datetimeFirst = DateTime.Now;
+        var addPointResult = await commandExecutor.ExecCommandAsync(
+            new AddLoyaltyPoint(clientId, datetimeFirst, LoyaltyPointReceiveTypeKeys.FlightDomestic, 1000, "")
+            {
+                ReferenceVersion = loyaltyPoint.Version
+            });
+        Assert.NotNull(addPointResult);
+        Assert.NotNull(addPointResult.AggregateId);
+
+        loyaltyPoint = await projectionService.AsDefaultStateAsync<LoyaltyPoint>(clientId);
+        Assert.NotNull(loyaltyPoint);
+        Assert.Equal(1000, loyaltyPoint.Payload.CurrentPoint);
+
+        // should throw not enough point error 
+        await Assert.ThrowsAsync<SekibanLoyaltyPointNotEnoughException>(
+            async () =>
+            {
+                await commandExecutor.ExecCommandAsync(
+                    new UseLoyaltyPoint(clientId, datetimeFirst.AddSeconds(1), LoyaltyPointUsageTypeKeys.FlightUpgrade, 2000, "")
+                    {
+                        ReferenceVersion = addPointResult.Version
+                    });
+            });
+        var usePointResult = await commandExecutor.ExecCommandAsync(
+            new UseLoyaltyPoint(clientId, DateTime.Now, LoyaltyPointUsageTypeKeys.FlightUpgrade, 200, "")
+            {
+                ReferenceVersion = addPointResult.Version
+            });
+        Assert.NotNull(usePointResult);
+        Assert.NotNull(usePointResult.AggregateId);
+
+        loyaltyPoint = await projectionService.AsDefaultStateAsync<LoyaltyPoint>(clientId);
+        Assert.NotNull(loyaltyPoint);
+        Assert.Equal(800, loyaltyPoint.Payload.CurrentPoint);
+
+        var p = await multiProjectionService.GetMultiProjectionAsync<ClientLoyaltyPointMultiProjection>();
+        Assert.NotNull(p);
+        Assert.Single(p.Payload.Branches);
+        Assert.Single(p.Payload.Records);
+
+        // delete client
+        var deleteClientResult = await commandExecutor.ExecCommandAsync(new DeleteClient(clientId) { ReferenceVersion = createClientResult.Version });
+        Assert.NotNull(deleteClientResult);
+        Assert.NotNull(deleteClientResult.AggregateId);
+        // client deleted
+        var clientList = await multiProjectionService.GetAggregateList<Client>();
+        Assert.Empty(clientList);
+        // can find deleted client
+        clientList = await multiProjectionService.GetAggregateList<Client>(QueryListType.DeletedOnly);
+        Assert.Single(clientList);
+        clientList = await multiProjectionService.GetAggregateList<Client>(QueryListType.ActiveAndDeleted);
+        Assert.Single(clientList);
+
+        // loyalty point should be created with event subscribe
+        var loyaltyPointList = await multiProjectionService.GetAggregateList<LoyaltyPoint>();
+        Assert.Empty(loyaltyPointList);
+        loyaltyPointList = await multiProjectionService.GetAggregateList<LoyaltyPoint>(QueryListType.DeletedOnly);
+        Assert.Single(loyaltyPointList);
+    }
+
+
+
     [Fact]
     public async Task SnapshotTestAsync()
     {

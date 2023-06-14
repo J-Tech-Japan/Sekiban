@@ -30,7 +30,7 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> where TAg
         string rootPartitionKey)
     {
         var command = commandDocument.Payload;
-        _aggregate = await _aggregateLoader.AsAggregateAsync<TAggregatePayload>(aggregateId) ??
+        _aggregate = await _aggregateLoader.AsAggregateAsync<TAggregatePayload>(aggregateId, rootPartitionKey) ??
             new Aggregate<TAggregatePayload> { AggregateId = aggregateId };
         if (handler is not ICommandHandler<TAggregatePayload, TCommand> regularHandler)
         {

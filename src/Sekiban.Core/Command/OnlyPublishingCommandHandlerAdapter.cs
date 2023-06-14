@@ -16,7 +16,8 @@ public class OnlyPublishingCommandHandlerAdapter<TAggregatePayload, TCommand> wh
     public async Task<CommandResponse> HandleCommandAsync(
         CommandDocument<TCommand> commandDocument,
         ICommandHandlerCommon<TAggregatePayload, TCommand> handler,
-        Guid aggregateId)
+        Guid aggregateId,
+        string rootPartitionKey)
     {
         if (handler is not IOnlyPublishingCommandHandler<TAggregatePayload, TCommand> publishHandler)
         {
@@ -26,7 +27,11 @@ public class OnlyPublishingCommandHandlerAdapter<TAggregatePayload, TCommand> wh
         var events = new List<IEvent>();
         await foreach (var eventPayload in publishHandler.HandleCommandAsync(aggregateId, commandDocument.Payload))
         {
-            events.Add(EventHelper.GenerateEventToSave<IEventPayloadApplicableTo<TAggregatePayload>, TAggregatePayload>(aggregateId, eventPayload));
+            events.Add(
+                EventHelper.GenerateEventToSave<IEventPayloadApplicableTo<TAggregatePayload>, TAggregatePayload>(
+                    aggregateId,
+                    rootPartitionKey,
+                    eventPayload));
         }
         await Task.CompletedTask;
         return new CommandResponse(aggregateId, events.ToImmutableList(), 0, events.Max(m => m.SortableUniqueId));
