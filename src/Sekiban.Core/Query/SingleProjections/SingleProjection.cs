@@ -39,6 +39,7 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection, ISinglePr
 #endif
         LastEventId = ev.Id;
         LastSortableUniqueId = ev.SortableUniqueId;
+        RootPartitionKey = ev.RootPartitionKey;
         Version++;
     }
 

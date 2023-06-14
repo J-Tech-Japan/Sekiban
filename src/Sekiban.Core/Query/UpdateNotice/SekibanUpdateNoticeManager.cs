@@ -20,6 +20,7 @@ public class SekibanUpdateNoticeManager : IUpdateNotice
         var toSave = new NoticeRecord(sortableUniqueIdValue, type);
         UpdateDictionary.AddOrUpdate(GetKeyForAggregate(rootPartitionKey, aggregateName, aggregateId), _ => toSave, (_, _) => toSave);
         UpdateDictionary.AddOrUpdate(GetKeyForType(rootPartitionKey, aggregateName), _ => toSave, (_, _) => toSave);
+        UpdateDictionary.AddOrUpdate(GetKeyForType(aggregateName), _ => toSave, (_, _) => toSave);
     }
 
     public (bool, UpdatedLocationType?) HasUpdateAfter(
@@ -42,10 +43,18 @@ public class SekibanUpdateNoticeManager : IUpdateNotice
 
     public (bool, UpdatedLocationType?) HasUpdateAfter(string rootPartitionKey, string aggregateName, SortableUniqueIdValue? sortableUniqueId)
     {
-        // if searching for all partitions, return true (need to search for updates)
         if (rootPartitionKey.Equals(IMultiProjectionService.ProjectionAllPartitions))
         {
-            return (true, null);
+            var currentAll = UpdateDictionary.GetValueOrDefault(GetKeyForType(aggregateName));
+            if (currentAll is null || string.IsNullOrEmpty(currentAll.SortableUniqueId))
+            {
+                return (false, null);
+            }
+            if (sortableUniqueId is null)
+            {
+                return (true, null);
+            }
+            return (sortableUniqueId.EarlierThanOrEqual(currentAll.SortableUniqueId), currentAll.LocationType);
         }
         var current = UpdateDictionary.GetValueOrDefault(GetKeyForType(rootPartitionKey, aggregateName));
         if (current is null || string.IsNullOrEmpty(current.SortableUniqueId))
@@ -62,8 +71,8 @@ public class SekibanUpdateNoticeManager : IUpdateNotice
     public static string GetKeyForAggregate(string rootPartitionKey, string aggregateName, Guid aggregateId) =>
         "UpdateNotice-" + rootPartitionKey + "-" + aggregateName + "-" + aggregateId;
 
-    public static string GetKeyForType(string rootPartitionKey, string aggregateName) =>
-        "UpdateNotice-" + rootPartitionKey + "-" + aggregateName + "-";
+    public static string GetKeyForType(string rootPartitionKey, string aggregateName) => "UpdateNotice-" + rootPartitionKey + "-" + aggregateName;
+    public static string GetKeyForType(string aggregateName) => "UpdateNotice-" + aggregateName;
 
     private record NoticeRecord(SortableUniqueIdValue SortableUniqueId, UpdatedLocationType LocationType);
 }

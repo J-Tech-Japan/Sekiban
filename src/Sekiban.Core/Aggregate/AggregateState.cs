@@ -25,6 +25,7 @@ public sealed record AggregateState<TPayload> : IAggregateStateCommon where TPay
         LastEventId = aggregateCommon.LastEventId;
         LastSortableUniqueId = aggregateCommon.LastSortableUniqueId;
         AppliedSnapshotVersion = aggregateCommon.AppliedSnapshotVersion;
+        RootPartitionKey = aggregateCommon.RootPartitionKey;
     }
 
     public AggregateState(IAggregateCommon aggregateCommon, TPayload payload) : this(aggregateCommon) => Payload = payload;
