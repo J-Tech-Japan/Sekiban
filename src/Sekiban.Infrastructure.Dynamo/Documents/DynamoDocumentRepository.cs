@@ -6,6 +6,7 @@ using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Partition;
+using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.SingleProjections.Projections;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
@@ -221,6 +222,10 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
 
                 var filter = new ScanFilter();
                 filter.AddCondition(nameof(IEvent.AggregateType), ScanOperator.In, targetAggregateNames.Select(m => new AttributeValue(m)).ToList());
+                if (rootPartitionKey.Equals(IMultiProjectionService.ProjectionAllPartitions))
+                {
+                    filter.AddCondition(nameof(IDocument.RootPartitionKey), ScanOperator.Equal, rootPartitionKey);
+                }
                 if (sinceSortableUniqueId is not null)
                 {
                     filter.AddCondition(nameof(Document.SortableUniqueId), ScanOperator.GreaterThan, sinceSortableUniqueId);
