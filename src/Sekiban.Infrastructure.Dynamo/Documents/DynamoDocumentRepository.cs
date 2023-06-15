@@ -60,6 +60,10 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
                 do
                 {
+                    if (search is null)
+                    {
+                        break;
+                    }
                     var nextSet = await search.GetNextSetAsync();
                     resultList.AddRange(nextSet);
                 } while (!search.IsDone);
@@ -139,6 +143,10 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
                 do
                 {
+                    if (search is null)
+                    {
+                        break;
+                    }
                     var nextSet = await search.GetNextSetAsync();
                     resultList.AddRange(nextSet);
                 } while (!search.IsDone);
@@ -177,6 +185,10 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
                 do
                 {
+                    if (search is null)
+                    {
+                        break;
+                    }
                     var nextSet = await search.GetNextSetAsync();
                     resultList.AddRange(nextSet);
                 } while (!search.IsDone);
@@ -236,6 +248,10 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
                 do
                 {
+                    if (search is null)
+                    {
+                        break;
+                    }
                     var nextSet = await search.GetNextSetAsync();
                     resultList.AddRange(nextSet);
                 } while (!search.IsDone);
@@ -291,6 +307,10 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
                 do
                 {
+                    if (search is null)
+                    {
+                        break;
+                    }
                     var nextSet = await search.GetNextSetAsync();
                     resultList.AddRange(nextSet);
                     if (resultList.Any()) { break; }
@@ -328,6 +348,10 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
                 do
                 {
+                    if (search is null)
+                    {
+                        break;
+                    }
                     var nextSet = await search.GetNextSetAsync();
                     resultList.AddRange(nextSet);
                     if (resultList.Any()) { break; }
@@ -373,6 +397,10 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
                 do
                 {
+                    if (search is null)
+                    {
+                        break;
+                    }
                     var nextSet = await search.GetNextSetAsync();
                     resultList.AddRange(nextSet);
                     if (resultList.Any()) { break; }
@@ -414,6 +442,10 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
                 do
                 {
+                    if (search is null)
+                    {
+                        break;
+                    }
                     var nextSet = await search.GetNextSetAsync();
                     resultList.AddRange(nextSet);
                 } while (!search.IsDone);
@@ -459,6 +491,10 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
                 do
                 {
+                    if (search is null)
+                    {
+                        break;
+                    }
                     var nextSet = await search.GetNextSetAsync();
                     resultList.AddRange(nextSet);
                     if (resultList.Any()) { break; }
