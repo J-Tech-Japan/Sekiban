@@ -253,6 +253,10 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                         break;
                     }
                     var nextSet = await search.GetNextSetAsync();
+                    if (nextSet is null)
+                    {
+                        continue;
+                    }
                     resultList.AddRange(nextSet);
                 } while (!search.IsDone);
                 var events = new List<IEvent>();
@@ -312,6 +316,10 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                         break;
                     }
                     var nextSet = await search.GetNextSetAsync();
+                    if (nextSet is null)
+                    {
+                        continue;
+                    }
                     resultList.AddRange(nextSet);
                     if (resultList.Any()) { break; }
                 } while (!search.IsDone);
@@ -353,6 +361,10 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                         break;
                     }
                     var nextSet = await search.GetNextSetAsync();
+                    if (nextSet is null)
+                    {
+                        continue;
+                    }
                     resultList.AddRange(nextSet);
                     if (resultList.Any()) { break; }
                 } while (!search.IsDone);
@@ -402,6 +414,10 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                         break;
                     }
                     var nextSet = await search.GetNextSetAsync();
+                    if (nextSet is null)
+                    {
+                        continue;
+                    }
                     resultList.AddRange(nextSet);
                     if (resultList.Any()) { break; }
                 } while (!search.IsDone);
@@ -447,6 +463,10 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                         break;
                     }
                     var nextSet = await search.GetNextSetAsync();
+                    if (nextSet is null)
+                    {
+                        continue;
+                    }
                     resultList.AddRange(nextSet);
                 } while (!search.IsDone);
                 var snapshots = (from document in resultList
@@ -496,6 +516,10 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                         break;
                     }
                     var nextSet = await search.GetNextSetAsync();
+                    if (nextSet is null)
+                    {
+                        continue;
+                    }
                     resultList.AddRange(nextSet);
                     if (resultList.Any()) { break; }
                 } while (!search.IsDone);
