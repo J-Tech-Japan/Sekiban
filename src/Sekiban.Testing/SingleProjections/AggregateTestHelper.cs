@@ -221,7 +221,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
             throw new Exception("Failed to get aggregate loader");
         var aggregateId = GetAggregateId();
-        var aggregate = aggregateLoader.AsDefaultStateAsync<TAggregatePayload>(aggregateId).Result;
+        var rootPartitionKey = GetRootPartitionKey();
+        var aggregate = aggregateLoader.AsDefaultStateAsync<TAggregatePayload>(aggregateId, rootPartitionKey).Result;
         return aggregate ?? throw new SekibanAggregateNotExistsException(GetAggregateId(), typeof(TAggregatePayload).Name);
     }
 
@@ -453,6 +454,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         CheckCommandJSONSupports(commandDocument);
 
         var aggregateId = GetAggregateId();
+        var rootPartitionKey = command.GetRootPartitionKey();
         var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader;
         if (aggregateLoader is null)
         {
@@ -466,8 +468,9 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
                 var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayloadIn), command.GetType());
                 var adapter = Activator.CreateInstance(adapterClass) ?? throw new Exception("Method not found");
                 var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new Exception("HandleCommandAsync not found");
-                var commandResponse = (CommandResponse)((dynamic?)method.Invoke(adapter, new object?[] { commandDocument, handler, aggregateId }) ??
-                    throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
+                var commandResponse
+                    = (CommandResponse)((dynamic?)method.Invoke(adapter, new object?[] { commandDocument, handler, aggregateId, rootPartitionKey }) ??
+                        throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
                 _latestEvents = commandResponse.Events.ToList();
             } else
             {
@@ -477,8 +480,9 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
                 var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new Exception("HandleCommandAsync not found");
 
-                var commandResponse = (CommandResponse)((dynamic?)method.Invoke(adapter, new object?[] { commandDocument, handler, aggregateId }) ??
-                    throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
+                var commandResponse
+                    = (CommandResponse)((dynamic?)method.Invoke(adapter, new object?[] { commandDocument, handler, aggregateId, rootPartitionKey }) ??
+                        throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
                 _latestEvents = commandResponse.Events.ToList();
             }
         }

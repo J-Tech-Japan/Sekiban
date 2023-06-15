@@ -638,13 +638,15 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         return this;
     }
 
-    public UnifiedTest<TDependencyDefinition> GivenEvents(params (Guid aggregateId, IEventPayloadCommon payload)[] eventTouples)
+    public UnifiedTest<TDependencyDefinition> GivenEvents(
+        params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTouples)
     {
         _eventHandler.GivenEvents(eventTouples);
         return this;
     }
 
-    public UnifiedTest<TDependencyDefinition> GivenEventsWithPublish(params (Guid aggregateId, IEventPayloadCommon payload)[] eventTouples)
+    public UnifiedTest<TDependencyDefinition> GivenEventsWithPublish(
+        params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTouples)
     {
         _eventHandler.GivenEventsWithPublish(eventTouples);
         return this;

@@ -45,12 +45,17 @@ public class TestCommandExecutor
             throw new SekibanCommandNotRegisteredException(command.GetType().Name);
         }
         var aggregateId = injectingAggregateId ?? command.GetAggregateId();
-
         if (command is not IOnlyPublishingCommandCommon)
         {
             var commandDocumentBaseType = typeof(CommandDocument<>);
             var commandDocumentType = commandDocumentBaseType.MakeGenericType(command.GetType());
-            var commandDocument = Activator.CreateInstance(commandDocumentType, aggregateId, command, typeof(TAggregatePayload), null);
+            var commandDocument = Activator.CreateInstance(
+                commandDocumentType,
+                aggregateId,
+                command,
+                typeof(TAggregatePayload),
+                rootPartitionKey,
+                null);
 
             var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader;
             if (aggregateLoader is null)

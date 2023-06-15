@@ -1,6 +1,7 @@
 using FeatureCheck.Domain.Aggregates.Branches.Events;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
 using FeatureCheck.Domain.Shared;
+using Sekiban.Core.Documents;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Testing;
 using System;
@@ -16,7 +17,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTest<F
     [Fact]
     public void ProjectionTest()
     {
-        GivenEvents((branchId, new BranchCreated(branchName)))
+        GivenEvents((branchId, IDocument.DefaultRootPartitionKey, new BranchCreated(branchName)))
             .ThenMultiProjectionStateIs(
                 new MultiProjectionState<ClientLoyaltyPointMultiProjection>(
                     new ClientLoyaltyPointMultiProjection(

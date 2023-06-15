@@ -125,25 +125,25 @@ public class TestEventHandler
         }
     }
 
-    public void GivenEvents(params (Guid aggregateId, IEventPayloadCommon payload)[] eventTouples)
+    public void GivenEvents(params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTouples)
     {
         GivenEvents(false, eventTouples);
     }
 
-    public void GivenEventsWithPublish(params (Guid aggregateId, IEventPayloadCommon payload)[] eventTouples)
+    public void GivenEventsWithPublish(params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTouples)
     {
         GivenEvents(true, eventTouples);
     }
 
-    private void GivenEvents(bool withPublish, params (Guid aggregateId, IEventPayloadCommon payload)[] eventTouples)
+    private void GivenEvents(bool withPublish, params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTouples)
     {
-        foreach (var (aggregateId, payload) in eventTouples)
+        foreach (var (aggregateId, rootPartitionKey, payload) in eventTouples)
         {
             var type = payload.GetType();
             var aggregateType = payload.GetAggregatePayloadInType();
             var eventType = typeof(Event<>);
             var genericType = eventType.MakeGenericType(type);
-            var ev = Activator.CreateInstance(genericType, aggregateId, aggregateType, payload) as IEvent;
+            var ev = Activator.CreateInstance(genericType, aggregateId, aggregateType, payload, rootPartitionKey) as IEvent;
             if (ev == null)
             {
                 throw new InvalidDataException("イベントの生成に失敗しました。" + payload);
