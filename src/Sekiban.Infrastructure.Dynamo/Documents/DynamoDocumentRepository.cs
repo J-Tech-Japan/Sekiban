@@ -234,7 +234,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
 
                 var filter = new ScanFilter();
                 filter.AddCondition(nameof(IEvent.AggregateType), ScanOperator.In, targetAggregateNames.Select(m => new AttributeValue(m)).ToList());
-                if (rootPartitionKey.Equals(IMultiProjectionService.ProjectionAllPartitions))
+                if (!rootPartitionKey.Equals(IMultiProjectionService.ProjectionAllPartitions))
                 {
                     filter.AddCondition(nameof(IDocument.RootPartitionKey), ScanOperator.Equal, rootPartitionKey);
                 }
