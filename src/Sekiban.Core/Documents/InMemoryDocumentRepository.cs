@@ -22,7 +22,11 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         _snapshotDocumentCache = snapshotDocumentCache;
     }
 
-    public async Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType)
+    public async Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(
+        Guid aggregateId,
+        Type aggregatePayloadType,
+        Type projectionPayloadType,
+        string rootPartitionKey)
     {
         await Task.CompletedTask;
         return new List<SnapshotDocument>();
@@ -33,6 +37,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         Type aggregatePayloadType,
         string? partitionKey,
         string? sinceSortableUniqueId,
+        string rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction)
     {
         var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
@@ -65,6 +70,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         Type aggregatePayloadType,
         string? partitionKey,
         string? sinceSortableUniqueId,
+        string rootPartitionKey,
         Action<IEnumerable<string>> resultAction)
     {
         await GetAllEventsForAggregateIdAsync(
@@ -72,6 +78,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             aggregatePayloadType,
             partitionKey,
             sinceSortableUniqueId,
+            rootPartitionKey,
             events =>
             {
                 resultAction(events.Select(SekibanJsonHelper.Serialize).Where(m => !string.IsNullOrEmpty(m))!);
@@ -82,6 +89,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         Guid aggregateId,
         Type aggregatePayloadType,
         string? sinceSortableUniqueId,
+        string rootPartitionKey,
         Action<IEnumerable<string>> resultAction)
     {
         await Task.CompletedTask;
@@ -92,6 +100,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         Type multiProjectionType,
         IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
+        string rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction)
     {
         var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
@@ -124,10 +133,11 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         Guid aggregateId,
         Type aggregatePayloadType,
         Type projectionPayloadType,
+        string rootPartitionKey,
         string payloadVersionIdentifier)
     {
         await Task.CompletedTask;
-        if (_snapshotDocumentCache.Get(aggregateId, projectionPayloadType, projectionPayloadType) is { } snapshotDocument)
+        if (_snapshotDocumentCache.Get(aggregateId, projectionPayloadType, projectionPayloadType, rootPartitionKey) is { } snapshotDocument)
         {
             return snapshotDocument;
         }
@@ -135,13 +145,20 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
     }
     public async Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(
         Type multiProjectionPayloadType,
-        string payloadVersionIdentifier)
+        string payloadVersionIdentifier,
+        string rootPartitionKey)
     {
         await Task.CompletedTask;
         return default;
     }
 
-    public Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type aggregatePayloadType, Type projectionPayloadType, string partitionKey) =>
+    public Task<SnapshotDocument?> GetSnapshotByIdAsync(
+        Guid id,
+        Guid aggregateId,
+        Type aggregatePayloadType,
+        Type projectionPayloadType,
+        string partitionKey,
+        string rootPartitionKey) =>
         throw new NotImplementedException();
 
     public async Task<bool> EventsForAggregateIdHasSortableUniqueIdAsync(
@@ -201,6 +218,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         Type aggregatePayloadType,
         Type projectionPayloadType,
         int version,
+        string rootPartitionKey,
         string payloadVersionIdentifier) =>
         Task.FromResult(false);
 }

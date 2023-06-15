@@ -62,11 +62,12 @@ public class BaseClassCartTest : AggregateTest<ICartAggregate, FeatureCheckDepen
     {
         var subtype = Subtype<ShoppingCartI>();
         subtype.WhenCommand(new AddItemToShoppingCartI { CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100 });
-        var aggregateId = GetAggregateId();
+        GetAggregateId();
         subtype.WhenCommandWithPublish(
             new SubmitOrderI { CartId = GetAggregateId(), OrderSubmittedLocalTime = DateTime.Now, ReferenceVersion = GetCurrentVersion() });
-        var sybtype2 = subtype.ThenPayloadTypeShouldBe<PurchasedCartI>()
+        subtype.ThenPayloadTypeShouldBe<PurchasedCartI>()
             .ThenGetState(
+                // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Local
                 state =>
                 {
                     Assert.NotEqual(Guid.Empty, state.AggregateId);

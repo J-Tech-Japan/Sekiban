@@ -6,6 +6,7 @@ using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Partition;
+using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.SingleProjections.Projections;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
@@ -35,6 +36,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
         Type aggregatePayloadType,
         string? partitionKey,
         string? sinceSortableUniqueId,
+        string rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
@@ -58,6 +60,10 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
                 do
                 {
+                    if (search is null)
+                    {
+                        break;
+                    }
                     var nextSet = await search.GetNextSetAsync();
                     resultList.AddRange(nextSet);
                 } while (!search.IsDone);
@@ -93,6 +99,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
         Type aggregatePayloadType,
         string? partitionKey,
         string? sinceSortableUniqueId,
+        string rootPartitionKey,
         Action<IEnumerable<string>> resultAction)
     {
         await GetAllEventsForAggregateIdAsync(
@@ -100,6 +107,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
             aggregatePayloadType,
             partitionKey,
             sinceSortableUniqueId,
+            rootPartitionKey,
             events =>
             {
                 resultAction(events.Select(SekibanJsonHelper.Serialize).Where(m => !string.IsNullOrEmpty(m))!);
@@ -109,6 +117,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
         Guid aggregateId,
         Type aggregatePayloadType,
         string? sinceSortableUniqueId,
+        string rootPartitionKey,
         Action<IEnumerable<string>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
@@ -118,7 +127,10 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
             aggregateContainerGroup,
             async table =>
             {
-                var partitionKey = PartitionKeyGenerator.ForCommand(aggregateId, aggregatePayloadType.GetBaseAggregatePayloadTypeFromAggregate());
+                var partitionKey = PartitionKeyGenerator.ForCommand(
+                    aggregateId,
+                    aggregatePayloadType.GetBaseAggregatePayloadTypeFromAggregate(),
+                    rootPartitionKey);
                 var filter = new QueryFilter();
                 filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
                 if (sinceSortableUniqueId is not null)
@@ -131,6 +143,10 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
                 do
                 {
+                    if (search is null)
+                    {
+                        break;
+                    }
                     var nextSet = await search.GetNextSetAsync();
                     resultList.AddRange(nextSet);
                 } while (!search.IsDone);
@@ -169,6 +185,10 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
                 do
                 {
+                    if (search is null)
+                    {
+                        break;
+                    }
                     var nextSet = await search.GetNextSetAsync();
                     resultList.AddRange(nextSet);
                 } while (!search.IsDone);
@@ -200,6 +220,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
         Type multiProjectionType,
         IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
+        string rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionType);
@@ -213,6 +234,10 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
 
                 var filter = new ScanFilter();
                 filter.AddCondition(nameof(IEvent.AggregateType), ScanOperator.In, targetAggregateNames.Select(m => new AttributeValue(m)).ToList());
+                if (!rootPartitionKey.Equals(IMultiProjectionService.ProjectionAllPartitions))
+                {
+                    filter.AddCondition(nameof(IDocument.RootPartitionKey), ScanOperator.Equal, rootPartitionKey);
+                }
                 if (sinceSortableUniqueId is not null)
                 {
                     filter.AddCondition(nameof(Document.SortableUniqueId), ScanOperator.GreaterThan, sinceSortableUniqueId);
@@ -223,7 +248,15 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
                 do
                 {
+                    if (search is null)
+                    {
+                        break;
+                    }
                     var nextSet = await search.GetNextSetAsync();
+                    if (nextSet is null)
+                    {
+                        continue;
+                    }
                     resultList.AddRange(nextSet);
                 } while (!search.IsDone);
                 var events = new List<IEvent>();
@@ -254,6 +287,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
         Guid aggregateId,
         Type aggregatePayloadType,
         Type projectionPayloadType,
+        string rootPartitionKey,
         string payloadVersionIdentifier)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
@@ -262,7 +296,11 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
             aggregateContainerGroup,
             async table =>
             {
-                var partitionKey = PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType);
+                var partitionKey = PartitionKeyGenerator.ForAggregateSnapshot(
+                    aggregateId,
+                    aggregatePayloadType,
+                    projectionPayloadType,
+                    rootPartitionKey);
                 var filter = new QueryFilter();
                 filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
                 filter.AddCondition(nameof(SnapshotDocument.PayloadVersionIdentifier), QueryOperator.Equal, payloadVersionIdentifier);
@@ -273,7 +311,15 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
                 do
                 {
+                    if (search is null)
+                    {
+                        break;
+                    }
                     var nextSet = await search.GetNextSetAsync();
+                    if (nextSet is null)
+                    {
+                        continue;
+                    }
                     resultList.AddRange(nextSet);
                     if (resultList.Any()) { break; }
                 } while (!search.IsDone);
@@ -290,7 +336,8 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
     }
     public async Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(
         Type multiProjectionPayloadType,
-        string payloadVersionIdentifier)
+        string payloadVersionIdentifier,
+        string rootPartitionKey)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionPayloadType);
         return await _dbFactory.DynamoActionAsync(
@@ -298,7 +345,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
             aggregateContainerGroup,
             async table =>
             {
-                var partitionKey = PartitionKeyGenerator.ForMultiProjectionSnapshot(multiProjectionPayloadType);
+                var partitionKey = PartitionKeyGenerator.ForMultiProjectionSnapshot(multiProjectionPayloadType, rootPartitionKey);
                 var filter = new QueryFilter();
                 filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
                 filter.AddCondition(nameof(MultiProjectionSnapshotDocument.PayloadVersionIdentifier), QueryOperator.Equal, payloadVersionIdentifier);
@@ -309,7 +356,15 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
                 do
                 {
+                    if (search is null)
+                    {
+                        break;
+                    }
                     var nextSet = await search.GetNextSetAsync();
+                    if (nextSet is null)
+                    {
+                        continue;
+                    }
                     resultList.AddRange(nextSet);
                     if (resultList.Any()) { break; }
                 } while (!search.IsDone);
@@ -329,6 +384,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
         Type aggregatePayloadType,
         Type projectionPayloadType,
         int version,
+        string rootPartitionKey,
         string payloadVersionIdentifier)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
@@ -337,7 +393,11 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
             aggregateContainerGroup,
             async table =>
             {
-                var partitionKey = PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType);
+                var partitionKey = PartitionKeyGenerator.ForAggregateSnapshot(
+                    aggregateId,
+                    aggregatePayloadType,
+                    projectionPayloadType,
+                    rootPartitionKey);
                 var filter = new QueryFilter();
                 filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
                 filter.AddCondition(nameof(SnapshotDocument.PayloadVersionIdentifier), QueryOperator.Equal, payloadVersionIdentifier);
@@ -349,7 +409,15 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
                 do
                 {
+                    if (search is null)
+                    {
+                        break;
+                    }
                     var nextSet = await search.GetNextSetAsync();
+                    if (nextSet is null)
+                    {
+                        continue;
+                    }
                     resultList.AddRange(nextSet);
                     if (resultList.Any()) { break; }
                 } while (!search.IsDone);
@@ -365,39 +433,11 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 return true;
             });
     }
-    public async Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type aggregatePayloadType, Type projectionPayloadType, string partitionKey)
-    {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-        return await _dbFactory.DynamoActionAsync(
-            DocumentType.AggregateSnapshot,
-            aggregateContainerGroup,
-            async table =>
-            {
-                var filter = new QueryFilter();
-                filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
-                filter.AddCondition(nameof(SnapshotDocument.Id), QueryOperator.Equal, id);
-                var config = new QueryOperationConfig { Filter = filter, BackwardSearch = true };
-                var search = table.Query(config);
-
-                var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
-                do
-                {
-                    var nextSet = await search.GetNextSetAsync();
-                    resultList.AddRange(nextSet);
-                    if (resultList.Any()) { break; }
-                } while (!search.IsDone);
-                var snapshots = (from document in resultList
-                                 let json = document.ToJson()
-                                 let sortableUniqueId = document[nameof(IDocument.SortableUniqueId)].AsString()
-                                 select json).ToList();
-                var snapshotJson = snapshots.FirstOrDefault();
-                if (string.IsNullOrEmpty(snapshotJson)) { return null; }
-                var snapshot = SekibanJsonHelper.Deserialize<SnapshotDocument>(snapshotJson);
-                if (snapshot is null) { return null; }
-                return await _singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshot);
-            });
-    }
-    public async Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType)
+    public async Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(
+        Guid aggregateId,
+        Type aggregatePayloadType,
+        Type projectionPayloadType,
+        string rootPartitionKey)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         return await _dbFactory.DynamoActionAsync<List<SnapshotDocument>>(
@@ -405,7 +445,11 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
             aggregateContainerGroup,
             async table =>
             {
-                var partitionKey = PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType);
+                var partitionKey = PartitionKeyGenerator.ForAggregateSnapshot(
+                    aggregateId,
+                    aggregatePayloadType,
+                    projectionPayloadType,
+                    rootPartitionKey);
                 var filter = new QueryFilter();
                 filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
                 var config = new QueryOperationConfig { Filter = filter, BackwardSearch = true };
@@ -414,7 +458,15 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
                 do
                 {
+                    if (search is null)
+                    {
+                        break;
+                    }
                     var nextSet = await search.GetNextSetAsync();
+                    if (nextSet is null)
+                    {
+                        continue;
+                    }
                     resultList.AddRange(nextSet);
                 } while (!search.IsDone);
                 var snapshots = (from document in resultList
@@ -435,5 +487,51 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 return toReturn;
             });
 
+    }
+    public async Task<SnapshotDocument?> GetSnapshotByIdAsync(
+        Guid id,
+        Guid aggregateId,
+        Type aggregatePayloadType,
+        Type projectionPayloadType,
+        string partitionKey,
+        string rootPartitionKey)
+    {
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+        return await _dbFactory.DynamoActionAsync(
+            DocumentType.AggregateSnapshot,
+            aggregateContainerGroup,
+            async table =>
+            {
+                var filter = new QueryFilter();
+                filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
+                filter.AddCondition(nameof(SnapshotDocument.Id), QueryOperator.Equal, id);
+                var config = new QueryOperationConfig { Filter = filter, BackwardSearch = true };
+                var search = table.Query(config);
+
+                var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
+                do
+                {
+                    if (search is null)
+                    {
+                        break;
+                    }
+                    var nextSet = await search.GetNextSetAsync();
+                    if (nextSet is null)
+                    {
+                        continue;
+                    }
+                    resultList.AddRange(nextSet);
+                    if (resultList.Any()) { break; }
+                } while (!search.IsDone);
+                var snapshots = (from document in resultList
+                                 let json = document.ToJson()
+                                 let sortableUniqueId = document[nameof(IDocument.SortableUniqueId)].AsString()
+                                 select json).ToList();
+                var snapshotJson = snapshots.FirstOrDefault();
+                if (string.IsNullOrEmpty(snapshotJson)) { return null; }
+                var snapshot = SekibanJsonHelper.Deserialize<SnapshotDocument>(snapshotJson);
+                if (snapshot is null) { return null; }
+                return await _singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshot);
+            });
     }
 }

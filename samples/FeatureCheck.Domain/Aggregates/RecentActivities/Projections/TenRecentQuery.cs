@@ -14,7 +14,8 @@ public record TenRecentQuery : ISingleProjectionListQuery<TenRecentProjection, T
                 m.LastEventId,
                 m.LastSortableUniqueId,
                 m.AppliedSnapshotVersion,
-                m.Version));
+                m.Version,
+                m.RootPartitionKey));
     }
     public IEnumerable<Responsse> HandleSort(Parameter queryParam, IEnumerable<Responsse> filteredList) =>
         filteredList.OrderByDescending(m => m.LastSortableUniqueId);
@@ -25,11 +26,13 @@ public record TenRecentQuery : ISingleProjectionListQuery<TenRecentProjection, T
         Guid LastEventId,
         string LastSortableUniqueId,
         int AppliedSnapshotVersion,
-        int Version) : SingleProjectionState<TenRecentProjection>(
+        int Version,
+        string RootPartitionKey) : SingleProjectionState<TenRecentProjection>(
         Payload,
         AggregateId,
         LastEventId,
         LastSortableUniqueId,
         AppliedSnapshotVersion,
-        Version), IQueryResponse;
+        Version,
+        RootPartitionKey), IQueryResponse;
 }

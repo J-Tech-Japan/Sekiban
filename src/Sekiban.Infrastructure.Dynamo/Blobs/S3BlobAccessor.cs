@@ -4,6 +4,7 @@ using Amazon.S3.Model;
 using ICSharpCode.SharpZipLib.GZip;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Sekiban.Core.Exceptions;
 using Sekiban.Core.Setting;
 using System.IO.Compression;
 namespace Sekiban.Infrastructure.Dynamo.Blobs;
@@ -28,11 +29,11 @@ public class S3BlobAccessor : IBlobAccessor
             return section;
         }
     }
-    private string AwsAccessKeyId => _section?.GetValue<string>("AwsAccessKeyId") ?? throw new ArgumentNullException("AwsAccessKeyId");
-    private string AwsAccessKey => _section?.GetValue<string>("AwsAccessKey") ?? throw new ArgumentNullException("AwsAccessKey");
-    private string S3BucketName => _section?.GetValue<string>("S3BucketName") ?? throw new ArgumentNullException("S3BucketName");
+    private string AwsAccessKeyId => _section?.GetValue<string>("AwsAccessKeyId") ?? throw new SekibanConfigurationException("AwsAccessKeyId");
+    private string AwsAccessKey => _section?.GetValue<string>("AwsAccessKey") ?? throw new SekibanConfigurationException("AwsAccessKey");
+    private string S3BucketName => _section?.GetValue<string>("S3BucketName") ?? throw new SekibanConfigurationException("S3BucketName");
     private RegionEndpoint S3RegionEndpoint =>
-        RegionEndpoint.GetBySystemName(_section?.GetValue<string>("S3Region") ?? throw new ArgumentNullException("S3Region"));
+        RegionEndpoint.GetBySystemName(_section?.GetValue<string>("S3Region") ?? throw new SekibanConfigurationException("S3Region"));
     public S3BlobAccessor(IConfiguration configuration, IServiceProvider serviceProvider)
     {
         _configuration = configuration;

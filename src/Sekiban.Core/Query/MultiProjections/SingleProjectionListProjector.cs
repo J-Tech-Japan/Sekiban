@@ -9,7 +9,6 @@ public class SingleProjectionListProjector<TProjection, TState, TProjector> : IM
     where TState : IAggregateStateCommon
     where TProjector : ISingleProjector<TProjection>, new()
 {
-    private TProjection _eventChecker;
     private TProjector _projector = new();
 
     private SingleProjectionListState<TState> State { get; set; }
@@ -18,7 +17,6 @@ public class SingleProjectionListProjector<TProjection, TState, TProjector> : IM
 
     public SingleProjectionListProjector()
     {
-        _eventChecker = _projector.CreateInitialAggregate(Guid.Empty);
         State = new SingleProjectionListState<TState> { List = List.Select(m => m.ToState()).ToList() };
     }
     public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().LaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
@@ -44,7 +42,13 @@ public class SingleProjectionListProjector<TProjection, TState, TProjector> : IM
     public MultiProjectionState<SingleProjectionListState<TState>> ToState()
     {
         State = new SingleProjectionListState<TState> { List = List.Select(m => m.ToState()).ToList() };
-        return new MultiProjectionState<SingleProjectionListState<TState>>(State, LastEventId, LastSortableUniqueId, AppliedSnapshotVersion, Version);
+        return new MultiProjectionState<SingleProjectionListState<TState>>(
+            State,
+            LastEventId,
+            LastSortableUniqueId,
+            AppliedSnapshotVersion,
+            Version,
+            RootPartitionKey);
     }
 
     public void ApplySnapshot(MultiProjectionState<SingleProjectionListState<TState>> snapshot)
@@ -70,5 +74,9 @@ public class SingleProjectionListProjector<TProjection, TState, TProjector> : IM
     public string LastSortableUniqueId { get; private set; } = string.Empty;
     public int AppliedSnapshotVersion { get; private set; }
     public int Version { get; private set; }
+    public string RootPartitionKey
+    {
+        get;
+    } = string.Empty;
     public string GetPayloadVersionIdentifier() => _projector.GetPayloadVersionIdentifier();
 }

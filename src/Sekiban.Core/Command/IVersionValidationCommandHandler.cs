@@ -1,6 +1,7 @@
 using Sekiban.Core.Aggregate;
 namespace Sekiban.Core.Command;
 
+// ReSharper disable once InvalidXmlDocComment
 /// <summary>
 ///     Command Handler Interface for　<see cref="IVersionValidationCommand" />
 ///     Application developer can implement this interface to define a command handler

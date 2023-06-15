@@ -54,7 +54,7 @@ public record ClientLoyaltyPointListProjection(
                         m => m.ClientId == ev.AggregateId ? m with { ClientName = clientNameChanged.ClientName } : m)
                     .ToImmutableList()
             },
-            ClientDeleted clientDeleted => projectionPayload with
+            ClientDeleted => projectionPayload with
             {
                 Records = projectionPayload.Records.Where(m => m.ClientId != ev.AggregateId).ToImmutableList()
             },

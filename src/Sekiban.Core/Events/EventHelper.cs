@@ -7,24 +7,27 @@ namespace Sekiban.Core.Events;
 
 public static class EventHelper
 {
-    public static IEvent HandleEvent<TAggregatePayload>(Aggregate<TAggregatePayload> aggregate, IEventPayloadCommon eventPayload)
-        where TAggregatePayload : IAggregatePayloadCommon
+    public static IEvent HandleEvent<TAggregatePayload>(
+        Aggregate<TAggregatePayload> aggregate,
+        IEventPayloadCommon eventPayload,
+        string rootPartitionKey) where TAggregatePayload : IAggregatePayloadCommon
     {
         var aggregateType = aggregate.GetType();
         var methodName = nameof(Aggregate<TAggregatePayload>.AddAndApplyEvent);
         var aggregateMethodBase = aggregateType.GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Instance);
         var aggregateMethod = aggregateMethodBase?.MakeGenericMethod(eventPayload.GetType());
-        return aggregateMethod?.Invoke(aggregate, new object?[] { eventPayload }) as IEvent ?? throw new SekibanEventFailedToActivateException();
+        return aggregateMethod?.Invoke(aggregate, new object?[] { eventPayload, rootPartitionKey }) as IEvent ??
+            throw new SekibanEventFailedToActivateException();
     }
 
-    public static IEvent GenerateEventToSave<TEventPayload, TAggregatePayload>(Guid aggregateId, TEventPayload payload)
+    public static IEvent GenerateEventToSave<TEventPayload, TAggregatePayload>(Guid aggregateId, string rootPartitionKey, TEventPayload payload)
         where TEventPayload : IEventPayloadApplicableTo<TAggregatePayload> where TAggregatePayload : IAggregatePayloadCommon
     {
         var eventPayloadType = payload.GetType();
         // ReSharper disable once SuspiciousTypeConversion.Global
         var eventBaseType = typeof(Event<>);
         var eventType = eventBaseType.MakeGenericType(eventPayloadType);
-        return Activator.CreateInstance(eventType, aggregateId, typeof(TAggregatePayload), payload) as IEvent ??
+        return Activator.CreateInstance(eventType, aggregateId, typeof(TAggregatePayload), payload, rootPartitionKey) as IEvent ??
             throw new SekibanEventFailedToActivateException();
     }
 

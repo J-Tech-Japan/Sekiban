@@ -25,6 +25,7 @@ public sealed record AggregateState<TPayload> : IAggregateStateCommon where TPay
         LastEventId = aggregateCommon.LastEventId;
         LastSortableUniqueId = aggregateCommon.LastSortableUniqueId;
         AppliedSnapshotVersion = aggregateCommon.AppliedSnapshotVersion;
+        RootPartitionKey = aggregateCommon.RootPartitionKey;
     }
 
     public AggregateState(IAggregateCommon aggregateCommon, TPayload payload) : this(aggregateCommon) => Payload = payload;
@@ -36,6 +37,10 @@ public sealed record AggregateState<TPayload> : IAggregateStateCommon where TPay
     [Required]
     [Description("Aggregate Version")]
     public int Version { get; init; }
+
+    [Required]
+    [Description("Root Partition Key")]
+    public string RootPartitionKey { get; init; } = string.Empty;
 
     [Required]
     [Description("Last Event Id")]
@@ -82,6 +87,7 @@ public sealed record AggregateState<TPayload> : IAggregateStateCommon where TPay
             Version = copyVersion ? original.Version : Version,
             LastEventId = original.LastEventId,
             AppliedSnapshotVersion = original.AppliedSnapshotVersion,
-            LastSortableUniqueId = original.LastSortableUniqueId
+            LastSortableUniqueId = original.LastSortableUniqueId,
+            RootPartitionKey = original.RootPartitionKey
         };
 }

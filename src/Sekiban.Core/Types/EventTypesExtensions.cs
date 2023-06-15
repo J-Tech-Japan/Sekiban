@@ -62,6 +62,10 @@ public static class EventTypesExtensions
     }
     private enum EventGenericTypeContents
     {
-        AggregatePayloadIn, AggregatePayloadOut, EventPayload
+        // ReSharper disable once UnusedMember.Local
+        AggregatePayloadIn,
+        // ReSharper disable once UnusedMember.Local
+        AggregatePayloadOut,
+        EventPayload
     }
 }

@@ -18,19 +18,21 @@ public class MultiProjectionSnapshotGenerator : IMultiProjectionSnapshotGenerato
         _documentWriter = documentWriter;
     }
 
-    public async Task<MultiProjectionState<TProjectionPayload>>
-        GenerateMultiProjectionSnapshotAsync<TProjection, TProjectionPayload>(int minimumNumberOfEventsToGenerateSnapshot)
-        where TProjection : IMultiProjector<TProjectionPayload>, new() where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+    public async Task<MultiProjectionState<TProjectionPayload>> GenerateMultiProjectionSnapshotAsync<TProjection, TProjectionPayload>(
+        int minimumNumberOfEventsToGenerateSnapshot,
+        string rootPartitionKey) where TProjection : IMultiProjector<TProjectionPayload>, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         var projector = new TProjection();
         // if there is snapshot, load it, if not make a new one
-        var state = await GetCurrentStateAsync<TProjectionPayload>();
+        var state = await GetCurrentStateAsync<TProjectionPayload>(rootPartitionKey);
         projector.ApplySnapshot(state);
         // get events from after snapshot or the initial and project them
         await _documentRepository.GetAllEventsAsync(
             typeof(TProjection),
             projector.TargetAggregateNames(),
             state.Version > 0 ? state.LastSortableUniqueId : null,
+            rootPartitionKey,
             events =>
             {
                 var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
@@ -56,19 +58,20 @@ public class MultiProjectionSnapshotGenerator : IMultiProjectionSnapshotGenerato
                 SekibanBlobContainer.MultiProjectionState,
                 FilenameForSnapshot(typeof(TProjectionPayload), blobId, state.LastSortableUniqueId),
                 memoryStream);
-            var snapshotDocument = new MultiProjectionSnapshotDocument(typeof(TProjectionPayload), blobId, projector);
+            var snapshotDocument = new MultiProjectionSnapshotDocument(typeof(TProjectionPayload), blobId, projector, rootPartitionKey);
             await _documentWriter.SaveAsync(snapshotDocument, typeof(TProjectionPayload));
         }
         return projector.ToState();
     }
 
-    public async Task<MultiProjectionState<TProjectionPayload>> GetCurrentStateAsync<TProjectionPayload>()
+    public async Task<MultiProjectionState<TProjectionPayload>> GetCurrentStateAsync<TProjectionPayload>(string rootPartitionKey)
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         var payload = new TProjectionPayload();
         var snapshotDocument = await _documentRepository.GetLatestSnapshotForMultiProjectionAsync(
             typeof(TProjectionPayload),
-            payload.GetPayloadVersionIdentifier());
+            payload.GetPayloadVersionIdentifier(),
+            rootPartitionKey);
 
         // if snapshot document is not null, load it from blob storage
         if (snapshotDocument != null)

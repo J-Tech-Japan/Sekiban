@@ -94,7 +94,5 @@ public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPo
         bool? SortKey2Asc) : IListQueryPagingParameter<Response>;
 
     public record Response(Guid BranchId, string BranchName, Guid ClientId, string ClientName, int Point) :
-        ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord(BranchId, BranchName, ClientId, ClientName, Point), IQueryResponse
-    {
-    }
+        ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord(BranchId, BranchName, ClientId, ClientName, Point), IQueryResponse;
 }

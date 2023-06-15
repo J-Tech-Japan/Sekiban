@@ -52,8 +52,8 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
             new List<string> { _webDependencyDefinition.Options.BaseSingleProjectionControllerType.Name }.Contains(controller.ControllerType.Name))
         {
             var projectionPayloadType = controller.ControllerType.GenericTypeArguments[0];
-            var originalType = projectionPayloadType?.GetOriginalTypeFromSingleProjectionPayload() ??
-                throw new SekibanTypeNotFoundException("Can not find original type of " + projectionPayloadType?.Name);
+            var originalType = projectionPayloadType.GetOriginalTypeFromSingleProjectionPayload() ??
+                throw new SekibanTypeNotFoundException("Can not find original type of " + projectionPayloadType.Name);
             controller.ControllerName = originalType.Name;
             controller.Selectors.Add(
                 new SelectorModel
@@ -108,9 +108,9 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                 controller.ControllerType.Name))
         {
             var projectionType = controller.ControllerType.GenericTypeArguments[0] ??
-                throw new SekibanTypeNotFoundException("Can not find projection type of " + controller.ControllerType?.Name);
-            var originalType = projectionType?.GetOriginalTypeFromSingleProjectionPayload() ??
-                throw new SekibanTypeNotFoundException("Can not find original type of " + projectionType?.Name);
+                throw new SekibanTypeNotFoundException("Can not find projection type of " + controller.ControllerType.Name);
+            var originalType = projectionType.GetOriginalTypeFromSingleProjectionPayload() ??
+                throw new SekibanTypeNotFoundException("Can not find original type of " + projectionType.Name);
             var queryType = controller.ControllerType.GenericTypeArguments[1];
             controller.ControllerName = originalType.Name;
             controller.Selectors.Add(
@@ -130,9 +130,9 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                 controller.ControllerType.Name))
         {
             var projectionType = controller.ControllerType.GenericTypeArguments[0] ??
-                throw new SekibanTypeNotFoundException("Can not find projection type of " + controller.ControllerType?.Name);
-            var originalType = projectionType?.GetOriginalTypeFromSingleProjectionPayload() ??
-                throw new SekibanTypeNotFoundException("Can not find original type of " + projectionType?.Name);
+                throw new SekibanTypeNotFoundException("Can not find projection type of " + controller.ControllerType.Name);
+            var originalType = projectionType.GetOriginalTypeFromSingleProjectionPayload() ??
+                throw new SekibanTypeNotFoundException("Can not find original type of " + projectionType.Name);
             var queryType = controller.ControllerType.GenericTypeArguments[1];
             controller.ControllerName = originalType.Name;
             controller.Selectors.Add(

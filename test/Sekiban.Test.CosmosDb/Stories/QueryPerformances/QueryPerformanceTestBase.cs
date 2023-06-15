@@ -4,7 +4,6 @@ using FeatureCheck.Domain.Aggregates.Clients;
 using FeatureCheck.Domain.Aggregates.Clients.Commands;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
-using Sekiban.Core.Dependency;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.SingleProjections;
@@ -27,10 +26,7 @@ public abstract class QueryPerformanceTestBase : TestBase
     protected readonly IMultiProjectionService MultiProjectionService;
     protected readonly IAggregateLoader ProjectionService;
 
-    protected QueryPerformanceTestBase(
-        SekibanTestFixture sekibanTestFixture,
-        ITestOutputHelper testOutputHelper,
-        ServiceCollectionExtensions.MultiProjectionType multiProjectionType) : base(
+    protected QueryPerformanceTestBase(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
         sekibanTestFixture,
         testOutputHelper,
         new CosmosSekibanServiceProviderGenerator())

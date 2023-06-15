@@ -45,10 +45,6 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
     public IAggregateTestHelper<TAggregateSubtypePayload> Subtype<TAggregateSubtypePayload>()
         where TAggregateSubtypePayload : IAggregatePayloadCommon, IApplicableAggregatePayload<TAggregatePayload> =>
         _helper.Subtype<TAggregateSubtypePayload>();
-    // public IAggregateTestHelper<TAggregatePayload> Subtype<TAggregateSubtypePayload>(
-    //     Action<IAggregateTestHelper<TAggregateSubtypePayload>> subtypeTestHelperAction)
-    //     where TAggregateSubtypePayload : IAggregatePayloadCommon, IApplicableAggregatePayload<TAggregatePayload> =>
-    //     _helper.Subtype(subtypeTestHelperAction);
 
     public IAggregateTestHelper<TAggregatePayload> GivenScenario(Action initialAction) => _helper.GivenScenario(initialAction);
 
@@ -155,6 +151,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
     public IAggregateTestHelper<TAggregatePayload> ThenPayloadIsFromFile(string payloadFileName) => _helper.ThenPayloadIsFromFile(payloadFileName);
 
     public Guid GetAggregateId() => _helper.GetAggregateId();
+    public string GetRootPartitionKey() => _helper.GetRootPartitionKey();
 
     public int GetCurrentVersion() => _helper.GetCurrentVersion();
 

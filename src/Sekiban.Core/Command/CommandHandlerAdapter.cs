@@ -26,10 +26,11 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> where TAg
     public async Task<CommandResponse> HandleCommandAsync(
         CommandDocument<TCommand> commandDocument,
         ICommandHandlerCommon<TAggregatePayload, TCommand> handler,
-        Guid aggregateId)
+        Guid aggregateId,
+        string rootPartitionKey)
     {
         var command = commandDocument.Payload;
-        _aggregate = await _aggregateLoader.AsAggregateAsync<TAggregatePayload>(aggregateId) ??
+        _aggregate = await _aggregateLoader.AsAggregateAsync<TAggregatePayload>(aggregateId, rootPartitionKey) ??
             new Aggregate<TAggregatePayload> { AggregateId = aggregateId };
         if (handler is not ICommandHandler<TAggregatePayload, TCommand> regularHandler)
         {
@@ -49,7 +50,7 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> where TAg
         }
         await foreach (var eventPayload in regularHandler.HandleCommandAsync(GetAggregateState, command))
         {
-            _events.Add(EventHelper.HandleEvent(_aggregate, eventPayload));
+            _events.Add(EventHelper.HandleEvent(_aggregate, eventPayload, rootPartitionKey));
         }
         return new CommandResponse(_aggregate.AggregateId, _events.ToImmutableList(), _aggregate.Version, _events.Max(m => m.SortableUniqueId));
     }

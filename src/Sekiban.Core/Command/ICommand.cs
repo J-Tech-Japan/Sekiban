@@ -1,10 +1,12 @@
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Documents;
 namespace Sekiban.Core.Command;
 
 /// <summary>
 ///     Interface for defining a command
 /// </summary>
 /// <typeparam name="TAggregatePayload">Target Aggregate Payload to execute the command</typeparam>
+// ReSharper disable once UnusedTypeParameter
 public interface ICommand<TAggregatePayload> : ICommandCommon where TAggregatePayload : IAggregatePayloadCommon
 {
     /// <summary>
@@ -16,4 +18,10 @@ public interface ICommand<TAggregatePayload> : ICommandCommon where TAggregatePa
     /// </summary>
     /// <returns></returns>
     public Guid GetAggregateId();
+
+    /// <summary>
+    ///     Set root partition key for the command.
+    /// </summary>
+    /// <returns>root partition key</returns>
+    public string GetRootPartitionKey() => IDocument.DefaultRootPartitionKey;
 }

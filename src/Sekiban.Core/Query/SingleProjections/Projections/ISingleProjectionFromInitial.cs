@@ -8,11 +8,11 @@ public interface ISingleProjectionFromInitial
     ///     検証などのためにこちらを残しています。
     /// </summary>
     /// <param name="aggregateId"></param>
+    /// <param name="rootPartitionKey"></param>
     /// <param name="toVersion"></param>
-    /// <param name="includesSortableUniqueId"></param>
     /// <typeparam name="TProjection"></typeparam>
     /// <typeparam name="TProjector"></typeparam>
     /// <returns></returns>
-    Task<TProjection?> GetAggregateFromInitialAsync<TProjection, TProjector>(Guid aggregateId, int? toVersion)
+    Task<TProjection?> GetAggregateFromInitialAsync<TProjection, TProjector>(Guid aggregateId, string rootPartitionKey, int? toVersion)
         where TProjection : IAggregateCommon, SingleProjections.ISingleProjection where TProjector : ISingleProjector<TProjection>, new();
 }

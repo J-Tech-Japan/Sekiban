@@ -4,7 +4,6 @@ using FeatureCheck.Domain.Aggregates.Clients.Queries.BasicClientFilters;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointLists;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
 using Sekiban.Core.Command;
-using Sekiban.Core.Dependency;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Infrastructure.Cosmos;
 using System.Threading.Tasks;
@@ -14,17 +13,13 @@ namespace Sekiban.Test.CosmosDb.Stories;
 
 public class SimpleQueryTest : TestBase
 {
-    private readonly ICommandExecutor _commandExecutor;
     private readonly IQueryExecutor _queryExecutor;
-    public SimpleQueryTest(
-        SekibanTestFixture sekibanTestFixture,
-        ITestOutputHelper testOutputHelper,
-        ServiceCollectionExtensions.MultiProjectionType multiProjectionType = ServiceCollectionExtensions.MultiProjectionType.MemoryCache) : base(
+    public SimpleQueryTest(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
         sekibanTestFixture,
         testOutputHelper,
         new CosmosSekibanServiceProviderGenerator())
     {
-        _commandExecutor = GetService<ICommandExecutor>();
+        GetService<ICommandExecutor>();
         _queryExecutor = GetService<IQueryExecutor>();
     }
 
@@ -32,7 +27,7 @@ public class SimpleQueryTest : TestBase
     public async Task QueryExecuteAggregateListAsync()
     {
 
-        var result = await _queryExecutor.ExecuteAsync(
+        await _queryExecutor.ExecuteAsync(
             new BasicClientQueryParameter(
                 null,
                 null,
@@ -46,7 +41,7 @@ public class SimpleQueryTest : TestBase
     [Fact]
     public async Task QueryExecuteAggregateAsync()
     {
-        var result = await _queryExecutor.ExecuteAsync(new ClientEmailExistsQuery.Parameter("foo@example.com"));
+        await _queryExecutor.ExecuteAsync(new ClientEmailExistsQuery.Parameter("foo@example.com"));
     }
 
 
@@ -54,18 +49,18 @@ public class SimpleQueryTest : TestBase
     public async Task QueryExecuteSingleProjectionListAsync()
     {
 
-        var result = await _queryExecutor.ExecuteAsync(new ClientNameHistoryProjectionQuery.Parameter(null, null, null, null, null));
+        await _queryExecutor.ExecuteAsync(new ClientNameHistoryProjectionQuery.Parameter(null, null, null, null, null));
     }
     [Fact]
     public async Task QueryExecuteSingleProjectionAsync()
     {
 
-        var result = await _queryExecutor.ExecuteAsync(new ClientNameHistoryProjectionCountQuery.Parameter(null, null));
+        await _queryExecutor.ExecuteAsync(new ClientNameHistoryProjectionCountQuery.Parameter(null, null));
     }
     [Fact]
     public async Task QueryExecuteMultipleProjectionListAsync()
     {
-        var result = await _queryExecutor.ExecuteAsync(
+        await _queryExecutor.ExecuteAsync(
             new ClientLoyaltyPointQuery.Parameter(
                 null,
                 null,
@@ -79,7 +74,7 @@ public class SimpleQueryTest : TestBase
     [Fact]
     public async Task QueryExecuteMultipleProjectionAsync()
     {
-        var result = await _queryExecutor.ExecuteAsync(
+        await _queryExecutor.ExecuteAsync(
             new ClientLoyaltyPointMultiProjectionQuery.Parameter(null, ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.Points));
     }
 }

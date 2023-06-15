@@ -28,7 +28,8 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
             state.LastEventId,
             state.LastSortableUniqueId,
             state.Version,
-            state.GetPayloadVersionIdentifier());
+            state.GetPayloadVersionIdentifier(),
+            state.RootPartitionKey);
     }
     public async Task<SnapshotDocument?> SnapshotDocumentFromSingleProjectionStateAsync<TPayload>(
         SingleProjectionState<TPayload> state,
@@ -43,7 +44,8 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
             state.LastEventId,
             state.LastSortableUniqueId,
             state.Version,
-            state.GetPayloadVersionIdentifier());
+            state.GetPayloadVersionIdentifier(),
+            state.RootPartitionKey);
         return snapshotDocument;
     }
     public async Task<SnapshotDocument?> FillSnapshotDocumentWithBlobAsync(SnapshotDocument document)
@@ -57,7 +59,7 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
         {
             case StateType.Aggregate:
             {
-                var aggregateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.AggregateTypeName);
+                var aggregateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.AggregateType);
                 if (aggregateType is null) { return null; }
                 var aggregateStateType = typeof(AggregateState<>).MakeGenericType(aggregateType.Aggregate);
                 var state = JsonSerializer.Deserialize(snapshotString, aggregateStateType);
@@ -70,9 +72,8 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
                 break;
             case StateType.AggregateSubtype:
             {
-                var aggregateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.AggregateTypeName);
+                var aggregateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.AggregateType);
                 if (aggregateType is null) { return null; }
-                var baseType = aggregateType.Aggregate.GetBaseAggregatePayloadTypeFromAggregate();
                 var subAggregateStateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.DocumentTypeName);
                 if (subAggregateStateType is null) { return null; }
                 var aggregateStateType = typeof(AggregateState<>).MakeGenericType(subAggregateStateType.Aggregate);
@@ -116,7 +117,7 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
         {
             case StateType.Aggregate:
             {
-                var aggregateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.AggregateTypeName);
+                var aggregateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.AggregateType);
                 if (aggregateType == null) { return null; }
                 var targetClassType = typeof(AggregateState<>).MakeGenericType(aggregateType.Aggregate);
                 var state = SekibanJsonHelper.ConvertTo(document.Snapshot, targetClassType);
@@ -129,7 +130,7 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
                 break;
             case StateType.AggregateSubtype:
             {
-                var aggregateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.AggregateTypeName);
+                var aggregateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.AggregateType);
                 if (aggregateType is null) { return null; }
                 var subAggregateStateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.DocumentTypeName);
                 if (subAggregateStateType is null) { return null; }
@@ -169,7 +170,7 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
 
     private StateType GetStateType(SnapshotDocument document)
     {
-        if (document.AggregateTypeName == document.DocumentTypeName)
+        if (document.AggregateType == document.DocumentTypeName)
         {
             return StateType.Aggregate;
         }

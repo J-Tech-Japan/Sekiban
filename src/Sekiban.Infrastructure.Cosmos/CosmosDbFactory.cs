@@ -133,7 +133,7 @@ public class CosmosDbFactory
                 new MemoryCacheEntryOptions());
         }
 
-        var containerProperties = new ContainerProperties(containerId, "/PartitionKey");
+        var containerProperties = new ContainerProperties(containerId, GetPartitionKeyPaths());
         container = await database.CreateContainerIfNotExistsAsync(containerProperties, 400);
         _memoryCache.Cache.Set(
             GetMemoryCacheContainerKey(documentType, databaseId, containerId, _sekibanContextIdentifier),
@@ -155,7 +155,7 @@ public class CosmosDbFactory
                 var query = container.GetItemLinqQueryable<IDocument>().Where(b => true);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition());
 
-                var deleteItemIds = new List<(Guid id, string partitionKey)>();
+                var deleteItemIds = new List<(Guid id, PartitionKey partitionKey)>();
                 while (feedIterator.HasMoreResults)
                 {
                     var response = await feedIterator.ReadNextAsync();
@@ -163,19 +163,21 @@ public class CosmosDbFactory
                     {
                         var id = SekibanJsonHelper.GetValue<Guid>(item, nameof(IDocument.Id));
                         var partitionKey = SekibanJsonHelper.GetValue<string>(item, nameof(IDocument.PartitionKey));
+                        var rootPartitionKey = SekibanJsonHelper.GetValue<string>(item, nameof(IDocument.RootPartitionKey));
+                        var aggregateType = SekibanJsonHelper.GetValue<string>(item, nameof(IDocument.AggregateType));
                         if (id is null || partitionKey is null)
                         {
                             continue;
                         }
 
-                        deleteItemIds.Add((id, partitionKey));
+                        deleteItemIds.Add((id, new PartitionKeyBuilder().Add(rootPartitionKey).Add(aggregateType).Add(partitionKey).Build()));
                     }
                 }
 
                 var concurrencyTasks = new List<Task>();
                 foreach (var (id, partitionKey) in deleteItemIds)
                 {
-                    concurrencyTasks.Add(container.DeleteItemAsync<IDocument>(id.ToString(), new PartitionKey(partitionKey)));
+                    concurrencyTasks.Add(container.DeleteItemAsync<IDocument>(id.ToString(), partitionKey));
                 }
 
                 await Task.WhenAll(concurrencyTasks);
@@ -234,4 +236,6 @@ public class CosmosDbFactory
             throw;
         }
     }
+
+    private IReadOnlyList<string> GetPartitionKeyPaths() => new List<string> { "/RootPartitionKey", "/AggregateType", "/PartitionKey" };
 }

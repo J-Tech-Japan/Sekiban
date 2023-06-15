@@ -13,6 +13,7 @@ public class AggregateIdHolder<TBaseAggregatePayload> : IAggregateIdHolder where
         set;
     } = Guid.Empty;
 
+    public string GetRootPartitionKey() => GetAggregate()?.RootPartitionKey ?? string.Empty;
     public async Task<AggregateState<TAggregatePayload>?> GetAggregateStateAsync<TAggregatePayload>()
         where TAggregatePayload : IAggregatePayloadCommon
     {

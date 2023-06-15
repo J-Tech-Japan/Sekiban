@@ -20,6 +20,7 @@ public class ListTest
     [Fact]
     public void AppendListTest()
     {
+        // ReSharper disable once CollectionNeverUpdated.Local
         var list = new List<Record>();
 
         var second = list.Append(new Record("John", 20)).ToList();

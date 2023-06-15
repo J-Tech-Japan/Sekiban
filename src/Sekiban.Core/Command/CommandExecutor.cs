@@ -42,7 +42,7 @@ public class CommandExecutor : ICommandExecutor
         if (!command.GetType().IsCommandType()) { throw new SekibanCommandNotRegisteredException(command.GetType().Name); }
         var method = GetType().GetMethod(nameof(ExecCommandAsyncTyped)) ?? throw new Exception("Method not found");
         var genericMethod = method.MakeGenericMethod(command.GetType().GetAggregatePayloadTypeFromCommandType(), command.GetType());
-        var (response, generatedEvents)
+        var (response, _)
             = ((CommandExecutorResponse, List<IEvent>))await (dynamic)(genericMethod.Invoke(this, new object?[] { command, callHistories }) ??
                 throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
         return response;
@@ -68,7 +68,7 @@ public class CommandExecutor : ICommandExecutor
         if (!command.GetType().IsCommandType()) { throw new SekibanCommandNotRegisteredException(command.GetType().Name); }
         var method = GetType().GetMethod(nameof(ExecCommandWithoutValidationAsyncTyped)) ?? throw new Exception("Method not found");
         var genericMethod = method.MakeGenericMethod(command.GetType().GetAggregatePayloadTypeFromCommandType(), command.GetType());
-        var (response, generatedEvents)
+        var (response, _)
             = ((CommandExecutorResponse, List<IEvent>))await (dynamic)(genericMethod.Invoke(this, new object?[] { command, callHistories }) ??
                 throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
         return response;
@@ -91,8 +91,8 @@ public class CommandExecutor : ICommandExecutor
         TCommand command,
         List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayload>
     {
-        var validationResult = command.ValidateProperties()?.ToList();
-        if (validationResult?.Any() == true)
+        var validationResult = command.ValidateProperties().ToList();
+        if (validationResult.Any())
         {
             return (new CommandExecutorResponse(
                 null,
@@ -109,15 +109,16 @@ public class CommandExecutor : ICommandExecutor
         TCommand command,
         List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayload>
     {
+        var rootPartitionKey = command.GetRootPartitionKey();
         var commandDocument
-            = new CommandDocument<TCommand>(Guid.Empty, command, typeof(TAggregatePayload), callHistories)
+            = new CommandDocument<TCommand>(Guid.Empty, command, typeof(TAggregatePayload), rootPartitionKey, callHistories)
             {
                 ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
             };
-        List<IEvent> events = new();
+        List<IEvent> events;
         var commandToSave = command is ICleanupNecessaryCommand<TCommand> cleanupCommand ? cleanupCommand.CleanupCommand(command) : command;
-        var version = 0;
-        string? lastSortableUniqueId = null;
+        int version;
+        string? lastSortableUniqueId;
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(TAggregatePayload));
         if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
@@ -138,7 +139,7 @@ public class CommandExecutor : ICommandExecutor
             await _commandExecuteAwaiter.WaitUntilOtherThreadFinished<TAggregatePayload>(aggregateId);
             _commandExecuteAwaiter.StartTask<TAggregatePayload>(aggregateId);
             commandDocument
-                = new CommandDocument<TCommand>(aggregateId, command, typeof(TAggregatePayload), callHistories)
+                = new CommandDocument<TCommand>(aggregateId, command, typeof(TAggregatePayload), rootPartitionKey, callHistories)
                 {
                     ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
                 };
@@ -149,7 +150,7 @@ public class CommandExecutor : ICommandExecutor
                 var adapter = Activator.CreateInstance(adapterClass) ?? throw new Exception("Method not found");
                 var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new Exception("HandleCommandAsync not found");
                 var commandResponse
-                    = (CommandResponse)await ((dynamic?)method.Invoke(adapter, new object?[] { commandDocument, handler, aggregateId }) ??
+                    = (CommandResponse)await ((dynamic?)method.Invoke(adapter, new object?[] { commandDocument, handler, aggregateId, rootPartitionKey }) ??
                         throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
                 events = await HandleEventsAsync<TAggregatePayload, TCommand>(commandResponse.Events, commandDocument);
                 version = commandResponse.Version;
@@ -157,7 +158,7 @@ public class CommandExecutor : ICommandExecutor
             } else
             {
                 var adapter = new CommandHandlerAdapter<TAggregatePayload, TCommand>(_aggregateLoader);
-                var commandResponse = await adapter.HandleCommandAsync(commandDocument, handler, aggregateId);
+                var commandResponse = await adapter.HandleCommandAsync(commandDocument, handler, aggregateId, rootPartitionKey);
                 events = await HandleEventsAsync<TAggregatePayload, TCommand>(commandResponse.Events, commandDocument);
                 version = commandResponse.Version;
                 lastSortableUniqueId = commandResponse.LastSortableUniqueId;

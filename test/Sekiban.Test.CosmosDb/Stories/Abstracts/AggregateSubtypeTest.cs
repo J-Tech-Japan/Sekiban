@@ -178,10 +178,10 @@ public abstract class AggregateSubtypeTest : TestBase
                 new AddItemToShoppingCartI { CartId = snapshotCartId, Code = $"TEST{i:000}", Name = $"Name{i:000}", Quantity = i + 1 });
             var state = await aggregateLoader.AsDefaultStateAsync<ICartAggregate>(snapshotCartId);
             Assert.NotNull(state);
-            Assert.Equal(nameof(ShoppingCartI), state?.PayloadTypeName);
+            Assert.Equal(nameof(ShoppingCartI), state.PayloadTypeName);
         }
 
-        var cart1 = await aggregateLoader.AsDefaultStateFromInitialAsync<ICartAggregate>(snapshotCartId, 90);
+        var cart1 = await aggregateLoader.AsDefaultStateFromInitialAsync<ICartAggregate>(snapshotCartId, toVersion: 90);
         var cartSnapshot = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(cart1!);
         await _documentPersistentWriter.SaveSingleSnapshotAsync(cartSnapshot!, typeof(ICartAggregate), false);
         var cart2 = await aggregateLoader.AsDefaultStateFromInitialAsync<ICartAggregate>(snapshotCartId);
@@ -218,8 +218,8 @@ public abstract class AggregateSubtypeTest : TestBase
         }
         var stateAfter = await aggregateLoader.AsDefaultStateAsync<ICartAggregate>(snapshotCartId);
         Assert.NotNull(stateAfter);
-        Assert.Equal(nameof(ShoppingCartI), stateAfter?.PayloadTypeName);
-        Assert.NotEqual(0, stateAfter!.AppliedSnapshotVersion);
+        Assert.Equal(nameof(ShoppingCartI), stateAfter.PayloadTypeName);
+        Assert.NotEqual(0, stateAfter.AppliedSnapshotVersion);
     }
 
 

@@ -112,10 +112,10 @@ public class SimpleUnifiedProjectionTest : UnifiedTest<FeatureCheckDependency>
         // Create Loyalty Point Runs automatically with event Created CreateClient
         ThenGetAggregateTest<LoyaltyPoint>(
             clientId,
-            test => test.WhenCommand(
+            aggregateTest => aggregateTest.WhenCommand(
                     new AddLoyaltyPoint(clientId, new DateTime(2022, 11, 1), LoyaltyPointReceiveTypeKeys.CreditcardUsage, 100, string.Empty)
                     {
-                        ReferenceVersion = test.GetCurrentVersion()
+                        ReferenceVersion = aggregateTest.GetCurrentVersion()
                     })
                 .ThenNotThrowsAnException());
     }

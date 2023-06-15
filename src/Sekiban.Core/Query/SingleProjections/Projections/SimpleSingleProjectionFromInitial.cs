@@ -15,11 +15,12 @@ public class SimpleSingleProjectionFromInitial : ISingleProjectionFromInitial
     ///     検証などのためにこちらを残しています。
     /// </summary>
     /// <param name="aggregateId"></param>
+    /// <param name="rootPartitionKey"></param>
     /// <param name="toVersion"></param>
     /// <typeparam name="TProjection"></typeparam>
     /// <typeparam name="TProjector"></typeparam>
     /// <returns></returns>
-    public async Task<TProjection?> GetAggregateFromInitialAsync<TProjection, TProjector>(Guid aggregateId, int? toVersion)
+    public async Task<TProjection?> GetAggregateFromInitialAsync<TProjection, TProjector>(Guid aggregateId, string rootPartitionKey, int? toVersion)
         where TProjection : IAggregateCommon, SingleProjections.ISingleProjection where TProjector : ISingleProjector<TProjection>, new()
     {
         var projector = new TProjector();
@@ -28,11 +29,13 @@ public class SimpleSingleProjectionFromInitial : ISingleProjectionFromInitial
         await _documentRepository.GetAllEventsForAggregateIdAsync(
             aggregateId,
             projector.GetOriginalAggregatePayloadType(),
-            PartitionKeyGenerator.ForEvent(aggregateId, projector.GetOriginalAggregatePayloadType()),
+            PartitionKeyGenerator.ForEvent(aggregateId, projector.GetOriginalAggregatePayloadType(), rootPartitionKey),
             null,
+            rootPartitionKey,
             events =>
             {
-                if (events.Count() != events.Select(m => m.Id).Distinct().Count())
+                var enumerable = events.ToList();
+                if (enumerable.Count() != enumerable.Select(m => m.Id).Distinct().Count())
                 {
                     throw new SekibanEventDuplicateException();
                 }
@@ -40,7 +43,7 @@ public class SimpleSingleProjectionFromInitial : ISingleProjectionFromInitial
                 {
                     return;
                 }
-                foreach (var e in events)
+                foreach (var e in enumerable)
                 {
                     aggregate.ApplyEvent(e);
                     if (toVersion.HasValue && toVersion.Value == aggregate.Version)

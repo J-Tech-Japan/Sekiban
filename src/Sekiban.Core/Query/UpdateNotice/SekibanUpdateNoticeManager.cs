@@ -1,4 +1,5 @@
 using Sekiban.Core.Documents.ValueObjects;
+using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Shared;
 using System.Collections.Concurrent;
 namespace Sekiban.Core.Query.UpdateNotice;
@@ -11,43 +12,67 @@ public class SekibanUpdateNoticeManager : IUpdateNotice
 
     public SekibanUpdateNoticeManager(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
 
-    public void SendUpdate(string aggregateName, Guid aggregateId, string sortableUniqueId, UpdatedLocationType type)
+    public void SendUpdate(string rootPartitionKey, string aggregateName, Guid aggregateId, string sortableUniqueId, UpdatedLocationType type)
     {
         var sortableUniqueIdValue = string.IsNullOrWhiteSpace(sortableUniqueId)
             ? new SortableUniqueIdValue(SortableUniqueIdValue.Generate(_sekibanDateProducer.UtcNow, Guid.Empty))
             : new SortableUniqueIdValue(sortableUniqueId);
         var toSave = new NoticeRecord(sortableUniqueIdValue, type);
-        UpdateDictionary.AddOrUpdate(GetKeyForAggregate(aggregateName, aggregateId), s => toSave, (s, record) => toSave);
-        UpdateDictionary.AddOrUpdate(GetKeyForType(aggregateName), s => toSave, (s, record) => toSave);
+        UpdateDictionary.AddOrUpdate(GetKeyForAggregate(rootPartitionKey, aggregateName, aggregateId), _ => toSave, (_, _) => toSave);
+        UpdateDictionary.AddOrUpdate(GetKeyForType(rootPartitionKey, aggregateName), _ => toSave, (_, _) => toSave);
+        UpdateDictionary.AddOrUpdate(GetKeyForType(aggregateName), _ => toSave, (_, _) => toSave);
     }
 
-    public (bool, UpdatedLocationType?) HasUpdateAfter(string aggregateName, Guid aggregateId, SortableUniqueIdValue? sortableUniqueId)
+    public (bool, UpdatedLocationType?) HasUpdateAfter(
+        string rootPartitionKey,
+        string aggregateName,
+        Guid aggregateId,
+        SortableUniqueIdValue? sortableUniqueId)
     {
-        var current = UpdateDictionary.GetValueOrDefault(GetKeyForAggregate(aggregateName, aggregateId));
+        var current = UpdateDictionary.GetValueOrDefault(GetKeyForAggregate(rootPartitionKey, aggregateName, aggregateId));
         if (current is null || string.IsNullOrEmpty(current.SortableUniqueId))
         {
             return (false, null);
         }
-        return (!current.SortableUniqueId.Value?.Equals(sortableUniqueId?.Value ?? string.Empty) ?? true, current?.LocationType);
+        if (string.IsNullOrEmpty(sortableUniqueId?.Value))
+        {
+            return (true, null);
+        }
+        return (sortableUniqueId.EarlierThanOrEqual(current.SortableUniqueId), current.LocationType);
     }
 
-    public (bool, UpdatedLocationType?) HasUpdateAfter(string aggregateName, SortableUniqueIdValue? sortableUniqueId)
+    public (bool, UpdatedLocationType?) HasUpdateAfter(string rootPartitionKey, string aggregateName, SortableUniqueIdValue? sortableUniqueId)
     {
-        var current = UpdateDictionary.GetValueOrDefault(GetKeyForType(aggregateName));
+        if (rootPartitionKey.Equals(IMultiProjectionService.ProjectionAllPartitions))
+        {
+            var currentAll = UpdateDictionary.GetValueOrDefault(GetKeyForType(aggregateName));
+            if (currentAll is null || string.IsNullOrEmpty(currentAll.SortableUniqueId))
+            {
+                return (false, null);
+            }
+            if (sortableUniqueId is null)
+            {
+                return (true, null);
+            }
+            return (sortableUniqueId.EarlierThanOrEqual(currentAll.SortableUniqueId), currentAll.LocationType);
+        }
+        var current = UpdateDictionary.GetValueOrDefault(GetKeyForType(rootPartitionKey, aggregateName));
         if (current is null || string.IsNullOrEmpty(current.SortableUniqueId))
         {
             return (false, null);
         }
         if (sortableUniqueId is null)
         {
-            return (false, null);
+            return (true, null);
         }
-        return (!current.SortableUniqueId.Value?.Equals(sortableUniqueId) ?? true, current?.LocationType);
+        return (sortableUniqueId.EarlierThanOrEqual(current.SortableUniqueId), current.LocationType);
     }
 
-    public static string GetKeyForAggregate(string aggregateName, Guid aggregateId) => "UpdateNotice-" + aggregateName + "-" + aggregateId;
+    public static string GetKeyForAggregate(string rootPartitionKey, string aggregateName, Guid aggregateId) =>
+        "UpdateNotice-" + rootPartitionKey + "-" + aggregateName + "-" + aggregateId;
 
-    public static string GetKeyForType(string aggregateName) => "UpdateNotice-" + aggregateName + "-";
+    public static string GetKeyForType(string rootPartitionKey, string aggregateName) => "UpdateNotice-" + rootPartitionKey + "-" + aggregateName;
+    public static string GetKeyForType(string aggregateName) => "UpdateNotice-" + aggregateName;
 
     private record NoticeRecord(SortableUniqueIdValue SortableUniqueId, UpdatedLocationType LocationType);
 }

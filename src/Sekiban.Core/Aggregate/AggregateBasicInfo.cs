@@ -11,4 +11,5 @@ public record AggregateBasicInfo
     public string LastSortableUniqueId { get; init; } = string.Empty;
     public int AppliedSnapshotVersion { get; init; } = 0;
     public int Version { get; init; } = 0;
+    public string RootPartitionKey { get; init; } = string.Empty;
 }

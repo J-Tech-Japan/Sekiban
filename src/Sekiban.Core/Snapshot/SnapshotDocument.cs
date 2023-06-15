@@ -4,13 +4,10 @@ using Sekiban.Core.Partition;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Snapshot;
 
-public record SnapshotDocument : Document, IDocument
+public record SnapshotDocument : Document
 {
 
     public dynamic? Snapshot { get; init; }
-
-    public string AggregateTypeName { get; init; } = string.Empty;
-
     public Guid LastEventId { get; init; }
 
     public string LastSortableUniqueId { get; init; } = string.Empty;
@@ -30,14 +27,16 @@ public record SnapshotDocument : Document, IDocument
         Guid lastEventId,
         string lastSortableUniqueId,
         int savedVersion,
-        string payloadVersionIdentifier) : base(
+        string payloadVersionIdentifier,
+        string rootPartitionKey) : base(
         aggregateId,
-        PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregateType, payloadType),
+        PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregateType, payloadType, rootPartitionKey),
         DocumentType.AggregateSnapshot,
-        payloadType.Name ?? string.Empty)
+        payloadType.Name,
+        aggregateType.Name,
+        rootPartitionKey)
     {
         Snapshot = stateToSnapshot;
-        AggregateTypeName = aggregateType.Name;
         AggregateId = aggregateId;
         LastEventId = lastEventId;
         LastSortableUniqueId = lastSortableUniqueId;

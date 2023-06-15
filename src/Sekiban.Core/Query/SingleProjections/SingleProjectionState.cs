@@ -7,7 +7,8 @@ public record SingleProjectionState<TPayload>(
     Guid LastEventId,
     string LastSortableUniqueId,
     int AppliedSnapshotVersion,
-    int Version) : ISingleProjectionPayloadCommon, IAggregateStateCommon where TPayload : ISingleProjectionPayloadCommon
+    int Version,
+    string RootPartitionKey) : ISingleProjectionPayloadCommon, IAggregateStateCommon where TPayload : ISingleProjectionPayloadCommon
 {
     public string PayloadTypeName => Payload.GetType().Name;
 
@@ -18,7 +19,8 @@ public record SingleProjectionState<TPayload>(
         Guid.Empty,
         string.Empty,
         0,
-        0)
+        0,
+        string.Empty)
     {
     }
     public SingleProjectionState(IAggregateCommon aggregateCommon) : this(
@@ -27,7 +29,8 @@ public record SingleProjectionState<TPayload>(
         aggregateCommon.LastEventId,
         aggregateCommon.LastSortableUniqueId,
         aggregateCommon.AppliedSnapshotVersion,
-        aggregateCommon.Version)
+        aggregateCommon.Version,
+        aggregateCommon.RootPartitionKey)
     {
     }
 

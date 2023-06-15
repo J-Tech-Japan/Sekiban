@@ -13,7 +13,7 @@ public record SortableUniqueIdValue(string Value)
 
     public DateTime GetTicks()
     {
-        var ticksString = Value?.Substring(0, TickNumberOfLength) ?? TickFormatter;
+        var ticksString = Value[..TickNumberOfLength];
         var ticks = long.Parse(ticksString);
         return new DateTime(ticks);
     }

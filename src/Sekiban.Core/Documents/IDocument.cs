@@ -3,11 +3,14 @@ namespace Sekiban.Core.Documents;
 
 public interface IDocument
 {
+    public const string DefaultRootPartitionKey = "default";
     public Guid Id { get; init; }
     public string PartitionKey { get; init; }
     public DocumentType DocumentType { get; init; }
     public string DocumentTypeName { get; init; }
     public DateTime TimeStamp { get; init; }
     public string SortableUniqueId { get; init; }
+    public string AggregateType { get; init; }
+    public string RootPartitionKey { get; init; }
     public SortableUniqueIdValue GetSortableUniqueId();
 }

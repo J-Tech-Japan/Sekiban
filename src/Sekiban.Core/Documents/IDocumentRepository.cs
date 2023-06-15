@@ -9,6 +9,7 @@ public interface IDocumentRepository
         Type aggregatePayloadType,
         string? partitionKey,
         string? sinceSortableUniqueId,
+        string rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction);
 
     Task GetAllEventStringsForAggregateIdAsync(
@@ -16,12 +17,14 @@ public interface IDocumentRepository
         Type aggregatePayloadType,
         string? partitionKey,
         string? sinceSortableUniqueId,
+        string rootPartitionKey,
         Action<IEnumerable<string>> resultAction);
 
     Task GetAllCommandStringsForAggregateIdAsync(
         Guid aggregateId,
         Type aggregatePayloadType,
         string? sinceSortableUniqueId,
+        string rootPartitionKey,
         Action<IEnumerable<string>> resultAction);
 
     Task GetAllEventsForAggregateAsync(Type aggregatePayloadType, string? sinceSortableUniqueId, Action<IEnumerable<IEvent>> resultAction);
@@ -30,28 +33,44 @@ public interface IDocumentRepository
         Type multiProjectionType,
         IList<string> targetAggregateNames,
         string? sinceSortableUniqueId,
+        string rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction);
 
     Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
         Guid aggregateId,
         Type aggregatePayloadType,
         Type projectionPayloadType,
+        string rootPartitionKey,
         string payloadVersionIdentifier);
 
-    Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(Type multiProjectionPayloadType, string payloadVersionIdentifier);
+    Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(
+        Type multiProjectionPayloadType,
+        string payloadVersionIdentifier,
+        string rootPartitionKey = MultiProjectionSnapshotDocument.AllRootPartitionKey);
 
     Task<bool> ExistsSnapshotForAggregateAsync(
         Guid aggregateId,
         Type aggregatePayloadType,
         Type projectionPayloadType,
         int version,
+        string rootPartitionKey,
         string payloadVersionIdentifier);
 
-    Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Type aggregatePayloadType, Type projectionPayloadType, string partitionKey);
+    Task<SnapshotDocument?> GetSnapshotByIdAsync(
+        Guid id,
+        Guid aggregateId,
+        Type aggregatePayloadType,
+        Type projectionPayloadType,
+        string partitionKey,
+        string rootPartitionKey);
 }
 public interface IDocumentPersistentRepository : IDocumentRepository
 {
-    Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType);
+    Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(
+        Guid aggregateId,
+        Type aggregatePayloadType,
+        Type projectionPayloadType,
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey);
 }
 public interface IDocumentTemporaryRepository : IDocumentRepository
 {

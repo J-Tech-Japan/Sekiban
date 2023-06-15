@@ -90,7 +90,7 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
                     .AddEventSubscriber<OrderSubmittedI, OrderSubmittedI.Subscriber>())
             .AddSubtype<PurchasedCartI>(
                 subType => subType.AddCommandHandler<ReceivePaymentToPurchasedCartI, ReceivePaymentToPurchasedCartI.Handler>())
-            .AddSubtype<ShippingCartI>(subType => { });
+            .AddSubtype<ShippingCartI>(_ => { });
 
         AddAggregate<CartAggregateR>()
             .AddSubtype<ShoppingCartR>(
@@ -98,7 +98,7 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
                     .AddCommandHandler<SubmitOrderR, SubmitOrderR.Handler>())
             .AddSubtype<PurchasedCartR>(
                 subType => subType.AddCommandHandler<ReceivePaymentToPurchasedCartR, ReceivePaymentToPurchasedCartR.Handler>())
-            .AddSubtype<ShippingCartR>(subType => { });
+            .AddSubtype<ShippingCartR>(_ => { });
 
         AddMultiProjectionQuery<ClientLoyaltyPointMultiProjectionQuery>();
         AddMultiProjectionListQuery<ClientLoyaltyPointQuery>();

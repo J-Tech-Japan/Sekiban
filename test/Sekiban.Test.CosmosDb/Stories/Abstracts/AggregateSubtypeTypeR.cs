@@ -166,7 +166,7 @@ public abstract class AggregateSubtypeTypeR : TestBase
                 new AddItemToShoppingCartR { CartId = snapshotCartId, Code = $"TEST{i:000}", Name = $"Name{i:000}", Quantity = i + 1 });
             var state = await aggregateLoader.AsDefaultStateAsync<CartAggregateR>(snapshotCartId);
             Assert.NotNull(state);
-            Assert.Equal(typeof(ShoppingCartR).Name, state?.PayloadTypeName);
+            Assert.Equal(typeof(ShoppingCartR).Name, state.PayloadTypeName);
         }
         // Remove in memory data
         _inMemoryDocumentStore.ResetInMemoryStore();
@@ -175,7 +175,7 @@ public abstract class AggregateSubtypeTypeR : TestBase
 
         var stateAfter = await aggregateLoader.AsDefaultStateAsync<CartAggregateR>(snapshotCartId);
         Assert.NotNull(stateAfter);
-        Assert.Equal(typeof(ShoppingCartR).Name, stateAfter?.PayloadTypeName);
+        Assert.Equal(typeof(ShoppingCartR).Name, stateAfter.PayloadTypeName);
     }
 
 

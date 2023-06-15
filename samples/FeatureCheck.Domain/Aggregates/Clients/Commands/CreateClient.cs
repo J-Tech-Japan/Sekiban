@@ -8,7 +8,6 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.QueryModel;
-using Sekiban.Core.Query.SingleProjections;
 using System.ComponentModel.DataAnnotations;
 namespace FeatureCheck.Domain.Aggregates.Clients.Commands;
 
@@ -38,14 +37,9 @@ public record CreateClient : ICommand<Client>
 
     public class Handler : ICommandHandler<Client, CreateClient>
     {
-        private readonly IAggregateLoader aggregateLoader;
         private readonly IQueryExecutor queryExecutor;
 
-        public Handler(IAggregateLoader aggregateLoader, IQueryExecutor queryExecutor)
-        {
-            this.aggregateLoader = aggregateLoader;
-            this.queryExecutor = queryExecutor;
-        }
+        public Handler(IQueryExecutor queryExecutor) => this.queryExecutor = queryExecutor;
 
         public async IAsyncEnumerable<IEventPayloadApplicableTo<Client>> HandleCommandAsync(
             Func<AggregateState<Client>> getAggregateStateState,
