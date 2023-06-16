@@ -5,14 +5,14 @@ namespace Sekiban.Core.Query.MultiProjections;
 
 public interface IMultiProjectionService
 {
-    public const string ProjectionAllPartitions = "";
+    public const string ProjectionAllRootPartitions = "";
     public Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjectionPayload>(
-        string rootPartitionKey = ProjectionAllPartitions,
+        string rootPartitionKey = ProjectionAllRootPartitions,
         SortableUniqueIdValue? includesSortableUniqueIdValue = null) where TProjectionPayload : IMultiProjectionPayloadCommon, new();
 
     public Task<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>> GetAggregateListObject<TAggregatePayload>(
         SortableUniqueIdValue? includesSortableUniqueIdValue) where TAggregatePayload : IAggregatePayloadCommon =>
-        GetAggregateListObject<TAggregatePayload>(ProjectionAllPartitions, includesSortableUniqueIdValue);
+        GetAggregateListObject<TAggregatePayload>(ProjectionAllRootPartitions, includesSortableUniqueIdValue);
 
     public Task<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>> GetAggregateListObject<TAggregatePayload>(
         string rootPartitionKey,
@@ -20,13 +20,13 @@ public interface IMultiProjectionService
 
     public Task<List<AggregateState<TAggregatePayload>>> GetAggregateList<TAggregatePayload>(
         QueryListType queryListType = QueryListType.ActiveOnly,
-        string rootPartitionKey = ProjectionAllPartitions,
+        string rootPartitionKey = ProjectionAllRootPartitions,
         SortableUniqueIdValue? includesSortableUniqueIdValue = null) where TAggregatePayload : IAggregatePayloadCommon;
 
     public Task<MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>
         GetSingleProjectionListObject<TSingleProjectionPayload>(SortableUniqueIdValue? includesSortableUniqueIdValue)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new() =>
-        GetSingleProjectionListObject<TSingleProjectionPayload>(ProjectionAllPartitions, includesSortableUniqueIdValue);
+        GetSingleProjectionListObject<TSingleProjectionPayload>(ProjectionAllRootPartitions, includesSortableUniqueIdValue);
 
     public Task<MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>
         GetSingleProjectionListObject<TSingleProjectionPayload>(string rootPartitionKey, SortableUniqueIdValue? includesSortableUniqueIdValue)
@@ -34,6 +34,6 @@ public interface IMultiProjectionService
 
     public Task<List<SingleProjectionState<TSingleProjectionPayload>>> GetSingleProjectionList<TSingleProjectionPayload>(
         QueryListType queryListType = QueryListType.ActiveOnly,
-        string rootPartitionKey = ProjectionAllPartitions,
+        string rootPartitionKey = ProjectionAllRootPartitions,
         SortableUniqueIdValue? includesSortableUniqueIdValue = null) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new();
 }

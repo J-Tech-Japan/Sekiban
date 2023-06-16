@@ -43,7 +43,7 @@ public class SekibanUpdateNoticeManager : IUpdateNotice
 
     public (bool, UpdatedLocationType?) HasUpdateAfter(string rootPartitionKey, string aggregateName, SortableUniqueIdValue? sortableUniqueId)
     {
-        if (rootPartitionKey.Equals(IMultiProjectionService.ProjectionAllPartitions))
+        if (rootPartitionKey.Equals(IMultiProjectionService.ProjectionAllRootPartitions))
         {
             var currentAll = UpdateDictionary.GetValueOrDefault(GetKeyForType(aggregateName));
             if (currentAll is null || string.IsNullOrEmpty(currentAll.SortableUniqueId))

@@ -176,7 +176,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
 
                 var filter = new QueryFilter();
                 filter.AddCondition(nameof(IEvent.AggregateType), QueryOperator.Equal, aggregatePayloadType.Name);
-                if (rootPartitionKey != IMultiProjectionService.ProjectionAllPartitions)
+                if (rootPartitionKey != IMultiProjectionService.ProjectionAllRootPartitions)
                 {
                     filter.AddCondition(nameof(Document.RootPartitionKey), QueryOperator.Equal, rootPartitionKey);
                 }
@@ -239,7 +239,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
 
                 var filter = new ScanFilter();
                 filter.AddCondition(nameof(IEvent.AggregateType), ScanOperator.In, targetAggregateNames.Select(m => new AttributeValue(m)).ToList());
-                if (!rootPartitionKey.Equals(IMultiProjectionService.ProjectionAllPartitions))
+                if (!rootPartitionKey.Equals(IMultiProjectionService.ProjectionAllRootPartitions))
                 {
                     filter.AddCondition(nameof(IDocument.RootPartitionKey), ScanOperator.Equal, rootPartitionKey);
                 }

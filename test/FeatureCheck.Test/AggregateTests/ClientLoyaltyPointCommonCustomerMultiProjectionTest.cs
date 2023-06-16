@@ -28,7 +28,7 @@ public class ClientLoyaltyPointCommonCustomerMultiProjectionTest : UnifiedTest<F
                     string.Empty,
                     0,
                     0,
-                    IMultiProjectionService.ProjectionAllPartitions))
+                    IMultiProjectionService.ProjectionAllRootPartitions))
             .ThenQueryResponseIs(
                 new ClientLoyaltyPointMultiProjectionQuery.Parameter(null, ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.ClientName),
                 new ClientLoyaltyPointMultiProjectionQuery.Response(
