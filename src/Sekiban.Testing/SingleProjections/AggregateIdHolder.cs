@@ -1,4 +1,5 @@
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Documents;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Testing.SingleProjections;
 
@@ -12,8 +13,13 @@ public class AggregateIdHolder<TBaseAggregatePayload> : IAggregateIdHolder where
         get;
         set;
     } = Guid.Empty;
+    public string RootPartitionKey
+    {
+        get;
+        set;
+    } = IDocument.DefaultRootPartitionKey;
 
-    public string GetRootPartitionKey() => GetAggregate()?.RootPartitionKey ?? string.Empty;
+    public string GetRootPartitionKey() => RootPartitionKey;
     public async Task<AggregateState<TAggregatePayload>?> GetAggregateStateAsync<TAggregatePayload>()
         where TAggregatePayload : IAggregatePayloadCommon
     {
@@ -31,6 +37,6 @@ public class AggregateIdHolder<TBaseAggregatePayload> : IAggregateIdHolder where
         return aggregate?.GetPayloadTypeIs<TAggregatePayload>() ?? false;
     }
     public async Task<Aggregate<TBaseAggregatePayload>?> GetAggregateAsync() =>
-        await aggregateLoader.AsAggregateAsync<TBaseAggregatePayload>(AggregateId);
+        await aggregateLoader.AsAggregateAsync<TBaseAggregatePayload>(AggregateId, RootPartitionKey);
     public Aggregate<TBaseAggregatePayload>? GetAggregate() => GetAggregateAsync().Result;
 }

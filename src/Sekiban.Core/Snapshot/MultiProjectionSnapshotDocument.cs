@@ -7,7 +7,7 @@ namespace Sekiban.Core.Snapshot;
 
 public record MultiProjectionSnapshotDocument : IDocument
 {
-    public const string AllRootPartitionKey = "all";
+    public const string AllRootPartitionKeySnapshotValue = "[ALL]";
     public Guid LastEventId { get; init; }
 
     public string LastSortableUniqueId { get; init; } = string.Empty;
@@ -20,7 +20,9 @@ public record MultiProjectionSnapshotDocument : IDocument
     public MultiProjectionSnapshotDocument(Type projectionType, Guid id, IMultiProjectionCommon projection, string rootPartitionKey)
     {
         Id = id;
-        RootPartitionKey = rootPartitionKey;
+        RootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions.SequenceEqual(rootPartitionKey)
+            ? AllRootPartitionKeySnapshotValue
+            : rootPartitionKey;
         DocumentTypeName = DocumentTypeNameFromProjectionType(projectionType);
         DocumentType = DocumentType.MultiProjectionSnapshot;
         PartitionKey = PartitionKeyGenerator.ForMultiProjectionSnapshot(projectionType, RootPartitionKey);

@@ -44,7 +44,10 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
 
     protected override void Define()
     {
-        AddAggregate<Branch>().AddCommandHandler<CreateBranch, CreateBranch.Handler>().AddAggregateQuery<BranchExistsQuery>();
+        AddAggregate<Branch>()
+            .AddCommandHandler<CreateBranch, CreateBranch.Handler>()
+            .AddCommandHandler<CreateBranchWithRootPartitionKey, CreateBranchWithRootPartitionKey.Handler>()
+            .AddAggregateQuery<BranchExistsQuery>();
 
         AddAggregate<Client>()
             .AddCommandHandler<CreateClient, CreateClient.Handler>()

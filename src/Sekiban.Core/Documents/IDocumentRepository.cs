@@ -1,4 +1,5 @@
 using Sekiban.Core.Events;
+using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Snapshot;
 namespace Sekiban.Core.Documents;
 
@@ -50,7 +51,7 @@ public interface IDocumentRepository
     Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(
         Type multiProjectionPayloadType,
         string payloadVersionIdentifier,
-        string rootPartitionKey = MultiProjectionSnapshotDocument.AllRootPartitionKey);
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions);
 
     Task<bool> ExistsSnapshotForAggregateAsync(
         Guid aggregateId,

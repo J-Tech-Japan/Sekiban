@@ -1,4 +1,6 @@
-﻿using Sekiban.Core.Types;
+﻿using Sekiban.Core.Query.MultiProjections;
+using Sekiban.Core.Snapshot;
+using Sekiban.Core.Types;
 namespace Sekiban.Core.Partition;
 
 public static class PartitionKeyGenerator
@@ -16,11 +18,15 @@ public static class PartitionKeyGenerator
 
     public static string ForMultiProjectionSnapshot(Type projectionType, string rootPartitionKey)
     {
+        var rootPartitionKeyToUse = IMultiProjectionService.ProjectionAllRootPartitions.Equals(rootPartitionKey)
+            ? MultiProjectionSnapshotDocument.AllRootPartitionKeySnapshotValue
+            : rootPartitionKey;
+
         if (projectionType.IsSingleProjectionListStateType())
         {
             return
-                $"m_list_{projectionType.GetAggregatePayloadOrSingleProjectionPayloadTypeFromSingleProjectionListStateType().Name}_{rootPartitionKey}";
+                $"m_list_{projectionType.GetAggregatePayloadOrSingleProjectionPayloadTypeFromSingleProjectionListStateType().Name}_{rootPartitionKeyToUse}";
         }
-        return $"m_{projectionType.Name}_{rootPartitionKey}";
+        return $"m_{projectionType.Name}_{rootPartitionKeyToUse}";
     }
 }
