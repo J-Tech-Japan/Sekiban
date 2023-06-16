@@ -162,6 +162,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
     public async Task GetAllEventsForAggregateAsync(
         Type aggregatePayloadType,
         string? sinceSortableUniqueId,
+        string rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
@@ -175,6 +176,10 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
 
                 var filter = new QueryFilter();
                 filter.AddCondition(nameof(IEvent.AggregateType), QueryOperator.Equal, aggregatePayloadType.Name);
+                if (rootPartitionKey != IMultiProjectionService.ProjectionAllPartitions)
+                {
+                    filter.AddCondition(nameof(Document.RootPartitionKey), QueryOperator.Equal, rootPartitionKey);
+                }
                 if (sinceSortableUniqueId is not null)
                 {
                     filter.AddCondition(nameof(Document.SortableUniqueId), QueryOperator.GreaterThan, sinceSortableUniqueId);

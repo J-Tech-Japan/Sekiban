@@ -280,16 +280,17 @@ public class DocumentRepositorySplitter : IDocumentRepository
             rootPartitionKey);
     }
 
-    public Task GetAllEventsForAggregateAsync(Type aggregatePayloadType, string? sinceSortableUniqueId, Action<IEnumerable<IEvent>> resultAction)
+    public Task GetAllEventsForAggregateAsync(Type aggregatePayloadType, string? sinceSortableUniqueId,string rootPartitionKey, Action<IEnumerable<IEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
-            return _documentTemporaryRepository.GetAllEventsForAggregateAsync(aggregatePayloadType, sinceSortableUniqueId, resultAction);
+            return _documentTemporaryRepository.GetAllEventsForAggregateAsync(aggregatePayloadType, sinceSortableUniqueId, rootPartitionKey, resultAction);
         }
         return _documentPersistentRepository.GetAllEventsForAggregateAsync(
             aggregatePayloadType,
             sinceSortableUniqueId,
+            rootPartitionKey,
             events => { resultAction(events); });
     }
 

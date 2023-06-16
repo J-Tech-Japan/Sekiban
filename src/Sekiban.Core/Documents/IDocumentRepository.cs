@@ -27,7 +27,11 @@ public interface IDocumentRepository
         string rootPartitionKey,
         Action<IEnumerable<string>> resultAction);
 
-    Task GetAllEventsForAggregateAsync(Type aggregatePayloadType, string? sinceSortableUniqueId, Action<IEnumerable<IEvent>> resultAction);
+    Task GetAllEventsForAggregateAsync(
+        Type aggregatePayloadType,
+        string? sinceSortableUniqueId,
+        string rootPartitionKey,
+        Action<IEnumerable<IEvent>> resultAction);
 
     Task GetAllEventsAsync(
         Type multiProjectionType,

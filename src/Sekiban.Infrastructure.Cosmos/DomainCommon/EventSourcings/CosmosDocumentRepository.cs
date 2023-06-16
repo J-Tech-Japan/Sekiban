@@ -5,6 +5,7 @@ using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Partition;
+using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.SingleProjections.Projections;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
@@ -266,6 +267,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
     public async Task GetAllEventsForAggregateAsync(
         Type aggregatePayloadType,
         string? sinceSortableUniqueId,
+        string rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
@@ -278,6 +280,10 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 var options = new QueryRequestOptions { MaxConcurrency = -1, MaxItemCount = -1, MaxBufferedItemCount = -1 };
                 var query = container.GetItemLinqQueryable<IEvent>()
                     .Where(b => b.DocumentType == DocumentType.Event && b.AggregateType == aggregatePayloadType.Name);
+                if (rootPartitionKey != IMultiProjectionService.ProjectionAllPartitions)
+                {
+                    query = query.Where(m => m.RootPartitionKey == rootPartitionKey);
+                }
 
                 query = sinceSortableUniqueId is not null
                     ? query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0).OrderByDescending(m => m.SortableUniqueId)
