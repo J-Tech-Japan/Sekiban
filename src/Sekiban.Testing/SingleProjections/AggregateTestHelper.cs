@@ -449,6 +449,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             return this;
         }
         AggregateIdHolder.AggregateId = command.GetAggregateId();
+        AggregateIdHolder.RootPartitionKey = command.GetRootPartitionKey();
 
         var commandDocument = new CommandDocument<TCommand>(GetAggregateId(), command, typeof(TAggregatePayload), GetRootPartitionKey());
         CheckCommandJSONSupports(commandDocument);

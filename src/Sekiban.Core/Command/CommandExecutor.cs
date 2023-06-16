@@ -110,6 +110,10 @@ public class CommandExecutor : ICommandExecutor
         List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayload>
     {
         var rootPartitionKey = command.GetRootPartitionKey();
+        if (!CommandRootPartitionValidationAttribute.IsValidRootPartitionKey(rootPartitionKey))
+        {
+            throw new SekibanInvalidRootPartitionKeyException(rootPartitionKey);
+        }
         var commandDocument
             = new CommandDocument<TCommand>(Guid.Empty, command, typeof(TAggregatePayload), rootPartitionKey, callHistories)
             {
@@ -150,7 +154,9 @@ public class CommandExecutor : ICommandExecutor
                 var adapter = Activator.CreateInstance(adapterClass) ?? throw new Exception("Method not found");
                 var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new Exception("HandleCommandAsync not found");
                 var commandResponse
-                    = (CommandResponse)await ((dynamic?)method.Invoke(adapter, new object?[] { commandDocument, handler, aggregateId, rootPartitionKey }) ??
+                    = (CommandResponse)await ((dynamic?)method.Invoke(
+                            adapter,
+                            new object?[] { commandDocument, handler, aggregateId, rootPartitionKey }) ??
                         throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
                 events = await HandleEventsAsync<TAggregatePayload, TCommand>(commandResponse.Events, commandDocument);
                 version = commandResponse.Version;

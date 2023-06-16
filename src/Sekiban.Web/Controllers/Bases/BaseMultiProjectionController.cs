@@ -26,7 +26,7 @@ public class BaseMultiProjectionController<TProjectionPayload> : ControllerBase 
     [Route("")]
     public virtual async Task<ActionResult<MultiProjectionState<TProjectionPayload>>> GetMultiProjectionAsync(
         string? includesSortableUniqueId = null,
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllPartitions)
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions)
     {
         if (_webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.MultiProjection,

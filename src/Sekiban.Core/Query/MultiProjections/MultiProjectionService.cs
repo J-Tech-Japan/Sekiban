@@ -30,7 +30,7 @@ public class MultiProjectionService : IMultiProjectionService
 
     public async Task<List<AggregateState<TAggregatePayload>>> GetAggregateList<TAggregatePayload>(
         QueryListType queryListType = QueryListType.ActiveOnly,
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllPartitions,
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions,
         SortableUniqueIdValue? includesSortableUniqueIdValue = null) where TAggregatePayload : IAggregatePayloadCommon
     {
         var projection = await GetAggregateListObject<TAggregatePayload>(rootPartitionKey, includesSortableUniqueIdValue);
@@ -55,7 +55,7 @@ public class MultiProjectionService : IMultiProjectionService
 
     public async Task<List<SingleProjectionState<TSingleProjectionPayload>>> GetSingleProjectionList<TSingleProjectionPayload>(
         QueryListType queryListType = QueryListType.ActiveOnly,
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllPartitions,
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions,
         SortableUniqueIdValue? includesSortableUniqueIdValue = null) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
     {
         var projection = await GetSingleProjectionListObject<TSingleProjectionPayload>(rootPartitionKey, includesSortableUniqueIdValue);

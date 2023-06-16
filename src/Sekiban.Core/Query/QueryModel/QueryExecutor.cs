@@ -112,7 +112,7 @@ public class QueryExecutor : IQueryExecutor
         where TQueryResponse : IQueryResponse
     {
         var allProjection = await multiProjectionService.GetMultiProjectionAsync<TProjectionPayload>(
-            param.RootPartitionKey,
+            param.GetRootPartitionKey(),
             SortableUniqueIdValue.GetShouldIncludeSortableUniqueIdValue(param));
         return queryHandler.GetMultiProjectionQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param, allProjection);
     }
@@ -125,7 +125,7 @@ public class QueryExecutor : IQueryExecutor
         where TQueryResponse : IQueryResponse
     {
         var allProjection = await multiProjectionService.GetMultiProjectionAsync<TProjectionPayload>(
-            param.RootPartitionKey,
+            param.GetRootPartitionKey(),
             SortableUniqueIdValue.GetShouldIncludeSortableUniqueIdValue(param));
         return queryHandler.GetMultiProjectionListQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param, allProjection);
     }
@@ -139,7 +139,7 @@ public class QueryExecutor : IQueryExecutor
     {
         var allProjection = await multiProjectionService.GetAggregateList<TAggregatePayload>(
             QueryListType.ActiveOnly,
-            param.RootPartitionKey,
+            param.GetRootPartitionKey(),
             SortableUniqueIdValue.GetShouldIncludeSortableUniqueIdValue(param));
         return queryHandler.GetAggregateListQuery<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param, allProjection);
     }
@@ -152,7 +152,7 @@ public class QueryExecutor : IQueryExecutor
     {
         var allProjection = await multiProjectionService.GetAggregateList<TAggregatePayload>(
             QueryListType.ActiveOnly,
-            param.RootPartitionKey,
+            param.GetRootPartitionKey(),
             SortableUniqueIdValue.GetShouldIncludeSortableUniqueIdValue(param));
         return queryHandler.GetAggregateQuery<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(param, allProjection);
     }
@@ -166,7 +166,7 @@ public class QueryExecutor : IQueryExecutor
     {
         var allProjection = await multiProjectionService.GetSingleProjectionList<TProjectionPayload>(
             QueryListType.ActiveOnly,
-            param.RootPartitionKey,
+            param.GetRootPartitionKey(),
             SortableUniqueIdValue.GetShouldIncludeSortableUniqueIdValue(param));
         return queryHandler.GetSingleProjectionListQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param, allProjection);
     }
@@ -180,7 +180,7 @@ public class QueryExecutor : IQueryExecutor
     {
         var allProjection = await multiProjectionService.GetSingleProjectionList<TSingleProjectionPayload>(
             QueryListType.ActiveOnly,
-            param.RootPartitionKey,
+            param.GetRootPartitionKey(),
             SortableUniqueIdValue.GetShouldIncludeSortableUniqueIdValue(param));
         return queryHandler.GetSingleProjectionQuery<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param, allProjection);
     }

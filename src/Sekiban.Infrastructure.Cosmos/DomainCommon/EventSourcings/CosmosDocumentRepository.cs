@@ -280,7 +280,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                 var options = new QueryRequestOptions { MaxConcurrency = -1, MaxItemCount = -1, MaxBufferedItemCount = -1 };
                 var query = container.GetItemLinqQueryable<IEvent>()
                     .Where(b => b.DocumentType == DocumentType.Event && b.AggregateType == aggregatePayloadType.Name);
-                if (rootPartitionKey != IMultiProjectionService.ProjectionAllPartitions)
+                if (rootPartitionKey != IMultiProjectionService.ProjectionAllRootPartitions)
                 {
                     query = query.Where(m => m.RootPartitionKey == rootPartitionKey);
                 }
