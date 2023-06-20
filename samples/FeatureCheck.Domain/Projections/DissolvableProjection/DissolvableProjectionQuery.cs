@@ -1,6 +1,5 @@
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.QueryModel;
-using Sekiban.Core.Query.QueryModel.Parameters;
 namespace FeatureCheck.Domain.Projections.DissolvableProjection;
 
 public class DissolvableProjectionQuery : IMultiProjectionQuery<DissolvableEventsProjection, DissolvableProjectionQuery.Parameter,

@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
 using Sekiban.Core.Query.QueryModel;
-using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Web.Controllers.Bases;
 

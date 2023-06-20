@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
 using Sekiban.Core.Query.QueryModel;
-using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Web.Authorizations;
 using Sekiban.Web.Dependency;
