@@ -6,6 +6,7 @@ using FeatureCheck.Domain.Aggregates.LoyaltyPoints;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Consts;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointLists;
+using FeatureCheck.Domain.Shared;
 using Microsoft.Extensions.Caching.Memory;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Cache;
@@ -22,7 +23,7 @@ using Xunit;
 using Xunit.Abstractions;
 namespace Sekiban.Test.CosmosDb.Stories.Abstracts;
 
-public abstract class MultiProjectionSnapshotTests : TestBase
+public abstract class MultiProjectionSnapshotTests : TestBase<FeatureCheckDependency>
 {
     private readonly IDocumentRemover _documentRemover;
     private readonly HybridStoreManager _hybridStoreManager;

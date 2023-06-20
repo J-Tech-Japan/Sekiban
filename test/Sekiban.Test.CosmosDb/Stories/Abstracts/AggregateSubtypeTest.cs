@@ -4,6 +4,7 @@ using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.Purcha
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.ShippingCarts;
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.ShoppingCarts;
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.ShoppingCarts.Commands;
+using FeatureCheck.Domain.Shared;
 using Microsoft.Extensions.Caching.Memory;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Cache;
@@ -20,7 +21,7 @@ using Xunit;
 using Xunit.Abstractions;
 namespace Sekiban.Test.CosmosDb.Stories.Abstracts;
 
-public abstract class AggregateSubtypeTest : TestBase
+public abstract class AggregateSubtypeTest : TestBase<FeatureCheckDependency>
 {
     private readonly IDocumentPersistentWriter _documentPersistentWriter;
     private readonly IDocumentRemover _documentRemover;

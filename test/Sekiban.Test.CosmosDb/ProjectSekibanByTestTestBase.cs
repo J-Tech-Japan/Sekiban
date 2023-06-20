@@ -5,7 +5,7 @@ namespace Sekiban.Test.CosmosDb;
 
 public class ProjectSekibanByTestTestBase : SekibanByTestTestBase
 {
-    private readonly ISekibanTestFixture _fixture = new TestBase.SekibanTestFixture();
+    private readonly ISekibanTestFixture _fixture = new TestBase<FeatureCheckDependency>.SekibanTestFixture();
     public ProjectSekibanByTestTestBase(ITestOutputHelper testOutputHelper, ISekibanServiceProviderGenerator serviceProviderGenerator)
     {
         _fixture.TestOutputHelper = testOutputHelper;

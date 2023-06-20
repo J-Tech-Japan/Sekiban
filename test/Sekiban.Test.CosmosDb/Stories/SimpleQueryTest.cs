@@ -3,6 +3,7 @@ using FeatureCheck.Domain.Aggregates.Clients.Queries;
 using FeatureCheck.Domain.Aggregates.Clients.Queries.BasicClientFilters;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointLists;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
+using FeatureCheck.Domain.Shared;
 using Sekiban.Core.Command;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Infrastructure.Cosmos;
@@ -11,7 +12,7 @@ using Xunit;
 using Xunit.Abstractions;
 namespace Sekiban.Test.CosmosDb.Stories;
 
-public class SimpleQueryTest : TestBase
+public class SimpleQueryTest : TestBase<FeatureCheckDependency>
 {
     private readonly IQueryExecutor _queryExecutor;
     public SimpleQueryTest(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(

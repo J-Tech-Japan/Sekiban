@@ -1,5 +1,6 @@
 using FeatureCheck.Domain.Aggregates.Branches;
 using FeatureCheck.Domain.Aggregates.Branches.Commands;
+using FeatureCheck.Domain.Shared;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
@@ -11,7 +12,7 @@ using Xunit;
 using Xunit.Abstractions;
 namespace Sekiban.Test.CosmosDb.Stories;
 
-public class MultipleDbStoryTest : TestBase
+public class MultipleDbStoryTest : TestBase<FeatureCheckDependency>
 {
     private const string SecondaryDb = "Secondary";
     private const string DefaultDb = "Default";

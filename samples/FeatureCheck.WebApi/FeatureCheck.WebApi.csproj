@@ -15,8 +15,8 @@
 
     <ItemGroup>
         <ProjectReference Include="..\..\src\Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Web\Sekiban.Web.csproj" />
         <ProjectReference Include="..\FeatureCheck.Domain\FeatureCheck.Domain.csproj" />
-        <ProjectReference Include="..\..\src\Sekiban.Addon.Web\Sekiban.Addon.Web.csproj" />
     </ItemGroup>
 
 </Project>

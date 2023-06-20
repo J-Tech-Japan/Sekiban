@@ -2,6 +2,7 @@ using FeatureCheck.Domain.Aggregates.Branches;
 using FeatureCheck.Domain.Aggregates.Branches.Commands;
 using FeatureCheck.Domain.Aggregates.Clients;
 using FeatureCheck.Domain.Aggregates.Clients.Commands;
+using FeatureCheck.Domain.Shared;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
@@ -15,7 +16,7 @@ using Xunit;
 using Xunit.Abstractions;
 namespace Sekiban.Test.CosmosDb.Stories.QueryPerformances;
 
-public abstract class QueryPerformanceTestBase : TestBase
+public abstract class QueryPerformanceTestBase : TestBase<FeatureCheckDependency>
 {
     protected readonly CosmosDbFactory _cosmosDbFactory;
     protected readonly IDocumentPersistentRepository _documentPersistentRepository;

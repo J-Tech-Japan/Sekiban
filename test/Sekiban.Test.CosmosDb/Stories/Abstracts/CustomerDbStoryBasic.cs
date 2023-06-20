@@ -12,6 +12,7 @@ using FeatureCheck.Domain.Aggregates.RecentActivities.Projections;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Commands;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
+using FeatureCheck.Domain.Shared;
 using FeatureCheck.Domain.Shared.Exceptions;
 using Microsoft.Extensions.Caching.Memory;
 using Sekiban.Core.Aggregate;
@@ -37,7 +38,7 @@ using Xunit;
 using Xunit.Abstractions;
 namespace Sekiban.Test.CosmosDb.Stories.Abstracts;
 
-public abstract class CustomerDbStoryBasic : TestBase
+public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
 {
     private readonly IDocumentPersistentRepository _documentPersistentRepository;
     private readonly IDocumentPersistentWriter _documentPersistentWriter;

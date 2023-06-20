@@ -2,6 +2,7 @@ using FeatureCheck.Domain.Shared;
 using Microsoft.DotNet.PlatformAbstractions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Sekiban.Core.Dependency;
 using Sekiban.Core.Snapshot.BackgroundServices;
 using Sekiban.Testing.Story;
 using System;
@@ -13,7 +14,7 @@ using Xunit.Abstractions;
 namespace Sekiban.Test.CosmosDb;
 
 [Collection("Sequential")]
-public class TestBase : IClassFixture<TestBase.SekibanTestFixture>, IDisposable
+public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.SekibanTestFixture>, IDisposable where TDependency : IDependencyDefinition, new()
 {
     protected readonly SekibanTestFixture _sekibanTestFixture;
     protected readonly IServiceProvider _serviceProvider;
@@ -22,7 +23,7 @@ public class TestBase : IClassFixture<TestBase.SekibanTestFixture>, IDisposable
     {
         sekibanTestFixture.TestOutputHelper = output;
         _sekibanTestFixture = sekibanTestFixture;
-        _serviceProvider = providerGenerator.Generate(sekibanTestFixture, new FeatureCheckDependency());
+        _serviceProvider = providerGenerator.Generate(sekibanTestFixture, new TDependency());
         var backgroundService = _serviceProvider.GetRequiredService<SnapshotTakingBackgroundService>();
         backgroundService.ServiceProvider = _serviceProvider;
         Task.Run(() => backgroundService.StartAsync(CancellationToken.None));

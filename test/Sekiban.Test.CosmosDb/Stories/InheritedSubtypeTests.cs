@@ -1,4 +1,5 @@
 using FeatureCheck.Domain.Aggregates.SubTypes.InheritedSubtypes;
+using FeatureCheck.Domain.Shared;
 using Microsoft.Extensions.Caching.Memory;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Cache;
@@ -13,7 +14,7 @@ using Xunit;
 using Xunit.Abstractions;
 namespace Sekiban.Test.CosmosDb.Stories;
 
-public class InheritedSubtypeTests : TestBase
+public class InheritedSubtypeTests : TestBase<FeatureCheckDependency>
 {
     private readonly CosmosDbFactory _cosmosDbFactory;
     private readonly IDocumentPersistentWriter _documentPersistentWriter;
