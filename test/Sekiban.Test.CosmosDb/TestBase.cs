@@ -1,8 +1,14 @@
-using FeatureCheck.Domain.Shared;
 using Microsoft.DotNet.PlatformAbstractions;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Sekiban.Core.Aggregate;
+using Sekiban.Core.Cache;
+using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
+using Sekiban.Core.Documents;
+using Sekiban.Core.Query.MultiProjections;
+using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Snapshot.BackgroundServices;
 using Sekiban.Testing.Story;
 using System;
@@ -14,19 +20,41 @@ using Xunit.Abstractions;
 namespace Sekiban.Test.CosmosDb;
 
 [Collection("Sequential")]
-public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.SekibanTestFixture>, IDisposable where TDependency : IDependencyDefinition, new()
+public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.SekibanTestFixture>, IDisposable
+    where TDependency : IDependencyDefinition, new()
 {
-    protected readonly SekibanTestFixture _sekibanTestFixture;
-    protected readonly IServiceProvider _serviceProvider;
+    protected readonly IDocumentPersistentWriter documentPersistentWriter;
+    protected readonly IAggregateLoader aggregateLoader;
+    protected readonly ICommandExecutor commandExecutor;
+    protected readonly IDocumentPersistentRepository documentPersistentRepository;
+    protected readonly IDocumentRemover documentRemover;
 
+    protected readonly HybridStoreManager hybridStoreManager;
+    protected readonly InMemoryDocumentStore inMemoryDocumentStore;
+    protected readonly IMemoryCacheAccessor memoryCache;
+    protected readonly IMultiProjectionService multiProjectionService;
+    protected readonly SekibanTestFixture sekibanTestFixture;
+    protected readonly IServiceProvider serviceProvider;
+
+    protected ITestOutputHelper _testOutputHelper => sekibanTestFixture.TestOutputHelper!;
     public TestBase(SekibanTestFixture sekibanTestFixture, ITestOutputHelper output, ISekibanServiceProviderGenerator providerGenerator)
     {
         sekibanTestFixture.TestOutputHelper = output;
-        _sekibanTestFixture = sekibanTestFixture;
-        _serviceProvider = providerGenerator.Generate(sekibanTestFixture, new TDependency());
-        var backgroundService = _serviceProvider.GetRequiredService<SnapshotTakingBackgroundService>();
-        backgroundService.ServiceProvider = _serviceProvider;
+        this.sekibanTestFixture = sekibanTestFixture;
+        serviceProvider = providerGenerator.Generate(sekibanTestFixture, new TDependency());
+        var backgroundService = serviceProvider.GetRequiredService<SnapshotTakingBackgroundService>();
+        backgroundService.ServiceProvider = serviceProvider;
         Task.Run(() => backgroundService.StartAsync(CancellationToken.None));
+        documentRemover = GetService<IDocumentRemover>();
+        commandExecutor = GetService<ICommandExecutor>();
+        aggregateLoader = GetService<IAggregateLoader>();
+
+        hybridStoreManager = GetService<HybridStoreManager>();
+        inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
+        memoryCache = GetService<IMemoryCacheAccessor>();
+        documentPersistentWriter = GetService<IDocumentPersistentWriter>();
+        documentPersistentRepository = GetService<IDocumentPersistentRepository>();
+        multiProjectionService = GetService<IMultiProjectionService>();
     }
 
     public void Dispose()
@@ -44,12 +72,34 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
 
     public T GetService<T>()
     {
-        var toreturn = _serviceProvider.GetService<T>();
-        if (toreturn is null)
+        var toReturn = serviceProvider.GetService<T>();
+        if (toReturn is null)
         {
             throw new Exception("オブジェクトが登録されていません。" + typeof(T));
         }
-        return toreturn;
+        return toReturn;
+    }
+
+    protected void RemoveAllFromDefault()
+    {
+        documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Default).Wait();
+        documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Default).Wait();
+    }
+    protected void RemoveAllFromDefaultAndDissolvable()
+    {
+        documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Default).Wait();
+        documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Default).Wait();
+        documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Dissolvable).Wait();
+        documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Dissolvable).Wait();
+    }
+
+    protected void ResetInMemoryDocumentStoreAndCache()
+    {
+        // Remove in memory data
+        inMemoryDocumentStore.ResetInMemoryStore();
+        hybridStoreManager.ClearHybridPartitions();
+        // ReSharper disable once SuspiciousTypeConversion.Global
+        ((MemoryCache)memoryCache).Compact(1);
     }
 
     public class SekibanTestFixture : ISekibanTestFixture

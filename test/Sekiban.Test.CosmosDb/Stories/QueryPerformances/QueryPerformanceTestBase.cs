@@ -20,9 +20,6 @@ public abstract class QueryPerformanceTestBase : TestBase<FeatureCheckDependency
 {
     protected readonly CosmosDbFactory _cosmosDbFactory;
     protected readonly IDocumentPersistentRepository _documentPersistentRepository;
-    protected readonly HybridStoreManager _hybridStoreManager;
-    protected readonly InMemoryDocumentStore _inMemoryDocumentStore;
-    protected readonly ITestOutputHelper _testOutputHelper;
     protected readonly ICommandExecutor CommandExecutor;
     protected readonly IMultiProjectionService MultiProjectionService;
     protected readonly IAggregateLoader ProjectionService;
@@ -32,13 +29,10 @@ public abstract class QueryPerformanceTestBase : TestBase<FeatureCheckDependency
         testOutputHelper,
         new CosmosSekibanServiceProviderGenerator())
     {
-        _testOutputHelper = testOutputHelper;
         _cosmosDbFactory = GetService<CosmosDbFactory>();
         CommandExecutor = GetService<ICommandExecutor>();
         ProjectionService = GetService<IAggregateLoader>();
         _documentPersistentRepository = GetService<IDocumentPersistentRepository>();
-        _inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
-        _hybridStoreManager = GetService<HybridStoreManager>();
         MultiProjectionService = GetService<IMultiProjectionService>();
     }
 

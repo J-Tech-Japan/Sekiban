@@ -7,14 +7,7 @@ using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Consts;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointLists;
 using FeatureCheck.Domain.Shared;
-using Microsoft.Extensions.Caching.Memory;
-using Sekiban.Core.Aggregate;
-using Sekiban.Core.Cache;
-using Sekiban.Core.Command;
-using Sekiban.Core.Documents;
-using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.MultiProjections.Projections;
-using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Testing.Story;
 using System;
 using System.Linq;
@@ -25,38 +18,18 @@ namespace Sekiban.Test.CosmosDb.Stories.Abstracts;
 
 public abstract class MultiProjectionSnapshotTests : TestBase<FeatureCheckDependency>
 {
-    private readonly IDocumentRemover _documentRemover;
-    private readonly HybridStoreManager _hybridStoreManager;
-    private readonly InMemoryDocumentStore _inMemoryDocumentStore;
-    private readonly IMemoryCacheAccessor _memoryCache;
-    private readonly IAggregateLoader aggregateLoader;
-    private readonly ICommandExecutor commandExecutor;
-    private readonly IMultiProjectionService multiProjectionService;
     private readonly IMultiProjectionSnapshotGenerator multiProjectionSnapshotGenerator;
     public MultiProjectionSnapshotTests(
         SekibanTestFixture sekibanTestFixture,
         ITestOutputHelper testOutputHelper,
-        ISekibanServiceProviderGenerator providerGenerator) : base(sekibanTestFixture, testOutputHelper, providerGenerator)
-    {
-        _documentRemover = GetService<IDocumentRemover>();
-        commandExecutor = GetService<ICommandExecutor>();
-        aggregateLoader = GetService<IAggregateLoader>();
-        multiProjectionService = GetService<IMultiProjectionService>();
-        _inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
-        _hybridStoreManager = GetService<HybridStoreManager>();
-        _memoryCache = GetService<IMemoryCacheAccessor>();
+        ISekibanServiceProviderGenerator providerGenerator) : base(sekibanTestFixture, testOutputHelper, providerGenerator) =>
         multiProjectionSnapshotGenerator = GetService<IMultiProjectionSnapshotGenerator>();
-    }
 
 
     [Fact]
     public async Task MultiProjectionTest()
     {
-        // 先に全データを削除する
-        await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Default);
-        await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Dissolvable);
-        await _documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Default);
-        await _documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Dissolvable);
+        RemoveAllFromDefaultAndDissolvable();
 
         var response = await commandExecutor.ExecCommandAsync(new CreateBranch("branch1"));
         var branchId = response.AggregateId!.Value;
@@ -82,10 +55,7 @@ public abstract class MultiProjectionSnapshotTests : TestBase<FeatureCheckDepend
         var projection = await multiProjectionSnapshotGenerator.GenerateMultiProjectionSnapshotAsync<ClientLoyaltyPointListProjection>(50);
         Assert.True(projection.Version > 100);
 
-        // Remove in memory data
-        _inMemoryDocumentStore.ResetInMemoryStore();
-        _hybridStoreManager.ClearHybridPartitions();
-        ((MemoryCache)_memoryCache.Cache).Compact(1);
+        ResetInMemoryDocumentStoreAndCache();
 
         projection = await multiProjectionService.GetMultiProjectionAsync<ClientLoyaltyPointListProjection>();
         Assert.True(projection.AppliedSnapshotVersion > 0);
@@ -93,10 +63,7 @@ public abstract class MultiProjectionSnapshotTests : TestBase<FeatureCheckDepend
         var listProjection = await multiProjectionSnapshotGenerator.GenerateAggregateListSnapshotAsync<Client>(50);
         Assert.True(listProjection.Version > 50);
 
-        // Remove in memory data
-        _inMemoryDocumentStore.ResetInMemoryStore();
-        _hybridStoreManager.ClearHybridPartitions();
-        ((MemoryCache)_memoryCache.Cache).Compact(1);
+        ResetInMemoryDocumentStoreAndCache();
 
         listProjection = await multiProjectionService.GetAggregateListObject<Client>(null);
         Assert.True(listProjection.AppliedSnapshotVersion > 0);
@@ -105,10 +72,7 @@ public abstract class MultiProjectionSnapshotTests : TestBase<FeatureCheckDepend
         var listProjection2 = await multiProjectionSnapshotGenerator.GenerateSingleProjectionListSnapshotAsync<ClientNameHistoryProjection>(50);
         Assert.True(listProjection2.Version > 50);
 
-        // Remove in memory data
-        _inMemoryDocumentStore.ResetInMemoryStore();
-        _hybridStoreManager.ClearHybridPartitions();
-        ((MemoryCache)_memoryCache.Cache).Compact(1);
+        ResetInMemoryDocumentStoreAndCache();
 
         listProjection2 = await multiProjectionService.GetSingleProjectionListObject<ClientNameHistoryProjection>(null);
         Assert.True(listProjection2.AppliedSnapshotVersion > 0);

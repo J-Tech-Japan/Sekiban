@@ -5,12 +5,7 @@ using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.ShippingC
 using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.ShoppingCarts;
 using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.ShoppingCarts.Commands;
 using FeatureCheck.Domain.Shared;
-using Microsoft.Extensions.Caching.Memory;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
-using Sekiban.Core.Documents;
-using Sekiban.Core.Query.MultiProjections;
-using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Testing.Story;
 using System;
 using System.Linq;
@@ -21,37 +16,19 @@ namespace Sekiban.Test.CosmosDb.Stories.Abstracts;
 
 public abstract class AggregateSubtypeTypeR : TestBase<FeatureCheckDependency>
 {
-    private readonly IDocumentRemover _documentRemover;
-    private readonly HybridStoreManager _hybridStoreManager;
-    private readonly InMemoryDocumentStore _inMemoryDocumentStore;
-    private readonly IMemoryCache _memoryCache;
-    private readonly IAggregateLoader aggregateLoader;
     private readonly Guid cartId = Guid.NewGuid();
-    private readonly ICommandExecutor commandExecutor;
-    private readonly IMultiProjectionService multiProjectionService;
     private CommandExecutorResponseWithEvents commandResponse = default!;
     public AggregateSubtypeTypeR(
         SekibanTestFixture sekibanTestFixture,
         ITestOutputHelper testOutputHelper,
         ISekibanServiceProviderGenerator providerGenerator) : base(sekibanTestFixture, testOutputHelper, providerGenerator)
     {
-        _documentRemover = GetService<IDocumentRemover>();
-        commandExecutor = GetService<ICommandExecutor>();
-        aggregateLoader = GetService<IAggregateLoader>();
-        multiProjectionService = GetService<IMultiProjectionService>();
-        _hybridStoreManager = GetService<HybridStoreManager>();
-        _inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
-        _memoryCache = GetService<IMemoryCache>();
     }
 
     [Fact(DisplayName = "SubtypeのAggregateを作成する")]
     public async Task CosmosDbStory()
     {
-        // 先に全データを削除する
-        await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Default);
-        await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Dissolvable);
-        await _documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Default);
-        await _documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Dissolvable);
+        RemoveAllFromDefaultAndDissolvable();
 
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
             new AddItemToShoppingCartR { CartId = cartId, Code = "TEST1", Name = "Name1", Quantity = 1 });
@@ -154,11 +131,7 @@ public abstract class AggregateSubtypeTypeR : TestBase<FeatureCheckDependency>
     [Fact]
     public async Task SimpleCommandsTestSnapshot()
     {
-        // 先に全データを削除する
-        await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Default);
-        await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Dissolvable);
-        await _documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Default);
-        await _documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Dissolvable);
+        RemoveAllFromDefaultAndDissolvable();
 
         var snapshotCartId = Guid.NewGuid();
         for (var i = 0; i < 140; i++)
@@ -169,10 +142,7 @@ public abstract class AggregateSubtypeTypeR : TestBase<FeatureCheckDependency>
             Assert.NotNull(state);
             Assert.Equal(typeof(ShoppingCartR).Name, state.PayloadTypeName);
         }
-        // Remove in memory data
-        _inMemoryDocumentStore.ResetInMemoryStore();
-        _hybridStoreManager.ClearHybridPartitions();
-        ((MemoryCache)_memoryCache).Compact(1);
+        ResetInMemoryDocumentStoreAndCache();
 
         var stateAfter = await aggregateLoader.AsDefaultStateAsync<CartAggregateR>(snapshotCartId);
         Assert.NotNull(stateAfter);
@@ -197,11 +167,7 @@ public abstract class AggregateSubtypeTypeR : TestBase<FeatureCheckDependency>
     [Fact]
     public async Task multiProjectionsTest()
     {
-        // 先に全データを削除する
-        await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Default);
-        await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Dissolvable);
-        await _documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Default);
-        await _documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Dissolvable);
+        RemoveAllFromDefaultAndDissolvable();
 
         var cartId1 = Guid.NewGuid();
         var cartId2 = Guid.NewGuid();

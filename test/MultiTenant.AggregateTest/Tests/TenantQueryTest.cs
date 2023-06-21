@@ -18,6 +18,7 @@ public class TenantQueryTest : UnifiedTest<MultiTenantDependency>
         RunCommand(new CreateClient { Name = clientName2, TenantId = tenantId2 });
         ThenGetQueryResponse(
             new ClientListQuery.Parameter(tenantId1),
+            // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Local
             result =>
             {
                 Assert.Single(result.Items);
@@ -25,6 +26,7 @@ public class TenantQueryTest : UnifiedTest<MultiTenantDependency>
             });
         ThenGetQueryResponse(
             new ClientListQuery.Parameter(tenantId2),
+            // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Local
             result =>
             {
                 Assert.Single(result.Items);
