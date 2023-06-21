@@ -8,6 +8,7 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Query.MultiProjections;
+using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Snapshot.BackgroundServices;
 using Sekiban.Testing.Story;
@@ -23,19 +24,19 @@ namespace Sekiban.Test.CosmosDb;
 public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.SekibanTestFixture>, IDisposable
     where TDependency : IDependencyDefinition, new()
 {
-    protected readonly IDocumentPersistentWriter documentPersistentWriter;
     protected readonly IAggregateLoader aggregateLoader;
     protected readonly ICommandExecutor commandExecutor;
     protected readonly IDocumentPersistentRepository documentPersistentRepository;
+    protected readonly IDocumentPersistentWriter documentPersistentWriter;
     protected readonly IDocumentRemover documentRemover;
 
     protected readonly HybridStoreManager hybridStoreManager;
     protected readonly InMemoryDocumentStore inMemoryDocumentStore;
     protected readonly IMemoryCacheAccessor memoryCache;
     protected readonly IMultiProjectionService multiProjectionService;
+    protected readonly IQueryExecutor queryExecutor;
     protected readonly SekibanTestFixture sekibanTestFixture;
     protected readonly IServiceProvider serviceProvider;
-
     protected ITestOutputHelper _testOutputHelper => sekibanTestFixture.TestOutputHelper!;
     public TestBase(SekibanTestFixture sekibanTestFixture, ITestOutputHelper output, ISekibanServiceProviderGenerator providerGenerator)
     {
@@ -55,6 +56,7 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
         documentPersistentWriter = GetService<IDocumentPersistentWriter>();
         documentPersistentRepository = GetService<IDocumentPersistentRepository>();
         multiProjectionService = GetService<IMultiProjectionService>();
+        queryExecutor = GetService<IQueryExecutor>();
     }
 
     public void Dispose()
@@ -98,8 +100,7 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
         // Remove in memory data
         inMemoryDocumentStore.ResetInMemoryStore();
         hybridStoreManager.ClearHybridPartitions();
-        // ReSharper disable once SuspiciousTypeConversion.Global
-        ((MemoryCache)memoryCache).Compact(1);
+        (memoryCache.Cache as MemoryCache)?.Compact(1);
     }
 
     public class SekibanTestFixture : ISekibanTestFixture
