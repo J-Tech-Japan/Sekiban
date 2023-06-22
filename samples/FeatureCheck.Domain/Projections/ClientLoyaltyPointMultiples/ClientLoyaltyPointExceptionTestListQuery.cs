@@ -1,6 +1,5 @@
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.QueryModel;
-using Sekiban.Core.Query.QueryModel.Parameters;
 namespace FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
 
 public class ClientLoyaltyPointExceptionTestListQuery : IMultiProjectionListQuery<ClientLoyaltyPointMultiProjection,

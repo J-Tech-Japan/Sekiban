@@ -54,7 +54,6 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
     [Fact(DisplayName = "CosmosDb ストーリーテスト インメモリで集約の機能のテストを行う")]
     public async Task CosmosDbStory()
     {
-
         _inMemoryDocumentStore.ResetInMemoryStore();
         _hybridStoreManager.ClearHybridPartitions();
         ((MemoryCache)_memoryCacheAccessor.Cache).Compact(1);

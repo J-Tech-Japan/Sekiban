@@ -1,9 +1,9 @@
 using FeatureCheck.Domain.Shared;
 using FeatureCheck.WebApi;
-using Sekiban.Addon.Web.Dependency;
-using Sekiban.Addon.Web.SwashbuckleHelpers;
 using Sekiban.Core.Dependency;
 using Sekiban.Infrastructure.Cosmos;
+using Sekiban.Web.Dependency;
+using Sekiban.Web.SwashbuckleHelpers;
 var builder = WebApplication.CreateBuilder(args);
 
 // Sekiban Web Setting

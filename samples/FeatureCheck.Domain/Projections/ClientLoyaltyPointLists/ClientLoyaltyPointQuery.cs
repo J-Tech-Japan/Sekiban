@@ -1,6 +1,5 @@
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.QueryModel;
-using Sekiban.Core.Query.QueryModel.Parameters;
 using System.Collections.Immutable;
 namespace FeatureCheck.Domain.Projections.ClientLoyaltyPointLists;
 

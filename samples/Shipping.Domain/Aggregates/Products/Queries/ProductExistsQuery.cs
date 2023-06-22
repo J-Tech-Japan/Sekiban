@@ -1,6 +1,5 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.QueryModel;
-using Sekiban.Core.Query.QueryModel.Parameters;
 namespace ShippingContext.Aggregates.Products.Queries;
 
 public class ProductExistsQuery : IAggregateQuery<Product, ProductExistsQuery.Parameter, ProductExistsQuery.Response>

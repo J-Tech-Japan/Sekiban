@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <TargetFrameworks>net7.0;net6.0</TargetFrameworks>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\src\Sekiban.Core\Sekiban.Core.csproj" />
+    </ItemGroup>
+
+</Project>

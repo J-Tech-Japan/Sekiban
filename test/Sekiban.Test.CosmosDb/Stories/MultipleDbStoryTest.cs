@@ -1,7 +1,7 @@
 using FeatureCheck.Domain.Aggregates.Branches;
 using FeatureCheck.Domain.Aggregates.Branches.Commands;
+using FeatureCheck.Domain.Shared;
 using Sekiban.Core.Aggregate;
-using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Setting;
@@ -11,7 +11,7 @@ using Xunit;
 using Xunit.Abstractions;
 namespace Sekiban.Test.CosmosDb.Stories;
 
-public class MultipleDbStoryTest : TestBase
+public class MultipleDbStoryTest : TestBase<FeatureCheckDependency>
 {
     private const string SecondaryDb = "Secondary";
     private const string DefaultDb = "Default";
@@ -27,7 +27,6 @@ public class MultipleDbStoryTest : TestBase
     public async Task CosmosDbStory()
     {
         var cosmosDbFactory = GetService<CosmosDbFactory>();
-        var commandExecutor = GetService<ICommandExecutor>();
         var multiProjectionService = GetService<IMultiProjectionService>();
 
         // 何もしないで実行したら "Default"の動作となる

@@ -1,11 +1,9 @@
 using FeatureCheck.Domain.Aggregates.SubTypes.InheritedSubtypes;
-using Microsoft.Extensions.Caching.Memory;
+using FeatureCheck.Domain.Shared;
 using Sekiban.Core.Aggregate;
-using Sekiban.Core.Cache;
 using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Query.MultiProjections;
-using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Query.SingleProjections.Projections;
 using Sekiban.Infrastructure.Cosmos;
 using System.Threading.Tasks;
@@ -13,15 +11,9 @@ using Xunit;
 using Xunit.Abstractions;
 namespace Sekiban.Test.CosmosDb.Stories;
 
-public class InheritedSubtypeTests : TestBase
+public class InheritedSubtypeTests : TestBase<FeatureCheckDependency>
 {
     private readonly CosmosDbFactory _cosmosDbFactory;
-    private readonly IDocumentPersistentWriter _documentPersistentWriter;
-    private readonly HybridStoreManager _hybridStoreManager;
-    private readonly InMemoryDocumentStore _inMemoryDocumentStore;
-    private readonly IMemoryCacheAccessor _memoryCache;
-    private readonly IAggregateLoader aggregateLoader;
-    private readonly ICommandExecutor commandExecutor;
     private readonly ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor;
     private CommandExecutorResponseWithEvents commandResponse = default!;
 
@@ -31,16 +23,9 @@ public class InheritedSubtypeTests : TestBase
         new CosmosSekibanServiceProviderGenerator())
     {
         _cosmosDbFactory = GetService<CosmosDbFactory>();
-        commandExecutor = GetService<ICommandExecutor>();
-        aggregateLoader = GetService<IAggregateLoader>();
         GetService<IMultiProjectionService>();
-        _hybridStoreManager = GetService<HybridStoreManager>();
-        _inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
-        _memoryCache = GetService<IMemoryCacheAccessor>();
         GetService<IDocumentPersistentRepository>();
         singleProjectionSnapshotAccessor = GetService<ISingleProjectionSnapshotAccessor>();
-        _documentPersistentWriter = GetService<IDocumentPersistentWriter>();
-
     }
 
     [Fact]
@@ -64,18 +49,14 @@ public class InheritedSubtypeTests : TestBase
 
         var aggregateState = await aggregateLoader.AsDefaultStateFromInitialAsync<IInheritedAggregate>(aggregateId);
         var snapshotDocument = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(aggregateState!);
-        await _documentPersistentWriter.SaveSingleSnapshotAsync(snapshotDocument!, typeof(IInheritedAggregate), false);
+        await documentPersistentWriter.SaveSingleSnapshotAsync(snapshotDocument!, typeof(IInheritedAggregate), false);
 
-        _inMemoryDocumentStore.ResetInMemoryStore();
-        _hybridStoreManager.ClearHybridPartitions();
-        ((MemoryCache)_memoryCache.Cache).Compact(1);
+        ResetInMemoryDocumentStoreAndCache();
 
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
             new ReopenInheritedAggregate { Reason = "reopen", AggregateId = aggregateId });
 
-        _inMemoryDocumentStore.ResetInMemoryStore();
-        _hybridStoreManager.ClearHybridPartitions();
-        ((MemoryCache)_memoryCache.Cache).Compact(1);
+        ResetInMemoryDocumentStoreAndCache();
 
         aggregateState = await aggregateLoader.AsDefaultStateAsync<IInheritedAggregate>(aggregateId);
 
@@ -104,18 +85,14 @@ public class InheritedSubtypeTests : TestBase
 
         var aggregateState = await aggregateLoader.AsDefaultStateFromInitialAsync<IInheritedAggregate>(aggregateId);
         var snapshotDocument = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(aggregateState!);
-        await _documentPersistentWriter.SaveSingleSnapshotAsync(snapshotDocument!, typeof(IInheritedAggregate), true);
+        await documentPersistentWriter.SaveSingleSnapshotAsync(snapshotDocument!, typeof(IInheritedAggregate), true);
 
-        _inMemoryDocumentStore.ResetInMemoryStore();
-        _hybridStoreManager.ClearHybridPartitions();
-        ((MemoryCache)_memoryCache.Cache).Compact(1);
+        ResetInMemoryDocumentStoreAndCache();
 
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
             new ReopenInheritedAggregate { Reason = "reopen", AggregateId = aggregateId });
 
-        _inMemoryDocumentStore.ResetInMemoryStore();
-        _hybridStoreManager.ClearHybridPartitions();
-        ((MemoryCache)_memoryCache.Cache).Compact(1);
+        ResetInMemoryDocumentStoreAndCache();
 
         aggregateState = await aggregateLoader.AsDefaultStateAsync<IInheritedAggregate>(aggregateId);
 

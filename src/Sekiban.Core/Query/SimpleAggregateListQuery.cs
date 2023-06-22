@@ -1,6 +1,5 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.QueryModel;
-using Sekiban.Core.Query.QueryModel.Parameters;
 namespace Sekiban.Core.Query;
 
 public record QueryAggregateState<TAggregatePayload>(AggregateState<TAggregatePayload> AggregateState) : IQueryResponse

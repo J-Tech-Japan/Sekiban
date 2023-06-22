@@ -1,6 +1,5 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.QueryModel;
-using Sekiban.Core.Query.QueryModel.Parameters;
 namespace FeatureCheck.Domain.Aggregates.Clients.Queries;
 
 public class ClientEmailExistsQuery : IAggregateQuery<Client, ClientEmailExistsQuery.Parameter, ClientEmailExistsQuery.Response>

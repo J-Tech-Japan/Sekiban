@@ -2,6 +2,7 @@ using FeatureCheck.Domain.Aggregates.Branches;
 using FeatureCheck.Domain.Aggregates.Branches.Commands;
 using FeatureCheck.Domain.Aggregates.Clients;
 using FeatureCheck.Domain.Aggregates.Clients.Commands;
+using FeatureCheck.Domain.Shared;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
@@ -15,13 +16,10 @@ using Xunit;
 using Xunit.Abstractions;
 namespace Sekiban.Test.CosmosDb.Stories.QueryPerformances;
 
-public abstract class QueryPerformanceTestBase : TestBase
+public abstract class QueryPerformanceTestBase : TestBase<FeatureCheckDependency>
 {
     protected readonly CosmosDbFactory _cosmosDbFactory;
     protected readonly IDocumentPersistentRepository _documentPersistentRepository;
-    protected readonly HybridStoreManager _hybridStoreManager;
-    protected readonly InMemoryDocumentStore _inMemoryDocumentStore;
-    protected readonly ITestOutputHelper _testOutputHelper;
     protected readonly ICommandExecutor CommandExecutor;
     protected readonly IMultiProjectionService MultiProjectionService;
     protected readonly IAggregateLoader ProjectionService;
@@ -31,13 +29,10 @@ public abstract class QueryPerformanceTestBase : TestBase
         testOutputHelper,
         new CosmosSekibanServiceProviderGenerator())
     {
-        _testOutputHelper = testOutputHelper;
         _cosmosDbFactory = GetService<CosmosDbFactory>();
         CommandExecutor = GetService<ICommandExecutor>();
         ProjectionService = GetService<IAggregateLoader>();
         _documentPersistentRepository = GetService<IDocumentPersistentRepository>();
-        _inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
-        _hybridStoreManager = GetService<HybridStoreManager>();
         MultiProjectionService = GetService<IMultiProjectionService>();
     }
 

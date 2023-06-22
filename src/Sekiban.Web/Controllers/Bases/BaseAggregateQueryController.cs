@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.QueryModel;
-using Sekiban.Core.Query.QueryModel.Parameters;
 namespace Sekiban.Web.Controllers.Bases;
 
 [ApiController]

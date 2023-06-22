@@ -1,8 +1,8 @@
 using FeatureCheck.Domain.Shared;
-using Sekiban.Addon.Web.Authorizations;
-using Sekiban.Addon.Web.Authorizations.Definitions;
-using Sekiban.Addon.Web.Common;
-using Sekiban.Addon.Web.Dependency;
+using Sekiban.Web.Authorizations;
+using Sekiban.Web.Authorizations.Definitions;
+using Sekiban.Web.Common;
+using Sekiban.Web.Dependency;
 namespace FeatureCheck.WebApi.Dynamo;
 
 public class FeatureCheckWebDependency : FeatureCheckDependency, IWebDependencyDefinition

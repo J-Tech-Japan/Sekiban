@@ -1,5 +1,4 @@
 using Sekiban.Core.Query.QueryModel;
-using Sekiban.Core.Query.QueryModel.Parameters;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Query;
 

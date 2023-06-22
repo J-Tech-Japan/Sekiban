@@ -12,15 +12,11 @@ using FeatureCheck.Domain.Aggregates.RecentActivities.Projections;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Commands;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
+using FeatureCheck.Domain.Shared;
 using FeatureCheck.Domain.Shared.Exceptions;
-using Microsoft.Extensions.Caching.Memory;
 using Sekiban.Core.Aggregate;
-using Sekiban.Core.Cache;
-using Sekiban.Core.Command;
-using Sekiban.Core.Documents;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query;
-using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Query.SingleProjections.Projections;
 using Sekiban.Core.Setting;
@@ -37,47 +33,23 @@ using Xunit;
 using Xunit.Abstractions;
 namespace Sekiban.Test.CosmosDb.Stories.Abstracts;
 
-public abstract class CustomerDbStoryBasic : TestBase
+public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
 {
-    private readonly IDocumentPersistentRepository _documentPersistentRepository;
-    private readonly IDocumentPersistentWriter _documentPersistentWriter;
-    private readonly IDocumentRemover _documentRemover;
-    private readonly HybridStoreManager _hybridStoreManager;
-    private readonly InMemoryDocumentStore _inMemoryDocumentStore;
-    private readonly IMemoryCacheAccessor _memoryCache;
-    private readonly ITestOutputHelper _testOutputHelper;
     private readonly IBlobAccessor blobAccessor;
-    private readonly ICommandExecutor commandExecutor;
-    private readonly IMultiProjectionService multiProjectionService;
-    private readonly IAggregateLoader projectionService;
     private readonly ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor;
     public CustomerDbStoryBasic(
         SekibanTestFixture sekibanTestFixture,
         ITestOutputHelper testOutputHelper,
         ISekibanServiceProviderGenerator providerGenerator) : base(sekibanTestFixture, testOutputHelper, providerGenerator)
     {
-        _testOutputHelper = testOutputHelper;
-        _documentRemover = GetService<IDocumentRemover>();
-        commandExecutor = GetService<ICommandExecutor>();
-        projectionService = GetService<IAggregateLoader>();
-        _documentPersistentRepository = GetService<IDocumentPersistentRepository>();
-        multiProjectionService = GetService<IMultiProjectionService>();
-        _inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
-        _hybridStoreManager = GetService<HybridStoreManager>();
-        _memoryCache = GetService<IMemoryCacheAccessor>();
         singleProjectionSnapshotAccessor = GetService<ISingleProjectionSnapshotAccessor>();
-        _documentPersistentWriter = GetService<IDocumentPersistentWriter>();
         blobAccessor = GetService<IBlobAccessor>();
     }
 
     [Fact(DisplayName = "ストーリーテスト 集約の機能のテストではなく、DBと連携して正しく動くかをテストしています。")]
     public async Task DocumentDbStory()
     {
-        // 先に全データを削除する
-        await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Default);
-        await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Dissolvable);
-        await _documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Default);
-        await _documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Dissolvable);
+        RemoveAllFromDefaultAndDissolvable();
 
         // create list branch
         var branchList = await multiProjectionService.GetAggregateList<Branch>();
@@ -159,14 +131,14 @@ public abstract class CustomerDbStoryBasic : TestBase
         }
 
         // get change name state
-        var changeNameProjection = await projectionService.AsSingleProjectionStateAsync<ClientNameHistoryProjection>(clientId);
+        var changeNameProjection = await aggregateLoader.AsSingleProjectionStateAsync<ClientNameHistoryProjection>(clientId);
         Assert.NotNull(changeNameProjection);
 
         // loyalty point should be created with event subscribe
-        loyaltyPointList = await multiProjectionService.GetAggregateList<LoyaltyPoint>();
+        var __ = await multiProjectionService.GetAggregateList<LoyaltyPoint>();
         Assert.Single(clientList);
         // first point = 0
-        var loyaltyPoint = await projectionService.AsDefaultStateAsync<LoyaltyPoint>(clientId);
+        var loyaltyPoint = await aggregateLoader.AsDefaultStateAsync<LoyaltyPoint>(clientId);
         Assert.NotNull(loyaltyPoint);
         Assert.Equal(0, loyaltyPoint.Payload.CurrentPoint);
 
@@ -179,7 +151,7 @@ public abstract class CustomerDbStoryBasic : TestBase
         Assert.NotNull(addPointResult);
         Assert.NotNull(addPointResult.AggregateId);
 
-        loyaltyPoint = await projectionService.AsDefaultStateAsync<LoyaltyPoint>(clientId);
+        loyaltyPoint = await aggregateLoader.AsDefaultStateAsync<LoyaltyPoint>(clientId);
         Assert.NotNull(loyaltyPoint);
         Assert.Equal(1000, loyaltyPoint.Payload.CurrentPoint);
 
@@ -201,7 +173,7 @@ public abstract class CustomerDbStoryBasic : TestBase
         Assert.NotNull(usePointResult);
         Assert.NotNull(usePointResult.AggregateId);
 
-        loyaltyPoint = await projectionService.AsDefaultStateAsync<LoyaltyPoint>(clientId);
+        loyaltyPoint = await aggregateLoader.AsDefaultStateAsync<LoyaltyPoint>(clientId);
         Assert.NotNull(loyaltyPoint);
         Assert.Equal(800, loyaltyPoint.Payload.CurrentPoint);
 
@@ -254,14 +226,14 @@ public abstract class CustomerDbStoryBasic : TestBase
         await commandExecutor.ExecCommandAsync(new OnlyPublishingAddRecentActivity(recentActivityId, "only publish event"));
 
         // get single aggregate and applied event
-        var recentActivityState = await projectionService.AsDefaultStateAsync<RecentActivity>(recentActivityId);
+        var recentActivityState = await aggregateLoader.AsDefaultStateAsync<RecentActivity>(recentActivityId);
         Assert.Equal("only publish event", recentActivityState?.Payload.LatestActivities.First().Activity);
 
         p = await multiProjectionService.GetMultiProjectionAsync<ClientLoyaltyPointMultiProjection>();
         Assert.NotNull(p);
         Assert.Equal(3, p.Payload.Branches.Count);
         Assert.Empty(p.Payload.Records);
-        var snapshotManager = await projectionService.AsDefaultStateFromInitialAsync<SnapshotManager>(SnapshotManager.SharedId);
+        var snapshotManager = await aggregateLoader.AsDefaultStateFromInitialAsync<SnapshotManager>(SnapshotManager.SharedId);
         if (snapshotManager is null)
         {
             _testOutputHelper.WriteLine("snapshot manager is null");
@@ -287,11 +259,7 @@ public abstract class CustomerDbStoryBasic : TestBase
     [Fact]
     public async Task DocumentDbStoryLoyaltyPointThrows()
     {
-        // 先に全データを削除する
-        await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Default);
-        await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Dissolvable);
-        await _documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Default);
-        await _documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Dissolvable);
+        RemoveAllFromDefaultAndDissolvable();
 
         // create list branch
         var branchList = await multiProjectionService.GetAggregateList<Branch>();
@@ -303,7 +271,7 @@ public abstract class CustomerDbStoryBasic : TestBase
         var createClientResult = await commandExecutor.ExecCommandAsync(new CreateClient(branchId, originalName, "tanaka@example.com"));
         var clientId = createClientResult.AggregateId!.Value;
 
-        var loyaltyPoint = await projectionService.AsDefaultStateAsync<LoyaltyPoint>(clientId);
+        var loyaltyPoint = await aggregateLoader.AsDefaultStateAsync<LoyaltyPoint>(clientId);
         Assert.NotNull(loyaltyPoint);
         Assert.Equal(0, loyaltyPoint.Payload.CurrentPoint);
 
@@ -316,7 +284,7 @@ public abstract class CustomerDbStoryBasic : TestBase
         Assert.NotNull(addPointResult);
         Assert.NotNull(addPointResult.AggregateId);
 
-        loyaltyPoint = await projectionService.AsDefaultStateAsync<LoyaltyPoint>(clientId);
+        loyaltyPoint = await aggregateLoader.AsDefaultStateAsync<LoyaltyPoint>(clientId);
         Assert.NotNull(loyaltyPoint);
         Assert.Equal(1000, loyaltyPoint.Payload.CurrentPoint);
 
@@ -338,7 +306,7 @@ public abstract class CustomerDbStoryBasic : TestBase
         Assert.NotNull(usePointResult);
         Assert.NotNull(usePointResult.AggregateId);
 
-        loyaltyPoint = await projectionService.AsDefaultStateAsync<LoyaltyPoint>(clientId);
+        loyaltyPoint = await aggregateLoader.AsDefaultStateAsync<LoyaltyPoint>(clientId);
         Assert.NotNull(loyaltyPoint);
         Assert.Equal(800, loyaltyPoint.Payload.CurrentPoint);
 
@@ -372,7 +340,7 @@ public abstract class CustomerDbStoryBasic : TestBase
     [Fact]
     public async Task SnapshotTestAsync()
     {
-        await DeleteonlyAsync();
+        RemoveAllFromDefaultAndDissolvable();
         var branchResult = await commandExecutor.ExecCommandAsync(new CreateBranch("Tokyo"));
         var branchId = branchResult.AggregateId!.Value;
         var clientResult = await commandExecutor.ExecCommandAsync(new CreateClient(branchId, "name", "email@example.com"));
@@ -384,13 +352,11 @@ public abstract class CustomerDbStoryBasic : TestBase
             currentVersion = clientResult.Version;
         }
 
-        _inMemoryDocumentStore.ResetInMemoryStore();
-        _hybridStoreManager.ClearHybridPartitions();
-        ((MemoryCache)_memoryCache.Cache).Compact(1);
+        ResetInMemoryDocumentStoreAndCache();
 
-        var client = await projectionService.AsDefaultStateAsync<Client>(clientResult.AggregateId!.Value);
+        var client = await aggregateLoader.AsDefaultStateAsync<Client>(clientResult.AggregateId!.Value);
         Assert.NotNull(client);
-        var clientProjection = await projectionService.AsSingleProjectionStateAsync<ClientNameHistoryProjection>(clientResult.AggregateId!.Value);
+        var clientProjection = await aggregateLoader.AsSingleProjectionStateAsync<ClientNameHistoryProjection>(clientResult.AggregateId!.Value);
         Assert.NotNull(clientProjection);
     }
     [Fact]
@@ -403,7 +369,7 @@ public abstract class CustomerDbStoryBasic : TestBase
     [Fact]
     public async Task ManualSnapshotTestAsync()
     {
-        await DeleteonlyAsync();
+        RemoveAllFromDefaultAndDissolvable();
         var branchResult = await commandExecutor.ExecCommandAsync(new CreateBranch("Tokyo"));
         var branchId = branchResult.AggregateId!.Value;
         var clientResult = await commandExecutor.ExecCommandAsync(new CreateClient(branchId, "name", "email@example.com"));
@@ -417,14 +383,14 @@ public abstract class CustomerDbStoryBasic : TestBase
 
         var aggregateId = clientResult.AggregateId!.Value;
 
-        var client1 = await projectionService.AsDefaultStateFromInitialAsync<Client>(aggregateId, toVersion: 80);
+        var client1 = await aggregateLoader.AsDefaultStateFromInitialAsync<Client>(aggregateId, toVersion: 80);
         var clientSnapshot = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(client1!);
-        await _documentPersistentWriter.SaveSingleSnapshotAsync(clientSnapshot!, typeof(Client), false);
-        var client2 = await projectionService.AsDefaultStateFromInitialAsync<Client>(aggregateId);
+        await documentPersistentWriter.SaveSingleSnapshotAsync(clientSnapshot!, typeof(Client), false);
+        var client2 = await aggregateLoader.AsDefaultStateFromInitialAsync<Client>(aggregateId);
         var clientSnapshot2 = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(client2!);
-        await _documentPersistentWriter.SaveSingleSnapshotAsync(clientSnapshot2!, typeof(Client), true);
+        await documentPersistentWriter.SaveSingleSnapshotAsync(clientSnapshot2!, typeof(Client), true);
 
-        var snapshots = await _documentPersistentRepository.GetSnapshotsForAggregateAsync(aggregateId, typeof(Client), typeof(Client));
+        var snapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(aggregateId, typeof(Client), typeof(Client));
 
         Assert.Contains(clientSnapshot!.Id, snapshots.Select(m => m.Id));
         var clientFromSnapshot = snapshots.First(m => m.Id == clientSnapshot.Id).GetState();
@@ -435,17 +401,16 @@ public abstract class CustomerDbStoryBasic : TestBase
         Assert.NotNull(clientFromSnapshot2);
 
         var projection1
-            = await projectionService.AsSingleProjectionStateFromInitialAsync<ClientNameHistoryProjection>(
+            = await aggregateLoader.AsSingleProjectionStateFromInitialAsync<ClientNameHistoryProjection>(
                 clientResult.AggregateId!.Value,
                 toVersion: 80);
         var projectionSnapshot = await singleProjectionSnapshotAccessor.SnapshotDocumentFromSingleProjectionStateAsync(projection1!, typeof(Client));
-        await _documentPersistentWriter.SaveSingleSnapshotAsync(projectionSnapshot!, typeof(Client), false);
-        var projection2
-            = await projectionService.AsSingleProjectionStateFromInitialAsync<ClientNameHistoryProjection>(clientResult.AggregateId!.Value);
+        await documentPersistentWriter.SaveSingleSnapshotAsync(projectionSnapshot!, typeof(Client), false);
+        var projection2 = await aggregateLoader.AsSingleProjectionStateFromInitialAsync<ClientNameHistoryProjection>(clientResult.AggregateId!.Value);
         var projectionSnapshot2 = await singleProjectionSnapshotAccessor.SnapshotDocumentFromSingleProjectionStateAsync(projection2!, typeof(Client));
-        await _documentPersistentWriter.SaveSingleSnapshotAsync(projectionSnapshot2!, typeof(Client), true);
+        await documentPersistentWriter.SaveSingleSnapshotAsync(projectionSnapshot2!, typeof(Client), true);
 
-        var projectionSnapshots = await _documentPersistentRepository.GetSnapshotsForAggregateAsync(
+        var projectionSnapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(
             aggregateId,
             typeof(Client),
             typeof(ClientNameHistoryProjection));
@@ -463,15 +428,7 @@ public abstract class CustomerDbStoryBasic : TestBase
 
 
     [Fact(DisplayName = "ストーリーテスト用に削除のみを行う 。")]
-    public async Task DeleteonlyAsync()
-    {
-        // 先に全データを削除する
-        await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Default);
-        await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Dissolvable);
-        await _documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Default);
-        await _documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Dissolvable);
-
-    }
+    public void DeleteOnlyTest() => RemoveAllFromDefaultAndDissolvable();
 
     [Trait(SekibanTestConstants.Category, SekibanTestConstants.Categories.Flaky)]
     [Fact(DisplayName = "No Flaky Test For now. This is just empty test")]
@@ -483,12 +440,7 @@ public abstract class CustomerDbStoryBasic : TestBase
     [Trait(SekibanTestConstants.Category, SekibanTestConstants.Categories.Flaky)]
     public async Task AsynchronousExecutionTestAsync()
     {
-        // 先に全データを削除する
-        await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Default);
-        await _documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Dissolvable);
-        await _documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Default);
-        await _documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Dissolvable);
-
+        RemoveAllFromDefaultAndDissolvable();
 
         // create recent activity
         var createRecentActivityResult = await commandExecutor.ExecCommandAsync(new CreateRecentActivity());
@@ -514,18 +466,18 @@ public abstract class CustomerDbStoryBasic : TestBase
         await Task.WhenAll(tasks);
         recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
         Assert.Single(recentActivityList);
-        var projection = await projectionService.AsSingleProjectionStateAsync<TenRecentProjection>(createRecentActivityResult.AggregateId!.Value);
+        var projection = await aggregateLoader.AsSingleProjectionStateAsync<TenRecentProjection>(createRecentActivityResult.AggregateId!.Value);
         Assert.NotNull(projection);
         // this works
         var aggregateRecentActivity
-            = await projectionService.AsDefaultStateFromInitialAsync<RecentActivity>(createRecentActivityResult.AggregateId!.Value);
-        var aggregateRecentActivity2 = await projectionService.AsDefaultStateAsync<RecentActivity>(createRecentActivityResult.AggregateId!.Value);
+            = await aggregateLoader.AsDefaultStateFromInitialAsync<RecentActivity>(createRecentActivityResult.AggregateId!.Value);
+        var aggregateRecentActivity2 = await aggregateLoader.AsDefaultStateAsync<RecentActivity>(createRecentActivityResult.AggregateId!.Value);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + 1, aggregateRecentActivity.Version);
         Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
 
-        var snapshotManager = await projectionService.AsDefaultStateFromInitialAsync<SnapshotManager>(SnapshotManager.SharedId);
+        var snapshotManager = await aggregateLoader.AsDefaultStateFromInitialAsync<SnapshotManager>(SnapshotManager.SharedId);
         _testOutputHelper.WriteLine("-requests-");
         foreach (var key in snapshotManager!.Payload.Requests)
         {
@@ -537,28 +489,26 @@ public abstract class CustomerDbStoryBasic : TestBase
             _testOutputHelper.WriteLine(key);
         }
 
-        var snapshots = await _documentPersistentRepository.GetSnapshotsForAggregateAsync(
+        var snapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(
             createRecentActivityResult.AggregateId!.Value,
             typeof(RecentActivity),
             typeof(RecentActivity));
 
         await CheckSnapshots<RecentActivity>(snapshots, createRecentActivityResult.AggregateId!.Value);
 
-        var snapshots2 = await _documentPersistentRepository.GetSnapshotsForAggregateAsync(
+        var snapshots2 = await documentPersistentRepository.GetSnapshotsForAggregateAsync(
             createRecentActivityResult.AggregateId!.Value,
             typeof(RecentActivity),
             typeof(TenRecentProjection));
 
         await CheckProjectionSnapshots<TenRecentProjection>(snapshots2, createRecentActivityResult.AggregateId!.Value);
 
-        await _documentPersistentRepository.GetSnapshotsForAggregateAsync(
+        await documentPersistentRepository.GetSnapshotsForAggregateAsync(
             createRecentActivityResult.AggregateId!.Value,
             typeof(RecentActivity),
             typeof(TenRecentProjection));
 
-        _inMemoryDocumentStore.ResetInMemoryStore();
-        _hybridStoreManager.ClearHybridPartitions();
-        ((MemoryCache)_memoryCache.Cache).Compact(1);
+        ResetInMemoryDocumentStoreAndCache();
         await ContinuousExecutionTestAsync();
     }
 
@@ -576,7 +526,7 @@ public abstract class CustomerDbStoryBasic : TestBase
                 throw new SekibanInvalidArgumentException($"Snapshot {snapshot.AggregateType} {snapshot.SavedVersion}  is null");
             }
             _testOutputHelper.WriteLine($"Snapshot {snapshot.AggregateType}  {snapshot.Id}  {snapshot.SavedVersion}  is not null");
-            var fromInitial = await projectionService.AsDefaultStateFromInitialAsync<TAggregatePayload>(aggregateId, toVersion: state.Version);
+            var fromInitial = await aggregateLoader.AsDefaultStateFromInitialAsync<TAggregatePayload>(aggregateId, toVersion: state.Version);
             if (fromInitial is null)
             {
                 throw new SekibanInvalidArgumentException();
@@ -604,8 +554,7 @@ public abstract class CustomerDbStoryBasic : TestBase
             }
             _testOutputHelper.WriteLine(
                 $"Snapshot {snapshot.AggregateType} {snapshot.DocumentTypeName} {snapshot.Id}  {snapshot.SavedVersion}  is not null");
-            var fromInitial
-                = await projectionService.AsSingleProjectionStateFromInitialAsync<TAggregatePayload>(aggregateId, toVersion: state.Version);
+            var fromInitial = await aggregateLoader.AsSingleProjectionStateFromInitialAsync<TAggregatePayload>(aggregateId, toVersion: state.Version);
             if (fromInitial is null)
             {
                 throw new SekibanInvalidArgumentException();
@@ -646,9 +595,9 @@ public abstract class CustomerDbStoryBasic : TestBase
         Assert.Single(recentActivityList);
 
         var aggregateRecentActivity
-            = await projectionService.AsDefaultStateFromInitialAsync<RecentInMemoryActivity>(createRecentActivityResult.AggregateId!.Value);
+            = await aggregateLoader.AsDefaultStateFromInitialAsync<RecentInMemoryActivity>(createRecentActivityResult.AggregateId!.Value);
         var aggregateRecentActivity2
-            = await projectionService.AsDefaultStateAsync<RecentInMemoryActivity>(createRecentActivityResult.AggregateId!.Value);
+            = await aggregateLoader.AsDefaultStateAsync<RecentInMemoryActivity>(createRecentActivityResult.AggregateId!.Value);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + 1, aggregateRecentActivity.Version);
@@ -662,9 +611,9 @@ public abstract class CustomerDbStoryBasic : TestBase
         Assert.Single(recentActivityList);
         var aggregateId = recentActivityList.First().AggregateId;
 
-        var aggregate = await projectionService.AsAggregateAsync<RecentActivity>(aggregateId);
+        var aggregate = await aggregateLoader.AsAggregateAsync<RecentActivity>(aggregateId);
         Assert.NotNull(aggregate);
-        var _ = await projectionService.AsDefaultStateAsync<RecentActivity>(aggregateId);
+        var _ = await aggregateLoader.AsDefaultStateAsync<RecentActivity>(aggregateId);
 
         //var aggregateRecentActivity =
         //    await projectionService
@@ -696,12 +645,12 @@ public abstract class CustomerDbStoryBasic : TestBase
 
         _testOutputHelper.WriteLine("518");
 
-        var snapshots = await _documentPersistentRepository.GetSnapshotsForAggregateAsync(
+        var snapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(
             aggregateId,
             typeof(RecentActivity),
             typeof(RecentActivity));
         await CheckSnapshots<RecentActivity>(snapshots, aggregateId);
-        var projectionSnapshots = await _documentPersistentRepository.GetSnapshotsForAggregateAsync(
+        var projectionSnapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(
             aggregateId,
             typeof(RecentActivity),
             typeof(TenRecentProjection));
@@ -709,14 +658,14 @@ public abstract class CustomerDbStoryBasic : TestBase
         await CheckProjectionSnapshots<TenRecentProjection>(projectionSnapshots, aggregateId);
 
         // check aggregate result
-        var aggregateRecentActivity = await projectionService.AsDefaultStateFromInitialAsync<RecentActivity>(aggregateId);
-        var aggregateRecentActivity2 = await projectionService.AsDefaultStateAsync<RecentActivity>(aggregateId);
+        var aggregateRecentActivity = await aggregateLoader.AsDefaultStateFromInitialAsync<RecentActivity>(aggregateId);
+        var aggregateRecentActivity2 = await aggregateLoader.AsDefaultStateAsync<RecentActivity>(aggregateId);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + aggregate.ToState().Version, aggregateRecentActivity.Version);
         Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
 
-        var snapshotManager = await projectionService.AsDefaultStateFromInitialAsync<SnapshotManager>(SnapshotManager.SharedId);
+        var snapshotManager = await aggregateLoader.AsDefaultStateFromInitialAsync<SnapshotManager>(SnapshotManager.SharedId);
         _testOutputHelper.WriteLine("-requests-");
         foreach (var key in snapshotManager!.Payload.Requests)
         {

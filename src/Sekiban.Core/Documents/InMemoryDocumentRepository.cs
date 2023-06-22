@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Events;
+using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
@@ -51,8 +52,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         if (string.IsNullOrWhiteSpace(sinceSortableUniqueId))
         {
             resultAction(list.OrderBy(m => m.SortableUniqueId));
-        }
-        else
+        } else
         {
             var index = list.Any(m => m.SortableUniqueId == sinceSortableUniqueId)
                 ? list.FindIndex(m => m.SortableUniqueId == sinceSortableUniqueId)
@@ -109,23 +109,24 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             ? string.Empty
             : sekibanContext.SettingGroupIdentifier;
         await Task.CompletedTask;
-        var list = _inMemoryDocumentStore.GetAllEvents(sekibanIdentifier).ToList();
+        var list = _inMemoryDocumentStore.GetAllEvents(sekibanIdentifier)
+            .Where(m => rootPartitionKey == IMultiProjectionService.ProjectionAllRootPartitions ? true : m.RootPartitionKey == rootPartitionKey)
+            .ToList();
+
         if (sinceSortableUniqueId is not null)
         {
             var index = list.FindIndex(m => m.SortableUniqueId == sinceSortableUniqueId);
             if (index == list.Count - 1)
             {
                 resultAction(new List<IEvent>());
-            }
-            else
+            } else
             {
                 resultAction(
                     list.GetRange(index + 1, list.Count - index - 1)
                         .Where(m => targetAggregateNames.Count == 0 || targetAggregateNames.Contains(m.AggregateType))
                         .OrderBy(m => m.SortableUniqueId));
             }
-        }
-        else
+        } else
         {
             resultAction(
                 list.Where(m => targetAggregateNames.Count == 0 || targetAggregateNames.Contains(m.AggregateType)).OrderBy(m => m.SortableUniqueId));
@@ -200,20 +201,20 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             ? string.Empty
             : sekibanContext.SettingGroupIdentifier;
 
-        var list = _inMemoryDocumentStore.GetAllEvents(sekibanIdentifier).Where(m => m.AggregateType == aggregatePayloadType.Name && m.RootPartitionKey == rootPartitionKey).ToList();
+        var list = _inMemoryDocumentStore.GetAllEvents(sekibanIdentifier)
+            .Where(m => m.AggregateType == aggregatePayloadType.Name && m.RootPartitionKey == rootPartitionKey)
+            .ToList();
         if (sinceSortableUniqueId is not null)
         {
             var index = list.FindIndex(m => m.SortableUniqueId == sinceSortableUniqueId);
             if (index == list.Count - 1)
             {
                 resultAction(new List<IEvent>());
-            }
-            else
+            } else
             {
                 resultAction(list.GetRange(index + 1, list.Count - index - 1).OrderBy(m => m.SortableUniqueId));
             }
-        }
-        else
+        } else
         {
             resultAction(list.OrderBy(m => m.SortableUniqueId));
         }
