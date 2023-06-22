@@ -12,7 +12,7 @@ namespace Sekiban.Test.CosmosDb.Stories.Abstracts;
 public abstract class MultiTenantDocumentTests : TestBase<MultiTenantDependency>
 {
     private const string clientName1 = "Tenant Name 1";
-    private const string clientName2 = "Tenant Name 1";
+    private const string clientName2 = "Tenant Name 2";
     private const string tenantId1 = "tenant-1";
     private const string tenantId2 = "tenant-2";
 
