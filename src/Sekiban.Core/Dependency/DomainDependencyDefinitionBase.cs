@@ -16,6 +16,8 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
 
     private ImmutableList<Type> MultiProjectionQueryTypes { get; set; } = ImmutableList<Type>.Empty;
     private ImmutableList<Type> MultiProjectionListQueryTypes { get; set; } = ImmutableList<Type>.Empty;
+    private ImmutableList<Type> GeneralQueryTypes { get; set; } = ImmutableList<Type>.Empty;
+    private ImmutableList<Type> GeneralListQueryTypes { get; set; } = ImmutableList<Type>.Empty;
     private ImmutableList<Assembly> Assemblies { get; set; } = ImmutableList<Assembly>.Empty;
     protected DomainDependencyDefinitionBase()
     {
@@ -57,6 +59,8 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
     public IEnumerable<Type> GetMultiProjectionQueryTypes() => MultiProjectionQueryTypes;
 
     public IEnumerable<Type> GetMultiProjectionListQueryTypes() => MultiProjectionListQueryTypes;
+    public IEnumerable<Type> GetGeneralQueryTypes() => GeneralQueryTypes;
+    public IEnumerable<Type> GetGeneralListQueryTypes() => GeneralListQueryTypes;
 
     public virtual SekibanDependencyOptions GetSekibanDependencyOptions() =>
         new(
@@ -122,6 +126,28 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
         } else
         {
             throw new ArgumentException("Type must implement MultiProjectionListQuery", typeof(TQuery).Name);
+        }
+    }
+
+    protected void AddGeneralQuery<TQuery>()
+    {
+        if (typeof(TQuery).IsGeneralQueryType())
+        {
+            GeneralQueryTypes = GeneralQueryTypes.Add(typeof(TQuery));
+        } else
+        {
+            throw new ArgumentException("Type must implement GeneralQuery", typeof(TQuery).Name);
+        }
+    }
+
+    protected void AddGeneralListQuery<TQuery>()
+    {
+        if (typeof(TQuery).IsGeneralListQueryType())
+        {
+            GeneralListQueryTypes = GeneralListQueryTypes.Add(typeof(TQuery));
+        } else
+        {
+            throw new ArgumentException("Type must implement GeneralListQuery", typeof(TQuery).Name);
         }
     }
 

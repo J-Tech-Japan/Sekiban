@@ -165,6 +165,21 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                     }
                 });
         }
+        if (controller.ControllerType.IsGenericType &&
+            new List<string> { _webDependencyDefinition.Options.BaseGeneralListQueryControllerType.Name }.Contains(controller.ControllerType.Name))
+        {
+            var queryType = controller.ControllerType.GenericTypeArguments[0];
+            controller.ControllerName = queryType.Name;
+            controller.Selectors.Add(
+                new SelectorModel
+                {
+                    AttributeRouteModel = new AttributeRouteModel(
+                        new RouteAttribute($"{_webDependencyDefinition.Options.QueryPrefix}/{queryType.Name.Replace("`", "").ToLower()}"))
+                    {
+                        Name = queryType.Name
+                    }
+                });
+        }
 
         if (controller.ControllerType.IsGenericType &&
             new List<string> { _webDependencyDefinition.Options.BaseMultiProjectionQueryControllerType.Name }
@@ -181,6 +196,21 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                             $"{_webDependencyDefinition.Options.QueryPrefix}/{projectionType.Name.ToLower()}/{queryType.Name.Replace("`", "").ToLower()}"))
                     {
                         Name = projectionType.Name + queryType.Name
+                    }
+                });
+        }
+        if (controller.ControllerType.IsGenericType &&
+            new List<string> { _webDependencyDefinition.Options.BaseGeneralQueryControllerType.Name }.Contains(controller.ControllerType.Name))
+        {
+            var queryType = controller.ControllerType.GenericTypeArguments[0];
+            controller.ControllerName = queryType.Name;
+            controller.Selectors.Add(
+                new SelectorModel
+                {
+                    AttributeRouteModel = new AttributeRouteModel(
+                        new RouteAttribute($"{_webDependencyDefinition.Options.QueryPrefix}/{queryType.Name.Replace("`", "").ToLower()}"))
+                    {
+                        Name = queryType.Name
                     }
                 });
         }

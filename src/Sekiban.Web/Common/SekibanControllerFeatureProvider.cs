@@ -131,6 +131,34 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
                     .GetTypeInfo());
         }
 
+        foreach (var queryType in _webDependencyDefinition.GetGeneralListQueryTypes())
+        {
+            if (!queryType.IsGeneralListQueryType())
+            {
+                continue;
+            }
+            feature.Controllers.Add(
+                _webDependencyDefinition.Options.BaseGeneralListQueryControllerType.MakeGenericType(
+                        queryType,
+                        queryType.GetParamTypeFromGeneralListQueryType(),
+                        queryType.GetResponseTypeFromGeneralListQueryType())
+                    .GetTypeInfo());
+        }
+
+        foreach (var queryType in _webDependencyDefinition.GetGeneralQueryTypes())
+        {
+            if (!queryType.IsGeneralQueryType())
+            {
+                continue;
+            }
+            feature.Controllers.Add(
+                _webDependencyDefinition.Options.BaseGeneralQueryControllerType.MakeGenericType(
+                        queryType,
+                        queryType.GetParamTypeFromGeneralQueryType(),
+                        queryType.GetResponseTypeFromGeneralQueryType())
+                    .GetTypeInfo());
+        }
+
         feature.Controllers.Add(_webDependencyDefinition.Options.BaseIndexControllerType.MakeGenericType(typeof(object)).GetTypeInfo());
     }
 }
