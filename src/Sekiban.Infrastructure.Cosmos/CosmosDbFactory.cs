@@ -114,7 +114,9 @@ public class CosmosDbFactory
             AllowBulkExecution = true,
             MaxRequestsPerTcpConnection = 200,
             MaxRetryAttemptsOnRateLimitedRequests = 200,
-            MaxTcpConnectionsPerEndpoint = 200
+            MaxTcpConnectionsPerEndpoint = 200,
+            ConnectionMode = ConnectionMode.Gateway,
+            GatewayModeMaxConnectionLimit = 200
         };
         var client = _memoryCache.Cache.Get<CosmosClient?>(GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier));
         if (client is null)
