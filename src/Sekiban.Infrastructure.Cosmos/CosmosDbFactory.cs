@@ -112,7 +112,7 @@ public class CosmosDbFactory
         {
             Serializer = new SekibanCosmosSerializer(),
             AllowBulkExecution = true,
-            MaxRequestsPerTcpConnection = 200,
+            // MaxRequestsPerTcpConnection = 200,
             MaxRetryAttemptsOnRateLimitedRequests = 200,
             MaxTcpConnectionsPerEndpoint = 200,
             ConnectionMode = ConnectionMode.Gateway,
