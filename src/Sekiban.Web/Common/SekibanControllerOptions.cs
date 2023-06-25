@@ -18,6 +18,9 @@ public class SekibanControllerOptions
     public Type BaseMultiProjectionQueryControllerType { get; set; } = typeof(BaseMultiProjectionQueryController<,,,>);
 
     public Type BaseMultiProjectionListQueryControllerType { get; set; } = typeof(BaseMultiProjectionListQueryController<,,,>);
+    public Type BaseGeneralQueryControllerType { get; set; } = typeof(BaseGeneralQueryController<,,>);
+
+    public Type BaseGeneralListQueryControllerType { get; set; } = typeof(BaseGeneralListQueryController<,,>);
 
     public string CreateCommandPrefix { get; set; } = "api/command";
     public string ChangeCommandPrefix { get; set; } = "api/command";

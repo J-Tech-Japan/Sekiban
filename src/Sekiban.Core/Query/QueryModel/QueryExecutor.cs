@@ -58,6 +58,16 @@ public class QueryExecutor : IQueryExecutor
                 throw new Exception("Can not find method ForAggregateListQueryAsync"));
             return result;
         }
+        if (handlerType.IsGeneralListQueryType())
+        {
+            var baseMethod = GetType().GetMethod(nameof(ForGeneralListQueryAsync)) ??
+                throw new Exception("Can not find method ForGeneralListQueryAsync");
+            var method = (MethodInfo?)baseMethod.MakeGenericMethod(handler.GetType(), paramType, outputType) ??
+                throw new Exception("Can not find method ForGeneralListQueryAsync");
+            var result = await (dynamic)(method.Invoke(this, new object?[] { param }) ??
+                throw new Exception("Can not find method ForGeneralListQueryAsync"));
+            return result;
+        }
         throw new Exception("Can not find query handler for" + paramType.Name);
     }
     public async Task<TOutput> ExecuteAsync<TOutput>(IQueryInput<TOutput> param) where TOutput : IQueryResponse
@@ -101,6 +111,14 @@ public class QueryExecutor : IQueryExecutor
                 throw new Exception("Can not find method For MultiProjectionQuery"));
             return result;
         }
+        if (handlerType.IsGeneralQueryType())
+        {
+            var baseMethod = GetType().GetMethod(nameof(ForGeneralQueryAsync)) ?? throw new Exception("Can not find method For GeneralQuery");
+            var method = (MethodInfo?)baseMethod.MakeGenericMethod(handler.GetType(), paramType, outputType) ??
+                throw new Exception("Can not find method For GeneralQuery");
+            var result = await (dynamic)(method.Invoke(this, new object?[] { param }) ?? throw new Exception("Can not find method For GeneralQuery"));
+            return result;
+        }
         throw new Exception("Can not find query handler for" + paramType.Name);
     }
 
@@ -128,6 +146,20 @@ public class QueryExecutor : IQueryExecutor
             SortableUniqueIdValue.GetShouldIncludeSortableUniqueIdValue(param));
         return queryHandler.GetMultiProjectionListQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param, allProjection);
     }
+
+    public async Task<ListQueryResult<TQueryResponse>> ForGeneralListQueryAsync<TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
+        where TQuery : IGeneralListQuery<TQueryParameter, TQueryResponse>
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse =>
+        await queryHandler.GetGeneralListQueryAsync<TQuery, TQueryParameter, TQueryResponse>(param);
+
+    public async Task<TQueryResponse> ForGeneralQueryAsync<TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
+        where TQuery : IGeneralQuery<TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse =>
+        await queryHandler.GetGeneralQueryAsync<TQuery, TQueryParameter, TQueryResponse>(param);
+
+
 
     public async Task<ListQueryResult<TQueryResponse>>
         ForAggregateListQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)

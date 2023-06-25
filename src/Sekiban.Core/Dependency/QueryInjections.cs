@@ -33,6 +33,12 @@ public static class QueryInjections
                 var output = type.GetResponseTypeFromMultiProjectionListQueryType();
                 services.AddTransient(typeof(IListQueryHandlerCommon<,>).MakeGenericType(input, output), type);
             }
+            if (type.IsGeneralListQueryType())
+            {
+                var input = type.GetParamTypeFromGeneralListQueryType();
+                var output = type.GetResponseTypeFromGeneralListQueryType();
+                services.AddTransient(typeof(IListQueryHandlerCommon<,>).MakeGenericType(input, output), type);
+            }
 
             if (type.IsAggregateQueryType())
             {
@@ -53,6 +59,13 @@ public static class QueryInjections
                 services.AddTransient(typeof(IQueryHandlerCommon<,>).MakeGenericType(input, output), type);
             }
 
+            if (type.IsGeneralQueryType())
+            {
+                var input = type.GetParamTypeFromGeneralQueryType();
+                var output = type.GetResponseTypeFromGeneralQueryType();
+                services.AddTransient(typeof(IQueryHandlerCommon<,>).MakeGenericType(input, output), type);
+            }
+
         }
         return services;
     }
@@ -66,7 +79,9 @@ public static class QueryInjections
             dependencyDefinition.GetSingleProjectionQueryTypes(),
             dependencyDefinition.GetSingleProjectionListQueryTypes(),
             dependencyDefinition.GetMultiProjectionQueryTypes(),
-            dependencyDefinition.GetMultiProjectionListQueryTypes());
+            dependencyDefinition.GetMultiProjectionListQueryTypes(),
+            dependencyDefinition.GetGeneralQueryTypes(),
+            dependencyDefinition.GetGeneralListQueryTypes());
         return services;
     }
 }

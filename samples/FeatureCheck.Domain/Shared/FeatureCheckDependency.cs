@@ -31,6 +31,7 @@ using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.ShoppingC
 using FeatureCheck.Domain.Aggregates.VersionCheckAggregates;
 using FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Commands;
 using FeatureCheck.Domain.EventSubscribers;
+using FeatureCheck.Domain.Projections;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointLists;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
 using FeatureCheck.Domain.Projections.DissolvableProjection;
@@ -108,6 +109,8 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
         AddMultiProjectionQuery<DissolvableProjectionQuery>();
         AddMultiProjectionQuery<ClientLoyaltyPointExceptionTestQuery>();
         AddMultiProjectionListQuery<ClientLoyaltyPointExceptionTestListQuery>();
+        AddGeneralQuery<GeneralQuerySample>();
+        AddGeneralListQuery<GeneralListQuerySample>();
 
         AddAggregate<IInheritedAggregate>()
             .AddSubtype<ProcessingSubAggregate>(

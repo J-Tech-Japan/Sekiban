@@ -50,6 +50,41 @@ public class QueryHandler
     }
 
 
+    public async Task<ListQueryResult<TQueryResponse>> GetGeneralListQueryAsync<TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
+        where TQuery : IGeneralListQuery<TQueryParameter, TQueryResponse>
+        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
+    {
+        var query = _serviceProvider.GetService<TQuery>();
+        if (query is null)
+        {
+            throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
+        }
+        var filtered = await query.HandleFilterAsync(param);
+        var sorted = query.HandleSort(param, filtered);
+        var queryResponses = sorted.ToList();
+        if (param is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam)
+        {
+            return makeQueryListResult(pagingParam, queryResponses);
+        }
+        return new ListQueryResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
+    }
+
+    public async Task<TQueryResponse> GetGeneralQueryAsync<TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
+        where TQuery : IGeneralQuery<TQueryParameter, TQueryResponse>
+        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryResponse : IQueryResponse
+    {
+        var query = _serviceProvider.GetService<TQuery>();
+        if (query is null)
+        {
+            throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
+        }
+        var filtered = await query.HandleFilterAsync(param);
+        return filtered;
+    }
+
+
     public ListQueryResult<TQueryResponse> GetAggregateListQuery<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
         TQueryParameter param,
         IEnumerable<AggregateState<TAggregatePayload>> list) where TAggregatePayload : IAggregatePayloadCommon
