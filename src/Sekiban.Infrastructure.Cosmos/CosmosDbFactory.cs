@@ -8,7 +8,6 @@ using Sekiban.Core.Documents;
 using Sekiban.Core.Events;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
-using Sekiban.Infrastructure.Cosmos.Lib.Json;
 namespace Sekiban.Infrastructure.Cosmos;
 
 public class CosmosDbFactory
@@ -16,6 +15,7 @@ public class CosmosDbFactory
     private const string SekibanSection = "Sekiban";
     private readonly IConfiguration _configuration;
     private readonly IMemoryCacheAccessor _memoryCache;
+    private readonly SekibanCosmosOptions _options;
     private readonly string _sekibanContextIdentifier;
     private readonly IServiceProvider _serviceProvider;
 
@@ -37,11 +37,13 @@ public class CosmosDbFactory
         IConfiguration configuration,
         IMemoryCacheAccessor memoryCache,
         ISekibanContext sekibanContext,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        SekibanCosmosOptions options)
     {
         _configuration = configuration;
         _memoryCache = memoryCache;
         _serviceProvider = serviceProvider;
+        _options = options;
         _sekibanContextIdentifier = sekibanContext.SettingGroupIdentifier;
     }
 
@@ -108,16 +110,7 @@ public class CosmosDbFactory
         var uri = GetUri(documentType);
         var securityKey = GetSecurityKey(documentType);
 
-        var options = new CosmosClientOptions
-        {
-            Serializer = new SekibanCosmosSerializer(),
-            AllowBulkExecution = true,
-            // MaxRequestsPerTcpConnection = 200,
-            MaxRetryAttemptsOnRateLimitedRequests = 200,
-            // MaxTcpConnectionsPerEndpoint = 200,
-            ConnectionMode = ConnectionMode.Gateway,
-            GatewayModeMaxConnectionLimit = 200
-        };
+        var options = _options.ClientOptions;
         var client = _memoryCache.Cache.Get<CosmosClient?>(GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier));
         if (client is null)
         {
