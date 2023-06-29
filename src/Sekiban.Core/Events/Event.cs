@@ -22,7 +22,7 @@ public record Event<TEventPayload> : Document, IEvent where TEventPayload : IEve
         Payload = eventPayload;
 
     /// <summary>
-    ///     集約のイベント適用後のバージョン
+    ///     Version after applying the aggregate event.
     /// </summary>
     public int Version { get; init; }
 

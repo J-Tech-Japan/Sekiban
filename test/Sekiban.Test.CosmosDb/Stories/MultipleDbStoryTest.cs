@@ -23,7 +23,7 @@ public class MultipleDbStoryTest : TestBase<FeatureCheckDependency>
         new CosmosSekibanServiceProviderGenerator()) =>
         _sekibanContext = GetService<ISekibanContext>();
 
-    [Fact(DisplayName = "CosmosDb ストーリーテスト 複数データベースでの動作を検証する")]
+    [Fact(DisplayName = "Verify the operation with multiple databases in the CosmosDb story test.")]
     public async Task CosmosDbStory()
     {
         var cosmosDbFactory = GetService<CosmosDbFactory>();

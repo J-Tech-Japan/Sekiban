@@ -199,7 +199,7 @@ public static class ServiceCollectionExtensions
 
     public static IServiceCollection AddSekibanHTTPUser(this IServiceCollection services, HttpContextType contextType = HttpContextType.Local)
     {
-        // ユーザー情報
+        // Users Information
         services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
         switch (contextType)
         {
@@ -216,14 +216,14 @@ public static class ServiceCollectionExtensions
 
     public static IServiceCollection AddSekibanSettingsFromAppSettings(this IServiceCollection services)
     {
-        // 設定はConfigurationから指定することもできる、設定オブジェクトをnewで生成することも可能
+        // Settings can be specified from the Configuration, and a settings object can also be created with new.
         services.AddTransient<IAggregateSettings, ConfigurationAggregateSettings>();
         return services;
     }
 
     public static IServiceCollection AddSekibanAppSettingsFromObject(this IServiceCollection services, AggregateSettings settings)
     {
-        // 例
+        // Example
         // services.AddSingleton<IAggregateSettings>(
         //     new AggregateSettings
         //     {

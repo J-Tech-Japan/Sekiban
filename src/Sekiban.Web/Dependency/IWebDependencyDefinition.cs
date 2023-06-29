@@ -10,33 +10,33 @@ public interface IWebDependencyDefinition : IQueryDefinition
 
     public bool ShouldMakeSimpleSingleProjectionListQueries { get; }
 
-    // パターン1: Member コマンドだけAdnministrator必要
+    // Pattern 1: Only Member command requires Administrator.
     //new AuthorizeDefinitionCollection(
-    //    // Memberのコマンドに関しては、SiteAdministratorのみを許可する
+    //    // For Member commands, only allow SiteAdministrator.
     //    new AllowOnlyWithRolesAndDenyIfNot<AllCommandsForAggregate<Member>, SomuAppRole>(SomuAppRole.SiteAdministrator),
-    //    // その他全てのメソッドはSomuAppUserを許可する
+    //    // All other methods allow SomuAppUser.
     //    new AllowWithRoles<AllMethod, SomuAppRole>(SomuAppRole.SomuAppUser),
-    //    // その他全ては不許可とする
+    //    // All other situations are not allowed.
     //    new Deny<AllMethod>()
     //)
-    // パターン2: ログインしていれば全てOK
+    // Pattern 2: Everything is OK if logged in.
     //new AuthorizeDefinitionCollection(
-    //    // 全てのメソッドはログインしていればOK
+    //    // All methods are OK if logged in.
     //    new AllowIfLoggedIn<AllMethod>()
     //)
-    // パターン3: ログインしていなくてもオーケー
+    // Pattern 3: OK even if not logged in.
     //new AuthorizeDefinitionCollection(new Allow<AllMethod>())
     AuthorizeDefinitionCollection AuthorizationDefinitions { get; }
     public SekibanControllerOptions Options { get; }
 
     /// <summary>
-    ///     コントローラーに表示する集約
+    ///     Get Aggregate Payload Types
     /// </summary>
     /// <returns></returns>
     public IEnumerable<Type> GetAggregatePayloadTypes();
 
     /// <summary>
-    ///     コントローラーに表示する集約
+    ///     Get Aggregate Payload Subtypes
     /// </summary>
     /// <returns></returns>
     public IEnumerable<Type> GetAggregatePayloadSubtypes();
@@ -64,7 +64,7 @@ public interface IWebDependencyDefinition : IQueryDefinition
     }
 
     /// <summary>
-    ///     単集約用のプロジェクションリスト
+    ///     Get Single Projection Types
     /// </summary>
     /// <returns></returns>
     public IEnumerable<Type> GetSingleProjectionTypes();

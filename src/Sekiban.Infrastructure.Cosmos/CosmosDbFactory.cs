@@ -210,8 +210,8 @@ public class CosmosDbFactory
     {
         var containerId = GetContainerId(documentType, containerGroup);
         var databaseId = GetDatabaseId(documentType);
-        // ネットワークエラーの可能性があるので、コンテナを初期化する
-        // これによって次回回復したら再接続できる
+        // There may be a network error, so initialize the container.
+        // This allows reconnection when recovered next time.
         _memoryCache.Cache.Remove(GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier));
         _memoryCache.Cache.Remove(GetMemoryCacheDatabaseKey(documentType, databaseId, _sekibanContextIdentifier));
         _memoryCache.Cache.Remove(GetMemoryCacheContainerKey(documentType, databaseId, containerId, _sekibanContextIdentifier));
@@ -225,8 +225,8 @@ public class CosmosDbFactory
         }
         catch
         {
-            // ネットワークエラーの可能性があるので、コンテナを初期化する
-            // これによって次回回復したら再接続できる
+            // There may be a network error, so initialize the container.
+            // This allows reconnection when recovered next time.
             ResetMemoryCache(documentType, containerGroup);
             throw;
         }

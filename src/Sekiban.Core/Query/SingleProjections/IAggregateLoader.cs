@@ -6,9 +6,9 @@ namespace Sekiban.Core.Query.SingleProjections;
 public interface IAggregateLoader
 {
     /// <summary>
-    ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
-    ///     遅いので、通常はキャッシュバージョンを使用ください
-    ///     検証などのためにこちらを残しています。
+    ///     Creates an Aggregate from the initial event without using the memory cache.
+    ///     It's slow, so please normally use the cached version.
+    ///     This remains for testing and verification purposes.
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <param name="rootPartitionKey"></param>
@@ -21,7 +21,7 @@ public interface IAggregateLoader
         int? toVersion = null) where TAggregatePayload : IAggregatePayloadCommon;
 
     /// <summary>
-    ///     カスタムプロジェククションを取得
+    ///     Get the custom projection.
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <param name="rootPartitionKey"></param>
@@ -41,8 +41,8 @@ public interface IAggregateLoader
         int? toVersion = null) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new();
 
     /// <summary>
-    ///     スナップショット、メモリキャッシュを使用する通常版
-    ///     こちらはデフォルトプロジェクトション（集約のデフォルトステータス）
+    ///     The normal version that uses snapshots and memory cache.
+    ///     This is the default projection (default status of the aggregate).
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <param name="rootPartitionKey"></param>
@@ -57,8 +57,8 @@ public interface IAggregateLoader
         string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommon;
 
     /// <summary>
-    ///     スナップショット、メモリキャッシュを使用する通常版
-    ///     こちらはデフォルトプロジェクトション（集約のデフォルトステータス）
+    ///     The normal version that uses snapshots and memory cache.
+    ///     This is the default projection (default status of the aggregate).
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <param name="rootPartitionKey"></param>

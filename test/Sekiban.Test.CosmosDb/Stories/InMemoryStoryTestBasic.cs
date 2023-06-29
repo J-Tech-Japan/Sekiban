@@ -51,7 +51,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         _memoryCacheAccessor = GetService<IMemoryCacheAccessor>();
     }
 
-    [Fact(DisplayName = "CosmosDb ストーリーテスト インメモリで集約の機能のテストを行う")]
+    [Fact(DisplayName = "CosmosDb story test - Perform a function test of the aggregate in-memory.")]
     public async Task CosmosDbStory()
     {
         _inMemoryDocumentStore.ResetInMemoryStore();
@@ -245,7 +245,9 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         }
     }
 
-    [Fact(DisplayName = "CosmosDb ストーリーテスト 。並列でたくさん動かしたらどうなるか。 INoValidateCommand がRecentActivityに適応されているので、問題ないはず")]
+    [Fact(
+        DisplayName
+            = "CosmosDb story test. What happens if we run a lot in parallel? Since INoValidateCommand is applied to RecentActivity, there should be no problem.")]
     public async Task AsynchronousExecutionTestAsync()
     {
         var _ = Guid.NewGuid();
@@ -298,7 +300,7 @@ public class InMemoryStoryTestBasic : ProjectSekibanByTestTestBase
         }
     }
 
-    [Fact(DisplayName = "インメモリストーリーテスト 。並列でたくさん動かしたらどうなるか。 Versionの重複が発生しないことを確認")]
+    [Fact(DisplayName = "In-memory story test. What happens if we run a lot in parallel? Make sure that Version duplication does not occur.")]
     public async Task AsynchronousInMemoryExecutionTestAsync()
     {
         // create recent activity

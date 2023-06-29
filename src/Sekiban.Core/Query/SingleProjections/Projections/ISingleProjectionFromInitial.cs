@@ -3,9 +3,9 @@ namespace Sekiban.Core.Query.SingleProjections.Projections;
 public interface ISingleProjectionFromInitial
 {
     /// <summary>
-    ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
-    ///     遅いので、通常はキャッシュバージョンを使用ください
-    ///     検証などのためにこちらを残しています。
+    ///     Creates an Aggregate from the initial event without using the memory cache.
+    ///     It's slow, so please normally use the cached version.
+    ///     This remains for testing and verification purposes.
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <param name="rootPartitionKey"></param>

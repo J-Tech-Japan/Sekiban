@@ -31,7 +31,6 @@ public class ClientAndProjectionSpec : AggregateTest<Client, FeatureCheckDepende
     public void CreateTest()
     {
         RunEnvironmentCommand(new CreateBranch(branchName), branchId);
-        // GetEnvironmentAggregateStateのテスト
         var branch = GetEnvironmentAggregateState<Branch>(branchId);
         Assert.Equal(branchName, branch.Payload.Name);
 
@@ -154,7 +153,7 @@ public class ClientAndProjectionSpec : AggregateTest<Client, FeatureCheckDepende
     [Fact]
     public void TestWithFile()
     {
-        // Sekibanのテストでは結果をファイルに書いたり、期待値をファイルから読み込んだり、JSONで比較したりすることができる。
+        // In Sekiban's tests, you can write results to a file, read expectations from a file, and compare with JSON.
         GivenScenario(ChangeNameTest)
             .WriteStateToFile("ClientTestOut.json")
             .WritePayloadToFile("ClientContentsTestOut.json")

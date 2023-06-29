@@ -11,7 +11,7 @@ public class HttpContextUserInformationFactory : IUserInformationFactory
     public string GetCurrentUserInformation()
     {
         var ip = _httpContextAccessor.HttpContext?.Connection?.RemoteIpAddress?.ToString();
-        // Identityを取得し、未認証の場合はエラーとする
+        // Get the Identity and return an error if not authenticated.
         var identity = _httpContextAccessor.HttpContext?.User?.Identity;
         var userId = identity is null || identity.IsAuthenticated == false
             ? null
