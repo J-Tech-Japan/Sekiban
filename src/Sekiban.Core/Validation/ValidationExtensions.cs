@@ -65,7 +65,7 @@ public static class ValidationExtensions
     {
         var validationResults = new List<ValidationResult>();
 
-        // オブジェクトがコレクションの場合
+        // In case the object is a collection.
         if (targetClass is IEnumerable collection)
         {
             foreach (var (index, validationResult) in collection.ValidateEnumerable())
@@ -78,7 +78,7 @@ public static class ValidationExtensions
             yield break;
         }
 
-        // 一般的なプロパティの検証
+        // General property validation.
         Validator.TryValidateObject(targetClass, new ValidationContext(targetClass), validationResults, true);
         foreach (var validationResult in validationResults)
         {
@@ -100,7 +100,7 @@ public static class ValidationExtensions
             };
         }
 
-        // 参照型のプロパティがあるかどうかをチェックする
+        // Check whether there is a reference type property.
         foreach (var pi in targetClass.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
             if (!isReferenceType(pi.PropertyType))

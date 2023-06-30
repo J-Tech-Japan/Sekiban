@@ -1,8 +1,7 @@
 namespace Sekiban.Core.Command.UserInformation;
 
 /// <summary>
-///     こちらは定数をユーザー名、ユーザーIDとして返します。
-///     WebApiのプロジェクトでは、
+///     This class returns constants as the username and userID.
 /// </summary>
 public class ConstUserInformationFactory : IUserInformationFactory
 {

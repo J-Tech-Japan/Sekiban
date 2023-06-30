@@ -46,7 +46,9 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         blobAccessor = GetService<IBlobAccessor>();
     }
 
-    [Fact(DisplayName = "ストーリーテスト 集約の機能のテストではなく、DBと連携して正しく動くかをテストしています。")]
+    [Fact(
+        DisplayName
+            = "In the story test, we are not testing the functionality of the aggregate, but testing if it works correctly in collaboration with the DB.")]
     public async Task DocumentDbStory()
     {
         RemoveAllFromDefaultAndDissolvable();
@@ -427,7 +429,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
     }
 
 
-    [Fact(DisplayName = "ストーリーテスト用に削除のみを行う 。")]
+    [Fact(DisplayName = "Do deletion only for the story test.")]
     public void DeleteOnlyTest() => RemoveAllFromDefaultAndDissolvable();
 
     [Trait(SekibanTestConstants.Category, SekibanTestConstants.Categories.Flaky)]
@@ -436,7 +438,9 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
     {
     }
 
-    [Fact(DisplayName = "ストーリーテスト 。並列でたくさん動かしたらどうなるか。 INoValidateCommand がRecentActivityに適応されているので、問題ないはず")]
+    [Fact(
+        DisplayName
+            = "Story test. What happens if we run a lot in parallel? Since INoValidateCommand is applied to RecentActivity, there should be no problem")]
     [Trait(SekibanTestConstants.Category, SekibanTestConstants.Categories.Flaky)]
     public async Task AsynchronousExecutionTestAsync()
     {
@@ -564,7 +568,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         }
     }
 
-    [Fact(DisplayName = "インメモリストーリーテスト 。並列でたくさん動かしたらどうなるか。 Versionの重複が発生しないことを確認")]
+    [Fact(DisplayName = "In-memory story test. What happens if we run a lot in parallel? Check that version duplication does not occur.")]
     public async Task AsynchronousInMemoryExecutionTestAsync()
     {
         // create recent activity
@@ -645,10 +649,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
 
         _testOutputHelper.WriteLine("518");
 
-        var snapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(
-            aggregateId,
-            typeof(RecentActivity),
-            typeof(RecentActivity));
+        var snapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(aggregateId, typeof(RecentActivity), typeof(RecentActivity));
         await CheckSnapshots<RecentActivity>(snapshots, aggregateId);
         var projectionSnapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(
             aggregateId,

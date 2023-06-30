@@ -27,7 +27,7 @@ public abstract class AggregateSubtypeTest : TestBase<FeatureCheckDependency>
         ISekibanServiceProviderGenerator providerGenerator) : base(sekibanTestFixture, testOutputHelper, providerGenerator) =>
         singleProjectionSnapshotAccessor = GetService<ISingleProjectionSnapshotAccessor>();
 
-    [Fact(DisplayName = "SubtypeのAggregateを作成する")]
+    [Fact(DisplayName = "Create the Subtype's Aggregate.")]
     public async Task CosmosDbStory()
     {
         RemoveAllFromDefaultAndDissolvable();
@@ -133,7 +133,6 @@ public abstract class AggregateSubtypeTest : TestBase<FeatureCheckDependency>
     [Fact]
     public async Task SimpleCommandsTestSnapshot()
     {
-        // 先に全データを削除する
         RemoveAllFromDefaultAndDissolvable();
 
         var snapshotCartId = Guid.NewGuid();

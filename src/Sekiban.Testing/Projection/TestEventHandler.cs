@@ -73,7 +73,7 @@ public class TestEventHandler
         var list = JsonSerializer.Deserialize<List<JsonElement>>(jsonEvents);
         if (list is null)
         {
-            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+            throw new InvalidDataException("Failed to serialize in JSON.");
         }
         AddEventsFromList(list, withPublish);
     }
@@ -94,7 +94,7 @@ public class TestEventHandler
         var list = JsonSerializer.Deserialize<List<JsonElement>>(openStream);
         if (list is null)
         {
-            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+            throw new InvalidDataException("Failed to serialize in JSON.");
         }
         AddEventsFromList(list, withPublish);
     }
@@ -119,7 +119,7 @@ public class TestEventHandler
             var ev = Activator.CreateInstance(genericType, aggregateId, aggregateType, payload) as IEvent;
             if (ev == null)
             {
-                throw new InvalidDataException("イベントの生成に失敗しました。" + payload);
+                throw new InvalidDataException("Failed to generate an event" + payload);
             }
             GivenEvents(new[] { ev }, withPublish);
         }
@@ -146,7 +146,7 @@ public class TestEventHandler
             var ev = Activator.CreateInstance(genericType, aggregateId, aggregateType, payload, rootPartitionKey) as IEvent;
             if (ev == null)
             {
-                throw new InvalidDataException("イベントの生成に失敗しました。" + payload);
+                throw new InvalidDataException("Failed to generate an event" + payload);
             }
             GivenEvents(new[] { ev }, withPublish);
         }
@@ -161,7 +161,7 @@ public class TestEventHandler
         var registeredEventTypes = _serviceProvider.GetService<RegisteredEventTypes>();
         if (registeredEventTypes is null)
         {
-            throw new InvalidOperationException("RegisteredEventTypes が登録されていません。");
+            throw new InvalidOperationException("RegisteredEventTypes is not registered.");
         }
         foreach (var json in list)
         {
@@ -169,22 +169,22 @@ public class TestEventHandler
             var eventPayloadType = registeredEventTypes.RegisteredTypes.FirstOrDefault(e => e.Name == documentTypeName);
             if (eventPayloadType is null)
             {
-                throw new InvalidDataException($"イベントタイプ {documentTypeName} は登録されていません。");
+                throw new InvalidDataException($"Event Type {documentTypeName} Is not registered.");
             }
             var eventType = typeof(Event<>).MakeGenericType(eventPayloadType);
             if (eventType is null)
             {
-                throw new InvalidDataException($"イベント {documentTypeName} の生成に失敗しました。");
+                throw new InvalidDataException($"Event {documentTypeName} failed to generate.");
             }
             var eventInstance = JsonSerializer.Deserialize(json.ToString(), eventType);
             if (eventInstance is null)
             {
-                throw new InvalidDataException($"イベント {documentTypeName} のデシリアライズに失敗しました。");
+                throw new InvalidDataException($"Event {documentTypeName} failed to deserialize.");
             }
             var ev = eventInstance as IEvent;
             if (ev is null)
             {
-                throw new InvalidDataException($"イベント {documentTypeName} の生成に失敗しました。");
+                throw new InvalidDataException($"Event {documentTypeName} failed to cast.");
             }
             GivenEvents(new List<IEvent> { ev }, withPublish);
         }

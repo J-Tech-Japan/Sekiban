@@ -5,20 +5,20 @@ public record LoyaltyPointUsageType : IValueObject<LoyaltyPointUsageTypeKeys>
 {
     public static Dictionary<int, string> LoyaltyPointUsageTypes = new()
     {
-        { (int)LoyaltyPointUsageTypeKeys.FlightDomestic, "国内線フライト" },
-        { (int)LoyaltyPointUsageTypeKeys.FlightInternational, "国際線フライト" },
-        { (int)LoyaltyPointUsageTypeKeys.FlightUpgrade, "フライトアップグレード" },
-        { (int)LoyaltyPointUsageTypeKeys.TravelHotel, "ホテル利用" },
-        { (int)LoyaltyPointUsageTypeKeys.TravelCarRental, "レンタカー" },
-        { (int)LoyaltyPointUsageTypeKeys.PointExchange, "ポイント交換" },
-        { (int)LoyaltyPointUsageTypeKeys.RestaurantCoupon, "レストラン利用券" }
+        { (int)LoyaltyPointUsageTypeKeys.FlightDomestic, "Domestic Flight" },
+        { (int)LoyaltyPointUsageTypeKeys.FlightInternational, "International Flight" },
+        { (int)LoyaltyPointUsageTypeKeys.FlightUpgrade, "Upgrading Flight" },
+        { (int)LoyaltyPointUsageTypeKeys.TravelHotel, "Hotel Stay" },
+        { (int)LoyaltyPointUsageTypeKeys.TravelCarRental, "Car Rental" },
+        { (int)LoyaltyPointUsageTypeKeys.PointExchange, "Point Exchange" },
+        { (int)LoyaltyPointUsageTypeKeys.RestaurantCoupon, "Restaurant Usages" }
     };
 
     public LoyaltyPointUsageType(LoyaltyPointUsageTypeKeys value)
     {
         if (!Enum.IsDefined(typeof(LoyaltyPointUsageTypeKeys), value))
         {
-            throw new InvalidValueException("登録されていないポイント使用区分です。");
+            throw new InvalidValueException("It's an unregistered point earning category.");
         }
         Value = value;
     }

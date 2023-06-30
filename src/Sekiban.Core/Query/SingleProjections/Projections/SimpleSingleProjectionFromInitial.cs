@@ -9,17 +9,6 @@ public class SimpleSingleProjectionFromInitial : ISingleProjectionFromInitial
 
     public SimpleSingleProjectionFromInitial(IDocumentRepository documentRepository) => _documentRepository = documentRepository;
 
-    /// <summary>
-    ///     メモリキャッシュも使用せず、初期イベントからAggregateを作成します。
-    ///     遅いので、通常はキャッシュバージョンを使用ください
-    ///     検証などのためにこちらを残しています。
-    /// </summary>
-    /// <param name="aggregateId"></param>
-    /// <param name="rootPartitionKey"></param>
-    /// <param name="toVersion"></param>
-    /// <typeparam name="TProjection"></typeparam>
-    /// <typeparam name="TProjector"></typeparam>
-    /// <returns></returns>
     public async Task<TProjection?> GetAggregateFromInitialAsync<TProjection, TProjector>(Guid aggregateId, string rootPartitionKey, int? toVersion)
         where TProjection : IAggregateCommon, SingleProjections.ISingleProjection where TProjector : ISingleProjector<TProjection>, new()
     {

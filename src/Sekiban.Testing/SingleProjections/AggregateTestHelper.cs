@@ -318,7 +318,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var state = JsonSerializer.Deserialize<AggregateState<TAggregatePayload>>(stateJson);
         if (state is null)
         {
-            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+            throw new InvalidDataException("Failed to serialize in JSON.");
         }
         var actual = GetAggregateState();
         var expected = state.GetComparableObject(actual);
@@ -334,7 +334,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var state = JsonSerializer.Deserialize<AggregateState<TAggregatePayload>>(openStream);
         if (state is null)
         {
-            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+            throw new InvalidDataException("Failed to serialize in JSON.");
         }
         var actual = GetAggregateState();
         var expected = state.GetComparableObject(actual);
@@ -349,7 +349,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var payload = JsonSerializer.Deserialize<TAggregatePayload>(payloadJson);
         if (payload is null)
         {
-            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+            throw new InvalidDataException("Failed to serialize in JSON.");
         }
         var actual = GetAggregateState().Payload;
         var expected = payload;
@@ -365,7 +365,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var payload = JsonSerializer.Deserialize<TAggregatePayload>(openStream);
         if (payload is null)
         {
-            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+            throw new InvalidDataException("Failed to serialize in JSON.");
         }
         var actual = GetAggregateState().Payload;
         var expected = payload;
@@ -421,7 +421,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var list = JsonSerializer.Deserialize<List<JsonElement>>(openStream);
         if (list is null)
         {
-            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+            throw new InvalidDataException("Failed to serialize in JSON.");
         }
         AddEventsFromList(list, withPublish);
         return this;
@@ -528,7 +528,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var registeredEventTypes = _serviceProvider.GetService<RegisteredEventTypes>();
         if (registeredEventTypes is null)
         {
-            throw new InvalidOperationException("RegisteredEventTypes が登録されていません。");
+            throw new InvalidOperationException("RegisteredEventTypes is not registered.");
         }
         foreach (var json in list)
         {
@@ -536,17 +536,17 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             var eventPayloadType = registeredEventTypes.RegisteredTypes.FirstOrDefault(e => e.Name == documentTypeName);
             if (eventPayloadType is null)
             {
-                throw new InvalidDataException($"イベントタイプ {documentTypeName} は登録されていません。");
+                throw new InvalidDataException($"Event Type {documentTypeName} is not registered.");
             }
             var eventType = typeof(Event<>).MakeGenericType(eventPayloadType);
             if (eventType is null)
             {
-                throw new InvalidDataException($"イベント {documentTypeName} の生成に失敗しました。");
+                throw new InvalidDataException($"Event {documentTypeName} failed to generate type.");
             }
             var eventInstance = JsonSerializer.Deserialize(json.ToString(), eventType);
             if (eventInstance is null)
             {
-                throw new InvalidDataException($"イベント {documentTypeName} のデシリアライズに失敗しました。");
+                throw new InvalidDataException($"Event {documentTypeName} failed to deserialize.");
             }
             SaveEvent((Event<IEventPayloadCommon>)eventInstance, withPublish);
         }
@@ -665,7 +665,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var payload = JsonSerializer.Deserialize<TSingleProjectionPayload>(payloadJson);
         if (payload is null)
         {
-            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+            throw new InvalidDataException("Failed to serialize in JSON.");
         }
         var expected = payload;
         var actualJson = SekibanJsonHelper.Serialize(actual);
@@ -682,7 +682,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var payload = JsonSerializer.Deserialize<TSingleProjectionPayload>(openStream);
         if (payload is null)
         {
-            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+            throw new InvalidDataException("Failed to serialize in JSON.");
         }
         var expected = payload;
         var actualJson = SekibanJsonHelper.Serialize(actual);
@@ -748,7 +748,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(responseJson);
         if (response is null)
         {
-            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+            throw new InvalidDataException("Failed to serialize in JSON.");
         }
         ThenQueryResponseIs(param, response);
         return this;
@@ -762,7 +762,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(openStream);
         if (response is null)
         {
-            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+            throw new InvalidDataException("Failed to serialize in JSON.");
         }
         ThenQueryResponseIs(param, response);
         return this;
@@ -858,7 +858,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var response = JsonSerializer.Deserialize<TQueryResponse>(responseJson);
         if (response is null)
         {
-            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+            throw new InvalidDataException("Failed to serialize in JSON.");
         }
         ThenQueryResponseIs(param, response);
         return this;
@@ -872,7 +872,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var response = JsonSerializer.Deserialize<TQueryResponse>(openStream);
         if (response is null)
         {
-            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+            throw new InvalidDataException("Failed to serialize in JSON.");
         }
         ThenQueryResponseIs(param, response);
         return this;

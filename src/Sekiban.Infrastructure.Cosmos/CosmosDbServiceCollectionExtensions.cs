@@ -11,7 +11,6 @@ public static class CosmosDbServiceCollectionExtensions
         Func<SekibanCosmosOptions, SekibanCosmosOptions>? optionsFunc = null)
     {
         var options = optionsFunc is null ? new SekibanCosmosOptions() : optionsFunc(new SekibanCosmosOptions());
-        // データストア
         services.AddSingleton(options);
         services.AddTransient<CosmosDbFactory>();
         services.AddTransient<IDocumentPersistentWriter, CosmosDocumentWriter>();

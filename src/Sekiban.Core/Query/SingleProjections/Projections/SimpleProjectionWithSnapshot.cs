@@ -16,7 +16,7 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
     }
 
     /// <summary>
-    ///     スナップショット、メモリキャッシュを使用する通常版
+    ///     The normal version that uses snapshots and memory cache.
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <param name="rootPartitionKey"></param>

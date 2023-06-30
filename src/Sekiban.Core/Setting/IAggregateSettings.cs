@@ -5,9 +5,10 @@ public interface IAggregateSettings
     public bool ShouldTakeSnapshotForType(Type aggregatePayloadType);
 
     /// <summary>
-    ///     タイプがハイブリッドを使うことができるか？
-    ///     ハイブリッドを使うと、生成したイベントをインメモリにも保管する
-    ///     使うことができるのは同じインスタンスで全てのイベントが発生することが確定している集約のみ
+    ///     Can it use a hybrid type?
+    ///     When using hybrid, the generated events are also stored in memory.
+    ///     The only aggregates that can use this are those where it is certain that all events will occur in the same
+    ///     instance.
     /// </summary>
     /// <param name="aggregatePayloadType"></param>
     /// <returns></returns>

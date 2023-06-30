@@ -35,7 +35,7 @@ public class Member
 }
 public class ValidationTest
 {
-    [Fact(DisplayName = "検証成功")]
+    [Fact(DisplayName = "Verification successful.")]
     public void Test1()
     {
         var m = new Member { Name = "YAMADA Taro", Age = 25, Tel = "090-1111-2222", Email = "hoge@example.com" };
@@ -58,7 +58,7 @@ public class ValidationTest
         Assert.False(vresults.Any());
     }
 
-    [Fact(DisplayName = "検証失敗_名前未入力")]
+    [Fact(DisplayName = "Verification failed - Name not entered.")]
     public void Test2()
     {
         var m = new Member { Name = string.Empty, Age = 25, Tel = "090-1111-2222", Email = "hoge@example.com" };
@@ -66,7 +66,7 @@ public class ValidationTest
         Assert.True(vresults.Any());
     }
 
-    [Fact(DisplayName = "検証失敗_名前の桁あふれ")]
+    [Fact(DisplayName = "Verification failed - Name digit overflow.")]
     public void Test3()
     {
         var m = new Member { Name = "YAMADA Taroooooooooooooooo", Age = 25, Tel = "090-1111-2222", Email = "hoge@example.com" };
@@ -74,7 +74,7 @@ public class ValidationTest
         Assert.True(vresults.Any());
     }
 
-    [Fact(DisplayName = "検証失敗_年齢の数値範囲外")]
+    [Fact(DisplayName = "Verification failed - Age outside numeric range.")]
     public void Test4()
     {
         var m = new Member { Name = "YAMADA Taro", Age = 80, Tel = "090-1111-2222", Email = "hoge@example.com" };
@@ -82,7 +82,7 @@ public class ValidationTest
         Assert.True(vresults.Any());
     }
 
-    [Fact(DisplayName = "検証失敗_電話番号の文字種")]
+    [Fact(DisplayName = "Verification failed - Character type of phone number.")]
     public void Test5()
     {
         var m = new Member { Name = "YAMADA Taro", Age = 25, Tel = "090-1111-abcd", Email = "hoge@example.com" };
@@ -90,7 +90,7 @@ public class ValidationTest
         Assert.True(vresults.Any());
     }
 
-    [Fact(DisplayName = "検証失敗_メールアドレスの形式")]
+    [Fact(DisplayName = "Verification failed - Email address format.")]
     public void Test6()
     {
         var m = new Member { Name = "YAMADA Taro", Age = 25, Tel = "090-1111-2222", Email = "hoge@example@com" };
@@ -98,7 +98,7 @@ public class ValidationTest
         Assert.True(vresults.Any());
     }
 
-    [Fact(DisplayName = "検証成功_参照型プロパティあり")]
+    [Fact(DisplayName = "Verification successful - Reference type property exists.")]
     public void Test7()
     {
         var m = new Member
@@ -113,7 +113,7 @@ public class ValidationTest
         Assert.False(vresults.Any());
     }
 
-    [Fact(DisplayName = "検証失敗_参照型プロパティのプロパティ")]
+    [Fact(DisplayName = "Verification failed - Property of reference-type property.")]
     public void Test8()
     {
         var m = new Member
@@ -130,7 +130,7 @@ public class ValidationTest
         Assert.Equal("Partner.Name", validationResults.First().MemberNames.First());
     }
 
-    [Fact(DisplayName = "検証成功_配列型のプロパティあり")]
+    [Fact(DisplayName = "Verification successful - Array type property exists.")]
     public void Test9()
     {
         var m = new Member
@@ -146,7 +146,7 @@ public class ValidationTest
         Assert.False(vresults.Any());
     }
 
-    [Fact(DisplayName = "検証失敗_配列型のプロパティに検証に失敗する要素あり")]
+    [Fact(DisplayName = "Verification failed - There is an element that fails validation in array type property.")]
     public void Test10()
     {
         var m = new Member

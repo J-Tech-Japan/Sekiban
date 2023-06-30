@@ -77,7 +77,7 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
         var toReturn = serviceProvider.GetService<T>();
         if (toReturn is null)
         {
-            throw new Exception("オブジェクトが登録されていません。" + typeof(T));
+            throw new Exception("The object has not been registered." + typeof(T));
         }
         return toReturn;
     }

@@ -129,20 +129,14 @@ public class DynamoDbFactory
                 do
                 {
                     List<Document> items = await search.GetNextSetAsync();
-
-                    // 取得したアイテムを削除
                     foreach (var item in items)
                     {
                         var primaryKey = item[nameof(Core.Documents.Document.PartitionKey)].AsString();
-
-                        // ソートキーがある場合
                         if (item.TryGetValue(nameof(Core.Documents.Document.SortableUniqueId), out var value))
                         {
                             var sortKey = value.AsString();
                             await table.DeleteItemAsync(primaryKey, sortKey);
-                        }
-                        // ソートキーがない場合
-                        else
+                        } else
                         {
                             await table.DeleteItemAsync(primaryKey);
                         }
@@ -180,8 +174,8 @@ public class DynamoDbFactory
     private void ResetMemoryCache(DocumentType documentType, AggregateContainerGroup containerGroup)
     {
         var containerId = GetTableId(documentType, containerGroup);
-        // ネットワークエラーの可能性があるので、コンテナを初期化する
-        // これによって次回回復したら再接続できる
+        // There may be a network error, so initialize the container.
+        // This allows reconnection when recovered next time.
         _memoryCache.Cache.Remove(GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier));
         _memoryCache.Cache.Remove(GetMemoryCacheTableKey(documentType, containerId, _sekibanContextIdentifier));
     }
@@ -194,8 +188,8 @@ public class DynamoDbFactory
         }
         catch
         {
-            // ネットワークエラーの可能性があるので、コンテナを初期化する
-            // これによって次回回復したら再接続できる
+            // There may be a network error, so initialize the container.
+            // This allows reconnection when recovered next time.
             ResetMemoryCache(documentType, containerGroup);
             throw;
         }

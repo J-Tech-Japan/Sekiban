@@ -15,7 +15,6 @@ public class SnapshotTakingBackgroundService : BackgroundService
         Console.WriteLine("SnapshotTakingBackgroundService is started.");
         while (!stoppingToken.IsCancellationRequested)
         {
-            // タスクがある場合は実行する
             if (_eventQueue.TryTake(out var ev))
             {
                 if (ServiceProvider is null) { return; }
@@ -31,9 +30,7 @@ public class SnapshotTakingBackgroundService : BackgroundService
                 {
                     logger?.LogError(ex, "Snapshot Generator Error");
                 }
-            }
-            // タスクがない場合は待機する
-            else
+            } else
             {
                 await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
             }

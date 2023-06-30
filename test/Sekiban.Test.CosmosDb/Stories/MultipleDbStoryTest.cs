@@ -1,8 +1,6 @@
 using FeatureCheck.Domain.Aggregates.Branches;
 using FeatureCheck.Domain.Aggregates.Branches.Commands;
 using FeatureCheck.Domain.Shared;
-using Sekiban.Core.Aggregate;
-using Sekiban.Core.Documents;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Setting;
 using Sekiban.Infrastructure.Cosmos;
@@ -23,28 +21,25 @@ public class MultipleDbStoryTest : TestBase<FeatureCheckDependency>
         new CosmosSekibanServiceProviderGenerator()) =>
         _sekibanContext = GetService<ISekibanContext>();
 
-    [Fact(DisplayName = "CosmosDb ストーリーテスト 複数データベースでの動作を検証する")]
+    [Fact(DisplayName = "Verify the operation with multiple databases in the CosmosDb story test.")]
     public async Task CosmosDbStory()
     {
         var cosmosDbFactory = GetService<CosmosDbFactory>();
         var multiProjectionService = GetService<IMultiProjectionService>();
 
-        // 何もしないで実行したら "Default"の動作となる
-        // 先に全データを削除する
-        await cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default);
-        await cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Dissolvable);
-        await cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command, AggregateContainerGroup.Dissolvable);
-        await cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command);
+        // When executed without doing anything, it becomes the "Default" behavior.
 
-        // Secondary の設定ないで実行する
+        RemoveAllFromDefaultAndDissolvable();
+
+        // Run command within Secondary
         await _sekibanContext.SekibanActionAsync(
             SecondaryDb,
             async () =>
             {
-                await cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default);
-                await cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command);
+                await Task.CompletedTask;
+                RemoveAllFromDefault();
             });
-        // Default を明示的に指定して、１件データを作成
+        // Run Command within Default Setting
         await _sekibanContext.SekibanActionAsync(
             DefaultDb,
             async () =>
@@ -52,19 +47,19 @@ public class MultipleDbStoryTest : TestBase<FeatureCheckDependency>
                 await commandExecutor.ExecCommandAsync(new CreateBranch("TEST"));
             });
 
-        // Default で Listを取得すると1件取得
+        // If you get a List with "Default", you get one record.
         var list = await _sekibanContext.SekibanActionAsync(DefaultDb, async () => await multiProjectionService.GetAggregateList<Branch>());
         Assert.Single(list);
 
-        // 何もつけない場合も Default のDbから取得
+        // If you don't attach anything, it is also obtained from the Default Db.
         list = await multiProjectionService.GetAggregateList<Branch>();
         Assert.Single(list);
 
-        // Secondary で Listを取得すると0件取得
+        // If you get a List with "Secondary", you get zero records.
         list = await _sekibanContext.SekibanActionAsync(SecondaryDb, async () => await multiProjectionService.GetAggregateList<Branch>());
         Assert.Empty(list);
 
-        // Secondaryで3件データを作成
+        // Create three pieces of data with "Secondary".
         await _sekibanContext.SekibanActionAsync(
             SecondaryDb,
             async () =>
@@ -74,15 +69,15 @@ public class MultipleDbStoryTest : TestBase<FeatureCheckDependency>
                 await commandExecutor.ExecCommandAsync(new CreateBranch("MEXICO"));
             });
 
-        // Default で Listを取得すると1件取得
+        // If you get a List with "Default", you get one record.
         list = await _sekibanContext.SekibanActionAsync(DefaultDb, async () => await multiProjectionService.GetAggregateList<Branch>());
         Assert.Single(list);
 
-        // 何もつけない場合も Default のDbから取得
+        // If you don't attach anything, it is also obtained from the Default Db.
         list = await multiProjectionService.GetAggregateList<Branch>();
         Assert.Single(list);
 
-        // Secondary で Listを取得すると3件取得
+        // If you get a List with "Secondary", you get three records.
         list = await _sekibanContext.SekibanActionAsync(SecondaryDb, async () => await multiProjectionService.GetAggregateList<Branch>());
         Assert.Equal(3, list.Count);
     }

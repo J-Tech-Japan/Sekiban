@@ -5,18 +5,18 @@ public record LoyaltyPointReceiveType : IValueObject<LoyaltyPointReceiveTypeKeys
 {
     public static Dictionary<int, string> LoyaltyPointReceiveTypes = new()
     {
-        { (int)LoyaltyPointReceiveTypeKeys.FlightDomestic, "国内線フライト" },
-        { (int)LoyaltyPointReceiveTypeKeys.FlightInternational, "国際線フライト" },
-        { (int)LoyaltyPointReceiveTypeKeys.TravelPoint, "旅行ポイント" },
-        { (int)LoyaltyPointReceiveTypeKeys.CreditcardUsage, "クレジットカードポイント" },
-        { (int)LoyaltyPointReceiveTypeKeys.InsuranceUsage, "保険ポイント" }
+        { (int)LoyaltyPointReceiveTypeKeys.FlightDomestic, "Domestic Flight" },
+        { (int)LoyaltyPointReceiveTypeKeys.FlightInternational, "International Flight" },
+        { (int)LoyaltyPointReceiveTypeKeys.TravelPoint, "Travel Point" },
+        { (int)LoyaltyPointReceiveTypeKeys.CreditcardUsage, "Credit Card Point" },
+        { (int)LoyaltyPointReceiveTypeKeys.InsuranceUsage, "Insurance Usage Point" }
     };
 
     public LoyaltyPointReceiveType(LoyaltyPointReceiveTypeKeys value)
     {
         if (!Enum.IsDefined(typeof(LoyaltyPointReceiveTypeKeys), value))
         {
-            throw new InvalidValueException("登録されていないポイント獲得区分です。");
+            throw new InvalidValueException("It's an unregistered point earning category.");
         }
         Value = value;
     }

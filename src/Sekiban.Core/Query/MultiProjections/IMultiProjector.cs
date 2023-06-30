@@ -9,8 +9,8 @@ public interface IMultiProjector<TProjectionPayload> : IMultiProjectionCommon wh
     void ApplySnapshot(MultiProjectionState<TProjectionPayload> snapshot);
 
     /// <summary>
-    ///     対象のAggregate名リスト
-    ///     Emptyの場合は、全ての集約を対象とする
+    ///     Target Aggregate Name List
+    ///     If Empty, all aggregates will be targeted.
     /// </summary>
     /// <returns></returns>
     IList<string> TargetAggregateNames();
