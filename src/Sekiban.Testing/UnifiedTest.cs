@@ -156,7 +156,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(responseJson);
         if (response is null)
         {
-            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+            throw new InvalidDataException("Failed to serialize in JSON.");
         }
         ThenQueryResponseIs(param, response);
         return this;
@@ -170,7 +170,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(openStream);
         if (response is null)
         {
-            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+            throw new InvalidDataException("Failed to serialize in JSON.");
         }
         ThenQueryResponseIs(param, response);
         return this;
@@ -265,7 +265,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         var response = JsonSerializer.Deserialize<TQueryResponse>(responseJson);
         if (response is null)
         {
-            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+            throw new InvalidDataException("Failed to serialize in JSON.");
         }
         ThenQueryResponseIs(param, response);
         return this;
@@ -278,7 +278,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         var response = JsonSerializer.Deserialize<TQueryResponse>(openStream);
         if (response is null)
         {
-            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+            throw new InvalidDataException("Failed to serialize in JSON.");
         }
         ThenQueryResponseIs(param, response);
         return this;
@@ -305,7 +305,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         var projection = JsonSerializer.Deserialize<TMultiProjectionPayload>(openStream);
         if (projection is null)
         {
-            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+            throw new InvalidDataException("Failed to serialize in JSON.");
         }
         return ThenMultiProjectionPayloadIs(projection, rootPartitionKey);
     }
@@ -367,7 +367,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         var projection = JsonSerializer.Deserialize<MultiProjectionState<TMultiProjectionPayload>>(openStream);
         if (projection is null)
         {
-            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+            throw new InvalidDataException("Failed to serialize in JSON.");
         }
         return ThenMultiProjectionStateIs(rootPartitionKey, projection);
     }
@@ -401,7 +401,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         var projection = JsonSerializer.Deserialize<SingleProjectionListState<AggregateState<TAggregatePayload>>>(openStream);
         if (projection is null)
         {
-            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+            throw new InvalidDataException("Failed to serialize in JSON.");
         }
         return ThenAggregateListProjectionPayloadIs(rootPartitionKey, projection);
     }
@@ -458,7 +458,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         var projection = JsonSerializer.Deserialize<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>>(openStream);
         if (projection is null)
         {
-            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+            throw new InvalidDataException("Failed to serialize in JSON.");
         }
         return ThenAggregateListProjectionStateIs(rootPartitionKey, projection);
     }
@@ -492,7 +492,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         var projection = JsonSerializer.Deserialize<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>(openStream);
         if (projection is null)
         {
-            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+            throw new InvalidDataException("Failed to serialize in JSON.");
         }
         return ThenSingleProjectionListPayloadIs(rootPartitionKey, projection);
     }
@@ -556,7 +556,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
                 .Deserialize<MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>(openStream);
         if (projection is null)
         {
-            throw new InvalidDataException("JSON のでシリアライズに失敗しました。");
+            throw new InvalidDataException("Failed to serialize in JSON.");
         }
         return ThenSingleProjectionListStateIs(rootPartitionKey, projection);
     }

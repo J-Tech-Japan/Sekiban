@@ -3,7 +3,6 @@ using FeatureCheck.Domain.Aggregates.Branches.Commands;
 using FeatureCheck.Domain.Aggregates.Clients;
 using FeatureCheck.Domain.Aggregates.Clients.Commands;
 using FeatureCheck.Domain.Shared;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Query.MultiProjections;
@@ -40,11 +39,7 @@ public abstract class QueryPerformanceTestBase : TestBase<FeatureCheckDependency
     [Trait(SekibanTestConstants.Category, SekibanTestConstants.Categories.Performance)]
     public void TestQuery1()
     {
-        // 先に全データを削除する
-        _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default).Wait();
-        _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Dissolvable).Wait();
-        _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command, AggregateContainerGroup.Dissolvable).Wait();
-        _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command).Wait();
+        RemoveAllFromDefaultAndDissolvable();
     }
 
     [Theory]

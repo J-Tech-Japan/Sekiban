@@ -7,7 +7,7 @@ public record EmailString : IValueObject<string>
     {
         if (!Regex.IsMatch(email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.IgnoreCase))
         {
-            throw new InvalidValueException("Eメールアドレスが正しくありません。");
+            throw new InvalidValueException("The email address is not correct.");
         }
 
         Value = email;

@@ -133,7 +133,6 @@ public abstract class AggregateSubtypeTest : TestBase<FeatureCheckDependency>
     [Fact]
     public async Task SimpleCommandsTestSnapshot()
     {
-        // 先に全データを削除する
         RemoveAllFromDefaultAndDissolvable();
 
         var snapshotCartId = Guid.NewGuid();

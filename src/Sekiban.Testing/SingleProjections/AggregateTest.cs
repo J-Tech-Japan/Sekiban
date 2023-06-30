@@ -187,7 +187,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         var toreturn = _serviceProvider.GetService<T>();
         if (toreturn is null)
         {
-            throw new Exception("オブジェクトが登録されていません。" + typeof(T));
+            throw new Exception("The object has not been registered." + typeof(T));
         }
         return toreturn;
     }

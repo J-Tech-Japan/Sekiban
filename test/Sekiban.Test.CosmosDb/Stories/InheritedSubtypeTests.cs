@@ -1,6 +1,5 @@
 using FeatureCheck.Domain.Aggregates.SubTypes.InheritedSubtypes;
 using FeatureCheck.Domain.Shared;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Query.MultiProjections;
@@ -31,13 +30,7 @@ public class InheritedSubtypeTests : TestBase<FeatureCheckDependency>
     [Fact]
     public async Task SubtypeSnapshotTest1UseJson()
     {
-        // 先に全データを削除する
-        await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default);
-        await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Dissolvable);
-        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command, AggregateContainerGroup.Dissolvable);
-        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command);
-
-
+        RemoveAllFromDefaultAndDissolvable();
 
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(new OpenInheritedAggregate { YearMonth = 202001 });
         Assert.NotNull(commandResponse.AggregateId);
@@ -67,13 +60,7 @@ public class InheritedSubtypeTests : TestBase<FeatureCheckDependency>
     [Fact]
     public async Task SubtypeSnapshotTest2UseBlob()
     {
-        // 先に全データを削除する
-        await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Default);
-        await _cosmosDbFactory.DeleteAllFromEventContainer(AggregateContainerGroup.Dissolvable);
-        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command, AggregateContainerGroup.Dissolvable);
-        await _cosmosDbFactory.DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command);
-
-
+        RemoveAllFromDefaultAndDissolvable();
 
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(new OpenInheritedAggregate { YearMonth = 202001 });
         Assert.NotNull(commandResponse.AggregateId);

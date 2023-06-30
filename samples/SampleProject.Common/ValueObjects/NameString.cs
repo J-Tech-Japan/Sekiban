@@ -6,7 +6,7 @@ public record NameString : IValueObject<string>
     {
         if (string.IsNullOrWhiteSpace(name))
         {
-            throw new InvalidValueException("名前を空白にすることはできません。");
+            throw new InvalidValueException("You cannot leave the name blank.");
         }
 
         Value = name;
