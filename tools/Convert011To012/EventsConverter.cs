@@ -124,7 +124,6 @@ public class EventsConverter
                     {
                         var sortableUniqueId = SekibanJsonHelper.GetValue<string>(item, nameof(IDocument.SortableUniqueId));
 
-                        // pick out one item
                         if (sortableUniqueId == null) { continue; }
                         var safe = new SortableUniqueIdValue(SortableUniqueIdValue.GetSafeIdFromUtc());
                         var fromContainer = new SortableUniqueIdValue(sortableUniqueId);
