@@ -30,10 +30,10 @@ public record SortableUniqueIdValue(string Value)
 
     public string GetSafeId() => GetTicks().AddSeconds(-SafeMilliseconds).Ticks + GetIdString(Guid.Empty);
 
-    public bool EarlierThan(SortableUniqueIdValue toCompare) => Value.CompareTo(toCompare) < 0;
-    public bool EarlierThanOrEqual(SortableUniqueIdValue toCompare) => Value.CompareTo(toCompare) <= 0;
+    public bool IsEarlierThan(SortableUniqueIdValue toCompare) => Value.CompareTo(toCompare) < 0;
+    public bool IsEarlierThanOrEqual(SortableUniqueIdValue toCompare) => Value.CompareTo(toCompare) <= 0;
 
-    public bool LaterThanOrEqual(SortableUniqueIdValue toCompare) => Value.CompareTo(toCompare) >= 0;
+    public bool IsLaterThanOrEqual(SortableUniqueIdValue toCompare) => Value.CompareTo(toCompare) >= 0;
 
     public static string GetTickString(long tick) => tick.ToString(TickFormatter);
     public static string GetIdString(Guid id) => (Math.Abs(id.GetHashCode()) % IdModBase).ToString(IdFormatter);

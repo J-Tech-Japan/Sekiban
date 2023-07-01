@@ -30,7 +30,7 @@ public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPa
     }
 
     public MultiProjectionState<TProjectionPayload> ToState() => state;
-    public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().LaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
+    public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().IsLaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
 
     public void ApplySnapshot(MultiProjectionState<TProjectionPayload> snapshot)
     {

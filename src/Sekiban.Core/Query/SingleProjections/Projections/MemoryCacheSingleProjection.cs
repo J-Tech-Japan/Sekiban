@@ -53,7 +53,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
         }
         if (includesSortableUniqueId is not null &&
             savedContainer.SafeSortableUniqueId is not null &&
-            includesSortableUniqueId.EarlierThan(savedContainer.SafeSortableUniqueId))
+            includesSortableUniqueId.IsEarlierThan(savedContainer.SafeSortableUniqueId))
         {
             return aggregate;
         }
@@ -91,7 +91,9 @@ public class MemoryCacheSingleProjection : ISingleProjection
                         {
                             throw new SekibanEventDuplicateException();
                         }
-                        if (container.LastSortableUniqueId == null && e.GetSortableUniqueId().LaterThanOrEqual(targetSafeId) && aggregate.Version > 0)
+                        if (container.LastSortableUniqueId == null &&
+                            e.GetSortableUniqueId().IsLaterThanOrEqual(targetSafeId) &&
+                            aggregate.Version > 0)
                         {
                             container = container with
                             {
@@ -104,7 +106,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
                         if (!aggregate.EventShouldBeApplied(e)) { throw new SekibanEventOrderMixedUpException(); }
                         aggregate.ApplyEvent(e);
                         container = container with { LastSortableUniqueId = e.SortableUniqueId };
-                        if (e.GetSortableUniqueId().LaterThanOrEqual(targetSafeId))
+                        if (e.GetSortableUniqueId().IsLaterThanOrEqual(targetSafeId))
                         {
                             container.UnsafeEvents.Add(e);
                         }
@@ -134,7 +136,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
         container = container with { State = aggregate.ToState() };
         if (container.LastSortableUniqueId != null &&
             container.SafeSortableUniqueId == null &&
-            container.LastSortableUniqueId?.EarlierThan(SortableUniqueIdValue.GetSafeIdFromUtc()) == true)
+            container.LastSortableUniqueId?.IsEarlierThan(SortableUniqueIdValue.GetSafeIdFromUtc()) == true)
         {
             container = container with { SafeState = container.State, SafeSortableUniqueId = container.LastSortableUniqueId };
         }
@@ -188,7 +190,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
                     {
                         throw new SekibanEventDuplicateException();
                     }
-                    if (container.LastSortableUniqueId == null && e.GetSortableUniqueId().EarlierThan(targetSafeId) && aggregate.Version > 0)
+                    if (container.LastSortableUniqueId == null && e.GetSortableUniqueId().IsEarlierThan(targetSafeId) && aggregate.Version > 0)
                     {
                         container = container with
                         {
@@ -201,7 +203,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
 
                     aggregate.ApplyEvent(e);
                     container = container with { LastSortableUniqueId = e.GetSortableUniqueId() };
-                    if (e.GetSortableUniqueId().LaterThanOrEqual(targetSafeId))
+                    if (e.GetSortableUniqueId().IsLaterThanOrEqual(targetSafeId))
                     {
                         container.UnsafeEvents.Add(e);
                     }
@@ -226,7 +228,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
         container = container with { State = aggregate.ToState() };
         if (container.LastSortableUniqueId != null &&
             container.SafeSortableUniqueId == null &&
-            container.LastSortableUniqueId?.EarlierThan(SortableUniqueIdValue.GetSafeIdFromUtc()) == true)
+            container.LastSortableUniqueId?.IsEarlierThan(SortableUniqueIdValue.GetSafeIdFromUtc()) == true)
         {
             container = container with { SafeState = container.State, SafeSortableUniqueId = container.LastSortableUniqueId };
         }
@@ -268,7 +270,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
                 var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
                 foreach (var e in events)
                 {
-                    if (container.LastSortableUniqueId == null && e.GetSortableUniqueId().EarlierThan(targetSafeId) && aggregate.Version > 0)
+                    if (container.LastSortableUniqueId == null && e.GetSortableUniqueId().IsEarlierThan(targetSafeId) && aggregate.Version > 0)
                     {
                         container = container with
                         {
@@ -281,7 +283,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
 
                     aggregate.ApplyEvent(e);
                     container = container with { LastSortableUniqueId = e.GetSortableUniqueId() };
-                    if (e.GetSortableUniqueId().LaterThanOrEqual(targetSafeId))
+                    if (e.GetSortableUniqueId().IsLaterThanOrEqual(targetSafeId))
                     {
                         container.UnsafeEvents.Add(e);
                     }
@@ -300,7 +302,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
         container = container with { State = aggregate.ToState() };
         if (container.LastSortableUniqueId != null &&
             container.SafeSortableUniqueId == null &&
-            container.LastSortableUniqueId?.EarlierThan(SortableUniqueIdValue.GetSafeIdFromUtc()) == true)
+            container.LastSortableUniqueId?.IsEarlierThan(SortableUniqueIdValue.GetSafeIdFromUtc()) == true)
         {
             container = container with { SafeState = container.State, SafeSortableUniqueId = container.LastSortableUniqueId };
         }

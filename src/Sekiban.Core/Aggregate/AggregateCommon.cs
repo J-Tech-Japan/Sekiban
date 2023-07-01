@@ -11,11 +11,7 @@ public abstract class AggregateCommon : IAggregate
     protected AggregateBasicInfo _basicInfo = new();
 
 
-    public Guid AggregateId
-    {
-        get => _basicInfo.AggregateId;
-        init => _basicInfo = _basicInfo with { AggregateId = value };
-    }
+    public Guid AggregateId { get => _basicInfo.AggregateId; init => _basicInfo = _basicInfo with { AggregateId = value }; }
 
     public Guid LastEventId => _basicInfo.LastEventId;
     public string LastSortableUniqueId => _basicInfo.LastSortableUniqueId;
@@ -26,7 +22,7 @@ public abstract class AggregateCommon : IAggregate
     public abstract void ApplyEvent(IEvent ev);
 
     public abstract string GetPayloadVersionIdentifier();
-    public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().LaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
+    public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().IsLaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
 
     public bool CanApplyEvent(IEvent ev) => true;
 

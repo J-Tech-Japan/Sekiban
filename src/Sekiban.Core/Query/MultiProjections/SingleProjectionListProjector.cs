@@ -19,7 +19,7 @@ public class SingleProjectionListProjector<TProjection, TState, TProjector> : IM
     {
         State = new SingleProjectionListState<TState> { List = List.Select(m => m.ToState()).ToList() };
     }
-    public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().LaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
+    public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().IsLaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
 
     public void ApplyEvent(IEvent ev)
     {
@@ -74,9 +74,6 @@ public class SingleProjectionListProjector<TProjection, TState, TProjector> : IM
     public string LastSortableUniqueId { get; private set; } = string.Empty;
     public int AppliedSnapshotVersion { get; private set; }
     public int Version { get; private set; }
-    public string RootPartitionKey
-    {
-        get;
-    } = string.Empty;
+    public string RootPartitionKey { get; } = string.Empty;
     public string GetPayloadVersionIdentifier() => _projector.GetPayloadVersionIdentifier();
 }

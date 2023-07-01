@@ -53,6 +53,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MultiTenant.AggregateTest",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MultiTenant.WebApi", "samples\MultiTenant.WebApi\MultiTenant.WebApi.csproj", "{091121AC-BDAB-46B3-8A49-A63D0EF6FAA5}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tools", "Tools", "{9504B5F4-E803-46E3-B110-CBA8196B03D4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Convert011To012", "tools\Convert011To012\Convert011To012.csproj", "{482C14AE-C213-4234-9B11-F0D7E953EEE2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -147,6 +151,10 @@ Global
 		{091121AC-BDAB-46B3-8A49-A63D0EF6FAA5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{091121AC-BDAB-46B3-8A49-A63D0EF6FAA5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{091121AC-BDAB-46B3-8A49-A63D0EF6FAA5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{482C14AE-C213-4234-9B11-F0D7E953EEE2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{482C14AE-C213-4234-9B11-F0D7E953EEE2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{482C14AE-C213-4234-9B11-F0D7E953EEE2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{482C14AE-C213-4234-9B11-F0D7E953EEE2}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -174,6 +182,7 @@ Global
 		{3E9F6FD7-81D2-4CA9-988F-267A6A14993C} = {B85F80AE-6A27-402C-93FA-352D938EDA8D}
 		{7774CC25-EF36-4DA3-ADAF-B98F4274CBFD} = {4C34F748-F223-44DD-899D-029F9CEF7780}
 		{091121AC-BDAB-46B3-8A49-A63D0EF6FAA5} = {B85F80AE-6A27-402C-93FA-352D938EDA8D}
+		{482C14AE-C213-4234-9B11-F0D7E953EEE2} = {9504B5F4-E803-46E3-B110-CBA8196B03D4}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {2DFBE53E-69A7-453A-8D20-72271AE32016}

@@ -38,8 +38,8 @@ public class MultiProjectionSnapshotGenerator : IMultiProjectionSnapshotGenerato
                 var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
                 foreach (var ev in events)
                 {
-                    if (ev.GetSortableUniqueId().EarlierThan(targetSafeId) &&
-                        ev.GetSortableUniqueId().LaterThanOrEqual(projector.LastSortableUniqueId))
+                    if (ev.GetSortableUniqueId().IsEarlierThan(targetSafeId) &&
+                        ev.GetSortableUniqueId().IsLaterThanOrEqual(projector.LastSortableUniqueId))
                     {
                         projector.ApplyEvent(ev);
                     }

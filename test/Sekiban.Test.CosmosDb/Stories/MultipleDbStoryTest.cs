@@ -80,5 +80,21 @@ public class MultipleDbStoryTest : TestBase<FeatureCheckDependency>
         // If you get a List with "Secondary", you get three records.
         list = await _sekibanContext.SekibanActionAsync(SecondaryDb, async () => await multiProjectionService.GetAggregateList<Branch>());
         Assert.Equal(3, list.Count);
+
+        // nesting database can work.
+        await _sekibanContext.SekibanActionAsync(
+            DefaultDb,
+            async () =>
+            {
+                // If you get a List with "Secondary", you get three records.
+                list = await _sekibanContext.SekibanActionAsync(SecondaryDb, async () => await multiProjectionService.GetAggregateList<Branch>());
+                Assert.Equal(3, list.Count);
+
+                // After the nesting seconds, go back to default database.
+                list = await multiProjectionService.GetAggregateList<Branch>();
+                Assert.Single(list);
+
+            });
+
     }
 }

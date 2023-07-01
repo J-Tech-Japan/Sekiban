@@ -38,7 +38,7 @@ public class SekibanUpdateNoticeManager : IUpdateNotice
         {
             return (true, null);
         }
-        return (sortableUniqueId.EarlierThanOrEqual(current.SortableUniqueId), current.LocationType);
+        return (sortableUniqueId.IsEarlierThanOrEqual(current.SortableUniqueId), current.LocationType);
     }
 
     public (bool, UpdatedLocationType?) HasUpdateAfter(string rootPartitionKey, string aggregateName, SortableUniqueIdValue? sortableUniqueId)
@@ -54,7 +54,7 @@ public class SekibanUpdateNoticeManager : IUpdateNotice
             {
                 return (true, null);
             }
-            return (sortableUniqueId.EarlierThanOrEqual(currentAll.SortableUniqueId), currentAll.LocationType);
+            return (sortableUniqueId.IsEarlierThanOrEqual(currentAll.SortableUniqueId), currentAll.LocationType);
         }
         var current = UpdateDictionary.GetValueOrDefault(GetKeyForType(rootPartitionKey, aggregateName));
         if (current is null || string.IsNullOrEmpty(current.SortableUniqueId))
@@ -65,7 +65,7 @@ public class SekibanUpdateNoticeManager : IUpdateNotice
         {
             return (true, null);
         }
-        return (sortableUniqueId.EarlierThanOrEqual(current.SortableUniqueId), current.LocationType);
+        return (sortableUniqueId.IsEarlierThanOrEqual(current.SortableUniqueId), current.LocationType);
     }
 
     public static string GetKeyForAggregate(string rootPartitionKey, string aggregateName, Guid aggregateId) =>

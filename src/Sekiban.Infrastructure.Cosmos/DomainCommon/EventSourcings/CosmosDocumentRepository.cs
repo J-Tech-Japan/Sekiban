@@ -252,7 +252,8 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     var response = await feedIterator.ReadNextAsync();
                     foreach (var item in response)
                     {
-                        if (sinceSortableUniqueId is not null && new SortableUniqueIdValue(item.SortableUniqueId).EarlierThan(sinceSortableUniqueId))
+                        if (sinceSortableUniqueId is not null &&
+                            new SortableUniqueIdValue(item.SortableUniqueId).IsEarlierThan(sinceSortableUniqueId))
                         {
                             continue;
                         }

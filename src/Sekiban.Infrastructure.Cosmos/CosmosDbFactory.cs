@@ -64,6 +64,12 @@ public class CosmosDbFactory
         };
     }
 
+    private bool GetSupportsHierarchicalPartitions()
+    {
+        var supportsHierarchicalPartitions = _section?.GetValue<bool>("LegacyPartitions");
+        return !supportsHierarchicalPartitions ?? true;
+    }
+
     private static string GetMemoryCacheContainerKey(
         DocumentType documentType,
         string databaseId,
@@ -128,7 +134,7 @@ public class CosmosDbFactory
                 new MemoryCacheEntryOptions());
         }
 
-        var containerProperties = new ContainerProperties(containerId, GetPartitionKeyPaths());
+        var containerProperties = new ContainerProperties(containerId, GetPartitionKeyPaths(GetSupportsHierarchicalPartitions()));
         container = await database.CreateContainerIfNotExistsAsync(containerProperties, 400);
         _memoryCache.Cache.Set(
             GetMemoryCacheContainerKey(documentType, databaseId, containerId, _sekibanContextIdentifier),
@@ -232,5 +238,8 @@ public class CosmosDbFactory
         }
     }
 
-    private IReadOnlyList<string> GetPartitionKeyPaths() => new List<string> { "/RootPartitionKey", "/AggregateType", "/PartitionKey" };
+    private IReadOnlyList<string> GetPartitionKeyPaths(bool supportsHierarchicalPartitions) =>
+        supportsHierarchicalPartitions
+            ? new List<string> { "/RootPartitionKey", "/AggregateType", "/PartitionKey" }
+            : new List<string> { "/PartitionKey" };
 }

@@ -82,7 +82,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                     {
                         throw new SekibanUnregisterdEventFoundException();
                     }
-                    if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().EarlierThan(sinceSortableUniqueId))
+                    if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
                     {
                         continue;
                     }
@@ -153,7 +153,8 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 var commands = (from document in resultList
                                 let json = document.ToJson()
                                 let sortableUniqueId = document[nameof(IDocument.SortableUniqueId)].AsString()
-                                where sinceSortableUniqueId is null || !new SortableUniqueIdValue(sortableUniqueId).EarlierThan(sinceSortableUniqueId)
+                                where sinceSortableUniqueId is null ||
+                                    !new SortableUniqueIdValue(sortableUniqueId).IsEarlierThan(sinceSortableUniqueId)
                                 select json).ToList();
                 resultAction(commands);
             });
@@ -212,7 +213,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                     {
                         throw new SekibanUnregisterdEventFoundException();
                     }
-                    if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().EarlierThan(sinceSortableUniqueId))
+                    if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
                     {
                         continue;
                     }
@@ -279,7 +280,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                     {
                         throw new SekibanUnregisterdEventFoundException();
                     }
-                    if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().EarlierThan(sinceSortableUniqueId))
+                    if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
                     {
                         continue;
                     }

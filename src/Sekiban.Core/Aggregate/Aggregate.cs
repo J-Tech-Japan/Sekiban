@@ -47,7 +47,7 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon, ISingleProje
     public override void ApplyEvent(IEvent ev)
     {
         if (!string.IsNullOrEmpty(LastSortableUniqueId) &&
-            new SortableUniqueIdValue(LastSortableUniqueId).LaterThanOrEqual(new SortableUniqueIdValue(ev.SortableUniqueId)))
+            new SortableUniqueIdValue(LastSortableUniqueId).IsLaterThanOrEqual(new SortableUniqueIdValue(ev.SortableUniqueId)))
         {
             return;
         }
