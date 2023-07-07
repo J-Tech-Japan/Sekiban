@@ -59,7 +59,6 @@ public static class GeneralTypeExtensions
 
     public static Type GetImplementingFromGenericInterfaceType(this Type type, Type genericInterface)
     {
-        var interfaces = type.GetInterfaces();
         return type.GetInterfaces().FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == genericInterface) ??
             throw new ArgumentException("The type does not implement the generic interface.", nameof(type));
     }

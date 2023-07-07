@@ -18,4 +18,6 @@ public interface IDependencyDefinition : IQueryDefinition
     Assembly GetExecutingAssembly();
     IEnumerable<(Type serviceType, Type? implementationType)> GetCommandDependencies();
     IEnumerable<(Type serviceType, Type? implementationType)> GetSubscriberDependencies();
+
+    IEnumerable<IAggregateDependencyDefinition> GetAggregateDefinitions();
 }
