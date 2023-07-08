@@ -18,6 +18,7 @@ public class DynamoSekibanServiceProviderGenerator : ISekibanServiceProviderGene
         services.AddSingleton<IConfiguration>(fixture.Configuration);
         services.AddSekibanCoreWithDependency(dependencyDefinition, sekibanDateProducer);
         services.AddSekibanDynamoDB();
+        services.AddLogging();
         if (fixture.TestOutputHelper is not null)
         {
             services.AddSingleton(fixture.TestOutputHelper);

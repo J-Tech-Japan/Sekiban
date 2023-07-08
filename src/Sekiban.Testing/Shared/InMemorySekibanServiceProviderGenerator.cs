@@ -16,6 +16,7 @@ public class InMemorySekibanServiceProviderGenerator : ISekibanServiceProviderGe
         IServiceCollection services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(fixture.Configuration);
         services.AddSekibanCoreInMemoryTestWithDependency(dependencyDefinition);
+        services.AddLogging();
         if (fixture.TestOutputHelper is not null)
         {
             services.AddSingleton(fixture.TestOutputHelper);
