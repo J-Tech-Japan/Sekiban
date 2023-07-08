@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Setting;
@@ -12,17 +11,11 @@ public class MultiProjectionSnapshotGenerator : IMultiProjectionSnapshotGenerato
     private readonly IBlobAccessor _blobAccessor;
     private readonly IDocumentRepository _documentRepository;
     private readonly IDocumentWriter _documentWriter;
-    private readonly ILogger<MultiProjectionSnapshotGenerator> _logger;
-    public MultiProjectionSnapshotGenerator(
-        IDocumentRepository documentRepository,
-        IBlobAccessor blobAccessor,
-        IDocumentWriter documentWriter,
-        ILogger<MultiProjectionSnapshotGenerator> logger)
+    public MultiProjectionSnapshotGenerator(IDocumentRepository documentRepository, IBlobAccessor blobAccessor, IDocumentWriter documentWriter)
     {
         _documentRepository = documentRepository;
         _blobAccessor = blobAccessor;
         _documentWriter = documentWriter;
-        _logger = logger;
     }
 
     public async Task<MultiProjectionState<TProjectionPayload>> GenerateMultiProjectionSnapshotAsync<TProjection, TProjectionPayload>(
