@@ -11,6 +11,7 @@ public class MultiProjectionCollectionGenerator
 
     public async Task GenerateAsync(IMultiProjectionsSnapshotGenerateSetting settings)
     {
+        var minimumNumberOfEventsToGenerateSnapshot = settings.GetMinimumNumberOfEventsToGenerateSnapshot();
         foreach (var multiProjectionType in settings.GetMultiProjectionsSnapshotTypes())
         {
             if (multiProjectionType.IsMultiProjectionPayloadType())
@@ -24,7 +25,6 @@ public class MultiProjectionCollectionGenerator
 
                 var generateMethod = method.MakeGenericMethod(multiProjectionType);
 
-                var minimumNumberOfEventsToGenerateSnapshot = settings.GetMinimumNumberOfEventsToGenerateSnapshot();
                 var rootPartitionKeys = settings.GetRootPartitionKeys();
                 foreach (var rootPartitionKey in rootPartitionKeys)
                 {
@@ -47,7 +47,6 @@ public class MultiProjectionCollectionGenerator
 
                 var generateMethod = method.MakeGenericMethod(aggregatePayloadType);
 
-                var minimumNumberOfEventsToGenerateSnapshot = settings.GetMinimumNumberOfEventsToGenerateSnapshot();
                 var rootPartitionKeys = settings.GetRootPartitionKeys();
                 foreach (var rootPartitionKey in rootPartitionKeys)
                 {
@@ -70,7 +69,6 @@ public class MultiProjectionCollectionGenerator
 
                 var generateMethod = method.MakeGenericMethod(singleProjectionPayloadType);
 
-                var minimumNumberOfEventsToGenerateSnapshot = settings.GetMinimumNumberOfEventsToGenerateSnapshot();
                 var rootPartitionKeys = settings.GetRootPartitionKeys();
                 foreach (var rootPartitionKey in rootPartitionKeys)
                 {

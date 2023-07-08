@@ -60,6 +60,19 @@ public class MultiProjectionSnapshotGenerator : IMultiProjectionSnapshotGenerato
                 memoryStream);
             var snapshotDocument = new MultiProjectionSnapshotDocument(typeof(TProjectionPayload), blobId, projector, rootPartitionKey);
             await _documentWriter.SaveAsync(snapshotDocument, typeof(TProjectionPayload));
+            Console.WriteLine(
+                "Generate multi snapshot for {0} and rootPartitionKey {1} because used version is {2}",
+                ProjectionName(typeof(TProjectionPayload)),
+                rootPartitionKey,
+                usedVersion);
+        } else
+        {
+            Console.WriteLine(
+                "skip making snapshot for {0} and rootPartitionKey {1} because used version is {2} and minimum is {3}",
+                ProjectionName(typeof(TProjectionPayload)),
+                rootPartitionKey,
+                usedVersion,
+                minimumNumberOfEventsToGenerateSnapshot);
         }
         return projector.ToState();
     }
