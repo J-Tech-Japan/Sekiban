@@ -86,11 +86,13 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
 
     protected void RemoveAllFromDefault()
     {
+        ResetInMemoryDocumentStoreAndCache();
         documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Default).Wait();
         documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Default).Wait();
     }
     protected void RemoveAllFromDefaultAndDissolvable()
     {
+        ResetInMemoryDocumentStoreAndCache();
         documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Default).Wait();
         documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Default).Wait();
         documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Dissolvable).Wait();
