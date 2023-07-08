@@ -93,6 +93,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<SnapshotGenerator>();
         services.AddTransient<ISingleProjectionSnapshotAccessor, SingleProjectionSnapshotAccessor>();
         services.AddSingleton<ICommandExecuteAwaiter>(new CommandExecuteAwaiter());
+        services.AddTransient<MultiProjectionCollectionGenerator>();
         return services;
     }
 
@@ -144,6 +145,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<SnapshotGenerator>();
         services.AddTransient<ISingleProjectionSnapshotAccessor, SingleProjectionSnapshotAccessor>();
         services.AddSingleton<ICommandExecuteAwaiter>(new CommandExecuteAwaiter());
+        services.AddTransient<MultiProjectionCollectionGenerator>();
         return services;
     }
 
@@ -194,6 +196,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<SnapshotGenerator>();
         services.AddTransient<ISingleProjectionSnapshotAccessor, SingleProjectionSnapshotAccessor>();
         services.AddSingleton<ICommandExecuteAwaiter>(new CommandExecuteAwaiter());
+        services.AddTransient<MultiProjectionCollectionGenerator>();
         return services;
     }
 
@@ -214,6 +217,12 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    public static IServiceCollection AddSekibanMultiProjectionSnapshotBackgroundService<TSettings>(this IServiceCollection services)
+        where TSettings : IMultiProjectionsSnapshotGenerateSetting
+    {
+        services.AddHostedService<MultiProjectionSnapshotCollectionBackgroundService<TSettings>>();
+        return services;
+    }
     public static IServiceCollection AddSekibanSettingsFromAppSettings(this IServiceCollection services)
     {
         // Settings can be specified from the Configuration, and a settings object can also be created with new.

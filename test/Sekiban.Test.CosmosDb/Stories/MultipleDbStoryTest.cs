@@ -1,7 +1,6 @@
 using FeatureCheck.Domain.Aggregates.Branches;
 using FeatureCheck.Domain.Aggregates.Branches.Commands;
 using FeatureCheck.Domain.Shared;
-using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Setting;
 using Sekiban.Infrastructure.Cosmos;
 using System.Threading.Tasks;
@@ -24,11 +23,7 @@ public class MultipleDbStoryTest : TestBase<FeatureCheckDependency>
     [Fact(DisplayName = "Verify the operation with multiple databases in the CosmosDb story test.")]
     public async Task CosmosDbStory()
     {
-        var cosmosDbFactory = GetService<CosmosDbFactory>();
-        var multiProjectionService = GetService<IMultiProjectionService>();
-
         // When executed without doing anything, it becomes the "Default" behavior.
-
         RemoveAllFromDefaultAndDissolvable();
 
         // Run command within Secondary

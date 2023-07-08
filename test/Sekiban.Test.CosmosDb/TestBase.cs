@@ -26,6 +26,7 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
 {
     protected readonly IAggregateLoader aggregateLoader;
     protected readonly ICommandExecutor commandExecutor;
+    protected readonly IConfiguration configuration;
     protected readonly IDocumentPersistentRepository documentPersistentRepository;
     protected readonly IDocumentPersistentWriter documentPersistentWriter;
     protected readonly IDocumentRemover documentRemover;
@@ -57,6 +58,7 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
         documentPersistentRepository = GetService<IDocumentPersistentRepository>();
         multiProjectionService = GetService<IMultiProjectionService>();
         queryExecutor = GetService<IQueryExecutor>();
+        configuration = GetService<IConfiguration>();
     }
 
     public void Dispose()
@@ -84,11 +86,13 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
 
     protected void RemoveAllFromDefault()
     {
+        ResetInMemoryDocumentStoreAndCache();
         documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Default).Wait();
         documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Default).Wait();
     }
     protected void RemoveAllFromDefaultAndDissolvable()
     {
+        ResetInMemoryDocumentStoreAndCache();
         documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Default).Wait();
         documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Default).Wait();
         documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Dissolvable).Wait();

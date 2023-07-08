@@ -38,7 +38,7 @@ public class EventsConverter
                     ConvertDestination,
                     async () => await GetLastSortableUniqueIdAsync(containerGroup));
 
-                var lastDefault = await GetLastSortableUniqueIdAsync(containerGroup);
+                await GetLastSortableUniqueIdAsync(containerGroup);
 
 
                 await _cosmosDbFactory.CosmosActionAsync(
@@ -59,7 +59,6 @@ public class EventsConverter
 
                         while (feedIterator.HasMoreResults)
                         {
-                            var events = new List<IEvent>();
                             var response = await feedIterator.ReadNextAsync();
                             foreach (var item in response)
                             {

@@ -58,7 +58,7 @@ public class ValidationTest
         Assert.False(vresults.Any());
     }
 
-    [Fact(DisplayName = "Verification failed - Name not entered.")]
+    [Fact(DisplayName = "Verification returns validation error - Name not entered.")]
     public void Test2()
     {
         var m = new Member { Name = string.Empty, Age = 25, Tel = "090-1111-2222", Email = "hoge@example.com" };
@@ -66,7 +66,7 @@ public class ValidationTest
         Assert.True(vresults.Any());
     }
 
-    [Fact(DisplayName = "Verification failed - Name digit overflow.")]
+    [Fact(DisplayName = "Verification returns validation error - Name digit overflow.")]
     public void Test3()
     {
         var m = new Member { Name = "YAMADA Taroooooooooooooooo", Age = 25, Tel = "090-1111-2222", Email = "hoge@example.com" };
@@ -74,7 +74,7 @@ public class ValidationTest
         Assert.True(vresults.Any());
     }
 
-    [Fact(DisplayName = "Verification failed - Age outside numeric range.")]
+    [Fact(DisplayName = "Verification returns validation error - Age outside numeric range.")]
     public void Test4()
     {
         var m = new Member { Name = "YAMADA Taro", Age = 80, Tel = "090-1111-2222", Email = "hoge@example.com" };
@@ -82,7 +82,7 @@ public class ValidationTest
         Assert.True(vresults.Any());
     }
 
-    [Fact(DisplayName = "Verification failed - Character type of phone number.")]
+    [Fact(DisplayName = "Verification returns validation error - Character type of phone number.")]
     public void Test5()
     {
         var m = new Member { Name = "YAMADA Taro", Age = 25, Tel = "090-1111-abcd", Email = "hoge@example.com" };
@@ -90,7 +90,7 @@ public class ValidationTest
         Assert.True(vresults.Any());
     }
 
-    [Fact(DisplayName = "Verification failed - Email address format.")]
+    [Fact(DisplayName = "Verification returns validation error - Email address format.")]
     public void Test6()
     {
         var m = new Member { Name = "YAMADA Taro", Age = 25, Tel = "090-1111-2222", Email = "hoge@example@com" };
@@ -113,7 +113,7 @@ public class ValidationTest
         Assert.False(vresults.Any());
     }
 
-    [Fact(DisplayName = "Verification failed - Property of reference-type property.")]
+    [Fact(DisplayName = "Verification returns validation error - Property of reference-type property.")]
     public void Test8()
     {
         var m = new Member
@@ -146,7 +146,7 @@ public class ValidationTest
         Assert.False(vresults.Any());
     }
 
-    [Fact(DisplayName = "Verification failed - There is an element that fails validation in array type property.")]
+    [Fact(DisplayName = "Verification returns validation error - There is an element that fails validation in array type property.")]
     public void Test10()
     {
         var m = new Member

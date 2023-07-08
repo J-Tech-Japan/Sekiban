@@ -12,7 +12,6 @@ namespace Sekiban.Test.CosmosDb.Stories;
 
 public class InheritedSubtypeTests : TestBase<FeatureCheckDependency>
 {
-    private readonly CosmosDbFactory _cosmosDbFactory;
     private readonly ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor;
     private CommandExecutorResponseWithEvents commandResponse = default!;
 
@@ -21,7 +20,6 @@ public class InheritedSubtypeTests : TestBase<FeatureCheckDependency>
         testOutputHelper,
         new CosmosSekibanServiceProviderGenerator())
     {
-        _cosmosDbFactory = GetService<CosmosDbFactory>();
         GetService<IMultiProjectionService>();
         GetService<IDocumentPersistentRepository>();
         singleProjectionSnapshotAccessor = GetService<ISingleProjectionSnapshotAccessor>();

@@ -79,7 +79,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                             throw new SekibanUnregisterdEventFoundException();
                         }
 
-                        if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().EarlierThan(sinceSortableUniqueId))
+                        if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
                         {
                             continue;
                         }
@@ -211,7 +211,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                             throw new SekibanUnregisterdEventFoundException();
                         }
 
-                        if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().EarlierThan(sinceSortableUniqueId))
+                        if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
                         {
                             continue;
                         }
@@ -311,7 +311,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                             throw new SekibanUnregisterdEventFoundException();
                         }
 
-                        if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().EarlierThan(sinceSortableUniqueId))
+                        if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
                         {
                             continue;
                         }
