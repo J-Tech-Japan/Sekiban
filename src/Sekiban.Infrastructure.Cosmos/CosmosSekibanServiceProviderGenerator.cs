@@ -18,7 +18,6 @@ public class CosmosSekibanServiceProviderGenerator : ISekibanServiceProviderGene
         services.AddSingleton<IConfiguration>(fixture.Configuration);
         services.AddSekibanCoreWithDependency(dependencyDefinition, sekibanDateProducer);
         services.AddSekibanCosmosDB();
-        services.AddLogging();
         if (fixture.TestOutputHelper is not null)
         {
             services.AddSingleton(fixture.TestOutputHelper);
