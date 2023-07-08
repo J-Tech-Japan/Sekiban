@@ -2,6 +2,7 @@ using Microsoft.DotNet.PlatformAbstractions;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Command;
@@ -43,7 +44,10 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
     {
         sekibanTestFixture.TestOutputHelper = output;
         this.sekibanTestFixture = sekibanTestFixture;
-        serviceProvider = providerGenerator.Generate(sekibanTestFixture, new TDependency());
+        serviceProvider = providerGenerator.Generate(
+            sekibanTestFixture,
+            new TDependency(),
+            collection => collection.AddLogging(builder => builder.AddXUnit(sekibanTestFixture.TestOutputHelper)));
         var backgroundService = serviceProvider.GetRequiredService<SnapshotTakingBackgroundService>();
         backgroundService.ServiceProvider = serviceProvider;
         Task.Run(() => backgroundService.StartAsync(CancellationToken.None));

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
@@ -7,6 +8,8 @@ using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
+using Xunit.Abstractions;
+using Xunit.Sdk;
 namespace Sekiban.Testing.SingleProjections;
 
 public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposable, IAggregateTestHelper<TAggregatePayload>
@@ -22,6 +25,9 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         SetupDependency(services);
         services.AddQueriesFromDependencyDefinition(new TDependencyDefinition());
         services.AddSekibanCoreForAggregateTestWithDependency(new TDependencyDefinition());
+        var outputHelper = new TestOutputHelper();
+        services.AddSingleton<ITestOutputHelper>(outputHelper);
+        services.AddLogging(builder => builder.AddXUnit(outputHelper));
         _serviceProvider = services.BuildServiceProvider();
         _helper = new AggregateTestHelper<TAggregatePayload>(_serviceProvider);
     }

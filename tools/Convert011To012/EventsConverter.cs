@@ -1,5 +1,6 @@
 using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Cosmos.Linq;
+using Microsoft.Extensions.Logging;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.ValueObjects;
@@ -17,11 +18,13 @@ public class EventsConverter
     private const string SourceDatabase = "Default";
     private const string ConvertDestination = "ConvertDestination";
     private readonly CosmosDbFactory _cosmosDbFactory;
+    private readonly ILogger<EventsConverter> _logger;
     private readonly ISekibanContext _sekibanContext;
-    public EventsConverter(ISekibanContext sekibanContext, CosmosDbFactory cosmosDbFactory)
+    public EventsConverter(ISekibanContext sekibanContext, CosmosDbFactory cosmosDbFactory, ILogger<EventsConverter> logger)
     {
         _sekibanContext = sekibanContext;
         _cosmosDbFactory = cosmosDbFactory;
+        _logger = logger;
     }
 
 
@@ -88,7 +91,11 @@ public class EventsConverter
                                                     count++;
                                                     if (count % 1000 == 0)
                                                     {
-                                                        Console.WriteLine($"{count} - {jsonDocument["Timestamp"]} - {DateTime.Now:T}");
+                                                        _logger.LogInformation(
+                                                            "{Count} - {Unknown} - {Now}",
+                                                            count,
+                                                            jsonDocument["Timestamp"],
+                                                            DateTime.Now);
                                                     }
                                                 });
 

@@ -40,6 +40,7 @@ public static class ServiceCollectionExtensions
         IConfiguration? configuration = null)
     {
         services.AddMemoryCache();
+        services.AddLogging();
         services.AddTransient<IMemoryCacheAccessor, MemoryCacheAccessor>();
         services.AddTransient<EventPublisher>();
 
@@ -100,6 +101,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddSekibanCoreInMemory(this IServiceCollection services, ISekibanDateProducer? sekibanDateProducer = null)
     {
         services.AddMemoryCache();
+        services.AddLogging();
         services.AddTransient<IMemoryCacheAccessor, MemoryCacheAccessor>();
 
         services.AddTransient<EventPublisher>();
@@ -152,6 +154,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddSekibanCoreAggregateTest(this IServiceCollection services, ISekibanDateProducer? sekibanDateProducer = null)
     {
         services.AddMemoryCache();
+        services.AddLogging();
         services.AddTransient<IMemoryCacheAccessor, MemoryCacheAccessor>();
 
         services.AddTransient<EventPublisher>();

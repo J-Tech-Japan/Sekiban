@@ -1,4 +1,6 @@
 using FeatureCheck.Domain.Shared;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Sekiban.Testing.Story;
 using Xunit.Abstractions;
 namespace Sekiban.Test.CosmosDb;
@@ -9,6 +11,9 @@ public class ProjectSekibanByTestTestBase : SekibanByTestTestBase
     public ProjectSekibanByTestTestBase(ITestOutputHelper testOutputHelper, ISekibanServiceProviderGenerator serviceProviderGenerator)
     {
         _fixture.TestOutputHelper = testOutputHelper;
-        ServiceProvider = serviceProviderGenerator.Generate(_fixture, new FeatureCheckDependency());
+        ServiceProvider = serviceProviderGenerator.Generate(
+            _fixture,
+            new FeatureCheckDependency(),
+            collection => collection.AddLogging(builder => builder.AddXUnit(_fixture.TestOutputHelper)));
     }
 }
