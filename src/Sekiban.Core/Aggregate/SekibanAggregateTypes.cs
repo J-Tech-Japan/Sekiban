@@ -1,4 +1,3 @@
-using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Types;
 using System.Reflection;
 namespace Sekiban.Core.Aggregate;
@@ -23,9 +22,7 @@ public class SekibanAggregateTypes
 
             foreach (var type in aggregates)
             {
-                var baseProjector = typeof(DefaultSingleProjector<>);
-                var p = baseProjector.MakeGenericType(type);
-                var aggregateType = new DefaultAggregateType(type, p);
+                var aggregateType = new DefaultAggregateType(type);
                 if (_registeredTypes.Contains(aggregateType))
                 {
                     continue;
@@ -36,10 +33,7 @@ public class SekibanAggregateTypes
             var customProjectors = assembly.DefinedTypes.GetSingleProjectorTypes();
             foreach (var type in customProjectors)
             {
-                var projectorType = new SingleProjectionAggregateType(
-                    type.GetOriginalTypeFromSingleProjectionPayload(),
-                    type.GetProjectionTypeFromSingleProjection(),
-                    type);
+                var projectorType = new SingleProjectionAggregateType(type.GetOriginalTypeFromSingleProjectionPayload(), type);
                 if (_registeredCustomProjectorTypes.Contains(projectorType))
                 {
                     continue;
@@ -52,7 +46,7 @@ public class SekibanAggregateTypes
         SingleProjectionTypes = _registeredCustomProjectorTypes.AsReadOnly();
     }
 
-    public record DefaultAggregateType(Type Aggregate, Type Projection);
+    public record DefaultAggregateType(Type Aggregate);
 
-    public record SingleProjectionAggregateType(Type Aggregate, Type Projection, Type PayloadType) : DefaultAggregateType(Aggregate, Projection);
+    public record SingleProjectionAggregateType(Type OriginalAggregate, Type SingleProjectionPayloadType);
 }

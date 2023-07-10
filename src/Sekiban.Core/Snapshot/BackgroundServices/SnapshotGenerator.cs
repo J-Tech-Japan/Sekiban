@@ -124,16 +124,16 @@ public class SnapshotGenerator
             }
 
             foreach (var projection in _sekibanAggregateTypes.SingleProjectionTypes.Where(
-                m => m.Aggregate.FullName == aggregateType.Aggregate.FullName))
+                m => m.OriginalAggregate.FullName == aggregateType.Aggregate.FullName))
             {
-                if (!_aggregateSettings.ShouldTakeSnapshotForType(projection.Aggregate))
+                if (!_aggregateSettings.ShouldTakeSnapshotForType(projection.OriginalAggregate))
                 {
                     continue;
                 }
                 var snapshotManagerResponseP = await commandExecutor.ExecCommandWithEventsAsync(
                     new ReportVersionToSnapshotManger(
                         SnapshotManager.SharedId,
-                        projection.PayloadType,
+                        projection.SingleProjectionPayloadType,
                         notification.AggregateId,
                         notification.Version,
                         null));
@@ -147,7 +147,7 @@ public class SnapshotGenerator
                 {
                     dynamic? awaitable = aggregateLoader.GetType()
                         .GetMethod(nameof(aggregateLoader.AsSingleProjectionStateAsync))
-                        ?.MakeGenericMethod(projection.PayloadType)
+                        ?.MakeGenericMethod(projection.SingleProjectionPayloadType)
                         .Invoke(
                             aggregateLoader,
                             new object?[] { notification.AggregateId, notification.RootPartitionKey, taken.Payload.NextSnapshotVersion, null });
@@ -163,8 +163,8 @@ public class SnapshotGenerator
                     }
                     if (await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
                         notification.AggregateId,
-                        projection.Aggregate,
-                        projection.PayloadType,
+                        projection.OriginalAggregate,
+                        projection.SingleProjectionPayloadType,
                         taken.Payload.NextSnapshotVersion,
                         taken.RootPartitionKey,
                         aggregateToSnapshot.GetPayloadVersionIdentifier()))
@@ -178,8 +178,8 @@ public class SnapshotGenerator
                     var snapshotDocument
                         = await singleProjectionSnapshotAccessor.SnapshotDocumentFromSingleProjectionStateAsync(
                             aggregateToSnapshot,
-                            projection.Aggregate);
-                    await _documentWriter.SaveAsync(snapshotDocument, projection.Aggregate);
+                            projection.OriginalAggregate);
+                    await _documentWriter.SaveAsync(snapshotDocument, projection.OriginalAggregate);
                 }
             }
         }
