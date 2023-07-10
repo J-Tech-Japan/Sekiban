@@ -10,13 +10,14 @@ var builder = new ConfigurationBuilder().SetBasePath(AppContext.BaseDirectory)
     .AddJsonFile("appsettings.json")
     .AddEnvironmentVariables()
     .AddUserSecrets(Assembly.GetExecutingAssembly());
-var Configuration = builder.Build();
-var ServiceCollection = new ServiceCollection();
-ServiceCollection.AddSingleton<IConfiguration>(Configuration);
-SekibanEventSourcingDependency.Register(ServiceCollection, new EmptyDependencyDefinition());
-ServiceCollection.AddSekibanCosmosDB();
-ServiceCollection.AddTransient<EventsConverter>();
-var ServiceProvider = ServiceCollection.BuildServiceProvider();
+var configuration = builder.Build();
+var serviceCollection = new ServiceCollection();
+serviceCollection.AddSingleton<IConfiguration>(configuration);
+SekibanEventSourcingDependency.Register(serviceCollection, new EmptyDependencyDefinition());
+serviceCollection.AddSekibanCosmosDB();
+serviceCollection.AddLogging();
+serviceCollection.AddTransient<EventsConverter>();
+var ServiceProvider = serviceCollection.BuildServiceProvider();
 
 var eventConverter = ServiceProvider.GetService<EventsConverter>();
 if (eventConverter == null)

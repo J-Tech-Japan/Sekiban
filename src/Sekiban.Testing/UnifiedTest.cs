@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
@@ -14,6 +15,8 @@ using Sekiban.Testing.Projection;
 using Sekiban.Testing.SingleProjections;
 using System.Text.Json;
 using Xunit;
+using Xunit.Abstractions;
+using Xunit.Sdk;
 namespace Sekiban.Testing;
 
 public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefinition : IDependencyDefinition, new()
@@ -30,6 +33,9 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         SetupDependency(services);
         services.AddQueriesFromDependencyDefinition(new TDependencyDefinition());
         services.AddSekibanCoreForAggregateTestWithDependency(new TDependencyDefinition());
+        var outputHelper = new TestOutputHelper();
+        services.AddSingleton<ITestOutputHelper>(outputHelper);
+        services.AddLogging(builder => builder.AddXUnit(outputHelper));
         _serviceProvider = services.BuildServiceProvider();
         _commandExecutor = new TestCommandExecutor(_serviceProvider);
         _eventHandler = new TestEventHandler(_serviceProvider);

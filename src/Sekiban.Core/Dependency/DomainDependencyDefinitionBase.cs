@@ -31,6 +31,8 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
         return AggregateDefinitions.SelectMany(s => s.CommandTypes);
     }
 
+    public IEnumerable<IAggregateDependencyDefinition> GetAggregateDefinitions() => AggregateDefinitions;
+
     public IEnumerable<(Type serviceType, Type? implementationType)> GetSubscriberDependencies()
     {
         return AggregateDefinitions.SelectMany(s => s.SubscriberTypes);

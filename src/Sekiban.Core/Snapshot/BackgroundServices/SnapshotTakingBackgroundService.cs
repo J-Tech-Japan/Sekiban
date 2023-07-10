@@ -12,7 +12,6 @@ public class SnapshotTakingBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        Console.WriteLine("SnapshotTakingBackgroundService is started.");
         while (!stoppingToken.IsCancellationRequested)
         {
             if (_eventQueue.TryTake(out var ev))

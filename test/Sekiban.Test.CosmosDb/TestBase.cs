@@ -2,6 +2,7 @@ using Microsoft.DotNet.PlatformAbstractions;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Command;
@@ -26,6 +27,7 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
 {
     protected readonly IAggregateLoader aggregateLoader;
     protected readonly ICommandExecutor commandExecutor;
+    protected readonly IConfiguration configuration;
     protected readonly IDocumentPersistentRepository documentPersistentRepository;
     protected readonly IDocumentPersistentWriter documentPersistentWriter;
     protected readonly IDocumentRemover documentRemover;
@@ -42,7 +44,10 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
     {
         sekibanTestFixture.TestOutputHelper = output;
         this.sekibanTestFixture = sekibanTestFixture;
-        serviceProvider = providerGenerator.Generate(sekibanTestFixture, new TDependency());
+        serviceProvider = providerGenerator.Generate(
+            sekibanTestFixture,
+            new TDependency(),
+            collection => collection.AddLogging(builder => builder.AddXUnit(sekibanTestFixture.TestOutputHelper)));
         var backgroundService = serviceProvider.GetRequiredService<SnapshotTakingBackgroundService>();
         backgroundService.ServiceProvider = serviceProvider;
         Task.Run(() => backgroundService.StartAsync(CancellationToken.None));
@@ -57,6 +62,7 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
         documentPersistentRepository = GetService<IDocumentPersistentRepository>();
         multiProjectionService = GetService<IMultiProjectionService>();
         queryExecutor = GetService<IQueryExecutor>();
+        configuration = GetService<IConfiguration>();
     }
 
     public void Dispose()
@@ -84,11 +90,13 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
 
     protected void RemoveAllFromDefault()
     {
+        ResetInMemoryDocumentStoreAndCache();
         documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Default).Wait();
         documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Default).Wait();
     }
     protected void RemoveAllFromDefaultAndDissolvable()
     {
+        ResetInMemoryDocumentStoreAndCache();
         documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Default).Wait();
         documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Default).Wait();
         documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Dissolvable).Wait();

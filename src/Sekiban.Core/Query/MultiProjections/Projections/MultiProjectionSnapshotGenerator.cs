@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Setting;
@@ -11,11 +12,17 @@ public class MultiProjectionSnapshotGenerator : IMultiProjectionSnapshotGenerato
     private readonly IBlobAccessor _blobAccessor;
     private readonly IDocumentRepository _documentRepository;
     private readonly IDocumentWriter _documentWriter;
-    public MultiProjectionSnapshotGenerator(IDocumentRepository documentRepository, IBlobAccessor blobAccessor, IDocumentWriter documentWriter)
+    private readonly ILogger<MultiProjectionSnapshotGenerator> _logger;
+    public MultiProjectionSnapshotGenerator(
+        IDocumentRepository documentRepository,
+        IBlobAccessor blobAccessor,
+        IDocumentWriter documentWriter,
+        ILogger<MultiProjectionSnapshotGenerator> logger)
     {
         _documentRepository = documentRepository;
         _blobAccessor = blobAccessor;
         _documentWriter = documentWriter;
+        _logger = logger;
     }
 
     public async Task<MultiProjectionState<TProjectionPayload>> GenerateMultiProjectionSnapshotAsync<TProjection, TProjectionPayload>(
@@ -60,6 +67,19 @@ public class MultiProjectionSnapshotGenerator : IMultiProjectionSnapshotGenerato
                 memoryStream);
             var snapshotDocument = new MultiProjectionSnapshotDocument(typeof(TProjectionPayload), blobId, projector, rootPartitionKey);
             await _documentWriter.SaveAsync(snapshotDocument, typeof(TProjectionPayload));
+            _logger.LogInformation(
+                "Generate multi snapshot for {ProjectionName} and rootPartitionKey {RootPartitionKey} because used version is {UsedVersion}",
+                ProjectionName(typeof(TProjectionPayload)),
+                rootPartitionKey,
+                usedVersion);
+        } else
+        {
+            _logger.LogInformation(
+                "skip making snapshot for {ProjectionName} and rootPartitionKey {RootPartitionKey} because used version is {UsedVersion} and minimum is {MinimumNumberOfEventsToGenerateSnapshot}",
+                ProjectionName(typeof(TProjectionPayload)),
+                rootPartitionKey,
+                usedVersion,
+                minimumNumberOfEventsToGenerateSnapshot);
         }
         return projector.ToState();
     }
