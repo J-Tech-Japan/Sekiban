@@ -1,3 +1,5 @@
+using FeatureCheck.Domain.Aggregates.ALotOfEvents;
+using FeatureCheck.Domain.Aggregates.ALotOfEvents.Commands;
 using FeatureCheck.Domain.Aggregates.Branches;
 using FeatureCheck.Domain.Aggregates.Branches.Commands;
 using FeatureCheck.Domain.Aggregates.Branches.Queries;
@@ -117,6 +119,8 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
                 subType => subType.AddCommandHandler<OpenInheritedAggregate, OpenInheritedAggregate.Handler>()
                     .AddCommandHandler<CloseInheritedAggregate, CloseInheritedAggregate.Handler>())
             .AddSubtype<ClosedSubAggregate>(subType => subType.AddCommandHandler<ReopenInheritedAggregate, ReopenInheritedAggregate.Handler>());
+
+        AddAggregate<ALotOfEventsAggregate>().AddCommandHandler<ALotOfEventsCreateCommand, ALotOfEventsCreateCommand.Handler>();
 
     }
 }

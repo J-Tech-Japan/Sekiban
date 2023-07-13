@@ -1,3 +1,5 @@
+using FeatureCheck.Domain.Aggregates.ALotOfEvents;
+using FeatureCheck.Domain.Aggregates.ALotOfEvents.Commands;
 using FeatureCheck.Domain.Aggregates.Branches;
 using FeatureCheck.Domain.Aggregates.Branches.Commands;
 using FeatureCheck.Domain.Aggregates.Clients;
@@ -677,5 +679,17 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         {
             _testOutputHelper.WriteLine(key);
         }
+    }
+
+    [Fact]
+    public async Task ALotOfEventCreateTest()
+    {
+        RemoveAllFromDefaultAndDissolvable();
+        var result = await commandExecutor.ExecCommandWithEventsAsync(
+            new ALotOfEventsCreateCommand { AggregateId = Guid.NewGuid(), NumberOfEvents = 100 });
+        Assert.Equal(100, result.Version);
+        Assert.Equal(100, result.Events.Count);
+        var aggregate = await aggregateLoader.AsDefaultStateAsync<ALotOfEventsAggregate>(result.AggregateId!.Value);
+        Assert.Equal(100, aggregate?.Payload.Count);
     }
 }
