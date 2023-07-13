@@ -87,9 +87,9 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
             case StateType.SingleProjection:
                 foreach (var singleProjection in _sekibanAggregateTypes.SingleProjectionTypes)
                 {
-                    if (singleProjection.PayloadType.Name == document.DocumentTypeName)
+                    if (singleProjection.SingleProjectionPayloadType.Name == document.DocumentTypeName)
                     {
-                        var aggregateStateType = typeof(SingleProjectionState<>).MakeGenericType(singleProjection.PayloadType);
+                        var aggregateStateType = typeof(SingleProjectionState<>).MakeGenericType(singleProjection.SingleProjectionPayloadType);
                         var state = JsonSerializer.Deserialize(snapshotString, aggregateStateType);
                         if (state != null)
                         {
@@ -147,10 +147,11 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
             case StateType.SingleProjection:
             {
                 var projectionType
-                    = _sekibanAggregateTypes.SingleProjectionTypes.FirstOrDefault(m => m.PayloadType.Name == document.DocumentTypeName);
+                    = _sekibanAggregateTypes.SingleProjectionTypes.FirstOrDefault(
+                        m => m.SingleProjectionPayloadType.Name == document.DocumentTypeName);
                 if (projectionType != null)
                 {
-                    var targetClassType = typeof(SingleProjectionState<>).MakeGenericType(projectionType.PayloadType);
+                    var targetClassType = typeof(SingleProjectionState<>).MakeGenericType(projectionType.SingleProjectionPayloadType);
                     var state = SekibanJsonHelper.ConvertTo(document.Snapshot, targetClassType);
                     if (state is not null)
                     {

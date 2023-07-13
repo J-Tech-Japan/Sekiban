@@ -11,15 +11,34 @@ namespace Sekiban.Core.Cache;
 /// </summary>
 public interface IMultiProjectionCache
 {
+    /// <summary>
+    ///     Set a projection container to cache
+    /// </summary>
+    /// <param name="rootPartitionKey"></param>
+    /// <param name="container"></param>
+    /// <typeparam name="TProjection"></typeparam>
+    /// <typeparam name="TProjectionPayload"></typeparam>
     public void Set<TProjection, TProjectionPayload>(
         string rootPartitionKey,
         MultipleMemoryProjectionContainer<TProjection, TProjectionPayload> container) where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon, new();
 
+    /// <summary>
+    ///     Get a projection container from cache
+    /// </summary>
+    /// <param name="rootPartitionKey"></param>
+    /// <typeparam name="TProjection"></typeparam>
+    /// <typeparam name="TProjectionPayload"></typeparam>
+    /// <returns></returns>
     public MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>? Get<TProjection, TProjectionPayload>(string rootPartitionKey)
         where TProjection : IMultiProjector<TProjectionPayload>, new() where TProjectionPayload : IMultiProjectionPayloadCommon, new();
 
-
+    /// <summary>
+    ///     Get aggregate list from cache
+    /// </summary>
+    /// <param name="rootPartitionKey"></param>
+    /// <typeparam name="TAggregatePayload"></typeparam>
+    /// <returns></returns>
     public MultipleMemoryProjectionContainer<SingleProjectionListProjector<Aggregate<TAggregatePayload>,
             AggregateState<TAggregatePayload>, DefaultSingleProjector<TAggregatePayload>>,
         SingleProjectionListState<AggregateState<TAggregatePayload>>>?
@@ -27,6 +46,12 @@ public interface IMultiProjectionCache
         Get<SingleProjectionListProjector<Aggregate<TAggregatePayload>, AggregateState<TAggregatePayload>, DefaultSingleProjector<TAggregatePayload>>,
             SingleProjectionListState<AggregateState<TAggregatePayload>>>(rootPartitionKey);
 
+    /// <summary>
+    ///     Get single projection list from cache
+    /// </summary>
+    /// <param name="rootPartitionKey"></param>
+    /// <typeparam name="TSingleProjectionPayload"></typeparam>
+    /// <returns></returns>
     public
         MultipleMemoryProjectionContainer<
             SingleProjectionListProjector<SingleProjection<TSingleProjectionPayload>, SingleProjectionState<TSingleProjectionPayload>,

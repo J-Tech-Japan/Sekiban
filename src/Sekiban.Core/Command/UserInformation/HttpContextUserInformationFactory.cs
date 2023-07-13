@@ -2,6 +2,10 @@ using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
 namespace Sekiban.Core.Command.UserInformation;
 
+/// <summary>
+///     Getting user information through HttpContext.
+///     If you use dotnet authentication, you can get the user information from the HttpContext.
+/// </summary>
 public class HttpContextUserInformationFactory : IUserInformationFactory
 {
     private readonly IHttpContextAccessor _httpContextAccessor;
