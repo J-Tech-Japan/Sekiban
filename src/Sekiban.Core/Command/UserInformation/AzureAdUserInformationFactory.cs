@@ -2,6 +2,9 @@ using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
 namespace Sekiban.Core.Command.UserInformation;
 
+/// <summary>
+///     Get user information from AzureAd
+/// </summary>
 public class AzureAdUserInformationFactory : IUserInformationFactory
 {
     private readonly IHttpContextAccessor _httpContextAccessor;

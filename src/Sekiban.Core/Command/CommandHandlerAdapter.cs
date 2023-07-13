@@ -22,7 +22,18 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> where TAg
         _aggregateLoader = aggregateLoader;
         _checkVersion = checkVersion;
     }
-
+    /// <summary>
+    ///     Common Command handler, it is used for test and production code.
+    ///     internal use only
+    /// </summary>
+    /// <param name="commandDocument"></param>
+    /// <param name="handler"></param>
+    /// <param name="aggregateId"></param>
+    /// <param name="rootPartitionKey"></param>
+    /// <returns></returns>
+    /// <exception cref="SekibanCommandHandlerNotMatchException">When command is called with wrong context.</exception>
+    /// <exception cref="SekibanAggregateAlreadyDeletedException">When Command is called for deleted aggregate</exception>
+    /// <exception cref="SekibanCommandInconsistentVersionException">When optimistic version check failed.</exception>
     public async Task<CommandResponse> HandleCommandAsync(
         CommandDocument<TCommand> commandDocument,
         ICommandHandlerCommon<TAggregatePayload, TCommand> handler,
