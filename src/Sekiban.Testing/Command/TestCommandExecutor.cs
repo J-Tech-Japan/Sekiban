@@ -100,7 +100,7 @@ public class TestCommandExecutor
         {
             if (withPublish)
             {
-                documentWriter.SaveAndPublishEvent(e, typeof(TAggregatePayload)).Wait();
+                documentWriter.SaveAndPublishEvents(new List<IEvent> { e }, typeof(TAggregatePayload)).Wait();
             } else
             {
                 documentWriter.SaveAsync(e, typeof(TAggregatePayload)).Wait();

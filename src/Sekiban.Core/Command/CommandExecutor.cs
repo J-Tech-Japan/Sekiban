@@ -214,8 +214,7 @@ public class CommandExecutor : ICommandExecutor
             ev.CallHistories.AddRange(commandDocument.GetCallHistoriesIncludesItself());
         }
         toReturnEvents.AddRange(events);
-        var tasks = events.Select(ev => _documentWriter.SaveAndPublishEvent(ev, typeof(TAggregatePayload))).ToList();
-        await Task.WhenAll(tasks);
+        await _documentWriter.SaveAndPublishEvents(events, typeof(TAggregatePayload));
         return toReturnEvents;
     }
 }

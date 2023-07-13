@@ -62,20 +62,6 @@ public class DynamoDocumentWriter : IDocumentPersistentWriter
                 break;
         }
     }
-    public async Task SaveAndPublishEvent<TEvent>(TEvent ev, Type aggregateType) where TEvent : IEvent
-    {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
-        await _dbFactory.DynamoActionAsync(
-            DocumentType.Event,
-            aggregateContainerGroup,
-            async container =>
-            {
-                var json = SekibanJsonHelper.Serialize(ev) ?? throw new SekibanInvalidDocumentTypeException();
-                var newItem = Document.FromJson(json) ?? throw new SekibanInvalidDocumentTypeException();
-                await container.PutItemAsync(newItem);
-            });
-        await _eventPublisher.PublishAsync(ev);
-    }
     public async Task SaveSingleSnapshotAsync(SnapshotDocument document, Type aggregateType, bool useBlob)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
@@ -109,4 +95,27 @@ public class DynamoDocumentWriter : IDocumentPersistentWriter
         }
     }
     public bool ShouldUseBlob(SnapshotDocument document) => false;
+    public async Task SaveAndPublishEvents<TEvent>(IEnumerable<TEvent> events, Type aggregateType) where TEvent : IEvent
+    {
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
+        var evs = events.ToList();
+        await _dbFactory.DynamoActionAsync(
+            DocumentType.Event,
+            aggregateContainerGroup,
+            async container =>
+            {
+                var batchWriter = container.CreateBatchWrite();
+                foreach (var ev in evs)
+                {
+                    var json = SekibanJsonHelper.Serialize(ev) ?? throw new SekibanInvalidDocumentTypeException();
+                    var newItem = Document.FromJson(json) ?? throw new SekibanInvalidDocumentTypeException();
+                    batchWriter.AddDocumentToPut(newItem);
+                }
+                await batchWriter.ExecuteAsync();
+            });
+        foreach (var ev in evs)
+        {
+            await _eventPublisher.PublishAsync(ev);
+        }
+    }
 }

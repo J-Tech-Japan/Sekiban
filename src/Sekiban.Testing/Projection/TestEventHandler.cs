@@ -43,7 +43,7 @@ public class TestEventHandler
                 documentWriter.SaveAsync(e, aggregateType.Aggregate).Wait();
             } else
             {
-                documentWriter.SaveAndPublishEvent(e, aggregateType.Aggregate).Wait();
+                documentWriter.SaveAndPublishEvents(new List<IEvent> { e }, aggregateType.Aggregate).Wait();
             }
         }
     }
