@@ -11,22 +11,22 @@
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <PackageVersion>0.12.6</PackageVersion>
         <Description>Event persistance performance tuning</Description>
-        <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
-        <LangVersion>11</LangVersion>
+        <TargetFrameworks>net6.0;net7.0;net8.0</TargetFrameworks>
+        <LangVersion>preview</LangVersion>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <PackageReadmeFile>README.md</PackageReadmeFile>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="AWSSDK.DynamoDBv2" Version="3.7.102.38"/>
-        <PackageReference Include="AWSSDK.S3" Version="3.7.104.16"/>
-        <PackageReference Include="SharpZipLib" Version="1.4.2"/>
-        <None Include="..\..\README.md" Pack="true" PackagePath="\"/>
+        <PackageReference Include="AWSSDK.DynamoDBv2" Version="3.7.102.38" />
+        <PackageReference Include="AWSSDK.S3" Version="3.7.104.16" />
+        <PackageReference Include="SharpZipLib" Version="1.4.2" />
+        <None Include="..\..\README.md" Pack="true" PackagePath="\" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj"/>
-        <ProjectReference Include="..\Sekiban.Testing\Sekiban.Testing.csproj"/>
+        <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj" />
+        <ProjectReference Include="..\Sekiban.Testing\Sekiban.Testing.csproj" />
     </ItemGroup>
 
 </Project>

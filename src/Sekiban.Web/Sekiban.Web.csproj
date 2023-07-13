@@ -12,20 +12,20 @@
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <PackageVersion>0.12.6</PackageVersion>
         <Description>Event persistance performance tuning</Description>
-        <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
-        <LangVersion>11</LangVersion>
+        <TargetFrameworks>net6.0;net7.0;net8.0</TargetFrameworks>
+        <LangVersion>preview</LangVersion>
         <OpenApiGenerateDocuments>false</OpenApiGenerateDocuments>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <PackageReadmeFile>README.md</PackageReadmeFile>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0"/>
-        <None Include="..\..\README.md" Pack="true" PackagePath="\"/>
+        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
+        <None Include="..\..\README.md" Pack="true" PackagePath="\" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj"/>
+        <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj" />
     </ItemGroup>
 
 </Project>
