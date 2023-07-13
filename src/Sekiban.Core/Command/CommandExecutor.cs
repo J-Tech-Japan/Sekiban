@@ -205,19 +205,17 @@ public class CommandExecutor : ICommandExecutor
         CommandDocument<TCommand> commandDocument) where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayload>
     {
         var toReturnEvents = new List<IEvent>();
-        if (events.Any())
+        if (!events.Any())
         {
-            foreach (var ev in events)
-            {
-                ev.CallHistories.AddRange(commandDocument.GetCallHistoriesIncludesItself());
-            }
-            toReturnEvents.AddRange(events);
-            foreach (var ev in events)
-            {
-                await _documentWriter.SaveAndPublishEvent(ev, typeof(TAggregatePayload));
-            }
+            return toReturnEvents;
         }
-
+        foreach (var ev in events)
+        {
+            ev.CallHistories.AddRange(commandDocument.GetCallHistoriesIncludesItself());
+        }
+        toReturnEvents.AddRange(events);
+        var tasks = events.Select(ev => _documentWriter.SaveAndPublishEvent(ev, typeof(TAggregatePayload))).ToList();
+        await Task.WhenAll(tasks);
         return toReturnEvents;
     }
 }
