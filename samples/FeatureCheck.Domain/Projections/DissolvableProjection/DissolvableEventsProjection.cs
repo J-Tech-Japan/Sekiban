@@ -10,10 +10,6 @@ namespace FeatureCheck.Domain.Projections.DissolvableProjection;
 public record DissolvableEventsProjection : IMultiProjectionPayload<DissolvableEventsProjection>
 {
     public ImmutableList<RecentActivityRecord> RecentActivities { get; init; } = ImmutableList<RecentActivityRecord>.Empty;
-    public DissolvableEventsProjection? ApplyEventInstance<TEventPayload>(DissolvableEventsProjection projectionPayload, Event<TEventPayload> ev)
-        where TEventPayload : IEventPayloadCommon =>
-        ApplyEvent(projectionPayload, ev);
-
     public static DissolvableEventsProjection? ApplyEvent<TEventPayload>(DissolvableEventsProjection projectionPayload, Event<TEventPayload> ev)
         where TEventPayload : IEventPayloadCommon =>
         ev.Payload switch

@@ -10,9 +10,6 @@ public record OrderSubmittedI : IEventPayload<ShoppingCartI, PurchasedCartI, Ord
 
     public static PurchasedCartI OnEvent(ShoppingCartI aggregatePayload, Event<OrderSubmittedI> ev) =>
         new() { Items = aggregatePayload.Items, PurchasedDate = ev.Payload.OrderSubmittedLocalTime };
-    public PurchasedCartI OnEventInstance(ShoppingCartI aggregatePayload, Event<OrderSubmittedI> ev) => OnEvent(aggregatePayload, ev);
-
-
     public class Subscriber : IEventSubscriber<OrderSubmittedI>
     {
         private readonly ILogger<Subscriber> _logger;

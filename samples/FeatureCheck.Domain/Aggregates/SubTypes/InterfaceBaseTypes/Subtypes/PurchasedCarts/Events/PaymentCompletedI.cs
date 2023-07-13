@@ -4,6 +4,5 @@ namespace FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.Pu
 
 public class PaymentCompletedI : IEventPayload<PurchasedCartI, ShippingCartI, PaymentCompletedI>
 {
-    public ShippingCartI OnEventInstance(PurchasedCartI aggregatePayload, Event<PaymentCompletedI> ev) => OnEvent(aggregatePayload, ev);
     public static ShippingCartI OnEvent(PurchasedCartI aggregatePayload, Event<PaymentCompletedI> ev) => new() { Items = aggregatePayload.Items };
 }

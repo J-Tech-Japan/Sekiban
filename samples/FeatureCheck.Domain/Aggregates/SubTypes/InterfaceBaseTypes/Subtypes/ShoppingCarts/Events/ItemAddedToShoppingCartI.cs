@@ -6,8 +6,6 @@ public record ItemAddedToShoppingCartI : IEventPayload<ShoppingCartI, ItemAddedT
     public string Code { get; init; } = string.Empty;
     public string Name { get; init; } = string.Empty;
     public int Quantity { get; init; } = 0;
-    public ShoppingCartI OnEventInstance(ShoppingCartI aggregatePayload, Event<ItemAddedToShoppingCartI> ev) => OnEvent(aggregatePayload, ev);
-
     public static ShoppingCartI OnEvent(ShoppingCartI aggregatePayload, Event<ItemAddedToShoppingCartI> ev) =>
         aggregatePayload with
         {

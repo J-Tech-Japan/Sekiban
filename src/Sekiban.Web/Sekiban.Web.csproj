@@ -5,14 +5,14 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <OutputType>Library</OutputType>
         <PackageId>Sekiban.Web</PackageId>
-        <Version>0.12.6</Version>
+        <Version>0.13.0</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework WebHelper</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.12.6</PackageVersion>
-        <Description>Event persistance performance tuning</Description>
-        <TargetFrameworks>net6.0;net7.0;net8.0</TargetFrameworks>
+        <PackageVersion>0.13.0</PackageVersion>
+        <Description>Removed dotnet 6 support, add dotnet 8 preview support</Description>
+        <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
         <LangVersion>preview</LangVersion>
         <OpenApiGenerateDocuments>false</OpenApiGenerateDocuments>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -20,12 +20,12 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
-        <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0"/>
+        <None Include="..\..\README.md" Pack="true" PackagePath="\"/>
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj" />
+        <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj"/>
     </ItemGroup>
 
 </Project>

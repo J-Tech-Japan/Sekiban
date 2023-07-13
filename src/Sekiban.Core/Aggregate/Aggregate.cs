@@ -107,18 +107,8 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon, ISingleProje
         TAggregatePayloadIn aggregatePayload,
         Event<TEventPayload> ev) where TAggregatePayloadIn : IAggregatePayloadCommon
         where TAggregatePayloadOut : IAggregatePayloadCommon
-        where TEventPayload : IEventPayload<TAggregatePayloadIn, TAggregatePayloadOut, TEventPayload>
-    {
-#if NET7_0_OR_GREATER
-        return TEventPayload.OnEvent(aggregatePayload, ev);
-#else
-        if (ev.Payload is IEventPayload<TAggregatePayloadIn, TAggregatePayloadOut, TEventPayload> applicableEvent)
-        {
-            return applicableEvent.OnEventInstance(aggregatePayload, ev);
-        }
-        return default;
-#endif
-    }
+        where TEventPayload : IEventPayload<TAggregatePayloadIn, TAggregatePayloadOut, TEventPayload> =>
+        TEventPayload.OnEvent(aggregatePayload, ev);
 
     internal IEvent AddAndApplyEvent<TEventPayload>(TEventPayload eventPayload, string rootPartitionKey) where TEventPayload : IEventPayloadCommon
     {

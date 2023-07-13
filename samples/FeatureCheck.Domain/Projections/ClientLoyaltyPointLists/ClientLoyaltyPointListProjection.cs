@@ -21,12 +21,6 @@ public record ClientLoyaltyPointListProjection(
     public TargetAggregatePayloadCollection GetTargetAggregatePayloads() =>
         new TargetAggregatePayloadCollection().Add<Branch>().Add<Client>().Add<LoyaltyPoint>();
 
-
-    public ClientLoyaltyPointListProjection? ApplyEventInstance<TEventPayload>(
-        ClientLoyaltyPointListProjection projectionPayload,
-        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon =>
-        ApplyEvent(projectionPayload, ev);
-
     public static ClientLoyaltyPointListProjection? ApplyEvent<TEventPayload>(
         ClientLoyaltyPointListProjection projectionPayload,
         Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon

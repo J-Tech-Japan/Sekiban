@@ -10,9 +10,5 @@ public interface IEventPayload<TAggregatePayloadIn, TAggregatePayloadOut, TEvent
     where TEventPayload : IEventPayload<TAggregatePayloadIn, TAggregatePayloadOut, TEventPayload>
     where TAggregatePayloadOut : IAggregatePayloadCommon
 {
-#if NET7_0_OR_GREATER
     public static abstract TAggregatePayloadOut OnEvent(TAggregatePayloadIn aggregatePayload, Event<TEventPayload> ev);
-#else
-    public TAggregatePayloadOut OnEventInstance(TAggregatePayloadIn aggregatePayload, Event<TEventPayload> ev);
-#endif
 }

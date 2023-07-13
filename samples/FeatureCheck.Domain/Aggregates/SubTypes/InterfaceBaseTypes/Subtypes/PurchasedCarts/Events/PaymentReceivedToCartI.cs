@@ -6,7 +6,6 @@ public record PaymentReceivedToCartI : IEventPayload<PurchasedCartI, PaymentRece
     public string PaymentMethod { get; init; } = "Cash";
     public decimal Amount { get; init; } = 0;
     public string Currency { get; init; } = "JPY";
-    public PurchasedCartI OnEventInstance(PurchasedCartI aggregatePayload, Event<PaymentReceivedToCartI> ev) => OnEvent(aggregatePayload, ev);
     public static PurchasedCartI OnEvent(PurchasedCartI aggregatePayload, Event<PaymentReceivedToCartI> ev) =>
         aggregatePayload with
         {

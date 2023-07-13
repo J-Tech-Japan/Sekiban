@@ -7,9 +7,6 @@ namespace FeatureCheck.Domain.Aggregates.RecentActivities.Projections;
 public record TenRecentProjection : ISingleProjectionPayload<RecentActivity, TenRecentProjection>
 {
     public ImmutableList<RecentActivityRecord> List { get; init; } = ImmutableList<RecentActivityRecord>.Empty;
-    public TenRecentProjection? ApplyEventInstance<TEventPayload>(TenRecentProjection projectionPayload, Event<TEventPayload> ev)
-        where TEventPayload : IEventPayloadCommon =>
-        ApplyEvent(projectionPayload, ev);
     public static TenRecentProjection? ApplyEvent<TEventPayload>(TenRecentProjection projectionPayload, Event<TEventPayload> ev)
         where TEventPayload : IEventPayloadCommon =>
         ev.Payload switch

@@ -17,10 +17,6 @@ public record ClientNameHistoryProjection(
     {
     }
     public bool IsDeleted { get; init; }
-    public ClientNameHistoryProjection? ApplyEventInstance<TEventPayload>(ClientNameHistoryProjection projectionPayload, Event<TEventPayload> ev)
-        where TEventPayload : IEventPayloadCommon =>
-        ApplyEvent(projectionPayload, ev);
-
     public static ClientNameHistoryProjection? ApplyEvent<TEventPayload>(ClientNameHistoryProjection projectionPayload, Event<TEventPayload> ev)
         where TEventPayload : IEventPayloadCommon
     {
