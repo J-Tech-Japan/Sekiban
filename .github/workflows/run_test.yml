@@ -21,7 +21,7 @@ jobs:
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v1
       with:
-        dotnet-version: 8.0.x
+        dotnet-version: 8.x
     - name: Setup .NET 7
       uses: actions/setup-dotnet@v1
       with:
@@ -76,6 +76,10 @@ jobs:
     needs: [ regular ]
     steps:
     - uses: actions/checkout@v2
+    - name: Setup .NET 8
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 8.x
     - name: Setup .NET 7
       uses: actions/setup-dotnet@v1
       with:
@@ -134,6 +138,10 @@ jobs:
     needs: [ flaky ]
     steps:
     - uses: actions/checkout@v2
+    - name: Setup .NET 8
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 8.x
     - name: Setup .NET 7
       uses: actions/setup-dotnet@v1
       with:
