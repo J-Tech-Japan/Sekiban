@@ -684,12 +684,13 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
     [Fact]
     public async Task ALotOfEventCreateTest()
     {
+        var eventCount = 300;
         RemoveAllFromDefaultAndDissolvable();
         var result = await commandExecutor.ExecCommandWithEventsAsync(
-            new ALotOfEventsCreateCommand { AggregateId = Guid.NewGuid(), NumberOfEvents = 100 });
-        Assert.Equal(100, result.Version);
-        Assert.Equal(100, result.Events.Count);
+            new ALotOfEventsCreateCommand { AggregateId = Guid.NewGuid(), NumberOfEvents = eventCount });
+        Assert.Equal(eventCount, result.Version);
+        Assert.Equal(eventCount, result.Events.Count);
         var aggregate = await aggregateLoader.AsDefaultStateAsync<ALotOfEventsAggregate>(result.AggregateId!.Value);
-        Assert.Equal(100, aggregate?.Payload.Count);
+        Assert.Equal(eventCount, aggregate?.Payload.Count);
     }
 }

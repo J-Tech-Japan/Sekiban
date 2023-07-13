@@ -128,6 +128,7 @@ public class DynamoDbFactory
 
                 do
                 {
+                    var batchWriter = table.CreateBatchWrite();
                     List<Document> items = await search.GetNextSetAsync();
                     foreach (var item in items)
                     {
@@ -135,12 +136,13 @@ public class DynamoDbFactory
                         if (item.TryGetValue(nameof(Core.Documents.Document.SortableUniqueId), out var value))
                         {
                             var sortKey = value.AsString();
-                            await table.DeleteItemAsync(primaryKey, sortKey);
+                            batchWriter.AddItemToDelete(item);
                         } else
                         {
-                            await table.DeleteItemAsync(primaryKey);
+                            batchWriter.AddItemToDelete(item);
                         }
                     }
+                    await batchWriter.ExecuteAsync();
                 } while (!search.IsDone);
 
                 return null;

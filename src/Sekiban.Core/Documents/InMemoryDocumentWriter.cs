@@ -52,14 +52,17 @@ public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersist
         await Task.CompletedTask;
     }
 
-    public async Task SaveAndPublishEvent<TEvent>(TEvent ev, Type aggregateType) where TEvent : IEvent
+    public async Task SaveAndPublishEvents<TEvent>(IEnumerable<TEvent> events, Type aggregateType) where TEvent : IEvent
     {
         var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
         var sekibanIdentifier = string.IsNullOrWhiteSpace(sekibanContext?.SettingGroupIdentifier)
             ? string.Empty
             : sekibanContext.SettingGroupIdentifier;
 
-        _inMemoryDocumentStore.SaveEvent(ev, ev.PartitionKey, sekibanIdentifier);
-        await _eventPublisher.PublishAsync(ev);
+        foreach (var ev in events)
+        {
+            _inMemoryDocumentStore.SaveEvent(ev, ev.PartitionKey, sekibanIdentifier);
+            await _eventPublisher.PublishAsync(ev);
+        }
     }
 }

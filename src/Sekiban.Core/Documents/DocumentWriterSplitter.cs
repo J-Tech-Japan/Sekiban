@@ -42,17 +42,20 @@ public class DocumentWriterSplitter : IDocumentWriter
         await _documentPersistentWriter.SaveAsync(document, aggregateType);
     }
 
-    public async Task SaveAndPublishEvent<TEvent>(TEvent ev, Type aggregateType) where TEvent : IEvent
+    public async Task SaveAndPublishEvents<TEvent>(IEnumerable<TEvent> events, Type aggregateType) where TEvent : IEvent
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
-            await _documentTemporaryWriter.SaveAndPublishEvent(ev, aggregateType);
+            await _documentTemporaryWriter.SaveAndPublishEvents(events, aggregateType);
             return;
         }
-
-        await AddToHybridIfPossible(ev, aggregateType);
-        await _documentPersistentWriter.SaveAndPublishEvent(ev, aggregateType);
+        var enumerable = events.ToList();
+        foreach (var ev in enumerable)
+        {
+            await AddToHybridIfPossible(ev, aggregateType);
+        }
+        await _documentPersistentWriter.SaveAndPublishEvents(enumerable, aggregateType);
     }
 
     private async Task AddToHybridIfPossible(IEvent ev, Type aggregateType)

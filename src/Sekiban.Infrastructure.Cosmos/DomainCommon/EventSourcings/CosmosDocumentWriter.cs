@@ -55,16 +55,6 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
                 break;
         }
     }
-
-    public async Task SaveAndPublishEvent<TEvent>(TEvent ev, Type aggregateType) where TEvent : IEvent
-    {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
-        await _cosmosDbFactory.CosmosActionAsync(
-            DocumentType.Event,
-            aggregateContainerGroup,
-            async container => { await container.UpsertItemAsync<dynamic>(ev, CosmosPartitionGenerator.ForDocument(ev)); });
-        await _eventPublisher.PublishAsync(ev);
-    }
     public async Task SaveSingleSnapshotAsync(SnapshotDocument document, Type aggregateType, bool useBlob)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
@@ -99,5 +89,22 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
         var serializer = new SekibanCosmosSerializer();
         var stream = serializer.ToStream(document);
         return stream.Length > 1024 * 500;
+    }
+
+    public async Task SaveAndPublishEvents<TEvent>(IEnumerable<TEvent> events, Type aggregateType) where TEvent : IEvent
+    {
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
+        await _cosmosDbFactory.CosmosActionAsync(
+            DocumentType.Event,
+            aggregateContainerGroup,
+            async container =>
+            {
+                var taskList = events.Select(ev => container.UpsertItemAsync<dynamic>(ev, CosmosPartitionGenerator.ForDocument(ev))).ToList();
+                await Task.WhenAll(taskList);
+            });
+        foreach (var ev in events)
+        {
+            await _eventPublisher.PublishAsync(ev);
+        }
     }
 }

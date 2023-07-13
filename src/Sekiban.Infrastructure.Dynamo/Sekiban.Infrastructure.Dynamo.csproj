@@ -4,12 +4,12 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Infrastructure.Dynamo</PackageId>
-        <Version>0.12.5</Version>
+        <Version>0.12.6</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Dynamo Infrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.12.5</PackageVersion>
+        <PackageVersion>0.12.6</PackageVersion>
         <Description>Event persistance performance tuning</Description>
         <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
         <LangVersion>11</LangVersion>
