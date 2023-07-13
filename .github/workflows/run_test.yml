@@ -18,6 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+    - name: Setup .NET 8
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 8.0.100-preview.6.23330.14
     - name: Setup .NET 7
       uses: actions/setup-dotnet@v1
       with:
@@ -72,6 +76,10 @@ jobs:
     needs: [ regular ]
     steps:
     - uses: actions/checkout@v2
+    - name: Setup .NET 8
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 8.0.100-preview.6.23330.14
     - name: Setup .NET 7
       uses: actions/setup-dotnet@v1
       with:
@@ -130,6 +138,10 @@ jobs:
     needs: [ flaky ]
     steps:
     - uses: actions/checkout@v2
+    - name: Setup .NET 8
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 8.0.100-preview.6.23330.14
     - name: Setup .NET 7
       uses: actions/setup-dotnet@v1
       with:
