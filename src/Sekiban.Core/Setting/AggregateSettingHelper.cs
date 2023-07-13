@@ -8,7 +8,7 @@ public class AggregateSettingHelper
     public int SnapshotFrequencyDefault { get; }
     public int SnapshotOffsetDefault { get; }
     public bool UseUpdateMarker { get; }
-    public IEnumerable<AggregateSetting> Exceptions { get; } = new List<AggregateSetting>();
+    public IEnumerable<AggregateSetting> Exceptions { get; } = Enumerable.Empty<AggregateSetting>();
     public AggregateSettingHelper()
     {
         UseHybridDefault = false;

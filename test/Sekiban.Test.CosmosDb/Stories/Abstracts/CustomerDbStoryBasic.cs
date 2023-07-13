@@ -693,4 +693,24 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         var aggregate = await aggregateLoader.AsDefaultStateAsync<ALotOfEventsAggregate>(result.AggregateId!.Value);
         Assert.Equal(eventCount, aggregate?.Payload.Count);
     }
+
+    [Fact]
+    public async Task CommandWithNoEventsWorksFine()
+    {
+        RemoveAllFromDefault();
+        var result = await commandExecutor.ExecCommandWithEventsAsync(new CreateBranch("JAPAN"));
+        var branchId = result.AggregateId!.Value;
+        result = await commandExecutor.ExecCommandWithEventsAsync(new CreateClient(branchId, "Test Name", "test@example.com"));
+        var clientId = result.AggregateId!.Value;
+        result = await commandExecutor.ExecCommandWithEventsAsync(new ClientNoEventsCommand { ClientId = clientId });
+        Assert.Null(result.AggregateId);
+
+        var result2 = await commandExecutor.ExecCommandWithEventsAsync(new ClientNoEventsCommand { ClientId = clientId });
+        Assert.Null(result2.AggregateId);
+
+        var result3 = await commandExecutor.ExecCommandWithoutValidationAsync(new ClientNoEventsCommand { ClientId = clientId });
+        Assert.Null(result3.AggregateId);
+        var result4 = await commandExecutor.ExecCommandWithoutValidationWithEventsAsync(new ClientNoEventsCommand { ClientId = clientId });
+        Assert.Null(result4.AggregateId);
+    }
 }

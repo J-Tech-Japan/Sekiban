@@ -100,7 +100,7 @@ public class CommandExecutor : ICommandExecutor
                 0,
                 validationResult,
                 null,
-                GetAggregatePayloadOut<TAggregatePayload>(new List<IEvent>())), new List<IEvent>());
+                GetAggregatePayloadOut<TAggregatePayload>(Enumerable.Empty<IEvent>())), Enumerable.Empty<IEvent>().ToList());
         }
         return await ExecCommandWithoutValidationAsyncTyped<TAggregatePayload, TCommand>(command, callHistories);
     }
@@ -185,13 +185,14 @@ public class CommandExecutor : ICommandExecutor
             }
         }
 
-        return (new CommandExecutorResponse(
-            commandDocument.AggregateId,
-            commandDocument.Id,
-            version,
-            null,
-            lastSortableUniqueId,
-            GetAggregatePayloadOut<TAggregatePayload>(events)), events);
+        return (
+            new CommandExecutorResponse(
+                events.Any() ? commandDocument.AggregateId : null,
+                commandDocument.Id,
+                version,
+                null,
+                lastSortableUniqueId,
+                GetAggregatePayloadOut<TAggregatePayload>(events)), events);
     }
 
     private string GetAggregatePayloadOut<TAggregatePayload>(IEnumerable<IEvent> events)
