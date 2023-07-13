@@ -20,12 +20,12 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0"/>
-        <None Include="..\..\README.md" Pack="true" PackagePath="\"/>
+        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+        <None Include="..\..\README.md" Pack="true" PackagePath="\" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj"/>
+        <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj" />
     </ItemGroup>
 
 </Project>
