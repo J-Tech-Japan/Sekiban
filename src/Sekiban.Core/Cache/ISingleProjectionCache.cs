@@ -11,9 +11,23 @@ namespace Sekiban.Core.Cache;
 /// </summary>
 public interface ISingleProjectionCache
 {
+    /// <summary>
+    ///     Set container to cache
+    /// </summary>
+    /// <param name="aggregateId"></param>
+    /// <param name="container"></param>
+    /// <typeparam name="TAggregate"></typeparam>
+    /// <typeparam name="TState"></typeparam>
     public void SetContainer<TAggregate, TState>(Guid aggregateId, SingleMemoryCacheProjectionContainer<TAggregate, TState> container)
         where TAggregate : IAggregateCommon, ISingleProjection where TState : IAggregateStateCommon;
 
+    /// <summary>
+    ///     Get container from cache
+    /// </summary>
+    /// <param name="aggregateId"></param>
+    /// <typeparam name="TAggregate"></typeparam>
+    /// <typeparam name="TState"></typeparam>
+    /// <returns></returns>
     public SingleMemoryCacheProjectionContainer<TAggregate, TState>? GetContainer<TAggregate, TState>(Guid aggregateId)
         where TAggregate : IAggregateCommon, ISingleProjection where TState : IAggregateStateCommon;
 }

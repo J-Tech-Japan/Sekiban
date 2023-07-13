@@ -1,6 +1,10 @@
 using System.Collections.Concurrent;
 namespace Sekiban.Core.Command;
 
+/// <summary>
+///     Command Execute Awaiter implementation.
+///     Note: This class is for internal use only
+/// </summary>
 public class CommandExecuteAwaiter : ICommandExecuteAwaiter
 {
     private readonly ConcurrentDictionary<string, TaskCompletionSource<bool>> _taskCompletionSources;

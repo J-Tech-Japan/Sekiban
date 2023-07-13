@@ -2,6 +2,9 @@ using System.ComponentModel.DataAnnotations;
 using System.Text.RegularExpressions;
 namespace Sekiban.Core.Command;
 
+/// <summary>
+///     Validate Root Partition Key
+/// </summary>
 public class CommandRootPartitionValidationAttribute : ValidationAttribute
 {
     private const string RootPartitionKeyRegexPattern = "^[a-z0-9-_]{1,36}$";
