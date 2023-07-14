@@ -13,7 +13,7 @@ public class AzureBlobAccessor : IBlobAccessor
     private readonly IConfiguration _configuration;
     private readonly IServiceProvider _serviceProvider;
 
-    private IConfigurationSection? _section
+    private IConfigurationSection _section
     {
         get
         {
@@ -21,7 +21,7 @@ public class AzureBlobAccessor : IBlobAccessor
             var _sekibanContext = _serviceProvider.GetService<ISekibanContext>();
             if (!string.IsNullOrEmpty(_sekibanContext?.SettingGroupIdentifier))
             {
-                section = section?.GetSection(_sekibanContext.SettingGroupIdentifier);
+                section = section.GetSection(_sekibanContext.SettingGroupIdentifier);
             }
             return section;
         }
@@ -85,7 +85,7 @@ public class AzureBlobAccessor : IBlobAccessor
     }
 
     public string BlobConnectionString() =>
-        _section?.GetValue<string>("BlobConnectionString") ?? throw new Exception("BlobConnectionString not found");
+        _section.GetValue<string>("BlobConnectionString") ?? throw new Exception("BlobConnectionString not found");
     private async Task<BlobContainerClient> GetContainerAsync(string containerName)
     {
         var connectionString = BlobConnectionString();

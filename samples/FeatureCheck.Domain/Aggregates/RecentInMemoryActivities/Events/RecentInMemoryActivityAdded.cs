@@ -4,8 +4,6 @@ namespace FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Events;
 
 public record RecentInMemoryActivityAdded(RecentInMemoryActivityRecord Record) : IEventPayload<RecentInMemoryActivity, RecentInMemoryActivityAdded>
 {
-    public RecentInMemoryActivity OnEventInstance(RecentInMemoryActivity aggregatePayload, Event<RecentInMemoryActivityAdded> ev) =>
-        OnEvent(aggregatePayload, ev);
     public static RecentInMemoryActivity OnEvent(RecentInMemoryActivity aggregatePayload, Event<RecentInMemoryActivityAdded> ev)
     {
         return new RecentInMemoryActivity(

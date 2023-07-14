@@ -13,9 +13,9 @@ public class AzureAdUserInformationFactory : IUserInformationFactory
 
     public string GetCurrentUserInformation()
     {
-        var ip = _httpContextAccessor.HttpContext?.Connection?.RemoteIpAddress?.ToString();
+        var ip = _httpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString();
         // Get the Identity and return an error if not authenticated.
-        var identity = _httpContextAccessor.HttpContext?.User?.Identity;
+        var identity = _httpContextAccessor.HttpContext?.User.Identity;
         var userId = identity is null || identity.IsAuthenticated == false ? null : (identity as ClaimsIdentity)?.Name;
         return $"{userId ?? "Unauthenticated User"} from {ip ?? "ip address not found"}";
     }

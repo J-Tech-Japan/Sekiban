@@ -11,11 +11,6 @@ public record VersionCheckAggregateLastInfo
     public VersionCheckAggregateLastInfo() : this(0, PaymentKind.Cash, string.Empty)
     {
     }
-    public VersionCheckAggregateLastInfo? ApplyEventInstance<TEventPayload>(VersionCheckAggregateLastInfo projectionPayload, Event<TEventPayload> ev)
-        where TEventPayload : IEventPayloadCommon =>
-        ApplyEvent(projectionPayload, ev);
-
-
     public static VersionCheckAggregateLastInfo? ApplyEvent<TEventPayload>(VersionCheckAggregateLastInfo projectionPayload, Event<TEventPayload> ev)
         where TEventPayload : IEventPayloadCommon =>
         ev.Payload switch

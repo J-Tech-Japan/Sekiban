@@ -20,7 +20,7 @@ public class DynamoDbFactory
     private readonly string _sekibanContextIdentifier;
     private readonly IServiceProvider _serviceProvider;
 
-    private IConfigurationSection? _section
+    private IConfigurationSection _section
     {
         get
         {
@@ -28,7 +28,7 @@ public class DynamoDbFactory
             var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
             if (!string.IsNullOrEmpty(sekibanContext?.SettingGroupIdentifier))
             {
-                section = section?.GetSection(sekibanContext.SettingGroupIdentifier);
+                section = section.GetSection(sekibanContext.SettingGroupIdentifier);
             }
             return section;
         }
@@ -50,16 +50,16 @@ public class DynamoDbFactory
     {
         return documentType switch
         {
-            DocumentType.Event => _section?.GetValue<string>(
+            DocumentType.Event => _section.GetValue<string>(
                     $"DynamoDbEventsTable{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _section?.GetValue<string>($"DynamoDbItemsTable{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _section?.GetValue<string>("DynamoDbItemsTable") ?? throw new Exception("DynamoDb Table not found"),
-            DocumentType.Command => _section?.GetValue<string>(
+                _section.GetValue<string>($"DynamoDbItemsTable{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
+                _section.GetValue<string>("DynamoDbItemsTable") ?? throw new Exception("DynamoDb Table not found"),
+            DocumentType.Command => _section.GetValue<string>(
                     $"DynamoDbCommandsTable{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _section?.GetValue<string>($"DynamoDbItemsTable{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _section?.GetValue<string>("DynamoDbItemsTable") ?? throw new Exception("DynamoDb Container not found"),
-            _ => _section?.GetValue<string>($"DynamoDbItemsTable{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _section?.GetValue<string>("DynamoDbItemsTable") ?? throw new Exception("DynamoDb Container not found")
+                _section.GetValue<string>($"DynamoDbItemsTable{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
+                _section.GetValue<string>("DynamoDbItemsTable") ?? throw new Exception("DynamoDb Container not found"),
+            _ => _section.GetValue<string>($"DynamoDbItemsTable{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
+                _section.GetValue<string>("DynamoDbItemsTable") ?? throw new Exception("DynamoDb Container not found")
         };
     }
 
@@ -70,13 +70,13 @@ public class DynamoDbFactory
 
     private string GetAwsAccessKeyId(DocumentType documentType) =>
         (documentType == DocumentType.Event
-            ? _section?.GetValue<string>("AwsAccessKeyIdEvent") ?? _section?.GetValue<string>("AwsAccessKeyId")
-            : _section?.GetValue<string>("AwsAccessKeyId")) ??
+            ? _section.GetValue<string>("AwsAccessKeyIdEvent") ?? _section.GetValue<string>("AwsAccessKeyId")
+            : _section.GetValue<string>("AwsAccessKeyId")) ??
         throw new Exception("Dynamo Db Aws AccessKey DbEndPointUrl not found");
     private string GetAwsAccessKey(DocumentType documentType) =>
         (documentType == DocumentType.Event
-            ? _section?.GetValue<string>("AwsAccessKeyEvent") ?? _section?.GetValue<string>("AwsAccessKey")
-            : _section?.GetValue<string>("AwsAccessKey")) ??
+            ? _section.GetValue<string>("AwsAccessKeyEvent") ?? _section.GetValue<string>("AwsAccessKey")
+            : _section.GetValue<string>("AwsAccessKey")) ??
         throw new Exception("CosmosDbEndPointUrl not found");
 
 
@@ -132,15 +132,7 @@ public class DynamoDbFactory
                     List<Document> items = await search.GetNextSetAsync();
                     foreach (var item in items)
                     {
-                        var primaryKey = item[nameof(Core.Documents.Document.PartitionKey)].AsString();
-                        if (item.TryGetValue(nameof(Core.Documents.Document.SortableUniqueId), out var value))
-                        {
-                            var sortKey = value.AsString();
-                            batchWriter.AddItemToDelete(item);
-                        } else
-                        {
-                            batchWriter.AddItemToDelete(item);
-                        }
+                        batchWriter.AddItemToDelete(item);
                     }
                     await batchWriter.ExecuteAsync();
                 } while (!search.IsDone);

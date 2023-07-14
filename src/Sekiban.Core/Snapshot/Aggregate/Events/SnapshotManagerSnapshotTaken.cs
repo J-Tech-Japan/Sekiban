@@ -7,7 +7,6 @@ public record SnapshotManagerSnapshotTaken(
     int NextSnapshotVersion,
     int? SnapshotVersion) : IEventPayload<SnapshotManager, SnapshotManagerSnapshotTaken>
 {
-    public SnapshotManager OnEventInstance(SnapshotManager payload, Event<SnapshotManagerSnapshotTaken> ev) => OnEvent(payload, ev);
     public static SnapshotManager OnEvent(SnapshotManager payload, Event<SnapshotManagerSnapshotTaken> ev) =>
         payload with
         {

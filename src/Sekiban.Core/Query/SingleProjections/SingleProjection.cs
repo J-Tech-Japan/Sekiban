@@ -28,15 +28,9 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection, ISinglePr
         {
             return;
         }
-#if NET7_0_OR_GREATER
-        var method = typeof(TProjectionPayload).GetMethod("ApplyEvent");
+        var method = typeof(TProjectionPayload).GetMethod(nameof(ApplyEvent));
         var genericMethod = method?.MakeGenericMethod(ev.GetEventPayloadType());
         Payload = (TProjectionPayload)(genericMethod?.Invoke(typeof(TProjectionPayload), new object[] { Payload, ev }) ?? Payload);
-#else
-        var method = Payload.GetType().GetMethod("ApplyEventInstance");
-        var genericMethod = method?.MakeGenericMethod(ev.GetEventPayloadType());
-        Payload = (TProjectionPayload)(genericMethod?.Invoke(Payload, new object[] { Payload, ev }) ?? Payload);
-#endif
         LastEventId = ev.Id;
         LastSortableUniqueId = ev.SortableUniqueId;
         RootPartitionKey = ev.RootPartitionKey;

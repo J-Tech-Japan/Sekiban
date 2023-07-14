@@ -5,7 +5,6 @@ namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Events;
 public record LoyaltyPointUsed
     (DateTime HappenedDate, LoyaltyPointUsageTypeKeys Reason, int PointAmount, string Note) : IEventPayload<LoyaltyPoint, LoyaltyPointUsed>
 {
-    public LoyaltyPoint OnEventInstance(LoyaltyPoint payload, Event<LoyaltyPointUsed> ev) => OnEvent(payload, ev);
     public static LoyaltyPoint OnEvent(LoyaltyPoint aggregatePayload, Event<LoyaltyPointUsed> ev) =>
         aggregatePayload with { CurrentPoint = aggregatePayload.CurrentPoint - ev.Payload.PointAmount, LastOccuredTime = ev.Payload.HappenedDate };
 }

@@ -16,7 +16,7 @@ public class S3BlobAccessor : IBlobAccessor
     private readonly IConfiguration _configuration;
     private readonly IServiceProvider _serviceProvider;
 
-    private IConfigurationSection? _section
+    private IConfigurationSection _section
     {
         get
         {
@@ -24,16 +24,16 @@ public class S3BlobAccessor : IBlobAccessor
             var _sekibanContext = _serviceProvider.GetService<ISekibanContext>();
             if (!string.IsNullOrEmpty(_sekibanContext?.SettingGroupIdentifier))
             {
-                section = section?.GetSection(_sekibanContext.SettingGroupIdentifier);
+                section = section.GetSection(_sekibanContext.SettingGroupIdentifier);
             }
             return section;
         }
     }
-    private string AwsAccessKeyId => _section?.GetValue<string>("AwsAccessKeyId") ?? throw new SekibanConfigurationException("AwsAccessKeyId");
-    private string AwsAccessKey => _section?.GetValue<string>("AwsAccessKey") ?? throw new SekibanConfigurationException("AwsAccessKey");
-    private string S3BucketName => _section?.GetValue<string>("S3BucketName") ?? throw new SekibanConfigurationException("S3BucketName");
+    private string AwsAccessKeyId => _section.GetValue<string>("AwsAccessKeyId") ?? throw new SekibanConfigurationException("AwsAccessKeyId");
+    private string AwsAccessKey => _section.GetValue<string>("AwsAccessKey") ?? throw new SekibanConfigurationException("AwsAccessKey");
+    private string S3BucketName => _section.GetValue<string>("S3BucketName") ?? throw new SekibanConfigurationException("S3BucketName");
     private RegionEndpoint S3RegionEndpoint =>
-        RegionEndpoint.GetBySystemName(_section?.GetValue<string>("S3Region") ?? throw new SekibanConfigurationException("S3Region"));
+        RegionEndpoint.GetBySystemName(_section.GetValue<string>("S3Region") ?? throw new SekibanConfigurationException("S3Region"));
     public S3BlobAccessor(IConfiguration configuration, IServiceProvider serviceProvider)
     {
         _configuration = configuration;
