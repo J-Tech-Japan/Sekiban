@@ -59,7 +59,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
                 : 0;
             if (index == list.Count - 1)
             {
-                resultAction(new List<IEvent>());
+                resultAction(Enumerable.Empty<IEvent>());
             }
             resultAction(
                 list.GetRange(index, list.Count - index).Where(m => m.SortableUniqueId != sinceSortableUniqueId).OrderBy(m => m.SortableUniqueId));
@@ -94,7 +94,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         Action<IEnumerable<string>> resultAction)
     {
         await Task.CompletedTask;
-        resultAction(new List<string>());
+        resultAction(Enumerable.Empty<string>());
     }
 
     public async Task GetAllEventsAsync(
@@ -110,7 +110,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             : sekibanContext.SettingGroupIdentifier;
         await Task.CompletedTask;
         var list = _inMemoryDocumentStore.GetAllEvents(sekibanIdentifier)
-            .Where(m => rootPartitionKey == IMultiProjectionService.ProjectionAllRootPartitions ? true : m.RootPartitionKey == rootPartitionKey)
+            .Where(m => rootPartitionKey == IMultiProjectionService.ProjectionAllRootPartitions || m.RootPartitionKey == rootPartitionKey)
             .ToList();
 
         if (sinceSortableUniqueId is not null)
@@ -118,7 +118,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             var index = list.FindIndex(m => m.SortableUniqueId == sinceSortableUniqueId);
             if (index == list.Count - 1)
             {
-                resultAction(new List<IEvent>());
+                resultAction(Enumerable.Empty<IEvent>());
             } else
             {
                 resultAction(
@@ -209,7 +209,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             var index = list.FindIndex(m => m.SortableUniqueId == sinceSortableUniqueId);
             if (index == list.Count - 1)
             {
-                resultAction(new List<IEvent>());
+                resultAction(Enumerable.Empty<IEvent>());
             } else
             {
                 resultAction(list.GetRange(index + 1, list.Count - index - 1).OrderBy(m => m.SortableUniqueId));
