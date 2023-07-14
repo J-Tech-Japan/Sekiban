@@ -33,7 +33,10 @@ public class MultiProjectionSnapshotGenerator : IMultiProjectionSnapshotGenerato
         var projector = new TProjection();
         // if there is snapshot, load it, if not make a new one
         var state = await GetCurrentStateAsync<TProjectionPayload>(rootPartitionKey);
-        projector.ApplySnapshot(state);
+        if (state.Version > 0)
+        {
+            projector.ApplySnapshot(state);
+        }
         // get events from after snapshot or the initial and project them
         await _documentRepository.GetAllEventsAsync(
             typeof(TProjection),
@@ -96,18 +99,25 @@ public class MultiProjectionSnapshotGenerator : IMultiProjectionSnapshotGenerato
         // if snapshot document is not null, load it from blob storage
         if (snapshotDocument != null)
         {
-            var snapshotStream = await _blobAccessor.GetBlobWithGZipAsync(
-                SekibanBlobContainer.MultiProjectionState,
-                FilenameForSnapshot(typeof(TProjectionPayload), snapshotDocument.Id, snapshotDocument.LastSortableUniqueId));
-            if (snapshotStream != null)
+            try
             {
-                using var reader = new StreamReader(snapshotStream);
-                var snapshotString = await reader.ReadToEndAsync();
-                var state = JsonSerializer.Deserialize<MultiProjectionState<TProjectionPayload>>(snapshotString);
-                if (state != null)
+                var snapshotStream = await _blobAccessor.GetBlobWithGZipAsync(
+                    SekibanBlobContainer.MultiProjectionState,
+                    FilenameForSnapshot(typeof(TProjectionPayload), snapshotDocument.Id, snapshotDocument.LastSortableUniqueId));
+                if (snapshotStream != null)
                 {
-                    return state;
+                    using var reader = new StreamReader(snapshotStream);
+                    var snapshotString = await reader.ReadToEndAsync();
+                    var state = JsonSerializer.Deserialize<MultiProjectionState<TProjectionPayload>>(snapshotString);
+                    if (state != null)
+                    {
+                        return state;
+                    }
                 }
+            }
+            catch
+            {
+                return new MultiProjectionState<TProjectionPayload>();
             }
         }
         return new MultiProjectionState<TProjectionPayload>();
