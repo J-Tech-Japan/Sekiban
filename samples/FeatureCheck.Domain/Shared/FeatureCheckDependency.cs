@@ -50,6 +50,7 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
         AddAggregate<Branch>()
             .AddCommandHandler<CreateBranch, CreateBranch.Handler>()
             .AddCommandHandler<CreateBranchWithRootPartitionKey, CreateBranchWithRootPartitionKey.Handler>()
+            .AddCommandHandler<AddNumberOfClients, AddNumberOfClients.Handler>()
             .AddAggregateQuery<BranchExistsQuery>();
 
         AddAggregate<Client>()
@@ -57,6 +58,7 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
             .AddCommandHandler<ChangeClientName, ChangeClientName.Handler>()
             .AddCommandHandler<DeleteClient, DeleteClient.Handler>()
             .AddCommandHandler<CancelDeleteClient, CancelDeleteClient.Handler>()
+            .AddEventSubscriberWithNonBlocking<ClientCreated, ClientCreated.BranchSubscriber>()
             .AddEventSubscriber<ClientCreated, ClientCreatedSubscriber>()
             .AddEventSubscriber<ClientDeleted, ClientDeletedSubscriber>()
             .AddSingleProjection<ClientNameHistoryProjection>()
