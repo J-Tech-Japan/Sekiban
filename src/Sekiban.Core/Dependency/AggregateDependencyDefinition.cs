@@ -16,15 +16,24 @@ namespace Sekiban.Core.Dependency;
 /// <typeparam name="TAggregatePayload"></typeparam>
 public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDependencyDefinition where TAggregatePayload : IAggregatePayloadCommon
 {
-    public ImmutableList<IAggregateSubTypeDependencyDefinition<TAggregatePayload>> SubAggregates { get; protected set; }
+    /// <summary>
+    ///     Subtypes of this aggregate, edit only from method AddSubType
+    /// </summary>
+    public ImmutableList<IAggregateSubTypeDependencyDefinition<TAggregatePayload>> SubAggregates { get; private set; }
         = ImmutableList<IAggregateSubTypeDependencyDefinition<TAggregatePayload>>.Empty;
 
-    protected ImmutableList<(Type, Type?)> SelfCommandTypes { get; set; } = ImmutableList<(Type, Type?)>.Empty;
+    protected ImmutableList<(Type, Type?)> SelfCommandTypes { get; private set; } = ImmutableList<(Type, Type?)>.Empty;
     protected ImmutableList<(Type, Type?)> SelfSubscriberTypes { get; private set; } = ImmutableList<(Type, Type?)>.Empty;
 
+    /// <summary>
+    ///     Get Only Aggregate Type
+    /// </summary>
     public AggregateDependencyDefinition() => AggregateType = typeof(TAggregatePayload);
 
     public ImmutableList<Type> AggregateSubtypes => SubAggregates.Select(m => m.GetType().GetGenericArguments().Last()).ToImmutableList();
+    /// <summary>
+    ///     Get Aggregate commands
+    /// </summary>
     public virtual ImmutableList<(Type, Type?)> CommandTypes
     {
         get
@@ -37,6 +46,9 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
             return types;
         }
     }
+    /// <summary>
+    ///     Aggregate Event Subscribers
+    /// </summary>
     public ImmutableList<(Type, Type?)> SubscriberTypes
     {
         get
@@ -49,20 +61,54 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
             return types;
         }
     }
+    /// <summary>
+    ///     Aggregate Query Types
+    /// </summary>
     public ImmutableList<Type> AggregateQueryTypes { get; private set; } = ImmutableList<Type>.Empty;
+    /// <summary>
+    ///     Aggregate List Query Types
+    /// </summary>
     public ImmutableList<Type> AggregateListQueryTypes { get; private set; } = ImmutableList<Type>.Empty;
+    /// <summary>
+    ///     Aggregate Single Projection Types
+    /// </summary>
     public ImmutableList<Type> SingleProjectionTypes { get; private set; } = ImmutableList<Type>.Empty;
+    /// <summary>
+    ///     Aggregate Single Projection Query Types
+    /// </summary>
     public ImmutableList<Type> SingleProjectionQueryTypes { get; private set; } = ImmutableList<Type>.Empty;
+    /// <summary>
+    ///     Aggregate Single Projection List Query Types
+    /// </summary>
     public ImmutableList<Type> SingleProjectionListQueryTypes { get; private set; } = ImmutableList<Type>.Empty;
+    /// <summary>
+    ///     Aggregate Type
+    /// </summary>
     public Type AggregateType { get; }
-
+    /// <summary>
+    ///     Add Command Handler to Aggregate
+    /// </summary>
+    /// <typeparam name="TCreateCommand">Target Command</typeparam>
+    /// <typeparam name="TCommandHandler">Command Handler for Target Command</typeparam>
+    /// <returns>Self for method chain</returns>
     public AggregateDependencyDefinition<TAggregatePayload> AddCommandHandler<TCreateCommand, TCommandHandler>()
         where TCreateCommand : ICommand<TAggregatePayload>, new() where TCommandHandler : ICommandHandlerCommon<TAggregatePayload, TCreateCommand>
     {
         SelfCommandTypes = SelfCommandTypes.Add((typeof(ICommandHandlerCommon<TAggregatePayload, TCreateCommand>), typeof(TCommandHandler)));
         return this;
     }
-
+    /// <summary>
+    ///     Add Event Subscriber to Aggregate Event
+    /// </summary>
+    /// <typeparam name="TEvent">
+    ///     Target Event
+    /// </typeparam>
+    /// <typeparam name="TEventSubscriber">
+    ///     Subscriber for Target Event
+    /// </typeparam>
+    /// <returns>
+    ///     Self for method chain
+    /// </returns>
     public AggregateDependencyDefinition<TAggregatePayload> AddEventSubscriber<TEvent, TEventSubscriber>()
         where TEvent : IEventPayloadApplicableTo<TAggregatePayload> where TEventSubscriber : IEventSubscriber<TEvent>
     {

@@ -18,6 +18,7 @@ namespace Sekiban.Core.Command;
 public class CommandExecutor : ICommandExecutor
 {
     private static readonly SemaphoreSlim SemaphoreInMemory = new(1, 1);
+    private static readonly SemaphoreSlim SemaphoreAwaiter = new(1, 1);
     private readonly IAggregateLoader _aggregateLoader;
     private readonly ICommandExecuteAwaiter _commandExecuteAwaiter;
     private readonly IDocumentWriter _documentWriter;
@@ -139,9 +140,13 @@ public class CommandExecutor : ICommandExecutor
             {
                 throw new SekibanCommandNotRegisteredException(typeof(TCommand).Name);
             }
-
-            await _commandExecuteAwaiter.WaitUntilOtherThreadFinished<TAggregatePayload>(aggregateId);
-            _commandExecuteAwaiter.StartTask<TAggregatePayload>(aggregateId);
+            if (command is not IOnlyPublishingCommandCommon)
+            {
+                await SemaphoreAwaiter.WaitAsync();
+                await _commandExecuteAwaiter.WaitUntilOtherThreadFinished<TAggregatePayload>(aggregateId);
+                await _commandExecuteAwaiter.StartTaskAsync<TAggregatePayload>(aggregateId);
+                SemaphoreAwaiter.Release();
+            }
             commandDocument
                 = new CommandDocument<TCommand>(aggregateId, command, typeof(TAggregatePayload), rootPartitionKey, callHistories)
                 {
@@ -177,7 +182,7 @@ public class CommandExecutor : ICommandExecutor
         }
         finally
         {
-            _commandExecuteAwaiter.EndTask<TAggregatePayload>(aggregateId);
+            await _commandExecuteAwaiter.EndTaskAsync<TAggregatePayload>(aggregateId);
             await _documentWriter.SaveAsync(commandDocument with { Payload = commandToSave }, typeof(TAggregatePayload));
             if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
             {
