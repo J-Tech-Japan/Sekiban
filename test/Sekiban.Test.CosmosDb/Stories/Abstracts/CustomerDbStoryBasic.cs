@@ -17,6 +17,7 @@ using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
 using FeatureCheck.Domain.Shared;
 using FeatureCheck.Domain.Shared.Exceptions;
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query;
 using Sekiban.Core.Query.SingleProjections;
@@ -442,7 +443,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
 
     [Fact(
         DisplayName
-            = "Story test. What happens if we run a lot in parallel? Since INoValidateCommand is applied to RecentActivity, there should be no problem")]
+            = "Story test. What happens if we run a lot in parallel? Since ICommand does not have optimistic version check, there should be no problem")]
     [Trait(SekibanTestConstants.Category, SekibanTestConstants.Categories.Flaky)]
     public async Task AsynchronousExecutionTestAsync()
     {
@@ -517,6 +518,44 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         ResetInMemoryDocumentStoreAndCache();
         await ContinuousExecutionTestAsync();
     }
+
+    [Fact]
+    [Trait(SekibanTestConstants.Category, SekibanTestConstants.Categories.Flaky)]
+    public async Task AsynchronousExecutionConsistencyTestAsync()
+    {
+        RemoveAllFromDefaultAndDissolvable();
+
+        // create recent activity
+        var createRecentActivityResult = await commandExecutor.ExecCommandAsync(new CreateRecentActivity());
+        var aggregateId = createRecentActivityResult.AggregateId!.Value;
+        var recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
+        Assert.Single(recentActivityList);
+        var version = createRecentActivityResult.Version;
+        var tasks = new List<Task>();
+        var count = 50;
+        foreach (var i in Enumerable.Range(0, count))
+        {
+            tasks.Add(
+                Task.Run(
+                    async () =>
+                    {
+                        var recentActivityAddedResult = await commandExecutor.ExecCommandAsync(
+                            new AddRecentActivity(aggregateId, $"Message - {i + 1}") { ReferenceVersion = version });
+                        version = recentActivityAddedResult.Version;
+                    }));
+        }
+        await Task.WhenAll(tasks);
+
+        var events = (await aggregateLoader.AllEventsAsync<RecentActivity>(aggregateId) ?? Enumerable.Empty<IEvent>()).ToList();
+        var versionShouldBe = 1;
+        foreach (var ev in events)
+        {
+            Assert.Equal(versionShouldBe, ev.Version);
+            versionShouldBe++;
+        }
+    }
+
+
 
     private async Task CheckSnapshots<TAggregatePayload>(List<SnapshotDocument> snapshots, Guid aggregateId)
         where TAggregatePayload : IAggregatePayloadCommon

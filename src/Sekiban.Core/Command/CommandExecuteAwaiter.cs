@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 namespace Sekiban.Core.Command;
 
@@ -7,12 +8,9 @@ namespace Sekiban.Core.Command;
 /// </summary>
 public class CommandExecuteAwaiter : ICommandExecuteAwaiter
 {
-    private readonly ConcurrentDictionary<string, TaskCompletionSource<bool>> _taskCompletionSources;
-    public CommandExecuteAwaiter() => _taskCompletionSources = new ConcurrentDictionary<string, TaskCompletionSource<bool>>();
-    public void StartTask<TAggregatePayload>(Guid aggregateId)
-    {
-        _taskCompletionSources.AddOrUpdate(GetKey<TAggregatePayload>(aggregateId), new TaskCompletionSource<bool>(), (_, oldValue) => oldValue);
-    }
+    private static readonly ConcurrentDictionary<string, TaskCompletionSource<bool>> _taskCompletionSources = new();
+    private readonly ILogger<CommandExecuteAwaiter> _logger;
+    public CommandExecuteAwaiter(ILogger<CommandExecuteAwaiter> logger) => _logger = logger;
     public async Task WaitUntilOtherThreadFinished<TAggregatePayload>(Guid aggregateId)
     {
         if (_taskCompletionSources.TryGetValue(GetKey<TAggregatePayload>(aggregateId), out var tcs))
@@ -20,12 +18,18 @@ public class CommandExecuteAwaiter : ICommandExecuteAwaiter
             await tcs.Task;
         }
     }
-    public void EndTask<TAggregatePayload>(Guid aggregateId)
+    public async Task StartTaskAsync<TAggregatePayload>(Guid aggregateId)
+    {
+        await Task.CompletedTask;
+        _taskCompletionSources.AddOrUpdate(GetKey<TAggregatePayload>(aggregateId), new TaskCompletionSource<bool>(), (_, oldValue) => oldValue);
+    }
+    public async Task EndTaskAsync<TAggregatePayload>(Guid aggregateId)
     {
         if (_taskCompletionSources.TryRemove(GetKey<TAggregatePayload>(aggregateId), out var tcs))
         {
             tcs.SetResult(true);
         }
+        await Task.CompletedTask;
     }
 
     private string GetKey<TAggregatePayload>(Guid aggregateId) => $"{typeof(TAggregatePayload).Name}_{aggregateId}";

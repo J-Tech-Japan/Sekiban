@@ -14,7 +14,7 @@ public interface ICommandExecuteAwaiter
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <typeparam name="TAggregatePayload"></typeparam>
-    void StartTask<TAggregatePayload>(Guid aggregateId);
+    Task StartTaskAsync<TAggregatePayload>(Guid aggregateId);
     /// <summary>
     ///     Wait until other thread finished execution.
     /// </summary>
@@ -27,5 +27,5 @@ public interface ICommandExecuteAwaiter
     /// </summary>
     /// <param name="aggregateId"></param>
     /// <typeparam name="TAggregatePayload"></typeparam>
-    void EndTask<TAggregatePayload>(Guid aggregateId);
+    Task EndTaskAsync<TAggregatePayload>(Guid aggregateId);
 }
