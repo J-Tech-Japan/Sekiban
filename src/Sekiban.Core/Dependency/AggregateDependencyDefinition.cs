@@ -110,11 +110,31 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
     ///     Self for method chain
     /// </returns>
     public AggregateDependencyDefinition<TAggregatePayload> AddEventSubscriber<TEvent, TEventSubscriber>()
-        where TEvent : IEventPayloadApplicableTo<TAggregatePayload> where TEventSubscriber : IEventSubscriber<TEvent>
+        where TEvent : IEventPayloadApplicableTo<TAggregatePayload> where TEventSubscriber : IEventSubscriber<TEvent, TEventSubscriber>
     {
         SelfSubscriberTypes
             = SelfSubscriberTypes.Add((typeof(INotificationHandler<Event<TEvent>>), typeof(EventSubscriber<TEvent, TEventSubscriber>)));
-        SelfSubscriberTypes = SelfSubscriberTypes.Add((typeof(IEventSubscriber<TEvent>), typeof(TEventSubscriber)));
+        SelfSubscriberTypes = SelfSubscriberTypes.Add((typeof(IEventSubscriber<TEvent, TEventSubscriber>), typeof(TEventSubscriber)));
+        return this;
+    }
+    /// <summary>
+    ///     Add Event Subscriber to Aggregate Event with Non Blocking
+    /// </summary>
+    /// <typeparam name="TEvent">
+    ///     Target Event
+    /// </typeparam>
+    /// <typeparam name="TEventSubscriber">
+    ///     Subscriber for Target Event
+    /// </typeparam>
+    /// <returns>
+    ///     Self for method chain
+    /// </returns>
+    public AggregateDependencyDefinition<TAggregatePayload> AddEventSubscriberWithNonBlocking<TEvent, TEventSubscriber>()
+        where TEvent : IEventPayloadApplicableTo<TAggregatePayload> where TEventSubscriber : IEventSubscriber<TEvent, TEventSubscriber>
+    {
+        SelfSubscriberTypes = SelfSubscriberTypes.Add(
+            (typeof(INotificationHandler<Event<TEvent>>), typeof(NonBlockingEventSubscriber<TEvent, TEventSubscriber>)));
+        SelfSubscriberTypes = SelfSubscriberTypes.Add((typeof(IEventSubscriber<TEvent, TEventSubscriber>), typeof(TEventSubscriber)));
         return this;
     }
 

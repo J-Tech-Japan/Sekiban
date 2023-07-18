@@ -5,7 +5,7 @@ using Sekiban.Core.Events;
 using Sekiban.Core.PubSub;
 namespace FeatureCheck.Domain.EventSubscribers;
 
-public class ClientDeletedSubscriber : IEventSubscriber<ClientDeleted>
+public class ClientDeletedSubscriber : IEventSubscriber<ClientDeleted, ClientDeletedSubscriber>
 {
     private readonly ICommandExecutor commandExecutor;
 

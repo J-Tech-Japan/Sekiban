@@ -752,4 +752,21 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         var result4 = await commandExecutor.ExecCommandWithoutValidationWithEventsAsync(new ClientNoEventsCommand { ClientId = clientId });
         Assert.Null(result4.AggregateId);
     }
+
+    [Fact]
+    public async Task NoBlockingEventSubscriberWorks()
+    {
+        RemoveAllFromDefault();
+        var result = await commandExecutor.ExecCommandWithEventsAsync(new CreateBranch("JAPAN"));
+        var branchId = result.AggregateId!.Value;
+        result = await commandExecutor.ExecCommandWithEventsAsync(new CreateClientWithBranchSubscriber(branchId, "Test Name", "test@example.com"));
+        var clientId = result.AggregateId!.Value;
+        var branch = await aggregateLoader.AsDefaultStateAsync<Branch>(branchId);
+        Assert.NotNull(branch);
+        Assert.Equal(0, branch.Payload.NumberOfMembers);
+        await Task.Delay(2000);
+        branch = await aggregateLoader.AsDefaultStateAsync<Branch>(branchId);
+        Assert.NotNull(branch);
+        Assert.Equal(1, branch.Payload.NumberOfMembers);
+    }
 }

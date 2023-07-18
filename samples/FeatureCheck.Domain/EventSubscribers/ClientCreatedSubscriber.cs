@@ -5,7 +5,7 @@ using Sekiban.Core.Events;
 using Sekiban.Core.PubSub;
 namespace FeatureCheck.Domain.EventSubscribers;
 
-public class ClientCreatedSubscriber : IEventSubscriber<ClientCreated>
+public class ClientCreatedSubscriber : IEventSubscriber<ClientCreated, ClientCreatedSubscriber>
 {
     private readonly ICommandExecutor commandExecutor;
 

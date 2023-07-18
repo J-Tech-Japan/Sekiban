@@ -4,13 +4,13 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Infrastructure.Dynamo</PackageId>
-        <Version>0.13.0</Version>
+        <Version>0.13.1</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Dynamo Infrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.13.0</PackageVersion>
-        <Description>Removed dotnet 6 support, add dotnet 8 preview support</Description>
+        <PackageVersion>0.13.1</PackageVersion>
+        <Description>Fixed subscriber behabior, add Non Blocking subscriber</Description>
         <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
         <LangVersion>preview</LangVersion>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>

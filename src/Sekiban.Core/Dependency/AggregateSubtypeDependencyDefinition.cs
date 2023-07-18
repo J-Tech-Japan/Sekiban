@@ -10,21 +10,17 @@ public class
     AggregateSubtypeDependencyDefinition<TParentAggregatePayload, TAggregateSubtypePayload> : IAggregateSubTypeDependencyDefinition<
         TParentAggregatePayload> where TParentAggregatePayload : IAggregatePayloadCommon where TAggregateSubtypePayload : IAggregatePayloadCommon
 {
-    public AggregateDependencyDefinition<TParentAggregatePayload> ParentAggregateDependencyDefinition
-    {
-        get;
-        init;
-    }
+    public AggregateDependencyDefinition<TParentAggregatePayload> ParentAggregateDependencyDefinition { get; init; }
     internal AggregateSubtypeDependencyDefinition(AggregateDependencyDefinition<TParentAggregatePayload> parentAggregateDependencyDefinition) =>
         ParentAggregateDependencyDefinition = parentAggregateDependencyDefinition;
     public ImmutableList<(Type, Type?)> SubscriberTypes { get; private set; } = ImmutableList<(Type, Type?)>.Empty;
     public ImmutableList<(Type, Type?)> CommandTypes { get; private set; } = ImmutableList<(Type, Type?)>.Empty;
     public AggregateDependencyDefinition<TParentAggregatePayload> GetParentAggregateDependencyDefinition() => ParentAggregateDependencyDefinition;
     public AggregateSubtypeDependencyDefinition<TParentAggregatePayload, TAggregateSubtypePayload> AddEventSubscriber<TEvent, TEventSubscriber>()
-        where TEvent : IEventPayloadApplicableTo<TAggregateSubtypePayload> where TEventSubscriber : IEventSubscriber<TEvent>
+        where TEvent : IEventPayloadApplicableTo<TAggregateSubtypePayload> where TEventSubscriber : IEventSubscriber<TEvent, TEventSubscriber>
     {
         SubscriberTypes = SubscriberTypes.Add((typeof(INotificationHandler<Event<TEvent>>), typeof(EventSubscriber<TEvent, TEventSubscriber>)));
-        SubscriberTypes = SubscriberTypes.Add((typeof(IEventSubscriber<TEvent>), typeof(TEventSubscriber)));
+        SubscriberTypes = SubscriberTypes.Add((typeof(IEventSubscriber<TEvent, TEventSubscriber>), typeof(TEventSubscriber)));
         return this;
     }
     public AggregateSubtypeDependencyDefinition<TParentAggregatePayload, TAggregateSubtypePayload>
