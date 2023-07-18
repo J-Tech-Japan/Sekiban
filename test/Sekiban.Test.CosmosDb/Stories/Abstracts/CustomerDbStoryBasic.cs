@@ -759,7 +759,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         RemoveAllFromDefault();
         var result = await commandExecutor.ExecCommandWithEventsAsync(new CreateBranch("JAPAN"));
         var branchId = result.AggregateId!.Value;
-        result = await commandExecutor.ExecCommandWithEventsAsync(new CreateClient(branchId, "Test Name", "test@example.com"));
+        result = await commandExecutor.ExecCommandWithEventsAsync(new CreateClientWithBranchSubscriber(branchId, "Test Name", "test@example.com"));
         var clientId = result.AggregateId!.Value;
         var branch = await aggregateLoader.AsDefaultStateAsync<Branch>(branchId);
         Assert.NotNull(branch);
