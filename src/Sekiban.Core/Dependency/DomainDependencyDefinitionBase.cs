@@ -89,16 +89,16 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
 
     public IEnumerable<Type> GetAggregatePayloadTypes()
     {
-        return AggregateDefinitions.Select(s => s.AggregateType);
+        return AggregateDefinitions.Select(s => s.AggregatePayloadType);
     }
     public IEnumerable<Type> GetAggregatePayloadSubtypes()
     {
-        return AggregateDefinitions.SelectMany(s => s.AggregateSubtypes);
+        return AggregateDefinitions.SelectMany(s => s.AggregatePayloadSubtypes);
     }
 
     protected AggregateDependencyDefinition<TAggregatePayload> AddAggregate<TAggregatePayload>() where TAggregatePayload : IAggregatePayload
     {
-        if (AggregateDefinitions.SingleOrDefault(s => s.AggregateType == typeof(TAggregatePayload)) is
+        if (AggregateDefinitions.SingleOrDefault(s => s.AggregatePayloadType == typeof(TAggregatePayload)) is
             AggregateDependencyDefinition<TAggregatePayload> existing)
         {
             return existing;

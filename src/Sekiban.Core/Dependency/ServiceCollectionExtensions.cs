@@ -33,6 +33,14 @@ public static class ServiceCollectionExtensions
         Simple = 1, MemoryCache = 2
     }
 
+    /// <summary>
+    ///     Add Sekiban Core dependencies
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="sekibanDateProducer"></param>
+    /// <param name="multiProjectionType"></param>
+    /// <param name="configuration"></param>
+    /// <returns></returns>
     public static IServiceCollection AddSekibanCore(
         this IServiceCollection services,
         ISekibanDateProducer? sekibanDateProducer = null,
@@ -97,7 +105,12 @@ public static class ServiceCollectionExtensions
         services.AddTransient<MultiProjectionCollectionGenerator>();
         return services;
     }
-
+    /// <summary>
+    ///     Add sekiban core dependencies for in memory
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="sekibanDateProducer"></param>
+    /// <returns></returns>
     public static IServiceCollection AddSekibanCoreInMemory(this IServiceCollection services, ISekibanDateProducer? sekibanDateProducer = null)
     {
         services.AddMemoryCache();
@@ -150,7 +163,12 @@ public static class ServiceCollectionExtensions
         services.AddTransient<MultiProjectionCollectionGenerator>();
         return services;
     }
-
+    /// <summary>
+    ///     add sekiban core dependencies for test
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="sekibanDateProducer"></param>
+    /// <returns></returns>
     public static IServiceCollection AddSekibanCoreAggregateTest(this IServiceCollection services, ISekibanDateProducer? sekibanDateProducer = null)
     {
         services.AddMemoryCache();
@@ -202,7 +220,12 @@ public static class ServiceCollectionExtensions
         services.AddTransient<MultiProjectionCollectionGenerator>();
         return services;
     }
-
+    /// <summary>
+    ///     Add Sekbian HTTP User
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="contextType"></param>
+    /// <returns></returns>
     public static IServiceCollection AddSekibanHTTPUser(this IServiceCollection services, HttpContextType contextType = HttpContextType.Local)
     {
         // Users Information
@@ -219,20 +242,35 @@ public static class ServiceCollectionExtensions
 
         return services;
     }
-
+    /// <summary>
+    ///     Add Sekiban MultiProjection Snapshot Background Service
+    /// </summary>
+    /// <param name="services"></param>
+    /// <typeparam name="TSettings"></typeparam>
+    /// <returns></returns>
     public static IServiceCollection AddSekibanMultiProjectionSnapshotBackgroundService<TSettings>(this IServiceCollection services)
         where TSettings : IMultiProjectionsSnapshotGenerateSetting
     {
         services.AddHostedService<MultiProjectionSnapshotCollectionBackgroundService<TSettings>>();
         return services;
     }
+    /// <summary>
+    ///     Add Sekiban Settings from AppSettings
+    /// </summary>
+    /// <param name="services"></param>
+    /// <returns></returns>
     public static IServiceCollection AddSekibanSettingsFromAppSettings(this IServiceCollection services)
     {
         // Settings can be specified from the Configuration, and a settings object can also be created with new.
         services.AddTransient<IAggregateSettings, ConfigurationAggregateSettings>();
         return services;
     }
-
+    /// <summary>
+    ///     Add Sekiban Settings from Object
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="settings"></param>
+    /// <returns></returns>
     public static IServiceCollection AddSekibanAppSettingsFromObject(this IServiceCollection services, AggregateSettings settings)
     {
         // Example

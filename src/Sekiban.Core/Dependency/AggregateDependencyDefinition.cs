@@ -28,9 +28,9 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
     /// <summary>
     ///     Get Only Aggregate Type
     /// </summary>
-    public AggregateDependencyDefinition() => AggregateType = typeof(TAggregatePayload);
+    public AggregateDependencyDefinition() => AggregatePayloadType = typeof(TAggregatePayload);
 
-    public ImmutableList<Type> AggregateSubtypes => SubAggregates.Select(m => m.GetType().GetGenericArguments().Last()).ToImmutableList();
+    public ImmutableList<Type> AggregatePayloadSubtypes => SubAggregates.Select(m => m.GetType().GetGenericArguments().Last()).ToImmutableList();
     /// <summary>
     ///     Get Aggregate commands
     /// </summary>
@@ -84,7 +84,7 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
     /// <summary>
     ///     Aggregate Type
     /// </summary>
-    public Type AggregateType { get; }
+    public Type AggregatePayloadType { get; }
     /// <summary>
     ///     Add Command Handler to Aggregate
     /// </summary>
@@ -146,9 +146,9 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         {
             throw new ArgumentException($"Type {singleProjectionType} is not a single projection type");
         }
-        if (singleProjectionType.GetOriginalTypeFromSingleProjectionPayload() != AggregateType)
+        if (singleProjectionType.GetOriginalTypeFromSingleProjectionPayload() != AggregatePayloadType)
         {
-            throw new ArgumentException($"Single projection {singleProjectionType.Name} must be for aggregate {AggregateType.Name}");
+            throw new ArgumentException($"Single projection {singleProjectionType.Name} must be for aggregate {AggregatePayloadType.Name}");
         }
         SingleProjectionTypes = SingleProjectionTypes.Add(typeof(TSingleProjection));
         return this;

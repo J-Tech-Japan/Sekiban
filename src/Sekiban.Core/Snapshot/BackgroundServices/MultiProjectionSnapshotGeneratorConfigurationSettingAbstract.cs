@@ -77,7 +77,7 @@ public abstract class MultiProjectionSnapshotGeneratorConfigurationSettingAbstra
         var dependencyDefinition = new TDependency();
         foreach (var aggregateDefinition in dependencyDefinition.GetAggregateDefinitions())
         {
-            AggregateListSnapshotTypes.Add(aggregateDefinition.AggregateType);
+            AggregateListSnapshotTypes.Add(aggregateDefinition.AggregatePayloadType);
         }
         return this;
     }

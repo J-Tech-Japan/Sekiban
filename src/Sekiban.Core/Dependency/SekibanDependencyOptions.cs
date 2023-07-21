@@ -22,7 +22,12 @@ public record SekibanDependencyOptions
         SekibanAggregateTypes = sekibanAggregateTypes;
         TransientDependencies = transientDependencies;
     }
-
+    /// <summary>
+    ///     Create Merged Option from multiple dependency definitions
+    /// </summary>
+    /// <param name="assemblies"></param>
+    /// <param name="transientDependencies"></param>
+    /// <returns></returns>
     public static SekibanDependencyOptions CreateMergedOption(
         Assembly[] assemblies,
         IEnumerable<(Type serviceType, Type? implementationType)> transientDependencies) =>

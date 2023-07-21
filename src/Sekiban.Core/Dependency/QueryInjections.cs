@@ -9,6 +9,12 @@ namespace Sekiban.Core.Dependency;
 /// </summary>
 public static class QueryInjections
 {
+    /// <summary>
+    ///     Register with each query
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="controllerItems"></param>
+    /// <returns></returns>
     public static IServiceCollection AddQueries(this IServiceCollection services, params IEnumerable<Type>[] controllerItems)
     {
         foreach (var types in controllerItems)
@@ -69,7 +75,12 @@ public static class QueryInjections
         }
         return services;
     }
-
+    /// <summary>
+    ///     Register Dependencies
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="dependencyDefinition"></param>
+    /// <returns></returns>
     public static IServiceCollection AddQueriesFromDependencyDefinition(this IServiceCollection services, IQueryDefinition dependencyDefinition)
     {
         AddQueries(

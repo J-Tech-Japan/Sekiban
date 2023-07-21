@@ -17,6 +17,15 @@ public static class SekibanEventSourcingDependency
 {
     public static Assembly GetAssembly() => Assembly.GetExecutingAssembly();
 
+    /// <summary>
+    ///     Register Sekiban Core with Dependency
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="dependencyDefinition"></param>
+    /// <param name="sekibanDateProducer"></param>
+    /// <param name="multiProjectionType"></param>
+    /// <param name="configuration"></param>
+    /// <returns></returns>
     public static IServiceCollection AddSekibanCoreWithDependency(
         this IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
@@ -35,7 +44,14 @@ public static class SekibanEventSourcingDependency
         yield return (typeof(ICommandHandlerCommon<SnapshotManager, CreateSnapshotManager>), typeof(CreateSnapshotManagerHandler));
         yield return (typeof(ICommandHandlerCommon<SnapshotManager, ReportVersionToSnapshotManger>), typeof(ReportVersionToSnapshotMangerHandler));
     }
-
+    /// <summary>
+    ///     Register sekiban dependency
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="dependencyDefinition"></param>
+    /// <param name="sekibanDateProducer"></param>
+    /// <param name="multiProjectionType"></param>
+    /// <param name="configuration"></param>
     public static void Register(
         IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
@@ -58,7 +74,13 @@ public static class SekibanEventSourcingDependency
 
         services.AddQueriesFromDependencyDefinition(dependencyDefinition);
     }
-
+    /// <summary>
+    ///     Register sekiban dependency for in memory test
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="dependencyDefinition"></param>
+    /// <param name="sekibanDateProducer"></param>
+    /// <returns></returns>
     public static IServiceCollection AddSekibanCoreInMemoryTestWithDependency(
         this IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
@@ -68,7 +90,12 @@ public static class SekibanEventSourcingDependency
         RegisterForInMemoryTest(services, dependencyDefinition, sekibanDateProducer);
         return services;
     }
-
+    /// <summary>
+    ///     register sekiban dependency for in memory test
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="dependencyDefinition"></param>
+    /// <param name="sekibanDateProducer"></param>
     public static void RegisterForInMemoryTest(
         IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
@@ -92,7 +119,13 @@ public static class SekibanEventSourcingDependency
 
         services.AddQueriesFromDependencyDefinition(dependencyDefinition);
     }
-
+    /// <summary>
+    ///     register sekiban dependency for aggregate test
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="dependencyDefinition"></param>
+    /// <param name="sekibanDateProducer"></param>
+    /// <returns></returns>
     public static IServiceCollection AddSekibanCoreForAggregateTestWithDependency(
         this IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
@@ -102,7 +135,12 @@ public static class SekibanEventSourcingDependency
         RegisterForAggregateTest(services, dependencyDefinition, sekibanDateProducer);
         return services;
     }
-
+    /// <summary>
+    ///     register sekiban dependency for aggregate test
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="dependencyDefinition"></param>
+    /// <param name="sekibanDateProducer"></param>
     public static void RegisterForAggregateTest(
         IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
