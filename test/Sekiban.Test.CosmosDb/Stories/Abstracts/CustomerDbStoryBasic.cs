@@ -432,11 +432,11 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
     }
 
 
-    [Fact(DisplayName = "Do deletion only for the story test.")]
+    [Fact]
     public void DeleteOnlyTest() => RemoveAllFromDefaultAndDissolvable();
 
     [Trait(SekibanTestConstants.Category, SekibanTestConstants.Categories.Flaky)]
-    [Fact(DisplayName = "No Flaky Test For now. This is just empty test")]
+    [Fact]
     public void NoFlakyTest()
     {
     }
@@ -609,7 +609,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         }
     }
 
-    [Fact(DisplayName = "In-memory story test. What happens if we run a lot in parallel? Check that version duplication does not occur.")]
+    [Fact]
     public async Task AsynchronousInMemoryExecutionTestAsync()
     {
         // create recent activity

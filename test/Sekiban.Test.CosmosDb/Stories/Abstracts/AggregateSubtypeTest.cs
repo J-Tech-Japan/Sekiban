@@ -27,8 +27,8 @@ public abstract class AggregateSubtypeTest : TestBase<FeatureCheckDependency>
         ISekibanServiceProviderGenerator providerGenerator) : base(sekibanTestFixture, testOutputHelper, providerGenerator) =>
         singleProjectionSnapshotAccessor = GetService<ISingleProjectionSnapshotAccessor>();
 
-    [Fact(DisplayName = "Create the Subtype's Aggregate.")]
-    public async Task CosmosDbStory()
+    [Fact]
+    public async Task CreateTheSubtypesAggregate()
     {
         RemoveAllFromDefaultAndDissolvable();
 
@@ -71,7 +71,7 @@ public abstract class AggregateSubtypeTest : TestBase<FeatureCheckDependency>
     [Fact]
     public async Task SecondCommandTest()
     {
-        await CosmosDbStory();
+        await CreateTheSubtypesAggregate();
         var purchasedTime = DateTime.Now;
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
             new SubmitOrderI { CartId = cartId, OrderSubmittedLocalTime = purchasedTime, ReferenceVersion = commandResponse.Version });

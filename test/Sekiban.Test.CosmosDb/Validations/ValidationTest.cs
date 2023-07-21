@@ -35,7 +35,7 @@ public class Member
 }
 public class ValidationTest
 {
-    [Fact(DisplayName = "Verification successful.")]
+    [Fact]
     public void Test1()
     {
         var m = new Member { Name = "YAMADA Taro", Age = 25, Tel = "090-1111-2222", Email = "hoge@example.com" };
@@ -58,48 +58,48 @@ public class ValidationTest
         Assert.False(vresults.Any());
     }
 
-    [Fact(DisplayName = "Verification returns validation error - Name not entered.")]
-    public void Test2()
+    [Fact]
+    public void VerificationReturnsValidationErrorNameNotEntered()
     {
         var m = new Member { Name = string.Empty, Age = 25, Tel = "090-1111-2222", Email = "hoge@example.com" };
         var vresults = m.ValidateProperties();
         Assert.True(vresults.Any());
     }
 
-    [Fact(DisplayName = "Verification returns validation error - Name digit overflow.")]
-    public void Test3()
+    [Fact]
+    public void TestNameDigitOverflow()
     {
         var m = new Member { Name = "YAMADA Taroooooooooooooooo", Age = 25, Tel = "090-1111-2222", Email = "hoge@example.com" };
         var vresults = m.ValidateProperties();
         Assert.True(vresults.Any());
     }
 
-    [Fact(DisplayName = "Verification returns validation error - Age outside numeric range.")]
-    public void Test4()
+    [Fact]
+    public void TestAgeOutsideNumericRange()
     {
         var m = new Member { Name = "YAMADA Taro", Age = 80, Tel = "090-1111-2222", Email = "hoge@example.com" };
         var vresults = m.ValidateProperties();
         Assert.True(vresults.Any());
     }
 
-    [Fact(DisplayName = "Verification returns validation error - Character type of phone number.")]
-    public void Test5()
+    [Fact]
+    public void TestCharacterTypeOfPhoneNumber()
     {
         var m = new Member { Name = "YAMADA Taro", Age = 25, Tel = "090-1111-abcd", Email = "hoge@example.com" };
         var vresults = m.ValidateProperties();
         Assert.True(vresults.Any());
     }
 
-    [Fact(DisplayName = "Verification returns validation error - Email address format.")]
-    public void Test6()
+    [Fact]
+    public void TestEmailAddressFormat()
     {
         var m = new Member { Name = "YAMADA Taro", Age = 25, Tel = "090-1111-2222", Email = "hoge@example@com" };
         var vresults = m.ValidateProperties();
         Assert.True(vresults.Any());
     }
 
-    [Fact(DisplayName = "Verification successful - Reference type property exists.")]
-    public void Test7()
+    [Fact]
+    public void TestReferenceTypePropertyExists()
     {
         var m = new Member
         {
@@ -113,8 +113,8 @@ public class ValidationTest
         Assert.False(vresults.Any());
     }
 
-    [Fact(DisplayName = "Verification returns validation error - Property of reference-type property.")]
-    public void Test8()
+    [Fact]
+    public void TestPropertyOfReferenceTypeProperty()
     {
         var m = new Member
         {
@@ -130,8 +130,8 @@ public class ValidationTest
         Assert.Equal("Partner.Name", validationResults.First().MemberNames.First());
     }
 
-    [Fact(DisplayName = "Verification successful - Array type property exists.")]
-    public void Test9()
+    [Fact]
+    public void TestArrayTypePropertyExists()
     {
         var m = new Member
         {
@@ -146,8 +146,8 @@ public class ValidationTest
         Assert.False(vresults.Any());
     }
 
-    [Fact(DisplayName = "Verification returns validation error - There is an element that fails validation in array type property.")]
-    public void Test10()
+    [Fact]
+    public void TestFailsValidationInArrayType()
     {
         var m = new Member
         {

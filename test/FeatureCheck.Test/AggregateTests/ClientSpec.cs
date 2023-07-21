@@ -20,7 +20,7 @@ public class ClientSpec : AggregateTest<Client, FeatureCheckDependency>
     private const string testClientChangedName = "TestName2";
     private const string testEmail = "test@example.com";
 
-    [Fact(DisplayName = "Execute the aggregate command and test it.")]
+    [Fact]
     public void ClientCreateSpec()
     {
         // Create command refers to the Branch, so flow the command to create the Branch.
@@ -51,7 +51,7 @@ public class ClientSpec : AggregateTest<Client, FeatureCheckDependency>
             });
     }
 
-    [Fact(DisplayName = "If a duplicate email address exists, the creation fails.")]
+    [Fact]
     public void ClientCreateDuplicateEmailSpec()
     {
         var branchId = RunEnvironmentCommand(new CreateBranch("TEST"));
@@ -86,7 +86,7 @@ public class ClientSpec : AggregateTest<Client, FeatureCheckDependency>
         RunEnvironmentCommand(new UseLoyaltyPoint(otherClientId, DateTime.Today, LoyaltyPointUsageTypeKeys.TravelCarRental, 30, "test"));
     }
 
-    [Fact(DisplayName = "Can not delete client twice")]
+    [Fact]
     public void CanNotDeleteClientTwice()
     {
         var branchId = RunEnvironmentCommand(new CreateBranch("TEST"));
@@ -98,7 +98,7 @@ public class ClientSpec : AggregateTest<Client, FeatureCheckDependency>
             .ThenThrows<SekibanAggregateAlreadyDeletedException>();
     }
 
-    [Fact(DisplayName = "Can Cancel Delete")]
+    [Fact]
     public void CanCancelClientDelete()
     {
         var branchId = RunEnvironmentCommand(new CreateBranch("TEST"));
