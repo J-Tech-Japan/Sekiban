@@ -20,8 +20,8 @@ public class MultipleDbStoryTest : TestBase<FeatureCheckDependency>
         new CosmosSekibanServiceProviderGenerator()) =>
         _sekibanContext = GetService<ISekibanContext>();
 
-    [Fact(DisplayName = "Verify the operation with multiple databases in the CosmosDb story test.")]
-    public async Task CosmosDbStory()
+    [Fact]
+    public async Task MultipleDatabaseTest()
     {
         // When executed without doing anything, it becomes the "Default" behavior.
         RemoveAllFromDefaultAndDissolvable();

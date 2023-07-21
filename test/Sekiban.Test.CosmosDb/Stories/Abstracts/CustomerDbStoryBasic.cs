@@ -49,9 +49,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         blobAccessor = GetService<IBlobAccessor>();
     }
 
-    [Fact(
-        DisplayName
-            = "In the story test, we are not testing the functionality of the aggregate, but testing if it works correctly in collaboration with the DB.")]
+    [Fact]
     public async Task DocumentDbStory()
     {
         RemoveAllFromDefaultAndDissolvable();
@@ -432,18 +430,16 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
     }
 
 
-    [Fact(DisplayName = "Do deletion only for the story test.")]
+    [Fact]
     public void DeleteOnlyTest() => RemoveAllFromDefaultAndDissolvable();
 
     [Trait(SekibanTestConstants.Category, SekibanTestConstants.Categories.Flaky)]
-    [Fact(DisplayName = "No Flaky Test For now. This is just empty test")]
+    [Fact]
     public void NoFlakyTest()
     {
     }
 
-    [Fact(
-        DisplayName
-            = "Story test. What happens if we run a lot in parallel? Since ICommand does not have optimistic version check, there should be no problem")]
+    [Fact]
     [Trait(SekibanTestConstants.Category, SekibanTestConstants.Categories.Flaky)]
     public async Task AsynchronousExecutionTestAsync()
     {
@@ -609,7 +605,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         }
     }
 
-    [Fact(DisplayName = "In-memory story test. What happens if we run a lot in parallel? Check that version duplication does not occur.")]
+    [Fact]
     public async Task AsynchronousInMemoryExecutionTestAsync()
     {
         // create recent activity

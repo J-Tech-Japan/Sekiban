@@ -25,7 +25,7 @@ public abstract class AggregateSubtypeTypeR : TestBase<FeatureCheckDependency>
     {
     }
 
-    [Fact(DisplayName = "Create an Aggregate of the Subtype.")]
+    [Fact]
     public async Task CosmosDbStory()
     {
         RemoveAllFromDefaultAndDissolvable();
