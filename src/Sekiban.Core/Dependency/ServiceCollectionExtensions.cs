@@ -95,6 +95,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<ISingleProjectionSnapshotAccessor, SingleProjectionSnapshotAccessor>();
         services.AddSingleton<ICommandExecuteAwaiter, CommandExecuteAwaiter>();
         services.AddTransient<MultiProjectionCollectionGenerator>();
+        services.AddScoped<EventNonBlockingStatus>();
         return services;
     }
 
@@ -148,6 +149,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<ISingleProjectionSnapshotAccessor, SingleProjectionSnapshotAccessor>();
         services.AddSingleton<ICommandExecuteAwaiter, CommandExecuteAwaiter>();
         services.AddTransient<MultiProjectionCollectionGenerator>();
+        services.AddScoped<EventNonBlockingStatus>();
         return services;
     }
 
@@ -200,6 +202,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<ISingleProjectionSnapshotAccessor, SingleProjectionSnapshotAccessor>();
         services.AddSingleton<ICommandExecuteAwaiter, CommandExecuteAwaiter>();
         services.AddTransient<MultiProjectionCollectionGenerator>();
+        services.AddScoped<EventNonBlockingStatus>();
         return services;
     }
 

@@ -5,6 +5,7 @@ using Sekiban.Core.Documents;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Partition;
+using Sekiban.Core.PubSub;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Validation;
 using System.Collections.Immutable;
@@ -26,6 +27,15 @@ public class TestCommandExecutor
     public Guid ExecuteCommandWithPublish<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
         where TAggregatePayload : IAggregatePayloadCommon =>
         ExecuteCommand(command, injectingAggregateId, true);
+
+    public Guid ExecuteCommandWithPublishAndBlockingSubscriptions<TAggregatePayload>(
+        ICommand<TAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TAggregatePayload : IAggregatePayloadCommon
+    {
+        var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>();
+        if (nonBlockingStatus is null) { throw new Exception("EventNonBlockingStatus could not be found."); }
+        return nonBlockingStatus.RunBlockingFunc(() => ExecuteCommand(command, injectingAggregateId, true));
+    }
 
     private Guid ExecuteCommand<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId, bool withPublish)
         where TAggregatePayload : IAggregatePayloadCommon

@@ -4,6 +4,7 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
+using Sekiban.Core.PubSub;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Shared;
@@ -62,6 +63,11 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> GivenScenario(Action initialAction)
     {
         initialAction();
+        return this;
+    }
+    public IAggregateTestHelper<TAggregatePayload> GivenScenarioTask(Func<Task> initialAction)
+    {
+        initialAction().Wait();
         return this;
     }
 
@@ -135,10 +141,32 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     {
         return WhenCommandPrivate<TAggregatePayload, TCommand>(_ => changeCommand, true);
     }
+    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublishAndBlockingSubscriber<TCommand>(TCommand command)
+        where TCommand : ICommand<TAggregatePayload>
+    {
+        var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>();
+        if (nonBlockingStatus == null)
+        {
+            throw new Exception("EventNonBlockingStatus is not registered");
+        }
+        nonBlockingStatus.RunBlockingAction(() => WhenCommandWithPublish(command));
+        return this;
+    }
 
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
         where TCommand : ICommand<TAggregatePayload> =>
         WhenCommandPrivate<TAggregatePayload, TCommand>(commandFunc, true);
+    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublishAndBlockingSubscriber<TCommand>(
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommand<TAggregatePayload>
+    {
+        var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>();
+        if (nonBlockingStatus == null)
+        {
+            throw new Exception("EventNonBlockingStatus is not registered");
+        }
+        nonBlockingStatus.RunBlockingAction(() => WhenCommandPrivate<TAggregatePayload, TCommand>(commandFunc, true));
+        return this;
+    }
 
     public IAggregateTestHelper<TAggregatePayload> ThenGetLatestEvents(Action<List<IEvent>> checkEventsAction)
     {
@@ -380,16 +408,58 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         _commandExecutor.ExecuteCommand(command, injectingAggregateId);
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventWithPublish(IEvent ev) => SaveEvent(ev, true);
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventWithPublishAndBlockingEvent(IEvent ev)
+    {
+        var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>();
+        if (nonBlockingStatus == null)
+        {
+            throw new Exception("EventNonBlockingStatus is not registered");
+        }
+        nonBlockingStatus.RunBlockingAction(() => GivenEnvironmentEventWithPublish(ev));
+        return this;
+
+    }
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsWithPublish(IEnumerable<IEvent> events) => SaveEvents(events, true);
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsWithPublishAndBlockingEvents(IEnumerable<IEvent> events)
+    {
+        var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>();
+        if (nonBlockingStatus == null)
+        {
+            throw new Exception("EventNonBlockingStatus is not registered");
+        }
+        nonBlockingStatus.RunBlockingAction(() => GivenEnvironmentEventsWithPublish(events));
+        return this;
+    }
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFileWithPublish(string filename) =>
         GivenEnvironmentEventsFile(filename, true);
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFileWithPublishAndBlockingEvents(string filename)
+    {
+        var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>();
+        if (nonBlockingStatus == null)
+        {
+            throw new Exception("EventNonBlockingStatus is not registered");
+        }
+        nonBlockingStatus.RunBlockingAction(() => GivenEnvironmentEventsFileWithPublish(filename));
+        return this;
+    }
 
     public Guid RunEnvironmentCommandWithPublish<TEnvironmentAggregatePayload>(
         ICommand<TEnvironmentAggregatePayload> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon =>
         _commandExecutor.ExecuteCommandWithPublish(command, injectingAggregateId);
+    public Guid RunEnvironmentCommandWithPublishAndBlockingEvent<TEnvironmentAggregatePayload>(
+        ICommand<TEnvironmentAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon
+    {
+        var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>();
+        if (nonBlockingStatus == null)
+        {
+            throw new Exception("EventNonBlockingStatus is not registered");
+        }
+        return nonBlockingStatus.RunBlockingFunc(() => RunEnvironmentCommandWithPublish(command));
+    }
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentCommandExecutorAction(Action<TestCommandExecutor> action)
     {
