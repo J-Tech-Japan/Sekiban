@@ -49,9 +49,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         blobAccessor = GetService<IBlobAccessor>();
     }
 
-    [Fact(
-        DisplayName
-            = "In the story test, we are not testing the functionality of the aggregate, but testing if it works correctly in collaboration with the DB.")]
+    [Fact]
     public async Task DocumentDbStory()
     {
         RemoveAllFromDefaultAndDissolvable();
@@ -441,9 +439,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
     {
     }
 
-    [Fact(
-        DisplayName
-            = "Story test. What happens if we run a lot in parallel? Since ICommand does not have optimistic version check, there should be no problem")]
+    [Fact]
     [Trait(SekibanTestConstants.Category, SekibanTestConstants.Categories.Flaky)]
     public async Task AsynchronousExecutionTestAsync()
     {
