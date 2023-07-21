@@ -613,10 +613,18 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         _eventHandler.GivenEventsWithPublish(events);
         return this;
     }
+    public UnifiedTest<TDependencyDefinition> GivenEventsWithPublishAndBlockingSubscriptions(IEnumerable<IEvent> events)
+    {
+        _eventHandler.GivenEventsWithPublishAndBlockingSubscription(events);
+        return this;
+    }
 
     public UnifiedTest<TDependencyDefinition> GivenEvents(params IEvent[] events) => GivenEvents(events.AsEnumerable());
 
     public UnifiedTest<TDependencyDefinition> GivenEventsWithPublish(params IEvent[] events) => GivenEventsWithPublish(events.AsEnumerable());
+
+    public UnifiedTest<TDependencyDefinition> GivenEventsWithPublishAndBlockingSubscriptions(params IEvent[] events) =>
+        GivenEventsWithPublishAndBlockingSubscriptions(events.AsEnumerable());
 
     public UnifiedTest<TDependencyDefinition> GivenEventsFromJson(string jsonEvents)
     {
@@ -679,6 +687,11 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     public Guid RunCommandWithPublish<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
         where TAggregatePayload : IAggregatePayloadCommon =>
         _commandExecutor.ExecuteCommandWithPublish(command, injectingAggregateId);
+
+    public Guid RunCommandWithPublishAndBlockingSubscriptions<TAggregatePayload>(
+        ICommand<TAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TAggregatePayload : IAggregatePayloadCommon =>
+        _commandExecutor.ExecuteCommandWithPublishAndBlockingSubscriptions(command, injectingAggregateId);
 
     public UnifiedTest<TDependencyDefinition> GivenCommandExecutorAction(Action<TestCommandExecutor> action)
     {

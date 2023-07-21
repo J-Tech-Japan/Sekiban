@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Events;
+using Sekiban.Core.PubSub;
 using Sekiban.Core.Types;
 using System.Text.Json;
 namespace Sekiban.Testing.Projection;
@@ -20,6 +21,15 @@ public class TestEventHandler
     public void GivenEventsWithPublish(IEnumerable<IEvent> events)
     {
         GivenEvents(events, true);
+    }
+    public void GivenEventsWithPublishAndBlockingSubscription(IEnumerable<IEvent> events)
+    {
+        var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>();
+        if (nonBlockingStatus is null)
+        {
+            throw new Exception("EventNonBlockingStatus could not be found");
+        }
+        nonBlockingStatus.RunBlockingAction(() => GivenEvents(events, true));
     }
 
     private void GivenEvents(IEnumerable<IEvent> events, bool withPublish)

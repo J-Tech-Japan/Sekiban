@@ -52,6 +52,7 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         _helper.Subtype<TAggregateSubtypePayload>();
 
     public IAggregateTestHelper<TAggregatePayload> GivenScenario(Action initialAction) => _helper.GivenScenario(initialAction);
+    public IAggregateTestHelper<TAggregatePayload> GivenScenarioTask(Func<Task> initialAction) => _helper.GivenScenarioTask(initialAction);
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvent(IEvent ev) => _helper.GivenEnvironmentEvent(ev);
 
@@ -68,17 +69,24 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         _helper.RunEnvironmentCommand(command, injectingAggregateId);
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventWithPublish(IEvent ev) => _helper.GivenEnvironmentEventWithPublish(ev);
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventWithPublishAndBlockingEvent(IEvent ev) =>
+        _helper.GivenEnvironmentEventWithPublish(ev);
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsWithPublish(IEnumerable<IEvent> events) =>
         _helper.GivenEnvironmentEventsWithPublish(events);
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsWithPublishAndBlockingEvents(IEnumerable<IEvent> events) =>
+        _helper.GivenEnvironmentEventsWithPublish(events);
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFileWithPublish(string filename) =>
+        _helper.GivenEnvironmentEventsFileWithPublish(filename);
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFileWithPublishAndBlockingEvents(string filename) =>
         _helper.GivenEnvironmentEventsFileWithPublish(filename);
 
     public Guid RunEnvironmentCommandWithPublish<TEnvironmentAggregatePayload>(
         ICommand<TEnvironmentAggregatePayload> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon =>
         _helper.RunEnvironmentCommandWithPublish(command, injectingAggregateId);
+    public Guid RunEnvironmentCommandWithPublishAndBlockingEvent<TEnvironmentAggregatePayload>(ICommand<TEnvironmentAggregatePayload> command, Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon => _helper.RunEnvironmentCommandWithPublishAndBlockingEvent(command, injectingAggregateId);
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentCommandExecutorAction(Action<TestCommandExecutor> action)
     {
@@ -110,10 +118,16 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(TCommand changeCommand)
         where TCommand : ICommand<TAggregatePayload> =>
         _helper.WhenCommandWithPublish(changeCommand);
+    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublishAndBlockingSubscriber<TCommand>(TCommand command)
+        where TCommand : ICommand<TAggregatePayload> =>
+        _helper.WhenCommandWithPublishAndBlockingSubscriber(command);
 
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
         where TCommand : ICommand<TAggregatePayload> =>
         _helper.WhenCommandWithPublish(commandFunc);
+    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublishAndBlockingSubscriber<TCommand>(
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommand<TAggregatePayload> =>
+        _helper.WhenCommandWithPublishAndBlockingSubscriber(commandFunc);
 
     public IAggregateTestHelper<TAggregatePayload> ThenGetLatestEvents(Action<List<IEvent>> checkEventsAction) =>
         _helper.ThenGetLatestEvents(checkEventsAction);

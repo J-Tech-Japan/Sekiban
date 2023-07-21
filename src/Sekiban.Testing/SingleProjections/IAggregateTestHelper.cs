@@ -19,6 +19,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     #endregion
     #region given and setup
     public IAggregateTestHelper<TAggregatePayload> GivenScenario(Action initialAction);
+    public IAggregateTestHelper<TAggregatePayload> GivenScenarioTask(Func<Task> initialAction);
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvent(IEvent ev);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEvents(IEnumerable<IEvent> events);
@@ -28,10 +29,17 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         where TEnvironmentAggregatePayload : IAggregatePayloadCommon;
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventWithPublish(IEvent ev);
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventWithPublishAndBlockingEvent(IEvent ev);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsWithPublish(IEnumerable<IEvent> events);
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsWithPublishAndBlockingEvents(IEnumerable<IEvent> events);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFileWithPublish(string filename);
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFileWithPublishAndBlockingEvents(string filename);
 
     public Guid RunEnvironmentCommandWithPublish<TEnvironmentAggregatePayload>(
+        ICommand<TEnvironmentAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon;
+
+    public Guid RunEnvironmentCommandWithPublishAndBlockingEvent<TEnvironmentAggregatePayload>(
         ICommand<TEnvironmentAggregatePayload> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon;
 
@@ -42,18 +50,22 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     #endregion
 
     #region When
-    public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(TCommand changeCommand) where TCommand : ICommand<TAggregatePayload>;
-    public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommand<TAggregateSubtypePayload, TCommand>(TCommand changeCommand)
+    public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(TCommand command) where TCommand : ICommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommand<TAggregateSubtypePayload, TCommand>(TCommand command)
         where TAggregateSubtypePayload : TAggregatePayload, IAggregatePayloadCommon where TCommand : ICommand<TAggregateSubtypePayload>;
 
     public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
         where TCommand : ICommand<TAggregatePayload>;
 
-    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(TCommand changeCommand)
+    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(TCommand command) where TCommand : ICommand<TAggregatePayload>;
+
+    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublishAndBlockingSubscriber<TCommand>(TCommand command)
         where TCommand : ICommand<TAggregatePayload>;
 
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
         where TCommand : ICommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublishAndBlockingSubscriber<TCommand>(
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommand<TAggregatePayload>;
     #endregion
 
     #region Then

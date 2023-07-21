@@ -1,3 +1,4 @@
+using FeatureCheck.Domain.Aggregates.Branches;
 using FeatureCheck.Domain.Aggregates.Branches.Commands;
 using FeatureCheck.Domain.Aggregates.Clients;
 using FeatureCheck.Domain.Aggregates.Clients.Commands;
@@ -11,6 +12,7 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Exceptions;
 using Sekiban.Testing.SingleProjections;
 using System;
+using System.Threading.Tasks;
 using Xunit;
 namespace FeatureCheck.Test.AggregateTests;
 
@@ -111,5 +113,24 @@ public class ClientSpec : AggregateTest<Client, FeatureCheckDependency>
                 new CancelDeleteClient { ReferenceVersion = GetCurrentVersion(), ClientId = GetAggregateId(), Reason = "Deleted by mistake" })
             .ThenNotThrowsAnException()
             .ThenGetPayload(payload => Assert.False(payload.IsDeleted));
+    }
+
+    [Fact]
+    public async Task CanBlockNonBlockingSubscriber()
+    {
+        var branchId = RunEnvironmentCommand(new CreateBranch("TEST"));
+        WhenCommandWithPublishAndBlockingSubscriber(new CreateClientWithBranchSubscriber(branchId, "client", "client@example.com"));
+        var branch = GetEnvironmentAggregateState<Branch>(branchId);
+        Assert.Equal(1, branch.Payload.NumberOfMembers);
+        await Task.CompletedTask;
+    }
+    [Fact]
+    public async Task CanBlockNonBlockingSubscriberFunc()
+    {
+        var branchId = RunEnvironmentCommand(new CreateBranch("TEST"));
+        WhenCommandWithPublishAndBlockingSubscriber(_ => new CreateClientWithBranchSubscriber(branchId, "client", "client@example.com"));
+        var branch = GetEnvironmentAggregateState<Branch>(branchId);
+        Assert.Equal(1, branch.Payload.NumberOfMembers);
+        await Task.CompletedTask;
     }
 }
