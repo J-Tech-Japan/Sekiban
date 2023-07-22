@@ -94,7 +94,11 @@ public class DynamoDocumentWriter : IDocumentPersistentWriter
                 });
         }
     }
-    public bool ShouldUseBlob(SnapshotDocument document) => false;
+    public bool ShouldUseBlob(SnapshotDocument document)
+    {
+        var stream = SekibanJsonHelper.Serialize(document);
+        return stream is not null && stream.Length > 1024 * 300;
+    }
     public async Task SaveAndPublishEvents<TEvent>(IEnumerable<TEvent> events, Type aggregateType) where TEvent : IEvent
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);

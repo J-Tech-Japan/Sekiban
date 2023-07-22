@@ -1,4 +1,3 @@
-using MediatR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Command;
@@ -44,7 +43,7 @@ public static class SekibanEventSourcingDependency
         IConfiguration? configuration = null)
     {
         // MediatR
-        services.AddMediatR(Assembly.GetExecutingAssembly(), GetAssembly());
+        services.AddMediatR(new MediatRServiceConfiguration().RegisterServicesFromAssemblies(Assembly.GetExecutingAssembly(), GetAssembly()));
         // Sekiban Event Sourcing
         services.AddSekibanCore(sekibanDateProducer ?? new SekibanDateProducer(), multiProjectionType, configuration);
         services.AddSekibanHTTPUser();
@@ -75,7 +74,7 @@ public static class SekibanEventSourcingDependency
         ISekibanDateProducer? sekibanDateProducer = null)
     {
         // MediatR
-        services.AddMediatR(Assembly.GetExecutingAssembly(), GetAssembly());
+        services.AddMediatR(new MediatRServiceConfiguration().RegisterServicesFromAssemblies(Assembly.GetExecutingAssembly(), GetAssembly()));
 
         // Sekiban Event Sourcing
         services.AddSekibanCoreInMemory(sekibanDateProducer);
@@ -109,7 +108,7 @@ public static class SekibanEventSourcingDependency
         ISekibanDateProducer? sekibanDateProducer = null)
     {
         // MediatR
-        services.AddMediatR(Assembly.GetExecutingAssembly(), GetAssembly());
+        services.AddMediatR(new MediatRServiceConfiguration().RegisterServicesFromAssemblies(Assembly.GetExecutingAssembly(), GetAssembly()));
 
         // Sekiban Event Sourcing
         services.AddSekibanCoreAggregateTest(sekibanDateProducer);

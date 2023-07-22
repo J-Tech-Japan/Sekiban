@@ -69,15 +69,3 @@ public interface IDocumentRepository
         string partitionKey,
         string rootPartitionKey);
 }
-public interface IDocumentPersistentRepository : IDocumentRepository
-{
-    Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(
-        Guid aggregateId,
-        Type aggregatePayloadType,
-        Type projectionPayloadType,
-        string rootPartitionKey = IDocument.DefaultRootPartitionKey);
-}
-public interface IDocumentTemporaryRepository : IDocumentRepository
-{
-    Task<bool> EventsForAggregateIdHasSortableUniqueIdAsync(Guid aggregateId, Type originalType, string? partitionKey, string? sortableUniqueId);
-}

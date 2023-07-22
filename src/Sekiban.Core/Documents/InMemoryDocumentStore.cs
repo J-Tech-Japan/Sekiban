@@ -2,6 +2,10 @@ using Sekiban.Core.Events;
 using System.Collections.Concurrent;
 namespace Sekiban.Core.Documents;
 
+/// <summary>
+///     In memory Document Store.
+///     App Developer does not need to use this class
+/// </summary>
 public class InMemoryDocumentStore
 {
     private static readonly SemaphoreSlim _semaphoreInMemory = new(1, 1);

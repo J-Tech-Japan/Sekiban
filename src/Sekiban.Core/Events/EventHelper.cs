@@ -5,8 +5,21 @@ using Sekiban.Core.Types;
 using System.Reflection;
 namespace Sekiban.Core.Events;
 
+/// <summary>
+///     Event Helper for Generate, Convert and Not Registered Events
+///     App Developers usually does not need to use this class.
+/// </summary>
 public static class EventHelper
 {
+    /// <summary>
+    ///     handle events to add and apply for the aggregates
+    /// </summary>
+    /// <param name="aggregate"></param>
+    /// <param name="eventPayload"></param>
+    /// <param name="rootPartitionKey"></param>
+    /// <typeparam name="TAggregatePayload"></typeparam>
+    /// <returns></returns>
+    /// <exception cref="SekibanEventFailedToActivateException"></exception>
     public static IEvent HandleEvent<TAggregatePayload>(
         Aggregate<TAggregatePayload> aggregate,
         IEventPayloadCommon eventPayload,
@@ -19,7 +32,16 @@ public static class EventHelper
         return aggregateMethod?.Invoke(aggregate, new object?[] { eventPayload, rootPartitionKey }) as IEvent ??
             throw new SekibanEventFailedToActivateException();
     }
-
+    /// <summary>
+    ///     Generate Event from payload, aggregateId and rootPartitionKey
+    /// </summary>
+    /// <param name="aggregateId"></param>
+    /// <param name="rootPartitionKey"></param>
+    /// <param name="payload"></param>
+    /// <typeparam name="TEventPayload"></typeparam>
+    /// <typeparam name="TAggregatePayload"></typeparam>
+    /// <returns></returns>
+    /// <exception cref="SekibanEventFailedToActivateException"></exception>
     public static IEvent GenerateEventToSave<TEventPayload, TAggregatePayload>(Guid aggregateId, string rootPartitionKey, TEventPayload payload)
         where TEventPayload : IEventPayloadApplicableTo<TAggregatePayload> where TAggregatePayload : IAggregatePayloadCommon
     {
@@ -30,7 +52,12 @@ public static class EventHelper
         return Activator.CreateInstance(eventType, aggregateId, typeof(TAggregatePayload), payload, rootPartitionKey) as IEvent ??
             throw new SekibanEventFailedToActivateException();
     }
-
+    /// <summary>
+    ///     Get Converted event
+    /// </summary>
+    /// <param name="ev"></param>
+    /// <param name="payload"></param>
+    /// <returns></returns>
     public static (IEvent, IEventPayloadCommon) GetConvertedEventAndPayloadIfConverted(IEvent ev, IEventPayloadCommon payload)
     {
         if (payload.GetType().IsEventConvertingPayloadType())
@@ -43,7 +70,11 @@ public static class EventHelper
         }
         return (ev, payload);
     }
-
+    /// <summary>
+    ///     Get Unregistered events
+    /// </summary>
+    /// <param name="dynamicObject"></param>
+    /// <returns></returns>
     public static IEvent? GetUnregisteredEvent(JsonElement dynamicObject)
     {
         var payload = dynamicObject.GetProperty(nameof(Event<UnregisteredEventPayload>.Payload));

@@ -2,11 +2,6 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.QueryModel;
 namespace Sekiban.Core.Query;
 
-public record QueryAggregateState<TAggregatePayload>(AggregateState<TAggregatePayload> AggregateState) : IQueryResponse
-    where TAggregatePayload : IAggregatePayloadCommon;
-public record SimpleAggregateListQueryParameter<TAggregatePayload>
-    (int? PageSize, int? PageNumber) : IListQueryPagingParameter<QueryAggregateState<TAggregatePayload>>
-    where TAggregatePayload : IAggregatePayloadCommon;
 public class SimpleAggregateListQuery<TAggregatePayload> : IAggregateListQuery<TAggregatePayload, SimpleAggregateListQueryParameter<TAggregatePayload>
     , QueryAggregateState<TAggregatePayload>> where TAggregatePayload : IAggregatePayloadCommon
 {

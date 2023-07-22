@@ -2,10 +2,18 @@ using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Shared;
 namespace Sekiban.Core.Documents;
 
+/// <summary>
+///     General Document abstract.
+///     it will be inherited by Events, CommandDocument etc.
+/// </summary>
 public abstract record Document : IAggregateDocument
 {
-    public Document() { }
+    // ReSharper disable once PublicConstructorInAbstractClass
+    public Document()
+    {
+    }
 
+    // ReSharper disable once PublicConstructorInAbstractClass
     public Document(
         Guid aggregateId,
         string partitionKey,

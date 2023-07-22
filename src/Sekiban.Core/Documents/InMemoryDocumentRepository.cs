@@ -7,6 +7,11 @@ using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
 namespace Sekiban.Core.Documents;
 
+/// <summary>
+///     In memory Document Repository.
+///     Developer does not need to use this class
+///     Use interface <see cref="IDocumentRepository" />
+/// </summary>
 public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumentPersistentRepository
 {
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;

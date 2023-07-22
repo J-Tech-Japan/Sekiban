@@ -7,6 +7,12 @@ using Sekiban.Core.Snapshot;
 using Sekiban.Core.Types;
 namespace Sekiban.Core.Documents;
 
+/// <summary>
+///     Split repository depends on the Aggregate Type
+///     Aggregate Payload can be marked with attribute
+///     [AggregateContainerGroup(AggregateContainerGroup.Dissolvable)] dissolvable container
+///     [AggregateContainerGroup(AggregateContainerGroup.InMemory)] in memory container (reset after the restart)
+/// </summary>
 public class DocumentRepositorySplitter : IDocumentRepository
 {
     private readonly IAggregateSettings _aggregateSettings;
@@ -280,12 +286,20 @@ public class DocumentRepositorySplitter : IDocumentRepository
             rootPartitionKey);
     }
 
-    public Task GetAllEventsForAggregateAsync(Type aggregatePayloadType, string? sinceSortableUniqueId,string rootPartitionKey, Action<IEnumerable<IEvent>> resultAction)
+    public Task GetAllEventsForAggregateAsync(
+        Type aggregatePayloadType,
+        string? sinceSortableUniqueId,
+        string rootPartitionKey,
+        Action<IEnumerable<IEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
-            return _documentTemporaryRepository.GetAllEventsForAggregateAsync(aggregatePayloadType, sinceSortableUniqueId, rootPartitionKey, resultAction);
+            return _documentTemporaryRepository.GetAllEventsForAggregateAsync(
+                aggregatePayloadType,
+                sinceSortableUniqueId,
+                rootPartitionKey,
+                resultAction);
         }
         return _documentPersistentRepository.GetAllEventsForAggregateAsync(
             aggregatePayloadType,

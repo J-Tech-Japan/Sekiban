@@ -60,7 +60,7 @@ jobs:
         dotnet restore Sekiban.sln
     - name: Test dotnet
       run: |
-        dotnet test Sekiban.sln  --filter "Category!=Flaky&Category!=Performance" -v n -c Release
+        dotnet test Sekiban.sln  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1
     - uses: mktcode/consecutive-workflow-action@v1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
@@ -115,10 +115,10 @@ jobs:
     - name: Test dotnet
       uses: nick-fields/retry@v2
       with:
-        timeout_seconds: 300
+        timeout_seconds: 1000
         max_attempts: 3
         retry_on: error
-        command: dotnet test Sekiban.sln  --filter "Category=Flaky" -v n -c Release
+        command: dotnet test Sekiban.sln  --filter "Category=Flaky" -v m -c Release -m:1
     - uses: mktcode/consecutive-workflow-action@v1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
@@ -172,4 +172,4 @@ jobs:
         dotnet restore Sekiban.sln
     - name: Test dotnet
       run: |
-        dotnet test Sekiban.sln  --filter "Category=Performance" -v n -c Release
+        dotnet test Sekiban.sln  --filter "Category=Performance" -v m -c Release -m:1

@@ -1,6 +1,10 @@
 using System.Collections.Concurrent;
 namespace Sekiban.Core.Documents;
 
+/// <summary>
+///     System use keep in memory event caches.
+///     Application developers does not need to use this interface directly
+/// </summary>
 public class HybridStoreManager
 {
     private ConcurrentDictionary<string, HybridStatus> HybridPartitionKeys { get; } = new();
