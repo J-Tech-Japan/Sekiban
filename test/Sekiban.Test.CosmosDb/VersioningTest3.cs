@@ -2,10 +2,10 @@ using Sekiban.Core.Shared;
 using Xunit;
 namespace Sekiban.Test.CosmosDb;
 
-public class VersioningTest
+public class VersioningTest3
 {
     [Fact]
-    public void Versioning()
+    public void Versioning3()
     {
         var v1 = new TestV1("Name", "Location");
         var json = SekibanJsonHelper.Serialize(v1);
@@ -17,5 +17,8 @@ public class VersioningTest
 
     public record TestV1(string Name, string Location);
 
-    public record TestV2(string Name, string Location, int Point = 10);
+    public record TestV2(string Name, string Location)
+    {
+        public int Point { get; init; } = 10;
+    }
 }

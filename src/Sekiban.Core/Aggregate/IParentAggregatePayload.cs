@@ -18,15 +18,6 @@ public interface IParentAggregatePayload<TParentAggregatePayload> : IParentAggre
 {
 }
 /// <summary>
-///     Common interface for Parent Aggregate Payload
-///     Note : No need to implement this interface. It is used internally.
-/// </summary>
-/// <typeparam name="TParentAggregatePayload">Refers Parent Aggregate Itself</typeparam>
-public interface IParentAggregatePayloadCommon<TParentAggregatePayload> : IAggregatePayload, IApplicableAggregatePayload<TParentAggregatePayload>
-    where TParentAggregatePayload : IAggregatePayloadCommon
-{
-}
-/// <summary>
 ///     Parent Aggregate Payload
 ///     Developer can implement this interface to define the state of your aggregate.
 ///     This interface is used when Parent Aggregate Type and First Aggregate Payload type are different.

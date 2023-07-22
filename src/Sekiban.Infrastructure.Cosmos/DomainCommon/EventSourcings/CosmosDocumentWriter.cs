@@ -88,7 +88,7 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
     {
         var serializer = new SekibanCosmosSerializer();
         var stream = serializer.ToStream(document);
-        return stream.Length > 1024 * 500;
+        return stream.Length > 1024 * 1024 * 2;
     }
 
     public async Task SaveAndPublishEvents<TEvent>(IEnumerable<TEvent> events, Type aggregateType) where TEvent : IEvent

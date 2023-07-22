@@ -6,6 +6,11 @@ using Sekiban.Core.Setting;
 using Sekiban.Core.Snapshot;
 namespace Sekiban.Core.Documents;
 
+/// <summary>
+///     In memory Document Writer
+///     App developer does not need to use this class
+///     see <see cref="IDocumentWriter" />
+/// </summary>
 public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersistentWriter
 {
     private readonly EventPublisher _eventPublisher;

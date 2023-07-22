@@ -2,11 +2,6 @@ using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
 namespace FeatureCheck.Domain.Aggregates.Clients.Projections;
 
-public enum ClientNameHistoryProjectionQuerySortKeys
-{
-    BranchId, ClientId, ClientName, ClientEmail
-}
-
 // ReSharper disable once ClassNeverInstantiated.Global
 public class ClientNameHistoryProjectionQuery : ISingleProjectionListQuery<ClientNameHistoryProjection, ClientNameHistoryProjectionQuery.Parameter,
     ClientNameHistoryProjectionQuery.Response>
