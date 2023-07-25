@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
+using Sekiban.Core.Documents;
 using Sekiban.Core.Events;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
@@ -60,9 +61,10 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFile(string filename) => _helper.GivenEnvironmentEventsFile(filename);
 
-    public AggregateState<TEnvironmentAggregatePayload> GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
-        where TEnvironmentAggregatePayload : IAggregatePayloadCommon =>
-        _helper.GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(aggregateId);
+    public AggregateState<TEnvironmentAggregatePayload> GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(
+        Guid aggregateId,
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey) where TEnvironmentAggregatePayload : IAggregatePayloadCommon =>
+        _helper.GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(aggregateId, rootPartitionKey);
 
     public Guid RunEnvironmentCommand<TEnvironmentAggregatePayload>(ICommand<TEnvironmentAggregatePayload> command, Guid? injectingAggregateId = null)
         where TEnvironmentAggregatePayload : IAggregatePayloadCommon =>
@@ -86,7 +88,10 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         ICommand<TEnvironmentAggregatePayload> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon =>
         _helper.RunEnvironmentCommandWithPublish(command, injectingAggregateId);
-    public Guid RunEnvironmentCommandWithPublishAndBlockingEvent<TEnvironmentAggregatePayload>(ICommand<TEnvironmentAggregatePayload> command, Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon => _helper.RunEnvironmentCommandWithPublishAndBlockingEvent(command, injectingAggregateId);
+    public Guid RunEnvironmentCommandWithPublishAndBlockingEvent<TEnvironmentAggregatePayload>(
+        ICommand<TEnvironmentAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon =>
+        _helper.RunEnvironmentCommandWithPublishAndBlockingEvent(command, injectingAggregateId);
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentCommandExecutorAction(Action<TestCommandExecutor> action)
     {

@@ -1,7 +1,9 @@
 using Sekiban.Core.Validation;
 using System.ComponentModel.DataAnnotations;
 namespace Sekiban.Core.Exceptions;
-
+/// <summary>
+/// This exception is thrown when the validation errors are found.
+/// </summary>
 public class SekibanValidationErrorsException : Exception, ISekibanException
 {
 

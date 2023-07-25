@@ -80,7 +80,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                         EventHelper.GetUnregisteredEvent(jsonElement);
                     if (toAdd is null)
                     {
-                        throw new SekibanUnregisterdEventFoundException();
+                        throw new SekibanUnregisteredEventFoundException();
                     }
                     if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
                     {
@@ -211,7 +211,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                         EventHelper.GetUnregisteredEvent(jsonElement);
                     if (toAdd is null)
                     {
-                        throw new SekibanUnregisterdEventFoundException();
+                        throw new SekibanUnregisteredEventFoundException();
                     }
                     if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
                     {
@@ -284,7 +284,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                         EventHelper.GetUnregisteredEvent(jsonElement);
                     if (toAdd is null)
                     {
-                        throw new SekibanUnregisterdEventFoundException();
+                        throw new SekibanUnregisteredEventFoundException();
                     }
                     if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
                     {

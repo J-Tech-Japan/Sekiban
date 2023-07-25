@@ -57,7 +57,11 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> where TAg
         // Validate AddAggregate Version
         if (_checkVersion && command is IVersionValidationCommandCommon validationCommand && validationCommand.ReferenceVersion != _aggregate.Version)
         {
-            throw new SekibanCommandInconsistentVersionException(_aggregate.AggregateId, validationCommand.ReferenceVersion, _aggregate.Version);
+            throw new SekibanCommandInconsistentVersionException(
+                _aggregate.AggregateId,
+                validationCommand.ReferenceVersion,
+                _aggregate.Version,
+                rootPartitionKey);
         }
         await foreach (var eventPayload in regularHandler.HandleCommandAsync(GetAggregateState, command))
         {

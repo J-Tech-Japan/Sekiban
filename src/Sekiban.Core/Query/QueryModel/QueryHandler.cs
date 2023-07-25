@@ -28,7 +28,7 @@ public class QueryHandler
         var queryResponses = sorted.ToList();
         if (param is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam)
         {
-            return makeQueryListResult(pagingParam, queryResponses);
+            return MakeQueryListResult(pagingParam, queryResponses);
         }
         return new ListQueryResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
     }
@@ -65,7 +65,7 @@ public class QueryHandler
         var queryResponses = sorted.ToList();
         if (param is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam)
         {
-            return makeQueryListResult(pagingParam, queryResponses);
+            return MakeQueryListResult(pagingParam, queryResponses);
         }
         return new ListQueryResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
     }
@@ -106,7 +106,7 @@ public class QueryHandler
         var queryResponses = sorted.ToList();
         if (param is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam)
         {
-            return makeQueryListResult(pagingParam, queryResponses);
+            return MakeQueryListResult(pagingParam, queryResponses);
         }
         return new ListQueryResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
     }
@@ -144,12 +144,12 @@ public class QueryHandler
         var queryResponses = sorted.ToList();
         if (param is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam)
         {
-            return makeQueryListResult(pagingParam, queryResponses);
+            return MakeQueryListResult(pagingParam, queryResponses);
         }
         return new ListQueryResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
     }
 
-    private static ListQueryResult<TQueryResponse> makeQueryListResult<TQueryResponse>(
+    private static ListQueryResult<TQueryResponse> MakeQueryListResult<TQueryResponse>(
         IQueryPagingParameterCommon pagingParam,
         List<TQueryResponse> queryResponses)
     {
