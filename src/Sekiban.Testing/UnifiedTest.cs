@@ -583,7 +583,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         return this;
     }
 
-    public AggregateState<TEnvironmentAggregatePayload> GetAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
+    public AggregateState<TEnvironmentAggregatePayload> GetAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId, string rootPartitionKey)
         where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
         var singleProjectionService = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader;
@@ -592,7 +592,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
             throw new Exception("Failed to get single aggregate service");
         }
         var aggregate = singleProjectionService.AsDefaultStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
-        return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name);
+        return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name, rootPartitionKey);
     }
 
     public IReadOnlyCollection<IEvent> GetLatestEvents() => _commandExecutor.LatestEvents;

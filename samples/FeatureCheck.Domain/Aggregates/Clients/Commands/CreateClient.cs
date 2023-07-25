@@ -5,6 +5,7 @@ using FeatureCheck.Domain.Aggregates.Clients.Queries;
 using FeatureCheck.Domain.Shared.Exceptions;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
+using Sekiban.Core.Documents;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.QueryModel;
@@ -32,6 +33,7 @@ public record CreateClient : ICommand<Client>
         ClientName = clientName;
         ClientEmail = clientEmail;
     }
+    public string GetRootPartitionKey() => IDocument.DefaultRootPartitionKey;
 
     public Guid GetAggregateId() => Guid.NewGuid();
 
@@ -49,11 +51,12 @@ public record CreateClient : ICommand<Client>
             var branchExistsOutput = await queryExecutor.ExecuteAsync(new BranchExistsQuery.Parameter(command.BranchId));
             if (!branchExistsOutput.Exists)
             {
-                throw new SekibanAggregateNotExistsException(command.BranchId, nameof(Branch));
+                throw new SekibanAggregateNotExistsException(command.BranchId, nameof(Branch), (command as ICommandCommon).GetRootPartitionKey());
             }
 
             // Check no email duplicates
-            var emailExistsOutput = await queryExecutor.ExecuteAsync(new ClientEmailExistsQuery.Parameter(command.ClientEmail));
+            var emailExistsOutput = await queryExecutor.ExecuteAsync(
+                new ClientEmailExistsQuery.Parameter(command.ClientEmail) { RootPartitionKey = (command as ICommandCommon).GetRootPartitionKey() });
             if (emailExistsOutput.Exists)
             {
                 throw new SekibanEmailAlreadyRegistered();

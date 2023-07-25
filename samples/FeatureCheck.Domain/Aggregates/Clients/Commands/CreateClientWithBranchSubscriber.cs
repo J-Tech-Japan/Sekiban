@@ -49,7 +49,7 @@ public record CreateClientWithBranchSubscriber : ICommand<Client>
             var branchExistsOutput = await queryExecutor.ExecuteAsync(new BranchExistsQuery.Parameter(command.BranchId));
             if (!branchExistsOutput.Exists)
             {
-                throw new SekibanAggregateNotExistsException(command.BranchId, nameof(Branch));
+                throw new SekibanAggregateNotExistsException(command.BranchId, nameof(Branch), (command as ICommandCommon).GetRootPartitionKey());
             }
 
             // Check no email duplicates

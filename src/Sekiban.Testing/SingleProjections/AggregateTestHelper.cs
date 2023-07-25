@@ -85,8 +85,9 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFile(string filename) => GivenEnvironmentEventsFile(filename, false);
 
-    public AggregateState<TEnvironmentAggregatePayload> GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
-        where TEnvironmentAggregatePayload : IAggregatePayloadCommon
+    public AggregateState<TEnvironmentAggregatePayload> GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(
+        Guid aggregateId,
+        string rootPartitionKey) where TEnvironmentAggregatePayload : IAggregatePayloadCommon
     {
         var singleProjectionService = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader;
         if (singleProjectionService is null)
@@ -94,7 +95,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             throw new Exception("Failed to get single aggregate service");
         }
         var aggregate = singleProjectionService.AsDefaultStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
-        return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name);
+        return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name, rootPartitionKey);
     }
 
     public IReadOnlyCollection<IEvent> GetLatestEnvironmentEvents() => _commandExecutor.LatestEvents;
@@ -250,7 +251,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var aggregateId = GetAggregateId();
         var rootPartitionKey = GetRootPartitionKey();
         var aggregate = aggregateLoader.AsDefaultStateAsync<TAggregatePayload>(aggregateId, rootPartitionKey).Result;
-        return aggregate ?? throw new SekibanAggregateNotExistsException(GetAggregateId(), typeof(TAggregatePayload).Name);
+        return aggregate ?? throw new SekibanAggregateNotExistsException(GetAggregateId(), typeof(TAggregatePayload).Name, GetRootPartitionKey());
     }
 
     public IAggregateTestHelper<TAggregatePayload> ThenPayloadIs(TAggregatePayload payload)

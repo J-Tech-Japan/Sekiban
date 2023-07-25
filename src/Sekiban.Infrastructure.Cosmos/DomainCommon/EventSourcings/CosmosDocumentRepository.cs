@@ -76,7 +76,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                             EventHelper.GetUnregisteredEvent(item);
                         if (toAdd is null)
                         {
-                            throw new SekibanUnregisterdEventFoundException();
+                            throw new SekibanUnregisteredEventFoundException();
                         }
 
                         if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
@@ -208,7 +208,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                             EventHelper.GetUnregisteredEvent(item);
                         if (toAdd is null)
                         {
-                            throw new SekibanUnregisterdEventFoundException();
+                            throw new SekibanUnregisteredEventFoundException();
                         }
 
                         if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
@@ -308,7 +308,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                             EventHelper.GetUnregisteredEvent(item);
                         if (toAdd is null)
                         {
-                            throw new SekibanUnregisterdEventFoundException();
+                            throw new SekibanUnregisteredEventFoundException();
                         }
 
                         if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))

@@ -1,5 +1,6 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
+using Sekiban.Core.Documents;
 using Sekiban.Core.Events;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
@@ -109,8 +110,9 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public int GetCurrentVersion();
     public AggregateState<TAggregatePayload> GetAggregateState();
 
-    public AggregateState<TEnvironmentAggregatePayload> GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId)
-        where TEnvironmentAggregatePayload : IAggregatePayloadCommon;
+    public AggregateState<TEnvironmentAggregatePayload> GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(
+        Guid aggregateId,
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey) where TEnvironmentAggregatePayload : IAggregatePayloadCommon;
 
     public IReadOnlyCollection<IEvent> GetLatestEnvironmentEvents();
     public List<IEvent> GetLatestEvents();
