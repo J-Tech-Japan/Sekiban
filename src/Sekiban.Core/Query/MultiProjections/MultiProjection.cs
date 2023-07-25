@@ -3,8 +3,11 @@ using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 namespace Sekiban.Core.Query.MultiProjections;
 
-public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPayload>, IMultiProjectionBase
-    where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+/// <summary>
+///     General Multi Projection Payload's projector
+/// </summary>
+/// <typeparam name="TProjectionPayload"></typeparam>
+public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPayload> where TProjectionPayload : IMultiProjectionPayloadCommon, new()
 {
     private MultiProjectionState<TProjectionPayload> state = new(
         new TProjectionPayload(),

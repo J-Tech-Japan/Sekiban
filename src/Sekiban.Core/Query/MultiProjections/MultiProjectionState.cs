@@ -1,6 +1,15 @@
 using Sekiban.Core.Events;
 namespace Sekiban.Core.Query.MultiProjections;
-
+/// <summary>
+/// Multi Projection State.
+/// </summary>
+/// <param name="Payload"></param>
+/// <param name="LastEventId"></param>
+/// <param name="LastSortableUniqueId"></param>
+/// <param name="AppliedSnapshotVersion"></param>
+/// <param name="Version"></param>
+/// <param name="RootPartitionKey"></param>
+/// <typeparam name="TProjectionPayload"></typeparam>
 public record MultiProjectionState<TProjectionPayload>(
     TProjectionPayload Payload,
     Guid LastEventId,

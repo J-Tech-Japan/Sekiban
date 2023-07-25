@@ -4,6 +4,12 @@ using Sekiban.Core.Events;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Query.MultiProjections;
 
+/// <summary>
+///     General Single Projection List Projector
+/// </summary>
+/// <typeparam name="TProjection"></typeparam>
+/// <typeparam name="TState"></typeparam>
+/// <typeparam name="TProjector"></typeparam>
 public class SingleProjectionListProjector<TProjection, TState, TProjector> : IMultiProjector<SingleProjectionListState<TState>>
     where TProjection : IAggregateCommon, ISingleProjection, ISingleProjectionStateConvertible<TState>
     where TState : IAggregateStateCommon

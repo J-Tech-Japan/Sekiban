@@ -8,6 +8,9 @@ using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 namespace Sekiban.Core.Query.MultiProjections.Projections;
 
+/// <summary>
+///     Multi Projection using Memory Cache
+/// </summary>
 public class MemoryCacheMultiProjection : IMultiProjection
 {
     private readonly IAggregateSettings _aggregateSettings;

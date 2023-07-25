@@ -3,6 +3,12 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Events;
 namespace Sekiban.Core.PubSub;
 
+/// <summary>
+///     NonBlocking Event Subscriber,
+///     During test, it can be make it to blocking mode.
+/// </summary>
+/// <typeparam name="TEventPayload"></typeparam>
+/// <typeparam name="TEventSubscriber"></typeparam>
 public class NonBlockingEventSubscriber<TEventPayload, TEventSubscriber> : INotificationHandler<Event<TEventPayload>>
     where TEventPayload : IEventPayloadCommon where TEventSubscriber : IEventSubscriber<TEventPayload, TEventSubscriber>
 {

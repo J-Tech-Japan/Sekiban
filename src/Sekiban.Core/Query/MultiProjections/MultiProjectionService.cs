@@ -3,7 +3,9 @@ using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Query.MultiProjections.Projections;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Query.MultiProjections;
-
+/// <summary>
+/// Multi Projection Retrieve Service.
+/// </summary>
 public class MultiProjectionService : IMultiProjectionService
 {
     private readonly IMultiProjection multiProjection;
