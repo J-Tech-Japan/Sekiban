@@ -32,11 +32,13 @@ using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.ShoppingC
 using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.ShoppingCarts.Commands;
 using FeatureCheck.Domain.Aggregates.VersionCheckAggregates;
 using FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Commands;
+using FeatureCheck.Domain.Common;
 using FeatureCheck.Domain.EventSubscribers;
 using FeatureCheck.Domain.Projections;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointLists;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
 using FeatureCheck.Domain.Projections.DissolvableProjection;
+using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Dependency;
 using System.Reflection;
 namespace FeatureCheck.Domain.Shared;
@@ -52,6 +54,12 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
             .AddCommandHandler<CreateBranchWithRootPartitionKey, CreateBranchWithRootPartitionKey.Handler>()
             .AddCommandHandler<AddNumberOfClients, AddNumberOfClients.Handler>()
             .AddAggregateQuery<BranchExistsQuery>();
+
+        AddServices(
+            services =>
+            {
+                services.AddTransient<DependencyInjectionSampleService>();
+            });
 
         AddAggregate<Client>()
             .AddCommandHandler<CreateClient, CreateClient.Handler>()

@@ -56,6 +56,12 @@ public static class SekibanEventSourcingDependency
         services.AddTransient(GetDependencies());
 
         services.AddQueriesFromDependencyDefinition(dependencyDefinition);
+
+        foreach (var action in dependencyDefinition.GetServiceActions())
+        {
+            action(services);
+        }
+
     }
 
     public static IServiceCollection AddSekibanCoreInMemoryTestWithDependency(
@@ -90,6 +96,11 @@ public static class SekibanEventSourcingDependency
         services.AddTransient(GetDependencies());
 
         services.AddQueriesFromDependencyDefinition(dependencyDefinition);
+        foreach (var action in dependencyDefinition.GetServiceActions())
+        {
+            action(services);
+        }
+
     }
 
     public static IServiceCollection AddSekibanCoreForAggregateTestWithDependency(
@@ -123,6 +134,10 @@ public static class SekibanEventSourcingDependency
         services.AddTransient(dependencyDefinition.GetSekibanDependencyOptions().TransientDependencies);
         services.AddTransient(GetDependencies());
         services.AddQueriesFromDependencyDefinition(dependencyDefinition);
+        foreach (var action in dependencyDefinition.GetServiceActions())
+        {
+            action(services);
+        }
     }
 
     public static void AddTransient(this IServiceCollection services, IEnumerable<(Type serviceType, Type? implementationType)> dependencies)

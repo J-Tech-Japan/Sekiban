@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Events;
 using System.Reflection;
@@ -18,6 +19,6 @@ public interface IDependencyDefinition : IQueryDefinition
     Assembly GetExecutingAssembly();
     IEnumerable<(Type serviceType, Type? implementationType)> GetCommandDependencies();
     IEnumerable<(Type serviceType, Type? implementationType)> GetSubscriberDependencies();
-
+    IEnumerable<Action<IServiceCollection>> GetServiceActions();
     IEnumerable<IAggregateDependencyDefinition> GetAggregateDefinitions();
 }

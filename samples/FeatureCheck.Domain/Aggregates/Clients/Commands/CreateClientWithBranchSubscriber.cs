@@ -2,6 +2,7 @@ using FeatureCheck.Domain.Aggregates.Branches;
 using FeatureCheck.Domain.Aggregates.Branches.Queries;
 using FeatureCheck.Domain.Aggregates.Clients.Events;
 using FeatureCheck.Domain.Aggregates.Clients.Queries;
+using FeatureCheck.Domain.Common;
 using FeatureCheck.Domain.Shared.Exceptions;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
@@ -37,9 +38,13 @@ public record CreateClientWithBranchSubscriber : ICommand<Client>
 
     public class Handler : ICommandHandler<Client, CreateClientWithBranchSubscriber>
     {
+        private readonly DependencyInjectionSampleService dependencyInjectionSampleService;
         private readonly IQueryExecutor queryExecutor;
-
-        public Handler(IQueryExecutor queryExecutor) => this.queryExecutor = queryExecutor;
+        public Handler(IQueryExecutor queryExecutor, DependencyInjectionSampleService dependencyInjectionSampleService)
+        {
+            this.queryExecutor = queryExecutor;
+            this.dependencyInjectionSampleService = dependencyInjectionSampleService;
+        }
 
         public async IAsyncEnumerable<IEventPayloadApplicableTo<Client>> HandleCommandAsync(
             Func<AggregateState<Client>> getAggregateStateState,
@@ -55,6 +60,12 @@ public record CreateClientWithBranchSubscriber : ICommand<Client>
             // Check no email duplicates
             var emailExistsOutput = await queryExecutor.ExecuteAsync(new ClientEmailExistsQuery.Parameter(command.ClientEmail));
             if (emailExistsOutput.Exists)
+            {
+                throw new SekibanEmailAlreadyRegistered();
+            }
+
+            var emailExistsOutput2 = await dependencyInjectionSampleService.ExistsClientEmail(command.ClientEmail);
+            if (emailExistsOutput2)
             {
                 throw new SekibanEmailAlreadyRegistered();
             }
