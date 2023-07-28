@@ -4,6 +4,9 @@ using Sekiban.Core.Events;
 using Sekiban.Core.Shared;
 namespace Sekiban.Core.Query.MultiProjections.Projections;
 
+/// <summary>
+///     Simple Multi Projection
+/// </summary>
 public class SimpleMultiProjection : IMultiProjection
 {
     private readonly IDocumentRepository _documentRepository;

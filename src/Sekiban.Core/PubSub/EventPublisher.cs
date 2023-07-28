@@ -2,6 +2,9 @@ using MediatR;
 using Sekiban.Core.Events;
 namespace Sekiban.Core.PubSub;
 
+/// <summary>
+///     Event publisher using MediatR
+/// </summary>
 public class EventPublisher
 {
     private readonly IMediator _mediator;

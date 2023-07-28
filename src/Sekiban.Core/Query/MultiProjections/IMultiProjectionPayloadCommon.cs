@@ -1,5 +1,8 @@
 namespace Sekiban.Core.Query.MultiProjections;
 
+/// <summary>
+///     Multi Projection Payload Common Interface
+/// </summary>
 public interface IMultiProjectionPayloadCommon
 {
     /// <summary>

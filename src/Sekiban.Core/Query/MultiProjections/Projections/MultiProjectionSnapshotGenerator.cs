@@ -7,6 +7,9 @@ using Sekiban.Core.Types;
 using System.Text;
 namespace Sekiban.Core.Query.MultiProjections.Projections;
 
+/// <summary>
+///     Multi Projection Snapshot Generator
+/// </summary>
 public class MultiProjectionSnapshotGenerator : IMultiProjectionSnapshotGenerator
 {
     private readonly IBlobAccessor _blobAccessor;

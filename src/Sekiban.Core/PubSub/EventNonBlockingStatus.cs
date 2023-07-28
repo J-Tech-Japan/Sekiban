@@ -1,5 +1,8 @@
 namespace Sekiban.Core.PubSub;
 
+/// <summary>
+///     Runs blocking or non-blocking action for subscription
+/// </summary>
 public record EventNonBlockingStatus
 {
     public bool IsBlocking { get; set; }
