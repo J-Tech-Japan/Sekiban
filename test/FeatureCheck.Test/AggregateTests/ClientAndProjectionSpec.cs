@@ -27,6 +27,7 @@ public class ClientAndProjectionSpec : AggregateTest<Client, FeatureCheckDepende
     public DateTime ChangedEventDatetime { get; set; } = DateTime.Now;
 
 
+
     [Fact]
     public void CreateTest()
     {

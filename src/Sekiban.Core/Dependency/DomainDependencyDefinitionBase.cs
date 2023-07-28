@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Events;
 using Sekiban.Core.Types;
@@ -19,6 +20,7 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
     private ImmutableList<Type> GeneralQueryTypes { get; set; } = ImmutableList<Type>.Empty;
     private ImmutableList<Type> GeneralListQueryTypes { get; set; } = ImmutableList<Type>.Empty;
     private ImmutableList<Assembly> Assemblies { get; set; } = ImmutableList<Assembly>.Empty;
+    private ImmutableList<Action<IServiceCollection>> ServiceActions { get; set; } = ImmutableList<Action<IServiceCollection>>.Empty;
     protected DomainDependencyDefinitionBase()
     {
         // ReSharper disable once VirtualMemberCallInConstructor
@@ -31,6 +33,7 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
         return AggregateDefinitions.SelectMany(s => s.CommandTypes);
     }
 
+    public IEnumerable<Action<IServiceCollection>> GetServiceActions() => ServiceActions;
     public IEnumerable<IAggregateDependencyDefinition> GetAggregateDefinitions() => AggregateDefinitions;
 
     public IEnumerable<(Type serviceType, Type? implementationType)> GetSubscriberDependencies()
@@ -69,6 +72,12 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
             new RegisteredEventTypes(GetAssembliesForOptions()),
             new SekibanAggregateTypes(GetAssembliesForOptions()),
             GetCommandDependencies().Concat(GetSubscriberDependencies()));
+
+
+    public void AddServices(Action<IServiceCollection> serviceAction)
+    {
+        ServiceActions = ServiceActions.Add(serviceAction);
+    }
 
     public DomainDependencyDefinitionBase AddDependency<TDependency>() where TDependency : DomainDependencyDefinitionBase, new()
     {
