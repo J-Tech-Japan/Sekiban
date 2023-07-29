@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
+using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
@@ -391,7 +392,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
 
     #region Aggregate List Projection
     public MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>> GetAggregateListProjectionState<TAggregatePayload>(
-        string rootPartitionKey) where TAggregatePayload : IAggregatePayloadCommon
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TAggregatePayload : IAggregatePayloadCommon
     {
         var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ?? throw new Exception("Failed to get Query service");
         return multiProjectionService.GetAggregateListObject<TAggregatePayload>(rootPartitionKey, SortableUniqueIdValue.GetCurrentIdFromUtc())
@@ -400,8 +401,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     }
 
     public UnifiedTest<TDependencyDefinition> ThenAggregateListProjectionPayloadIsFromFile<TAggregatePayload>(
-        string rootPartitionKey,
-        string filename) where TAggregatePayload : IAggregatePayload, new()
+        string filename,
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TAggregatePayload : IAggregatePayload, new()
     {
         using var openStream = File.OpenRead(filename);
         var projection = JsonSerializer.Deserialize<SingleProjectionListState<AggregateState<TAggregatePayload>>>(openStream);
@@ -424,6 +425,12 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         return this;
     }
 
+    // ReSharper disable once FunctionRecursiveOnAllPaths
+    public UnifiedTest<TDependencyDefinition> ThenGetAggregateListProjectionState<TAggregatePayload>(
+        Action<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>> stateAction)
+        where TAggregatePayload : IAggregatePayloadCommon =>
+        ThenGetAggregateListProjectionState(stateAction);
+
     public UnifiedTest<TDependencyDefinition> ThenGetAggregateListProjectionState<TAggregatePayload>(
         string rootPartitionKey,
         Action<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>> stateAction)
@@ -432,6 +439,10 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         stateAction(GetAggregateListProjectionState<TAggregatePayload>(rootPartitionKey));
         return this;
     }
+
+    public UnifiedTest<TDependencyDefinition> ThenAggregateListProjectionStateIs<TAggregatePayload>(
+        MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>> state) where TAggregatePayload : IAggregatePayloadCommon =>
+        ThenAggregateListProjectionStateIs(IMultiProjectionService.ProjectionAllRootPartitions, state);
 
     public UnifiedTest<TDependencyDefinition> ThenAggregateListProjectionStateIs<TAggregatePayload>(
         string rootPartitionKey,
@@ -583,8 +594,9 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         return this;
     }
 
-    public AggregateState<TEnvironmentAggregatePayload> GetAggregateState<TEnvironmentAggregatePayload>(Guid aggregateId, string rootPartitionKey)
-        where TEnvironmentAggregatePayload : IAggregatePayload, new()
+    public AggregateState<TEnvironmentAggregatePayload> GetAggregateState<TEnvironmentAggregatePayload>(
+        Guid aggregateId,
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey) where TEnvironmentAggregatePayload : IAggregatePayload, new()
     {
         var singleProjectionService = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader;
         if (singleProjectionService is null)
