@@ -5,27 +5,29 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <OutputType>Library</OutputType>
         <PackageId>Sekiban.Web</PackageId>
-        <Version>0.13.5</Version>
+        <Version>0.13.6</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework WebHelper</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.13.5</PackageVersion>
-        <Description>AddService in DependencyDefinition</Description>
+        <PackageVersion>0.13.6</PackageVersion>
+        <Description>Add pdb symbols</Description>
         <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
         <LangVersion>preview</LangVersion>
         <OpenApiGenerateDocuments>false</OpenApiGenerateDocuments>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <PackageReadmeFile>README.md</PackageReadmeFile>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
-        <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0"/>
+        <None Include="..\..\README.md" Pack="true" PackagePath="\"/>
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj" />
+        <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj"/>
     </ItemGroup>
 
 </Project>
