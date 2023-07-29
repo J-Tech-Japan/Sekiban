@@ -6,12 +6,12 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Core</PackageId>
-        <Version>0.13.4</Version>
+        <Version>0.13.5</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Core</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.13.4</PackageVersion>
+        <PackageVersion>0.13.5</PackageVersion>
         <Description>AddService in DependencyDefinition</Description>
         <AssemblyName>Sekiban.Core</AssemblyName>
         <RootNamespace>Sekiban.Core</RootNamespace>
