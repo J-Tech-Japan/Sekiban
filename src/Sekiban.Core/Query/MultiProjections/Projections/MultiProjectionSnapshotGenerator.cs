@@ -10,23 +10,12 @@ namespace Sekiban.Core.Query.MultiProjections.Projections;
 /// <summary>
 ///     Multi Projection Snapshot Generator
 /// </summary>
-public class MultiProjectionSnapshotGenerator : IMultiProjectionSnapshotGenerator
+public class MultiProjectionSnapshotGenerator(
+    IDocumentRepository documentRepository,
+    IBlobAccessor blobAccessor,
+    IDocumentWriter documentWriter,
+    ILogger<MultiProjectionSnapshotGenerator> logger) : IMultiProjectionSnapshotGenerator
 {
-    private readonly IBlobAccessor _blobAccessor;
-    private readonly IDocumentRepository _documentRepository;
-    private readonly IDocumentWriter _documentWriter;
-    private readonly ILogger<MultiProjectionSnapshotGenerator> _logger;
-    public MultiProjectionSnapshotGenerator(
-        IDocumentRepository documentRepository,
-        IBlobAccessor blobAccessor,
-        IDocumentWriter documentWriter,
-        ILogger<MultiProjectionSnapshotGenerator> logger)
-    {
-        _documentRepository = documentRepository;
-        _blobAccessor = blobAccessor;
-        _documentWriter = documentWriter;
-        _logger = logger;
-    }
 
     public async Task<MultiProjectionState<TProjectionPayload>> GenerateMultiProjectionSnapshotAsync<TProjection, TProjectionPayload>(
         int minimumNumberOfEventsToGenerateSnapshot,
@@ -41,7 +30,7 @@ public class MultiProjectionSnapshotGenerator : IMultiProjectionSnapshotGenerato
             projector.ApplySnapshot(state);
         }
         // get events from after snapshot or the initial and project them
-        await _documentRepository.GetAllEventsAsync(
+        await documentRepository.GetAllEventsAsync(
             typeof(TProjection),
             projector.TargetAggregateNames(),
             state.Version > 0 ? state.LastSortableUniqueId : null,
@@ -67,20 +56,20 @@ public class MultiProjectionSnapshotGenerator : IMultiProjectionSnapshotGenerato
             var json = JsonSerializer.Serialize(state, new JsonSerializerOptions());
             var memoryStream = new MemoryStream(Encoding.UTF8.GetBytes(json));
             var blobId = Guid.NewGuid();
-            await _blobAccessor.SetBlobWithGZipAsync(
+            await blobAccessor.SetBlobWithGZipAsync(
                 SekibanBlobContainer.MultiProjectionState,
                 FilenameForSnapshot(typeof(TProjectionPayload), blobId, state.LastSortableUniqueId),
                 memoryStream);
             var snapshotDocument = new MultiProjectionSnapshotDocument(typeof(TProjectionPayload), blobId, projector, rootPartitionKey);
-            await _documentWriter.SaveAsync(snapshotDocument, typeof(TProjectionPayload));
-            _logger.LogInformation(
+            await documentWriter.SaveAsync(snapshotDocument, typeof(TProjectionPayload));
+            logger.LogInformation(
                 "Generate multi snapshot for {ProjectionName} and rootPartitionKey {RootPartitionKey} because used version is {UsedVersion}",
                 ProjectionName(typeof(TProjectionPayload)),
                 rootPartitionKey,
                 usedVersion);
         } else
         {
-            _logger.LogInformation(
+            logger.LogInformation(
                 "skip making snapshot for {ProjectionName} and rootPartitionKey {RootPartitionKey} because used version is {UsedVersion} and minimum is {MinimumNumberOfEventsToGenerateSnapshot}",
                 ProjectionName(typeof(TProjectionPayload)),
                 rootPartitionKey,
@@ -94,7 +83,7 @@ public class MultiProjectionSnapshotGenerator : IMultiProjectionSnapshotGenerato
         where TProjectionPayload : IMultiProjectionPayloadCommon, new()
     {
         var payload = new TProjectionPayload();
-        var snapshotDocument = await _documentRepository.GetLatestSnapshotForMultiProjectionAsync(
+        var snapshotDocument = await documentRepository.GetLatestSnapshotForMultiProjectionAsync(
             typeof(TProjectionPayload),
             payload.GetPayloadVersionIdentifier(),
             rootPartitionKey);
@@ -104,7 +93,7 @@ public class MultiProjectionSnapshotGenerator : IMultiProjectionSnapshotGenerato
         {
             try
             {
-                var snapshotStream = await _blobAccessor.GetBlobWithGZipAsync(
+                var snapshotStream = await blobAccessor.GetBlobWithGZipAsync(
                     SekibanBlobContainer.MultiProjectionState,
                     FilenameForSnapshot(typeof(TProjectionPayload), snapshotDocument.Id, snapshotDocument.LastSortableUniqueId));
                 if (snapshotStream != null)
