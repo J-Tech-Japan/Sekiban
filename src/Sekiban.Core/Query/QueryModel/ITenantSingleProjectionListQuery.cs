@@ -5,6 +5,4 @@ public interface
     ITenantSingleProjectionListQuery<TSingleProjectionPayload, in TQueryParam, TQueryResponse> : ISingleProjectionListQuery<TSingleProjectionPayload,
         TQueryParam, TQueryResponse> where TSingleProjectionPayload : ISingleProjectionPayloadCommon
     where TQueryParam : ITenantListQueryParameter<TQueryResponse>
-    where TQueryResponse : IQueryResponse
-{
-}
+    where TQueryResponse : IQueryResponse;

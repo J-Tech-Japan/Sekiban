@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 namespace Sekiban.Core.Command;
 
@@ -9,8 +8,6 @@ namespace Sekiban.Core.Command;
 public class CommandExecuteAwaiter : ICommandExecuteAwaiter
 {
     private static readonly ConcurrentDictionary<string, TaskCompletionSource<bool>> _taskCompletionSources = new();
-    private readonly ILogger<CommandExecuteAwaiter> _logger;
-    public CommandExecuteAwaiter(ILogger<CommandExecuteAwaiter> logger) => _logger = logger;
     public async Task WaitUntilOtherThreadFinished<TAggregatePayload>(Guid aggregateId)
     {
         if (_taskCompletionSources.TryGetValue(GetKey<TAggregatePayload>(aggregateId), out var tcs))

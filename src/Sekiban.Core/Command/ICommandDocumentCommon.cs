@@ -4,6 +4,4 @@ namespace Sekiban.Core.Command;
 ///     Common interface for the command document.
 ///     Internal use only.
 /// </summary>
-public interface ICommandDocumentCommon
-{
-}
+public interface ICommandDocumentCommon;

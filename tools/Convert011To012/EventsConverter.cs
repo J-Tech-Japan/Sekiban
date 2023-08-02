@@ -82,14 +82,15 @@ public class EventsConverter
 
                                 var jsonElement = (JsonElement)item;
                                 var jsonDocument = JsonNode.Parse(jsonElement.GetRawText());
+                                if (jsonDocument is null) { continue; }
                                 if (convertToHierarchical)
                                 {
-                                    jsonDocument!["RootPartitionKey"] = "default";
-                                    jsonDocument![nameof(PartitionKey)] = jsonDocument!["RootPartitionKey"] +
+                                    jsonDocument["RootPartitionKey"] = "default";
+                                    jsonDocument[nameof(PartitionKey)] = jsonDocument["RootPartitionKey"] +
                                         "_" +
-                                        jsonDocument!["AggregateType"] +
+                                        jsonDocument["AggregateType"] +
                                         "_" +
-                                        jsonDocument!["AggregateId"];
+                                        jsonDocument["AggregateId"];
                                 }
                                 tasks.Add(
                                     _sekibanContext.SekibanActionAsync(
@@ -101,7 +102,6 @@ public class EventsConverter
                                                 containerGroup,
                                                 async containerDest =>
                                                 {
-                                                    if (jsonDocument is null) { return; }
                                                     await containerDest.UpsertItemAsync(jsonDocument);
                                                     await _semaphoreCount.WaitAsync();
                                                     Printing(jsonDocument);

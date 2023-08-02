@@ -5,6 +5,4 @@ public interface
     ITenantAggregateListQuery<TAggregatePayload, in TQueryParameter, TQueryResponse> : IAggregateListQuery<TAggregatePayload, TQueryParameter,
         TQueryResponse> where TAggregatePayload : IAggregatePayloadCommon
     where TQueryParameter : ITenantListQueryParameter<TQueryResponse>
-    where TQueryResponse : IQueryResponse
-{
-}
+    where TQueryResponse : IQueryResponse;

@@ -4,6 +4,4 @@ namespace Sekiban.Core.Documents;
 ///     Document Writer for the in memory store
 ///     Developer does not need to use this class
 /// </summary>
-public interface IDocumentTemporaryWriter : IDocumentWriter
-{
-}
+public interface IDocumentTemporaryWriter : IDocumentWriter;
