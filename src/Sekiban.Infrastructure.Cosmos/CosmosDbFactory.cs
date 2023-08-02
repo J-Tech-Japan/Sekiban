@@ -16,8 +16,15 @@ public class CosmosDbFactory
     private readonly IConfiguration _configuration;
     private readonly IMemoryCacheAccessor _memoryCache;
     private readonly SekibanCosmosOptions _options;
-    private readonly string _sekibanContextIdentifier;
     private readonly IServiceProvider _serviceProvider;
+    private string _sekibanContextIdentifier
+    {
+        get
+        {
+            var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
+            return sekibanContext?.SettingGroupIdentifier ?? SekibanContext.Default;
+        }
+    }
 
     private IConfigurationSection _section
     {
@@ -36,7 +43,6 @@ public class CosmosDbFactory
     public CosmosDbFactory(
         IConfiguration configuration,
         IMemoryCacheAccessor memoryCache,
-        ISekibanContext sekibanContext,
         IServiceProvider serviceProvider,
         SekibanCosmosOptions options)
     {
@@ -44,7 +50,6 @@ public class CosmosDbFactory
         _memoryCache = memoryCache;
         _serviceProvider = serviceProvider;
         _options = options;
-        _sekibanContextIdentifier = sekibanContext.SettingGroupIdentifier;
     }
 
     private string GetContainerId(DocumentType documentType, AggregateContainerGroup containerGroup)
@@ -66,8 +71,8 @@ public class CosmosDbFactory
 
     private bool GetSupportsHierarchicalPartitions()
     {
-        var supportsHierarchicalPartitions = _section.GetValue<bool?>("LegacyPartitions");
-        return supportsHierarchicalPartitions ?? true;
+        var legacy = _section.GetValue<bool?>("LegacyPartitions") ?? false;
+        return !legacy;
     }
 
     private static string GetMemoryCacheContainerKey(
