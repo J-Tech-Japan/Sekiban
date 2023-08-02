@@ -16,10 +16,13 @@ namespace Convert011To012;
 public class EventsConverter
 {
     private const string SourceDatabase = "Default";
-    private const string ConvertDestination = "ConvertDestination";
+    private const string ConvertDestination = nameof(ConvertDestination);
+    private static readonly SemaphoreSlim _semaphoreCount = new(1, 1);
     private readonly CosmosDbFactory _cosmosDbFactory;
     private readonly ILogger<EventsConverter> _logger;
     private readonly ISekibanContext _sekibanContext;
+    private int count;
+
     public EventsConverter(ISekibanContext sekibanContext, CosmosDbFactory cosmosDbFactory, ILogger<EventsConverter> logger)
     {
         _sekibanContext = sekibanContext;
@@ -27,10 +30,18 @@ public class EventsConverter
         _logger = logger;
     }
 
-
-    public async Task<int> StartConvert(AggregateContainerGroup containerGroup)
+    private void Printing(JsonNode jsonDocument)
     {
-        var count = 0;
+        count++;
+        if (count % 1000 == 0)
+        {
+            var timestamp = jsonDocument["Timestamp"]?.ToString() ?? string.Empty;
+            _logger.LogInformation("{Count} - {Timestamp} - {Now}", count, timestamp, DateTime.Now);
+        }
+    }
+
+    public async Task<int> StartConvertAsync(AggregateContainerGroup containerGroup, bool convertToHierarchical = true)
+    {
         await _sekibanContext.SekibanActionAsync(
             SourceDatabase,
             async () =>
@@ -71,12 +82,15 @@ public class EventsConverter
 
                                 var jsonElement = (JsonElement)item;
                                 var jsonDocument = JsonNode.Parse(jsonElement.GetRawText());
-                                jsonDocument!["RootPartitionKey"] = "default";
-                                jsonDocument!["PartitionKey"] = jsonDocument!["RootPartitionKey"] +
-                                    "_" +
-                                    jsonDocument!["AggregateType"] +
-                                    "_" +
-                                    jsonDocument!["AggregateId"];
+                                if (convertToHierarchical)
+                                {
+                                    jsonDocument!["RootPartitionKey"] = "default";
+                                    jsonDocument![nameof(PartitionKey)] = jsonDocument!["RootPartitionKey"] +
+                                        "_" +
+                                        jsonDocument!["AggregateType"] +
+                                        "_" +
+                                        jsonDocument!["AggregateId"];
+                                }
                                 tasks.Add(
                                     _sekibanContext.SekibanActionAsync(
                                         ConvertDestination,
@@ -87,16 +101,11 @@ public class EventsConverter
                                                 containerGroup,
                                                 async containerDest =>
                                                 {
+                                                    if (jsonDocument is null) { return; }
                                                     await containerDest.UpsertItemAsync(jsonDocument);
-                                                    count++;
-                                                    if (count % 1000 == 0)
-                                                    {
-                                                        _logger.LogInformation(
-                                                            "{Count} - {Unknown} - {Now}",
-                                                            count,
-                                                            jsonDocument["Timestamp"],
-                                                            DateTime.Now);
-                                                    }
+                                                    await _semaphoreCount.WaitAsync();
+                                                    Printing(jsonDocument);
+                                                    _semaphoreCount.Release();
                                                 });
 
                                             await Task.CompletedTask;
@@ -104,6 +113,7 @@ public class EventsConverter
                             }
                         }
                         await Task.WhenAll(tasks);
+                        _logger.LogInformation("{Count} events has written", count);
                     });
 
 
