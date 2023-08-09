@@ -14,14 +14,14 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="MartinCostello.Logging.XUnit" Version="0.3.0" />
-        <PackageReference Include="Microsoft.DotNet.PlatformAbstractions" Version="3.1.6" />
-        <PackageReference Include="Microsoft.Extensions.Configuration" Version="7.0.0" />
-        <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="7.0.0" />
-        <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="7.0.0" />
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="7.0.0" />
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.6.3" />
-        <PackageReference Include="xunit" Version="2.5.0" />
+        <PackageReference Include="MartinCostello.Logging.XUnit" Version="0.3.0"/>
+        <PackageReference Include="Microsoft.DotNet.PlatformAbstractions" Version="3.1.6"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration" Version="7.0.0"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="7.0.0"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="7.0.0"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="7.0.0"/>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.7.0"/>
+        <PackageReference Include="xunit" Version="2.5.0"/>
         <PackageReference Include="xunit.runner.visualstudio" Version="2.5.0">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
@@ -42,12 +42,12 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\samples\FeatureCheck.Domain\FeatureCheck.Domain.csproj" />
-        <ProjectReference Include="..\..\samples\MultiTenant.Domain\MultiTenant.Domain.csproj" />
-        <ProjectReference Include="..\..\samples\SampleProject.Common\SampleProject.Common.csproj" />
-        <ProjectReference Include="..\..\src\Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj" />
-        <ProjectReference Include="..\..\src\Sekiban.Infrastructure.Dynamo\Sekiban.Infrastructure.Dynamo.csproj" />
-        <ProjectReference Include="..\..\src\Sekiban.Testing\Sekiban.Testing.csproj" />
+        <ProjectReference Include="..\..\samples\FeatureCheck.Domain\FeatureCheck.Domain.csproj"/>
+        <ProjectReference Include="..\..\samples\MultiTenant.Domain\MultiTenant.Domain.csproj"/>
+        <ProjectReference Include="..\..\samples\SampleProject.Common\SampleProject.Common.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Infrastructure.Dynamo\Sekiban.Infrastructure.Dynamo.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Testing\Sekiban.Testing.csproj"/>
     </ItemGroup>
 
     <ItemGroup>

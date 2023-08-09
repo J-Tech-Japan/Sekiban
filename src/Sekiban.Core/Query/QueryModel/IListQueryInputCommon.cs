@@ -1,3 +1,7 @@
 namespace Sekiban.Core.Query.QueryModel;
 
+/// <summary>
+///     List Query Parameter Interface.
+///     Query Developers does not need to implement this interface directly.
+/// </summary>
 public interface IListQueryInputCommon : IQueryPartitionKeyCommon;

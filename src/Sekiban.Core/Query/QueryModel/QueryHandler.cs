@@ -5,6 +5,9 @@ using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Query.QueryModel;
 
+/// <summary>
+///     Query Handler. Internal use only.
+/// </summary>
 public class QueryHandler
 {
     private readonly IServiceProvider _serviceProvider;
