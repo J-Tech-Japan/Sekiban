@@ -1,7 +1,10 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.QueryModel;
 namespace Sekiban.Core.Query;
-
+/// <summary>
+/// Generic aggregate list query parameter.
+/// </summary>
+/// <typeparam name="TAggregatePayload"></typeparam>
 public class SimpleAggregateListQuery<TAggregatePayload> : IAggregateListQuery<TAggregatePayload, SimpleAggregateListQueryParameter<TAggregatePayload>
     , QueryAggregateState<TAggregatePayload>> where TAggregatePayload : IAggregatePayloadCommon
 {

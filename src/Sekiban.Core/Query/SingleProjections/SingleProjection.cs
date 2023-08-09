@@ -4,6 +4,11 @@ using Sekiban.Core.Events;
 using Sekiban.Core.Types;
 namespace Sekiban.Core.Query.SingleProjections;
 
+/// <summary>
+///     Single Projection Implementation.
+///     Developer does not need to use this class directly.
+/// </summary>
+/// <typeparam name="TProjectionPayload"></typeparam>
 public class SingleProjection<TProjectionPayload> : ISingleProjection, ISingleProjectionStateConvertible<SingleProjectionState<TProjectionPayload>>,
     IAggregateCommon, ISingleProjector<SingleProjection<TProjectionPayload>> where TProjectionPayload : ISingleProjectionPayloadCommon, new()
 {

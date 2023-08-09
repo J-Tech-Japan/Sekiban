@@ -6,6 +6,10 @@ using Sekiban.Core.Partition;
 using Sekiban.Core.Query.SingleProjections.Projections;
 namespace Sekiban.Core.Query.SingleProjections;
 
+/// <summary>
+///     Aggregate Loader implementation.
+///     Aggregate developer uses <see cref="IAggregateLoader" /> to load aggregate.
+/// </summary>
 public class AggregateLoader : IAggregateLoader
 {
     private readonly IDocumentRepository _documentRepository;

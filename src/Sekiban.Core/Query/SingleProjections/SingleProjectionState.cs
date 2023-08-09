@@ -1,6 +1,17 @@
 using Sekiban.Core.Aggregate;
 namespace Sekiban.Core.Query.SingleProjections;
 
+/// <summary>
+///     General Single Projection State.
+/// </summary>
+/// <param name="Payload"></param>
+/// <param name="AggregateId"></param>
+/// <param name="LastEventId"></param>
+/// <param name="LastSortableUniqueId"></param>
+/// <param name="AppliedSnapshotVersion"></param>
+/// <param name="Version"></param>
+/// <param name="RootPartitionKey"></param>
+/// <typeparam name="TPayload"></typeparam>
 public record SingleProjectionState<TPayload>(
     TPayload Payload,
     Guid AggregateId,

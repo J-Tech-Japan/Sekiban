@@ -3,6 +3,9 @@ using Sekiban.Core.Exceptions;
 using Sekiban.Core.Partition;
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
+/// <summary>
+///     Simple Single Projection From Initial Implementation.
+/// </summary>
 public class SimpleSingleProjectionFromInitial : ISingleProjectionFromInitial
 {
     private readonly IDocumentRepository _documentRepository;

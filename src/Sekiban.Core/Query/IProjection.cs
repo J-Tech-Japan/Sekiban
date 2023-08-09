@@ -1,5 +1,8 @@
 namespace Sekiban.Core.Query;
 
+/// <summary>
+///     Basic Projection Interface.
+/// </summary>
 public interface IProjection
 {
     Guid LastEventId { get; }

@@ -3,6 +3,10 @@ using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.ValueObjects;
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
+/// <summary>
+///     General single projection interface.
+///     Developers does not need to implement this interface directly.
+/// </summary>
 public interface ISingleProjection
 {
     Task<TProjection?> GetAggregateAsync<TProjection, TState, TProjector>(

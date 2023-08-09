@@ -1,6 +1,9 @@
 using Sekiban.Core.Events;
 namespace Sekiban.Core.Query.SingleProjections;
 
+/// <summary>
+///     Single projection interface.
+/// </summary>
 public interface ISingleProjection
 {
     public string GetPayloadVersionIdentifier();
