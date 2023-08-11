@@ -11,7 +11,7 @@ using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
 // ReSharper disable StringCompareToIsCultureSpecific
 
-namespace Sekiban.Infrastructure.Cosmos.DomainCommon.EventSourcings;
+namespace Sekiban.Infrastructure.Cosmos.Documents;
 
 public class CosmosDocumentRepository : IDocumentPersistentRepository
 {
