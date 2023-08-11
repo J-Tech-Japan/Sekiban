@@ -146,7 +146,7 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         {
             throw new ArgumentException($"Type {singleProjectionType} is not a single projection type");
         }
-        if (singleProjectionType.GetOriginalTypeFromSingleProjectionPayload() != AggregateType)
+        if (singleProjectionType.GetAggregatePayloadTypeFromSingleProjectionPayload() != AggregateType)
         {
             throw new ArgumentException($"Single projection {singleProjectionType.Name} must be for aggregate {AggregateType.Name}");
         }

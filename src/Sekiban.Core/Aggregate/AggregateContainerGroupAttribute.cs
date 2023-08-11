@@ -25,7 +25,7 @@ public class AggregateContainerGroupAttribute : Attribute
             {
                 if (type.IsSingleProjectionPayloadType())
                 {
-                    type = type.GetOriginalTypeFromSingleProjectionPayload();
+                    type = type.GetAggregatePayloadTypeFromSingleProjectionPayload();
                     continue;
                 }
                 if (type.IsSingleProjectorType())

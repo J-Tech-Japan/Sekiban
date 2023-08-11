@@ -80,7 +80,7 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection, ISinglePr
         throw new NotImplementedException();
 
     public Type GetOriginalAggregatePayloadType() =>
-        typeof(TProjectionPayload).GetOriginalTypeFromSingleProjectionPayload().GetBaseAggregatePayloadTypeFromAggregate();
+        typeof(TProjectionPayload).GetAggregatePayloadTypeFromSingleProjectionPayload().GetBaseAggregatePayloadTypeFromAggregate();
     public bool CanApplyEvent(IEvent ev) => true;
 
 

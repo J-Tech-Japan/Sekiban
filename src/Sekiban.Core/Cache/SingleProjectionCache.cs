@@ -49,7 +49,7 @@ public class SingleProjectionCache : ISingleProjectionCache
         if (typeof(TSingleProjectionOrAggregate).IsSingleProjectionType())
         {
             return
-                $"{typeof(TSingleProjectionOrAggregate).GetSingleProjectionPayloadFromSingleProjectionType().GetOriginalTypeFromSingleProjectionPayload().Name}_{aggregateId}";
+                $"{typeof(TSingleProjectionOrAggregate).GetSingleProjectionPayloadFromSingleProjectionType().GetAggregatePayloadTypeFromSingleProjectionPayload().Name}_{aggregateId}";
         }
         return "Aggregate" + typeof(TSingleProjectionOrAggregate).GetAggregatePayloadTypeFromAggregate().Name + aggregateId;
     }

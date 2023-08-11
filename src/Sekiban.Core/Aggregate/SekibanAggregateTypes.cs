@@ -18,7 +18,7 @@ public class SekibanAggregateTypes
     {
         foreach (var assembly in assemblies)
         {
-            var aggregates = assembly.DefinedTypes.GetAggregateTypes();
+            var aggregates = assembly.DefinedTypes.GetAggregatePayloadTypes();
 
             foreach (var type in aggregates)
             {
@@ -33,7 +33,7 @@ public class SekibanAggregateTypes
             var customProjectors = assembly.DefinedTypes.GetSingleProjectorTypes();
             foreach (var type in customProjectors)
             {
-                var projectorType = new SingleProjectionAggregateType(type.GetOriginalTypeFromSingleProjectionPayload(), type);
+                var projectorType = new SingleProjectionAggregateType(type.GetAggregatePayloadTypeFromSingleProjectionPayload(), type);
                 if (_registeredCustomProjectorTypes.Contains(projectorType))
                 {
                     continue;
