@@ -6,6 +6,9 @@ using Microsoft.Extensions.DependencyInjection;
 using System.IO.Compression;
 namespace Sekiban.Core.Setting;
 
+/// <summary>
+///     Blob accessor implementation for Azure Blob Storage.
+/// </summary>
 public class AzureBlobAccessor : IBlobAccessor
 {
     private const string SekibanSection = "Sekiban";

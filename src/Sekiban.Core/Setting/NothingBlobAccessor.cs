@@ -1,5 +1,9 @@
 namespace Sekiban.Core.Setting;
 
+/// <summary>
+///     Blob accessor with no implementation.
+///     use for the test.
+/// </summary>
 public class NothingBlobAccessor : IBlobAccessor
 {
 
