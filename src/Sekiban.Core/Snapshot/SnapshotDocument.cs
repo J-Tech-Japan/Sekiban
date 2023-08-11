@@ -4,6 +4,9 @@ using Sekiban.Core.Partition;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Snapshot;
 
+/// <summary>
+///     Snapshot document for single projection aggregate. This document will save to persistent storage.
+/// </summary>
 public record SnapshotDocument : Document
 {
 

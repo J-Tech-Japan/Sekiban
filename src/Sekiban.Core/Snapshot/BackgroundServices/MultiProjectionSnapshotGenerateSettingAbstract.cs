@@ -5,6 +5,10 @@ using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Types;
 namespace Sekiban.Core.Snapshot.BackgroundServices;
 
+/// <summary>
+///     Multi Projection snapshot generate setting abstract class.
+///     Developer who wants to generate snapshot can inherit this class and implement Define method.
+/// </summary>
 public abstract class MultiProjectionSnapshotGenerateSettingAbstract : IMultiProjectionsSnapshotGenerateSetting
 {
     protected List<Type> MultiProjectionsSnapshotTypes { get; } = new();

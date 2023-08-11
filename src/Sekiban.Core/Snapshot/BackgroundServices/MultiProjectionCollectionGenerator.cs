@@ -3,6 +3,10 @@ using Sekiban.Core.Types;
 using System.Reflection;
 namespace Sekiban.Core.Snapshot.BackgroundServices;
 
+/// <summary>
+///     Multi projection collection generator.
+///     This class is for the internal use for the sekiban.
+/// </summary>
 public class MultiProjectionCollectionGenerator
 {
     private readonly IMultiProjectionSnapshotGenerator _multiProjectionSnapshotGenerator;

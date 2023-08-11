@@ -31,8 +31,8 @@ public static class SekibanEventSourcingDependency
     public static IEnumerable<(Type serviceType, Type? implementationType)> GetDependencies()
     {
         // AddAggregate: RecentInMemoryActivity
-        yield return (typeof(ICommandHandlerCommon<SnapshotManager, CreateSnapshotManager>), typeof(CreateSnapshotManagerHandler));
-        yield return (typeof(ICommandHandlerCommon<SnapshotManager, ReportVersionToSnapshotManger>), typeof(ReportVersionToSnapshotMangerHandler));
+        yield return (typeof(ICommandHandlerCommon<SnapshotManager, CreateSnapshotManager>), typeof(CreateSnapshotManager.Handler));
+        yield return (typeof(ICommandHandlerCommon<SnapshotManager, ReportVersionToSnapshotManger>), typeof(ReportVersionToSnapshotManger.Handler));
     }
 
     public static void Register(

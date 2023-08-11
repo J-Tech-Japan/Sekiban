@@ -1,5 +1,8 @@
 namespace Sekiban.Core.Shared;
 
+/// <summary>
+///     Sekiban Date Producer.
+/// </summary>
 public class SekibanDateProducer : ISekibanDateProducer
 {
     private static ISekibanDateProducer _registered = new SekibanDateProducer();

@@ -10,38 +10,23 @@ using Sekiban.Core.Snapshot.Aggregate.Commands;
 using Sekiban.Core.Snapshot.Aggregate.Events;
 namespace Sekiban.Core.Snapshot.BackgroundServices;
 
-public class SnapshotGenerator
+/// <summary>
+///     Single projection snapshot generator
+/// </summary>
+public class SnapshotGenerator(
+    SekibanAggregateTypes sekibanAggregateTypes,
+    ICommandExecutor commandExecutor,
+    IDocumentPersistentRepository documentPersistentRepository,
+    IAggregateLoader aggregateLoader,
+    IDocumentWriter documentWriter,
+    IAggregateSettings aggregateSettings,
+    ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor)
 {
     public static readonly SemaphoreSlim SemaphoreInMemory = new(1, 1);
 
-    private readonly IAggregateSettings _aggregateSettings;
-    private readonly IDocumentPersistentRepository _documentPersistentRepository;
-    private readonly IDocumentWriter _documentWriter;
-    private readonly SekibanAggregateTypes _sekibanAggregateTypes;
-    private readonly IAggregateLoader aggregateLoader;
-    private readonly ICommandExecutor commandExecutor;
-    private readonly ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor;
-    public SnapshotGenerator(
-        SekibanAggregateTypes sekibanAggregateTypes,
-        ICommandExecutor commandExecutor,
-        IDocumentPersistentRepository documentPersistentRepository,
-        IAggregateLoader aggregateLoader,
-        IDocumentWriter documentWriter,
-        IAggregateSettings aggregateSettings,
-        ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor)
-    {
-        _sekibanAggregateTypes = sekibanAggregateTypes;
-        this.commandExecutor = commandExecutor;
-        _documentPersistentRepository = documentPersistentRepository;
-        this.aggregateLoader = aggregateLoader;
-        _documentWriter = documentWriter;
-        _aggregateSettings = aggregateSettings;
-        this.singleProjectionSnapshotAccessor = singleProjectionSnapshotAccessor;
-    }
-
     public async Task Generate<TEvent>(TEvent notification) where TEvent : IEvent
     {
-        var aggregateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == notification.AggregateType);
+        var aggregateType = sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == notification.AggregateType);
         if (aggregateType is null)
         {
             return;
@@ -60,7 +45,7 @@ public class SnapshotGenerator
             }
             SemaphoreInMemory.Release();
 
-            if (_aggregateSettings.ShouldTakeSnapshotForType(aggregateType.Aggregate))
+            if (aggregateSettings.ShouldTakeSnapshotForType(aggregateType.Aggregate))
             {
                 var snapshotManagerResponse = await commandExecutor.ExecCommandWithEventsAsync(
                     new ReportVersionToSnapshotManger(
@@ -93,7 +78,7 @@ public class SnapshotGenerator
                         {
                             continue;
                         }
-                        if (await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
+                        if (await documentPersistentRepository.ExistsSnapshotForAggregateAsync(
                             notification.AggregateId,
                             aggregateType.Aggregate,
                             aggregateType.Aggregate,
@@ -118,15 +103,15 @@ public class SnapshotGenerator
                         //     aggregateToSnapshot.LastSortableUniqueId,
                         //     aggregateToSnapshot.Version,
                         //     aggregateToSnapshot.GetPayloadVersionIdentifier());
-                        await _documentWriter.SaveAsync(snapshotDocument, aggregateType.Aggregate);
+                        await documentWriter.SaveAsync(snapshotDocument, aggregateType.Aggregate);
                     }
                 }
             }
 
-            foreach (var projection in _sekibanAggregateTypes.SingleProjectionTypes.Where(
+            foreach (var projection in sekibanAggregateTypes.SingleProjectionTypes.Where(
                 m => m.OriginalAggregate.FullName == aggregateType.Aggregate.FullName))
             {
-                if (!_aggregateSettings.ShouldTakeSnapshotForType(projection.OriginalAggregate))
+                if (!aggregateSettings.ShouldTakeSnapshotForType(projection.OriginalAggregate))
                 {
                     continue;
                 }
@@ -161,7 +146,7 @@ public class SnapshotGenerator
                     {
                         continue;
                     }
-                    if (await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
+                    if (await documentPersistentRepository.ExistsSnapshotForAggregateAsync(
                         notification.AggregateId,
                         projection.OriginalAggregate,
                         projection.SingleProjectionPayloadType,
@@ -179,7 +164,7 @@ public class SnapshotGenerator
                         = await singleProjectionSnapshotAccessor.SnapshotDocumentFromSingleProjectionStateAsync(
                             aggregateToSnapshot,
                             projection.OriginalAggregate);
-                    await _documentWriter.SaveAsync(snapshotDocument, projection.OriginalAggregate);
+                    await documentWriter.SaveAsync(snapshotDocument, projection.OriginalAggregate);
                 }
             }
         }
