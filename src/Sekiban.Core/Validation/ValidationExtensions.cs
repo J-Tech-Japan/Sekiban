@@ -3,8 +3,16 @@ using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 namespace Sekiban.Core.Validation;
 
+/// <summary>
+///     Validation Extensions for Sekiban.
+/// </summary>
 public static class ValidationExtensions
 {
+    /// <summary>
+    ///     validate properties.
+    /// </summary>
+    /// <param name="collection"></param>
+    /// <returns></returns>
     public static IEnumerable<(int, ValidationResult)> ValidateEnumerable(this IEnumerable collection)
     {
         var validationResults = new List<ValidationResult>();
@@ -23,19 +31,35 @@ public static class ValidationExtensions
             }
         }
     }
-
+    /// <summary>
+    ///     validate properties.
+    /// </summary>
+    /// <param name="collection"></param>
+    /// <param name="validationResults"></param>
+    /// <returns></returns>
     public static bool TryValidateEnumerable(this IEnumerable collection, out IEnumerable<(int, ValidationResult)> validationResults)
     {
         validationResults = collection.ValidateEnumerable();
         return !validationResults.Any();
     }
-
+    /// <summary>
+    ///     Validate specific type of properties.
+    /// </summary>
+    /// <param name="collection"></param>
+    /// <param name="validationResults"></param>
+    /// <typeparam name="T"></typeparam>
+    /// <returns></returns>
     public static bool TryValidateEnumerable<T>(this IEnumerable<T> collection, out IEnumerable<(int, ValidationResult)> validationResults)
     {
         validationResults = collection.ValidateEnumerable();
         return !validationResults.Any();
     }
-
+    /// <summary>
+    ///     Validate specific type of properties.
+    /// </summary>
+    /// <param name="collection"></param>
+    /// <typeparam name="T"></typeparam>
+    /// <returns></returns>
     public static IEnumerable<(int, ValidationResult)> ValidateEnumerable<T>(this IEnumerable<T> collection)
     {
         var validationResults = new List<ValidationResult>();
@@ -54,7 +78,13 @@ public static class ValidationExtensions
             }
         }
     }
-
+    /// <summary>
+    ///     Validate properties.
+    /// </summary>
+    /// <param name="targetClass"></param>
+    /// <param name="validationResults"></param>
+    /// <param name="baseKeyPath"></param>
+    /// <returns></returns>
     public static bool TryValidateProperties(this object targetClass, out IEnumerable<ValidationResult> validationResults, string baseKeyPath = "")
     {
         validationResults = targetClass.ValidateProperties(baseKeyPath);

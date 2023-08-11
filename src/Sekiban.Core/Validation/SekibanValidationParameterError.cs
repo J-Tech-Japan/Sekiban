@@ -1,8 +1,18 @@
 using System.ComponentModel.DataAnnotations;
 namespace Sekiban.Core.Validation;
 
+/// <summary>
+///     Validation Parameter Error using in Sekiban.
+/// </summary>
+/// <param name="PropertyName"></param>
+/// <param name="ErrorMessages"></param>
 public record SekibanValidationParameterError(string PropertyName, IEnumerable<string> ErrorMessages)
 {
+    /// <summary>
+    ///     Create SekibanValidationParameterError from ValidationResults.
+    /// </summary>
+    /// <param name="validationResults"></param>
+    /// <returns></returns>
     public static IEnumerable<SekibanValidationParameterError> CreateFromValidationResults(IEnumerable<ValidationResult> validationResults)
     {
         var list = validationResults.ToList();
