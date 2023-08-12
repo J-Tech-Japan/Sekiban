@@ -3,6 +3,10 @@ using Sekiban.Core.Documents;
 using Sekiban.Core.Events;
 namespace Sekiban.Core.Query.SingleProjections;
 
+/// <summary>
+///     Aggregate Loader Interface.
+///     Developers can use this interface to load the aggregate.
+/// </summary>
 public interface IAggregateLoader
 {
     /// <summary>
@@ -34,7 +38,14 @@ public interface IAggregateLoader
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
         string? includesSortableUniqueId = null) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new();
-
+    /// <summary>
+    ///     Get aggregate from initial events. (without snapshot nor memory cache)
+    /// </summary>
+    /// <param name="aggregateId"></param>
+    /// <param name="rootPartitionKey"></param>
+    /// <param name="toVersion"></param>
+    /// <typeparam name="TSingleProjectionPayload"></typeparam>
+    /// <returns></returns>
     public Task<SingleProjectionState<TSingleProjectionPayload>?> AsSingleProjectionStateFromInitialAsync<TSingleProjectionPayload>(
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
@@ -72,7 +83,15 @@ public interface IAggregateLoader
         int? toVersion = null,
         string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommon;
 
-
+    /// <summary>
+    ///     Get all events for target aggregate.
+    /// </summary>
+    /// <param name="aggregateId"></param>
+    /// <param name="rootPartitionKey"></param>
+    /// <param name="toVersion"></param>
+    /// <param name="includesSortableUniqueId"></param>
+    /// <typeparam name="TAggregatePayload"></typeparam>
+    /// <returns></returns>
     public Task<IEnumerable<IEvent>?> AllEventsAsync<TAggregatePayload>(
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,

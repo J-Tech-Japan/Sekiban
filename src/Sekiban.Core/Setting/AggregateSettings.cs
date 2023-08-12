@@ -1,5 +1,8 @@
 namespace Sekiban.Core.Setting;
 
+/// <summary>
+///     Aggregate Setting Implementation.
+/// </summary>
 public class AggregateSettings : IAggregateSettings
 {
     public AggregateSettingHelper Helper { get; init; } = new();

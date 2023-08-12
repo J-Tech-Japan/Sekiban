@@ -1,5 +1,7 @@
 namespace Sekiban.Core.Query.QueryModel;
 
-public interface IQueryParameterCommon
-{
-}
+/// <summary>
+///     Query Parameter Interface.
+///     Query developers does not need to implement this interface directly.
+/// </summary>
+public interface IQueryParameterCommon;

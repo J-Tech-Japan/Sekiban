@@ -5,6 +5,9 @@ using Sekiban.Core.Exceptions;
 using Sekiban.Core.Partition;
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
+/// <summary>
+///     Single projection implementation. Simple one without snapshot.
+/// </summary>
 public class SimpleProjectionWithSnapshot : ISingleProjection
 {
     private readonly IDocumentRepository _documentRepository;

@@ -5,6 +5,4 @@ namespace Sekiban.Core.Aggregate;
 ///     System use Aggregate Identifier
 ///     Application Developer does not need to implement this interface
 /// </summary>
-public interface IAggregate : IAggregateCommon, ISingleProjection
-{
-}
+public interface IAggregate : IAggregateCommon, ISingleProjection;

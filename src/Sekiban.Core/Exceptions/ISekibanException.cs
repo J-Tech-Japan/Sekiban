@@ -3,6 +3,4 @@
 /// <summary>
 ///     BaseType for the Sekiban Exception
 /// </summary>
-public interface ISekibanException
-{
-}
+public interface ISekibanException;

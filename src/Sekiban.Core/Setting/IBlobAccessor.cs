@@ -1,5 +1,9 @@
 namespace Sekiban.Core.Setting;
 
+/// <summary>
+///     General Blob accessor interface.
+///     Blob is using for the snapshots.
+/// </summary>
 public interface IBlobAccessor
 {
     public Task<Stream?> GetBlobAsync(SekibanBlobContainer container, string blobName);

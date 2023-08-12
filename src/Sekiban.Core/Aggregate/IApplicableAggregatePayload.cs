@@ -8,6 +8,4 @@ namespace Sekiban.Core.Aggregate;
 /// </summary>
 /// <typeparam name="TParentAggregatePayload"></typeparam>
 public interface IApplicableAggregatePayload<TParentAggregatePayload> : IAggregatePayloadCommon
-    where TParentAggregatePayload : IAggregatePayloadCommon
-{
-}
+    where TParentAggregatePayload : IAggregatePayloadCommon;

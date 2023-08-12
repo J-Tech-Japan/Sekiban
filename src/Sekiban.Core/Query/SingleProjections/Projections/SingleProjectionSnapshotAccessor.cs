@@ -5,6 +5,10 @@ using Sekiban.Core.Snapshot;
 using Sekiban.Core.Types;
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
+/// <summary>
+///     Single Projection Snapshot Accessor implementation.
+///     Aggregate developer does not need to use this class directly
+/// </summary>
 public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccessor
 {
     private readonly IBlobAccessor _blobAccessor;

@@ -580,7 +580,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
     private async Task CheckProjectionSnapshots<TAggregatePayload>(List<SnapshotDocument> snapshots, Guid aggregateId)
         where TAggregatePayload : ISingleProjectionPayloadCommon, new()
     {
-        typeof(TAggregatePayload).GetOriginalTypeFromSingleProjectionPayload();
+        typeof(TAggregatePayload).GetAggregatePayloadTypeFromSingleProjectionPayload();
         _testOutputHelper.WriteLine($"snapshots {typeof(TAggregatePayload).Name} {snapshots.Count} ");
         foreach (var snapshot in snapshots)
         {
@@ -755,8 +755,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         RemoveAllFromDefault();
         var result = await commandExecutor.ExecCommandWithEventsAsync(new CreateBranch("JAPAN"));
         var branchId = result.AggregateId!.Value;
-        result = await commandExecutor.ExecCommandWithEventsAsync(new CreateClientWithBranchSubscriber(branchId, "Test Name", "test@example.com"));
-        var clientId = result.AggregateId!.Value;
+        await commandExecutor.ExecCommandWithEventsAsync(new CreateClientWithBranchSubscriber(branchId, "Test Name", "test@example.com"));
         var branch = await aggregateLoader.AsDefaultStateAsync<Branch>(branchId);
         Assert.NotNull(branch);
         Assert.Equal(0, branch.Payload.NumberOfMembers);

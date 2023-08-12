@@ -1,5 +1,8 @@
 namespace Sekiban.Core.Setting;
 
+/// <summary>
+///     Sekiban context implementation.
+/// </summary>
 public class SekibanContext : ISekibanContext
 {
     public const string Default = "Default";

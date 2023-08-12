@@ -2,6 +2,11 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Types;
 namespace Sekiban.Core.Query.SingleProjections;
 
+/// <summary>
+///     Default Single Projector implementation.
+///     Default means Aggregate itself as a projection.
+/// </summary>
+/// <typeparam name="TAggregatePayload"></typeparam>
 public class DefaultSingleProjector<TAggregatePayload> : ISingleProjector<Aggregate<TAggregatePayload>>
     where TAggregatePayload : IAggregatePayloadCommon
 {

@@ -6,6 +6,10 @@ using Sekiban.Core.Types;
 using System.Reflection;
 namespace Sekiban.Core.Query.QueryModel;
 
+/// <summary>
+///     Query Executor implementation.
+///     Developers use <see cref="IQueryExecutor" /> interface to execute query.
+/// </summary>
 public class QueryExecutor : IQueryExecutor
 {
     private readonly IMultiProjectionService multiProjectionService;

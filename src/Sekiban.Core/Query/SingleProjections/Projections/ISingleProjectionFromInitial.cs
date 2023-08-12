@@ -1,5 +1,9 @@
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
+/// <summary>
+///     Get Single Projection Aggregate from Initial Interface.
+///     Developers does not need to implement this interface directly.
+/// </summary>
 public interface ISingleProjectionFromInitial
 {
     /// <summary>

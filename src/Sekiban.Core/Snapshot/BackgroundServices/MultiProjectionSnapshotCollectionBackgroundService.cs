@@ -5,6 +5,12 @@ using Microsoft.Extensions.Logging;
 using Sekiban.Core.Shared;
 namespace Sekiban.Core.Snapshot.BackgroundServices;
 
+/// <summary>
+///     Background service for generating snapshots of multi-projection.
+///     This class can be used as a background service. Or use AddSekibanMultiProjectionSnapshotBackgroundService
+///     extension method.
+/// </summary>
+/// <typeparam name="TSettings"></typeparam>
 // ReSharper disable once ClassNeverInstantiated.Global
 public class MultiProjectionSnapshotCollectionBackgroundService<TSettings> : BackgroundService
     where TSettings : IMultiProjectionsSnapshotGenerateSetting

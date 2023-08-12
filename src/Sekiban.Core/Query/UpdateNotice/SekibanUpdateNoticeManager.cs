@@ -4,6 +4,9 @@ using Sekiban.Core.Shared;
 using System.Collections.Concurrent;
 namespace Sekiban.Core.Query.UpdateNotice;
 
+/// <summary>
+///     Update notice manager for Sekiban.
+/// </summary>
 public class SekibanUpdateNoticeManager : IUpdateNotice
 {
     private readonly ISekibanDateProducer _sekibanDateProducer;

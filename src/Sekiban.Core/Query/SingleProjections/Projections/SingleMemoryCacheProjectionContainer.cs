@@ -3,6 +3,11 @@ using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
+/// <summary>
+///     Memory Cache Projection Container.
+/// </summary>
+/// <typeparam name="TAggregate"></typeparam>
+/// <typeparam name="TState"></typeparam>
 // ReSharper disable once UnusedTypeParameter
 public record SingleMemoryCacheProjectionContainer<TAggregate, TState> where TAggregate : IAggregateCommon, SingleProjections.ISingleProjection
     where TState : IAggregateStateCommon

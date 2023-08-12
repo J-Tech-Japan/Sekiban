@@ -4,6 +4,4 @@ namespace Sekiban.Core.Events;
 ///     Common Event Payload Type
 ///     App Developer does not need to use this in common usecase.
 /// </summary>
-public interface IEventPayloadCommon
-{
-}
+public interface IEventPayloadCommon;

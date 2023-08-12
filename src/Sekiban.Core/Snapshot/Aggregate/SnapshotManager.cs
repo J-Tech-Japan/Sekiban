@@ -3,6 +3,13 @@ using Sekiban.Core.Shared;
 using System.Collections.Immutable;
 namespace Sekiban.Core.Snapshot.Aggregate;
 
+/// <summary>
+///     Snapshot Manager Aggregate. This class is internal use for the sekiban.
+///     Snapshot Manager Aggregate manages current snapshot versions in memory.
+/// </summary>
+/// <param name="Requests"></param>
+/// <param name="RequestTakens"></param>
+/// <param name="CreatedAt"></param>
 [AggregateContainerGroup(AggregateContainerGroup.InMemory)]
 public record SnapshotManager(ImmutableList<string> Requests, ImmutableList<string> RequestTakens, DateTime CreatedAt) : IAggregatePayloadCommon
 {

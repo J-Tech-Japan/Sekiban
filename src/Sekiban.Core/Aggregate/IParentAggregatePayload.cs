@@ -14,9 +14,7 @@ namespace Sekiban.Core.Aggregate;
 ///      ]]></code>
 /// </typeparam>
 public interface IParentAggregatePayload<TParentAggregatePayload> : IParentAggregatePayload<TParentAggregatePayload, TParentAggregatePayload>
-    where TParentAggregatePayload : IAggregatePayloadCommon, new()
-{
-}
+    where TParentAggregatePayload : IAggregatePayloadCommon, new();
 /// <summary>
 ///     Parent Aggregate Payload
 ///     Developer can implement this interface to define the state of your aggregate.
@@ -35,6 +33,4 @@ public interface IParentAggregatePayload<TParentAggregatePayload> : IParentAggre
 /// </typeparam>
 // ReSharper disable once UnusedTypeParameter
 public interface IParentAggregatePayload<TParentAggregatePayload, IFirstAggregatePayload> : IParentAggregatePayloadCommon<TParentAggregatePayload>
-    where TParentAggregatePayload : IAggregatePayloadCommon where IFirstAggregatePayload : IAggregatePayloadCommon, new()
-{
-}
+    where TParentAggregatePayload : IAggregatePayloadCommon where IFirstAggregatePayload : IAggregatePayloadCommon, new();

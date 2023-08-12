@@ -1,6 +1,7 @@
 using Sekiban.Core.Aggregate;
 namespace Sekiban.Core.Query.SingleProjections;
 
-public interface ISingleProjectionPayloadCommon : IAggregatePayloadCommon
-{
-}
+/// <summary>
+///     Single Projection Payload Common Interface.
+/// </summary>
+public interface ISingleProjectionPayloadCommon : IAggregatePayloadCommon;

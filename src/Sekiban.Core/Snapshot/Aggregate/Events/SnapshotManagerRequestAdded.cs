@@ -1,6 +1,13 @@
 using Sekiban.Core.Events;
 namespace Sekiban.Core.Snapshot.Aggregate.Events;
 
+/// <summary>
+///     Snapshot Manager Request Added Event. This class is internal use for the sekiban.
+/// </summary>
+/// <param name="AggregateTypeName"></param>
+/// <param name="TargetAggregateId"></param>
+/// <param name="NextSnapshotVersion"></param>
+/// <param name="SnapshotVersion"></param>
 public record SnapshotManagerRequestAdded(
     string AggregateTypeName,
     Guid TargetAggregateId,

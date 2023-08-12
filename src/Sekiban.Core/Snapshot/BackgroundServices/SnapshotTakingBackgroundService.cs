@@ -5,6 +5,10 @@ using Sekiban.Core.Events;
 using System.Collections.Concurrent;
 namespace Sekiban.Core.Snapshot.BackgroundServices;
 
+/// <summary>
+///     Snapshot Taking Background Service.
+///     This class is internal use for the sekiban.
+/// </summary>
 public class SnapshotTakingBackgroundService : BackgroundService
 {
     private readonly BlockingCollection<IEvent> _eventQueue = new();

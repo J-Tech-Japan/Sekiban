@@ -5,6 +5,9 @@ using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Shared;
 namespace Sekiban.Core.Snapshot;
 
+/// <summary>
+///     Multi Projection snapshot document for persistence.
+/// </summary>
 public record MultiProjectionSnapshotDocument : IDocument
 {
     public const string AllRootPartitionKeySnapshotValue = "[ALL]";
@@ -15,7 +18,9 @@ public record MultiProjectionSnapshotDocument : IDocument
     public int SavedVersion { get; init; }
 
     public string PayloadVersionIdentifier { get; init; } = string.Empty;
-    public MultiProjectionSnapshotDocument() { }
+    public MultiProjectionSnapshotDocument()
+    {
+    }
 
     public MultiProjectionSnapshotDocument(Type projectionType, Guid id, IMultiProjectionCommon projection, string rootPartitionKey)
     {

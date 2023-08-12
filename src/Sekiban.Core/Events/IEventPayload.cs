@@ -8,9 +8,7 @@ namespace Sekiban.Core.Events;
 /// <typeparam name="TAggregatePayload"></typeparam>
 /// <typeparam name="TEventPayload"> Need to put Event Payload's own type.</typeparam>
 public interface IEventPayload<TAggregatePayload, TEventPayload> : IEventPayload<TAggregatePayload, TAggregatePayload, TEventPayload>
-    where TAggregatePayload : IAggregatePayloadCommon where TEventPayload : IEventPayload<TAggregatePayload, TAggregatePayload, TEventPayload>
-{
-}
+    where TAggregatePayload : IAggregatePayloadCommon where TEventPayload : IEventPayload<TAggregatePayload, TAggregatePayload, TEventPayload>;
 /// <summary>
 ///     Event Payload Interface
 ///     This three generic type is used when aggregate uses SubTypes and Event Changes Subtype Type (In / Out has Different

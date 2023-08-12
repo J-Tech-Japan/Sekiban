@@ -1,7 +1,12 @@
 namespace Sekiban.Core.Setting;
 
+/// <summary>
+///     Aggregate Setting Helper.
+///     Default setting can be set by this class
+/// </summary>
 public class AggregateSettingHelper
 {
+
 
     public bool UseHybridDefault { get; }
     public bool TakeSnapshotDefault { get; }

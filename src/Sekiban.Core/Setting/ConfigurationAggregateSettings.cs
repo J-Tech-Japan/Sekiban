@@ -1,6 +1,9 @@
 using Microsoft.Extensions.Configuration;
 namespace Sekiban.Core.Setting;
 
+/// <summary>
+///     Aggregate settings using appsettings.json configuration.
+/// </summary>
 public class ConfigurationAggregateSettings : AggregateSettings
 {
     private const string SekibanSection = "Sekiban";

@@ -3,6 +3,10 @@ using Sekiban.Core.Types;
 using System.Collections.Immutable;
 namespace Sekiban.Core.Query;
 
+/// <summary>
+///     Target Aggregate Payload Collection.
+///     Projections can specify which aggregate events to use for the projection.
+/// </summary>
 public class TargetAggregatePayloadCollection
 {
     private ImmutableList<Type> TargetAggregatePayloads { get; set; } = ImmutableList<Type>.Empty;

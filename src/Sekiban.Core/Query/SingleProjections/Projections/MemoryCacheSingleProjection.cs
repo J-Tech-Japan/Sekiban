@@ -9,6 +9,9 @@ using Sekiban.Core.Setting;
 using Sekiban.Core.Types;
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
+/// <summary>
+///     Single projection implementation with memory cache.
+/// </summary>
 public class MemoryCacheSingleProjection : ISingleProjection
 {
     private readonly IAggregateSettings _aggregateSettings;

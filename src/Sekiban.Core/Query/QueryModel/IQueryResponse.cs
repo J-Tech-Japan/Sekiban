@@ -1,5 +1,7 @@
 namespace Sekiban.Core.Query.QueryModel;
 
-public interface IQueryResponse
-{
-}
+/// <summary>
+///     Interface for Query Response.
+///     Query Developers implement this interface for the response of the query.
+/// </summary>
+public interface IQueryResponse;

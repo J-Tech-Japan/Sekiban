@@ -3,6 +3,4 @@ using FeatureCheck.Domain.Shared;
 using Sekiban.Testing.SingleProjections;
 namespace FeatureCheck.Test.AggregateTests;
 
-public class InterfaceParentTest : AggregateTest<ICartAggregate, FeatureCheckDependency>
-{
-}
+public class InterfaceParentTest : AggregateTest<ICartAggregate, FeatureCheckDependency>;
