@@ -48,7 +48,8 @@ public static class SekibanEventSourcingDependency
         services.AddSekibanCore(sekibanDateProducer ?? new SekibanDateProducer(), multiProjectionType, configuration);
         services.AddSekibanHTTPUser();
         services.AddSekibanSettingsFromAppSettings();
-
+        // run Define() before using.
+        dependencyDefinition.Define();
         // Each Domain contexts
         services.AddSingleton(dependencyDefinition.GetSekibanDependencyOptions().RegisteredEventTypes);
         services.AddSingleton(dependencyDefinition.GetSekibanDependencyOptions().SekibanAggregateTypes);
@@ -88,6 +89,8 @@ public static class SekibanEventSourcingDependency
         services.AddSekibanHTTPUser();
 
         services.AddSekibanSettingsFromAppSettings();
+        // run Define() before using.
+        dependencyDefinition.Define();
 
         // Each Domain contexts
         services.AddSingleton(dependencyDefinition.GetSekibanDependencyOptions().RegisteredEventTypes);
@@ -127,6 +130,8 @@ public static class SekibanEventSourcingDependency
         services.AddSekibanHTTPUser();
 
         services.AddSekibanAppSettingsFromObject(new AggregateSettings());
+        // run Define() before using.
+        dependencyDefinition.Define();
 
         // Each Domain contexts
         services.AddSingleton(dependencyDefinition.GetSekibanDependencyOptions().RegisteredEventTypes);

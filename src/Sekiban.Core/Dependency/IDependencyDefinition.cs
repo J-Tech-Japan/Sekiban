@@ -21,4 +21,5 @@ public interface IDependencyDefinition : IQueryDefinition
     IEnumerable<(Type serviceType, Type? implementationType)> GetSubscriberDependencies();
     IEnumerable<Action<IServiceCollection>> GetServiceActions();
     IEnumerable<IAggregateDependencyDefinition> GetAggregateDefinitions();
+    void Define();
 }

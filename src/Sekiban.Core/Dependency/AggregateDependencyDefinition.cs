@@ -88,13 +88,13 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
     /// <summary>
     ///     Add Command Handler to Aggregate
     /// </summary>
-    /// <typeparam name="TCreateCommand">Target Command</typeparam>
+    /// <typeparam name="TCommand">Target Command</typeparam>
     /// <typeparam name="TCommandHandler">Command Handler for Target Command</typeparam>
     /// <returns>Self for method chain</returns>
-    public AggregateDependencyDefinition<TAggregatePayload> AddCommandHandler<TCreateCommand, TCommandHandler>()
-        where TCreateCommand : ICommand<TAggregatePayload>, new() where TCommandHandler : ICommandHandlerCommon<TAggregatePayload, TCreateCommand>
+    public AggregateDependencyDefinition<TAggregatePayload> AddCommandHandler<TCommand, TCommandHandler>()
+        where TCommand : ICommand<TAggregatePayload> where TCommandHandler : ICommandHandlerCommon<TAggregatePayload, TCommand>
     {
-        SelfCommandTypes = SelfCommandTypes.Add((typeof(ICommandHandlerCommon<TAggregatePayload, TCreateCommand>), typeof(TCommandHandler)));
+        SelfCommandTypes = SelfCommandTypes.Add((typeof(ICommandHandlerCommon<TAggregatePayload, TCommand>), typeof(TCommandHandler)));
         return this;
     }
     /// <summary>

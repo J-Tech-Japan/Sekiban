@@ -21,11 +21,6 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
     private ImmutableList<Type> GeneralListQueryTypes { get; set; } = ImmutableList<Type>.Empty;
     private ImmutableList<Assembly> Assemblies { get; set; } = ImmutableList<Assembly>.Empty;
     private ImmutableList<Action<IServiceCollection>> ServiceActions { get; set; } = ImmutableList<Action<IServiceCollection>>.Empty;
-    protected DomainDependencyDefinitionBase()
-    {
-        // ReSharper disable once VirtualMemberCallInConstructor
-        Define();
-    }
     public abstract Assembly GetExecutingAssembly();
 
     public IEnumerable<(Type serviceType, Type? implementationType)> GetCommandDependencies()
@@ -73,6 +68,8 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
             new SekibanAggregateTypes(GetAssembliesForOptions()),
             GetCommandDependencies().Concat(GetSubscriberDependencies()));
 
+    public abstract void Define();
+
 
     public void AddServices(Action<IServiceCollection> serviceAction)
     {
@@ -93,8 +90,6 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
     {
         return AggregateDefinitions.SelectMany(s => s.SingleProjectionTypes);
     }
-
-    protected abstract void Define();
 
     public IEnumerable<Type> GetAggregatePayloadTypes()
     {
