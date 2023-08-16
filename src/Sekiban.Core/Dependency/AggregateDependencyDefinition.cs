@@ -204,7 +204,7 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
 
     public AggregateDependencyDefinition<TAggregatePayload> AddSubtype<TSubAggregatePayload>(
         Action<AggregateSubtypeDependencyDefinition<TAggregatePayload, TSubAggregatePayload>> subAggregateDefinitionAction)
-        where TSubAggregatePayload : IAggregateSubtypePayload<TAggregatePayload>
+        where TSubAggregatePayload : IAggregateSubtypePayload<TAggregatePayload>, new()
     {
         var subAggregate = new AggregateSubtypeDependencyDefinition<TAggregatePayload, TSubAggregatePayload>(this);
         SubAggregates = SubAggregates.Add(subAggregate);
