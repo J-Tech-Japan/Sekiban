@@ -31,4 +31,5 @@
         <ProjectReference Include="..\Sekiban.Testing\Sekiban.Testing.csproj" />
     </ItemGroup>
 
+
 </Project>

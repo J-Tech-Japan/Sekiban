@@ -1,6 +1,6 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
-namespace Sekiban.Infrastructure.Cosmos.DomainCommon.EventSourcings;
+namespace Sekiban.Infrastructure.Cosmos.Documents;
 
 public class CosmosDbDocumentRemover : IDocumentRemover
 {

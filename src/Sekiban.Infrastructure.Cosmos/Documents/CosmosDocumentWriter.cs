@@ -7,7 +7,7 @@ using Sekiban.Core.Snapshot;
 using Sekiban.Infrastructure.Cosmos.Lib.Json;
 using System.Text;
 using System.Text.Json;
-namespace Sekiban.Infrastructure.Cosmos.DomainCommon.EventSourcings;
+namespace Sekiban.Infrastructure.Cosmos.Documents;
 
 public class CosmosDocumentWriter : IDocumentPersistentWriter
 {

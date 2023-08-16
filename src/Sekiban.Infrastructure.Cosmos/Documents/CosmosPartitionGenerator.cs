@@ -2,7 +2,7 @@ using Sekiban.Core.Documents;
 using Sekiban.Core.Partition;
 using Sekiban.Core.Snapshot;
 using Sekiban.Core.Types;
-namespace Sekiban.Infrastructure.Cosmos.DomainCommon.EventSourcings;
+namespace Sekiban.Infrastructure.Cosmos.Documents;
 
 public class CosmosPartitionGenerator
 {
