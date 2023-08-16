@@ -90,7 +90,7 @@ public class CommandExecutor : ICommandExecutor
 
     public async Task<(CommandExecutorResponse, List<IEvent>)> ExecCommandAsyncTyped<TAggregatePayload, TCommand>(
         TCommand command,
-        List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayloadCommon, new() where TCommand : ICommand<TAggregatePayload>
+        List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayloadCommonBase where TCommand : ICommand<TAggregatePayload>
     {
         var validationResult = command.ValidateProperties().ToList();
         if (validationResult.Any())
@@ -108,7 +108,7 @@ public class CommandExecutor : ICommandExecutor
 
     public async Task<(CommandExecutorResponse, List<IEvent>)> ExecCommandWithoutValidationAsyncTyped<TAggregatePayload, TCommand>(
         TCommand command,
-        List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayloadCommon, new() where TCommand : ICommand<TAggregatePayload>
+        List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayloadCommonBase where TCommand : ICommand<TAggregatePayload>
     {
         var rootPartitionKey = command.GetRootPartitionKey();
         if (!CommandRootPartitionValidationAttribute.IsValidRootPartitionKey(rootPartitionKey))
@@ -208,7 +208,7 @@ public class CommandExecutor : ICommandExecutor
 
     private async Task<List<IEvent>> HandleEventsAsync<TAggregatePayload, TCommand>(
         IReadOnlyCollection<IEvent> events,
-        CommandDocument<TCommand> commandDocument) where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayload>
+        CommandDocument<TCommand> commandDocument) where TAggregatePayload : IAggregatePayloadCommonBase where TCommand : ICommand<TAggregatePayload>
     {
         var toReturnEvents = new List<IEvent>();
         if (!events.Any())

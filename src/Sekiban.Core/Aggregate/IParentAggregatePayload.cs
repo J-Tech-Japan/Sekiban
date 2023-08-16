@@ -27,10 +27,10 @@ public interface IParentAggregatePayload<TParentAggregatePayload> : IParentAggre
 ///     CartAggregate : IParentAggregatePayload<CartAggregate, FirstAggregate>
 ///     ]]></code>
 /// </typeparam>
-/// <typeparam name="IFirstAggregatePayload">
+/// <typeparam name="TFirstAggregatePayload">
 ///     First Aggregate essentially denotes the state when you initially establish the
 ///     aggregate. In other words, it refers to types when they initiate or start for the first time.
 /// </typeparam>
 // ReSharper disable once UnusedTypeParameter
-public interface IParentAggregatePayload<TParentAggregatePayload, IFirstAggregatePayload> : IParentAggregatePayloadCommon<TParentAggregatePayload>
-    where TParentAggregatePayload : IAggregatePayloadCommon where IFirstAggregatePayload : IAggregatePayloadCommon, new();
+public interface IParentAggregatePayload<TParentAggregatePayload, TFirstAggregatePayload> : IParentAggregatePayloadCommon<TParentAggregatePayload>
+    where TParentAggregatePayload : IAggregatePayloadCommonBase where TFirstAggregatePayload : IAggregatePayloadCommon;

@@ -14,7 +14,7 @@ using Xunit.Sdk;
 namespace Sekiban.Testing.SingleProjections;
 
 public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposable, IAggregateTestHelper<TAggregatePayload>
-    where TAggregatePayload : IAggregatePayloadCommon where TDependencyDefinition : IDependencyDefinition, new()
+    where TAggregatePayload : IAggregatePayloadCommonBase where TDependencyDefinition : IDependencyDefinition, new()
 {
     private readonly IAggregateTestHelper<TAggregatePayload> _helper;
     protected readonly IServiceProvider _serviceProvider;
@@ -219,31 +219,31 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
 
     #region SingleProjection
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionStateIs<TSingleProjectionPayload>(
-        SingleProjectionState<TSingleProjectionPayload> state) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new() =>
+        SingleProjectionState<TSingleProjectionPayload> state) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon =>
         _helper.ThenSingleProjectionStateIs(state);
 
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIs<TSingleProjectionPayload>(TSingleProjectionPayload payload)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new() =>
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon =>
         _helper.ThenSingleProjectionPayloadIs(payload);
 
     public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionPayload<TSingleProjectionPayload>(
-        Action<TSingleProjectionPayload> payloadAction) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new() =>
+        Action<TSingleProjectionPayload> payloadAction) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon =>
         _helper.ThenGetSingleProjectionPayload(payloadAction);
 
     public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionState<TSingleProjectionPayload>(
-        Action<SingleProjectionState<TSingleProjectionPayload>> stateAction) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new() =>
+        Action<SingleProjectionState<TSingleProjectionPayload>> stateAction) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon =>
         _helper.ThenGetSingleProjectionState(stateAction);
 
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIsFromJson<TSingleProjectionPayload>(string payloadJson)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new() =>
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon =>
         _helper.ThenSingleProjectionPayloadIsFromJson<TSingleProjectionPayload>(payloadJson);
 
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIsFromFile<TSingleProjectionPayload>(string payloadFilename)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new() =>
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon =>
         _helper.ThenSingleProjectionPayloadIsFromFile<TSingleProjectionPayload>(payloadFilename);
 
     public IAggregateTestHelper<TAggregatePayload> WriteSingleProjectionStateToFile<TSingleProjectionPayload>(string filename)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new() =>
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon =>
         _helper.WriteSingleProjectionStateToFile<TSingleProjectionPayload>(filename);
     #endregion
 

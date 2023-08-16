@@ -6,4 +6,4 @@ namespace Sekiban.Core.Events;
 /// </summary>
 /// <typeparam name="TAggregatePayload"></typeparam>
 // ReSharper disable once UnusedTypeParameter
-public interface IEventPayloadApplicableTo<TAggregatePayload> : IEventPayloadCommon where TAggregatePayload : IAggregatePayloadCommon;
+public interface IEventPayloadApplicableTo<TAggregatePayload> : IEventPayloadCommon where TAggregatePayload : IAggregatePayloadCommonBase;

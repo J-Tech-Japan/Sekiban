@@ -23,7 +23,7 @@ public static class EventHelper
     public static IEvent HandleEvent<TAggregatePayload>(
         Aggregate<TAggregatePayload> aggregate,
         IEventPayloadCommon eventPayload,
-        string rootPartitionKey) where TAggregatePayload : IAggregatePayloadCommon
+        string rootPartitionKey) where TAggregatePayload : IAggregatePayloadCommonBase
     {
         var aggregateType = aggregate.GetType();
         var methodName = nameof(Aggregate<TAggregatePayload>.AddAndApplyEvent);
@@ -43,7 +43,7 @@ public static class EventHelper
     /// <returns></returns>
     /// <exception cref="SekibanEventFailedToActivateException"></exception>
     public static IEvent GenerateEventToSave<TEventPayload, TAggregatePayload>(Guid aggregateId, string rootPartitionKey, TEventPayload payload)
-        where TEventPayload : IEventPayloadApplicableTo<TAggregatePayload> where TAggregatePayload : IAggregatePayloadCommon
+        where TEventPayload : IEventPayloadApplicableTo<TAggregatePayload> where TAggregatePayload : IAggregatePayloadCommonBase
     {
         var eventPayloadType = payload.GetType();
         // ReSharper disable once SuspiciousTypeConversion.Global

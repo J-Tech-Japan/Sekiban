@@ -21,6 +21,8 @@ public record SnapshotManager(ImmutableList<string> Requests, ImmutableList<stri
     public SnapshotManager() : this(ImmutableList<string>.Empty, ImmutableList<string>.Empty, SekibanDateProducer.GetRegistered().UtcNow)
     {
     }
+    public static IAggregatePayloadCommon CreateInitialPayload() =>
+        new SnapshotManager(ImmutableList<string>.Empty, ImmutableList<string>.Empty, SekibanDateProducer.GetRegistered().UtcNow);
 
     internal static string SnapshotKey(string aggregateTypeName, Guid targetAggregateId, int nextSnapshotVersion) =>
         $"{aggregateTypeName}_{targetAggregateId.ToString()}_{nextSnapshotVersion}";

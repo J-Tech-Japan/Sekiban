@@ -7,5 +7,5 @@ namespace Sekiban.Core.Aggregate;
 ///     or <see cref="IParentAggregatePayload{TFirst}" />
 /// </summary>
 /// <typeparam name="TParentAggregatePayload">Parent Aggregate</typeparam>
-public interface IAggregateSubtypePayload<TParentAggregatePayload> : IApplicableAggregatePayload<TParentAggregatePayload>
-    where TParentAggregatePayload : IParentAggregatePayloadCommon<TParentAggregatePayload>;
+public interface IAggregateSubtypePayload<TParentAggregatePayload> : IAggregatePayloadCommon, IApplicableAggregatePayload<TParentAggregatePayload>
+    where TParentAggregatePayload : IAggregatePayloadCommonBase;

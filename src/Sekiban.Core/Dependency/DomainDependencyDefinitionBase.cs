@@ -100,7 +100,7 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
         return AggregateDefinitions.SelectMany(s => s.AggregateSubtypes);
     }
 
-    protected AggregateDependencyDefinition<TAggregatePayload> AddAggregate<TAggregatePayload>() where TAggregatePayload : IAggregatePayload
+    protected AggregateDependencyDefinition<TAggregatePayload> AddAggregate<TAggregatePayload>() where TAggregatePayload : IAggregatePayloadCommonBase
     {
         if (AggregateDefinitions.SingleOrDefault(s => s.AggregateType == typeof(TAggregatePayload)) is
             AggregateDependencyDefinition<TAggregatePayload> existing)

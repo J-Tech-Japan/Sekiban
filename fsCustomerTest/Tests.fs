@@ -20,7 +20,7 @@ type BranchSpec(testOutputHelper: ITestOutputHelper) =
 
     [<Fact>]
     member this.Serialize() =
-        let serialized = SekibanJsonHelper.Serialize(Branch("Japan"))
+        let serialized = SekibanJsonHelper.SerializeWithGeneric<Branch>({ Name = "Japan" })
         this.TestOutputHelper.WriteLine(serialized)
         let deserialized = SekibanJsonHelper.Deserialize<Branch>(serialized)
         let serializedFromDeserialized = SekibanJsonHelper.Serialize(deserialized)
@@ -32,7 +32,8 @@ type BranchSpec(testOutputHelper: ITestOutputHelper) =
         let options: JsonSerializerOptions = JsonSerializerOptions()
         //      options.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
         //        options.PropertyNameCaseInsensitive = true
-        let serialized = JsonSerializer.Serialize<Branch>(Branch("Japan"), options)
+        let branch: Branch = { Name = "Japan" }
+        let serialized = JsonSerializer.Serialize(branch, options)
         this.TestOutputHelper.WriteLine(serialized)
         let deserialized = JsonSerializer.Deserialize<Branch>(serialized, options)
 
@@ -44,4 +45,4 @@ type BranchSpec(testOutputHelper: ITestOutputHelper) =
 
     [<Fact>]
     member this.CreateAggregate() =
-        this.WhenCommand(CreateBranch("Japan")).ThenPayloadIs(Branch("Japan"))
+        this.WhenCommand(CreateBranch("Japan")).ThenPayloadIs({ Name = "Japan" })

@@ -8,7 +8,7 @@ using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
 namespace Sekiban.Testing.SingleProjections;
 
-public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload : IAggregatePayloadCommon
+public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload : IAggregatePayloadCommonBase
 {
 
     #region Subtypes
@@ -121,25 +121,25 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
 
     #region Single Projection
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionStateIs<TSingleProjectionPayload>(
-        SingleProjectionState<TSingleProjectionPayload> state) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new();
+        SingleProjectionState<TSingleProjectionPayload> state) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
 
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIs<TSingleProjectionPayload>(TSingleProjectionPayload payload)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new();
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
 
     public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionPayload<TSingleProjectionPayload>(
-        Action<TSingleProjectionPayload> payloadAction) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new();
+        Action<TSingleProjectionPayload> payloadAction) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
 
     public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionState<TSingleProjectionPayload>(
-        Action<SingleProjectionState<TSingleProjectionPayload>> stateAction) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new();
+        Action<SingleProjectionState<TSingleProjectionPayload>> stateAction) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
 
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIsFromJson<TSingleProjectionPayload>(string payloadJson)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new();
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
 
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIsFromFile<TSingleProjectionPayload>(string payloadFilename)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new();
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
 
     public IAggregateTestHelper<TAggregatePayload> WriteSingleProjectionStateToFile<TSingleProjectionPayload>(string filename)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new();
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
     #endregion
 
     #region General List Query Test

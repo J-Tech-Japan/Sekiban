@@ -11,7 +11,7 @@ public class BranchSpec : AggregateTest<Branch, FeatureCheckDependency>
     [Fact]
     public void CreateBranchCommandTest()
     {
-        WhenCommand(new CreateBranch("Japan Tokyo")).ThenPayloadIs(new Branch("Japan Tokyo"));
+        WhenCommand(new CreateBranch("Japan Tokyo")).ThenPayloadIs(new Branch("Japan Tokyo", 0));
     }
     [Fact]
     public void ValidationErrorTest()

@@ -19,14 +19,14 @@ public class BranchRootPartitionKeySpec : AggregateTest<Branch, FeatureCheckDepe
     {
         var command = new CreateBranchWithRootPartitionKey { Name = "BranchName", RootPartitionKey = rootPartitionKey };
         WhenCommand(command);
-        ThenPayloadIs(new Branch("BranchName"));
+        ThenPayloadIs(new Branch("BranchName", 0));
     }
     [Fact]
     public void CreateSuccessGuid()
     {
         var command = new CreateBranchWithRootPartitionKey { Name = "BranchName", RootPartitionKey = Guid.NewGuid().ToString() };
         WhenCommand(command);
-        ThenPayloadIs(new Branch("BranchName"));
+        ThenPayloadIs(new Branch("BranchName", 0));
     }
     [Theory]
     [InlineData("")]

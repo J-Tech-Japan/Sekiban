@@ -59,7 +59,7 @@ public interface IMultiProjectionSnapshotGenerator
         GenerateSingleProjectionListSnapshotAsync<TSingleProjectionPayload>(
             int minimumNumberOfEventsToGenerateSnapshot,
             string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new() =>
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon =>
         GenerateMultiProjectionSnapshotAsync<SingleProjectionListProjector<SingleProjection<TSingleProjectionPayload>,
                 SingleProjectionState<TSingleProjectionPayload>, SingleProjection<TSingleProjectionPayload>>,
             SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>(minimumNumberOfEventsToGenerateSnapshot, rootPartitionKey);

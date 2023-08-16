@@ -10,4 +10,4 @@ namespace Sekiban.Core.Command;
 /// <typeparam name="TAggregatePayload"></typeparam>
 /// <typeparam name="TCommand"></typeparam>
 public interface IVersionValidationCommandHandler<TAggregatePayload, TCommand> : ICommandHandler<TAggregatePayload, TCommand>
-    where TAggregatePayload : IAggregatePayloadCommon, new() where TCommand : IVersionValidationCommand<TAggregatePayload>;
+    where TAggregatePayload : IAggregatePayloadCommon where TCommand : IVersionValidationCommand<TAggregatePayload>;

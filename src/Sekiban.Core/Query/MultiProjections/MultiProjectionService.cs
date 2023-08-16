@@ -3,8 +3,9 @@ using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Query.MultiProjections.Projections;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Query.MultiProjections;
+
 /// <summary>
-/// Multi Projection Retrieve Service.
+///     Multi Projection Retrieve Service.
 /// </summary>
 public class MultiProjectionService : IMultiProjectionService
 {
@@ -21,19 +22,21 @@ public class MultiProjectionService : IMultiProjectionService
 
     public async Task<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>> GetAggregateListObject<TAggregatePayload>(
         string rootPartitionKey,
-        SortableUniqueIdValue? includesSortableUniqueIdValue) where TAggregatePayload : IAggregatePayloadCommon
+        SortableUniqueIdValue? includesSortableUniqueIdValue) where TAggregatePayload : IAggregatePayloadCommonBase
     {
         var list = await multiProjection
-            .GetMultiProjectionAsync<SingleProjectionListProjector<Aggregate<TAggregatePayload>,
-                    AggregateState<TAggregatePayload>, DefaultSingleProjector<TAggregatePayload>>,
-                SingleProjectionListState<AggregateState<TAggregatePayload>>>(rootPartitionKey, includesSortableUniqueIdValue);
+            .GetMultiProjectionAsync<
+                SingleProjectionListProjector<Aggregate<TAggregatePayload>, AggregateState<TAggregatePayload>,
+                    DefaultSingleProjector<TAggregatePayload>>, SingleProjectionListState<AggregateState<TAggregatePayload>>>(
+                rootPartitionKey,
+                includesSortableUniqueIdValue);
         return list;
     }
 
     public async Task<List<AggregateState<TAggregatePayload>>> GetAggregateList<TAggregatePayload>(
         QueryListType queryListType = QueryListType.ActiveOnly,
         string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions,
-        SortableUniqueIdValue? includesSortableUniqueIdValue = null) where TAggregatePayload : IAggregatePayloadCommon
+        SortableUniqueIdValue? includesSortableUniqueIdValue = null) where TAggregatePayload : IAggregatePayloadCommonBase
     {
         var projection = await GetAggregateListObject<TAggregatePayload>(rootPartitionKey, includesSortableUniqueIdValue);
         return queryListType switch
@@ -47,7 +50,7 @@ public class MultiProjectionService : IMultiProjectionService
 
     public Task<MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>
         GetSingleProjectionListObject<TSingleProjectionPayload>(string rootPartitionKey, SortableUniqueIdValue? includesSortableUniqueIdValue)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new() =>
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon =>
         multiProjection
             .GetMultiProjectionAsync<
                 SingleProjectionListProjector<SingleProjection<TSingleProjectionPayload>, SingleProjectionState<TSingleProjectionPayload>,
@@ -58,7 +61,7 @@ public class MultiProjectionService : IMultiProjectionService
     public async Task<List<SingleProjectionState<TSingleProjectionPayload>>> GetSingleProjectionList<TSingleProjectionPayload>(
         QueryListType queryListType = QueryListType.ActiveOnly,
         string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions,
-        SortableUniqueIdValue? includesSortableUniqueIdValue = null) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
+        SortableUniqueIdValue? includesSortableUniqueIdValue = null) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
         var projection = await GetSingleProjectionListObject<TSingleProjectionPayload>(rootPartitionKey, includesSortableUniqueIdValue);
         return queryListType switch

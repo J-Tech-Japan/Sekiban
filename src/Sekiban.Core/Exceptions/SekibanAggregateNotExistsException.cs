@@ -17,3 +17,10 @@ public class SekibanAggregateNotExistsException : Exception, ISekibanException
         RootPartitionKey = rootPartitionKey;
     }
 }
+public class SekibanAggregateCreateFailedException : Exception, ISekibanException
+{
+    public string AggregateTypeName { get; }
+
+    public SekibanAggregateCreateFailedException(string aggregateTypeName) : base($"Aggregate {aggregateTypeName} failed to create.") =>
+        AggregateTypeName = aggregateTypeName;
+}

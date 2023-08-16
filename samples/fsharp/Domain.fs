@@ -1,17 +1,17 @@
 module fsCustomer.Domain
 
 open System
-open System.Text.Json.Serialization
 open FSharp.Control
 open Sekiban.Core.Aggregate
 open Sekiban.Core.Command
 open Sekiban.Core.Events
 open Sekiban.Core.Query.QueryModel
 
-type Branch [<JsonConstructor>] (name: string) =
-    member this.Name = name
-    interface IAggregatePayload
-    new() = Branch("")
+type Branch =
+    { Name: string }
+
+    interface IAggregatePayload with
+        member this.CreateInitialPayload() = { Name = "" }
 
 type CreateBranch(name: string) =
     member this.Name = name
@@ -23,7 +23,7 @@ type BranchCreated =
     { Name: string }
 
     interface IEventPayload<Branch, Branch, BranchCreated> with
-        static member OnEvent(aggregatePayload, ev) = Branch(ev.Payload.Name)
+        static member OnEvent(aggregatePayload, ev) = { Name = ev.Payload.Name }
 
 type CreateBranchHandler() =
     interface ICommandHandler<Branch, CreateBranch> with
@@ -35,7 +35,10 @@ type Client(name: string, email: string, branchId: Guid) =
     member this.Name = name
     member this.Email = email
     member this.BranchId = branchId
-    interface IAggregatePayload
+
+    interface IAggregatePayload with
+        member this.CreateInitialPayload() = Client("", "", Guid.Empty)
+
     new() = Client("", "", Guid.Empty)
 
 type CreateClient =

@@ -6,4 +6,5 @@ public record Product(string Name, string Code, decimal Price) : IAggregatePaylo
     public Product() : this(string.Empty, string.Empty, 0)
     {
     }
+    public static IAggregatePayloadCommon CreateInitialPayload() => new Product();
 }

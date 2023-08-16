@@ -578,7 +578,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
     }
 
     private async Task CheckProjectionSnapshots<TAggregatePayload>(List<SnapshotDocument> snapshots, Guid aggregateId)
-        where TAggregatePayload : ISingleProjectionPayloadCommon, new()
+        where TAggregatePayload : class, ISingleProjectionPayloadCommon
     {
         typeof(TAggregatePayload).GetAggregatePayloadTypeFromSingleProjectionPayload();
         _testOutputHelper.WriteLine($"snapshots {typeof(TAggregatePayload).Name} {snapshots.Count} ");

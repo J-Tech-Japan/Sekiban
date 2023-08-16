@@ -6,14 +6,7 @@ public record PurchasedCartI : ICartAggregate, IAggregateSubtypePayload<ICartAgg
 {
     public DateTime PurchasedDate { get; init; } = DateTime.MinValue;
 
-    public ImmutableList<PaymentRecord> Payments
-    {
-        get;
-        init;
-    } = ImmutableList<PaymentRecord>.Empty;
-    public ImmutableSortedDictionary<int, CartItemRecordI> Items
-    {
-        get;
-        init;
-    } = ImmutableSortedDictionary<int, CartItemRecordI>.Empty;
+    public ImmutableList<PaymentRecord> Payments { get; init; } = ImmutableList<PaymentRecord>.Empty;
+    public static IAggregatePayloadCommon CreateInitialPayload() => new PurchasedCartI();
+    public ImmutableSortedDictionary<int, CartItemRecordI> Items { get; init; } = ImmutableSortedDictionary<int, CartItemRecordI>.Empty;
 }
