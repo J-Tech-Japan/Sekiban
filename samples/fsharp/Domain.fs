@@ -81,12 +81,12 @@ type CreateClientHandler(queryExecutor: IQueryExecutor) =
     interface ICommandHandler<Client, CreateClient> with
         member this.HandleCommandAsync(getAggregateState, command) =
             taskSeq {
-                let branchExistsResponse =
+                let emailExistsQueryResponse =
                     this.QueryExecutor.ExecuteAsync({ Email = command.Email })
                     |> Async.AwaitTask
                     |> Async.RunSynchronously
 
-                if branchExistsResponse.Exists then
+                if not emailExistsQueryResponse.Exists then
                     yield
                         { Name = command.Name
                           Email = command.Email
