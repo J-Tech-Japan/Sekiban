@@ -98,7 +98,13 @@ public sealed record AggregateState<TPayload> : IAggregateStateCommon where TPay
                 nameof(IAggregatePayloadCommon.CreateInitialPayload),
                 BindingFlags.Static | BindingFlags.Public);
             var created = method?.Invoke(firstAggregateType, new object?[] { });
-            return created is TPayload payload ? payload : throw new SekibanAggregateCreateFailedException(nameof(TPayload));
+            var converted = created is TPayload payload ? payload : default;
+            if (converted is not null)
+            {
+                return converted;
+            }
+            var instantiated = Activator.CreateInstance(typeof(TPayload), new object?[] { });
+            return instantiated is TPayload payload2 ? payload2 : throw new SekibanAggregateCreateFailedException(nameof(TPayload));
         }
         throw new SekibanAggregateCreateFailedException(nameof(TPayload));
     }
