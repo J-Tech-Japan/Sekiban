@@ -6,7 +6,7 @@ namespace Sekiban.Core.Query.MultiProjections;
 ///     Developers does not need to implement this interface directly.
 /// </summary>
 /// <typeparam name="TProjectionPayload"></typeparam>
-public interface IMultiProjector<TProjectionPayload> : IMultiProjectionCommon where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+public interface IMultiProjector<TProjectionPayload> : IMultiProjectionCommon where TProjectionPayload : IMultiProjectionPayloadCommon
 {
     /// <summary>
     ///     Check Event should be applied to this projection payload.

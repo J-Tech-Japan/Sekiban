@@ -21,7 +21,7 @@ public interface IMultiProjectionService
     /// <returns></returns>
     public Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjectionPayload>(
         string rootPartitionKey = ProjectionAllRootPartitions,
-        SortableUniqueIdValue? includesSortableUniqueIdValue = null) where TProjectionPayload : IMultiProjectionPayloadCommon, new();
+        SortableUniqueIdValue? includesSortableUniqueIdValue = null) where TProjectionPayload : IMultiProjectionPayloadCommon;
     /// <summary>
     ///     Get Aggregate List Projection Object
     ///     Uses all root partitions.

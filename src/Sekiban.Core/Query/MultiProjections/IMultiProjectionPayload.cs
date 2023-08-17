@@ -37,4 +37,9 @@ public interface IMultiProjectionPayload<TProjectionPayload> : IMultiProjectionP
         var genericMethod = method?.MakeGenericMethod(payloadType);
         return (TProjectionPayload?)genericMethod?.Invoke(typeof(TProjectionPayload), new object?[] { this, ev }) ?? (TProjectionPayload)this;
     }
+    /// <summary>
+    ///     Generate Default Payload in Static.
+    /// </summary>
+    /// <returns></returns>
+    public static abstract TProjectionPayload CreateInitialPayload();
 }

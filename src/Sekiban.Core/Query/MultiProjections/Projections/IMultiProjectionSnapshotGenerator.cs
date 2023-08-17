@@ -18,7 +18,7 @@ public interface IMultiProjectionSnapshotGenerator
     Task<MultiProjectionState<TProjectionPayload>> GenerateMultiProjectionSnapshotAsync<TProjection, TProjectionPayload>(
         int minimumNumberOfEventsToGenerateSnapshot,
         string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TProjection : IMultiProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new();
+        where TProjectionPayload : IMultiProjectionPayloadCommon;
     /// <summary>
     ///     Generate MultiProjection Snapshot for MultiProjection Payload
     /// </summary>
@@ -28,8 +28,7 @@ public interface IMultiProjectionSnapshotGenerator
     /// <returns></returns>
     Task<MultiProjectionState<TProjectionPayload>> GenerateMultiProjectionSnapshotAsync<TProjectionPayload>(
         int minimumNumberOfEventsToGenerateSnapshot,
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions)
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new() =>
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TProjectionPayload : IMultiProjectionPayloadCommon =>
         GenerateMultiProjectionSnapshotAsync<MultiProjection<TProjectionPayload>, TProjectionPayload>(
             minimumNumberOfEventsToGenerateSnapshot,
             rootPartitionKey);
@@ -70,5 +69,5 @@ public interface IMultiProjectionSnapshotGenerator
     /// <typeparam name="TProjectionPayload"></typeparam>
     /// <returns></returns>
     Task<MultiProjectionState<TProjectionPayload>> GetCurrentStateAsync<TProjectionPayload>(string rootPartitionKey)
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new();
+        where TProjectionPayload : IMultiProjectionPayloadCommon;
 }

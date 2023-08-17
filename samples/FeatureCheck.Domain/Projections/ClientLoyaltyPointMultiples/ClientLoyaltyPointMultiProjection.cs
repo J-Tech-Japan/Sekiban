@@ -14,10 +14,6 @@ public record ClientLoyaltyPointMultiProjection(
     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch> Branches,
     ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord> Records) : IMultiProjectionPayload<ClientLoyaltyPointMultiProjection>
 {
-    public ClientLoyaltyPointMultiProjection() : this(ImmutableList<ProjectedBranch>.Empty, ImmutableList<ProjectedRecord>.Empty)
-    {
-    }
-
     public TargetAggregatePayloadCollection GetTargetAggregatePayloads() =>
         new TargetAggregatePayloadCollection().Add<Branch, Client, LoyaltyPoint>();
     public static ClientLoyaltyPointMultiProjection? ApplyEvent<TEventPayload>(
@@ -72,6 +68,8 @@ public record ClientLoyaltyPointMultiProjection(
             _ => null
         };
     }
+    public static ClientLoyaltyPointMultiProjection CreateInitialPayload() =>
+        new(ImmutableList<ProjectedBranch>.Empty, ImmutableList<ProjectedRecord>.Empty);
 
     public record ProjectedBranch(Guid BranchId, string BranchName);
 

@@ -18,7 +18,7 @@ public interface IMultiProjection
     Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjection, TProjectionPayload>(
         string rootPartitionKey,
         SortableUniqueIdValue? includesSortableUniqueIdValue) where TProjection : IMultiProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new();
+        where TProjectionPayload : IMultiProjectionPayloadCommon;
     /// <summary>
     ///     Get Multi Projection from initial events
     ///     should not use cache / snapshots
@@ -33,7 +33,7 @@ public interface IMultiProjection
         Stream stream,
         string rootPartitionKey,
         SortableUniqueIdValue? includesSortableUniqueIdValue) where TProjection : IMultiProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new();
+        where TProjectionPayload : IMultiProjectionPayloadCommon;
 
     /// <summary>
     ///     Get Multi Projection from multiple streams
@@ -48,5 +48,5 @@ public interface IMultiProjection
         Func<Task<Stream?>> stream,
         string rootPartitionKey,
         SortableUniqueIdValue? includesSortableUniqueIdValue) where TProjection : IMultiProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new();
+        where TProjectionPayload : IMultiProjectionPayloadCommon;
 }

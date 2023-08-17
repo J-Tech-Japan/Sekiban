@@ -294,8 +294,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
 
     #region Multi Projection
     public MultiProjectionState<TMultiProjectionPayload> GetMultiProjectionState<TMultiProjectionPayload>(
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions)
-        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TMultiProjectionPayload : IMultiProjectionPayloadCommon
     {
         var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ?? throw new Exception("Failed to get Query service");
         return multiProjectionService.GetMultiProjectionAsync<TMultiProjectionPayload>(rootPartitionKey, SortableUniqueIdValue.GetSafeIdFromUtc())
@@ -305,8 +304,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
 
     public UnifiedTest<TDependencyDefinition> ThenMultiProjectionPayloadIsFromFile<TMultiProjectionPayload>(
         string filename,
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions)
-        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TMultiProjectionPayload : IMultiProjectionPayloadCommon
     {
         using var openStream = File.OpenRead(filename);
         var projection = JsonSerializer.Deserialize<TMultiProjectionPayload>(openStream);
@@ -318,12 +316,12 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     }
 
     public UnifiedTest<TDependencyDefinition> ThenGetMultiProjectionPayload<TMultiProjectionPayload>(Action<TMultiProjectionPayload> payloadAction)
-        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new() =>
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon =>
         ThenGetMultiProjectionPayload(IMultiProjectionService.ProjectionAllRootPartitions, payloadAction);
 
     public UnifiedTest<TDependencyDefinition> ThenGetMultiProjectionPayload<TMultiProjectionPayload>(
         string rootPartitionKey,
-        Action<TMultiProjectionPayload> payloadAction) where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
+        Action<TMultiProjectionPayload> payloadAction) where TMultiProjectionPayload : IMultiProjectionPayloadCommon
     {
         payloadAction(GetMultiProjectionState<TMultiProjectionPayload>(rootPartitionKey).Payload);
         return this;
@@ -331,18 +329,18 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
 
     public UnifiedTest<TDependencyDefinition> ThenGetMultiProjectionState<TMultiProjectionPayload>(
         string rootPartitionKey,
-        Action<MultiProjectionState<TMultiProjectionPayload>> stateAction) where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
+        Action<MultiProjectionState<TMultiProjectionPayload>> stateAction) where TMultiProjectionPayload : IMultiProjectionPayloadCommon
     {
         stateAction(GetMultiProjectionState<TMultiProjectionPayload>(rootPartitionKey));
         return this;
     }
 
     public UnifiedTest<TDependencyDefinition> ThenMultiProjectionStateIs<TMultiProjectionPayload>(MultiProjectionState<TMultiProjectionPayload> state)
-        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new() =>
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon =>
         ThenMultiProjectionStateIs(IMultiProjectionService.ProjectionAllRootPartitions, state);
     public UnifiedTest<TDependencyDefinition> ThenMultiProjectionStateIs<TMultiProjectionPayload>(
         string rootPartitionKey,
-        MultiProjectionState<TMultiProjectionPayload> state) where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
+        MultiProjectionState<TMultiProjectionPayload> state) where TMultiProjectionPayload : IMultiProjectionPayloadCommon
     {
         var actual = GetMultiProjectionState<TMultiProjectionPayload>(rootPartitionKey);
         var expected = state with { LastEventId = actual.LastEventId, LastSortableUniqueId = actual.LastSortableUniqueId, Version = actual.Version };
@@ -354,8 +352,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
 
     public UnifiedTest<TDependencyDefinition> ThenMultiProjectionPayloadIs<TMultiProjectionPayload>(
         TMultiProjectionPayload payload,
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions)
-        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TMultiProjectionPayload : IMultiProjectionPayloadCommon
     {
         var actual = GetMultiProjectionState<TMultiProjectionPayload>(rootPartitionKey).Payload;
         var expected = payload;
@@ -367,8 +364,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
 
     public UnifiedTest<TDependencyDefinition> ThenMultiProjectionStateIsFromFile<TMultiProjectionPayload>(
         string filename,
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions)
-        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TMultiProjectionPayload : IMultiProjectionPayloadCommon
     {
         using var openStream = File.OpenRead(filename);
         var projection = JsonSerializer.Deserialize<MultiProjectionState<TMultiProjectionPayload>>(openStream);
@@ -381,8 +377,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
 
     public UnifiedTest<TDependencyDefinition> WriteMultiProjectionStateToFile<TMultiProjectionPayload>(
         string filename,
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions)
-        where TMultiProjectionPayload : IMultiProjectionPayloadCommon, new()
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TMultiProjectionPayload : IMultiProjectionPayloadCommon
     {
         var json = SekibanJsonHelper.Serialize(GetMultiProjectionState<TMultiProjectionPayload>(rootPartitionKey));
         File.WriteAllTextAsync(filename, json);

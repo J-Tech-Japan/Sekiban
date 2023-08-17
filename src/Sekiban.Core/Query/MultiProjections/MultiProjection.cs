@@ -1,16 +1,18 @@
 using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
+using Sekiban.Core.Types;
+using System.Reflection;
 namespace Sekiban.Core.Query.MultiProjections;
 
 /// <summary>
 ///     General Multi Projection Payload's projector
 /// </summary>
 /// <typeparam name="TProjectionPayload"></typeparam>
-public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPayload> where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPayload> where TProjectionPayload : IMultiProjectionPayloadCommon
 {
     private MultiProjectionState<TProjectionPayload> state = new(
-        new TProjectionPayload(),
+        GeneratePayload(),
         Guid.Empty,
         string.Empty,
         0,
@@ -31,7 +33,6 @@ public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPa
         }
         state = state.ApplyEvent(ev);
     }
-
     public MultiProjectionState<TProjectionPayload> ToState() => state;
     public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().IsLaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
 
@@ -47,4 +48,19 @@ public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPa
         return projectionPayload.GetTargetAggregatePayloads().GetAggregateNames();
     }
     public string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();
+    private static TProjectionPayload GeneratePayload()
+    {
+        var payloadType = typeof(TProjectionPayload);
+        if (payloadType.IsMultiProjectionPayloadType())
+        {
+            var method = payloadType.GetMethod(
+                nameof(IMultiProjectionPayload<TProjectionPayload>.CreateInitialPayload),
+                BindingFlags.Static | BindingFlags.Public);
+            var created = method?.Invoke(payloadType, new object?[] { });
+            return created is TProjectionPayload projectionPayload
+                ? projectionPayload
+                : throw new SekibanMultiProjectionPayloadCreateFailedException(nameof(payloadType));
+        }
+        throw new SekibanMultiProjectionPayloadCreateFailedException(nameof(payloadType));
+    }
 }
