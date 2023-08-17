@@ -14,7 +14,7 @@ namespace Sekiban.Core.Dependency;
 ///     AddAggregate
 /// </summary>
 /// <typeparam name="TAggregatePayload"></typeparam>
-public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDependencyDefinition where TAggregatePayload : IAggregatePayloadCommon
+public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDependencyDefinition where TAggregatePayload : IAggregatePayloadCommonBase
 {
     /// <summary>
     ///     Subtypes of this aggregate, edit only from method AddSubType
@@ -88,13 +88,13 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
     /// <summary>
     ///     Add Command Handler to Aggregate
     /// </summary>
-    /// <typeparam name="TCreateCommand">Target Command</typeparam>
+    /// <typeparam name="TCommand">Target Command</typeparam>
     /// <typeparam name="TCommandHandler">Command Handler for Target Command</typeparam>
     /// <returns>Self for method chain</returns>
-    public AggregateDependencyDefinition<TAggregatePayload> AddCommandHandler<TCreateCommand, TCommandHandler>()
-        where TCreateCommand : ICommand<TAggregatePayload>, new() where TCommandHandler : ICommandHandlerCommon<TAggregatePayload, TCreateCommand>
+    public AggregateDependencyDefinition<TAggregatePayload> AddCommandHandler<TCommand, TCommandHandler>()
+        where TCommand : ICommand<TAggregatePayload> where TCommandHandler : ICommandHandlerCommon<TAggregatePayload, TCommand>
     {
-        SelfCommandTypes = SelfCommandTypes.Add((typeof(ICommandHandlerCommon<TAggregatePayload, TCreateCommand>), typeof(TCommandHandler)));
+        SelfCommandTypes = SelfCommandTypes.Add((typeof(ICommandHandlerCommon<TAggregatePayload, TCommand>), typeof(TCommandHandler)));
         return this;
     }
     /// <summary>
@@ -204,7 +204,7 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
 
     public AggregateDependencyDefinition<TAggregatePayload> AddSubtype<TSubAggregatePayload>(
         Action<AggregateSubtypeDependencyDefinition<TAggregatePayload, TSubAggregatePayload>> subAggregateDefinitionAction)
-        where TSubAggregatePayload : TAggregatePayload
+        where TSubAggregatePayload : IAggregateSubtypePayload<TAggregatePayload>, new()
     {
         var subAggregate = new AggregateSubtypeDependencyDefinition<TAggregatePayload, TSubAggregatePayload>(this);
         SubAggregates = SubAggregates.Add(subAggregate);

@@ -8,7 +8,7 @@ namespace Sekiban.Web.Controllers.Bases;
 [ApiController]
 [Produces("application/json")]
 public class BaseSingleProjectionController<TSingleProjectionPayload> : ControllerBase
-    where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
+    where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly IWebDependencyDefinition _webDependencyDefinition;

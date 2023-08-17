@@ -21,11 +21,6 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
     private ImmutableList<Type> GeneralListQueryTypes { get; set; } = ImmutableList<Type>.Empty;
     private ImmutableList<Assembly> Assemblies { get; set; } = ImmutableList<Assembly>.Empty;
     private ImmutableList<Action<IServiceCollection>> ServiceActions { get; set; } = ImmutableList<Action<IServiceCollection>>.Empty;
-    protected DomainDependencyDefinitionBase()
-    {
-        // ReSharper disable once VirtualMemberCallInConstructor
-        Define();
-    }
     public abstract Assembly GetExecutingAssembly();
 
     public IEnumerable<(Type serviceType, Type? implementationType)> GetCommandDependencies()
@@ -73,6 +68,8 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
             new SekibanAggregateTypes(GetAssembliesForOptions()),
             GetCommandDependencies().Concat(GetSubscriberDependencies()));
 
+    public abstract void Define();
+
 
     public void AddServices(Action<IServiceCollection> serviceAction)
     {
@@ -82,6 +79,7 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
     public DomainDependencyDefinitionBase AddDependency<TDependency>() where TDependency : DomainDependencyDefinitionBase, new()
     {
         var toAdd = new TDependency();
+        toAdd.Define();
         AggregateDefinitions = AggregateDefinitions.Concat(toAdd.AggregateDefinitions).ToImmutableList();
         MultiProjectionQueryTypes = MultiProjectionQueryTypes.Concat(toAdd.MultiProjectionQueryTypes).ToImmutableList();
         MultiProjectionListQueryTypes = MultiProjectionListQueryTypes.Concat(toAdd.MultiProjectionListQueryTypes).ToImmutableList();
@@ -94,8 +92,6 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
         return AggregateDefinitions.SelectMany(s => s.SingleProjectionTypes);
     }
 
-    protected abstract void Define();
-
     public IEnumerable<Type> GetAggregatePayloadTypes()
     {
         return AggregateDefinitions.Select(s => s.AggregateType);
@@ -105,7 +101,7 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
         return AggregateDefinitions.SelectMany(s => s.AggregateSubtypes);
     }
 
-    protected AggregateDependencyDefinition<TAggregatePayload> AddAggregate<TAggregatePayload>() where TAggregatePayload : IAggregatePayload
+    protected AggregateDependencyDefinition<TAggregatePayload> AddAggregate<TAggregatePayload>() where TAggregatePayload : IAggregatePayloadCommonBase
     {
         if (AggregateDefinitions.SingleOrDefault(s => s.AggregateType == typeof(TAggregatePayload)) is
             AggregateDependencyDefinition<TAggregatePayload> existing)

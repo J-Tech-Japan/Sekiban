@@ -15,7 +15,7 @@ public interface ISingleProjectionSnapshotAccessor
     /// <typeparam name="TPayload"></typeparam>
     /// <returns></returns>
     Task<SnapshotDocument?> SnapshotDocumentFromAggregateStateAsync<TPayload>(AggregateState<TPayload> state)
-        where TPayload : IAggregatePayloadCommon;
+        where TPayload : IAggregatePayloadCommonBase;
     /// <summary>
     ///     Create Snapshot document from single projection state.
     /// </summary>
@@ -24,7 +24,7 @@ public interface ISingleProjectionSnapshotAccessor
     /// <typeparam name="TPayload"></typeparam>
     /// <returns></returns>
     Task<SnapshotDocument?> SnapshotDocumentFromSingleProjectionStateAsync<TPayload>(SingleProjectionState<TPayload> state, Type aggregateType)
-        where TPayload : ISingleProjectionPayloadCommon, new();
+        where TPayload : class, ISingleProjectionPayloadCommon;
     /// <summary>
     ///     Fill snapshot document with blob.
     ///     When blob size is big, it will delegate to the blob storage.

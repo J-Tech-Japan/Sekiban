@@ -10,7 +10,7 @@ namespace Sekiban.Core.Command;
 /// <typeparam name="TAggregatePayload">Target Aggregate</typeparam>
 /// <typeparam name="TCommand">Target Command</typeparam>
 public interface ICommandHandler<TAggregatePayload, TCommand> : ICommandHandlerCommon<TAggregatePayload, TCommand>
-    where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayload>
+    where TAggregatePayload : IAggregatePayloadCommonBase where TCommand : ICommand<TAggregatePayload>
 {
     /// <summary>
     ///     A Command Handler.

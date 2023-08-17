@@ -1,4 +1,5 @@
 using FeatureCheck.Domain.Aggregates.Clients.Events;
+using Sekiban.Core.Aggregate;
 using Sekiban.Core.Events;
 using Sekiban.Core.Query.SingleProjections;
 using System.Collections.Immutable;
@@ -13,9 +14,6 @@ public record ClientNameHistoryProjection(
     ImmutableList<ClientNameHistoryProjection.ClientNameHistoryProjectionRecord> ClientNames,
     string ClientEmail) : IDeletableSingleProjectionPayload<Client, ClientNameHistoryProjection>
 {
-    public ClientNameHistoryProjection() : this(Guid.Empty, ImmutableList<ClientNameHistoryProjectionRecord>.Empty, string.Empty)
-    {
-    }
     public bool IsDeleted { get; init; }
     public static ClientNameHistoryProjection? ApplyEvent<TEventPayload>(ClientNameHistoryProjection projectionPayload, Event<TEventPayload> ev)
         where TEventPayload : IEventPayloadCommon
@@ -40,6 +38,8 @@ public record ClientNameHistoryProjection(
         };
         return func?.Invoke();
     }
+    public static IAggregatePayloadCommon CreateInitialPayload() =>
+        new ClientNameHistoryProjection(Guid.Empty, ImmutableList<ClientNameHistoryProjectionRecord>.Empty, string.Empty);
 
     public record ClientNameHistoryProjectionRecord(string Name, DateTime DateChanged);
 }

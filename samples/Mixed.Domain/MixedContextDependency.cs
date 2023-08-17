@@ -8,7 +8,7 @@ public class MixedContextDependency : DomainDependencyDefinitionBase
 {
     public override Assembly GetExecutingAssembly() => Assembly.GetExecutingAssembly();
 
-    protected override void Define()
+    public override void Define()
     {
         AddDependency<ShippingDependency>()
             .AddDependency<WarehouseDependency>();

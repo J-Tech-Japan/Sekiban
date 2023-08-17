@@ -20,4 +20,5 @@ public record DissolvableEventsProjection : IMultiProjectionPayload<DissolvableE
             },
             _ => null
         };
+    public static DissolvableEventsProjection CreateInitialPayload() => new();
 }

@@ -5,13 +5,13 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <OutputType>Library</OutputType>
         <PackageId>Sekiban.Web</PackageId>
-        <Version>0.13.6</Version>
+        <Version>0.14.0</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework WebHelper</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.13.6</PackageVersion>
-        <Description>Add pdb symbols</Description>
+        <PackageVersion>0.14.0</PackageVersion>
+        <Description>Default Constructor not necesary.</Description>
         <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
         <LangVersion>preview</LangVersion>
         <OpenApiGenerateDocuments>false</OpenApiGenerateDocuments>

@@ -9,7 +9,7 @@ public class ShippingDependency : DomainDependencyDefinitionBase
 {
     public override Assembly GetExecutingAssembly() => Assembly.GetExecutingAssembly();
 
-    protected override void Define()
+    public override void Define()
     {
         AddAggregate<Product>()
             .AddCommandHandler<CreateProduct, CreateProduct.Handler>()

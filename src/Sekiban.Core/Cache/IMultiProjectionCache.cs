@@ -21,7 +21,7 @@ public interface IMultiProjectionCache
     public void Set<TProjection, TProjectionPayload>(
         string rootPartitionKey,
         MultipleMemoryProjectionContainer<TProjection, TProjectionPayload> container) where TProjection : IMultiProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new();
+        where TProjectionPayload : IMultiProjectionPayloadCommon;
 
     /// <summary>
     ///     Get a projection container from cache
@@ -31,7 +31,7 @@ public interface IMultiProjectionCache
     /// <typeparam name="TProjectionPayload"></typeparam>
     /// <returns></returns>
     public MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>? Get<TProjection, TProjectionPayload>(string rootPartitionKey)
-        where TProjection : IMultiProjector<TProjectionPayload>, new() where TProjectionPayload : IMultiProjectionPayloadCommon, new();
+        where TProjection : IMultiProjector<TProjectionPayload>, new() where TProjectionPayload : IMultiProjectionPayloadCommon;
 
     /// <summary>
     ///     Get aggregate list from cache
@@ -42,7 +42,7 @@ public interface IMultiProjectionCache
     public MultipleMemoryProjectionContainer<SingleProjectionListProjector<Aggregate<TAggregatePayload>,
             AggregateState<TAggregatePayload>, DefaultSingleProjector<TAggregatePayload>>,
         SingleProjectionListState<AggregateState<TAggregatePayload>>>?
-        GetAggregateList<TAggregatePayload>(string rootPartitionKey) where TAggregatePayload : IAggregatePayloadCommon, new() =>
+        GetAggregateList<TAggregatePayload>(string rootPartitionKey) where TAggregatePayload : IAggregatePayloadCommon =>
         Get<SingleProjectionListProjector<Aggregate<TAggregatePayload>, AggregateState<TAggregatePayload>, DefaultSingleProjector<TAggregatePayload>>,
             SingleProjectionListState<AggregateState<TAggregatePayload>>>(rootPartitionKey);
 
@@ -57,7 +57,7 @@ public interface IMultiProjectionCache
             SingleProjectionListProjector<SingleProjection<TSingleProjectionPayload>, SingleProjectionState<TSingleProjectionPayload>,
                 SingleProjection<TSingleProjectionPayload>>, SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>?
         GetSingleProjectionList<TSingleProjectionPayload>(string rootPartitionKey)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new() =>
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon =>
         Get<SingleProjectionListProjector<SingleProjection<TSingleProjectionPayload>, SingleProjectionState<TSingleProjectionPayload>,
             SingleProjection<TSingleProjectionPayload>>, SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>(
             rootPartitionKey);

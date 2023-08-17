@@ -8,7 +8,7 @@ public class WarehouseDependency : DomainDependencyDefinitionBase
 {
     public override Assembly GetExecutingAssembly() => Assembly.GetExecutingAssembly();
 
-    protected override void Define()
+    public override void Define()
     {
         AddAggregate<ProductStock>()
             .AddCommandHandler<AddProductStock, AddProductStock.Handler>()

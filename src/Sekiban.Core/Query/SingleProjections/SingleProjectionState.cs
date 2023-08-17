@@ -19,7 +19,7 @@ public record SingleProjectionState<TPayload>(
     string LastSortableUniqueId,
     int AppliedSnapshotVersion,
     int Version,
-    string RootPartitionKey) : ISingleProjectionPayloadCommon, IAggregateStateCommon where TPayload : ISingleProjectionPayloadCommon
+    string RootPartitionKey) : IAggregateStateCommon where TPayload : ISingleProjectionPayloadCommon
 {
     public string PayloadTypeName => Payload.GetType().Name;
 

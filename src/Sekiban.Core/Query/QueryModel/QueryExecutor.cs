@@ -127,7 +127,7 @@ public class QueryExecutor : IQueryExecutor
     }
 
     public async Task<TQueryResponse> ForMultiProjectionQueryAsync<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon
         where TQuery : IMultiProjectionQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
@@ -140,7 +140,7 @@ public class QueryExecutor : IQueryExecutor
 
     public async Task<ListQueryResult<TQueryResponse>>
         ForMultiProjectionListQueryAsync<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon
         where TQuery : IMultiProjectionListQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IListQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
@@ -194,7 +194,7 @@ public class QueryExecutor : IQueryExecutor
 
     public async Task<ListQueryResult<TQueryResponse>>
         ForSingleProjectionListQueryAsync<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
-        where TProjectionPayload : ISingleProjectionPayloadCommon, new()
+        where TProjectionPayload : class, ISingleProjectionPayloadCommon
         where TQuery : ISingleProjectionListQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IListQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
@@ -208,7 +208,7 @@ public class QueryExecutor : IQueryExecutor
 
     public async Task<TQueryResponse>
         ForSingleProjectionQueryAsync<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse

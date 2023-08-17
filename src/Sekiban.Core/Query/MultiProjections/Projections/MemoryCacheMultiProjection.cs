@@ -38,7 +38,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
     public async Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjection, TProjectionPayload>(
         string rootPartitionKey,
         SortableUniqueIdValue? includesSortableUniqueIdValue) where TProjection : IMultiProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon
     {
         var savedContainerCache = multiProjectionCache.Get<TProjection, TProjectionPayload>(rootPartitionKey);
         var savedContainerBlob
@@ -153,7 +153,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
         Stream stream,
         string rootPartitionKey,
         SortableUniqueIdValue? includesSortableUniqueIdValue) where TProjection : IMultiProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon
     {
         await Task.CompletedTask;
         var list = JsonSerializer.Deserialize<List<JsonElement>>(stream) ?? throw new Exception("Could not deserialize file");
@@ -186,7 +186,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
         Func<Task<Stream?>> stream,
         string rootPartitionKey,
         SortableUniqueIdValue? includesSortableUniqueIdValue) where TProjection : IMultiProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon
     {
         var eventStream = await stream();
         var multiProjectionState = new MultiProjectionState<TProjectionPayload>();
@@ -226,7 +226,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
 
     private async Task<MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>?>
         GetContainerFromSnapshot<TProjection, TProjectionPayload>(string rootPartitionKey)
-        where TProjection : IMultiProjector<TProjectionPayload>, new() where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+        where TProjection : IMultiProjector<TProjectionPayload>, new() where TProjectionPayload : IMultiProjectionPayloadCommon
     {
         var state = await multiProjectionSnapshotGenerator.GetCurrentStateAsync<TProjectionPayload>(rootPartitionKey);
         if (state.Version == 0)
@@ -246,7 +246,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
     }
 
     private async Task<MultiProjectionState<TProjectionPayload>> GetInitialProjection<TProjection, TProjectionPayload>(string rootPartitionKey)
-        where TProjection : IMultiProjector<TProjectionPayload>, new() where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+        where TProjection : IMultiProjector<TProjectionPayload>, new() where TProjectionPayload : IMultiProjectionPayloadCommon
     {
         var projector = new TProjection();
         var container = new MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>();

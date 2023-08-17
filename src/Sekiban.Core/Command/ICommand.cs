@@ -8,7 +8,7 @@ namespace Sekiban.Core.Command;
 // ReSharper disable once UnusedTypeParameter
 [CommandRootPartitionValidation]
 // ReSharper disable once UnusedTypeParameter
-public interface ICommand<TAggregatePayload> : ICommandCommon where TAggregatePayload : IAggregatePayloadCommon
+public interface ICommand<TAggregatePayload> : ICommandCommon where TAggregatePayload : IAggregatePayloadCommonBase
 {
     /// <summary>
     ///     Set Aggregate Id for the Command.

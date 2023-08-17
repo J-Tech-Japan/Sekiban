@@ -16,7 +16,7 @@ using System.Text.Json;
 using Xunit;
 namespace Sekiban.Testing.SingleProjections;
 
-public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggregatePayload> where TAggregatePayload : IAggregatePayloadCommon
+public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggregatePayload> where TAggregatePayload : IAggregatePayloadCommonBase
 {
     private readonly TestCommandExecutor _commandExecutor;
     private readonly IServiceProvider _serviceProvider;
@@ -500,7 +500,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     private IAggregateTestHelper<TAggregatePayload> WhenCommandPrivate<TAggregatePayloadIn, TCommand>(
         Func<AggregateState<TAggregatePayload>, TCommand> commandFunc,
-        bool withPublish) where TAggregatePayloadIn : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayloadIn>
+        bool withPublish) where TAggregatePayloadIn : IAggregatePayloadCommonBase where TCommand : ICommand<TAggregatePayloadIn>
     {
         ResetBeforeCommand();
         var handler
@@ -680,7 +680,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     #region Single Projection
     private SingleProjectionState<TSingleProjectionPayload> GetSingleProjectionState<TSingleProjectionPayload>()
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
         var singleProjection = _serviceProvider.GetService<IAggregateLoader>() ?? throw new Exception("Failed to get single projection service");
         return singleProjection.AsSingleProjectionStateAsync<TSingleProjectionPayload>(GetAggregateId()).Result ??
@@ -688,7 +688,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     }
 
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionStateIs<TSingleProjectionPayload>(
-        SingleProjectionState<TSingleProjectionPayload> state) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
+        SingleProjectionState<TSingleProjectionPayload> state) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
         var actual = GetSingleProjectionState<TSingleProjectionPayload>();
         var expected = state with
@@ -705,7 +705,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     }
 
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIs<TSingleProjectionPayload>(TSingleProjectionPayload payload)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
         var actual = GetSingleProjectionState<TSingleProjectionPayload>().Payload;
         var expected = payload;
@@ -716,21 +716,21 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     }
 
     public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionPayload<TSingleProjectionPayload>(
-        Action<TSingleProjectionPayload> payloadAction) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
+        Action<TSingleProjectionPayload> payloadAction) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
         payloadAction(GetSingleProjectionState<TSingleProjectionPayload>().Payload);
         return this;
     }
 
     public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionState<TSingleProjectionPayload>(
-        Action<SingleProjectionState<TSingleProjectionPayload>> stateAction) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
+        Action<SingleProjectionState<TSingleProjectionPayload>> stateAction) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
         stateAction(GetSingleProjectionState<TSingleProjectionPayload>());
         return this;
     }
 
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIsFromJson<TSingleProjectionPayload>(string payloadJson)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
         var actual = GetSingleProjectionState<TSingleProjectionPayload>().Payload;
         var payload = JsonSerializer.Deserialize<TSingleProjectionPayload>(payloadJson);
@@ -746,7 +746,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     }
 
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIsFromFile<TSingleProjectionPayload>(string payloadFilename)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
         using var openStream = File.OpenRead(payloadFilename);
         var actual = GetSingleProjectionState<TSingleProjectionPayload>().Payload;
@@ -763,7 +763,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     }
 
     public IAggregateTestHelper<TAggregatePayload> WriteSingleProjectionStateToFile<TSingleProjectionPayload>(string filename)
-        where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
         var state = GetSingleProjectionState<TSingleProjectionPayload>();
         var json = SekibanJsonHelper.Serialize(state);

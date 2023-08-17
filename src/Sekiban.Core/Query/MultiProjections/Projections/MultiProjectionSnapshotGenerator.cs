@@ -1,9 +1,11 @@
 using Microsoft.Extensions.Logging;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.ValueObjects;
+using Sekiban.Core.Exceptions;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Snapshot;
 using Sekiban.Core.Types;
+using System.Reflection;
 using System.Text;
 namespace Sekiban.Core.Query.MultiProjections.Projections;
 
@@ -20,7 +22,7 @@ public class MultiProjectionSnapshotGenerator(
     public async Task<MultiProjectionState<TProjectionPayload>> GenerateMultiProjectionSnapshotAsync<TProjection, TProjectionPayload>(
         int minimumNumberOfEventsToGenerateSnapshot,
         string rootPartitionKey) where TProjection : IMultiProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon
     {
         var projector = new TProjection();
         // if there is snapshot, load it, if not make a new one
@@ -78,11 +80,10 @@ public class MultiProjectionSnapshotGenerator(
         }
         return projector.ToState();
     }
-
     public async Task<MultiProjectionState<TProjectionPayload>> GetCurrentStateAsync<TProjectionPayload>(string rootPartitionKey)
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon
     {
-        var payload = new TProjectionPayload();
+        var payload = GeneratePayload<TProjectionPayload>();
         var snapshotDocument = await documentRepository.GetLatestSnapshotForMultiProjectionAsync(
             typeof(TProjectionPayload),
             payload.GetPayloadVersionIdentifier(),
@@ -113,6 +114,21 @@ public class MultiProjectionSnapshotGenerator(
             }
         }
         return new MultiProjectionState<TProjectionPayload>();
+    }
+    private static TProjectionPayload GeneratePayload<TProjectionPayload>() where TProjectionPayload : IMultiProjectionPayloadCommon
+    {
+        var payloadType = typeof(TProjectionPayload);
+        if (payloadType.IsMultiProjectionPayloadType())
+        {
+            var method = payloadType.GetMethod(
+                nameof(IMultiProjectionPayloadGeneratePayload<TProjectionPayload>.CreateInitialPayload),
+                BindingFlags.Static | BindingFlags.Public);
+            var created = method?.Invoke(payloadType, new object?[] { });
+            return created is TProjectionPayload projectionPayload
+                ? projectionPayload
+                : throw new SekibanMultiProjectionPayloadCreateFailedException(payloadType.FullName ?? "");
+        }
+        throw new SekibanMultiProjectionPayloadCreateFailedException(payloadType?.FullName ?? "");
     }
 
     public string FilenameForSnapshot(Type projectionPayload, Guid id, SortableUniqueIdValue sortableUniqueId) =>

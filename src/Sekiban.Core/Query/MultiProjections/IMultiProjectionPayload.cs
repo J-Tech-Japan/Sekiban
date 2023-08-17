@@ -6,7 +6,8 @@ namespace Sekiban.Core.Query.MultiProjections;
 ///     Interface for MultiProjectionPayload
 /// </summary>
 /// <typeparam name="TProjectionPayload"></typeparam>
-public interface IMultiProjectionPayload<TProjectionPayload> : IMultiProjectionPayloadCommon where TProjectionPayload : IMultiProjectionPayloadCommon
+public interface IMultiProjectionPayload<TProjectionPayload> : IMultiProjectionPayloadGeneratePayload<TProjectionPayload>
+    where TProjectionPayload : IMultiProjectionPayloadCommon
 {
     /// <summary>
     ///     MultiProjection can set which AggregateType to use for the projection.

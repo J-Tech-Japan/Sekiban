@@ -15,28 +15,15 @@ namespace Sekiban.Core.Command;
 ///     System use implementation of the <see cref="ICommandExecutor" />
 ///     Application developer does not need to use this class directly
 /// </summary>
-public class CommandExecutor : ICommandExecutor
+public class CommandExecutor(
+    IDocumentWriter documentWriter,
+    IServiceProvider serviceProvider,
+    IAggregateLoader aggregateLoader,
+    IUserInformationFactory userInformationFactory,
+    ICommandExecuteAwaiter commandExecuteAwaiter) : ICommandExecutor
 {
     private static readonly SemaphoreSlim SemaphoreInMemory = new(1, 1);
     private static readonly SemaphoreSlim SemaphoreAwaiter = new(1, 1);
-    private readonly IAggregateLoader _aggregateLoader;
-    private readonly ICommandExecuteAwaiter _commandExecuteAwaiter;
-    private readonly IDocumentWriter _documentWriter;
-    private readonly IServiceProvider _serviceProvider;
-    private readonly IUserInformationFactory _userInformationFactory;
-    public CommandExecutor(
-        IDocumentWriter documentWriter,
-        IServiceProvider serviceProvider,
-        IAggregateLoader aggregateLoader,
-        IUserInformationFactory userInformationFactory,
-        ICommandExecuteAwaiter commandExecuteAwaiter)
-    {
-        _documentWriter = documentWriter;
-        _serviceProvider = serviceProvider;
-        _aggregateLoader = aggregateLoader;
-        _userInformationFactory = userInformationFactory;
-        _commandExecuteAwaiter = commandExecuteAwaiter;
-    }
     public async Task<CommandExecutorResponse> ExecCommandAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null)
         where TCommand : ICommandCommon
     {
@@ -90,7 +77,7 @@ public class CommandExecutor : ICommandExecutor
 
     public async Task<(CommandExecutorResponse, List<IEvent>)> ExecCommandAsyncTyped<TAggregatePayload, TCommand>(
         TCommand command,
-        List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayload>
+        List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayloadCommonBase where TCommand : ICommand<TAggregatePayload>
     {
         var validationResult = command.ValidateProperties().ToList();
         if (validationResult.Any())
@@ -108,7 +95,7 @@ public class CommandExecutor : ICommandExecutor
 
     public async Task<(CommandExecutorResponse, List<IEvent>)> ExecCommandWithoutValidationAsyncTyped<TAggregatePayload, TCommand>(
         TCommand command,
-        List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayload>
+        List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayloadCommonBase where TCommand : ICommand<TAggregatePayload>
     {
         var rootPartitionKey = command.GetRootPartitionKey();
         if (!CommandRootPartitionValidationAttribute.IsValidRootPartitionKey(rootPartitionKey))
@@ -118,7 +105,7 @@ public class CommandExecutor : ICommandExecutor
         var commandDocument
             = new CommandDocument<TCommand>(Guid.Empty, command, typeof(TAggregatePayload), rootPartitionKey, callHistories)
             {
-                ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
+                ExecutedUser = userInformationFactory.GetCurrentUserInformation()
             };
         List<IEvent> events;
         var commandToSave = command is ICleanupNecessaryCommand<TCommand> cleanupCommand ? cleanupCommand.CleanupCommand(command) : command;
@@ -134,7 +121,7 @@ public class CommandExecutor : ICommandExecutor
         {
 
             var handler
-                = _serviceProvider.GetService(typeof(ICommandHandlerCommon<TAggregatePayload, TCommand>)) as
+                = serviceProvider.GetService(typeof(ICommandHandlerCommon<TAggregatePayload, TCommand>)) as
                     ICommandHandlerCommon<TAggregatePayload, TCommand>;
             if (handler is null)
             {
@@ -143,14 +130,14 @@ public class CommandExecutor : ICommandExecutor
             if (command is not IOnlyPublishingCommandCommon)
             {
                 await SemaphoreAwaiter.WaitAsync();
-                await _commandExecuteAwaiter.WaitUntilOtherThreadFinished<TAggregatePayload>(aggregateId);
-                await _commandExecuteAwaiter.StartTaskAsync<TAggregatePayload>(aggregateId);
+                await commandExecuteAwaiter.WaitUntilOtherThreadFinished<TAggregatePayload>(aggregateId);
+                await commandExecuteAwaiter.StartTaskAsync<TAggregatePayload>(aggregateId);
                 SemaphoreAwaiter.Release();
             }
             commandDocument
                 = new CommandDocument<TCommand>(aggregateId, command, typeof(TAggregatePayload), rootPartitionKey, callHistories)
                 {
-                    ExecutedUser = _userInformationFactory.GetCurrentUserInformation()
+                    ExecutedUser = userInformationFactory.GetCurrentUserInformation()
                 };
             if (command is IOnlyPublishingCommandCommon)
             {
@@ -168,7 +155,7 @@ public class CommandExecutor : ICommandExecutor
                 lastSortableUniqueId = commandResponse.LastSortableUniqueId;
             } else
             {
-                var adapter = new CommandHandlerAdapter<TAggregatePayload, TCommand>(_aggregateLoader);
+                var adapter = new CommandHandlerAdapter<TAggregatePayload, TCommand>(aggregateLoader);
                 var commandResponse = await adapter.HandleCommandAsync(commandDocument, handler, aggregateId, rootPartitionKey);
                 events = await HandleEventsAsync<TAggregatePayload, TCommand>(commandResponse.Events, commandDocument);
                 version = commandResponse.Version;
@@ -182,8 +169,8 @@ public class CommandExecutor : ICommandExecutor
         }
         finally
         {
-            await _commandExecuteAwaiter.EndTaskAsync<TAggregatePayload>(aggregateId);
-            await _documentWriter.SaveAsync(commandDocument with { Payload = commandToSave }, typeof(TAggregatePayload));
+            await commandExecuteAwaiter.EndTaskAsync<TAggregatePayload>(aggregateId);
+            await documentWriter.SaveAsync(commandDocument with { Payload = commandToSave }, typeof(TAggregatePayload));
             if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
             {
                 SemaphoreInMemory.Release();
@@ -208,7 +195,7 @@ public class CommandExecutor : ICommandExecutor
 
     private async Task<List<IEvent>> HandleEventsAsync<TAggregatePayload, TCommand>(
         IReadOnlyCollection<IEvent> events,
-        CommandDocument<TCommand> commandDocument) where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayload>
+        CommandDocument<TCommand> commandDocument) where TAggregatePayload : IAggregatePayloadCommonBase where TCommand : ICommand<TAggregatePayload>
     {
         var toReturnEvents = new List<IEvent>();
         if (!events.Any())
@@ -220,7 +207,7 @@ public class CommandExecutor : ICommandExecutor
             ev.CallHistories.AddRange(commandDocument.GetCallHistoriesIncludesItself());
         }
         toReturnEvents.AddRange(events);
-        await _documentWriter.SaveAndPublishEvents(events, typeof(TAggregatePayload));
+        await documentWriter.SaveAndPublishEvents(events, typeof(TAggregatePayload));
         return toReturnEvents;
     }
 }

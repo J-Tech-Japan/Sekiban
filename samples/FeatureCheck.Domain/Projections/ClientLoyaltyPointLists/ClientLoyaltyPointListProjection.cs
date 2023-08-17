@@ -12,12 +12,9 @@ namespace FeatureCheck.Domain.Projections.ClientLoyaltyPointLists;
 
 public record ClientLoyaltyPointListProjection(
     ImmutableList<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> Records,
-    ImmutableList<ClientLoyaltyPointListProjection.ProjectedBranchInternal> Branches) : IMultiProjectionPayload<ClientLoyaltyPointListProjection>
+    ImmutableList<ClientLoyaltyPointListProjection.ProjectedBranchInternal> Branches) : IMultiProjectionPayload<
+    ClientLoyaltyPointListProjection>
 {
-    public ClientLoyaltyPointListProjection() : this(ImmutableList<ClientLoyaltyPointListRecord>.Empty, ImmutableList<ProjectedBranchInternal>.Empty)
-    {
-    }
-
     public TargetAggregatePayloadCollection GetTargetAggregatePayloads() =>
         new TargetAggregatePayloadCollection().Add<Branch>().Add<Client>().Add<LoyaltyPoint>();
 
@@ -73,6 +70,8 @@ public record ClientLoyaltyPointListProjection(
             _ => null
         };
     }
+    public static ClientLoyaltyPointListProjection CreateInitialPayload() =>
+        new(ImmutableList<ClientLoyaltyPointListRecord>.Empty, ImmutableList<ProjectedBranchInternal>.Empty);
 
     public record ClientLoyaltyPointListRecord(Guid BranchId, string BranchName, Guid ClientId, string ClientName, int Point);
 

@@ -1,7 +1,9 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
+using Sekiban.Core.Exceptions;
 using Sekiban.Core.Types;
+using System.Reflection;
 namespace Sekiban.Core.Query.SingleProjections;
 
 /// <summary>
@@ -10,9 +12,9 @@ namespace Sekiban.Core.Query.SingleProjections;
 /// </summary>
 /// <typeparam name="TProjectionPayload"></typeparam>
 public class SingleProjection<TProjectionPayload> : ISingleProjection, ISingleProjectionStateConvertible<SingleProjectionState<TProjectionPayload>>,
-    IAggregateCommon, ISingleProjector<SingleProjection<TProjectionPayload>> where TProjectionPayload : ISingleProjectionPayloadCommon, new()
+    IAggregateCommon, ISingleProjector<SingleProjection<TProjectionPayload>> where TProjectionPayload : class, ISingleProjectionPayloadCommon
 {
-    public TProjectionPayload Payload { get; set; } = new();
+    public TProjectionPayload Payload { get; set; } = CreatePayload();
     public Guid LastEventId { get; set; }
     public string LastSortableUniqueId { get; set; } = string.Empty;
     public int AppliedSnapshotVersion { get; set; }
@@ -69,7 +71,6 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection, ISinglePr
         RootPartitionKey = snapshot.RootPartitionKey;
         Payload = snapshot.GetPayload();
     }
-
     public Type GetPayloadType() => typeof(TProjectionPayload);
 
     public SingleProjection<TProjectionPayload> CreateInitialAggregate(Guid aggregateId) => new() { AggregateId = aggregateId };
@@ -81,6 +82,27 @@ public class SingleProjection<TProjectionPayload> : ISingleProjection, ISinglePr
 
     public Type GetOriginalAggregatePayloadType() =>
         typeof(TProjectionPayload).GetAggregatePayloadTypeFromSingleProjectionPayload().GetBaseAggregatePayloadTypeFromAggregate();
+    private static TProjectionPayload CreatePayload()
+    {
+        if (typeof(TProjectionPayload).GetInterfaces().Any(m => m == typeof(IAggregatePayloadCommon)))
+        {
+            var method = typeof(TProjectionPayload).GetMethod(
+                nameof(IAggregatePayloadCommon.CreateInitialPayload),
+                BindingFlags.Static | BindingFlags.Public);
+            return method?.Invoke(typeof(TProjectionPayload), new object?[] { }) as TProjectionPayload ??
+                throw new SekibanAggregateCreateFailedException(nameof(TProjectionPayload));
+        }
+        if (typeof(TProjectionPayload).DoesImplementingFromGenericInterfaceType(typeof(IParentAggregatePayload<>)))
+        {
+            var firstAggregateType = typeof(TProjectionPayload).GetFirstAggregatePayloadTypeFromAggregate();
+            var method = firstAggregateType.GetMethod(
+                nameof(IAggregatePayloadCommon.CreateInitialPayload),
+                BindingFlags.Static | BindingFlags.Public);
+            return method?.Invoke(firstAggregateType, new object?[] { }) as TProjectionPayload ??
+                throw new SekibanAggregateCreateFailedException(firstAggregateType.Name);
+        }
+        throw new SekibanAggregateCreateFailedException(nameof(TProjectionPayload));
+    }
     public bool CanApplyEvent(IEvent ev) => true;
 
 

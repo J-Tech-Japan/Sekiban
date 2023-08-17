@@ -5,7 +5,5 @@ namespace FeatureCheck.Domain.Aggregates.RecentInMemoryActivities;
 [AggregateContainerGroup(AggregateContainerGroup.InMemory)]
 public record RecentInMemoryActivity(ImmutableList<RecentInMemoryActivityRecord> LatestActivities) : IAggregatePayload
 {
-    public RecentInMemoryActivity() : this(ImmutableList<RecentInMemoryActivityRecord>.Empty)
-    {
-    }
+    public static IAggregatePayloadCommon CreateInitialPayload() => new RecentInMemoryActivity(ImmutableList<RecentInMemoryActivityRecord>.Empty);
 }

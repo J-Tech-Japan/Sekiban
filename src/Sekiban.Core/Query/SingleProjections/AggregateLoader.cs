@@ -30,7 +30,7 @@ public class AggregateLoader : IAggregateLoader
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
-        string? includesSortableUniqueId = null) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
+        string? includesSortableUniqueId = null) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
         var aggregate = await _singleProjection
             .GetAggregateAsync<SingleProjection<TSingleProjectionPayload>, SingleProjectionState<TSingleProjectionPayload>,
@@ -44,7 +44,7 @@ public class AggregateLoader : IAggregateLoader
     public async Task<SingleProjectionState<TSingleProjectionPayload>?> AsSingleProjectionStateFromInitialAsync<TSingleProjectionPayload>(
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
-        int? toVersion = null) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new()
+        int? toVersion = null) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
         var projection
             = await AsSingleProjectionStateFromInitialAsync<SingleProjection<TSingleProjectionPayload>, SingleProjection<TSingleProjectionPayload>>(
@@ -57,7 +57,7 @@ public class AggregateLoader : IAggregateLoader
     public async Task<AggregateState<TAggregatePayload>?> AsDefaultStateFromInitialAsync<TAggregatePayload>(
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
-        int? toVersion = null) where TAggregatePayload : IAggregatePayloadCommon
+        int? toVersion = null) where TAggregatePayload : IAggregatePayloadCommonBase
     {
         var aggregate = await AsAggregateFromInitialAsync<TAggregatePayload>(aggregateId, rootPartitionKey, toVersion);
         return aggregate?.ToState();
@@ -67,7 +67,7 @@ public class AggregateLoader : IAggregateLoader
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
-        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommon =>
+        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommonBase =>
         await _singleProjection
             .GetAggregateAsync<Aggregate<TAggregatePayload>, AggregateState<TAggregatePayload>, DefaultSingleProjector<TAggregatePayload>>(
                 aggregateId,
@@ -79,7 +79,7 @@ public class AggregateLoader : IAggregateLoader
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
-        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommon
+        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommonBase
     {
         var aggregate = await AsAggregateAsync<TAggregatePayload>(aggregateId, rootPartitionKey, toVersion);
         return aggregate?.GetPayloadTypeIs<TAggregatePayload>() == true ? aggregate.ToState() : null;
@@ -89,7 +89,7 @@ public class AggregateLoader : IAggregateLoader
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
-        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommon
+        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommonBase
     {
         var toReturn = new List<IEvent>();
         await _documentRepository.GetAllEventsForAggregateIdAsync(
@@ -112,7 +112,7 @@ public class AggregateLoader : IAggregateLoader
     public Task<Aggregate<TAggregatePayload>?> AsAggregateFromInitialAsync<TAggregatePayload>(
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
-        int? toVersion = null) where TAggregatePayload : IAggregatePayloadCommon =>
+        int? toVersion = null) where TAggregatePayload : IAggregatePayloadCommonBase =>
         AsSingleProjectionStateFromInitialAsync<Aggregate<TAggregatePayload>, DefaultSingleProjector<TAggregatePayload>>(
             aggregateId,
             rootPartitionKey,

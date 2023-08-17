@@ -22,7 +22,7 @@ public interface IAggregateLoader
     public Task<AggregateState<TAggregatePayload>?> AsDefaultStateFromInitialAsync<TAggregatePayload>(
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
-        int? toVersion = null) where TAggregatePayload : IAggregatePayloadCommon;
+        int? toVersion = null) where TAggregatePayload : IAggregatePayloadCommonBase;
 
     /// <summary>
     ///     Get the custom projection.
@@ -37,7 +37,7 @@ public interface IAggregateLoader
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
-        string? includesSortableUniqueId = null) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new();
+        string? includesSortableUniqueId = null) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
     /// <summary>
     ///     Get aggregate from initial events. (without snapshot nor memory cache)
     /// </summary>
@@ -49,7 +49,7 @@ public interface IAggregateLoader
     public Task<SingleProjectionState<TSingleProjectionPayload>?> AsSingleProjectionStateFromInitialAsync<TSingleProjectionPayload>(
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
-        int? toVersion = null) where TSingleProjectionPayload : ISingleProjectionPayloadCommon, new();
+        int? toVersion = null) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
 
     /// <summary>
     ///     The normal version that uses snapshots and memory cache.
@@ -65,7 +65,7 @@ public interface IAggregateLoader
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
-        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommon;
+        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommonBase;
 
     /// <summary>
     ///     The normal version that uses snapshots and memory cache.
@@ -81,7 +81,7 @@ public interface IAggregateLoader
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
-        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommon;
+        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommonBase;
 
     /// <summary>
     ///     Get all events for target aggregate.
@@ -96,5 +96,5 @@ public interface IAggregateLoader
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
-        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommon;
+        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommonBase;
 }

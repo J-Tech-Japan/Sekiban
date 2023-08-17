@@ -20,7 +20,7 @@ public class SimpleMultiProjection : IMultiProjection
     public async Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjection, TProjectionPayload>(
         string rootPartitionKey,
         SortableUniqueIdValue? includesSortableUniqueIdValue) where TProjection : IMultiProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon
     {
         var projector = new TProjection();
         await _documentRepository.GetAllEventsAsync(
@@ -41,7 +41,7 @@ public class SimpleMultiProjection : IMultiProjection
         Stream stream,
         string rootPartitionKey,
         SortableUniqueIdValue? includesSortableUniqueIdValue) where TProjection : IMultiProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon
     {
         await Task.CompletedTask;
         var list = JsonSerializer.Deserialize<List<JsonElement>>(stream) ?? throw new Exception("Could not deserialize file");
@@ -54,7 +54,7 @@ public class SimpleMultiProjection : IMultiProjection
         Func<Task<Stream?>> stream,
         string rootPartitionKey,
         SortableUniqueIdValue? includesSortableUniqueIdValue) where TProjection : IMultiProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon
     {
         var eventStream = await stream();
         var multiProjectionState = new MultiProjectionState<TProjectionPayload>();

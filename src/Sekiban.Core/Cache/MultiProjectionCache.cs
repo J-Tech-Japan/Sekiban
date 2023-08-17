@@ -24,13 +24,13 @@ public class MultiProjectionCache : IMultiProjectionCache
     public void Set<TProjection, TProjectionPayload>(
         string rootPartitionKey,
         MultipleMemoryProjectionContainer<TProjection, TProjectionPayload> container) where TProjection : IMultiProjector<TProjectionPayload>, new()
-        where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+        where TProjectionPayload : IMultiProjectionPayloadCommon
     {
         _memoryCache.Cache.Set(GetInMemoryKey<TProjection, TProjectionPayload>(rootPartitionKey), container, GetMemoryCacheOptions());
     }
 
     public MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>? Get<TProjection, TProjectionPayload>(string rootPartitionKey)
-        where TProjection : IMultiProjector<TProjectionPayload>, new() where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+        where TProjection : IMultiProjector<TProjectionPayload>, new() where TProjectionPayload : IMultiProjectionPayloadCommon
     {
         var toReturn = _memoryCache.Cache.Get<MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>>(
             GetInMemoryKey<TProjection, TProjectionPayload>(rootPartitionKey));
@@ -47,7 +47,7 @@ public class MultiProjectionCache : IMultiProjectionCache
 
     // ReSharper disable once UnusedTypeParameter
     private string GetInMemoryKey<TProjector, TPayload>(string rootPartitionKey) where TProjector : IMultiProjector<TPayload>, new()
-        where TPayload : IMultiProjectionPayloadCommon, new()
+        where TPayload : IMultiProjectionPayloadCommon
     {
         var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
         var name = "MultiProjection-" +

@@ -6,7 +6,9 @@ namespace Sekiban.Core.Query.MultiProjections;
 ///     It can hold either Aggregate List or Single Projection List.
 /// </summary>
 /// <typeparam name="TAggregateState"></typeparam>
-public record SingleProjectionListState<TAggregateState> : IMultiProjectionPayloadCommon where TAggregateState : IAggregateStateCommon
+public record SingleProjectionListState<TAggregateState> : IMultiProjectionPayloadGeneratePayload<SingleProjectionListState<TAggregateState>>,
+    IMultiProjectionPayloadCommon where TAggregateState : IAggregateStateCommon
 {
     public IReadOnlyCollection<TAggregateState> List { get; init; } = new List<TAggregateState>();
+    public static SingleProjectionListState<TAggregateState> CreateInitialPayload() => new();
 }

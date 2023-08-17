@@ -9,7 +9,7 @@ namespace Sekiban.Core.Query.QueryModel;
 /// <typeparam name="TQueryResponse"></typeparam>
 public interface
     IMultiProjectionListQuery<TProjectionPayload, in TQueryParameter, TQueryResponse> : IListQueryHandlerCommon<TQueryParameter, TQueryResponse>
-    where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+    where TProjectionPayload : IMultiProjectionPayloadCommon
     where TQueryParameter : IListQueryParameter<TQueryResponse>
     where TQueryResponse : IQueryResponse
 {

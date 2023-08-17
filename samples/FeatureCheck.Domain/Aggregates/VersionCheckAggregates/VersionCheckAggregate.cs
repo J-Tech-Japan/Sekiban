@@ -7,4 +7,5 @@ public record VersionCheckAggregate : IAggregatePayload
     public int Amount { get; init; }
     public PaymentKind PaymentKind { get; init; } = PaymentKind.Other;
     public string Description { get; init; } = string.Empty;
+    public static IAggregatePayloadCommon CreateInitialPayload() => new VersionCheckAggregate();
 }
