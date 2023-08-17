@@ -30,8 +30,13 @@ public static class MultiProjectionTypesExtensions
     /// </summary>
     /// <param name="type"></param>
     /// <returns></returns>
-    public static bool IsMultiProjectionPayloadType(this TypeInfo type) =>
-        type.ImplementedInterfaces.Contains(typeof(IMultiProjectionPayloadCommon)) && type.GetConstructor(Type.EmptyTypes) != null;
+    public static bool IsMultiProjectionPayloadType(this TypeInfo type)
+    {
+        if (!type.DoesImplementingFromGenericInterfaceType(typeof(IMultiProjectionPayloadGeneratePayload<>))) { return false; }
+        var genericType = type.GetImplementingFromGenericInterfaceType(typeof(IMultiProjectionPayloadGeneratePayload<>));
+        // CreateInitialPayload type should be equal to the type of the payload.
+        return genericType.GenericTypeArguments[0] == type;
+    }
     /// <summary>
     ///     Get the Multi Projection Payload Type from the given Multi Projection Type.
     /// </summary>

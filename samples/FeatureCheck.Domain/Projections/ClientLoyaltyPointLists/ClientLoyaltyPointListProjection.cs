@@ -12,7 +12,8 @@ namespace FeatureCheck.Domain.Projections.ClientLoyaltyPointLists;
 
 public record ClientLoyaltyPointListProjection(
     ImmutableList<ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord> Records,
-    ImmutableList<ClientLoyaltyPointListProjection.ProjectedBranchInternal> Branches) : IMultiProjectionPayload<ClientLoyaltyPointListProjection>
+    ImmutableList<ClientLoyaltyPointListProjection.ProjectedBranchInternal> Branches) : IMultiProjectionPayload<
+    ClientLoyaltyPointListProjection>
 {
     public TargetAggregatePayloadCollection GetTargetAggregatePayloads() =>
         new TargetAggregatePayloadCollection().Add<Branch>().Add<Client>().Add<LoyaltyPoint>();

@@ -37,14 +37,14 @@ public record MultiProjectionState<TProjectionPayload>(
         if (payloadType.IsMultiProjectionPayloadType())
         {
             var method = payloadType.GetMethod(
-                nameof(IMultiProjectionPayload<TProjectionPayload>.CreateInitialPayload),
+                nameof(IMultiProjectionPayloadGeneratePayload<TProjectionPayload>.CreateInitialPayload),
                 BindingFlags.Static | BindingFlags.Public);
             var created = method?.Invoke(payloadType, new object?[] { });
             return created is TProjectionPayload projectionPayload
                 ? projectionPayload
-                : throw new SekibanMultiProjectionPayloadCreateFailedException(nameof(payloadType));
+                : throw new SekibanMultiProjectionPayloadCreateFailedException(payloadType.FullName ?? "");
         }
-        throw new SekibanMultiProjectionPayloadCreateFailedException(nameof(payloadType));
+        throw new SekibanMultiProjectionPayloadCreateFailedException(payloadType.FullName ?? "");
     }
     public string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();
     public MultiProjectionState<TProjectionPayload> ApplyEvent(IEvent ev) =>

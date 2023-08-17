@@ -6,7 +6,8 @@ namespace Sekiban.Core.Query.MultiProjections;
 ///     Interface for MultiProjectionPayload
 /// </summary>
 /// <typeparam name="TProjectionPayload"></typeparam>
-public interface IMultiProjectionPayload<TProjectionPayload> : IMultiProjectionPayloadCommon where TProjectionPayload : IMultiProjectionPayloadCommon
+public interface IMultiProjectionPayload<TProjectionPayload> : IMultiProjectionPayloadGeneratePayload<TProjectionPayload>
+    where TProjectionPayload : IMultiProjectionPayloadCommon
 {
     /// <summary>
     ///     MultiProjection can set which AggregateType to use for the projection.
@@ -37,9 +38,4 @@ public interface IMultiProjectionPayload<TProjectionPayload> : IMultiProjectionP
         var genericMethod = method?.MakeGenericMethod(payloadType);
         return (TProjectionPayload?)genericMethod?.Invoke(typeof(TProjectionPayload), new object?[] { this, ev }) ?? (TProjectionPayload)this;
     }
-    /// <summary>
-    ///     Generate Default Payload in Static.
-    /// </summary>
-    /// <returns></returns>
-    public static abstract TProjectionPayload CreateInitialPayload();
 }

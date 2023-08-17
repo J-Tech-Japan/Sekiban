@@ -4,6 +4,7 @@ public class SekibanMultiProjectionPayloadCreateFailedException : Exception, ISe
 {
     public string AggregateTypeName { get; }
 
-    public SekibanMultiProjectionPayloadCreateFailedException(string aggregateTypeName) : base($"Aggregate {aggregateTypeName} failed to create.") =>
+    public SekibanMultiProjectionPayloadCreateFailedException(string aggregateTypeName) : base(
+        $"MultiProjection {aggregateTypeName} failed to create.") =>
         AggregateTypeName = aggregateTypeName;
 }
