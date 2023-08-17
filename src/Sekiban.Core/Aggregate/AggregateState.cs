@@ -14,7 +14,7 @@ namespace Sekiban.Core.Aggregate;
 public sealed record AggregateState<TPayload> : IAggregateStateCommon where TPayload : IAggregatePayloadCommonBase
 {
 
-    public string PayloadTypeName => Payload?.GetType().Name ?? string.Empty;
+    public string PayloadTypeName => Payload.GetType().Name;
 
     public TPayload Payload { get; init; } = CreatePayload();
     public AggregateState()
