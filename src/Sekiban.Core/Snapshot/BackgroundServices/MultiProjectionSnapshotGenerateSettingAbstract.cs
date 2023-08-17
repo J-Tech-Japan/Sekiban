@@ -71,6 +71,7 @@ public abstract class MultiProjectionSnapshotGenerateSettingAbstract : IMultiPro
         where TDependency : IDependencyDefinition, new()
     {
         var dependencyDefinition = new TDependency();
+        dependencyDefinition.Define();
         foreach (var aggregateDefinition in dependencyDefinition.GetAggregateDefinitions())
         {
             AggregateListSnapshotTypes.Add(aggregateDefinition.AggregateType);
@@ -81,6 +82,7 @@ public abstract class MultiProjectionSnapshotGenerateSettingAbstract : IMultiPro
         where TDependency : IDependencyDefinition, new()
     {
         var dependencyDefinition = new TDependency();
+        dependencyDefinition.Define();
         foreach (var aggregateDefinition in dependencyDefinition.GetAggregateDefinitions())
         {
             foreach (var singleProjection in aggregateDefinition.SingleProjectionTypes)
@@ -94,6 +96,7 @@ public abstract class MultiProjectionSnapshotGenerateSettingAbstract : IMultiPro
         where TDependency : IDependencyDefinition, new()
     {
         var dependencyDefinition = new TDependency();
+        dependencyDefinition.Define();
         foreach (var multiProjection in dependencyDefinition.GetExecutingAssembly().DefinedTypes.Where(m => m.IsMultiProjectionPayloadType()))
         {
             MultiProjectionsSnapshotTypes.Add(multiProjection);

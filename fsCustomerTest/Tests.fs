@@ -30,8 +30,6 @@ type BranchSpec(testOutputHelper: ITestOutputHelper) =
     [<Fact>]
     member this.SerializeOptionChecking() =
         let options: JsonSerializerOptions = JsonSerializerOptions()
-        //      options.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-        //        options.PropertyNameCaseInsensitive = true
         let branch: Branch = { Name = "Japan" }
         let serialized = JsonSerializer.Serialize(branch, options)
         this.TestOutputHelper.WriteLine(serialized)

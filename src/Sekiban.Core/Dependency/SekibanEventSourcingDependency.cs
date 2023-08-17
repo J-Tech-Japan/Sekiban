@@ -132,9 +132,9 @@ public static class SekibanEventSourcingDependency
         services.AddSekibanAppSettingsFromObject(new AggregateSettings());
         // run Define() before using.
         dependencyDefinition.Define();
-
+        var options = dependencyDefinition.GetSekibanDependencyOptions();
         // Each Domain contexts
-        services.AddSingleton(dependencyDefinition.GetSekibanDependencyOptions().RegisteredEventTypes);
+        services.AddSingleton(options.RegisteredEventTypes);
         services.AddSingleton(dependencyDefinition.GetSekibanDependencyOptions().SekibanAggregateTypes);
         services.AddTransient(dependencyDefinition.GetSekibanDependencyOptions().TransientDependencies);
         services.AddTransient(GetDependencies());

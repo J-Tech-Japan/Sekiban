@@ -79,6 +79,7 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
     public DomainDependencyDefinitionBase AddDependency<TDependency>() where TDependency : DomainDependencyDefinitionBase, new()
     {
         var toAdd = new TDependency();
+        toAdd.Define();
         AggregateDefinitions = AggregateDefinitions.Concat(toAdd.AggregateDefinitions).ToImmutableList();
         MultiProjectionQueryTypes = MultiProjectionQueryTypes.Concat(toAdd.MultiProjectionQueryTypes).ToImmutableList();
         MultiProjectionListQueryTypes = MultiProjectionListQueryTypes.Concat(toAdd.MultiProjectionListQueryTypes).ToImmutableList();
