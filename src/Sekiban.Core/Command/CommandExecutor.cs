@@ -77,7 +77,7 @@ public class CommandExecutor(
 
     public async Task<(CommandExecutorResponse, List<IEvent>)> ExecCommandAsyncTyped<TAggregatePayload, TCommand>(
         TCommand command,
-        List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayload>
+        List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload> where TCommand : ICommand<TAggregatePayload>
     {
         var validationResult = command.ValidateProperties().ToList();
         if (validationResult.Any())
@@ -95,7 +95,7 @@ public class CommandExecutor(
 
     public async Task<(CommandExecutorResponse, List<IEvent>)> ExecCommandWithoutValidationAsyncTyped<TAggregatePayload, TCommand>(
         TCommand command,
-        List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayload>
+        List<CallHistory>? callHistories = null) where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload> where TCommand : ICommand<TAggregatePayload>
     {
         var rootPartitionKey = command.GetRootPartitionKey();
         if (!CommandRootPartitionValidationAttribute.IsValidRootPartitionKey(rootPartitionKey))
