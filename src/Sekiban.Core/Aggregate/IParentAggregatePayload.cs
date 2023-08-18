@@ -13,8 +13,8 @@ namespace Sekiban.Core.Aggregate;
 ///      CartAggregate : IParentAggregatePayload<CartAggregate>
 ///      ]]></code>
 /// </typeparam>
-public interface IParentAggregatePayload<TParentAggregatePayload> : IParentAggregatePayload<TParentAggregatePayload, TParentAggregatePayload>
-    where TParentAggregatePayload : IAggregatePayloadGeneratable<TParentAggregatePayload>;
+public interface IParentAggregatePayload<TParentAggregatePayload> : IParentAggregatePayload<TParentAggregatePayload, TParentAggregatePayload>,
+    IAggregatePayloadGeneratable<TParentAggregatePayload> where TParentAggregatePayload : IAggregatePayloadGeneratable<TParentAggregatePayload>;
 /// <summary>
 ///     Parent Aggregate Payload
 ///     Developer can implement this interface to define the state of your aggregate.

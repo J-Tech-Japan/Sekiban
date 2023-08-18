@@ -1,4 +1,5 @@
 using FeatureCheck.Domain.Aggregates.SubTypes.InheritedSubtypes;
+using FeatureCheck.Domain.Aggregates.SubTypes.InheritedSubtypes.Commands;
 using FeatureCheck.Domain.Shared;
 using Sekiban.Testing.SingleProjections;
 using Xunit;
