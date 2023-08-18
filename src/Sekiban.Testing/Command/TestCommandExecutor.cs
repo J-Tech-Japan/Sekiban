@@ -121,7 +121,7 @@ public class TestCommandExecutor
 
     public IReadOnlyCollection<IEvent> GetAllAggregateEvents<TAggregatePayload>(
         Guid aggregateId,
-        string rootPartitionKey = IDocument.DefaultRootPartitionKey) where TAggregatePayload : IAggregatePayload, new()
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey) where TAggregatePayload : IAggregatePayloadCommon
     {
         var toReturn = new List<IEvent>();
         var documentRepository = _serviceProvider.GetRequiredService(typeof(IDocumentRepository)) as IDocumentRepository ??

@@ -10,8 +10,9 @@ open Sekiban.Core.Query.QueryModel
 type Branch =
     { Name: string }
 
-    interface IAggregatePayload with
-        member this.CreateInitialPayload() = { Name = "" }
+    interface IAggregatePayload<Branch> with
+        member this.CreateInitialPayload(_) = { Name = "" }
+
 
 type CreateBranch(name: string) =
     member this.Name = name
@@ -36,8 +37,8 @@ type Client(name: string, email: string, branchId: Guid) =
     member this.Email = email
     member this.BranchId = branchId
 
-    interface IAggregatePayload with
-        member this.CreateInitialPayload() = Client("", "", Guid.Empty)
+    interface IAggregatePayload<Client> with
+        member this.CreateInitialPayload(_) = Client("", "", Guid.Empty)
 
     new() = Client("", "", Guid.Empty)
 

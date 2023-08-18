@@ -1,5 +1,4 @@
 using FeatureCheck.Domain.Aggregates.RecentActivities.Events;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Events;
 using Sekiban.Core.Query.SingleProjections;
 using System.Collections.Immutable;
@@ -22,5 +21,5 @@ public record TenRecentProjection : ISingleProjectionPayload<RecentActivity, Ten
             },
             _ => null
         };
-    public static IAggregatePayloadCommon CreateInitialPayload() => new TenRecentProjection();
+    public static TenRecentProjection CreateInitialPayload() => new();
 }

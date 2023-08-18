@@ -1,7 +1,7 @@
 using Sekiban.Core.Aggregate;
 namespace FeatureCheck.Domain.Aggregates.SubTypes.InheritedSubtypes;
 
-public class ClosedSubAggregate : ProcessingSubAggregate
+public class ClosedSubAggregate : ProcessingSubAggregate, IAggregatePayloadGeneratable<ClosedSubAggregate>
 {
-    public new static IAggregatePayloadCommon CreateInitialPayload() => new ClosedSubAggregate();
+    public static ClosedSubAggregate CreateInitialPayload(ClosedSubAggregate? _) => new();
 }

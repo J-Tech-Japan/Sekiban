@@ -14,7 +14,7 @@ namespace Sekiban.Core.Aggregate;
 public sealed class Aggregate<TAggregatePayload> : AggregateCommon, ISingleProjectionStateConvertible<AggregateState<TAggregatePayload>>
     where TAggregatePayload : IAggregatePayloadCommonBase
 {
-    private IAggregatePayloadCommon Payload { get; set; } = CreatePayload();
+    private IAggregatePayloadCommon Payload { get; set; } = CreatePayloadCommon<TAggregatePayload>();
     public bool GetPayloadTypeIs(Type expect)
     {
         if (!expect.IsAggregatePayloadType()) { return false; }
@@ -70,39 +70,6 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon, ISingleProje
         Payload is TAggregatePayloadOut payloadOut
             ? new AggregateState<TAggregatePayloadOut>(this, payloadOut)
             : throw new AggregateTypeNotMatchException(typeof(TAggregatePayloadOut), Payload.GetType());
-
-    private static IAggregatePayloadCommon CreatePayload()
-    {
-        if (typeof(TAggregatePayload).IsAggregateSubtypePayload())
-        {
-            var parentType = typeof(TAggregatePayload).GetBaseAggregatePayloadTypeFromAggregate();
-            var firstAggregateType = parentType.GetFirstAggregatePayloadTypeFromAggregate();
-            var method = firstAggregateType.GetMethod(
-                nameof(IAggregatePayloadCommon.CreateInitialPayload),
-                BindingFlags.Static | BindingFlags.Public);
-            return method?.Invoke(firstAggregateType, new object?[] { }) as IAggregatePayloadCommon ??
-                throw new SekibanAggregateCreateFailedException(firstAggregateType.Name);
-        }
-        if (typeof(TAggregatePayload).GetInterfaces().Any(m => m == typeof(IAggregatePayloadCommon)))
-        {
-            var method = typeof(TAggregatePayload).GetMethod(
-                nameof(IAggregatePayloadCommon.CreateInitialPayload),
-                BindingFlags.Static | BindingFlags.Public);
-            return method?.Invoke(typeof(TAggregatePayload), new object?[] { }) as IAggregatePayloadCommon ??
-                throw new SekibanAggregateCreateFailedException(nameof(TAggregatePayload));
-        }
-        if (typeof(TAggregatePayload).DoesImplementingFromGenericInterfaceType(typeof(IParentAggregatePayload<,>)))
-        {
-            var firstAggregateType = typeof(TAggregatePayload).GetFirstAggregatePayloadTypeFromAggregate();
-            var method = firstAggregateType.GetMethod(
-                nameof(IAggregatePayloadCommon.CreateInitialPayload),
-                BindingFlags.Static | BindingFlags.Public);
-            return method?.Invoke(firstAggregateType, new object?[] { }) as IAggregatePayloadCommon ??
-                throw new SekibanAggregateCreateFailedException(firstAggregateType.Name);
-        }
-        throw new SekibanAggregateCreateFailedException(nameof(TAggregatePayload));
-    }
-
     public override string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();
     protected override IAggregatePayloadCommon? GetAggregatePayloadWithAppliedEvent(object aggregatePayload, IEvent ev)
     {
@@ -125,8 +92,8 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon, ISingleProje
     // ReSharper disable once ReturnTypeCanBeNotNullable
     private static TAggregatePayloadOut? ApplyEventToAggregatePayload<TAggregatePayloadIn, TAggregatePayloadOut, TEventPayload>(
         TAggregatePayloadIn aggregatePayload,
-        Event<TEventPayload> ev) where TAggregatePayloadIn : IAggregatePayloadCommon
-        where TAggregatePayloadOut : IAggregatePayloadCommon
+        Event<TEventPayload> ev) where TAggregatePayloadIn : IAggregatePayloadGeneratable<TAggregatePayloadIn>
+        where TAggregatePayloadOut : IAggregatePayloadGeneratable<TAggregatePayloadOut>
         where TEventPayload : IEventPayload<TAggregatePayloadIn, TAggregatePayloadOut, TEventPayload> =>
         TEventPayload.OnEvent(aggregatePayload, ev);
 
