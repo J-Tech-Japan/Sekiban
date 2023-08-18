@@ -8,7 +8,7 @@ namespace Sekiban.Core.Query.SingleProjections;
 /// </summary>
 /// <typeparam name="TAggregatePayload"></typeparam>
 public class DefaultSingleProjector<TAggregatePayload> : ISingleProjector<Aggregate<TAggregatePayload>>
-    where TAggregatePayload : IAggregatePayloadCommonBase
+    where TAggregatePayload : IAggregatePayloadCommon
 {
     public Aggregate<TAggregatePayload> CreateInitialAggregate(Guid aggregateId) => AggregateCommon.Create<Aggregate<TAggregatePayload>>(aggregateId);
     public Aggregate<TAggregatePayload> CreateAggregateFromState(

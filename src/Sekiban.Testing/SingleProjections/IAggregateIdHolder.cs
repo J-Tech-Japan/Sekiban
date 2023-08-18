@@ -10,5 +10,5 @@ public interface IAggregateIdHolder
 
     public Task<AggregateState<TAggregatePayload>?> GetAggregateStateAsync<TAggregatePayload>() where TAggregatePayload : IAggregatePayloadCommon;
     public AggregateState<TAggregatePayload>? GetAggregateState<TAggregatePayload>() where TAggregatePayload : IAggregatePayloadCommon;
-    public bool IsAggregateType<TAggregatePayload>() where TAggregatePayload : IAggregatePayloadCommonBase;
+    public bool IsAggregateType<TAggregatePayload>() where TAggregatePayload : IAggregatePayloadCommon;
 }

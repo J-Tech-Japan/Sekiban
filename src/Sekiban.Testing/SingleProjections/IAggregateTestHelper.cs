@@ -8,7 +8,7 @@ using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
 namespace Sekiban.Testing.SingleProjections;
 
-public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload : IAggregatePayloadCommonBase
+public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload : IAggregatePayloadCommon
 {
 
     #region Subtypes

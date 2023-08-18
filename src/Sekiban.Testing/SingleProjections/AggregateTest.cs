@@ -14,7 +14,7 @@ using Xunit.Sdk;
 namespace Sekiban.Testing.SingleProjections;
 
 public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposable, IAggregateTestHelper<TAggregatePayload>
-    where TAggregatePayload : IAggregatePayloadCommonBase where TDependencyDefinition : IDependencyDefinition, new()
+    where TAggregatePayload : IAggregatePayloadCommon where TDependencyDefinition : IDependencyDefinition, new()
 {
     private readonly IAggregateTestHelper<TAggregatePayload> _helper;
     protected readonly IServiceProvider _serviceProvider;

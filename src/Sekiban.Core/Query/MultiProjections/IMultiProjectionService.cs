@@ -42,7 +42,7 @@ public interface IMultiProjectionService
     /// <returns></returns>
     public Task<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>> GetAggregateListObject<TAggregatePayload>(
         string rootPartitionKey,
-        SortableUniqueIdValue? includesSortableUniqueIdValue) where TAggregatePayload : IAggregatePayloadCommonBase;
+        SortableUniqueIdValue? includesSortableUniqueIdValue) where TAggregatePayload : IAggregatePayloadCommon;
 
     /// <summary>
     ///     Get Aggregate List by Multi Projection
@@ -55,7 +55,7 @@ public interface IMultiProjectionService
     public Task<List<AggregateState<TAggregatePayload>>> GetAggregateList<TAggregatePayload>(
         QueryListType queryListType = QueryListType.ActiveOnly,
         string rootPartitionKey = ProjectionAllRootPartitions,
-        SortableUniqueIdValue? includesSortableUniqueIdValue = null) where TAggregatePayload : IAggregatePayloadCommonBase;
+        SortableUniqueIdValue? includesSortableUniqueIdValue = null) where TAggregatePayload : IAggregatePayloadCommon;
     /// <summary>
     ///     Get Single Projection List Object
     ///     Uses all root partitions.

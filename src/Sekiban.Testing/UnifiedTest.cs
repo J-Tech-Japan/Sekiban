@@ -387,7 +387,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
 
     #region Aggregate List Projection
     public MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>> GetAggregateListProjectionState<TAggregatePayload>(
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TAggregatePayload : IAggregatePayloadCommonBase
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TAggregatePayload : IAggregatePayloadCommon
     {
         var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ?? throw new Exception("Failed to get Query service");
         return multiProjectionService.GetAggregateListObject<TAggregatePayload>(rootPartitionKey, SortableUniqueIdValue.GetCurrentIdFromUtc())

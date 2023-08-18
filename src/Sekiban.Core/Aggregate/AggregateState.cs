@@ -8,7 +8,7 @@ namespace Sekiban.Core.Aggregate;
 ///     To make it executable, use the Aggregate class by applying this class as a snapshot
 /// </summary>
 /// <typeparam name="TPayload">Aggregate Payload</typeparam>
-public sealed record AggregateState<TPayload> : IAggregateStateCommon where TPayload : IAggregatePayloadCommonBase
+public sealed record AggregateState<TPayload> : IAggregateStateCommon where TPayload : IAggregatePayloadCommon
 {
 
     public string PayloadTypeName => Payload.GetType().Name;

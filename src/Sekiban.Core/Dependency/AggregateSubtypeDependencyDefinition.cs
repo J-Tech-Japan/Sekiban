@@ -8,7 +8,7 @@ namespace Sekiban.Core.Dependency;
 
 public class
     AggregateSubtypeDependencyDefinition<TParentAggregatePayload, TAggregateSubtypePayload> : IAggregateSubTypeDependencyDefinition<
-        TParentAggregatePayload> where TParentAggregatePayload : IAggregatePayloadCommonBase where TAggregateSubtypePayload : IAggregatePayloadCommon
+        TParentAggregatePayload> where TParentAggregatePayload : IAggregatePayloadCommon where TAggregateSubtypePayload : IAggregatePayloadCommon
 {
     public AggregateDependencyDefinition<TParentAggregatePayload> ParentAggregateDependencyDefinition { get; init; }
     internal AggregateSubtypeDependencyDefinition(AggregateDependencyDefinition<TParentAggregatePayload> parentAggregateDependencyDefinition) =>

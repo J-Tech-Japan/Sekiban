@@ -46,7 +46,7 @@ public abstract class AggregateCommon : IAggregate
 
     protected abstract object? GetAggregatePayloadWithAppliedEvent(object aggregatePayload, IEvent ev);
 
-    public static IAggregatePayloadCommon CreatePayloadCommon<TAggregatePayload>() where TAggregatePayload : IAggregatePayloadCommonBase
+    public static IAggregatePayloadCommon CreatePayloadCommon<TAggregatePayload>() where TAggregatePayload : IAggregatePayloadCommon
     {
         if (typeof(TAggregatePayload).IsAggregateSubtypePayload())
         {
@@ -86,7 +86,7 @@ public abstract class AggregateCommon : IAggregate
         throw new SekibanAggregateCreateFailedException(typeof(TAggregatePayload).FullName ?? string.Empty);
     }
 
-    public static TAggregatePayload CreatePayload<TAggregatePayload>() where TAggregatePayload : IAggregatePayloadCommonBase
+    public static TAggregatePayload CreatePayload<TAggregatePayload>() where TAggregatePayload : IAggregatePayloadCommon
     {
         if (typeof(TAggregatePayload).IsAggregateSubtypePayload())
         {

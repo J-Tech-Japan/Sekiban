@@ -33,4 +33,4 @@ public interface IParentAggregatePayload<TParentAggregatePayload> : IParentAggre
 /// </typeparam>
 // ReSharper disable once UnusedTypeParameter
 public interface IParentAggregatePayload<TParentAggregatePayload, TFirstAggregatePayload> : IParentAggregatePayloadCommon<TParentAggregatePayload>
-    where TParentAggregatePayload : IAggregatePayloadCommonBase where TFirstAggregatePayload : IAggregatePayloadCommon;
+    where TParentAggregatePayload : IAggregatePayloadCommon where TFirstAggregatePayload : IAggregatePayloadCommon;

@@ -14,7 +14,7 @@ namespace Sekiban.Core.Dependency;
 ///     AddAggregate
 /// </summary>
 /// <typeparam name="TAggregatePayload"></typeparam>
-public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDependencyDefinition where TAggregatePayload : IAggregatePayloadCommonBase
+public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDependencyDefinition where TAggregatePayload : IAggregatePayloadCommon
 {
     /// <summary>
     ///     Subtypes of this aggregate, edit only from method AddSubType

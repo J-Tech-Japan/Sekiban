@@ -10,5 +10,5 @@ namespace Sekiban.Core.Query.SingleProjections;
 // ReSharper disable once UnusedTypeParameter
 public interface
     ISingleProjectionPayload<TAggregatePayload, TSingleProjectionPayload> : ISingleProjectionPayloadGeneratable<TSingleProjectionPayload>,
-        ISingleProjectionEventApplicable<TSingleProjectionPayload> where TAggregatePayload : IAggregatePayloadCommonBase
+        ISingleProjectionEventApplicable<TSingleProjectionPayload> where TAggregatePayload : IAggregatePayloadCommon
     where TSingleProjectionPayload : ISingleProjectionPayloadCommon;

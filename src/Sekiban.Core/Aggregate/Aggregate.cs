@@ -12,7 +12,7 @@ namespace Sekiban.Core.Aggregate;
 /// </summary>
 /// <typeparam name="TAggregatePayload">User Defined Aggregate Payload</typeparam>
 public sealed class Aggregate<TAggregatePayload> : AggregateCommon, ISingleProjectionStateConvertible<AggregateState<TAggregatePayload>>
-    where TAggregatePayload : IAggregatePayloadCommonBase
+    where TAggregatePayload : IAggregatePayloadCommon
 {
     private IAggregatePayloadCommon Payload { get; set; } = CreatePayloadCommon<TAggregatePayload>();
     public bool GetPayloadTypeIs(Type expect)
@@ -66,7 +66,7 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon, ISingleProje
             LastEventId = ev.Id, LastSortableUniqueId = ev.SortableUniqueId, Version = Version + 1, RootPartitionKey = ev.RootPartitionKey
         };
     }
-    public AggregateState<TAggregatePayloadOut> ToState<TAggregatePayloadOut>() where TAggregatePayloadOut : IAggregatePayloadCommonBase =>
+    public AggregateState<TAggregatePayloadOut> ToState<TAggregatePayloadOut>() where TAggregatePayloadOut : IAggregatePayloadCommon =>
         Payload is TAggregatePayloadOut payloadOut
             ? new AggregateState<TAggregatePayloadOut>(this, payloadOut)
             : throw new AggregateTypeNotMatchException(typeof(TAggregatePayloadOut), Payload.GetType());

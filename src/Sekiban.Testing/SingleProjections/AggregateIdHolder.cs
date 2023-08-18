@@ -3,7 +3,7 @@ using Sekiban.Core.Documents;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Testing.SingleProjections;
 
-public class AggregateIdHolder<TBaseAggregatePayload> : IAggregateIdHolder where TBaseAggregatePayload : IAggregatePayloadCommonBase
+public class AggregateIdHolder<TBaseAggregatePayload> : IAggregateIdHolder where TBaseAggregatePayload : IAggregatePayloadCommon
 {
     private readonly IAggregateLoader aggregateLoader;
     public AggregateIdHolder(IAggregateLoader aggregateLoader) => this.aggregateLoader = aggregateLoader;
@@ -23,7 +23,7 @@ public class AggregateIdHolder<TBaseAggregatePayload> : IAggregateIdHolder where
         var aggregate = GetAggregate();
         return aggregate?.GetPayloadTypeIs<TAggregatePayload>() == true ? aggregate.ToState<TAggregatePayload>() : null;
     }
-    public bool IsAggregateType<TAggregatePayload>() where TAggregatePayload : IAggregatePayloadCommonBase
+    public bool IsAggregateType<TAggregatePayload>() where TAggregatePayload : IAggregatePayloadCommon
     {
         var aggregate = GetAggregate();
         return aggregate?.GetPayloadTypeIs<TAggregatePayload>() ?? false;

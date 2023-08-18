@@ -16,7 +16,7 @@ using System.Text.Json;
 using Xunit;
 namespace Sekiban.Testing.SingleProjections;
 
-public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggregatePayload> where TAggregatePayload : IAggregatePayloadCommonBase
+public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggregatePayload> where TAggregatePayload : IAggregatePayloadCommon
 {
     private readonly TestCommandExecutor _commandExecutor;
     private readonly IServiceProvider _serviceProvider;
@@ -500,7 +500,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     private IAggregateTestHelper<TAggregatePayload> WhenCommandPrivate<TAggregatePayloadIn, TCommand>(
         Func<AggregateState<TAggregatePayload>, TCommand> commandFunc,
-        bool withPublish) where TAggregatePayloadIn : IAggregatePayloadCommonBase where TCommand : ICommand<TAggregatePayloadIn>
+        bool withPublish) where TAggregatePayloadIn : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayloadIn>
     {
         ResetBeforeCommand();
         var handler

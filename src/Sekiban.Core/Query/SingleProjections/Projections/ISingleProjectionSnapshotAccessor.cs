@@ -15,7 +15,7 @@ public interface ISingleProjectionSnapshotAccessor
     /// <typeparam name="TPayload"></typeparam>
     /// <returns></returns>
     Task<SnapshotDocument?> SnapshotDocumentFromAggregateStateAsync<TPayload>(AggregateState<TPayload> state)
-        where TPayload : IAggregatePayloadCommonBase;
+        where TPayload : IAggregatePayloadCommon;
     /// <summary>
     ///     Create Snapshot document from single projection state.
     /// </summary>

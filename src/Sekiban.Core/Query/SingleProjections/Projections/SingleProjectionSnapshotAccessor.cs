@@ -20,7 +20,7 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
         _blobAccessor = blobAccessor;
     }
     public async Task<SnapshotDocument?> SnapshotDocumentFromAggregateStateAsync<TPayload>(AggregateState<TPayload> state)
-        where TPayload : IAggregatePayloadCommonBase
+        where TPayload : IAggregatePayloadCommon
     {
         await Task.CompletedTask;
         var parentAggregateType = typeof(TPayload).GetBaseAggregatePayloadTypeFromAggregate();

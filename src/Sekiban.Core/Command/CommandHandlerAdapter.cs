@@ -9,7 +9,7 @@ namespace Sekiban.Core.Command;
 ///     System use command handler adapter.
 ///     Application Developer does not need to implement this interface
 /// </summary>
-public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> where TAggregatePayload : IAggregatePayloadCommonBase
+public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> where TAggregatePayload : IAggregatePayloadCommon
     where TCommand : ICommand<TAggregatePayload>
 {
     private readonly IAggregateLoader _aggregateLoader;
