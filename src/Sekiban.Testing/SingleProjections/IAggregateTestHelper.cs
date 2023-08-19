@@ -361,127 +361,430 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="checkEventsAction"></param>
     /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenGetLatestEvents(Action<List<IEvent>> checkEventsAction);
+    /// <summary>
+    ///     Get all events to validate
+    /// </summary>
+    /// <param name="checkEventsAction"></param>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenGetAllAggregateEvents(Action<List<IEvent>> checkEventsAction);
-
+    /// <summary>
+    ///     Get latest event to validate
+    /// </summary>
+    /// <param name="checkEventAction"></param>
+    /// <typeparam name="T"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenGetLatestSingleEvent<T>(Action<Event<T>> checkEventAction) where T : IEventPayloadCommon;
-
+    /// <summary>
+    ///     Get Latest event to validate.
+    ///     Specify event type, if event was wrong type, it will throw exception.
+    /// </summary>
+    /// <param name="event"></param>
+    /// <typeparam name="T"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenLastSingleEventIs<T>(Event<T> @event) where T : IEventPayloadCommon;
-
+    /// <summary>
+    ///     Check latest event payload.
+    ///     Specify type and compare payload.
+    /// </summary>
+    /// <param name="payload"></param>
+    /// <typeparam name="T"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenLastSingleEventPayloadIs<T>(T payload) where T : IEventPayloadCommon;
-
+    /// <summary>
+    ///     Get latest event payload to validate.
+    ///     Specify type and compare payload.
+    /// </summary>
+    /// <param name="checkPayloadAction"></param>
+    /// <typeparam name="T"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenGetLatestSingleEventPayload<T>(Action<T> checkPayloadAction)
         where T : class, IEventPayloadCommon;
-
+    /// <summary>
+    ///     Get state to validate
+    /// </summary>
+    /// <param name="checkStateAction"></param>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenGetState(Action<AggregateState<TAggregatePayload>> checkStateAction);
-
+    /// <summary>
+    ///     Compare state with expected state
+    /// </summary>
+    /// <param name="expectedState"></param>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenStateIs(AggregateState<TAggregatePayload> expectedState);
+    /// <summary>
+    ///     Get Aggregate Payload to validate
+    /// </summary>
+    /// <param name="payloadAction"></param>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenGetPayload(Action<TAggregatePayload> payloadAction);
+    /// <summary>
+    ///     Compare Aggregate Payload with expected payload
+    /// </summary>
+    /// <param name="payload"></param>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenPayloadIs(TAggregatePayload payload);
+    /// <summary>
+    ///     Write Aggregate State to Json file
+    /// </summary>
+    /// <param name="filename"></param>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> WriteStateToFile(string filename);
+    /// <summary>
+    ///     Write Aggregate Payload to Json file
+    /// </summary>
+    /// <param name="filename"></param>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> WritePayloadToFile(string filename);
+    /// <summary>
+    ///     Compare Aggregate State with Json string
+    /// </summary>
+    /// <param name="stateJson"></param>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenStateIsFromJson(string stateJson);
+    /// <summary>
+    ///     Compare Aggregate State with Json file
+    /// </summary>
+    /// <param name="stateFileName"></param>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenStateIsFromFile(string stateFileName);
+    /// <summary>
+    ///     Compare Aggregate Payload with Json string
+    /// </summary>
+    /// <param name="payloadJson"></param>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenPayloadIsFromJson(string payloadJson);
+    /// <summary>
+    ///     Compare Aggregate Payload with Json file
+    /// </summary>
+    /// <param name="payloadFileName"></param>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenPayloadIsFromFile(string payloadFileName);
+    /// <summary>
+    ///     Check if command throws specified exception type.
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenThrows<T>() where T : Exception;
+    /// <summary>
+    ///     Get specified type exception thrown with last command to check exception.
+    /// </summary>
+    /// <param name="checkException"></param>
+    /// <typeparam name="T"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenGetException<T>(Action<T> checkException) where T : Exception;
+    /// <summary>
+    ///     Get exception thrown with last command to check exception.
+    /// </summary>
+    /// <param name="checkException"></param>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenGetException(Action<Exception> checkException);
+    /// <summary>
+    ///     Check if command not throws exception this expects no exception
+    /// </summary>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenNotThrowsAnException();
+    /// <summary>
+    ///     Check if command throws exception this expects some exception
+    /// </summary>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenThrowsAnException();
-
+    /// <summary>
+    ///     Check Validate Errors
+    /// </summary>
+    /// <param name="validationParameterErrors"></param>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors(IEnumerable<SekibanValidationParameterError> validationParameterErrors);
-
+    /// <summary>
+    ///     Check if validation errors exists, this method expects some validation errors
+    /// </summary>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors();
     #endregion
 
     #region Get
+    /// <summary>
+    ///     Get current aggregate id of Current Aggregate
+    ///     Current Aggregate is the aggregate that sent last command
+    /// </summary>
+    /// <returns></returns>
     public Guid GetAggregateId();
+    /// <summary>
+    ///     Get current root partition keyof Current Aggregate
+    ///     Current Aggregate is the aggregate that sent last command
+    /// </summary>
+    /// <returns></returns>
     public string GetRootPartitionKey();
+    /// <summary>
+    ///     Get current version of Current Aggregate
+    ///     Current Aggregate is the aggregate that sent last command
+    /// </summary>
+    /// <returns></returns>
     public int GetCurrentVersion();
+    /// <summary>
+    ///     Get current Aggregate state of Current Aggregate
+    ///     Current Aggregate is the aggregate that sent last command
+    /// </summary>
+    /// <returns></returns>
     public AggregateState<TAggregatePayload> GetAggregateState();
-
+    /// <summary>
+    ///     Get specified aggregate state. This is useful when you want to know some aggregate state.
+    /// </summary>
+    /// <param name="aggregateId"></param>
+    /// <param name="rootPartitionKey"></param>
+    /// <typeparam name="TEnvironmentAggregatePayload"></typeparam>
+    /// <returns></returns>
     public AggregateState<TEnvironmentAggregatePayload> GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey) where TEnvironmentAggregatePayload : IAggregatePayloadCommon;
-
+    /// <summary>
+    ///     Get last event in general
+    /// </summary>
+    /// <returns></returns>
     public IReadOnlyCollection<IEvent> GetLatestEnvironmentEvents();
+    /// <summary>
+    ///     Get latest executed events
+    /// </summary>
+    /// <returns></returns>
     public List<IEvent> GetLatestEvents();
+    /// <summary>
+    ///     Get all events for current aggregate.
+    /// </summary>
+    /// <param name="toVersion"></param>
+    /// <returns></returns>
     public List<IEvent> GetAllAggregateEvents(int? toVersion = null);
     #endregion
 
     #region Single Projection
+    /// <summary>
+    ///     Check Single Projection State for the current Aggregate
+    /// </summary>
+    /// <param name="state"></param>
+    /// <typeparam name="TSingleProjectionPayload"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionStateIs<TSingleProjectionPayload>(
         SingleProjectionState<TSingleProjectionPayload> state) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
-
+    /// <summary>
+    ///     Check Single Projection Payload for the current Aggregate
+    /// </summary>
+    /// <param name="payload"></param>
+    /// <typeparam name="TSingleProjectionPayload"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIs<TSingleProjectionPayload>(TSingleProjectionPayload payload)
         where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
-
+    /// <summary>
+    ///     Get Single Projection Payload for the current Aggregate
+    /// </summary>
+    /// <param name="payloadAction"></param>
+    /// <typeparam name="TSingleProjectionPayload"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionPayload<TSingleProjectionPayload>(
         Action<TSingleProjectionPayload> payloadAction) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
-
+    /// <summary>
+    ///     Get Single Projection State for the current Aggregate
+    /// </summary>
+    /// <param name="stateAction"></param>
+    /// <typeparam name="TSingleProjectionPayload"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionState<TSingleProjectionPayload>(
         Action<SingleProjectionState<TSingleProjectionPayload>> stateAction) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
-
+    /// <summary>
+    ///     Check if Single Projection Payload is expected value from Json
+    /// </summary>
+    /// <param name="payloadJson"></param>
+    /// <typeparam name="TSingleProjectionPayload"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIsFromJson<TSingleProjectionPayload>(string payloadJson)
         where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
-
+    /// <summary>
+    ///     Check if Single Projection Payload is expected value from Json file
+    /// </summary>
+    /// <param name="payloadFilename"></param>
+    /// <typeparam name="TSingleProjectionPayload"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIsFromFile<TSingleProjectionPayload>(string payloadFilename)
         where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
-
+    /// <summary>
+    ///     Write Single Projection State to Json file
+    /// </summary>
+    /// <param name="filename"></param>
+    /// <typeparam name="TSingleProjectionPayload"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> WriteSingleProjectionStateToFile<TSingleProjectionPayload>(string filename)
         where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
     #endregion
 
     #region General List Query Test
+    /// <summary>
+    ///     Check If Query Response is expected value
+    /// </summary>
+    /// <param name="param"></param>
+    /// <param name="expectedResponse"></param>
+    /// <typeparam name="TQueryResponse"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIs<TQueryResponse>(
         IListQueryInput<TQueryResponse> param,
         ListQueryResult<TQueryResponse> expectedResponse) where TQueryResponse : IQueryResponse;
+    /// <summary>
+    ///     Write Query Response to Json file
+    /// </summary>
+    /// <param name="param"></param>
+    /// <param name="filename"></param>
+    /// <typeparam name="TQueryResponse"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> WriteQueryResponseToFile<TQueryResponse>(IListQueryInput<TQueryResponse> param, string filename)
         where TQueryResponse : IQueryResponse;
+    /// <summary>
+    ///     Get Query Response to validate
+    /// </summary>
+    /// <param name="param"></param>
+    /// <param name="responseAction"></param>
+    /// <typeparam name="TQueryResponse"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenGetQueryResponse<TQueryResponse>(
         IListQueryInput<TQueryResponse> param,
         Action<ListQueryResult<TQueryResponse>> responseAction) where TQueryResponse : IQueryResponse;
-
+    /// <summary>
+    ///     Check if Query Response is expected value from Json
+    /// </summary>
+    /// <param name="param"></param>
+    /// <param name="responseJson"></param>
+    /// <typeparam name="TQueryResponse"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(
         IListQueryInput<TQueryResponse> param,
         string responseJson) where TQueryResponse : IQueryResponse;
-
+    /// <summary>
+    ///     Check if Query Response is expected value from Json file
+    /// </summary>
+    /// <param name="param"></param>
+    /// <param name="responseFilename"></param>
+    /// <typeparam name="TQueryResponse"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromFile<TQueryResponse>(
         IListQueryInput<TQueryResponse> param,
         string responseFilename) where TQueryResponse : IQueryResponse;
-
+    /// <summary>
+    ///     Check if query throws an exception with specified type
+    /// </summary>
+    /// <param name="param"></param>
+    /// <typeparam name="T"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenQueryThrows<T>(IListQueryInputCommon param) where T : Exception;
+    /// <summary>
+    ///     Get Query's exception with specific type
+    /// </summary>
+    /// <param name="param"></param>
+    /// <param name="checkException"></param>
+    /// <typeparam name="T"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<T>(IListQueryInputCommon param, Action<T> checkException)
         where T : Exception;
+    /// <summary>
+    ///     Get Query's exception
+    /// </summary>
+    /// <param name="param"></param>
+    /// <param name="checkException"></param>
+    /// <typeparam name="TQueryResponse"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<TQueryResponse>(
         IListQueryInput<TQueryResponse> param,
         Action<Exception> checkException) where TQueryResponse : IQueryResponse;
+    /// <summary>
+    ///     Check if query not throws an exception
+    /// </summary>
+    /// <param name="param"></param>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenQueryNotThrowsAnException(IListQueryInputCommon param);
+    /// <summary>
+    ///     Check if query throws exception
+    /// </summary>
+    /// <param name="param"></param>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenQueryThrowsAnException(IListQueryInputCommon param);
     #endregion
 
     #region Query Test (not list)
+    /// <summary>
+    ///     Check if Query Response is expected value
+    /// </summary>
+    /// <param name="param"></param>
+    /// <param name="expectedResponse"></param>
+    /// <typeparam name="TQueryResponse"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIs<TQueryResponse>(
         IQueryInput<TQueryResponse> param,
         TQueryResponse expectedResponse) where TQueryResponse : IQueryResponse;
+    /// <summary>
+    ///     Write Query Response to Json file
+    /// </summary>
+    /// <param name="param"></param>
+    /// <param name="filename"></param>
+    /// <typeparam name="TQueryResponse"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> WriteQueryResponseToFile<TQueryResponse>(IQueryInput<TQueryResponse> param, string filename)
         where TQueryResponse : IQueryResponse;
+    /// <summary>
+    ///     Get Query Response to validate
+    /// </summary>
+    /// <param name="param"></param>
+    /// <param name="responseAction"></param>
+    /// <typeparam name="TQueryResponse"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenGetQueryResponse<TQueryResponse>(
         IQueryInput<TQueryResponse> param,
         Action<TQueryResponse> responseAction) where TQueryResponse : IQueryResponse;
-
+    /// <summary>
+    ///     Check if Query Response is expected value from Json
+    /// </summary>
+    /// <param name="param"></param>
+    /// <param name="responseJson"></param>
+    /// <typeparam name="TQueryResponse"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(IQueryInput<TQueryResponse> param, string responseJson)
         where TQueryResponse : IQueryResponse;
-
+    /// <summary>
+    ///     Check if Query Response is expected value from Json file
+    /// </summary>
+    /// <param name="param"></param>
+    /// <param name="responseFilename"></param>
+    /// <typeparam name="TQueryResponse"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromFile<TQueryResponse>(
         IQueryInput<TQueryResponse> param,
         string responseFilename) where TQueryResponse : IQueryResponse;
-
+    /// <summary>
+    ///     Check if query throws an exception with specified type
+    /// </summary>
+    /// <param name="param"></param>
+    /// <typeparam name="T"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenQueryThrows<T>(IQueryInputCommon param) where T : Exception;
+    /// <summary>
+    ///     Get Query's exception with specific type
+    /// </summary>
+    /// <param name="param"></param>
+    /// <param name="checkException"></param>
+    /// <typeparam name="T"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<T>(IQueryInputCommon param, Action<T> checkException) where T : Exception;
+    /// <summary>
+    ///     Get Query's exception
+    /// </summary>
+    /// <param name="param"></param>
+    /// <param name="checkException"></param>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException(IQueryInputCommon param, Action<Exception> checkException);
+    /// <summary>
+    ///     Check if query not throws an exception
+    /// </summary>
+    /// <param name="param"></param>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenQueryNotThrowsAnException(IQueryInputCommon param);
-
+    /// <summary>
+    ///     Check if query throws exception
+    /// </summary>
+    /// <param name="param"></param>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenQueryThrowsAnException(IQueryInputCommon param);
     #endregion
 }
