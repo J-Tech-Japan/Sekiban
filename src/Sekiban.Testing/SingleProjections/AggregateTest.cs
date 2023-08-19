@@ -106,6 +106,32 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
     {
         _helper.ThrowIfTestHasUnhandledErrors();
     }
+    public IAggregateTestHelper<TAggregatePayload> GivenCommand<TCommand>(TCommand command) where TCommand : ICommand<TAggregatePayload> =>
+        WhenCommand(command);
+    public IAggregateTestHelper<TAggregatePayload> GivenSubtypeCommand<TAggregateSubtype>(ICommand<TAggregateSubtype> command)
+        where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload> =>
+        WhenSubtypeCommand(command);
+    public IAggregateTestHelper<TAggregatePayload> GivenSubtypeCommandWithPublish<TAggregateSubtype>(ICommand<TAggregateSubtype> command)
+        where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload> =>
+        WhenSubtypeCommandWithPublish(command);
+    public IAggregateTestHelper<TAggregatePayload>
+        GivenSubtypeCommandWithPublishAndBlockingSubscriber<TAggregateSubtype>(ICommand<TAggregateSubtype> command)
+        where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload> =>
+        WhenSubtypeCommandWithPublishAndBlockingSubscriber(command);
+    public IAggregateTestHelper<TAggregatePayload> GivenCommand<TCommand>(Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommand<TAggregatePayload> =>
+        WhenCommand(commandFunc);
+    public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublish<TCommand>(TCommand command) where TCommand : ICommand<TAggregatePayload> =>
+        WhenCommandWithPublish(command);
+    public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublishAndBlockingSubscriber<TCommand>(TCommand command)
+        where TCommand : ICommand<TAggregatePayload> =>
+        WhenCommandWithPublishAndBlockingSubscriber(command);
+    public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublish<TCommand>(Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommand<TAggregatePayload> =>
+        WhenCommandWithPublish(commandFunc);
+    public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublishAndBlockingSubscriber<TCommand>(
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommand<TAggregatePayload> =>
+        WhenCommandWithPublishAndBlockingSubscriber(commandFunc);
 
     public IReadOnlyCollection<IEvent> GetLatestEnvironmentEvents() => _helper.GetLatestEnvironmentEvents();
 

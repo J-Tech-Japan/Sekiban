@@ -20,7 +20,7 @@ public class BaseFirstAggregateTests : AggregateTest<BaseFirstAggregate, Feature
     public void ActivateSpec()
     {
         // Given
-        WhenCommand(new BFAggregateCreateAccount("test", 100));
+        GivenCommand(new BFAggregateCreateAccount("test", 100));
 
         // When
         WhenCommand(new ActivateBFAggregate(GetAggregateId()));
@@ -33,8 +33,8 @@ public class BaseFirstAggregateTests : AggregateTest<BaseFirstAggregate, Feature
     public void CloseSpec()
     {
         // Given
-        WhenCommand(new BFAggregateCreateAccount("test", 100));
-        WhenCommand(new ActivateBFAggregate(GetAggregateId()));
+        GivenCommand(new BFAggregateCreateAccount("test", 100));
+        GivenCommand(new ActivateBFAggregate(GetAggregateId()));
 
         // When
         WhenSubtypeCommand(new CloseBFAggregate(GetAggregateId()));
@@ -47,10 +47,10 @@ public class BaseFirstAggregateTests : AggregateTest<BaseFirstAggregate, Feature
     public void ReopenSpec()
     {
         // Given
-        WhenCommand(new BFAggregateCreateAccount("test", 100));
-        WhenCommand(new ActivateBFAggregate(GetAggregateId()))
+        GivenCommand(new BFAggregateCreateAccount("test", 100));
+        GivenCommand(new ActivateBFAggregate(GetAggregateId()))
             .ThenPayloadTypeShouldBe<ActiveBFAggregate>()
-            .WhenCommand(new CloseBFAggregate(GetAggregateId()))
+            .GivenCommand(new CloseBFAggregate(GetAggregateId()))
 
             // When
             .ThenPayloadTypeShouldBe<ClosedBFAggregate>()
@@ -64,9 +64,9 @@ public class BaseFirstAggregateTests : AggregateTest<BaseFirstAggregate, Feature
     public void ReopenSpecSimple()
     {
         // Given
-        WhenCommand(new BFAggregateCreateAccount("test", 100));
-        WhenCommand(new ActivateBFAggregate(GetAggregateId()));
-        WhenSubtypeCommand(new CloseBFAggregate(GetAggregateId()));
+        GivenCommand(new BFAggregateCreateAccount("test", 100));
+        GivenCommand(new ActivateBFAggregate(GetAggregateId()));
+        GivenSubtypeCommand(new CloseBFAggregate(GetAggregateId()));
 
         // When
         WhenSubtypeCommand(new ReopenBFAggregate(GetAggregateId()));

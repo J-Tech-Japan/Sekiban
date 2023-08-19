@@ -170,6 +170,106 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     ///     Check unhandled errors and if it exists, throw exception
     /// </summary>
     public void ThrowIfTestHasUnhandledErrors();
+
+
+    /// <summary>
+    ///     Run a command
+    ///     Use this method to prepare for the sut (system under test)
+    ///     Feature will be same as WhenCommand
+    /// </summary>
+    /// <param name="command"></param>
+    /// <typeparam name="TCommand"></typeparam>
+    /// <returns></returns>
+    public IAggregateTestHelper<TAggregatePayload> GivenCommand<TCommand>(TCommand command) where TCommand : ICommand<TAggregatePayload>;
+    /// <summary>
+    ///     Run a command with Subtype, event will not be published
+    ///     Use this method to prepare for the sut (system under test)
+    ///     Feature will be same as WhenSubtypeCommand
+    /// </summary>
+    /// <param name="command"></param>
+    /// <typeparam name="TAggregateSubtype"></typeparam>
+    /// <returns></returns>
+    public IAggregateTestHelper<TAggregatePayload> GivenSubtypeCommand<TAggregateSubtype>(ICommand<TAggregateSubtype> command)
+        where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload>;
+    /// <summary>
+    ///     Run a command with Subtype, event will be published
+    ///     Use this method to prepare for the sut (system under test)
+    ///     Feature will be same as WhenCommand
+    /// </summary>
+    /// <param name="command"></param>
+    /// <typeparam name="TAggregateSubtype"></typeparam>
+    /// <returns></returns>
+    public IAggregateTestHelper<TAggregatePayload> GivenSubtypeCommandWithPublish<TAggregateSubtype>(ICommand<TAggregateSubtype> command)
+        where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload>;
+    /// <summary>
+    ///     Run a command with Subtype, event will be published
+    ///     Even non blocking subscriptions will be executed by same thread and block the execution
+    ///     (To test subscription values, use this method. But be careful, orders could be different from actual execution)
+    ///     Use this method to prepare for the sut (system under test)
+    ///     Feature will be same as WhenSubtypeCommandWithPublishAndBlockingSubscriber
+    /// </summary>
+    /// <param name="command"></param>
+    /// <typeparam name="TAggregateSubtype"></typeparam>
+    /// <returns></returns>
+    public IAggregateTestHelper<TAggregatePayload> GivenSubtypeCommandWithPublishAndBlockingSubscriber<TAggregateSubtype>(
+        ICommand<TAggregateSubtype> command) where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload>;
+    /// <summary>
+    ///     Run a command.
+    ///     Use this method to prepare for the sut (system under test)
+    ///     Feature will be same as WhenCommand
+    /// </summary>
+    /// <param name="commandFunc"></param>
+    /// <typeparam name="TCommand"></typeparam>
+    /// <returns></returns>
+    public IAggregateTestHelper<TAggregatePayload> GivenCommand<TCommand>(Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommand<TAggregatePayload>;
+    /// <summary>
+    ///     Run a Command and publish events.
+    ///     When events are published, local subscriber will be executed.
+    ///     Use this method to prepare for the sut (system under test)
+    ///     Feature will be same as WhenCommandWithPublish
+    /// </summary>
+    /// <param name="command"></param>
+    /// <typeparam name="TCommand"></typeparam>
+    /// <returns></returns>
+    public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublish<TCommand>(TCommand command) where TCommand : ICommand<TAggregatePayload>;
+    /// <summary>
+    ///     Run a Command and publish events.
+    ///     When events are published, local subscriber will be executed.
+    ///     Even non blocking subscriptions will be executed by same thread and block the execution
+    ///     (To test subscription values, use this method. But be careful, orders could be different from actual execution)
+    ///     Use this method to prepare for the sut (system under test)
+    ///     Feature will be same as WhenCommandWithPublishAndBlockingSubscriber
+    /// </summary>
+    /// <param name="command"></param>
+    /// <typeparam name="TCommand"></typeparam>
+    /// <returns></returns>
+    public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublishAndBlockingSubscriber<TCommand>(TCommand command)
+        where TCommand : ICommand<TAggregatePayload>;
+    /// <summary>
+    ///     Run a Command and publish events.
+    ///     When events are published, local subscriber will be executed.
+    ///     Use this method to prepare for the sut (system under test)
+    ///     Feature will be same as WhenCommandWithPublish
+    /// </summary>
+    /// <param name="commandFunc"></param>
+    /// <typeparam name="TCommand"></typeparam>
+    /// <returns></returns>
+    public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublish<TCommand>(Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommand<TAggregatePayload>;
+    /// <summary>
+    ///     Run a Command and publish events.
+    ///     When events are published, local subscriber will be executed.
+    ///     Even non blocking subscriptions will be executed by same thread and block the execution
+    ///     (To test subscription values, use this method. But be careful, orders could be different from actual execution)
+    ///     Use this method to prepare for the sut (system under test)
+    ///     Feature will be same as WhenCommandWithPublishAndBlockingSubscriber
+    /// </summary>
+    /// <param name="commandFunc"></param>
+    /// <typeparam name="TCommand"></typeparam>
+    /// <returns></returns>
+    public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublishAndBlockingSubscriber<TCommand>(
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommand<TAggregatePayload>;
     #endregion
 
     #region When
@@ -206,22 +306,60 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommandWithPublishAndBlockingSubscriber<TAggregateSubtype>(
         ICommand<TAggregateSubtype> command) where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload>;
-
+    /// <summary>
+    ///     Run a command.
+    /// </summary>
+    /// <param name="commandFunc"></param>
+    /// <typeparam name="TCommand"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
         where TCommand : ICommand<TAggregatePayload>;
-
+    /// <summary>
+    ///     Run a Command and publish events.
+    ///     When events are published, local subscriber will be executed.
+    /// </summary>
+    /// <param name="command"></param>
+    /// <typeparam name="TCommand"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(TCommand command) where TCommand : ICommand<TAggregatePayload>;
-
+    /// <summary>
+    ///     Run a Command and publish events.
+    ///     When events are published, local subscriber will be executed.
+    ///     Even non blocking subscriptions will be executed by same thread and block the execution
+    ///     (To test subscription values, use this method. But be careful, orders could be different from actual execution)
+    /// </summary>
+    /// <param name="command"></param>
+    /// <typeparam name="TCommand"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublishAndBlockingSubscriber<TCommand>(TCommand command)
         where TCommand : ICommand<TAggregatePayload>;
-
+    /// <summary>
+    ///     Run a Command and publish events.
+    ///     When events are published, local subscriber will be executed.
+    /// </summary>
+    /// <param name="commandFunc"></param>
+    /// <typeparam name="TCommand"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
         where TCommand : ICommand<TAggregatePayload>;
+    /// <summary>
+    ///     Run a Command and publish events.
+    ///     When events are published, local subscriber will be executed.
+    ///     Even non blocking subscriptions will be executed by same thread and block the execution
+    ///     (To test subscription values, use this method. But be careful, orders could be different from actual execution)
+    /// </summary>
+    /// <param name="commandFunc"></param>
+    /// <typeparam name="TCommand"></typeparam>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublishAndBlockingSubscriber<TCommand>(
         Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommand<TAggregatePayload>;
     #endregion
 
     #region Then
+    /// <summary>
+    /// </summary>
+    /// <param name="checkEventsAction"></param>
+    /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenGetLatestEvents(Action<List<IEvent>> checkEventsAction);
     public IAggregateTestHelper<TAggregatePayload> ThenGetAllAggregateEvents(Action<List<IEvent>> checkEventsAction);
 
