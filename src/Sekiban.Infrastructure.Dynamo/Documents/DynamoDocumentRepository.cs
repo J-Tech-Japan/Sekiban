@@ -15,21 +15,14 @@ using System.Text.Json;
 using Document = Sekiban.Core.Documents.Document;
 namespace Sekiban.Infrastructure.Dynamo.Documents;
 
-public class DynamoDocumentRepository : IDocumentPersistentRepository
+/// <summary>
+///     Receive data from DynamoDB
+/// </summary>
+public class DynamoDocumentRepository(
+    DynamoDbFactory dbFactory,
+    RegisteredEventTypes registeredEventTypes,
+    ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor) : IDocumentPersistentRepository
 {
-    private readonly DynamoDbFactory _dbFactory;
-    private readonly RegisteredEventTypes _registeredEventTypes;
-    private readonly ISingleProjectionSnapshotAccessor _singleProjectionSnapshotAccessor;
-
-    public DynamoDocumentRepository(
-        DynamoDbFactory dbFactory,
-        RegisteredEventTypes registeredEventTypes,
-        ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor)
-    {
-        _dbFactory = dbFactory;
-        _registeredEventTypes = registeredEventTypes;
-        _singleProjectionSnapshotAccessor = singleProjectionSnapshotAccessor;
-    }
 
     public async Task GetAllEventsForAggregateIdAsync(
         Guid aggregateId,
@@ -41,12 +34,12 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
 
-        await _dbFactory.DynamoActionAsync(
+        await dbFactory.DynamoActionAsync(
             DocumentType.Event,
             aggregateContainerGroup,
             async table =>
             {
-                var types = _registeredEventTypes.RegisteredTypes;
+                var types = registeredEventTypes.RegisteredTypes;
 
                 var filter = new QueryFilter();
                 filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
@@ -122,7 +115,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
 
-        await _dbFactory.DynamoActionAsync(
+        await dbFactory.DynamoActionAsync(
             DocumentType.Command,
             aggregateContainerGroup,
             async table =>
@@ -168,12 +161,12 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
 
-        await _dbFactory.DynamoActionAsync(
+        await dbFactory.DynamoActionAsync(
             DocumentType.Event,
             aggregateContainerGroup,
             async table =>
             {
-                var types = _registeredEventTypes.RegisteredTypes;
+                var types = registeredEventTypes.RegisteredTypes;
 
                 var filter = new QueryFilter();
                 filter.AddCondition(nameof(IEvent.AggregateType), QueryOperator.Equal, aggregatePayloadType.Name);
@@ -231,12 +224,12 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionType);
 
-        await _dbFactory.DynamoActionAsync(
+        await dbFactory.DynamoActionAsync(
             DocumentType.Event,
             aggregateContainerGroup,
             async table =>
             {
-                var types = _registeredEventTypes.RegisteredTypes;
+                var types = registeredEventTypes.RegisteredTypes;
 
                 var filter = new ScanFilter();
                 if (targetAggregateNames.Count > 0)
@@ -303,7 +296,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
         string payloadVersionIdentifier)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-        return await _dbFactory.DynamoActionAsync(
+        return await dbFactory.DynamoActionAsync(
             DocumentType.AggregateSnapshot,
             aggregateContainerGroup,
             async table =>
@@ -343,7 +336,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 if (string.IsNullOrEmpty(snapshotJson)) { return null; }
                 var snapshot = SekibanJsonHelper.Deserialize<SnapshotDocument>(snapshotJson);
                 if (snapshot is null) { return null; }
-                return await _singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshot);
+                return await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshot);
             });
     }
     public async Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(
@@ -352,7 +345,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
         string rootPartitionKey)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionPayloadType);
-        return await _dbFactory.DynamoActionAsync(
+        return await dbFactory.DynamoActionAsync(
             DocumentType.MultiProjectionSnapshot,
             aggregateContainerGroup,
             async table =>
@@ -400,7 +393,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
         string payloadVersionIdentifier)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-        return await _dbFactory.DynamoActionAsync(
+        return await dbFactory.DynamoActionAsync(
             DocumentType.AggregateSnapshot,
             aggregateContainerGroup,
             async table =>
@@ -452,7 +445,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
         string rootPartitionKey)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-        return await _dbFactory.DynamoActionAsync<List<SnapshotDocument>>(
+        return await dbFactory.DynamoActionAsync<List<SnapshotDocument>>(
             DocumentType.AggregateSnapshot,
             aggregateContainerGroup,
             async table =>
@@ -492,7 +485,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 foreach (var snapshotDocument in snapshotDocuments)
                 {
                     if (snapshotDocument is null) { continue; }
-                    var filledSnapshot = await _singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshotDocument);
+                    var filledSnapshot = await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshotDocument);
                     if (filledSnapshot is null) { continue; }
                     toReturn.Add(filledSnapshot);
                 }
@@ -509,7 +502,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
         string rootPartitionKey)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-        return await _dbFactory.DynamoActionAsync(
+        return await dbFactory.DynamoActionAsync(
             DocumentType.AggregateSnapshot,
             aggregateContainerGroup,
             async table =>
@@ -543,7 +536,7 @@ public class DynamoDocumentRepository : IDocumentPersistentRepository
                 if (string.IsNullOrEmpty(snapshotJson)) { return null; }
                 var snapshot = SekibanJsonHelper.Deserialize<SnapshotDocument>(snapshotJson);
                 if (snapshot is null) { return null; }
-                return await _singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshot);
+                return await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshot);
             });
     }
 }

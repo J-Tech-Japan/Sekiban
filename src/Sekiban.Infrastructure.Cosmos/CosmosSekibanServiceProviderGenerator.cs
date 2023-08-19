@@ -5,9 +5,19 @@ using Sekiban.Core.Shared;
 using Sekiban.Testing.Story;
 namespace Sekiban.Infrastructure.Cosmos;
 
+/// <summary>
+///     Add Cosmos services
+/// </summary>
 public class CosmosSekibanServiceProviderGenerator : ISekibanServiceProviderGenerator
 {
-
+    /// <summary>
+    ///     Generate ServiceProvider for CosmosDB
+    /// </summary>
+    /// <param name="fixture"></param>
+    /// <param name="dependencyDefinition"></param>
+    /// <param name="configureServices"></param>
+    /// <param name="sekibanDateProducer"></param>
+    /// <returns></returns>
     public IServiceProvider Generate(
         ISekibanTestFixture fixture,
         IDependencyDefinition dependencyDefinition,

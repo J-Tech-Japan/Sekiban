@@ -8,6 +8,7 @@ using Sekiban.Core.PubSub;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Shared;
+using Sekiban.Core.Types;
 using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
 using System.Diagnostics;
@@ -127,20 +128,33 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     {
         return WhenCommand(_ => changeCommand);
     }
-    public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommand<TAggregateSubtypePayload, TCommand>(TCommand changeCommand)
-        where TAggregateSubtypePayload : TAggregatePayload, IAggregatePayloadCommon where TCommand : ICommand<TAggregateSubtypePayload>
+    public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommand<TAggregateSubtype>(ICommand<TAggregateSubtype> command)
+        where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload> =>
+        WhenSubtypeCommandPrivate(command, false);
+    public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommandWithPublish<TAggregateSubtype>(ICommand<TAggregateSubtype> command)
+        where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload> =>
+        WhenSubtypeCommandPrivate(command, true);
+
+    public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommandWithPublishAndBlockingSubscriber<TAggregateSubtype>(
+        ICommand<TAggregateSubtype> command) where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload>
     {
-        return WhenCommandPrivate<TAggregateSubtypePayload, TCommand>(_ => changeCommand, false);
+        var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>();
+        if (nonBlockingStatus == null)
+        {
+            throw new Exception("EventNonBlockingStatus is not registered");
+        }
+        nonBlockingStatus.RunBlockingAction(() => WhenSubtypeCommandPrivate(command, true));
+        return this;
     }
 
     public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
         where TCommand : ICommand<TAggregatePayload> =>
-        WhenCommandPrivate<TAggregatePayload, TCommand>(commandFunc, false);
+        WhenCommandPrivateFunc<TAggregatePayload, TCommand>(commandFunc, false);
 
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(TCommand changeCommand)
         where TCommand : ICommand<TAggregatePayload>
     {
-        return WhenCommandPrivate<TAggregatePayload, TCommand>(_ => changeCommand, true);
+        return WhenCommandPrivateFunc<TAggregatePayload, TCommand>(_ => changeCommand, true);
     }
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublishAndBlockingSubscriber<TCommand>(TCommand command)
         where TCommand : ICommand<TAggregatePayload>
@@ -156,7 +170,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
         where TCommand : ICommand<TAggregatePayload> =>
-        WhenCommandPrivate<TAggregatePayload, TCommand>(commandFunc, true);
+        WhenCommandPrivateFunc<TAggregatePayload, TCommand>(commandFunc, true);
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublishAndBlockingSubscriber<TCommand>(
         Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommand<TAggregatePayload>
     {
@@ -165,7 +179,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         {
             throw new Exception("EventNonBlockingStatus is not registered");
         }
-        nonBlockingStatus.RunBlockingAction(() => WhenCommandPrivate<TAggregatePayload, TCommand>(commandFunc, true));
+        nonBlockingStatus.RunBlockingAction(() => WhenCommandPrivateFunc<TAggregatePayload, TCommand>(commandFunc, true));
         return this;
     }
 
@@ -478,6 +492,19 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         checkEventAction((Event<T>)_latestEvents.First());
         return this;
     }
+    public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommandPrivate<TAggregateSubtype>(ICommand<TAggregateSubtype> command, bool withPublish)
+        where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload>
+    {
+        var commandType = command.GetType();
+        var aggregateIn = commandType.GetAggregatePayloadTypeFromCommandType();
+        var method = GetType().GetMethod(nameof(WhenCommandPrivate), BindingFlags.NonPublic | BindingFlags.Instance);
+        var genericMethod = method?.MakeGenericMethod(aggregateIn, commandType);
+        if (genericMethod is null)
+        {
+            throw new Exception("Failed to get WhenCommandPrivate method");
+        }
+        return (IAggregateTestHelper<TAggregatePayload>)genericMethod.Invoke(this, new object?[] { command, withPublish })!;
+    }
     public AggregateState<TAggregatePayload> GetAggregateStateIfNotNullEmptyAggregate()
     {
         var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
@@ -497,8 +524,10 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         AddEventsFromList(list, withPublish);
         return this;
     }
-
-    private IAggregateTestHelper<TAggregatePayload> WhenCommandPrivate<TAggregatePayloadIn, TCommand>(
+    private IAggregateTestHelper<TAggregatePayload> WhenCommandPrivate<TAggregatePayloadIn, TCommand>(TCommand command, bool withPublish)
+        where TAggregatePayloadIn : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayloadIn> =>
+        WhenCommandPrivateFunc<TAggregatePayloadIn, TCommand>(_ => command, withPublish);
+    private IAggregateTestHelper<TAggregatePayload> WhenCommandPrivateFunc<TAggregatePayloadIn, TCommand>(
         Func<AggregateState<TAggregatePayload>, TCommand> commandFunc,
         bool withPublish) where TAggregatePayloadIn : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayloadIn>
     {

@@ -13,7 +13,6 @@ type Branch =
     interface IAggregatePayload<Branch> with
         member this.CreateInitialPayload(_) = { Name = "" }
 
-
 type CreateBranch(name: string) =
     member this.Name = name
 

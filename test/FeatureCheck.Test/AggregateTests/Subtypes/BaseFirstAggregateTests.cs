@@ -23,11 +23,10 @@ public class BaseFirstAggregateTests : AggregateTest<BaseFirstAggregate, Feature
         WhenCommand(new BFAggregateCreateAccount("test", 100));
 
         // When
-        WhenCommand(new ActivateBFAggregate(GetAggregateId()))
+        WhenCommand(new ActivateBFAggregate(GetAggregateId()));
 
-            // Then
-            .ThenPayloadTypeShouldBe<ActiveBFAggregate>()
-            .ThenPayloadIs(new ActiveBFAggregate { Name = "test", Price = 100 });
+        // Then
+        ThenPayloadIs(new ActiveBFAggregate { Name = "test", Price = 100 });
     }
 
     [Fact]
@@ -35,15 +34,13 @@ public class BaseFirstAggregateTests : AggregateTest<BaseFirstAggregate, Feature
     {
         // Given
         WhenCommand(new BFAggregateCreateAccount("test", 100));
-        WhenCommand(new ActivateBFAggregate(GetAggregateId()))
-            .ThenPayloadTypeShouldBe<ActiveBFAggregate>()
+        WhenCommand(new ActivateBFAggregate(GetAggregateId()));
 
-            // When
-            .WhenCommand(new CloseBFAggregate(GetAggregateId()))
+        // When
+        WhenSubtypeCommand(new CloseBFAggregate(GetAggregateId()));
 
-            // Then
-            .ThenPayloadTypeShouldBe<ClosedBFAggregate>()
-            .ThenPayloadIs(new ClosedBFAggregate { Name = "test", Price = 100 });
+        // Then
+        ThenPayloadIs(new ClosedBFAggregate { Name = "test", Price = 100 });
     }
 
     [Fact]
@@ -62,5 +59,19 @@ public class BaseFirstAggregateTests : AggregateTest<BaseFirstAggregate, Feature
             // Then
             .ThenPayloadTypeShouldBe<BaseFirstAggregate>()
             .ThenPayloadIs(new BaseFirstAggregate { Name = "test", Price = 100 });
+    }
+    [Fact]
+    public void ReopenSpecSimple()
+    {
+        // Given
+        WhenCommand(new BFAggregateCreateAccount("test", 100));
+        WhenCommand(new ActivateBFAggregate(GetAggregateId()));
+        WhenSubtypeCommand(new CloseBFAggregate(GetAggregateId()));
+
+        // When
+        WhenSubtypeCommand(new ReopenBFAggregate(GetAggregateId()));
+
+        // Then
+        ThenPayloadIs(new BaseFirstAggregate { Name = "test", Price = 100 });
     }
 }

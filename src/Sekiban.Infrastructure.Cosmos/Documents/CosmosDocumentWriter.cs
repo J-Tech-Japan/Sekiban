@@ -9,17 +9,15 @@ using System.Text;
 using System.Text.Json;
 namespace Sekiban.Infrastructure.Cosmos.Documents;
 
-public class CosmosDocumentWriter : IDocumentPersistentWriter
+/// <summary>
+///     Writes data on CosmosDB
+/// </summary>
+/// <param name="cosmosDbFactory"></param>
+/// <param name="eventPublisher"></param>
+/// <param name="blobAccessor"></param>
+public class CosmosDocumentWriter
+    (CosmosDbFactory cosmosDbFactory, EventPublisher eventPublisher, IBlobAccessor blobAccessor) : IDocumentPersistentWriter
 {
-    private readonly IBlobAccessor _blobAccessor;
-    private readonly CosmosDbFactory _cosmosDbFactory;
-    private readonly EventPublisher _eventPublisher;
-    public CosmosDocumentWriter(CosmosDbFactory cosmosDbFactory, EventPublisher eventPublisher, IBlobAccessor blobAccessor)
-    {
-        _cosmosDbFactory = cosmosDbFactory;
-        _eventPublisher = eventPublisher;
-        _blobAccessor = blobAccessor;
-    }
 
     public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType) where TDocument : IDocument
     {
@@ -27,7 +25,7 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
         switch (document.DocumentType)
         {
             case DocumentType.Event:
-                await _cosmosDbFactory.CosmosActionAsync(
+                await cosmosDbFactory.CosmosActionAsync(
                     document.DocumentType,
                     aggregateContainerGroup,
                     async container =>
@@ -45,7 +43,7 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
                 await SaveSingleSnapshotAsync(snapshot, aggregateType, ShouldUseBlob(snapshot));
                 break;
             default:
-                await _cosmosDbFactory.CosmosActionAsync(
+                await cosmosDbFactory.CosmosActionAsync(
                     document.DocumentType,
                     aggregateContainerGroup,
                     async container =>
@@ -64,8 +62,8 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
             var snapshotValue = document.Snapshot;
             var json = JsonSerializer.Serialize(snapshotValue, new JsonSerializerOptions());
             var memoryStream = new MemoryStream(Encoding.UTF8.GetBytes(json));
-            await _blobAccessor.SetBlobWithGZipAsync(SekibanBlobContainer.SingleProjectionState, blobSnapshot.FilenameForSnapshot(), memoryStream);
-            await _cosmosDbFactory.CosmosActionAsync(
+            await blobAccessor.SetBlobWithGZipAsync(SekibanBlobContainer.SingleProjectionState, blobSnapshot.FilenameForSnapshot(), memoryStream);
+            await cosmosDbFactory.CosmosActionAsync(
                 blobSnapshot.DocumentType,
                 aggregateContainerGroup,
                 async container =>
@@ -75,7 +73,7 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
 
         } else
         {
-            await _cosmosDbFactory.CosmosActionAsync(
+            await cosmosDbFactory.CosmosActionAsync(
                 document.DocumentType,
                 aggregateContainerGroup,
                 async container =>
@@ -94,7 +92,7 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
     public async Task SaveAndPublishEvents<TEvent>(IEnumerable<TEvent> events, Type aggregateType) where TEvent : IEvent
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
-        await _cosmosDbFactory.CosmosActionAsync(
+        await cosmosDbFactory.CosmosActionAsync(
             DocumentType.Event,
             aggregateContainerGroup,
             async container =>
@@ -104,7 +102,7 @@ public class CosmosDocumentWriter : IDocumentPersistentWriter
             });
         foreach (var ev in events)
         {
-            await _eventPublisher.PublishAsync(ev);
+            await eventPublisher.PublishAsync(ev);
         }
     }
 }

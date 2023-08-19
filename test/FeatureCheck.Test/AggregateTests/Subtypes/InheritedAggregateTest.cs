@@ -17,4 +17,13 @@ public class InheritedAggregateTest : AggregateTest<IInheritedAggregate, Feature
         ThenPayloadTypeShouldBe<ProcessingSubAggregate>()
             .WhenCommand(new CloseInheritedAggregate { Reason = "test", AggregateId = GetAggregateId() });
     }
+
+    [Fact]
+    public void TestWithSubtypeCommand()
+    {
+        WhenSubtypeCommand(new OpenInheritedAggregate { YearMonth = 202201 });
+        WhenSubtypeCommand(new CloseInheritedAggregate { Reason = "test", AggregateId = GetAggregateId() });
+        WhenSubtypeCommand(new ReopenInheritedAggregate { Reason = "test", AggregateId = GetAggregateId() });
+        WhenSubtypeCommand(new CloseInheritedAggregate { Reason = "test", AggregateId = GetAggregateId() });
+    }
 }

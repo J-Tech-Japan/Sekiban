@@ -13,21 +13,17 @@ using Sekiban.Core.Snapshot;
 
 namespace Sekiban.Infrastructure.Cosmos.Documents;
 
-public class CosmosDocumentRepository : IDocumentPersistentRepository
+/// <summary>
+///     Retrieve documents from CosmosDB
+/// </summary>
+/// <param name="cosmosDbFactory"></param>
+/// <param name="registeredEventTypes"></param>
+/// <param name="singleProjectionSnapshotAccessor"></param>
+public class CosmosDocumentRepository(
+    CosmosDbFactory cosmosDbFactory,
+    RegisteredEventTypes registeredEventTypes,
+    ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor) : IDocumentPersistentRepository
 {
-    private readonly CosmosDbFactory _cosmosDbFactory;
-    private readonly RegisteredEventTypes _registeredEventTypes;
-    private readonly ISingleProjectionSnapshotAccessor _singleProjectionSnapshotAccessor;
-    public CosmosDocumentRepository(
-        CosmosDbFactory cosmosDbFactory,
-        RegisteredEventTypes registeredEventTypes,
-        ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor)
-    {
-        _cosmosDbFactory = cosmosDbFactory;
-        _registeredEventTypes = registeredEventTypes;
-        _singleProjectionSnapshotAccessor = singleProjectionSnapshotAccessor;
-    }
-
     public async Task GetAllEventsAsync(
         Type multiProjectionType,
         IList<string> targetAggregateNames,
@@ -37,7 +33,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionType);
 
-        await _cosmosDbFactory.CosmosActionAsync(
+        await cosmosDbFactory.CosmosActionAsync(
             DocumentType.Event,
             aggregateContainerGroup,
             async container =>
@@ -70,7 +66,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                             continue;
                         }
 
-                        var toAdd = _registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
+                        var toAdd = registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
                                 .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(Event<>).MakeGenericType(m)) as IEvent)
                                 .FirstOrDefault(m => m is not null) ??
                             EventHelper.GetUnregisteredEvent(item);
@@ -96,7 +92,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
         string rootPartitionKey)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionPayloadType);
-        return await _cosmosDbFactory.CosmosActionAsync(
+        return await cosmosDbFactory.CosmosActionAsync(
             DocumentType.MultiProjectionSnapshot,
             aggregateContainerGroup,
             async container =>
@@ -128,7 +124,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
         string rootPartitionKey)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-        return await _cosmosDbFactory.CosmosActionAsync(
+        return await cosmosDbFactory.CosmosActionAsync(
             DocumentType.AggregateSnapshot,
             aggregateContainerGroup,
             async container =>
@@ -151,7 +147,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     foreach (var obj in await feedIterator.ReadNextAsync())
                     {
                         if (obj is null) { continue; }
-                        var filled = await _singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(obj);
+                        var filled = await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(obj);
                         if (filled is not null)
                         {
                             list.Add(filled);
@@ -172,12 +168,12 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
 
-        await _cosmosDbFactory.CosmosActionAsync(
+        await cosmosDbFactory.CosmosActionAsync(
             DocumentType.Event,
             aggregateContainerGroup,
             async container =>
             {
-                var types = _registeredEventTypes.RegisteredTypes;
+                var types = registeredEventTypes.RegisteredTypes;
                 var options = new QueryRequestOptions
                 {
                     MaxConcurrency = -1,
@@ -232,7 +228,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
 
-        await _cosmosDbFactory.CosmosActionAsync(
+        await cosmosDbFactory.CosmosActionAsync(
             DocumentType.Command,
             aggregateContainerGroup,
             async container =>
@@ -273,7 +269,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
 
-        await _cosmosDbFactory.CosmosActionAsync(
+        await cosmosDbFactory.CosmosActionAsync(
             DocumentType.Event,
             aggregateContainerGroup,
             async container =>
@@ -302,7 +298,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                             continue;
                         }
 
-                        var toAdd = _registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
+                        var toAdd = registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
                                 .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(Event<>).MakeGenericType(m)) as IEvent)
                                 .FirstOrDefault(m => m is not null) ??
                             EventHelper.GetUnregisteredEvent(item);
@@ -332,7 +328,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
         string payloadVersionIdentifier)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-        return await _cosmosDbFactory.CosmosActionAsync(
+        return await cosmosDbFactory.CosmosActionAsync(
             DocumentType.AggregateSnapshot,
             aggregateContainerGroup,
             async container =>
@@ -373,7 +369,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
         string payloadVersionIdentifier)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-        return await _cosmosDbFactory.CosmosActionAsync(
+        return await cosmosDbFactory.CosmosActionAsync(
             DocumentType.AggregateSnapshot,
             aggregateContainerGroup,
             async container =>
@@ -400,7 +396,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     foreach (var obj in await feedIterator.ReadNextAsync())
                     {
                         if (obj is null) { continue; }
-                        return await _singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(obj);
+                        return await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(obj);
                     }
                 }
                 return null;
@@ -436,7 +432,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
         string rootPartitionKey)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-        return await _cosmosDbFactory.CosmosActionAsync(
+        return await cosmosDbFactory.CosmosActionAsync(
             DocumentType.AggregateSnapshot,
             aggregateContainerGroup,
             async container =>
@@ -445,7 +441,7 @@ public class CosmosDocumentRepository : IDocumentPersistentRepository
                     id.ToString(),
                     CosmosPartitionGenerator.ForSingleProjectionSnapshot(rootPartitionKey, aggregatePayloadType, projectionPayloadType, aggregateId));
                 if (response.Resource is null) { return null; }
-                return await _singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(response.Resource);
+                return await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(response.Resource);
             });
     }
 }

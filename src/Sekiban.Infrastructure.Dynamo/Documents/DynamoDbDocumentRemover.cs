@@ -2,6 +2,10 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
 namespace Sekiban.Infrastructure.Dynamo.Documents;
 
+/// <summary>
+///     Remove all documents from DynamoDB
+///     Usually use for test.
+/// </summary>
 public class DynamoDbDocumentRemover : IDocumentRemover
 {
     private readonly DynamoDbFactory _dynamoDbFactory;

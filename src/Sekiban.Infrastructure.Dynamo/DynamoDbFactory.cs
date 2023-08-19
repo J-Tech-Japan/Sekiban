@@ -12,6 +12,9 @@ using Sekiban.Core.Setting;
 using Document = Amazon.DynamoDBv2.DocumentModel.Document;
 namespace Sekiban.Infrastructure.Dynamo;
 
+/// <summary>
+///     Create DynamoDb session for Sekiban
+/// </summary>
 public class DynamoDbFactory
 {
     private const string SekibanSection = "Sekiban";

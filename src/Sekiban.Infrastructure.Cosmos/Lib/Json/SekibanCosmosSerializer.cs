@@ -3,12 +3,9 @@ using Sekiban.Core.Shared;
 using System.Text.Json;
 namespace Sekiban.Infrastructure.Cosmos.Lib.Json;
 
-public class SekibanCosmosSerializer : CosmosSerializer
+public class SekibanCosmosSerializer(JsonSerializerOptions? jsonSerializerOptions = null) : CosmosSerializer
 {
-    private readonly JsonObjectSerializer _jsonObjectSerializer;
-
-    public SekibanCosmosSerializer(JsonSerializerOptions? jsonSerializerOptions = null) =>
-        _jsonObjectSerializer = new JsonObjectSerializer(jsonSerializerOptions ?? SekibanJsonHelper.GetDefaultJsonSerializerOptions());
+    private readonly JsonObjectSerializer _jsonObjectSerializer = new(jsonSerializerOptions ?? SekibanJsonHelper.GetDefaultJsonSerializerOptions());
 
     public override T FromStream<T>(Stream stream)
     {

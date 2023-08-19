@@ -644,30 +644,30 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         return this;
     }
 
-    public UnifiedTest<TDependencyDefinition> GivenEvents(params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTouples)
+    public UnifiedTest<TDependencyDefinition> GivenEvents(params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTuples)
     {
-        _eventHandler.GivenEvents(eventTouples);
+        _eventHandler.GivenEvents(eventTuples);
         return this;
     }
 
     public UnifiedTest<TDependencyDefinition> GivenEventsWithPublish(
-        params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTouples)
+        params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTuples)
     {
-        _eventHandler.GivenEventsWithPublish(eventTouples);
+        _eventHandler.GivenEventsWithPublish(eventTuples);
         return this;
     }
 
     public UnifiedTest<TDependencyDefinition> GivenEvents(
-        params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTouples)
+        params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTuples)
     {
-        _eventHandler.GivenEvents(eventTouples);
+        _eventHandler.GivenEvents(eventTuples);
         return this;
     }
 
     public UnifiedTest<TDependencyDefinition> GivenEventsWithPublish(
-        params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTouples)
+        params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTuples)
     {
-        _eventHandler.GivenEventsWithPublish(eventTouples);
+        _eventHandler.GivenEventsWithPublish(eventTuples);
         return this;
     }
 

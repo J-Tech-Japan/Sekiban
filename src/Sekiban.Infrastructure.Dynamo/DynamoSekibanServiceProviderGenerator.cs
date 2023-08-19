@@ -5,9 +5,20 @@ using Sekiban.Core.Shared;
 using Sekiban.Testing.Story;
 namespace Sekiban.Infrastructure.Dynamo;
 
+/// <summary>
+///     DynamoDB service provider generator
+/// </summary>
 public class DynamoSekibanServiceProviderGenerator : ISekibanServiceProviderGenerator
 {
 
+    /// <summary>
+    ///     Generate service provider for Sekiban
+    /// </summary>
+    /// <param name="fixture"></param>
+    /// <param name="dependencyDefinition"></param>
+    /// <param name="configureServices"></param>
+    /// <param name="sekibanDateProducer"></param>
+    /// <returns></returns>
     public IServiceProvider Generate(
         ISekibanTestFixture fixture,
         IDependencyDefinition dependencyDefinition,

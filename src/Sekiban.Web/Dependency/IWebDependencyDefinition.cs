@@ -70,4 +70,6 @@ public interface IWebDependencyDefinition : IQueryDefinition
     public IEnumerable<Type> GetSingleProjectionTypes();
 
     IEnumerable<(Type serviceType, Type? implementationType)> GetCommandDependencies();
+
+    public void Define();
 }
