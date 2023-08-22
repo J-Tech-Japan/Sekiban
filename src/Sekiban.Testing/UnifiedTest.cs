@@ -32,7 +32,9 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         var services = new ServiceCollection();
         // ReSharper disable once VirtualMemberCallInConstructor
         SetupDependency(services);
-        services.AddQueriesFromDependencyDefinition(new TDependencyDefinition());
+        var dependencyDefinition = new TDependencyDefinition();
+        dependencyDefinition.Define();
+        services.AddQueriesFromDependencyDefinition(dependencyDefinition);
         services.AddSekibanCoreForAggregateTestWithDependency(new TDependencyDefinition());
         var outputHelper = new TestOutputHelper();
         services.AddSingleton<ITestOutputHelper>(outputHelper);
