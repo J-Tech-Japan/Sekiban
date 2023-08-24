@@ -42,10 +42,11 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         _helper = new AggregateTestHelper<TAggregatePayload>(_serviceProvider);
     }
 
-    public AggregateTest(IServiceProvider serviceProvider, Guid aggregateId) : this(serviceProvider)
+    public AggregateTest(IServiceProvider serviceProvider, Guid aggregateId, string rootPartitionKey) : this(serviceProvider)
     {
         _helper = new AggregateTestHelper<TAggregatePayload>(_serviceProvider);
         _helper.AggregateIdHolder.AggregateId = aggregateId;
+        _helper.AggregateIdHolder.RootPartitionKey = rootPartitionKey;
     }
 
     public IAggregateTestHelper<TAggregatePayloadExpected> ThenPayloadTypeShouldBe<TAggregatePayloadExpected>()
