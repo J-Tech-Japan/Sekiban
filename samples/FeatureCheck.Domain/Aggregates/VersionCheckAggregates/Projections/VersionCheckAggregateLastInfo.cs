@@ -1,6 +1,5 @@
 using FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Enums;
 using FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Events;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Events;
 using Sekiban.Core.Query.SingleProjections;
 namespace FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Projections;
@@ -19,5 +18,5 @@ public record VersionCheckAggregateLastInfo
                 paymentAdded.Description),
             _ => null
         };
-    public static IAggregatePayloadCommon CreateInitialPayload() => new VersionCheckAggregateLastInfo(0, PaymentKind.Cash, string.Empty);
+    public static VersionCheckAggregateLastInfo CreateInitialPayload() => new(0, PaymentKind.Cash, string.Empty);
 }

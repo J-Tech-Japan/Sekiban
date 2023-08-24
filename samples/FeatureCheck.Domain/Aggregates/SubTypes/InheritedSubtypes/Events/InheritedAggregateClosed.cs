@@ -1,5 +1,5 @@
 using Sekiban.Core.Events;
-namespace FeatureCheck.Domain.Aggregates.SubTypes.InheritedSubtypes;
+namespace FeatureCheck.Domain.Aggregates.SubTypes.InheritedSubtypes.Events;
 
 public record InheritedAggregateClosed(string Reason) : IEventPayload<ProcessingSubAggregate, ClosedSubAggregate, InheritedAggregateClosed>
 {

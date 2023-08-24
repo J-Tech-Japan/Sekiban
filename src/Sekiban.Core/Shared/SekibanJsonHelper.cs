@@ -20,7 +20,7 @@ public static class SekibanJsonHelper
     /// </summary>
     /// <param name="obj"></param>
     /// <returns></returns>
-    public static string? SerializeWithGeneric<T>(T obj) => JsonSerializer.Serialize(obj, GetDefaultJsonSerializerOptions());
+    public static string SerializeWithGeneric<T>(T obj) => JsonSerializer.Serialize(obj, GetDefaultJsonSerializerOptions());
 
     /// <summary>
     ///     serialize dynamic object to json string

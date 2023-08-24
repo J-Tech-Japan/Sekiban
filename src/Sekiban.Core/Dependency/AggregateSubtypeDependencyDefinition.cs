@@ -8,7 +8,7 @@ namespace Sekiban.Core.Dependency;
 
 public class
     AggregateSubtypeDependencyDefinition<TParentAggregatePayload, TAggregateSubtypePayload> : IAggregateSubTypeDependencyDefinition<
-        TParentAggregatePayload> where TParentAggregatePayload : IAggregatePayloadCommonBase where TAggregateSubtypePayload : IAggregatePayloadCommon
+        TParentAggregatePayload> where TParentAggregatePayload : IAggregatePayloadCommon where TAggregateSubtypePayload : IAggregatePayloadCommon
 {
     public AggregateDependencyDefinition<TParentAggregatePayload> ParentAggregateDependencyDefinition { get; init; }
     internal AggregateSubtypeDependencyDefinition(AggregateDependencyDefinition<TParentAggregatePayload> parentAggregateDependencyDefinition) =>
@@ -24,7 +24,7 @@ public class
         return this;
     }
     public AggregateSubtypeDependencyDefinition<TParentAggregatePayload, TAggregateSubtypePayload>
-        AddCommandHandler<TCreateCommand, TCommandHandler>() where TCreateCommand : ICommand<TAggregateSubtypePayload>, new()
+        AddCommandHandler<TCreateCommand, TCommandHandler>() where TCreateCommand : ICommand<TAggregateSubtypePayload>
         where TCommandHandler : ICommandHandlerCommon<TAggregateSubtypePayload, TCreateCommand>
     {
         CommandTypes = CommandTypes.Add((typeof(ICommandHandlerCommon<TAggregateSubtypePayload, TCreateCommand>), typeof(TCommandHandler)));

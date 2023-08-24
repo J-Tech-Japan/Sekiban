@@ -26,9 +26,10 @@
         </PackageReference>
     </ItemGroup>
 
+
     <ItemGroup>
-        <ProjectReference Include="..\samples\fsharp\fsCustomer.fsproj"/>
-        <ProjectReference Include="..\src\Sekiban.Testing\Sekiban.Testing.csproj"/>
+        <ProjectReference Include="..\..\samples\fsharp\fsCustomer.fsproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Testing\Sekiban.Testing.csproj"/>
     </ItemGroup>
 
 </Project>

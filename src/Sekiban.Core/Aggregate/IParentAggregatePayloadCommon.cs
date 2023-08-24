@@ -6,4 +6,4 @@ namespace Sekiban.Core.Aggregate;
 /// </summary>
 /// <typeparam name="TParentAggregatePayload">Refers Parent Aggregate Itself</typeparam>
 public interface IParentAggregatePayloadCommon<TParentAggregatePayload> : IApplicableAggregatePayload<TParentAggregatePayload>
-    where TParentAggregatePayload : IAggregatePayloadCommonBase;
+    where TParentAggregatePayload : IAggregatePayloadCommon;

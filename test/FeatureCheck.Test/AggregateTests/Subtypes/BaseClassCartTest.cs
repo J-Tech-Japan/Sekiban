@@ -16,9 +16,11 @@ public class BaseClassCartTest : AggregateTest<ICartAggregate, FeatureCheckDepen
     [Fact]
     public void CommandExecuteTest()
     {
-        Subtype<ShoppingCartI>()
-            .WhenCommand(new AddItemToShoppingCartI { CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100 })
-            .ThenGetLatestEvents(
+        // When
+        WhenSubtypeCommand(new AddItemToShoppingCartI { CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100 });
+
+        // Then
+        ThenGetLatestEvents(
                 events =>
                 {
                     var ev = events.First();
@@ -38,22 +40,27 @@ public class BaseClassCartTest : AggregateTest<ICartAggregate, FeatureCheckDepen
     [Fact]
     public void PublishTest()
     {
-        Subtype<ShoppingCartI>()
-            .WhenCommand(new AddItemToShoppingCartI { CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100 })
-            .WhenCommandWithPublish(
-                new SubmitOrderI { CartId = GetAggregateId(), OrderSubmittedLocalTime = DateTime.Now, ReferenceVersion = GetCurrentVersion() })
-            .ThenPayloadTypeShouldBe<PurchasedCartI>();
+        // Given
+        GivenSubtypeCommand(new AddItemToShoppingCartI { CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100 });
+        // When
+        WhenSubtypeCommandWithPublish(
+            new SubmitOrderI { CartId = GetAggregateId(), OrderSubmittedLocalTime = DateTime.Now, ReferenceVersion = GetCurrentVersion() });
+        // Then    
+        ThenPayloadTypeShouldBe<PurchasedCartI>();
     }
 
 
     [Fact]
     public void ScenarioTest()
     {
-        GivenScenario(CommandExecuteTest)
-            .ThenPayloadTypeShouldBe<ShoppingCartI>()
-            .WhenCommandWithPublish(
-                new SubmitOrderI { CartId = GetAggregateId(), OrderSubmittedLocalTime = DateTime.Now, ReferenceVersion = GetCurrentVersion() })
-            .ThenPayloadTypeShouldBe<PurchasedCartI>();
+        // Given
+        GivenScenario(CommandExecuteTest);
+
+        // When
+        WhenSubtypeCommandWithPublish(
+            new SubmitOrderI { CartId = GetAggregateId(), OrderSubmittedLocalTime = DateTime.Now, ReferenceVersion = GetCurrentVersion() });
+        // Then
+        ThenPayloadTypeShouldBe<PurchasedCartI>();
     }
 
 
@@ -62,7 +69,7 @@ public class BaseClassCartTest : AggregateTest<ICartAggregate, FeatureCheckDepen
     {
         var subtype = Subtype<ShoppingCartI>();
         subtype.WhenCommand(new AddItemToShoppingCartI { CartId = CartId, Code = "TESTCODE", Name = "TESTNAME", Quantity = 100 });
-        GetAggregateId();
+
         subtype.WhenCommandWithPublish(
             new SubmitOrderI { CartId = GetAggregateId(), OrderSubmittedLocalTime = DateTime.Now, ReferenceVersion = GetCurrentVersion() });
         subtype.ThenPayloadTypeShouldBe<PurchasedCartI>()

@@ -1,8 +1,5 @@
-using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.SingleProjections;
-using Sekiban.Core.Types;
 using System.ComponentModel.DataAnnotations;
-using System.Reflection;
 namespace Sekiban.Core.Aggregate;
 
 /// <summary>
@@ -11,12 +8,12 @@ namespace Sekiban.Core.Aggregate;
 ///     To make it executable, use the Aggregate class by applying this class as a snapshot
 /// </summary>
 /// <typeparam name="TPayload">Aggregate Payload</typeparam>
-public sealed record AggregateState<TPayload> : IAggregateStateCommon where TPayload : IAggregatePayloadCommonBase
+public sealed record AggregateState<TPayload> : IAggregateStateCommon where TPayload : IAggregatePayloadCommon
 {
 
-    public string PayloadTypeName => Payload?.GetType().Name ?? string.Empty;
+    public string PayloadTypeName => Payload.GetType().Name;
 
-    public TPayload Payload { get; init; } = CreatePayload();
+    public TPayload Payload { get; init; } = AggregateCommon.CreatePayload<TPayload>();
     public AggregateState()
     {
     }
@@ -66,48 +63,6 @@ public sealed record AggregateState<TPayload> : IAggregateStateCommon where TPay
     }
     public bool IsAggregatePayloadType<TAggregatePayloadExpected>() where TAggregatePayloadExpected : IAggregatePayloadCommon =>
         Payload is TAggregatePayloadExpected;
-
-    private static TPayload CreatePayload()
-    {
-        if (typeof(TPayload).GetInterfaces().Any(m => m == typeof(IAggregatePayloadCommon)))
-        {
-            var method = typeof(TPayload).GetMethod(nameof(IAggregatePayloadCommon.CreateInitialPayload), BindingFlags.Static | BindingFlags.Public);
-            var created = method?.Invoke(typeof(TPayload), new object?[] { });
-            var converted = created is TPayload payload ? payload : default;
-            if (converted is not null)
-            {
-                return converted;
-            }
-            var instantiated = Activator.CreateInstance(typeof(TPayload), new object?[] { });
-            return instantiated is TPayload payload2 ? payload2 : throw new SekibanAggregateCreateFailedException(nameof(TPayload));
-        }
-        // if (typeof(TPayload).IsAggregateSubtypePayload())
-        // {
-        //     var parentType = typeof(TPayload).GetBaseAggregatePayloadTypeFromAggregate();
-        //     var firstAggregateType = parentType.GetFirstAggregatePayloadTypeFromAggregate();
-        //     var method = firstAggregateType.GetMethod(
-        //         nameof(IAggregatePayloadCommon.CreateInitialPayload),
-        //         BindingFlags.Static | BindingFlags.Public);
-        //     var created = method?.Invoke(typeof(TPayload), new object?[] { });
-        //     return created is TPayload payload ? payload : throw new SekibanAggregateCreateFailedException(nameof(TPayload));
-        // }
-        if (typeof(TPayload).DoesImplementingFromGenericInterfaceType(typeof(IParentAggregatePayload<,>)))
-        {
-            var firstAggregateType = typeof(TPayload).GetFirstAggregatePayloadTypeFromAggregate();
-            var method = firstAggregateType.GetMethod(
-                nameof(IAggregatePayloadCommon.CreateInitialPayload),
-                BindingFlags.Static | BindingFlags.Public);
-            var created = method?.Invoke(firstAggregateType, new object?[] { });
-            var converted = created is TPayload payload ? payload : default;
-            if (converted is not null)
-            {
-                return converted;
-            }
-            var instantiated = Activator.CreateInstance(typeof(TPayload), new object?[] { });
-            return instantiated is TPayload payload2 ? payload2 : throw new SekibanAggregateCreateFailedException(nameof(TPayload));
-        }
-        throw new SekibanAggregateCreateFailedException(nameof(TPayload));
-    }
 
     public string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();
 

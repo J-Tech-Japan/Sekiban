@@ -22,7 +22,7 @@ public interface IAggregateLoader
     public Task<AggregateState<TAggregatePayload>?> AsDefaultStateFromInitialAsync<TAggregatePayload>(
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
-        int? toVersion = null) where TAggregatePayload : IAggregatePayloadCommonBase;
+        int? toVersion = null) where TAggregatePayload : IAggregatePayloadCommon;
 
     /// <summary>
     ///     Get the custom projection.
@@ -65,7 +65,7 @@ public interface IAggregateLoader
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
-        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommonBase;
+        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommon;
 
     /// <summary>
     ///     The normal version that uses snapshots and memory cache.
@@ -81,7 +81,7 @@ public interface IAggregateLoader
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
-        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommonBase;
+        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommon;
 
     /// <summary>
     ///     Get all events for target aggregate.
@@ -96,5 +96,5 @@ public interface IAggregateLoader
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
-        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommonBase;
+        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommon;
 }

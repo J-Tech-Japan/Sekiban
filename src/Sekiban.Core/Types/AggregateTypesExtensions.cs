@@ -24,7 +24,7 @@ public static class AggregateTypesExtensions
     /// <param name="type"></param>
     /// <returns></returns>
     public static bool IsAggregatePayloadType(this TypeInfo type) =>
-        type.ImplementedInterfaces.Contains(typeof(IAggregatePayloadCommonBase)) &&
+        type.ImplementedInterfaces.Contains(typeof(IAggregatePayloadCommon)) &&
         !type.ImplementedInterfaces.Contains(typeof(ISingleProjectionPayloadCommon));
 
 
@@ -39,7 +39,8 @@ public static class AggregateTypesExtensions
     /// </summary>
     /// <param name="type"></param>
     /// <returns></returns>
-    public static bool IsAggregateSubtypePayload(this Type type) => type.DoesImplementingFromGenericInterfaceType(typeof(IAggregateSubtypePayload<>));
+    public static bool IsAggregateSubtypePayload(this Type type) =>
+        type.DoesImplementingFromGenericInterfaceType(typeof(IAggregateSubtypePayload<,>));
     /// <summary>
     ///     Get base Aggregate Payload Type from given Aggregate Payload.
     /// </summary>
@@ -58,7 +59,7 @@ public static class AggregateTypesExtensions
     {
         if (aggregateType.IsAggregateSubtypePayload())
         {
-            var baseType = aggregateType.GetImplementingFromGenericInterfaceType(typeof(IAggregateSubtypePayload<>));
+            var baseType = aggregateType.GetImplementingFromGenericInterfaceType(typeof(IAggregateSubtypePayload<,>));
             return baseType.GenericTypeArguments[0];
         }
         if (aggregateType.IsParentAggregatePayload())

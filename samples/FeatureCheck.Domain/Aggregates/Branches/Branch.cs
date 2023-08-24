@@ -1,7 +1,7 @@
 using Sekiban.Core.Aggregate;
 namespace FeatureCheck.Domain.Aggregates.Branches;
 
-public record Branch(string Name, int NumberOfMembers) : IAggregatePayload
+public record Branch(string Name, int NumberOfMembers) : IAggregatePayload<Branch>
 {
-    public static IAggregatePayloadCommon CreateInitialPayload() => new Branch("", 0);
+    public static Branch CreateInitialPayload(Branch? _) => new(string.Empty, 0);
 }

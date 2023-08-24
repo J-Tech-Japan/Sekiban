@@ -32,7 +32,9 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         var services = new ServiceCollection();
         // ReSharper disable once VirtualMemberCallInConstructor
         SetupDependency(services);
-        services.AddQueriesFromDependencyDefinition(new TDependencyDefinition());
+        var dependencyDefinition = new TDependencyDefinition();
+        dependencyDefinition.Define();
+        services.AddQueriesFromDependencyDefinition(dependencyDefinition);
         services.AddSekibanCoreForAggregateTestWithDependency(new TDependencyDefinition());
         var outputHelper = new TestOutputHelper();
         services.AddSingleton<ITestOutputHelper>(outputHelper);
@@ -387,7 +389,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
 
     #region Aggregate List Projection
     public MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>> GetAggregateListProjectionState<TAggregatePayload>(
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TAggregatePayload : IAggregatePayloadCommonBase
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TAggregatePayload : IAggregatePayloadCommon
     {
         var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ?? throw new Exception("Failed to get Query service");
         return multiProjectionService.GetAggregateListObject<TAggregatePayload>(rootPartitionKey, SortableUniqueIdValue.GetCurrentIdFromUtc())
@@ -397,7 +399,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
 
     public UnifiedTest<TDependencyDefinition> ThenAggregateListProjectionPayloadIsFromFile<TAggregatePayload>(
         string filename,
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TAggregatePayload : IAggregatePayload, new()
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TAggregatePayload : IAggregatePayloadCommon
     {
         using var openStream = File.OpenRead(filename);
         var projection = JsonSerializer.Deserialize<SingleProjectionListState<AggregateState<TAggregatePayload>>>(openStream);
@@ -464,7 +466,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     }
 
     public UnifiedTest<TDependencyDefinition> ThenAggregateListProjectionStateIsFromFile<TAggregatePayload>(string rootPartitionKey, string filename)
-        where TAggregatePayload : IAggregatePayload, new()
+        where TAggregatePayload : IAggregatePayloadCommon
     {
         using var openStream = File.OpenRead(filename);
         var projection = JsonSerializer.Deserialize<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>>(openStream);
@@ -476,7 +478,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     }
 
     public UnifiedTest<TDependencyDefinition> WriteAggregateListProjectionStateToFile<TAggregatePayload>(string rootPartitionKey, string filename)
-        where TAggregatePayload : IAggregatePayload, new()
+        where TAggregatePayload : IAggregatePayloadCommon
     {
         var json = SekibanJsonHelper.Serialize(GetAggregateListProjectionState<TAggregatePayload>(rootPartitionKey));
         File.WriteAllTextAsync(filename, json);
@@ -591,7 +593,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
 
     public AggregateState<TEnvironmentAggregatePayload> GetAggregateState<TEnvironmentAggregatePayload>(
         Guid aggregateId,
-        string rootPartitionKey = IDocument.DefaultRootPartitionKey) where TEnvironmentAggregatePayload : IAggregatePayload, new()
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey) where TEnvironmentAggregatePayload : IAggregatePayloadCommon
     {
         var singleProjectionService = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader;
         if (singleProjectionService is null)
@@ -604,8 +606,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
 
     public IReadOnlyCollection<IEvent> GetLatestEvents() => _commandExecutor.LatestEvents;
 
-    public IReadOnlyCollection<IEvent> GetAllAggregateEvents<TAggregatePayload>(Guid aggregateId)
-        where TAggregatePayload : IAggregatePayload, new() =>
+    public IReadOnlyCollection<IEvent> GetAllAggregateEvents<TAggregatePayload>(Guid aggregateId) where TAggregatePayload : IAggregatePayloadCommon =>
         _commandExecutor.GetAllAggregateEvents<TAggregatePayload>(aggregateId);
 
     #region GivenEvents
@@ -645,30 +646,30 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         return this;
     }
 
-    public UnifiedTest<TDependencyDefinition> GivenEvents(params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTouples)
+    public UnifiedTest<TDependencyDefinition> GivenEvents(params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTuples)
     {
-        _eventHandler.GivenEvents(eventTouples);
+        _eventHandler.GivenEvents(eventTuples);
         return this;
     }
 
     public UnifiedTest<TDependencyDefinition> GivenEventsWithPublish(
-        params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTouples)
+        params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTuples)
     {
-        _eventHandler.GivenEventsWithPublish(eventTouples);
+        _eventHandler.GivenEventsWithPublish(eventTuples);
         return this;
     }
 
     public UnifiedTest<TDependencyDefinition> GivenEvents(
-        params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTouples)
+        params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTuples)
     {
-        _eventHandler.GivenEvents(eventTouples);
+        _eventHandler.GivenEvents(eventTuples);
         return this;
     }
 
     public UnifiedTest<TDependencyDefinition> GivenEventsWithPublish(
-        params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTouples)
+        params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTuples)
     {
-        _eventHandler.GivenEventsWithPublish(eventTouples);
+        _eventHandler.GivenEventsWithPublish(eventTuples);
         return this;
     }
 

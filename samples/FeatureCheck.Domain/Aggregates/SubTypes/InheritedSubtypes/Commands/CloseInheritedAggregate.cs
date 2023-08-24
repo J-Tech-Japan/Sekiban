@@ -1,7 +1,8 @@
+using FeatureCheck.Domain.Aggregates.SubTypes.InheritedSubtypes.Events;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
-namespace FeatureCheck.Domain.Aggregates.SubTypes.InheritedSubtypes;
+namespace FeatureCheck.Domain.Aggregates.SubTypes.InheritedSubtypes.Commands;
 
 public record CloseInheritedAggregate : ICommand<ProcessingSubAggregate>
 {

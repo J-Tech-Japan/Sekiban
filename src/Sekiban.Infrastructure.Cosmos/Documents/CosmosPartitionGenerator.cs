@@ -4,6 +4,9 @@ using Sekiban.Core.Snapshot;
 using Sekiban.Core.Types;
 namespace Sekiban.Infrastructure.Cosmos.Documents;
 
+/// <summary>
+///     Setting PartitionKey for CosmosDB
+/// </summary>
 public class CosmosPartitionGenerator
 {
     public static PartitionKey ForEvent(string rootPartitionKey, Type aggregateType, Guid aggregateId) =>

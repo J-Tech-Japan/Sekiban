@@ -8,7 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 
 // Sekiban Web Setting
-builder.Services.AddSekibanWebAddon(new MultiTenantWebDependency());
+builder.Services.AddSekibanWeb(new MultiTenantWebDependency());
 // Sekiban Core Setting
 builder.Services.AddSekibanCoreWithDependency(new MultiTenantWebDependency(), configuration: builder.Configuration);
 // Sekiban Cosmos Setting

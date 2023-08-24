@@ -5,8 +5,9 @@ namespace Sekiban.Web.Dependency;
 
 public static class WebServiceExtension
 {
-    public static IServiceCollection AddSekibanWebAddon(this IServiceCollection services, IWebDependencyDefinition definition)
+    public static IServiceCollection AddSekibanWeb(this IServiceCollection services, IWebDependencyDefinition definition)
     {
+        definition.Define();
         services.AddSingleton(definition);
         services.AddControllers(
                 configure =>

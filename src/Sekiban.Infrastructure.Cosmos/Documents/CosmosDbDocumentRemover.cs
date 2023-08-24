@@ -2,17 +2,19 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
 namespace Sekiban.Infrastructure.Cosmos.Documents;
 
-public class CosmosDbDocumentRemover : IDocumentRemover
+/// <summary>
+///     Remove all documents from CosmosDB
+///     Usually only use in test
+/// </summary>
+public class CosmosDbDocumentRemover(CosmosDbFactory cosmosDbFactory) : IDocumentRemover
 {
-    private readonly CosmosDbFactory _cosmosDbFactory;
-    public CosmosDbDocumentRemover(CosmosDbFactory cosmosDbFactory) => _cosmosDbFactory = cosmosDbFactory;
 
     public async Task RemoveAllEventsAsync(AggregateContainerGroup aggregateContainerGroup)
     {
-        await _cosmosDbFactory.DeleteAllFromEventContainer(aggregateContainerGroup);
+        await cosmosDbFactory.DeleteAllFromEventContainer(aggregateContainerGroup);
     }
     public async Task RemoveAllItemsAsync(AggregateContainerGroup aggregateContainerGroup)
     {
-        await _cosmosDbFactory.DeleteAllFromItemsContainer(aggregateContainerGroup);
+        await cosmosDbFactory.DeleteAllFromItemsContainer(aggregateContainerGroup);
     }
 }

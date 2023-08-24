@@ -9,6 +9,9 @@ using Sekiban.Core.Setting;
 using System.IO.Compression;
 namespace Sekiban.Infrastructure.Dynamo.Blobs;
 
+/// <summary>
+///     BlobAccessor for AWS S3
+/// </summary>
 public class S3BlobAccessor : IBlobAccessor
 {
     private const string SekibanSection = "Sekiban";

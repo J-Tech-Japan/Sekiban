@@ -1,7 +1,4 @@
 using Sekiban.Core.Events;
-using Sekiban.Core.Exceptions;
-using Sekiban.Core.Types;
-using System.Reflection;
 namespace Sekiban.Core.Query.MultiProjections;
 
 /// <summary>
@@ -23,28 +20,13 @@ public record MultiProjectionState<TProjectionPayload>(
     string RootPartitionKey) : IProjection where TProjectionPayload : IMultiProjectionPayloadCommon
 {
     public MultiProjectionState() : this(
-        GeneratePayload(),
+        MultiProjection<TProjectionPayload>.GeneratePayload(),
         Guid.Empty,
         string.Empty,
         0,
         0,
         string.Empty)
     {
-    }
-    private static TProjectionPayload GeneratePayload()
-    {
-        var payloadType = typeof(TProjectionPayload);
-        if (payloadType.IsMultiProjectionPayloadType())
-        {
-            var method = payloadType.GetMethod(
-                nameof(IMultiProjectionPayloadGeneratePayload<TProjectionPayload>.CreateInitialPayload),
-                BindingFlags.Static | BindingFlags.Public);
-            var created = method?.Invoke(payloadType, new object?[] { });
-            return created is TProjectionPayload projectionPayload
-                ? projectionPayload
-                : throw new SekibanMultiProjectionPayloadCreateFailedException(payloadType.FullName ?? "");
-        }
-        throw new SekibanMultiProjectionPayloadCreateFailedException(payloadType.FullName ?? "");
     }
     public string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();
     public MultiProjectionState<TProjectionPayload> ApplyEvent(IEvent ev) =>

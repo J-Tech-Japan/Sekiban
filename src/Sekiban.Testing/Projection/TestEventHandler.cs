@@ -7,24 +7,39 @@ using Sekiban.Core.Types;
 using System.Text.Json;
 namespace Sekiban.Testing.Projection;
 
-public class TestEventHandler
+/// <summary>
+///     Handle events for test.
+///     Given events could be multiple aggregates
+/// </summary>
+/// <param name="serviceProvider"></param>
+public class TestEventHandler(IServiceProvider serviceProvider)
 {
-    protected readonly IServiceProvider _serviceProvider;
-
-    public TestEventHandler(IServiceProvider serviceProvider) => _serviceProvider = serviceProvider;
-
+    /// <summary>
+    ///     Given events to test
+    /// </summary>
+    /// <param name="events"></param>
     public void GivenEvents(IEnumerable<IEvent> events)
     {
         GivenEvents(events, false);
     }
-
+    /// <summary>
+    ///     Given events to test and publish events
+    /// </summary>
+    /// <param name="events"></param>
     public void GivenEventsWithPublish(IEnumerable<IEvent> events)
     {
         GivenEvents(events, true);
     }
+    /// <summary>
+    ///     Given events to test and publish events
+    ///     Even non blocking subscriptions will be executed by same thread and block the execution
+    ///     (To test subscription values, use this method. But be careful, orders could be different from actual execution)
+    /// </summary>
+    /// <param name="events"></param>
+    /// <exception cref="Exception"></exception>
     public void GivenEventsWithPublishAndBlockingSubscription(IEnumerable<IEvent> events)
     {
-        var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>();
+        var nonBlockingStatus = serviceProvider.GetService<EventNonBlockingStatus>();
         if (nonBlockingStatus is null)
         {
             throw new Exception("EventNonBlockingStatus could not be found");
@@ -34,12 +49,12 @@ public class TestEventHandler
 
     private void GivenEvents(IEnumerable<IEvent> events, bool withPublish)
     {
-        var documentWriter = _serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter;
+        var documentWriter = serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter;
         if (documentWriter is null)
         {
             throw new Exception("Failed to get document writer");
         }
-        var sekibanAggregateTypes = _serviceProvider.GetService<SekibanAggregateTypes>() ?? throw new Exception("Failed to get aggregate types");
+        var sekibanAggregateTypes = serviceProvider.GetService<SekibanAggregateTypes>() ?? throw new Exception("Failed to get aggregate types");
 
         foreach (var e in events)
         {
@@ -57,27 +72,44 @@ public class TestEventHandler
             }
         }
     }
-
+    /// <summary>
+    ///     Given events to test
+    /// </summary>
+    /// <param name="events"></param>
     public void GivenEvents(params IEvent[] events)
     {
         GivenEvents(events.AsEnumerable(), false);
     }
-
+    /// <summary>
+    ///     Given events to test and publish events
+    /// </summary>
+    /// <param name="events"></param>
     public void GivenEventsWithPublish(params IEvent[] events)
     {
         GivenEvents(events.AsEnumerable(), true);
     }
-
+    /// <summary>
+    ///     Given events to test and publish events
+    /// </summary>
+    /// <param name="jsonEvents"></param>
     public void GivenEventsFromJson(string jsonEvents)
     {
         GivenEventsFromJson(jsonEvents, false);
     }
-
+    /// <summary>
+    ///     Given events to test and publish events
+    /// </summary>
+    /// <param name="jsonEvents"></param>
     public void GivenEventsFromJsonWithPublish(string jsonEvents)
     {
         GivenEventsFromJson(jsonEvents, true);
     }
-
+    /// <summary>
+    ///     Given events to test and publish events
+    /// </summary>
+    /// <param name="jsonEvents"></param>
+    /// <param name="withPublish"></param>
+    /// <exception cref="InvalidDataException"></exception>
     private void GivenEventsFromJson(string jsonEvents, bool withPublish)
     {
         var list = JsonSerializer.Deserialize<List<JsonElement>>(jsonEvents);
@@ -87,12 +119,19 @@ public class TestEventHandler
         }
         AddEventsFromList(list, withPublish);
     }
-
+    /// <summary>
+    ///     Given events to test from File
+    /// </summary>
+    /// <param name="filename"></param>
     public void GivenEventsFromFile(string filename)
     {
         GivenEventsFromFile(filename, false);
     }
-
+    /// <summary>
+    ///     Given events to test from File
+    ///     Also publish events
+    /// </summary>
+    /// <param name="filename"></param>
     public void GivenEventsFromFileWithPublish(string filename)
     {
         GivenEventsFromFile(filename, true);
@@ -108,20 +147,26 @@ public class TestEventHandler
         }
         AddEventsFromList(list, withPublish);
     }
-
-    public void GivenEvents(params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTouples)
+    /// <summary>
+    ///     Given Events, by AggregateId, Type and Payload
+    /// </summary>
+    /// <param name="eventTuples"></param>
+    public void GivenEvents(params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTuples)
     {
-        GivenEvents(false, eventTouples);
+        GivenEvents(false, eventTuples);
+    }
+    /// <summary>
+    ///     Given Events and publish events, by AggregateId, Type and Payload
+    /// </summary>
+    /// <param name="eventTuples"></param>
+    public void GivenEventsWithPublish(params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTuples)
+    {
+        GivenEvents(true, eventTuples);
     }
 
-    public void GivenEventsWithPublish(params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTouples)
+    private void GivenEvents(bool withPublish, params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTuples)
     {
-        GivenEvents(true, eventTouples);
-    }
-
-    private void GivenEvents(bool withPublish, params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTouples)
-    {
-        foreach (var (aggregateId, aggregateType, payload) in eventTouples)
+        foreach (var (aggregateId, aggregateType, payload) in eventTuples)
         {
             var type = payload.GetType();
             var eventType = typeof(Event<>);
@@ -134,20 +179,26 @@ public class TestEventHandler
             GivenEvents(new[] { ev }, withPublish);
         }
     }
-
-    public void GivenEvents(params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTouples)
+    /// <summary>
+    ///     Given Events, by AggregateId, Type and Payload
+    /// </summary>
+    /// <param name="eventTuples"></param>
+    public void GivenEvents(params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTuples)
     {
-        GivenEvents(false, eventTouples);
+        GivenEvents(false, eventTuples);
+    }
+    /// <summary>
+    ///     Given Events and publish events, by AggregateId, Type and Payload
+    /// </summary>
+    /// <param name="eventTuples"></param>
+    public void GivenEventsWithPublish(params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTuples)
+    {
+        GivenEvents(true, eventTuples);
     }
 
-    public void GivenEventsWithPublish(params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTouples)
+    private void GivenEvents(bool withPublish, params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTuples)
     {
-        GivenEvents(true, eventTouples);
-    }
-
-    private void GivenEvents(bool withPublish, params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTouples)
-    {
-        foreach (var (aggregateId, rootPartitionKey, payload) in eventTouples)
+        foreach (var (aggregateId, rootPartitionKey, payload) in eventTuples)
         {
             var type = payload.GetType();
             var aggregateType = payload.GetAggregatePayloadInType();
@@ -164,11 +215,11 @@ public class TestEventHandler
 
     private void AddEventsFromList(List<JsonElement> list, bool withPublish)
     {
-        if (_serviceProvider is null)
+        if (serviceProvider is null)
         {
             throw new Exception("Service provider is null. Please setup service provider.");
         }
-        var registeredEventTypes = _serviceProvider.GetService<RegisteredEventTypes>();
+        var registeredEventTypes = serviceProvider.GetService<RegisteredEventTypes>();
         if (registeredEventTypes is null)
         {
             throw new InvalidOperationException("RegisteredEventTypes is not registered.");

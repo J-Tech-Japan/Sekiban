@@ -9,7 +9,7 @@ using Sekiban.Web.SwashbuckleHelpers;
 var builder = WebApplication.CreateBuilder(args);
 
 // Sekiban Web Setting
-builder.Services.AddSekibanWebAddon(new FeatureCheckWebDependency());
+builder.Services.AddSekibanWeb(new FeatureCheckWebDependency());
 // Sekiban Core Setting
 builder.Services.AddSekibanCoreWithDependency(new FeatureCheckDependency(), configuration: builder.Configuration);
 // Sekiban Cosmos Setting

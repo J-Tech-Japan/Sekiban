@@ -48,7 +48,7 @@ public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPa
         return projectionPayload.GetTargetAggregatePayloads().GetAggregateNames();
     }
     public string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();
-    private static TProjectionPayload GeneratePayload()
+    public static TProjectionPayload GeneratePayload()
     {
         var payloadType = typeof(TProjectionPayload);
         if (payloadType.IsMultiProjectionPayloadType())

@@ -16,7 +16,10 @@ using FeatureCheck.Domain.Aggregates.RecentActivities.Commands;
 using FeatureCheck.Domain.Aggregates.RecentActivities.Projections;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Commands;
+using FeatureCheck.Domain.Aggregates.SubTypes.BaseIsFirstSubtypes;
+using FeatureCheck.Domain.Aggregates.SubTypes.BaseIsFirstSubtypes.Commands;
 using FeatureCheck.Domain.Aggregates.SubTypes.InheritedSubtypes;
+using FeatureCheck.Domain.Aggregates.SubTypes.InheritedSubtypes.Commands;
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes;
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.PurchasedCarts;
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.PurchasedCarts.Commands;
@@ -133,6 +136,12 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
             .AddSubtype<ClosedSubAggregate>(subType => subType.AddCommandHandler<ReopenInheritedAggregate, ReopenInheritedAggregate.Handler>());
 
         AddAggregate<ALotOfEventsAggregate>().AddCommandHandler<ALotOfEventsCreateCommand, ALotOfEventsCreateCommand.Handler>();
+
+        AddAggregate<BaseFirstAggregate>()
+            .AddCommandHandler<BFAggregateCreateAccount, BFAggregateCreateAccount.Handler>()
+            .AddCommandHandler<ActivateBFAggregate, ActivateBFAggregate.Handler>()
+            .AddSubtype<ActiveBFAggregate>(subType => subType.AddCommandHandler<CloseBFAggregate, CloseBFAggregate.Handler>())
+            .AddSubtype<ClosedBFAggregate>(subType => subType.AddCommandHandler<ReopenBFAggregate, ReopenBFAggregate.Handler>());
 
     }
 }

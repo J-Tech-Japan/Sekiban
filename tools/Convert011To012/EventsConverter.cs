@@ -1,6 +1,5 @@
 using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Cosmos.Linq;
-using Microsoft.Extensions.Logging;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.ValueObjects;
@@ -19,25 +18,25 @@ public class EventsConverter
     private const string ConvertDestination = nameof(ConvertDestination);
     private static readonly SemaphoreSlim _semaphoreCount = new(1, 1);
     private readonly CosmosDbFactory _cosmosDbFactory;
-    private readonly ILogger<EventsConverter> _logger;
     private readonly ISekibanContext _sekibanContext;
     private int count;
 
-    public EventsConverter(ISekibanContext sekibanContext, CosmosDbFactory cosmosDbFactory, ILogger<EventsConverter> logger)
+    public EventsConverter(ISekibanContext sekibanContext, CosmosDbFactory cosmosDbFactory)
     {
         _sekibanContext = sekibanContext;
         _cosmosDbFactory = cosmosDbFactory;
-        _logger = logger;
     }
 
-    private void Printing(JsonNode jsonDocument)
+    private async Task Printing(JsonNode jsonDocument)
     {
+        await _semaphoreCount.WaitAsync();
         count++;
-        if (count % 1000 == 0)
+        if (count % 100 == 0)
         {
             var timestamp = jsonDocument["Timestamp"]?.ToString() ?? string.Empty;
-            _logger.LogInformation("{Count} - {Timestamp} - {Now}", count, timestamp, DateTime.Now);
+            Console.WriteLine($"{count} - {timestamp} - {DateTime.Now}");
         }
+        _semaphoreCount.Release();
     }
 
     public async Task<int> StartConvertAsync(AggregateContainerGroup containerGroup, bool convertToHierarchical = true)
@@ -54,6 +53,7 @@ public class EventsConverter
 
                 await GetLastSortableUniqueIdAsync(containerGroup);
 
+                count = 0;
 
                 await _cosmosDbFactory.CosmosActionAsync(
                     DocumentType.Event,
@@ -103,17 +103,15 @@ public class EventsConverter
                                                 async containerDest =>
                                                 {
                                                     await containerDest.UpsertItemAsync(jsonDocument);
-                                                    await _semaphoreCount.WaitAsync();
-                                                    Printing(jsonDocument);
-                                                    _semaphoreCount.Release();
+                                                    await Printing(jsonDocument);
                                                 });
 
                                             await Task.CompletedTask;
                                         }));
                             }
+                            await Task.WhenAll(tasks);
+                            Console.WriteLine($"{count} events has written");
                         }
-                        await Task.WhenAll(tasks);
-                        _logger.LogInformation("{Count} events has written", count);
                     });
 
 

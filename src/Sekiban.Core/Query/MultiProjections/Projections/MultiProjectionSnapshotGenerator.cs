@@ -128,7 +128,7 @@ public class MultiProjectionSnapshotGenerator(
                 ? projectionPayload
                 : throw new SekibanMultiProjectionPayloadCreateFailedException(payloadType.FullName ?? "");
         }
-        throw new SekibanMultiProjectionPayloadCreateFailedException(payloadType?.FullName ?? "");
+        throw new SekibanMultiProjectionPayloadCreateFailedException(payloadType.FullName ?? "");
     }
 
     public string FilenameForSnapshot(Type projectionPayload, Guid id, SortableUniqueIdValue sortableUniqueId) =>

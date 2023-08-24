@@ -5,6 +5,9 @@ using Sekiban.Infrastructure.Dynamo.Blobs;
 using Sekiban.Infrastructure.Dynamo.Documents;
 namespace Sekiban.Infrastructure.Dynamo;
 
+/// <summary>
+///     Add DynamoDB services for Sekiban
+/// </summary>
 public static class DynamoDbServiceCollectionExtensions
 {
     public static IServiceCollection AddSekibanDynamoDB(this IServiceCollection services)

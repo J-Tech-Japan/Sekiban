@@ -11,17 +11,14 @@ using System.Text.Json;
 using Document = Amazon.DynamoDBv2.DocumentModel.Document;
 namespace Sekiban.Infrastructure.Dynamo.Documents;
 
-public class DynamoDocumentWriter : IDocumentPersistentWriter
+/// <summary>
+///     Write documents to DynamoDB
+/// </summary>
+/// <param name="dbFactory"></param>
+/// <param name="eventPublisher"></param>
+/// <param name="blobAccessor"></param>
+public class DynamoDocumentWriter(DynamoDbFactory dbFactory, EventPublisher eventPublisher, IBlobAccessor blobAccessor) : IDocumentPersistentWriter
 {
-    private readonly IBlobAccessor _blobAccessor;
-    private readonly DynamoDbFactory _dbFactory;
-    private readonly EventPublisher _eventPublisher;
-    public DynamoDocumentWriter(DynamoDbFactory dbFactory, EventPublisher eventPublisher, IBlobAccessor blobAccessor)
-    {
-        _dbFactory = dbFactory;
-        _eventPublisher = eventPublisher;
-        _blobAccessor = blobAccessor;
-    }
 
 
     public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType) where TDocument : IDocument
@@ -30,7 +27,7 @@ public class DynamoDocumentWriter : IDocumentPersistentWriter
         switch (document.DocumentType)
         {
             case DocumentType.Event:
-                await _dbFactory.DynamoActionAsync(
+                await dbFactory.DynamoActionAsync(
                     document.DocumentType,
                     aggregateContainerGroup,
                     async container =>
@@ -50,7 +47,7 @@ public class DynamoDocumentWriter : IDocumentPersistentWriter
                 await SaveSingleSnapshotAsync(snapshot, aggregateType, ShouldUseBlob(snapshot));
                 break;
             default:
-                await _dbFactory.DynamoActionAsync(
+                await dbFactory.DynamoActionAsync(
                     document.DocumentType,
                     aggregateContainerGroup,
                     async container =>
@@ -71,8 +68,8 @@ public class DynamoDocumentWriter : IDocumentPersistentWriter
             var snapshotValue = document.Snapshot;
             var json = JsonSerializer.Serialize(snapshotValue, new JsonSerializerOptions());
             var memoryStream = new MemoryStream(Encoding.UTF8.GetBytes(json));
-            await _blobAccessor.SetBlobWithGZipAsync(SekibanBlobContainer.SingleProjectionState, blobSnapshot.FilenameForSnapshot(), memoryStream);
-            await _dbFactory.DynamoActionAsync(
+            await blobAccessor.SetBlobWithGZipAsync(SekibanBlobContainer.SingleProjectionState, blobSnapshot.FilenameForSnapshot(), memoryStream);
+            await dbFactory.DynamoActionAsync(
                 blobSnapshot.DocumentType,
                 aggregateContainerGroup,
                 async container =>
@@ -83,7 +80,7 @@ public class DynamoDocumentWriter : IDocumentPersistentWriter
                 });
         } else
         {
-            await _dbFactory.DynamoActionAsync(
+            await dbFactory.DynamoActionAsync(
                 document.DocumentType,
                 aggregateContainerGroup,
                 async container =>
@@ -103,7 +100,7 @@ public class DynamoDocumentWriter : IDocumentPersistentWriter
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
         var evs = events.ToList();
-        await _dbFactory.DynamoActionAsync(
+        await dbFactory.DynamoActionAsync(
             DocumentType.Event,
             aggregateContainerGroup,
             async container =>
@@ -119,7 +116,7 @@ public class DynamoDocumentWriter : IDocumentPersistentWriter
             });
         foreach (var ev in evs)
         {
-            await _eventPublisher.PublishAsync(ev);
+            await eventPublisher.PublishAsync(ev);
         }
     }
 }

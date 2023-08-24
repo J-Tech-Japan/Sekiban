@@ -6,6 +6,14 @@ namespace Sekiban.Infrastructure.Cosmos;
 
 public static class CosmosDbServiceCollectionExtensions
 {
+    /// <summary>
+    ///     Setup Sekiban for CosmosDB
+    ///     can setup options for CosmosDB.
+    ///     Connection string or setting will be used from appsettings.json
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="optionsFunc"></param>
+    /// <returns></returns>
     public static IServiceCollection AddSekibanCosmosDB(
         this IServiceCollection services,
         Func<SekibanCosmosOptions, SekibanCosmosOptions>? optionsFunc = null)

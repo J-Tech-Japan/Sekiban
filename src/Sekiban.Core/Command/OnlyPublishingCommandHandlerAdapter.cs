@@ -10,7 +10,7 @@ namespace Sekiban.Core.Command;
 /// </summary>
 /// <typeparam name="TAggregatePayload"></typeparam>
 /// <typeparam name="TCommand"></typeparam>
-public class OnlyPublishingCommandHandlerAdapter<TAggregatePayload, TCommand> where TAggregatePayload : IAggregatePayloadCommon
+public class OnlyPublishingCommandHandlerAdapter<TAggregatePayload, TCommand> where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>
     where TCommand : IOnlyPublishingCommand<TAggregatePayload>
 {
     public async Task<CommandResponse> HandleCommandAsync(

@@ -14,7 +14,7 @@ namespace Sekiban.Core.Dependency;
 ///     AddAggregate
 /// </summary>
 /// <typeparam name="TAggregatePayload"></typeparam>
-public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDependencyDefinition where TAggregatePayload : IAggregatePayloadCommonBase
+public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDependencyDefinition where TAggregatePayload : IAggregatePayloadCommon
 {
     /// <summary>
     ///     Subtypes of this aggregate, edit only from method AddSubType
@@ -204,7 +204,7 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
 
     public AggregateDependencyDefinition<TAggregatePayload> AddSubtype<TSubAggregatePayload>(
         Action<AggregateSubtypeDependencyDefinition<TAggregatePayload, TSubAggregatePayload>> subAggregateDefinitionAction)
-        where TSubAggregatePayload : IAggregateSubtypePayload<TAggregatePayload>, new()
+        where TSubAggregatePayload : IAggregateSubtypePayloadParentApplicable<TAggregatePayload>, new()
     {
         var subAggregate = new AggregateSubtypeDependencyDefinition<TAggregatePayload, TSubAggregatePayload>(this);
         SubAggregates = SubAggregates.Add(subAggregate);

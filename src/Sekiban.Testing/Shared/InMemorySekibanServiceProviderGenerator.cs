@@ -5,8 +5,19 @@ using Sekiban.Core.Shared;
 using Sekiban.Testing.Story;
 namespace Sekiban.Testing.Shared;
 
+/// <summary>
+///     Provides a dependency for the test
+/// </summary>
 public class InMemorySekibanServiceProviderGenerator : ISekibanServiceProviderGenerator
 {
+    /// <summary>
+    ///     Generate a dependency for the test
+    /// </summary>
+    /// <param name="fixture"></param>
+    /// <param name="dependencyDefinition"></param>
+    /// <param name="configureServices"></param>
+    /// <param name="sekibanDateProducer"></param>
+    /// <returns></returns>
     public IServiceProvider Generate(
         ISekibanTestFixture fixture,
         IDependencyDefinition dependencyDefinition,

@@ -9,7 +9,7 @@ namespace Sekiban.Web.Controllers.Bases;
 [Produces("application/json")]
 // ReSharper disable once UnusedTypeParameter
 public class BaseMultiProjectionListQueryController<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse> : ControllerBase
-    where TProjectionPayload : IMultiProjectionPayloadCommon, new()
+    where TProjectionPayload : IMultiProjectionPayloadCommon
     where TQuery : IMultiProjectionListQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
     where TQueryParameter : IListQueryParameter<TQueryResponse>
     where TQueryResponse : IQueryResponse

@@ -13,12 +13,15 @@ using Xunit.Abstractions;
 using Xunit.Sdk;
 namespace Sekiban.Testing.SingleProjections;
 
+/// <summary>
+/// </summary>
+/// <typeparam name="TAggregatePayload">Test Target AggregatePayload</typeparam>
+/// <typeparam name="TDependencyDefinition">Dependency Definition</typeparam>
 public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposable, IAggregateTestHelper<TAggregatePayload>
-    where TAggregatePayload : IAggregatePayloadCommonBase where TDependencyDefinition : IDependencyDefinition, new()
+    where TAggregatePayload : IAggregatePayloadCommon where TDependencyDefinition : IDependencyDefinition, new()
 {
     private readonly IAggregateTestHelper<TAggregatePayload> _helper;
     protected readonly IServiceProvider _serviceProvider;
-
     public AggregateTest()
     {
         var services = new ServiceCollection();
@@ -103,6 +106,32 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
     {
         _helper.ThrowIfTestHasUnhandledErrors();
     }
+    public IAggregateTestHelper<TAggregatePayload> GivenCommand<TCommand>(TCommand command) where TCommand : ICommand<TAggregatePayload> =>
+        WhenCommand(command);
+    public IAggregateTestHelper<TAggregatePayload> GivenSubtypeCommand<TAggregateSubtype>(ICommand<TAggregateSubtype> command)
+        where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload> =>
+        WhenSubtypeCommand(command);
+    public IAggregateTestHelper<TAggregatePayload> GivenSubtypeCommandWithPublish<TAggregateSubtype>(ICommand<TAggregateSubtype> command)
+        where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload> =>
+        WhenSubtypeCommandWithPublish(command);
+    public IAggregateTestHelper<TAggregatePayload>
+        GivenSubtypeCommandWithPublishAndBlockingSubscriber<TAggregateSubtype>(ICommand<TAggregateSubtype> command)
+        where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload> =>
+        WhenSubtypeCommandWithPublishAndBlockingSubscriber(command);
+    public IAggregateTestHelper<TAggregatePayload> GivenCommand<TCommand>(Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommand<TAggregatePayload> =>
+        WhenCommand(commandFunc);
+    public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublish<TCommand>(TCommand command) where TCommand : ICommand<TAggregatePayload> =>
+        WhenCommandWithPublish(command);
+    public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublishAndBlockingSubscriber<TCommand>(TCommand command)
+        where TCommand : ICommand<TAggregatePayload> =>
+        WhenCommandWithPublishAndBlockingSubscriber(command);
+    public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublish<TCommand>(Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommand<TAggregatePayload> =>
+        WhenCommandWithPublish(commandFunc);
+    public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublishAndBlockingSubscriber<TCommand>(
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommand<TAggregatePayload> =>
+        WhenCommandWithPublishAndBlockingSubscriber(commandFunc);
 
     public IReadOnlyCollection<IEvent> GetLatestEnvironmentEvents() => _helper.GetLatestEnvironmentEvents();
 
@@ -112,10 +141,11 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
 
     public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(TCommand command) where TCommand : ICommand<TAggregatePayload> =>
         _helper.WhenCommand(command);
-    public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommand<TAggregateSubtypePayload, TCommand>(TCommand changeCommand)
-        where TAggregateSubtypePayload : TAggregatePayload, IAggregatePayloadCommon where TCommand : ICommand<TAggregateSubtypePayload> =>
-        _helper.WhenSubtypeCommand<TAggregateSubtypePayload, TCommand>(changeCommand);
 
+    public IAggregateTestHelper<TAggregatePayload>
+        WhenSubtypeCommandWithPublishAndBlockingSubscriber<TAggregateSubtype>(ICommand<TAggregateSubtype> command)
+        where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload> =>
+        _helper.WhenSubtypeCommandWithPublishAndBlockingSubscriber(command);
     public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
         where TCommand : ICommand<TAggregatePayload> =>
         _helper.WhenCommand(commandFunc);
@@ -196,6 +226,12 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         _helper.ThenHasValidationErrors(validationParameterErrors);
 
     public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors() => _helper.ThenHasValidationErrors();
+    public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommand<TAggregateSubtype>(ICommand<TAggregateSubtype> command)
+        where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload> =>
+        _helper.WhenSubtypeCommand(command);
+    public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommandWithPublish<TAggregateSubtype>(ICommand<TAggregateSubtype> command)
+        where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload> =>
+        _helper.WhenSubtypeCommandWithPublish(command);
 
     public void Dispose()
     {
