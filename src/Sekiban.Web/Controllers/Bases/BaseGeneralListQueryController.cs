@@ -27,7 +27,7 @@ public class BaseGeneralListQueryController<TQuery, TQueryParameter, TQueryRespo
 
     [HttpGet]
     [Route("")]
-    public async Task<ActionResult<TQueryResponse>> GetQueryResult([FromQuery] TQueryParameter queryParam)
+    public async Task<ActionResult<ListQueryResult<TQueryResponse>>> GetQueryResult([FromQuery] TQueryParameter queryParam)
     {
         if (_webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.MultiProjection,

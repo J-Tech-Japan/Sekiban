@@ -20,6 +20,11 @@ using Xunit.Abstractions;
 using Xunit.Sdk;
 namespace Sekiban.Testing;
 
+/// <summary>
+///     Unified test base class.
+///     Inherit this class to create a test class.
+/// </summary>
+/// <typeparam name="TDependencyDefinition"></typeparam>
 public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefinition : IDependencyDefinition, new()
 {
     private readonly TestCommandExecutor _commandExecutor;
@@ -43,28 +48,69 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         _commandExecutor = new TestCommandExecutor(_serviceProvider);
         _eventHandler = new TestEventHandler(_serviceProvider);
     }
-
+    /// <summary>
+    ///     Setup dependency for test.
+    /// </summary>
+    /// <param name="serviceCollection"></param>
     protected virtual void SetupDependency(IServiceCollection serviceCollection)
     {
     }
 
     #region Get Aggregate Test
-    public AggregateTest<TAggregatePayload, TDependencyDefinition> GetAggregateTest<TAggregatePayload>(Guid aggregateId)
-        where TAggregatePayload : IAggregatePayloadCommon =>
-        new(_serviceProvider, aggregateId);
-
+    /// <summary>
+    ///     Get aggregate test from
+    /// </summary>
+    /// <param name="aggregateId"></param>
+    /// <param name="rootPartitionKey"></param>
+    /// <typeparam name="TAggregatePayload"></typeparam>
+    /// <returns></returns>
+    public AggregateTest<TAggregatePayload, TDependencyDefinition> GetAggregateTest<TAggregatePayload>(
+        Guid aggregateId,
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey) where TAggregatePayload : IAggregatePayloadCommon =>
+        new(_serviceProvider, aggregateId, rootPartitionKey);
+    /// <summary>
+    ///     Get Aggregate test
+    /// </summary>
+    /// <typeparam name="TAggregatePayload"></typeparam>
+    /// <returns></returns>
     public AggregateTest<TAggregatePayload, TDependencyDefinition> GetAggregateTest<TAggregatePayload>()
         where TAggregatePayload : IAggregatePayloadCommon =>
         new(_serviceProvider);
-
+    /// <summary>
+    ///     Get Aggregate test in action.
+    ///     Root Partition Key will be default
+    /// </summary>
+    /// <param name="aggregateId"></param>
+    /// <param name="testAction"></param>
+    /// <typeparam name="TAggregatePayload"></typeparam>
+    /// <returns></returns>
     public UnifiedTest<TDependencyDefinition> ThenGetAggregateTest<TAggregatePayload>(
         Guid aggregateId,
+        Action<AggregateTest<TAggregatePayload, TDependencyDefinition>> testAction) where TAggregatePayload : IAggregatePayloadCommon =>
+        ThenGetAggregateTest(aggregateId, IDocument.DefaultRootPartitionKey, testAction);
+    /// <summary>
+    ///     Get Aggregate test in action.
+    /// </summary>
+    /// <param name="aggregateId"></param>
+    /// <param name="rootPartitionKey"></param>
+    /// <param name="testAction"></param>
+    /// <typeparam name="TAggregatePayload"></typeparam>
+    /// <returns></returns>
+    public UnifiedTest<TDependencyDefinition> ThenGetAggregateTest<TAggregatePayload>(
+        Guid aggregateId,
+        string rootPartitionKey,
         Action<AggregateTest<TAggregatePayload, TDependencyDefinition>> testAction) where TAggregatePayload : IAggregatePayloadCommon
     {
-        testAction(new AggregateTest<TAggregatePayload, TDependencyDefinition>(_serviceProvider, aggregateId));
+        testAction(new AggregateTest<TAggregatePayload, TDependencyDefinition>(_serviceProvider, aggregateId, rootPartitionKey));
         return this;
     }
 
+    /// <summary>
+    ///     Get Aggregate test in action.
+    /// </summary>
+    /// <param name="testAction"></param>
+    /// <typeparam name="TAggregatePayload"></typeparam>
+    /// <returns></returns>
     public UnifiedTest<TDependencyDefinition> ThenGetAggregateTest<TAggregatePayload>(
         Action<AggregateTest<TAggregatePayload, TDependencyDefinition>> testAction) where TAggregatePayload : IAggregatePayloadCommon
     {
@@ -74,13 +120,26 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     #endregion
 
     #region General List Query Test
+    /// <summary>
+    ///     Get Query Result
+    /// </summary>
+    /// <param name="param"></param>
+    /// <typeparam name="TQueryResponse"></typeparam>
+    /// <returns></returns>
+    /// <exception cref="Exception"></exception>
     private ListQueryResult<TQueryResponse> GetListQueryResponse<TQueryResponse>(IListQueryInput<TQueryResponse> param)
         where TQueryResponse : IQueryResponse
     {
         var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new Exception("Failed to get Query service");
         return queryService.ExecuteAsync(param).Result ?? throw new Exception("Failed to get Aggregate Query Response for " + param.GetType().Name);
     }
-
+    /// <summary>
+    ///     Get Exception from Query
+    ///     If query does not throw an exception, return null.
+    /// </summary>
+    /// <param name="param"></param>
+    /// <returns></returns>
+    /// <exception cref="Exception"></exception>
     private Exception? GetQueryException(IListQueryInputCommon param)
     {
         var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new Exception("Failed to get Query service");
@@ -94,7 +153,12 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         }
         return null;
     }
-
+    /// <summary>
+    ///     Check if query throws an exception of the specified type.
+    /// </summary>
+    /// <param name="param"></param>
+    /// <typeparam name="T"></typeparam>
+    /// <returns></returns>
     public UnifiedTest<TDependencyDefinition> ThenQueryThrows<T>(IListQueryInputCommon param) where T : Exception
     {
         Assert.IsType<T>(GetQueryException(param));

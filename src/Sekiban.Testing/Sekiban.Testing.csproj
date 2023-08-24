@@ -5,13 +5,13 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Testing</PackageId>
-        <Version>0.14.0</Version>
+        <Version>0.14.1</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Testing</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.14.0</PackageVersion>
-        <Description>Default Constructor not necesary.</Description>
+        <PackageVersion>0.14.1</PackageVersion>
+        <Description>IAggregatePayload needs generic parameters</Description>
         <AssemblyName>Sekiban.Testing</AssemblyName>
         <RootNamespace>Sekiban.Testing</RootNamespace>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>

@@ -39,7 +39,7 @@ public class EventsConverter
         _semaphoreCount.Release();
     }
 
-    public async Task<int> StartConvertAsync(AggregateContainerGroup containerGroup, bool convertToHierarchical = true)
+    public async Task<int> StartConvertAsync(AggregateContainerGroup containerGroup, bool convertToHierarchical)
     {
         await _sekibanContext.SekibanActionAsync(
             SourceDatabase,
