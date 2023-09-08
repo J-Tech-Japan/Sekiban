@@ -5,24 +5,20 @@ using Sekiban.Web.Authorizations;
 using Sekiban.Web.Dependency;
 namespace Sekiban.Web.Controllers.Bases;
 
+/// <summary>
+///     Base single projection controller
+/// </summary>
+/// <param name="aggregateLoader"></param>
+/// <param name="webDependencyDefinition"></param>
+/// <param name="serviceProvider"></param>
+/// <typeparam name="TSingleProjectionPayload"></typeparam>
 [ApiController]
 [Produces("application/json")]
-public class BaseSingleProjectionController<TSingleProjectionPayload> : ControllerBase
-    where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
+public class BaseSingleProjectionController<TSingleProjectionPayload>(
+    IAggregateLoader aggregateLoader,
+    IWebDependencyDefinition webDependencyDefinition,
+    IServiceProvider serviceProvider) : ControllerBase where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
 {
-    private readonly IServiceProvider _serviceProvider;
-    private readonly IWebDependencyDefinition _webDependencyDefinition;
-    private readonly IAggregateLoader aggregateLoader;
-
-    public BaseSingleProjectionController(
-        IAggregateLoader aggregateLoader,
-        IWebDependencyDefinition webDependencyDefinition,
-        IServiceProvider serviceProvider)
-    {
-        this.aggregateLoader = aggregateLoader;
-        _webDependencyDefinition = webDependencyDefinition;
-        _serviceProvider = serviceProvider;
-    }
 
     [HttpGet]
     [Route("get/{id}")]
@@ -32,14 +28,14 @@ public class BaseSingleProjectionController<TSingleProjectionPayload> : Controll
         int? toVersion = null,
         string? includesSortableUniqueId = null)
     {
-        if (_webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+        if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.SingleProjection,
                 this,
                 typeof(TSingleProjectionPayload),
                 null,
                 null,
                 HttpContext,
-                _serviceProvider) ==
+                serviceProvider) ==
             AuthorizeResultType.Denied)
         {
             return Unauthorized();
@@ -58,14 +54,14 @@ public class BaseSingleProjectionController<TSingleProjectionPayload> : Controll
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null)
     {
-        if (_webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+        if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.SingleProjection,
                 this,
                 typeof(TSingleProjectionPayload),
                 null,
                 null,
                 HttpContext,
-                _serviceProvider) ==
+                serviceProvider) ==
             AuthorizeResultType.Denied)
         {
             return Unauthorized();

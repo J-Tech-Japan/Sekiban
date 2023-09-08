@@ -1,9 +1,11 @@
 ﻿namespace Sekiban.Web.Authorizations;
 
+/// <summary>
+///     Authorize method type
+/// </summary>
 public enum AuthorizeMethodType
 {
-    CreateCommand,
-    ChangeCommand,
+    Command,
     Get,
     List,
     AggregateInfo,
@@ -11,7 +13,6 @@ public enum AuthorizeMethodType
     CommandHistory,
     SingleProjection,
     MultiProjection,
-    MultiListProjection,
     SendUpdateMarker,
     SnapshotHistory
 }

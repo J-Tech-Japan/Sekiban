@@ -25,7 +25,9 @@ if (eventConverter == null)
     Console.WriteLine("起動できません");
     return;
 }
-var containerGroup = args.Contains("dissolvable") ? AggregateContainerGroup.Dissolvable : AggregateContainerGroup.Default;
+// var containerGroup = args.Contains("dissolvable") ? AggregateContainerGroup.Dissolvable : AggregateContainerGroup.Default;
+// var containerGroup = AggregateContainerGroup.Dissolvable;
+var containerGroup = AggregateContainerGroup.Default;
 Console.WriteLine("start converting " + containerGroup);
-var result = await eventConverter.StartConvertAsync(containerGroup, false);
+var result = await eventConverter.StartConvertAsync(containerGroup, true);
 Console.WriteLine($"converted {result} events. Finished.");

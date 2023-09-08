@@ -2,6 +2,11 @@
 using Sekiban.Web.Authorizations.Definitions;
 namespace Sekiban.Web.Authorizations;
 
+/// <summary>
+///     Allow only specific authorize group with specific roles otherwise deny
+/// </summary>
+/// <typeparam name="TDefinitionType"></typeparam>
+/// <typeparam name="TRoleEnum"></typeparam>
 public class AllowOnlyWithRolesAndDenyIfNot<TDefinitionType, TRoleEnum> : IAuthorizeDefinition
     where TDefinitionType : IAuthorizationDefinitionType, new() where TRoleEnum : struct, Enum
 {

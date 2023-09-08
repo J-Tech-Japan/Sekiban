@@ -5,6 +5,9 @@ using Sekiban.Web.Dependency;
 using System.Reflection;
 namespace Sekiban.Web.Common;
 
+/// <summary>
+///     Controller feature provider for sekiban commands and queries
+/// </summary>
 public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<ControllerFeature>
 {
     private readonly IWebDependencyDefinition _webDependencyDefinition;

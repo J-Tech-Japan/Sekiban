@@ -6,39 +6,39 @@ using Sekiban.Web.Authorizations;
 using Sekiban.Web.Dependency;
 namespace Sekiban.Web.Controllers.Bases;
 
+/// <summary>
+///     Base command controller
+/// </summary>
+/// <param name="executor"></param>
+/// <param name="webDependencyDefinition"></param>
+/// <param name="serviceProvider"></param>
+/// <typeparam name="TAggregatePayload"></typeparam>
+/// <typeparam name="TCommand"></typeparam>
 [ApiController]
 [Produces("application/json")]
-public class BaseCommandController<TAggregatePayload, TCommand> : ControllerBase where TAggregatePayload : IAggregatePayloadCommon
-    where TCommand : ICommand<TAggregatePayload>
+public class BaseCommandController<TAggregatePayload, TCommand>(
+    ICommandExecutor executor,
+    IWebDependencyDefinition webDependencyDefinition,
+    IServiceProvider serviceProvider) : ControllerBase where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayload>
 {
-    private readonly ICommandExecutor _executor;
-    private readonly IServiceProvider _serviceProvider;
-    private readonly IWebDependencyDefinition _webDependencyDefinition;
-
-    public BaseCommandController(ICommandExecutor executor, IWebDependencyDefinition webDependencyDefinition, IServiceProvider serviceProvider)
-    {
-        _executor = executor;
-        _webDependencyDefinition = webDependencyDefinition;
-        _serviceProvider = serviceProvider;
-    }
 
     [HttpPost]
     [Route("")]
     public virtual async Task<ActionResult<CommandExecutorResponse>> Execute([FromBody] TCommand command)
     {
-        if (_webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
-                AuthorizeMethodType.ChangeCommand,
+        if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+                AuthorizeMethodType.Command,
                 this,
                 typeof(TAggregatePayload),
                 typeof(TCommand),
                 command,
                 HttpContext,
-                _serviceProvider) ==
+                serviceProvider) ==
             AuthorizeResultType.Denied)
         {
             return Unauthorized();
         }
-        var response = await _executor.ExecCommandAsync(command);
+        var response = await executor.ExecCommandAsync(command);
         if (response.ValidationResults is null || !response.ValidationResults.Any())
         {
             return new ActionResult<CommandExecutorResponse>(response);

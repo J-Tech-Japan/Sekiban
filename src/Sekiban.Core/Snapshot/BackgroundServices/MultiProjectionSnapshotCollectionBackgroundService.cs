@@ -39,7 +39,7 @@ public class MultiProjectionSnapshotCollectionBackgroundService<TSettings> : Bac
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            logger?.LogInformation("Starting to Make Snapshots。UTCTime:{DateTime}", dateUtil?.UtcNow.ToString("yyyy/MM/dd HH:mm:ss"));
+            logger?.LogInformation("Starting to Make Snapshots... UTCTime:{DateTime}", dateUtil?.UtcNow.ToString("yyyy/MM/dd HH:mm:ss"));
 
             var setting = GetSetting(configuration);
             if (setting is null) { break; }

@@ -2,6 +2,10 @@
 using Sekiban.Web.Authorizations.Definitions;
 namespace Sekiban.Web.Authorizations;
 
+/// <summary>
+///     Allow specific authorize group
+/// </summary>
+/// <typeparam name="TDefinitionType"></typeparam>
 public class Allow<TDefinitionType> : IAuthorizeDefinition where TDefinitionType : IAuthorizationDefinitionType, new()
 {
     public AuthorizeResultType Check(

@@ -2,6 +2,9 @@ using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerGen;
 namespace Sekiban.Web.SwashbuckleHelpers;
 
+/// <summary>
+///     Swashbuckle namespace schema filter
+/// </summary>
 public class NamespaceSchemaFilter : ISchemaFilter
 {
     public void Apply(OpenApiSchema schema, SchemaFilterContext context)

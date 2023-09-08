@@ -5,6 +5,9 @@ using Sekiban.Core.Types;
 using Sekiban.Web.Dependency;
 namespace Sekiban.Web.Common;
 
+/// <summary>
+///     set more controller route information.
+/// </summary>
 public class SekibanControllerRouteConvention : IControllerModelConvention
 {
     private readonly IWebDependencyDefinition _webDependencyDefinition;

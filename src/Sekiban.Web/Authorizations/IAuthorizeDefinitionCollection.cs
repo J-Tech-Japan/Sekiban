@@ -3,6 +3,9 @@ using Microsoft.AspNetCore.Mvc;
 using Sekiban.Core.Command;
 namespace Sekiban.Web.Authorizations;
 
+/// <summary>
+///     Collection for authorize group definitions
+/// </summary>
 public interface IAuthorizeDefinitionCollection
 {
     IEnumerable<IAuthorizeDefinition> Collection { get; }
