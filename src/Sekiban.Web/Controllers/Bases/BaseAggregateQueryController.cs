@@ -3,6 +3,13 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.QueryModel;
 namespace Sekiban.Web.Controllers.Bases;
 
+/// <summary>
+///     Base aggregate list query controller
+/// </summary>
+/// <typeparam name="TAggregatePayload"></typeparam>
+/// <typeparam name="TQuery"></typeparam>
+/// <typeparam name="TQueryParameter"></typeparam>
+/// <typeparam name="TQueryResponse"></typeparam>
 [ApiController]
 [Produces("application/json")]
 // ReSharper disable once UnusedTypeParameter

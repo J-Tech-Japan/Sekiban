@@ -5,6 +5,12 @@ namespace Sekiban.Web.Dependency;
 
 public static class WebServiceExtension
 {
+    /// <summary>
+    ///     Add Sekiban web
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="definition"></param>
+    /// <returns></returns>
     public static IServiceCollection AddSekibanWeb(this IServiceCollection services, IWebDependencyDefinition definition)
     {
         definition.Define();

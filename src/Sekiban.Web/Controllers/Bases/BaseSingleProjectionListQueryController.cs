@@ -4,42 +4,41 @@ using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Web.Authorizations;
 using Sekiban.Web.Dependency;
 namespace Sekiban.Web.Controllers.Bases;
-
+/// <summary>
+/// Base single projection list query controller
+/// </summary>
+/// <param name="queryExecutor"></param>
+/// <param name="webDependencyDefinition"></param>
+/// <param name="serviceProvider"></param>
+/// <typeparam name="TSingleProjectionPayload"></typeparam>
+/// <typeparam name="TQuery"></typeparam>
+/// <typeparam name="TQueryParameter"></typeparam>
+/// <typeparam name="TQueryResponse"></typeparam>
 [ApiController]
 [Produces("application/json")]
 // ReSharper disable once UnusedTypeParameter
-public class BaseSingleProjectionListQueryController<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse> : ControllerBase
-    where TSingleProjectionPayload : ISingleProjectionPayloadCommon
+public class BaseSingleProjectionListQueryController<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
+    IQueryExecutor queryExecutor,
+    IWebDependencyDefinition webDependencyDefinition,
+    IServiceProvider serviceProvider) : ControllerBase where TSingleProjectionPayload : ISingleProjectionPayloadCommon
     where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
     where TQueryParameter : IListQueryParameter<TQueryResponse>
     where TQueryResponse : IQueryResponse
 {
-    private readonly IServiceProvider _serviceProvider;
-    private readonly IWebDependencyDefinition _webDependencyDefinition;
-    protected readonly IQueryExecutor QueryExecutor;
-
-    public BaseSingleProjectionListQueryController(
-        IQueryExecutor queryExecutor,
-        IWebDependencyDefinition webDependencyDefinition,
-        IServiceProvider serviceProvider)
-    {
-        QueryExecutor = queryExecutor;
-        _webDependencyDefinition = webDependencyDefinition;
-        _serviceProvider = serviceProvider;
-    }
+    protected readonly IQueryExecutor QueryExecutor = queryExecutor;
 
     [HttpGet]
     [Route("")]
     public async Task<ActionResult<ListQueryResult<TQueryResponse>>> GetQueryResult([FromQuery] TQueryParameter queryParam)
     {
-        if (_webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+        if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.SingleProjection,
                 this,
                 typeof(TSingleProjectionPayload),
                 null,
                 null,
                 HttpContext,
-                _serviceProvider) ==
+                serviceProvider) ==
             AuthorizeResultType.Denied)
         {
             return Unauthorized();

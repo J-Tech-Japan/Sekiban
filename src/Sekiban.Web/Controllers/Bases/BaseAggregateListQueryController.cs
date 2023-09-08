@@ -5,41 +5,41 @@ using Sekiban.Web.Authorizations;
 using Sekiban.Web.Dependency;
 namespace Sekiban.Web.Controllers.Bases;
 
+/// <summary>
+///     Aggregate list query controller base
+/// </summary>
+/// <param name="queryExecutor"></param>
+/// <param name="serviceProvider"></param>
+/// <param name="webDependencyDefinition"></param>
+/// <typeparam name="TAggregatePayload"></typeparam>
+/// <typeparam name="TQuery"></typeparam>
+/// <typeparam name="TQueryParameter"></typeparam>
+/// <typeparam name="TQueryResponse"></typeparam>
 [ApiController]
 [Produces("application/json")]
 // ReSharper disable once UnusedTypeParameter
-public class BaseAggregateListQueryController<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> : ControllerBase
-    where TAggregatePayload : IAggregatePayloadCommon
+public class BaseAggregateListQueryController<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
+    IQueryExecutor queryExecutor,
+    IServiceProvider serviceProvider,
+    IWebDependencyDefinition webDependencyDefinition) : ControllerBase where TAggregatePayload : IAggregatePayloadCommon
     where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
     where TQueryParameter : IListQueryParameter<TQueryResponse>
     where TQueryResponse : IQueryResponse
 {
-    private readonly IServiceProvider _serviceProvider;
-    private readonly IWebDependencyDefinition _webDependencyDefinition;
-    protected readonly IQueryExecutor QueryExecutor;
-
-    public BaseAggregateListQueryController(
-        IQueryExecutor queryExecutor,
-        IServiceProvider serviceProvider,
-        IWebDependencyDefinition webDependencyDefinition)
-    {
-        QueryExecutor = queryExecutor;
-        _serviceProvider = serviceProvider;
-        _webDependencyDefinition = webDependencyDefinition;
-    }
+    protected readonly IQueryExecutor QueryExecutor = queryExecutor;
 
     [HttpGet]
     [Route("")]
     public async Task<ActionResult<ListQueryResult<TQueryResponse>>> GetQueryResult([FromQuery] TQueryParameter queryParam)
     {
-        if (_webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+        if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.Get,
                 this,
                 typeof(TAggregatePayload),
                 null,
                 null,
                 HttpContext,
-                _serviceProvider) ==
+                serviceProvider) ==
             AuthorizeResultType.Denied)
         {
             return Unauthorized();

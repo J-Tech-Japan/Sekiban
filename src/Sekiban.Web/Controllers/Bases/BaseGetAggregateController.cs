@@ -6,23 +6,18 @@ using Sekiban.Web.Authorizations;
 using Sekiban.Web.Dependency;
 namespace Sekiban.Web.Controllers.Bases;
 
+/// <summary>
+///     Base get aggregate controller
+/// </summary>
+/// <typeparam name="TAggregatePayload"></typeparam>
 [ApiController]
 [Produces("application/json")]
-public class BaseGetAggregateController<TAggregatePayload> : ControllerBase where TAggregatePayload : IAggregatePayloadCommon
+// ReSharper disable once ClassWithVirtualMembersNeverInherited.Global
+public class BaseGetAggregateController<TAggregatePayload>(
+    IAggregateLoader aggregateLoader,
+    IWebDependencyDefinition webDependencyDefinition,
+    IServiceProvider serviceProvider) : ControllerBase where TAggregatePayload : IAggregatePayloadCommon
 {
-    private readonly IServiceProvider _serviceProvider;
-    private readonly IWebDependencyDefinition _webDependencyDefinition;
-    private readonly IAggregateLoader aggregateLoader;
-
-    public BaseGetAggregateController(
-        IAggregateLoader aggregateLoader,
-        IWebDependencyDefinition webDependencyDefinition,
-        IServiceProvider serviceProvider)
-    {
-        this.aggregateLoader = aggregateLoader;
-        _webDependencyDefinition = webDependencyDefinition;
-        _serviceProvider = serviceProvider;
-    }
 
     [HttpGet]
     [Route("get/{id}")]
@@ -32,14 +27,14 @@ public class BaseGetAggregateController<TAggregatePayload> : ControllerBase wher
         int? toVersion = null,
         string? includesSortableUniqueId = null)
     {
-        if (_webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+        if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.Get,
                 this,
                 typeof(TAggregatePayload),
                 null,
                 null,
                 HttpContext,
-                _serviceProvider) ==
+                serviceProvider) ==
             AuthorizeResultType.Denied)
         {
             return Unauthorized();
@@ -54,14 +49,14 @@ public class BaseGetAggregateController<TAggregatePayload> : ControllerBase wher
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null)
     {
-        if (_webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+        if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.Get,
                 this,
                 typeof(TAggregatePayload),
                 null,
                 null,
                 HttpContext,
-                _serviceProvider) ==
+                serviceProvider) ==
             AuthorizeResultType.Denied)
         {
             return Unauthorized();
@@ -74,14 +69,14 @@ public class BaseGetAggregateController<TAggregatePayload> : ControllerBase wher
     public virtual async Task<ActionResult<IEnumerable<AggregateState<TAggregatePayload>>>> GetIdsAsync([FromQuery] IEnumerable<Guid> ids)
     {
         await Task.CompletedTask;
-        if (_webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+        if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.Get,
                 this,
                 typeof(TAggregatePayload),
                 null,
                 null,
                 HttpContext,
-                _serviceProvider) ==
+                serviceProvider) ==
             AuthorizeResultType.Denied)
         {
             return Unauthorized();

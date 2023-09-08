@@ -2,6 +2,10 @@
 using Sekiban.Web.Authorizations.Definitions;
 namespace Sekiban.Web.Authorizations;
 
+/// <summary>
+///     Allow specific authorize group when logged in
+/// </summary>
+/// <typeparam name="TDefinitionType"></typeparam>
 public class AllowIfLoggedIn<TDefinitionType> : IAuthorizeDefinition where TDefinitionType : IAuthorizationDefinitionType, new()
 {
     public AuthorizeResultType Check(

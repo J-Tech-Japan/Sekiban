@@ -5,6 +5,13 @@ using Sekiban.Web.Authorizations;
 using Sekiban.Web.Dependency;
 namespace Sekiban.Web.Controllers.Bases;
 
+/// <summary>
+///     Base multi projection list query controller
+/// </summary>
+/// <typeparam name="TProjectionPayload"></typeparam>
+/// <typeparam name="TQuery"></typeparam>
+/// <typeparam name="TQueryParameter"></typeparam>
+/// <typeparam name="TQueryResponse"></typeparam>
 [ApiController]
 [Produces("application/json")]
 // ReSharper disable once UnusedTypeParameter

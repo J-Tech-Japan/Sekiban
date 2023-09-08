@@ -1,6 +1,9 @@
 ﻿using Microsoft.AspNetCore.Http;
 namespace Sekiban.Web.Authorizations;
 
+/// <summary>
+///     Authorize group definition
+/// </summary>
 public interface IAuthorizeDefinition
 {
     public AuthorizeResultType Check(

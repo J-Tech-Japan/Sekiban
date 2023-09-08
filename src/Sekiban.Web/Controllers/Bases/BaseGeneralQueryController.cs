@@ -4,6 +4,12 @@ using Sekiban.Web.Authorizations;
 using Sekiban.Web.Dependency;
 namespace Sekiban.Web.Controllers.Bases;
 
+/// <summary>
+///     Base general query controller
+/// </summary>
+/// <typeparam name="TQuery"></typeparam>
+/// <typeparam name="TQueryParameter"></typeparam>
+/// <typeparam name="TQueryResponse"></typeparam>
 [ApiController]
 [Produces("application/json")]
 public class BaseGeneralQueryController<TQuery, TQueryParameter, TQueryResponse> : ControllerBase

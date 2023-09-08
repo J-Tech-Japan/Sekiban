@@ -2,6 +2,10 @@ using Sekiban.Web.Controllers;
 using Sekiban.Web.Controllers.Bases;
 namespace Sekiban.Web.Common;
 
+/// <summary>
+///     Controller options for sekiban.web
+///     Base class can be changed to custom base class
+/// </summary>
 public class SekibanControllerOptions
 {
     public Type BaseControllerType { get; set; } = typeof(BaseCommandController<,>);

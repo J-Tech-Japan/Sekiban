@@ -12,40 +12,31 @@ using Sekiban.Web.Common;
 using Sekiban.Web.Dependency;
 using System.Reflection;
 namespace Sekiban.Web.Controllers;
-
+/// <summary>
+/// Sekiban api list controller
+/// </summary>
+/// <typeparam name="T"></typeparam>
 [Produces("application/json")]
 [ApiController]
-public class SekibanApiListController<T> : ControllerBase
+public class SekibanApiListController<T>(
+    IWebDependencyDefinition webDependencyDefinition,
+    IDocumentPersistentRepository documentRepository,
+    IServiceProvider serviceProvider,
+    IUpdateNotice updateNotice) : ControllerBase
 {
-    private readonly IDocumentPersistentRepository _documentRepository;
-    private readonly IServiceProvider _serviceProvider;
-    private readonly IUpdateNotice _updateNotice;
-    private readonly IWebDependencyDefinition _webDependencyDefinition;
-
-    public SekibanApiListController(
-        IWebDependencyDefinition webDependencyDefinition,
-        IDocumentPersistentRepository documentRepository,
-        IServiceProvider serviceProvider,
-        IUpdateNotice updateNotice)
-    {
-        _webDependencyDefinition = webDependencyDefinition;
-        _documentRepository = documentRepository;
-        _serviceProvider = serviceProvider;
-        _updateNotice = updateNotice;
-    }
 
     [HttpGet]
     [Route("aggregates", Name = "SekibanAggregates")]
     public virtual async Task<ActionResult<List<SekibanAggregateInfo>>> AggregateInfoAsync()
     {
-        if (_webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+        if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.AggregateInfo,
                 this,
                 typeof(T),
                 null,
                 null,
                 HttpContext,
-                _serviceProvider) ==
+                serviceProvider) ==
             AuthorizeResultType.Denied)
         {
             return Unauthorized();
@@ -53,23 +44,22 @@ public class SekibanApiListController<T> : ControllerBase
 
         await Task.CompletedTask;
         var list = new List<SekibanAggregateInfo>();
-        foreach (var aggregateType in _webDependencyDefinition.GetAggregatePayloadTypes())
+        foreach (var aggregateType in webDependencyDefinition.GetAggregatePayloadTypes())
         {
             var stateResponseType = typeof(AggregateState<>).MakeGenericType(aggregateType).GetTypeInfo();
             var aggregateInfo = new SekibanAggregateInfo(
                 aggregateType.Name,
                 new SekibanQueryInfo
                 {
-                    GetUrl = $"/{_webDependencyDefinition.Options.QueryPrefix}/{aggregateType.Name}/get",
-                    ListUrl = $"/{_webDependencyDefinition.Options.QueryPrefix}/{aggregateType.Name}/list",
-                    GetEventsUrl = $"/{_webDependencyDefinition.Options.InfoPrefix}/events/{aggregateType.Name}/{{id}}",
-                    GetCommandsUrl = $"/{_webDependencyDefinition.Options.InfoPrefix}/commands/{aggregateType.Name}/{{id}}",
+                    GetUrl = $"/{webDependencyDefinition.Options.QueryPrefix}/{aggregateType.Name}/get",
+                    GetEventsUrl = $"/{webDependencyDefinition.Options.InfoPrefix}/events/{aggregateType.Name}/{{id}}",
+                    GetCommandsUrl = $"/{webDependencyDefinition.Options.InfoPrefix}/commands/{aggregateType.Name}/{{id}}",
                     Method = "GET",
                     SampleResponseObject = Activator.CreateInstance(stateResponseType)!
                 },
                 new List<SekibanCommandInfo>());
             list.Add(aggregateInfo);
-            foreach (var (_, implementationType) in _webDependencyDefinition.GetCommandDependencies())
+            foreach (var (_, implementationType) in webDependencyDefinition.GetCommandDependencies())
             {
                 if (implementationType != null && implementationType.IsCommandHandlerType())
                 {
@@ -82,12 +72,11 @@ public class SekibanApiListController<T> : ControllerBase
                     aggregateInfo.commands.Add(
                         new SekibanCommandInfo
                         {
-                            Url = $"/{_webDependencyDefinition.Options.CreateCommandPrefix}/{aggregateType.Name}/{commandType.Name}",
+                            Url = $"/{webDependencyDefinition.Options.CreateCommandPrefix}/{aggregateType.Name}/{commandType.Name}",
                             JsonBodyType = commandType.Name,
                             Method = "POST",
                             SampleBodyObject = Activator.CreateInstance(commandType)!,
-                            SampleResponseObject = Activator.CreateInstance(responseType)!,
-                            IsCreateEvent = true
+                            SampleResponseObject = Activator.CreateInstance(responseType)!
                         });
                 }
             }
@@ -103,26 +92,26 @@ public class SekibanApiListController<T> : ControllerBase
         Guid id,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey)
     {
-        foreach (var aggregateType in _webDependencyDefinition.GetAggregatePayloadTypes())
+        foreach (var aggregateType in webDependencyDefinition.GetAggregatePayloadTypes())
         {
             if (!string.Equals(aggregateName, aggregateType.Name, StringComparison.CurrentCultureIgnoreCase))
             {
                 continue;
             }
-            if (_webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+            if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                     AuthorizeMethodType.EventHistory,
                     this,
                     aggregateType,
                     null,
                     null,
                     HttpContext,
-                    _serviceProvider) ==
+                    serviceProvider) ==
                 AuthorizeResultType.Denied)
             {
                 return Unauthorized();
             }
             var events = new List<dynamic>();
-            await _documentRepository.GetAllEventsForAggregateIdAsync(
+            await documentRepository.GetAllEventsForAggregateIdAsync(
                 id,
                 aggregateType,
                 PartitionKeyGenerator.ForEvent(id, aggregateType, rootPartitionKey),
@@ -139,26 +128,26 @@ public class SekibanApiListController<T> : ControllerBase
     [Route("commands/{aggregateName}/{id}", Name = "SekibanCommands")]
     public virtual async Task<ActionResult<IEnumerable<dynamic>>> CommandsAsync(string aggregateName, Guid id, string rootPartitionKey)
     {
-        foreach (var aggregateType in _webDependencyDefinition.GetAggregatePayloadTypes())
+        foreach (var aggregateType in webDependencyDefinition.GetAggregatePayloadTypes())
         {
             if (!string.Equals(aggregateName, aggregateType.Name, StringComparison.CurrentCultureIgnoreCase))
             {
                 continue;
             }
-            if (_webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+            if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                     AuthorizeMethodType.CommandHistory,
                     this,
                     aggregateType,
                     null,
                     null,
                     HttpContext,
-                    _serviceProvider) ==
+                    serviceProvider) ==
                 AuthorizeResultType.Denied)
             {
                 return Unauthorized();
             }
             var events = new List<dynamic>();
-            await _documentRepository.GetAllCommandStringsForAggregateIdAsync(
+            await documentRepository.GetAllCommandStringsForAggregateIdAsync(
                 id,
                 aggregateType,
                 null,
@@ -180,25 +169,25 @@ public class SekibanApiListController<T> : ControllerBase
         Guid aggregateId,
         string rootPartitionKey)
     {
-        foreach (var aggregatePayloadType in _webDependencyDefinition.GetAggregatePayloadTypes())
+        foreach (var aggregatePayloadType in webDependencyDefinition.GetAggregatePayloadTypes())
         {
             if (!string.Equals(aggregateName, aggregatePayloadType.Name, StringComparison.CurrentCultureIgnoreCase))
             {
                 continue;
             }
-            if (_webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+            if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                     AuthorizeMethodType.SnapshotHistory,
                     this,
                     aggregatePayloadType,
                     null,
                     null,
                     HttpContext,
-                    _serviceProvider) ==
+                    serviceProvider) ==
                 AuthorizeResultType.Denied)
             {
                 return Unauthorized();
             }
-            var snapshots = await _documentRepository.GetSnapshotsForAggregateAsync(
+            var snapshots = await documentRepository.GetSnapshotsForAggregateAsync(
                 aggregateId,
                 aggregatePayloadType,
                 aggregatePayloadType,
@@ -217,25 +206,25 @@ public class SekibanApiListController<T> : ControllerBase
         Guid snapshotId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey)
     {
-        foreach (var aggregatePayloadType in _webDependencyDefinition.GetAggregatePayloadTypes())
+        foreach (var aggregatePayloadType in webDependencyDefinition.GetAggregatePayloadTypes())
         {
             if (!string.Equals(aggregateName, aggregatePayloadType.Name, StringComparison.CurrentCultureIgnoreCase))
             {
                 continue;
             }
-            if (_webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+            if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                     AuthorizeMethodType.SnapshotHistory,
                     this,
                     aggregatePayloadType,
                     null,
                     null,
                     HttpContext,
-                    _serviceProvider) ==
+                    serviceProvider) ==
                 AuthorizeResultType.Denied)
             {
                 return Unauthorized();
             }
-            var snapshots = await _documentRepository.GetSnapshotsForAggregateAsync(
+            var snapshots = await documentRepository.GetSnapshotsForAggregateAsync(
                 aggregateId,
                 aggregatePayloadType,
                 aggregatePayloadType,
@@ -256,25 +245,25 @@ public class SekibanApiListController<T> : ControllerBase
         UpdatedLocationType locationType = UpdatedLocationType.ExternalFunction)
     {
         await Task.CompletedTask;
-        foreach (var aggregateType in _webDependencyDefinition.GetAggregatePayloadTypes())
+        foreach (var aggregateType in webDependencyDefinition.GetAggregatePayloadTypes())
         {
             if (!string.Equals(aggregateName, aggregateType.Name, StringComparison.CurrentCultureIgnoreCase))
             {
                 continue;
             }
-            if (_webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+            if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                     AuthorizeMethodType.SendUpdateMarker,
                     this,
                     aggregateType,
                     null,
                     null,
                     HttpContext,
-                    _serviceProvider) ==
+                    serviceProvider) ==
                 AuthorizeResultType.Denied)
             {
                 return Unauthorized();
             }
-            _updateNotice.SendUpdate(rootPartitionKey, aggregateName, id, sortableUniqueId, locationType);
+            updateNotice.SendUpdate(rootPartitionKey, aggregateName, id, sortableUniqueId, locationType);
             return Ok(sortableUniqueId);
         }
 
