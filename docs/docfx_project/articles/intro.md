@@ -2,49 +2,58 @@
 
 ## What is Sekiban?
 
-**Sekiban** is application development framework using **Event Sourcing and CQRS**. Sekiban uses C# and dotnet 7+, and developers can use declarative api to build event sourcing applications. As a event store, sekiban can use [Microsoft Azure Cosmos DB](https://azure.microsoft.com/en-us/products/cosmos-db) and [Amazon Dynamo DB](https://aws.amazon.com/dynamodb/). Application can be deploy either azure or AWS.
+**Sekiban** is an application development framework that leverages **Event Sourcing and CQRS** principles. Built with C# and .NET Core 7+, it allows developers to use a declarative API to create event sourcing applications. Sekiban supports various event stores such as [Microsoft Azure Cosmos DB](https://azure.microsoft.com/en-us/products/cosmos-db) and [Amazon Dynamo DB](https://aws.amazon.com/dynamodb/), facilitating deployment on either Azure or AWS.
 
-## What is Event Sourcing and CQRS.
-If you reach this page, you would provably known Event Sourcing and CQRS well. If you would like detail about it, going to the source, Greg Young's youtube talk would be good to get an idea of it. e.g. [Transcript of Greg Young's Talk at Code on the Beach 2014: CQRS and Event Sourcing](https://www.eventstore.com/blog/transcript-of-greg-youngs-talk-at-code-on-the-beach-2014-cqrs-and-event-sourcing).
-Greg recomends not to use frameworks, and build your own event sourcing system. I agree, building framework let us understand the concepts of event sourcing more. We think many developers would rather focus on business logic and start developing with tools and document database. We think now many databases and cloud platform improved speed and scalability. This improvement allow many developers to do event sourcing using framework and cloud solutions. Good things, since  Sekiban is open sourced, whenever developers wants to dig deeper, you have source code in the repository, that can tweak around. 
+##  Understanding Event Sourcing and CQRS
+If you've landed here, you're likely already familiar with Event Sourcing and CQRS. However, if you require more detailed insights, Greg Young's informative YouTube talk might be of assistance. Check out the [transcript](https://www.eventstore.com/blog/transcript-of-greg-youngs-talk-at-code-on-the-beach-2014-cqrs-and-event-sourcing) of Greg's presentation at the Code on the Beach 2014 event on CQRS and Event Sourcing.
+Greg suggests creating your event sourcing system instead of relying on frameworks, a viewpoint I share, as constructing your framework can deepen your understanding of event sourcing concepts.
 
-**Disclaimer:** Even though you use framework, developers needs to understand concepts of event sourcing, especially after you launch first version, you need to optimize Query performance when more data and users are using system. It requires knowledge of the Event Sourcing and CQRS to convert it to microservice or optimize performances.
+However, we recognize many developers prefer concentrating on business logic and swiftly proceeding with tools and document databases. Given the recent advances in database speed and scalability across the cloud, event sourcing can be quite efficient with the use of frameworks and cloud solutions.
+Fortunately, as Sekiban is open-source, developers wishing to delve deeper can experiment with the source code housed in the repository.
 
-## Sekiban has following main features below.
+***Disclaimer:*** Despite using a framework, it's essential for developers to be familiar with event sourcing concepts, especially when optimizing Query performance for a growing user base and data set post-launch. Adequate knowledge of Event Sourcing and CQRS is mandatory when converting it to a microservice or improving performances.
 
-- Simple Commands and Events
-- Publish only commands
-- Optimistic aggregate version check
-- Event versions
-- Single Aggregate Projections
-- Multi Aggregate Live Projections
-- Single Aggregate / Multi Aggregate Projections Snapshots
-- Large snapshots can be stored in Azure Blob Storage / Amazon S3.
-- Testing framework
-- Cosmos DB / Dynamo DB datastore.
-- Tenant Partitions
-- Query from multi projections
-- Command and Query Web API Generator with swagger support.
+## Key Features of Sekiban
 
-Those and more features helps developers to simply forcus on the business side and implement commands, events, projections, tests and queries.
+
+Enhance your application development experience with Sekiban suited for those who prioritize efficiency and effectiveness:
+
+- **Simple Commands and Events:** Facilitates straightforward creation of functionality within your application.
+- **Publish-only Commands and Events:** Provides way to save events without projecting aggregates.
+- **Optimistic Aggregate Version Check:** Enables efficient conflict detection in concurrent environments.
+- **Event Versions:** Allows for improved forward compatibility.
+- **Single/Multi Aggregate Projections:** Supports projections at both individual and multiple aggregate levels.
+- **Projections Snapshots:** Offers the ability to capture the state of a projection at a certain point in time.
+- **Large Snapshots Storage:** Accommodate sizable snapshots using Azure Blob Storage or Amazon S3.
+- **Built-in Testing Framework:** Simplifies testing with an integrated suite.
+- **Cosmos DB / Dynamo DB Datastore:** Provides scalable and globally distributed data storage solutions.
+- **Tenant Partitions:** Facilitates separation of data based on tenant for easier data management and handling.
+- **Query from Multiple Projections:** Enables querying from a range of projections for more dynamic data analysis.
+- **Command and Query Web API Generator with Swagger Support:** Streamlines API design, building, and documentation.
+
+These, coupled with many more features, allow developers to focus on business aspects, implementing commands, events, projections, tests, and queries for practical solutions without unnecessary complexity.
 
 ## Compatibility
+Sekiban is compatible with .NET 7 and 8.
 
-Sekiban has compatibility with Dotnet 7 and 8. 
+For **Cosmos DB**, Sekiban supports the [Hierarchical Partition Key](https://learn.microsoft.com/en-us/azure/cosmos-db/hierarchical-partition-keys?tabs=net-v3%2Cbicep) feature. This enables more efficient querying using Cosmos DB by creating a Tenant (or Root Partition Key), Aggregate Type, and Partition Key.
 
-For Cosmos DB, we only support with new [Hieralchiral Partitions Key](https://learn.microsoft.com/en-us/azure/cosmos-db/hierarchical-partition-keys?tabs=net-v3%2Cbicep). This allow to create Tenant(Root Partition Key), Aggregate Type and Partition Key can be efficiently query using Cosmos DB.
+When using **Dynamo DB** with Sekiban, you need to set up a Partition Key and Sort Key.
 
-For Dynamo DB, you need to set Partiton Key and Sort Key for using Sekiban.
+## Scale of Sekiban Projects
 
-## How big can Sekiban Projects be?
-Current version of Sekiban (0.14) does not have build in materialized view helper features. Sekiban's Live Projection can handle small and midium size systems. Usually sekiban can be used with Live Projection if system memory is enough for the size of the Multiple Projections. For Live Projection Please see the great article from Anton Stöckl [Live Projections for Read Models with Event Sourcing and CQRS](https://medium.com/@TonyBologni/live-projections-for-read-models-with-event-sourcing-and-cqrs-42dd18b19fd0). Developers can implement using Cosmos DB and Dynamo DB change feed. Although it is very simple to create materialized view using Change Feed, it is not tightly related with Sekiban Framework, so we did not include in the framework.
+As of Sekiban version 0.14, the framework doesn't have built-in materialized view helper features. Sekiban's Live Projection capability is well-suited for small to medium-sized systems. Typically, Sekiban can handle Live Projections provided the system memory can accommodate the size of the Multiple Projections.
 
-## Open Source.
-We release Sekiban open source under Apache 2.0. See [License](https://github.com/J-Tech-Japan/Sekiban/blob/main/LICENSE). You can fork and fix bugs or add more features if you would like. Also anyone who is interesting in contributing, we have [Contribution Guideline](https://github.com/J-Tech-Japan/Sekiban/blob/main/CONTRIBUTING.md) and [Code of Conduct](https://github.com/J-Tech-Japan/Sekiban/blob/main/CODE_OF_CONDUCT.md). J-Tech Japan is the owner of this project and decide the future plan.
+For more insights on Live Projections, please reference this informative article by Anton Stöckl: [Live Projections for Read Models with Event Sourcing and CQRS](https://medium.com/@TonyBologni/live-projections-for-read-models-with-event-sourcing-and-cqrs-42dd18b19fd0).
 
-## Supports and training
-J-Tech Japan accepts sponsors for this project to maintain hight quality framwork. Also if you need training or seminor, please contact to [sekibanadmin@jtechs.com](mailto:sekibanadmin@jtechs.com)
+Developers can implement materialized views using Cosmos DB's and Dynamo DB's change feed feature. Although creation of materialized views with Change Feed is a straightforward process, it does not directly pertain to the Sekiban Framework's core functions, hence it hasn't been included within the framework.
 
+## Open Source
 
+Sekiban is released as open source under the Apache 2.0 license. You can view our [License](https://github.com/J-Tech-Japan/Sekiban/blob/main/LICENSE) here. We welcome developers to fork the project, fix bugs, or add new features as they wish. For those interested in contributing, we offer a detailed [Contribution Guideline](https://github.com/J-Tech-Japan/Sekiban/blob/main/CONTRIBUTING.md) and [Code of Conduct](https://github.com/J-Tech-Japan/Sekiban/blob/main/CODE_OF_CONDUCT.md). J-Tech Japan owns this project and determines its future direction.
 
-[Quick Start](./quick-start.md) to see how you can start using Sekiban.
+## Support and Training
+
+J-Tech Japan welcomes sponsors for this project to help maintain a high-quality framework. If you require training or seminars, please contact us at [sekibanadmin@jtechs.com](mailto:sekibanadmin@jtechs.com).
+
+Start using Sekiban today by checking out our [Quick Start Guide](./quick-start.md).
