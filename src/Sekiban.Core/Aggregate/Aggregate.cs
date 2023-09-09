@@ -8,7 +8,7 @@ namespace Sekiban.Core.Aggregate;
 
 /// <summary>
 ///     Common Aggregate Class
-///     Contents are defined by implementing <see cref="IAggregatePayload" />.
+///     Contents are defined by implementing <see cref="IAggregatePayload{TAggrfegatePayload}" />.
 /// </summary>
 /// <typeparam name="TAggregatePayload">User Defined Aggregate Payload</typeparam>
 public sealed class Aggregate<TAggregatePayload> : AggregateCommon, ISingleProjectionStateConvertible<AggregateState<TAggregatePayload>>

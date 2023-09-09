@@ -18,6 +18,4 @@ public record MemberWithPrimaryConstructor(
     [property: MinLength(8)]
     string? Email,
     MemberWithPrimaryConstructor? Partner,
-    ImmutableList<MemberWithPrimaryConstructor> Friends)
-{
-}
+    ImmutableList<MemberWithPrimaryConstructor> Friends);
