@@ -6,12 +6,12 @@ namespace Sekiban.Core.Command;
 
 // ReSharper disable once InvalidXmlDocComment
 /// <summary>
-///     System use for internal handler for <see cref="IOnlyPublishingCommand" />
+///     System use for internal handler for <see cref="IOnlyPublishingCommand{TAggregatePayload}" />
 /// </summary>
 /// <typeparam name="TAggregatePayload"></typeparam>
 /// <typeparam name="TCommand"></typeparam>
-public class OnlyPublishingCommandHandlerAdapter<TAggregatePayload, TCommand> where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>
-    where TCommand : IOnlyPublishingCommand<TAggregatePayload>
+public class OnlyPublishingCommandHandlerAdapter<TAggregatePayload, TCommand>
+    where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload> where TCommand : IOnlyPublishingCommand<TAggregatePayload>
 {
     public async Task<CommandResponse> HandleCommandAsync(
         CommandDocument<TCommand> commandDocument,

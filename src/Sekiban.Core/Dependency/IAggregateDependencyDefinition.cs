@@ -3,7 +3,7 @@ namespace Sekiban.Core.Dependency;
 
 // ReSharper disable once InvalidXmlDocComment
 /// <summary>
-///     system use base class for <see cref="AggregateDependencyDefinition" />
+///     system use base class for <see cref="AggregateDependencyDefinition{TAggregatePayload}" />
 ///     Application developer does not need to use this class directly.
 /// </summary>
 public interface IAggregateDependencyDefinition
