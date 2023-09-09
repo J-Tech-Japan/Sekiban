@@ -1,2 +1,5 @@
-- name: Introduction
+- name: Getting Started
+- name: Sekiban Concepts
   href: intro.md
+- name: Quick Start
+  href: quick-start.md
