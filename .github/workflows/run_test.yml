@@ -226,7 +226,7 @@ jobs:
         dotnet restore Sekiban.sln
     - name: Test dotnet
       run: |
-        dotnet test Sekiban.sln  --filter "Category=Performance" -v m -c Release -m:1 -f net8.0
+        dotnet test test/Sekiban.Test.CosmosDb/Sekiban.Test.CosmosDb.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net8.0
 
 
 
