@@ -21,7 +21,7 @@ jobs:
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v1
       with:
-        dotnet-version: 8.0.100-preview.7.23376.3
+        dotnet-version: 8.0.100-rc.1.23455.8
     - name: Setup .NET 7
       uses: actions/setup-dotnet@v1
       with:
@@ -75,7 +75,7 @@ jobs:
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v1
       with:
-        dotnet-version: 8.0.100-preview.7.23376.3
+        dotnet-version: 8.0.100-rc.1.23455.8
     - name: Setup .NET 7
       uses: actions/setup-dotnet@v1
       with:
@@ -133,7 +133,7 @@ jobs:
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v1
       with:
-        dotnet-version: 8.0.100-preview.7.23376.3
+        dotnet-version: 8.0.100-rc.1.23455.8
     - name: Setup .NET 7
       uses: actions/setup-dotnet@v1
       with:
