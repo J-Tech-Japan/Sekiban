@@ -3,7 +3,7 @@ namespace Sekiban.Core.Command;
 
 // ReSharper disable once InvalidXmlDocComment
 /// <summary>
-///     Command Handler Interface for　<see cref="IVersionValidationCommand" />
+///     Command Handler Interface for　<see cref="IVersionValidationCommand{TAggregatePayload}" />
 ///     Application developer can implement this interface to define a command handler
 ///     A Command Handler can receive DI objects through constructor.
 /// </summary>

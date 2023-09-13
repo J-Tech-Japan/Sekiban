@@ -7,6 +7,4 @@ namespace Sekiban.Core.Aggregate;
 ///     <see cref="IDeletableAggregatePayload{TAggregatePayload}" />.
 /// </summary>
 public interface IAggregatePayload<TAggregatePayload> : IAggregatePayloadGeneratable<TAggregatePayload>
-    where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>
-{
-}
+    where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>;
