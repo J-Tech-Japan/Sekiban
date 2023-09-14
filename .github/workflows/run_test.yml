@@ -229,112 +229,6 @@ jobs:
       run: |
         dotnet test test/Sekiban.Test.CosmosDb/Sekiban.Test.CosmosDb.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net7.0
 
-
-  performance80:
-    strategy:
-      max-parallel: 1
-
-    runs-on: ubuntu-latest
-    needs: [ performance70 ]
-    steps:
-    - uses: actions/checkout@v2
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v1
-      with:
-        dotnet-version: 8.0.100-rc.1.23455.8
-    - name: Setup .NET 7
-      uses: actions/setup-dotnet@v1
-      with:
-        dotnet-version: 7.0.x
-    - name: Secret Settings
-      run: |
-        pushd ./test/Sekiban.Test.CosmosDb
-        dotnet user-secrets set "Sekiban:Default:CosmosDbEndPointUrl" "${{secrets.TEST_COSMOS_ENDPOINT}}"
-        dotnet user-secrets set "Sekiban:Default:CosmosDbAuthorizationKey" "${{secrets.TEST_COSMOS_SECRET}}"
-        dotnet user-secrets set "Sekiban:Default:BlobConnectionString" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
-        dotnet user-secrets set "Sekiban:Secondary:CosmosDbEndPointUrl" "${{secrets.TEST_COSMOS_ENDPOINT}}"
-        dotnet user-secrets set "Sekiban:Secondary:CosmosDbAuthorizationKey" "${{secrets.TEST_COSMOS_SECRET}}"
-        dotnet user-secrets set "Sekiban:Secondary:BlobConnectionString" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
-        dotnet user-secrets set "Sekiban:Default:CosmosDbDatabase" "GithubActions"
-        dotnet user-secrets set "Sekiban:Secondary:CosmosDbDatabase" "GithubActions"
-        dotnet user-secrets set "Sekiban:Default:AwsAccessKeyId" "${{secrets.TEST_AWS_ACCESS_KEY_ID}}"
-        dotnet user-secrets set "Sekiban:Default:AwsAccessKey" "${{secrets.TEST_AWS_ACCESS_KEY}}"
-        dotnet user-secrets set "Sekiban:Default:DynamoDbRegion" "us-west-1"
-        dotnet user-secrets set "Sekiban:Default:DynamoDbItemsTable" "jjga_items"
-        dotnet user-secrets set "Sekiban:Default:DynamoDbEventsTable" "jjga_events"
-        dotnet user-secrets set "Sekiban:Default:DynamoDbItemsTableDissolvable" "jjga_d_items"
-        dotnet user-secrets set "Sekiban:Default:DynamoDbEventsTableDissolvable" "jjga_d_events"
-        dotnet user-secrets set "Sekiban:Default:S3Region" "us-west-1"
-        dotnet user-secrets set "Sekiban:Default:S3BucketName" "jjga-s3"
-        dotnet user-secrets set "Sekiban:Secondary:AwsAccessKeyId" "${{secrets.TEST_AWS_ACCESS_KEY_ID}}"
-        dotnet user-secrets set "Sekiban:Secondary:AwsAccessKey" "${{secrets.TEST_AWS_ACCESS_KEY}}"
-        dotnet user-secrets set "Sekiban:Secondary:DynamoDbRegion" "us-west-1"
-        dotnet user-secrets set "Sekiban:Secondary:DynamoDbItemsTable" "jjga_items_2"
-        dotnet user-secrets set "Sekiban:Secondary:DynamoDbEventsTable" "jjga_events_2"
-        dotnet user-secrets set "Sekiban:Secondary:DynamoDbItemsTableDissolvable" "jjga_d_items_2"
-        dotnet user-secrets set "Sekiban:Secondary:DynamoDbEventsTableDissolvable" "jjga_d_events_2"
-        dotnet user-secrets set "Sekiban:Secondary:S3Region" "us-west-1"
-        dotnet user-secrets set "Sekiban:Secondary:S3BucketName" "jjga-s3"
-    - name: Restore dependencies
-      run: |
-        dotnet restore Sekiban.sln
-    - name: Test dotnet
-      run: |
-        dotnet test test/Sekiban.Test.CosmosDb/Sekiban.Test.CosmosDb.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net8.0
-
-  performance70:
-    strategy:
-      max-parallel: 1
-
-    runs-on: ubuntu-latest
-    needs: [ flaky ]
-    steps:
-    - uses: actions/checkout@v2
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v1
-      with:
-        dotnet-version: 8.0.100-rc.1.23455.8
-    - name: Setup .NET 7
-      uses: actions/setup-dotnet@v1
-      with:
-        dotnet-version: 7.0.x
-    - name: Secret Settings
-      run: |
-        pushd ./test/Sekiban.Test.CosmosDb
-        dotnet user-secrets set "Sekiban:Default:CosmosDbEndPointUrl" "${{secrets.TEST_COSMOS_ENDPOINT}}"
-        dotnet user-secrets set "Sekiban:Default:CosmosDbAuthorizationKey" "${{secrets.TEST_COSMOS_SECRET}}"
-        dotnet user-secrets set "Sekiban:Default:BlobConnectionString" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
-        dotnet user-secrets set "Sekiban:Secondary:CosmosDbEndPointUrl" "${{secrets.TEST_COSMOS_ENDPOINT}}"
-        dotnet user-secrets set "Sekiban:Secondary:CosmosDbAuthorizationKey" "${{secrets.TEST_COSMOS_SECRET}}"
-        dotnet user-secrets set "Sekiban:Secondary:BlobConnectionString" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
-        dotnet user-secrets set "Sekiban:Default:CosmosDbDatabase" "GithubActions"
-        dotnet user-secrets set "Sekiban:Secondary:CosmosDbDatabase" "GithubActions"
-        dotnet user-secrets set "Sekiban:Default:AwsAccessKeyId" "${{secrets.TEST_AWS_ACCESS_KEY_ID}}"
-        dotnet user-secrets set "Sekiban:Default:AwsAccessKey" "${{secrets.TEST_AWS_ACCESS_KEY}}"
-        dotnet user-secrets set "Sekiban:Default:DynamoDbRegion" "us-west-1"
-        dotnet user-secrets set "Sekiban:Default:DynamoDbItemsTable" "jjga_items"
-        dotnet user-secrets set "Sekiban:Default:DynamoDbEventsTable" "jjga_events"
-        dotnet user-secrets set "Sekiban:Default:DynamoDbItemsTableDissolvable" "jjga_d_items"
-        dotnet user-secrets set "Sekiban:Default:DynamoDbEventsTableDissolvable" "jjga_d_events"
-        dotnet user-secrets set "Sekiban:Default:S3Region" "us-west-1"
-        dotnet user-secrets set "Sekiban:Default:S3BucketName" "jjga-s3"
-        dotnet user-secrets set "Sekiban:Secondary:AwsAccessKeyId" "${{secrets.TEST_AWS_ACCESS_KEY_ID}}"
-        dotnet user-secrets set "Sekiban:Secondary:AwsAccessKey" "${{secrets.TEST_AWS_ACCESS_KEY}}"
-        dotnet user-secrets set "Sekiban:Secondary:DynamoDbRegion" "us-west-1"
-        dotnet user-secrets set "Sekiban:Secondary:DynamoDbItemsTable" "jjga_items_2"
-        dotnet user-secrets set "Sekiban:Secondary:DynamoDbEventsTable" "jjga_events_2"
-        dotnet user-secrets set "Sekiban:Secondary:DynamoDbItemsTableDissolvable" "jjga_d_items_2"
-        dotnet user-secrets set "Sekiban:Secondary:DynamoDbEventsTableDissolvable" "jjga_d_events_2"
-        dotnet user-secrets set "Sekiban:Secondary:S3Region" "us-west-1"
-        dotnet user-secrets set "Sekiban:Secondary:S3BucketName" "jjga-s3"
-    - name: Restore dependencies
-      run: |
-        dotnet restore Sekiban.sln
-    - name: Test dotnet
-      run: |
-        dotnet test test/Sekiban.Test.CosmosDb/Sekiban.Test.CosmosDb.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net7.0
-
-
   performance80:
     strategy:
       max-parallel: 1
@@ -439,7 +333,6 @@ jobs:
       run: |
         dotnet test test/Sekiban.Test.Dynamo/Sekiban.Test.Dynamo.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net7.0
 
-
   performance80dynamo:
     strategy:
       max-parallel: 1
@@ -491,8 +384,3 @@ jobs:
     - name: Test dotnet
       run: |
         dotnet test test/Sekiban.Test.Dynamo/Sekiban.Test.Dynamo.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net8.0
-      
-
-
-
-
