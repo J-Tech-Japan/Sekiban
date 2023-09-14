@@ -112,7 +112,7 @@ jobs:
         dotnet restore Sekiban.sln
     - name: Test dotnet
       run: |
-        dotnet test Sekiban.sln  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net7.0
+        dotnet test Sekiban.sln  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net8.0
     - uses: mktcode/consecutive-workflow-action@v1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
