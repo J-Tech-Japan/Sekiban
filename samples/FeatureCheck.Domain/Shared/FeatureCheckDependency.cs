@@ -11,6 +11,7 @@ using FeatureCheck.Domain.Aggregates.Clients.Queries;
 using FeatureCheck.Domain.Aggregates.Clients.Queries.BasicClientFilters;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
+using FeatureCheck.Domain.Aggregates.MultipleEventsInAFiles;
 using FeatureCheck.Domain.Aggregates.RecentActivities;
 using FeatureCheck.Domain.Aggregates.RecentActivities.Commands;
 using FeatureCheck.Domain.Aggregates.RecentActivities.Projections;
@@ -142,6 +143,10 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
             .AddCommandHandler<ActivateBFAggregate, ActivateBFAggregate.Handler>()
             .AddSubtype<ActiveBFAggregate>(subType => subType.AddCommandHandler<CloseBFAggregate, CloseBFAggregate.Handler>())
             .AddSubtype<ClosedBFAggregate>(subType => subType.AddCommandHandler<ReopenBFAggregate, ReopenBFAggregate.Handler>());
+
+        AddAggregate<Booking>()
+            .AddCommandHandler<BookingCommands.BookRoom, BookingCommands.BookRoom.Handler>()
+            .AddCommandHandler<BookingCommands.PayBookedRoom, BookingCommands.PayBookedRoom.Handler>();
 
     }
 }

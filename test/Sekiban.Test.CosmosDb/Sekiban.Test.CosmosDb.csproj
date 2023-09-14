@@ -56,4 +56,8 @@
         </None>
     </ItemGroup>
 
+    <ItemGroup>
+        <Folder Include="Stories\QueryPerformances\"/>
+    </ItemGroup>
+
 </Project>
