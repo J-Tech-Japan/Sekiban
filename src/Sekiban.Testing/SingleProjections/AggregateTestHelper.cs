@@ -115,11 +115,14 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     {
         if (_latestException != null)
         {
-            throw _latestException;
+            var error = _latestException;
+            _latestException = null;
+            throw error;
         }
         if (_latestValidationErrors.Any())
         {
             var first = _latestValidationErrors.First();
+            _latestValidationErrors = new List<SekibanValidationParameterError>();
             throw new Exception(
                 $"{_latestCommand?.GetType().Name ?? ""}" + first.PropertyName + " has validation error " + first.ErrorMessages.First());
         }
@@ -212,18 +215,21 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public IAggregateTestHelper<TAggregatePayload> ThenGetLatestEvents(Action<List<IEvent>> checkEventsAction)
     {
+        ThenNotThrowsAnException();
         checkEventsAction(_latestEvents);
         return this;
     }
 
     public IAggregateTestHelper<TAggregatePayload> ThenGetAllAggregateEvents(Action<List<IEvent>> checkEventsAction)
     {
+        ThenNotThrowsAnException();
         checkEventsAction(GetAllAggregateEvents());
         return this;
     }
 
     public IAggregateTestHelper<TAggregatePayload> ThenLastSingleEventIs<T>(Event<T> @event) where T : IEventPayloadCommon
     {
+        ThenNotThrowsAnException();
         if (_latestEvents.Count != 1)
         {
             throw new SekibanInvalidArgumentException();
@@ -239,6 +245,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public IAggregateTestHelper<TAggregatePayload> ThenLastSingleEventPayloadIs<T>(T payload) where T : IEventPayloadCommon
     {
+        ThenNotThrowsAnException();
         if (_latestEvents.Count != 1)
         {
             throw new SekibanInvalidArgumentException();
@@ -254,6 +261,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> ThenGetLatestSingleEventPayload<T>(Action<T> checkPayloadAction)
         where T : class, IEventPayloadCommon
     {
+        ThenNotThrowsAnException();
         if (_latestEvents.Count != 1)
         {
             throw new SekibanInvalidArgumentException();
@@ -265,12 +273,14 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public IAggregateTestHelper<TAggregatePayload> ThenGetState(Action<AggregateState<TAggregatePayload>> checkStateAction)
     {
+        ThenNotThrowsAnException();
         checkStateAction(GetAggregateState());
         return this;
     }
 
     public IAggregateTestHelper<TAggregatePayload> ThenStateIs(AggregateState<TAggregatePayload> expectedState)
     {
+        ThenNotThrowsAnException();
         var actual = GetAggregateState();
         var expected = expectedState.GetComparableObject(actual);
         var actualJson = SekibanJsonHelper.Serialize(actual);
@@ -281,12 +291,14 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public IAggregateTestHelper<TAggregatePayload> ThenGetPayload(Action<TAggregatePayload> payloadAction)
     {
+        ThenNotThrowsAnException();
         payloadAction(GetAggregateState().Payload);
         return this;
     }
 
     public AggregateState<TAggregatePayload> GetAggregateState()
     {
+        ThenNotThrowsAnException();
         var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
             throw new Exception("Failed to get aggregate loader");
         var aggregateId = GetAggregateId();
@@ -297,6 +309,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public IAggregateTestHelper<TAggregatePayload> ThenPayloadIs(TAggregatePayload payload)
     {
+        ThenNotThrowsAnException();
         var actual = GetAggregateState().Payload;
         var expected = payload;
         var actualJson = SekibanJsonHelper.Serialize(actual);
@@ -307,6 +320,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public IAggregateTestHelper<TAggregatePayload> WriteStateToFile(string filename)
     {
+        ThenNotThrowsAnException();
         var actual = GetAggregateState();
         var actualJson = SekibanJsonHelper.Serialize(actual);
         File.WriteAllText(filename, actualJson);
@@ -377,6 +391,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public IAggregateTestHelper<TAggregatePayload> WritePayloadToFile(string filename)
     {
+        ThenNotThrowsAnException();
         var actual = GetAggregateState().Payload;
         var actualJson = SekibanJsonHelper.Serialize(actual);
         File.WriteAllText(filename, actualJson);
@@ -385,6 +400,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public IAggregateTestHelper<TAggregatePayload> ThenStateIsFromJson(string stateJson)
     {
+        ThenNotThrowsAnException();
         var state = JsonSerializer.Deserialize<AggregateState<TAggregatePayload>>(stateJson);
         if (state is null)
         {
@@ -400,6 +416,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public IAggregateTestHelper<TAggregatePayload> ThenStateIsFromFile(string stateFileName)
     {
+        ThenNotThrowsAnException();
         using var openStream = File.OpenRead(stateFileName);
         var state = JsonSerializer.Deserialize<AggregateState<TAggregatePayload>>(openStream);
         if (state is null)
@@ -416,6 +433,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public IAggregateTestHelper<TAggregatePayload> ThenPayloadIsFromJson(string payloadJson)
     {
+        ThenNotThrowsAnException();
         var payload = JsonSerializer.Deserialize<TAggregatePayload>(payloadJson);
         if (payload is null)
         {
@@ -431,6 +449,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public IAggregateTestHelper<TAggregatePayload> ThenPayloadIsFromFile(string payloadFileName)
     {
+        ThenNotThrowsAnException();
         using var openStream = File.OpenRead(payloadFileName);
         var payload = JsonSerializer.Deserialize<TAggregatePayload>(openStream);
         if (payload is null)
@@ -511,6 +530,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     public IAggregateTestHelper<TAggregatePayload> ThenGetLatestSingleEvent<T>(Action<Event<T>> checkEventAction) where T : IEventPayloadCommon
     {
+        ThenNotThrowsAnException();
         if (_latestEvents.Count != 1)
         {
             throw new SekibanInvalidArgumentException();
@@ -534,6 +554,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     }
     public AggregateState<TAggregatePayload> GetAggregateStateIfNotNullEmptyAggregate()
     {
+        ThenNotThrowsAnException();
         var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
             throw new Exception("Failed to get aggregate loader");
         var aggregate = aggregateLoader.AsDefaultStateAsync<TAggregatePayload>(GetAggregateId()).Result;
@@ -738,6 +759,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     private SingleProjectionState<TSingleProjectionPayload> GetSingleProjectionState<TSingleProjectionPayload>()
         where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
+        ThenNotThrowsAnException();
         var singleProjection = _serviceProvider.GetService<IAggregateLoader>() ?? throw new Exception("Failed to get single projection service");
         return singleProjection.AsSingleProjectionStateAsync<TSingleProjectionPayload>(GetAggregateId()).Result ??
             throw new Exception("Failed to get single projection state for " + typeof(TSingleProjectionPayload).Name + " and " + GetAggregateId());
@@ -746,6 +768,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionStateIs<TSingleProjectionPayload>(
         SingleProjectionState<TSingleProjectionPayload> state) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
+        ThenNotThrowsAnException();
         var actual = GetSingleProjectionState<TSingleProjectionPayload>();
         var expected = state with
         {
@@ -763,6 +786,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIs<TSingleProjectionPayload>(TSingleProjectionPayload payload)
         where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
+        ThenNotThrowsAnException();
         var actual = GetSingleProjectionState<TSingleProjectionPayload>().Payload;
         var expected = payload;
         var actualJson = SekibanJsonHelper.Serialize(actual);
@@ -774,6 +798,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionPayload<TSingleProjectionPayload>(
         Action<TSingleProjectionPayload> payloadAction) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
+        ThenNotThrowsAnException();
         payloadAction(GetSingleProjectionState<TSingleProjectionPayload>().Payload);
         return this;
     }
@@ -781,6 +806,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionState<TSingleProjectionPayload>(
         Action<SingleProjectionState<TSingleProjectionPayload>> stateAction) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
+        ThenNotThrowsAnException();
         stateAction(GetSingleProjectionState<TSingleProjectionPayload>());
         return this;
     }
@@ -788,6 +814,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIsFromJson<TSingleProjectionPayload>(string payloadJson)
         where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
+        ThenNotThrowsAnException();
         var actual = GetSingleProjectionState<TSingleProjectionPayload>().Payload;
         var payload = JsonSerializer.Deserialize<TSingleProjectionPayload>(payloadJson);
         if (payload is null)
@@ -804,6 +831,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIsFromFile<TSingleProjectionPayload>(string payloadFilename)
         where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
+        ThenNotThrowsAnException();
         using var openStream = File.OpenRead(payloadFilename);
         var actual = GetSingleProjectionState<TSingleProjectionPayload>().Payload;
         var payload = JsonSerializer.Deserialize<TSingleProjectionPayload>(openStream);
@@ -821,6 +849,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> WriteSingleProjectionStateToFile<TSingleProjectionPayload>(string filename)
         where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
+        ThenNotThrowsAnException();
         var state = GetSingleProjectionState<TSingleProjectionPayload>();
         var json = SekibanJsonHelper.Serialize(state);
         File.WriteAllText(filename, json);
@@ -834,6 +863,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     private ListQueryResult<TQueryResponse> GetListQueryResponse<TQueryResponse>(IListQueryInput<TQueryResponse> param)
         where TQueryResponse : IQueryResponse
     {
+        ThenNotThrowsAnException();
         var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new Exception("Failed to get Query service");
         return queryService.ExecuteAsync(param).Result ?? throw new Exception("Failed to get Aggregate Query Response for " + param.GetType().Name);
     }
@@ -842,6 +872,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         IListQueryInput<TQueryResponse> param,
         ListQueryResult<TQueryResponse> expectedResponse) where TQueryResponse : IQueryResponse
     {
+        ThenNotThrowsAnException();
         var actual = GetListQueryResponse(param);
         var expected = expectedResponse;
         var actualJson = SekibanJsonHelper.Serialize(actual);
@@ -852,6 +883,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> WriteQueryResponseToFile<TQueryResponse>(IListQueryInput<TQueryResponse> param, string filename)
         where TQueryResponse : IQueryResponse
     {
+        ThenNotThrowsAnException();
         var json = SekibanJsonHelper.Serialize(GetListQueryResponse(param));
         if (string.IsNullOrEmpty(json))
         {
@@ -864,6 +896,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         IListQueryInput<TQueryResponse> param,
         Action<ListQueryResult<TQueryResponse>> responseAction) where TQueryResponse : IQueryResponse
     {
+        ThenNotThrowsAnException();
         responseAction(GetListQueryResponse(param));
         return this;
     }
@@ -872,6 +905,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         IListQueryInput<TQueryResponse> param,
         string responseJson) where TQueryResponse : IQueryResponse
     {
+        ThenNotThrowsAnException();
         var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(responseJson);
         if (response is null)
         {
@@ -885,6 +919,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         IListQueryInput<TQueryResponse> param,
         string responseFilename) where TQueryResponse : IQueryResponse
     {
+        ThenNotThrowsAnException();
         using var openStream = File.OpenRead(responseFilename);
         var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(openStream);
         if (response is null)
@@ -897,6 +932,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     private Exception? GetQueryException(IListQueryInputCommon param)
     {
+        ThenNotThrowsAnException();
         var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new Exception("Failed to get Query service");
         try
         {
@@ -910,11 +946,13 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     }
     public IAggregateTestHelper<TAggregatePayload> ThenQueryThrows<T>(IListQueryInputCommon param) where T : Exception
     {
+        ThenNotThrowsAnException();
         Assert.IsType<T>(GetQueryException(param));
         return this;
     }
     public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<T>(IListQueryInputCommon param, Action<T> checkException) where T : Exception
     {
+        ThenNotThrowsAnException();
         var exception = GetQueryException(param);
         Assert.NotNull(exception);
         Assert.IsType<T>(exception);
@@ -925,6 +963,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         IListQueryInput<TQueryResponse> param,
         Action<Exception> checkException) where TQueryResponse : IQueryResponse
     {
+        ThenNotThrowsAnException();
         var exception = GetQueryException(param);
         Assert.NotNull(exception);
         checkException(exception ?? throw new Exception("Failed to cast exception"));
@@ -932,11 +971,13 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     }
     public IAggregateTestHelper<TAggregatePayload> ThenQueryNotThrowsAnException(IListQueryInputCommon param)
     {
+        ThenNotThrowsAnException();
         Assert.Null(GetQueryException(param));
         return this;
     }
     public IAggregateTestHelper<TAggregatePayload> ThenQueryThrowsAnException(IListQueryInputCommon param)
     {
+        ThenNotThrowsAnException();
         Assert.NotNull(GetQueryException(param));
         return this;
     }
@@ -945,6 +986,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     #region Query Test (not list)
     private TQueryResponse GetQueryResponse<TQueryResponse>(IQueryInput<TQueryResponse> param) where TQueryResponse : IQueryResponse
     {
+        ThenNotThrowsAnException();
         var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new Exception("Failed to get Query service");
         return queryService.ExecuteAsync(param).Result ?? throw new Exception("Failed to get Aggregate Query Response for " + param.GetType().Name);
     }
@@ -953,6 +995,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         IQueryInput<TQueryResponse> param,
         TQueryResponse expectedResponse) where TQueryResponse : IQueryResponse
     {
+        ThenNotThrowsAnException();
         var actual = GetQueryResponse(param);
         var expected = expectedResponse;
         var actualJson = SekibanJsonHelper.Serialize(actual);
@@ -963,6 +1006,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> WriteQueryResponseToFile<TQueryResponse>(IQueryInput<TQueryResponse> param, string filename)
         where TQueryResponse : IQueryResponse
     {
+        ThenNotThrowsAnException();
         var json = SekibanJsonHelper.Serialize(GetQueryResponse(param));
         if (string.IsNullOrEmpty(json))
         {
@@ -975,6 +1019,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         IQueryInput<TQueryResponse> param,
         Action<TQueryResponse> responseAction) where TQueryResponse : IQueryResponse
     {
+        ThenNotThrowsAnException();
         responseAction(GetQueryResponse(param));
         return this;
     }
@@ -982,6 +1027,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(IQueryInput<TQueryResponse> param, string responseJson)
         where TQueryResponse : IQueryResponse
     {
+        ThenNotThrowsAnException();
         var response = JsonSerializer.Deserialize<TQueryResponse>(responseJson);
         if (response is null)
         {
@@ -995,6 +1041,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         IQueryInput<TQueryResponse> param,
         string responseFilename) where TQueryResponse : IQueryResponse
     {
+        ThenNotThrowsAnException();
         using var openStream = File.OpenRead(responseFilename);
         var response = JsonSerializer.Deserialize<TQueryResponse>(openStream);
         if (response is null)
@@ -1006,6 +1053,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     }
     private Exception? GetQueryException(IQueryInputCommon param)
     {
+        ThenNotThrowsAnException();
         var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new Exception("Failed to get Query service");
         try
         {
@@ -1024,6 +1072,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     }
     public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<T>(IQueryInputCommon param, Action<T> checkException) where T : Exception
     {
+        ThenNotThrowsAnException();
         var exception = GetQueryException(param);
         Assert.NotNull(exception);
         Assert.IsType<T>(exception);
@@ -1040,11 +1089,13 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     }
     public IAggregateTestHelper<TAggregatePayload> ThenQueryNotThrowsAnException(IQueryInputCommon param)
     {
+        ThenNotThrowsAnException();
         Assert.Null(GetQueryException(param));
         return this;
     }
     public IAggregateTestHelper<TAggregatePayload> ThenQueryThrowsAnException(IQueryInputCommon param)
     {
+        ThenNotThrowsAnException();
         Assert.NotNull(GetQueryException(param));
         return this;
     }
