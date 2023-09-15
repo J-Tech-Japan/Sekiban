@@ -1,0 +1,6 @@
+@BookBorrowing.Web.Dynamo_HostAddress = http://localhost:5022
+
+GET {{BookBorrowing.Web.Dynamo_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
