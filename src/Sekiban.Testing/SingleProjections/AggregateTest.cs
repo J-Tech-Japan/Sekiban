@@ -73,6 +73,10 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
     public Guid RunEnvironmentCommand<TEnvironmentAggregatePayload>(ICommand<TEnvironmentAggregatePayload> command, Guid? injectingAggregateId = null)
         where TEnvironmentAggregatePayload : IAggregatePayloadCommon =>
         _helper.RunEnvironmentCommand(command, injectingAggregateId);
+    public Guid GivenEnvironmentCommand<TEnvironmentAggregatePayload>(
+        ICommand<TEnvironmentAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon =>
+        RunEnvironmentCommand(command, injectingAggregateId);
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventWithPublish(IEvent ev) => _helper.GivenEnvironmentEventWithPublish(ev);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventWithPublishAndBlockingEvent(IEvent ev) =>
@@ -92,10 +96,18 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         ICommand<TEnvironmentAggregatePayload> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon =>
         _helper.RunEnvironmentCommandWithPublish(command, injectingAggregateId);
+    public Guid GivenEnvironmentCommandWithPublish<TEnvironmentAggregatePayload>(
+        ICommand<TEnvironmentAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon =>
+        RunEnvironmentCommandWithPublish(command, injectingAggregateId);
     public Guid RunEnvironmentCommandWithPublishAndBlockingEvent<TEnvironmentAggregatePayload>(
         ICommand<TEnvironmentAggregatePayload> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon =>
         _helper.RunEnvironmentCommandWithPublishAndBlockingEvent(command, injectingAggregateId);
+    public Guid GivenEnvironmentCommandWithPublishAndBlockingEvent<TEnvironmentAggregatePayload>(
+        ICommand<TEnvironmentAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon =>
+        RunEnvironmentCommandWithPublishAndBlockingEvent(command, injectingAggregateId);
 
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentCommandExecutorAction(Action<TestCommandExecutor> action)
     {

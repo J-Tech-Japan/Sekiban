@@ -1,3 +1,4 @@
+using Sekiban.Core.Exceptions;
 using System.Collections;
 using System.ComponentModel.DataAnnotations;
 using System.Reflection;
@@ -89,6 +90,16 @@ public static class ValidationExtensions
     {
         validationResults = targetClass.ValidateProperties(baseKeyPath);
         return !validationResults.Any();
+    }
+
+    public static void ThrowIfValidationFailed(this object targetClass, string baseKeyPath = "")
+    {
+        var validationResults = targetClass.ValidateProperties(baseKeyPath).ToList();
+        if (!validationResults.Any())
+        {
+            return;
+        }
+        throw new SekibanValidationErrorsException(validationResults);
     }
 
     public static IEnumerable<ValidationResult> ValidateProperties(this object targetClass, string baseKeyPath = "")

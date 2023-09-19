@@ -51,8 +51,8 @@ public class LoyaltyPointTest : AggregateTest<LoyaltyPoint, FeatureCheckDependen
     [Fact]
     public void DeleteClientWillDeleteLoyaltyPointTest()
     {
-        var branchId = RunEnvironmentCommand(new CreateBranch("Test"));
-        var clientId = RunEnvironmentCommand(new CreateClient(branchId, "Test Name", "test@example.com"));
+        var branchId = GivenEnvironmentCommand(new CreateBranch("Test"));
+        var clientId = GivenEnvironmentCommand(new CreateClient(branchId, "Test Name", "test@example.com"));
         WhenCommand(new CreateLoyaltyPoint(clientId, 10));
         RunEnvironmentCommandWithPublish(new DeleteClient(clientId));
         var timeStamp = GetLatestEnvironmentEvents().Where(m => m.GetPayload() is LoyaltyPointDeleted).FirstOrDefault()?.TimeStamp;
