@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 using Xunit;
 namespace Sekiban.Test.CosmosDb.Serializations;
 
-public class SubClassSerialization
+public class InterfaceSerializationTest
 {
     [Fact]
     public void DeserializationNotThrowsTest()
