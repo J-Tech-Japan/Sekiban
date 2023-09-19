@@ -79,6 +79,16 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public Guid RunEnvironmentCommand<TEnvironmentAggregatePayload>(ICommand<TEnvironmentAggregatePayload> command, Guid? injectingAggregateId = null)
         where TEnvironmentAggregatePayload : IAggregatePayloadCommon;
     /// <summary>
+    ///     Run a command in environment as given condition (but not for the aggregate that will be tested)
+    /// </summary>
+    /// <param name="command"></param>
+    /// <param name="injectingAggregateId"></param>
+    /// <typeparam name="TEnvironmentAggregatePayload"></typeparam>
+    /// <returns></returns>
+    public Guid GivenEnvironmentCommand<TEnvironmentAggregatePayload>(
+        ICommand<TEnvironmentAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon;
+    /// <summary>
     ///     Given event that already put in the system and publish to the system.
     ///     events should be <see cref="Event{TEventPayload}" /> type
     ///     It could be in the aggregate developer will test or other aggregates.
@@ -143,6 +153,17 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         ICommand<TEnvironmentAggregatePayload> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon;
     /// <summary>
+    ///     Run command in environment as given condition (but not for the aggregate that will be tested) and publish to the
+    ///     system.
+    /// </summary>
+    /// <param name="command"></param>
+    /// <param name="injectingAggregateId"></param>
+    /// <typeparam name="TEnvironmentAggregatePayload"></typeparam>
+    /// <returns></returns>
+    public Guid GivenEnvironmentCommandWithPublish<TEnvironmentAggregatePayload>(
+        ICommand<TEnvironmentAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon;
+    /// <summary>
     ///     Run command in environment (but not for the aggregate that will be tested) and publish to the system.
     ///     Even non blocking subscriptions will be executed by same thread and block the execution
     ///     (To test subscription values, use this method. But be careful, orders could be different from actual execution)
@@ -152,6 +173,19 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <typeparam name="TEnvironmentAggregatePayload"></typeparam>
     /// <returns></returns>
     public Guid RunEnvironmentCommandWithPublishAndBlockingEvent<TEnvironmentAggregatePayload>(
+        ICommand<TEnvironmentAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon;
+    /// <summary>
+    ///     Run command in environment as given condition (but not for the aggregate that will be tested) and publish to the
+    ///     system.
+    ///     Even non blocking subscriptions will be executed by same thread and block the execution
+    ///     (To test subscription values, use this method. But be careful, orders could be different from actual execution)
+    /// </summary>
+    /// <param name="command"></param>
+    /// <param name="injectingAggregateId"></param>
+    /// <typeparam name="TEnvironmentAggregatePayload"></typeparam>
+    /// <returns></returns>
+    public Guid GivenEnvironmentCommandWithPublishAndBlockingEvent<TEnvironmentAggregatePayload>(
         ICommand<TEnvironmentAggregatePayload> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon;
     /// <summary>

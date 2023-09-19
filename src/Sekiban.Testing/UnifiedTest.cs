@@ -1148,6 +1148,26 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         where TAggregatePayload : IAggregatePayloadCommon =>
         _commandExecutor.ExecuteCommand(command, injectingAggregateId);
     /// <summary>
+    ///     Run command as given condition and get aggregate Id.
+    /// </summary>
+    /// <param name="command"></param>
+    /// <param name="injectingAggregateId"></param>
+    /// <typeparam name="TAggregatePayload"></typeparam>
+    /// <returns></returns>
+    public Guid GivenCommand<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
+        where TAggregatePayload : IAggregatePayloadCommon =>
+        _commandExecutor.ExecuteCommand(command, injectingAggregateId);
+    /// <summary>
+    ///     Run command as when statement and get aggregate Id.
+    /// </summary>
+    /// <param name="command"></param>
+    /// <param name="injectingAggregateId"></param>
+    /// <typeparam name="TAggregatePayload"></typeparam>
+    /// <returns></returns>
+    public Guid WhenCommand<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
+        where TAggregatePayload : IAggregatePayloadCommon =>
+        _commandExecutor.ExecuteCommand(command, injectingAggregateId);
+    /// <summary>
     ///     Run command and get aggregate Id. Subscribed handlers will be executed.
     /// </summary>
     /// <param name="command"></param>
@@ -1158,6 +1178,26 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         where TAggregatePayload : IAggregatePayloadCommon =>
         _commandExecutor.ExecuteCommandWithPublish(command, injectingAggregateId);
     /// <summary>
+    ///     Run command as given condition and get aggregate Id. Subscribed handlers will be executed.
+    /// </summary>
+    /// <param name="command"></param>
+    /// <param name="injectingAggregateId"></param>
+    /// <typeparam name="TAggregatePayload"></typeparam>
+    /// <returns></returns>
+    public Guid GivenCommandWithPublish<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
+        where TAggregatePayload : IAggregatePayloadCommon =>
+        _commandExecutor.ExecuteCommandWithPublish(command, injectingAggregateId);
+    /// <summary>
+    ///     Run command as when statement and get aggregate Id. Subscribed handlers will be executed.
+    /// </summary>
+    /// <param name="command"></param>
+    /// <param name="injectingAggregateId"></param>
+    /// <typeparam name="TAggregatePayload"></typeparam>
+    /// <returns></returns>
+    public Guid WhenCommandWithPublish<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
+        where TAggregatePayload : IAggregatePayloadCommon =>
+        _commandExecutor.ExecuteCommandWithPublish(command, injectingAggregateId);
+    /// <summary>
     ///     Run command and get aggregate Id. Subscribed handlers will be executed and block until all handlers are executed.
     /// </summary>
     /// <param name="command"></param>
@@ -1165,6 +1205,30 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
     public Guid RunCommandWithPublishAndBlockingSubscriptions<TAggregatePayload>(
+        ICommand<TAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TAggregatePayload : IAggregatePayloadCommon =>
+        _commandExecutor.ExecuteCommandWithPublishAndBlockingSubscriptions(command, injectingAggregateId);
+    /// <summary>
+    ///     Run command as given condition and get aggregate Id. Subscribed handlers will be executed and block until all
+    ///     handlers are executed.
+    /// </summary>
+    /// <param name="command"></param>
+    /// <param name="injectingAggregateId"></param>
+    /// <typeparam name="TAggregatePayload"></typeparam>
+    /// <returns></returns>
+    public Guid GivenCommandWithPublishAndBlockingSubscriptions<TAggregatePayload>(
+        ICommand<TAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TAggregatePayload : IAggregatePayloadCommon =>
+        _commandExecutor.ExecuteCommandWithPublishAndBlockingSubscriptions(command, injectingAggregateId);
+    /// <summary>
+    ///     Run command as when statement and get aggregate Id. Subscribed handlers will be executed and block until all
+    ///     handlers are executed.
+    /// </summary>
+    /// <param name="command"></param>
+    /// <param name="injectingAggregateId"></param>
+    /// <typeparam name="TAggregatePayload"></typeparam>
+    /// <returns></returns>
+    public Guid WhenCommandWithPublishAndBlockingSubscriptions<TAggregatePayload>(
         ICommand<TAggregatePayload> command,
         Guid? injectingAggregateId = null) where TAggregatePayload : IAggregatePayloadCommon =>
         _commandExecutor.ExecuteCommandWithPublishAndBlockingSubscriptions(command, injectingAggregateId);
