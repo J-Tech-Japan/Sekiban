@@ -1,3 +1,4 @@
+using Sekiban.Core.Exceptions;
 using Sekiban.Core.Validation;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -36,6 +37,20 @@ public class ValidationTestWithPrimaryConstructor
         var vresults = m.ValidateProperties();
         Assert.True(vresults.Any());
     }
+
+    [Fact]
+    public void ValidationErrorThrownWhenNameNotEntered()
+    {
+        var m = new MemberWithPrimaryConstructor(
+            string.Empty,
+            25,
+            "090-1111-2222",
+            "hoge@example.com",
+            null,
+            ImmutableList<MemberWithPrimaryConstructor>.Empty);
+        Assert.Throws<SekibanValidationErrorsException>(() => m.ThrowIfValidationFailed());
+    }
+
 
     [Fact]
     public void TestNameDigitOverflow()
