@@ -5,13 +5,13 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Testing</PackageId>
-        <Version>0.14.2</Version>
+        <Version>0.14.3</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Testing</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.14.2</PackageVersion>
-        <Description>Update comments and minor refactoring</Description>
+        <PackageVersion>0.14.3</PackageVersion>
+        <Description>Improve Test methods name. Can use given or when as needed</Description>
         <AssemblyName>Sekiban.Testing</AssemblyName>
         <RootNamespace>Sekiban.Testing</RootNamespace>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>

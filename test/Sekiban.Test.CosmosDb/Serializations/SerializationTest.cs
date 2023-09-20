@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Xunit;
-namespace Sekiban.Test.CosmosDb;
+namespace Sekiban.Test.CosmosDb.Serializations;
 
 public class SerializationTest
 {
