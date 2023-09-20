@@ -1,3 +1,4 @@
+using BookBorrowing.Domain;
 using BookBorrowing.Web.Cosmos;
 using Sekiban.Core.Dependency;
 using Sekiban.Infrastructure.Cosmos;
@@ -7,12 +8,12 @@ var builder = WebApplication.CreateBuilder(args);
 
 
 
-// Sekiban Web Setting
-builder.Services.AddSekibanWeb(new BookBorrowingWebDependency());
 // Sekiban Core Setting
-builder.Services.AddSekibanCoreWithDependency(new BookBorrowingWebDependency(), configuration: builder.Configuration);
+builder.Services.AddSekibanCoreWithDependency(new BookBorrowingDependency(), configuration: builder.Configuration);
 // Sekiban Cosmos Setting
 builder.Services.AddSekibanCosmosDB();
+// Sekiban Web Setting
+builder.Services.AddSekibanWeb(new BookBorrowingWebDependency());
 
 
 // Add services to the container.
@@ -30,5 +31,5 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
+app.MapControllers();
 app.Run();
