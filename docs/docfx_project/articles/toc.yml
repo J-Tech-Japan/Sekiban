@@ -3,3 +3,13 @@
   href: intro.md
 - name: Quick Start
   href: quick-start.md
+  items:
+  - name: Test it out with Cosmos DB
+    href: test-out-cosmos.md
+    items:
+    - name: Prepare Cosmos DB with local emurator
+      href: prepare-cosmos-db-local.md
+    - name: Prepare Cosmos DB with Azure Cosmos DB
+      href: prepare-cosmos-db-azure.md
+  - name: Test it out with Dynamo DB
+    href: test-out-dynamo.md
