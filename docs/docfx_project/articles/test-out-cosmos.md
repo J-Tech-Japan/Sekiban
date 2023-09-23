@@ -11,9 +11,11 @@ Either way you used, you need to get following information.
 - **URI**
 - **Primary Key**
 
-For Local Emulator in Windows, please see [This Page](prepare-cosmos-db-local.md)
+For Local Emulator in Windows, please see [This Page](./prepare-cosmos-db-local.md)
 
-For Azure Cosmos DB, please see [This Page](prepare-cosmos-db-azure.md)
+For Azure Cosmos DB, please see [This Page](./prepare-cosmos-db-azure.md)
+
+When you prepare Cosmos DB, note yourself privately the **URI** and **Primary Key**.
 
 ## Prepare for Blob Storage (Optional)
 
