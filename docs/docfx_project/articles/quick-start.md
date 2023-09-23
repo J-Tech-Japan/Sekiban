@@ -4,7 +4,7 @@
 ## Test it out.
 
 To start quickly, we recommend you to start testing sekiban with already set up get started project.
-It is located in the repository, `/Tutorials/GetStarted` folder.
+It is located in the repository, `/Tutorials/1.GetStarted` folder.
 
 ### Open GetStarted Solution.
 
