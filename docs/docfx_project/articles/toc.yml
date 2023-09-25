@@ -13,3 +13,5 @@
       href: prepare-cosmos-db-azure.md
   - name: Test it out with Dynamo DB
     href: test-out-dynamo.md
+- name: Sekiban Event Sourcing Basics
+  href: sekiban-event-sourcing-basics.md
