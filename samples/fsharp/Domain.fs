@@ -26,7 +26,7 @@ type BranchCreated =
         static member OnEvent(aggregatePayload, ev) = { Name = ev.Payload.Name }
 
 type CreateBranchHandler() =
-    interface ICommandHandler<Branch, CreateBranch> with
+    interface ICommandHandlerAsync<Branch, CreateBranch> with
         member this.HandleCommandAsync(getAggregateState, command) =
             taskSeq { yield { Name = command.Name } :> IEventPayloadApplicableTo<Branch> }
 
@@ -78,7 +78,7 @@ type ClientEmailExistsQuery =
 type CreateClientHandler(queryExecutor: IQueryExecutor) =
     member this.QueryExecutor = queryExecutor
 
-    interface ICommandHandler<Client, CreateClient> with
+    interface ICommandHandlerAsync<Client, CreateClient> with
         member this.HandleCommandAsync(getAggregateState, command) =
             taskSeq {
                 let emailExistsQueryResponse =

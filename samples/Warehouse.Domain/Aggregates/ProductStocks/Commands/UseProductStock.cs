@@ -10,8 +10,9 @@ public record UseProductStock : ICommand<ProductStock>
     public class Handler : ICommandHandler<ProductStock, UseProductStock>
     {
 
-        public IAsyncEnumerable<IEventPayloadApplicableTo<ProductStock>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<ProductStock>> HandleCommand(
             Func<AggregateState<ProductStock>> getAggregateState,
-            UseProductStock command) => throw new NotImplementedException();
+            UseProductStock command) =>
+            throw new NotImplementedException();
     }
 }

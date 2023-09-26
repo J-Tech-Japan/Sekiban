@@ -23,11 +23,10 @@ public record UseLoyaltyPoint(
 
     public class Handler : IVersionValidationCommandHandler<LoyaltyPoint, UseLoyaltyPoint>
     {
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommand(
             Func<AggregateState<LoyaltyPoint>> getAggregateState,
             UseLoyaltyPoint command)
         {
-            await Task.CompletedTask;
             if (getAggregateState().Payload.LastOccuredTime > command.HappenedDate)
             {
                 throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();

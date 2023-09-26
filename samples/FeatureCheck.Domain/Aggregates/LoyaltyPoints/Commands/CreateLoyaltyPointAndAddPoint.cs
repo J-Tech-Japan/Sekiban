@@ -16,7 +16,7 @@ public record CreateLoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : IC
 
     public Guid GetAggregateId() => ClientId;
 
-    public class Handler : ICommandHandler<LoyaltyPoint, CreateLoyaltyPointAndAddPoint>
+    public class Handler : ICommandHandlerAsync<LoyaltyPoint, CreateLoyaltyPointAndAddPoint>
     {
         private readonly ISekibanDateProducer _dateProducer;
         private readonly IAggregateLoader aggregateLoader;

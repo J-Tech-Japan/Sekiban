@@ -15,11 +15,10 @@ public class CreateClient : ITenantCommand<ClientPayload>
 
     public class Handler : ICommandHandler<ClientPayload, CreateClient>
     {
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<ClientPayload>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<ClientPayload>> HandleCommand(
             Func<AggregateState<ClientPayload>> getAggregateState,
             CreateClient command)
         {
-            await Task.CompletedTask;
             yield return new ClientCreated(command.Name);
         }
     }

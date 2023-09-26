@@ -19,11 +19,10 @@ public record AddItemToShoppingCartR : ICommand<ShoppingCartR>
     public class Handler : ICommandHandler<ShoppingCartR, AddItemToShoppingCartR>
     {
 
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<ShoppingCartR>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<ShoppingCartR>> HandleCommand(
             Func<AggregateState<ShoppingCartR>> getAggregateState,
             AddItemToShoppingCartR command)
         {
-            await Task.CompletedTask;
             yield return new ItemAddedToShoppingCartR { Code = command.Code, Name = command.Name, Quantity = command.Quantity };
         }
     }

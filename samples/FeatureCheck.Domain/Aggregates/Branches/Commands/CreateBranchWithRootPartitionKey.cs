@@ -15,11 +15,10 @@ public class CreateBranchWithRootPartitionKey : ICommand<Branch>
 
     public class Handler : ICommandHandler<Branch, CreateBranchWithRootPartitionKey>
     {
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<Branch>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<Branch>> HandleCommand(
             Func<AggregateState<Branch>> getAggregateState,
             CreateBranchWithRootPartitionKey command)
         {
-            await Task.CompletedTask;
             yield return new BranchCreated(command.Name);
         }
     }

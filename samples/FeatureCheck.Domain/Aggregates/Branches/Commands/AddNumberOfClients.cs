@@ -11,7 +11,7 @@ public class AddNumberOfClients : ICommand<Branch>
     public Guid BranchId { get; init; }
     public Guid ClientId { get; init; }
     public Guid GetAggregateId() => BranchId;
-    public class Handler : ICommandHandler<Branch, AddNumberOfClients>
+    public class Handler : ICommandHandlerAsync<Branch, AddNumberOfClients>
     {
         private readonly IAggregateLoader aggregateLoader;
         public Handler(IAggregateLoader aggregateLoader) => this.aggregateLoader = aggregateLoader;
@@ -20,7 +20,6 @@ public class AddNumberOfClients : ICommand<Branch>
             Func<AggregateState<Branch>> getAggregateState,
             AddNumberOfClients command)
         {
-            await Task.CompletedTask;
             var result = await aggregateLoader.AsDefaultStateAsync<Client>(command.ClientId);
             if (result is not null)
             {

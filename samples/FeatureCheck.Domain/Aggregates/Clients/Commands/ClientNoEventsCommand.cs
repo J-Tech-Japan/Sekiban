@@ -10,11 +10,10 @@ public record ClientNoEventsCommand : ICommand<Client>
 
     public class Handler : ICommandHandler<Client, ClientNoEventsCommand>
     {
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<Client>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(
             Func<AggregateState<Client>> getAggregateState,
             ClientNoEventsCommand command)
         {
-            await Task.CompletedTask;
             yield break;
         }
     }
