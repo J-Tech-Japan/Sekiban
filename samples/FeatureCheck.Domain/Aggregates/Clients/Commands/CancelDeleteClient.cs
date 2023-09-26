@@ -18,11 +18,10 @@ public record CancelDeleteClient : IVersionValidationCommand<Client>, ICancelDel
 
     public class Handler : IVersionValidationCommandHandler<Client, CancelDeleteClient>
     {
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<Client>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(
             Func<AggregateState<Client>> getAggregateState,
             CancelDeleteClient command)
         {
-            await Task.CompletedTask;
             yield return new ClientDeleteCancelled();
         }
     }

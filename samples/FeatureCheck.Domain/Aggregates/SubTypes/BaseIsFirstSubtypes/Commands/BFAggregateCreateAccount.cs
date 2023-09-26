@@ -10,11 +10,10 @@ public record BFAggregateCreateAccount(string Name, long Price) : ICommand<BaseF
 
     public class Handler : ICommandHandler<BaseFirstAggregate, BFAggregateCreateAccount>
     {
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<BaseFirstAggregate>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<BaseFirstAggregate>> HandleCommand(
             Func<AggregateState<BaseFirstAggregate>> getAggregateState,
             BFAggregateCreateAccount command)
         {
-            await Task.CompletedTask;
             yield return new BFAggregateInitiated(command.Name, command.Price);
         }
     }

@@ -11,8 +11,9 @@ public record ReportProductStockCount : ICommand<ProductStock>
     public class Handler : ICommandHandler<ProductStock, ReportProductStockCount>
     {
 
-        public IAsyncEnumerable<IEventPayloadApplicableTo<ProductStock>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<ProductStock>> HandleCommand(
             Func<AggregateState<ProductStock>> getAggregateState,
-            ReportProductStockCount command) => throw new NotImplementedException();
+            ReportProductStockCount command) =>
+            throw new NotImplementedException();
     }
 }

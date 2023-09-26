@@ -19,21 +19,34 @@ public class OnlyPublishingCommandHandlerAdapter<TAggregatePayload, TCommand>
         Guid aggregateId,
         string rootPartitionKey)
     {
-        if (handler is not IOnlyPublishingCommandHandler<TAggregatePayload, TCommand> publishHandler)
-        {
-            throw new SekibanCommandHandlerNotMatchException(
-                handler.GetType().Name + "handler should inherit " + typeof(IOnlyPublishingCommandHandler<,>).Name);
-        }
         var events = new List<IEvent>();
-        await foreach (var eventPayload in publishHandler.HandleCommandAsync(aggregateId, commandDocument.Payload))
+        if (handler is IOnlyPublishingCommandHandler<TAggregatePayload, TCommand> publishHandler)
         {
-            events.Add(
-                EventHelper.GenerateEventToSave<IEventPayloadApplicableTo<TAggregatePayload>, TAggregatePayload>(
-                    aggregateId,
-                    rootPartitionKey,
-                    eventPayload));
+            foreach (var eventPayload in publishHandler.HandleCommand(aggregateId, commandDocument.Payload))
+            {
+                events.Add(
+                    EventHelper.GenerateEventToSave<IEventPayloadApplicableTo<TAggregatePayload>, TAggregatePayload>(
+                        aggregateId,
+                        rootPartitionKey,
+                        eventPayload));
+            }
+            await Task.CompletedTask;
+            return new CommandResponse(aggregateId, events.ToImmutableList(), 0, events.Max(m => m.SortableUniqueId));
         }
-        await Task.CompletedTask;
-        return new CommandResponse(aggregateId, events.ToImmutableList(), 0, events.Max(m => m.SortableUniqueId));
+        if (handler is IOnlyPublishingCommandHandlerAsync<TAggregatePayload, TCommand> publishHandlerAsync)
+        {
+            await foreach (var eventPayload in publishHandlerAsync.HandleCommandAsync(aggregateId, commandDocument.Payload))
+            {
+                events.Add(
+                    EventHelper.GenerateEventToSave<IEventPayloadApplicableTo<TAggregatePayload>, TAggregatePayload>(
+                        aggregateId,
+                        rootPartitionKey,
+                        eventPayload));
+            }
+            await Task.CompletedTask;
+            return new CommandResponse(aggregateId, events.ToImmutableList(), 0, events.Max(m => m.SortableUniqueId));
+        }
+        throw new SekibanCommandHandlerNotMatchException(
+            handler.GetType().Name + "handler should inherit " + typeof(IOnlyPublishingCommandHandler<,>).Name);
     }
 }

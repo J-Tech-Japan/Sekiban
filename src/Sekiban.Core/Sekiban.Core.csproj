@@ -6,13 +6,13 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Core</PackageId>
-        <Version>0.14.3</Version>
+        <Version>0.14.5</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Core</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.14.3</PackageVersion>
-        <Description>Improve Test methods name. Can use given or when as needed</Description>
+        <PackageVersion>0.14.5</PackageVersion>
+        <Description>Command can be sync or async, need to change interfaces.</Description>
         <AssemblyName>Sekiban.Core</AssemblyName>
         <RootNamespace>Sekiban.Core</RootNamespace>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>

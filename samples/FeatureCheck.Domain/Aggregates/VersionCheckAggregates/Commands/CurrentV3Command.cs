@@ -15,11 +15,10 @@ public record CurrentV3Command : ICommand<VersionCheckAggregate>
 
     public class Handler : ICommandHandler<VersionCheckAggregate, CurrentV3Command>
     {
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<VersionCheckAggregate>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<VersionCheckAggregate>> HandleCommand(
             Func<AggregateState<VersionCheckAggregate>> getAggregateState,
             CurrentV3Command command)
         {
-            await Task.CompletedTask;
             yield return new PaymentAdded_V3(command.Amount, command.PaymentKind, command.Description);
         }
     }

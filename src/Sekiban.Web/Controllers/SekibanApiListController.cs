@@ -12,8 +12,9 @@ using Sekiban.Web.Common;
 using Sekiban.Web.Dependency;
 using System.Reflection;
 namespace Sekiban.Web.Controllers;
+
 /// <summary>
-/// Sekiban api list controller
+///     Sekiban api list controller
 /// </summary>
 /// <typeparam name="T"></typeparam>
 [Produces("application/json")]
@@ -75,8 +76,8 @@ public class SekibanApiListController<T>(
                             Url = $"/{webDependencyDefinition.Options.CreateCommandPrefix}/{aggregateType.Name}/{commandType.Name}",
                             JsonBodyType = commandType.Name,
                             Method = "POST",
-                            SampleBodyObject = Activator.CreateInstance(commandType)!,
-                            SampleResponseObject = Activator.CreateInstance(responseType)!
+                            SampleBodyObject = commandType.CreateDefaultInstance(),
+                            SampleResponseObject = responseType.CreateDefaultInstance()
                         });
                 }
             }
@@ -84,6 +85,7 @@ public class SekibanApiListController<T>(
 
         return Ok(list);
     }
+
 
     [HttpGet]
     [Route("events/{aggregateName}/{id}", Name = "SekibanEvents")]

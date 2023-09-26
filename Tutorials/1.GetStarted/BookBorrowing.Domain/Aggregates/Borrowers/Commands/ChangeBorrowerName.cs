@@ -10,11 +10,10 @@ public record ChangeBorrowerName(Guid BorrowerId, Name ChangedName, string Reaso
     public Guid GetAggregateId() => BorrowerId;
     public class Handler : ICommandHandler<Borrower, ChangeBorrowerName>
     {
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<Borrower>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<Borrower>> HandleCommand(
             Func<AggregateState<Borrower>> getAggregateState,
             ChangeBorrowerName command)
-        {
-            await Task.CompletedTask;
+        { 
             yield return new BorrowerNameUpdated(command.ChangedName, command.Reason);
         }
     }

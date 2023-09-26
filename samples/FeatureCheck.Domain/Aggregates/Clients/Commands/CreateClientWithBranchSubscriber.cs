@@ -36,7 +36,7 @@ public record CreateClientWithBranchSubscriber : ICommand<Client>
 
     public Guid GetAggregateId() => Guid.NewGuid();
 
-    public class Handler : ICommandHandler<Client, CreateClientWithBranchSubscriber>
+    public class Handler : ICommandHandlerAsync<Client, CreateClientWithBranchSubscriber>
     {
         private readonly DependencyInjectionSampleService dependencyInjectionSampleService;
         private readonly IQueryExecutor queryExecutor;

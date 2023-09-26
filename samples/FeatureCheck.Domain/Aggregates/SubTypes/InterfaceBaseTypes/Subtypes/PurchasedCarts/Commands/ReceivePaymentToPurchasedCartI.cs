@@ -16,11 +16,10 @@ public record ReceivePaymentToPurchasedCartI : IVersionValidationCommand<Purchas
 
     public class Handler : IVersionValidationCommandHandler<PurchasedCartI, ReceivePaymentToPurchasedCartI>
     {
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<PurchasedCartI>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<PurchasedCartI>> HandleCommand(
             Func<AggregateState<PurchasedCartI>> getAggregateState,
             ReceivePaymentToPurchasedCartI command)
         {
-            await Task.CompletedTask;
             yield return new PaymentReceivedToCartI { PaymentMethod = command.PaymentMethod, Amount = command.Amount, Currency = command.Currency };
             yield return new PaymentCompletedI();
         }

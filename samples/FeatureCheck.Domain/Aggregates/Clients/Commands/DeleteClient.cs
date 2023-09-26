@@ -16,11 +16,8 @@ public record DeleteClient(Guid ClientId) : IVersionValidationCommand<Client>
 
     public class Handler : IVersionValidationCommandHandler<Client, DeleteClient>
     {
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<Client>> HandleCommandAsync(
-            Func<AggregateState<Client>> getAggregateStateState,
-            DeleteClient command)
+        public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(Func<AggregateState<Client>> getAggregateStateState, DeleteClient command)
         {
-            await Task.CompletedTask;
             yield return new ClientDeleted();
         }
     }

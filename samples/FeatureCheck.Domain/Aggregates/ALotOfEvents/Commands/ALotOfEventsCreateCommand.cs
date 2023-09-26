@@ -12,11 +12,10 @@ public record ALotOfEventsCreateCommand : ICommand<ALotOfEventsAggregate>
 
     public class Handler : ICommandHandler<ALotOfEventsAggregate, ALotOfEventsCreateCommand>
     {
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<ALotOfEventsAggregate>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<ALotOfEventsAggregate>> HandleCommand(
             Func<AggregateState<ALotOfEventsAggregate>> getAggregateState,
             ALotOfEventsCreateCommand command)
         {
-            await Task.CompletedTask;
             foreach (var i in Enumerable.Range(0, command.NumberOfEvents))
             {
                 yield return new ALotOfEventsSingleEvent(i.ToString());

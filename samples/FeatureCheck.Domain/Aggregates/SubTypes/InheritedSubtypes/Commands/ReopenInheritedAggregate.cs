@@ -12,11 +12,10 @@ public record ReopenInheritedAggregate : ICommand<ClosedSubAggregate>
 
     public class Handler : ICommandHandler<ClosedSubAggregate, ReopenInheritedAggregate>
     {
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<ClosedSubAggregate>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<ClosedSubAggregate>> HandleCommand(
             Func<AggregateState<ClosedSubAggregate>> getAggregateState,
             ReopenInheritedAggregate command)
         {
-            await Task.CompletedTask;
             yield return new InheritedAggregateReopened(command.Reason);
         }
     }

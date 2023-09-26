@@ -10,11 +10,10 @@ public record ReopenBFAggregate(Guid BfAggregateId) : ICommand<ClosedBFAggregate
 
     public class Handler : ICommandHandler<ClosedBFAggregate, ReopenBFAggregate>
     {
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<ClosedBFAggregate>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<ClosedBFAggregate>> HandleCommand(
             Func<AggregateState<ClosedBFAggregate>> getAggregateState,
             ReopenBFAggregate command)
         {
-            await Task.CompletedTask;
             yield return new BFAggregateReopened();
         }
     }

@@ -14,11 +14,10 @@ public record CreateSnapshotManager : ICommand<SnapshotManager>
 
     public class Handler(ISekibanDateProducer sekibanDateProducer) : ICommandHandler<SnapshotManager, CreateSnapshotManager>
     {
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<SnapshotManager>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<SnapshotManager>> HandleCommand(
             Func<AggregateState<SnapshotManager>> getAggregateState,
             CreateSnapshotManager command)
         {
-            await Task.CompletedTask;
             yield return new SnapshotManagerCreated(sekibanDateProducer.UtcNow);
         }
     }

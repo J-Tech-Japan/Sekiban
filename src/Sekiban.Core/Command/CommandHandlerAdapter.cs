@@ -43,16 +43,6 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> where TAg
         var command = commandDocument.Payload;
         _aggregate = await _aggregateLoader.AsAggregateAsync<TAggregatePayload>(aggregateId, rootPartitionKey) ??
             new Aggregate<TAggregatePayload> { AggregateId = aggregateId };
-        if (handler is not ICommandHandler<TAggregatePayload, TCommand> regularHandler)
-        {
-            throw new SekibanCommandHandlerNotMatchException(handler.GetType().Name + "handler should inherit " + typeof(ICommandHandler<,>).Name);
-        }
-        var state = _aggregate.ToState();
-        // Validate AddAggregate is deleted
-        if (state.GetIsDeleted() && command is not ICancelDeletedCommand)
-        {
-            throw new SekibanAggregateAlreadyDeletedException();
-        }
 
         // Validate AddAggregate Version
         if (_checkVersion && command is IVersionValidationCommandCommon validationCommand && validationCommand.ReferenceVersion != _aggregate.Version)
@@ -63,7 +53,34 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> where TAg
                 _aggregate.Version,
                 rootPartitionKey);
         }
-        await foreach (var eventPayload in regularHandler.HandleCommandAsync(GetAggregateState, command))
+        var state = _aggregate.ToState();
+
+        if (handler is ICommandHandler<TAggregatePayload, TCommand> regularHandler)
+        {
+            // Validate AddAggregate is deleted
+            if (state.GetIsDeleted() && command is not ICancelDeletedCommand)
+            {
+                throw new SekibanAggregateAlreadyDeletedException();
+            }
+
+            foreach (var eventPayload in regularHandler.HandleCommand(GetAggregateState, command))
+            {
+                _events.Add(EventHelper.HandleEvent(_aggregate, eventPayload, rootPartitionKey));
+            }
+            return new CommandResponse(_aggregate.AggregateId, _events.ToImmutableList(), _aggregate.Version, _events.Max(m => m.SortableUniqueId));
+        }
+        if (handler is not ICommandHandlerAsync<TAggregatePayload, TCommand> asyncHandler)
+        {
+            throw new SekibanCommandHandlerNotMatchException(handler.GetType().Name + "handler should inherit " + typeof(ICommandHandler<,>).Name);
+        }
+
+        // Validate AddAggregate is deleted
+        if (state.GetIsDeleted() && command is not ICancelDeletedCommand)
+        {
+            throw new SekibanAggregateAlreadyDeletedException();
+        }
+
+        await foreach (var eventPayload in asyncHandler.HandleCommandAsync(GetAggregateState, command))
         {
             _events.Add(EventHelper.HandleEvent(_aggregate, eventPayload, rootPartitionKey));
         }

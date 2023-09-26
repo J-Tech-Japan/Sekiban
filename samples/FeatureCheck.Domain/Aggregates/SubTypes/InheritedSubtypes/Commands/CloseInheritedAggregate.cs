@@ -12,11 +12,10 @@ public record CloseInheritedAggregate : ICommand<ProcessingSubAggregate>
 
     public class Handler : ICommandHandler<ProcessingSubAggregate, CloseInheritedAggregate>
     {
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<ProcessingSubAggregate>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<ProcessingSubAggregate>> HandleCommand(
             Func<AggregateState<ProcessingSubAggregate>> getAggregateState,
             CloseInheritedAggregate command)
         {
-            await Task.CompletedTask;
             yield return new InheritedAggregateClosed(command.Reason);
         }
     }

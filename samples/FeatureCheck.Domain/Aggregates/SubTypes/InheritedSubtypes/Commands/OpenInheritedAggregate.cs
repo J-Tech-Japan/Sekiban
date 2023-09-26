@@ -13,11 +13,10 @@ public record OpenInheritedAggregate : ICommand<ProcessingSubAggregate>
 
     public class Handler : ICommandHandler<ProcessingSubAggregate, OpenInheritedAggregate>
     {
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<ProcessingSubAggregate>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<ProcessingSubAggregate>> HandleCommand(
             Func<AggregateState<ProcessingSubAggregate>> getAggregateState,
             OpenInheritedAggregate command)
         {
-            await Task.CompletedTask;
             yield return new InheritedAggregateOpened(command.YearMonth);
         }
     }

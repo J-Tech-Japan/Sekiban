@@ -21,11 +21,10 @@ public record AddRecentActivity(Guid RecentActivityId, string Activity) : IComma
 
         public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
 
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<RecentActivity>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<RecentActivity>> HandleCommand(
             Func<AggregateState<RecentActivity>> getAggregateState,
             AddRecentActivity command)
         {
-            await Task.CompletedTask;
             yield return new RecentActivityAdded(new RecentActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
         }
     }
