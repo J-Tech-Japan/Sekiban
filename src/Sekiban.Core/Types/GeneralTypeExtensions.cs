@@ -91,4 +91,64 @@ public static class GeneralTypeExtensions
         return type.GetInterfaces().FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == genericInterface) ??
             throw new ArgumentException("The type does not implement the generic interface.", nameof(type));
     }
+
+
+    /// <summary>
+    ///     Create Default Instance
+    /// </summary>
+    /// <param name="type"></param>
+    /// <returns></returns>
+    public static dynamic CreateDefaultInstance(this Type type)
+    {
+        if (type == typeof(string))
+        {
+            return "";
+        }
+        if (type == typeof(char[]))
+        {
+            return Array.Empty<char>();
+        }
+        if (type == typeof(short))
+        {
+            return 0;
+        }
+        if (type == typeof(int))
+        {
+            return 0;
+        }
+        if (type == typeof(uint))
+        {
+            return 0;
+        }
+        if (type == typeof(long))
+        {
+            return 0;
+        }
+        if (type == typeof(ulong))
+        {
+            return 0;
+        }
+        if (type == typeof(Guid))
+        {
+            return Guid.Empty;
+        }
+        var defaultConstructor = type.GetConstructor(Type.EmptyTypes);
+        if (defaultConstructor != null)
+        {
+            return Activator.CreateInstance(type) ?? "No default object found";
+        }
+        var firstConstructor = type.GetConstructors().FirstOrDefault();
+
+        if (firstConstructor != null)
+        {
+            var ctorParameters = firstConstructor.GetParameters();
+            var parameters = new object[ctorParameters.Length];
+            for (var i = 0; i < ctorParameters.Length; i++)
+            {
+                parameters[i] = CreateDefaultInstance(ctorParameters[i].ParameterType);
+            }
+            return firstConstructor.Invoke(parameters);
+        }
+        return "No default constructor found";
+    }
 }
