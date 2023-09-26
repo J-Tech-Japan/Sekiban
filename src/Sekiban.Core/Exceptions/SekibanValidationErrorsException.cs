@@ -10,6 +10,7 @@ public class SekibanValidationErrorsException(List<SekibanValidationParameterErr
         errors.Select(e => e.PropertyName + ":" + e.ErrorMessages.Aggregate("", (s, s1) => s + s1)).Aggregate("", (s, s1) => s + "\n" + s1)),
     ISekibanException
 {
+    public List<SekibanValidationParameterError> Errors => errors;
     public SekibanValidationErrorsException(IEnumerable<ValidationResult> validationResults) : this(
         SekibanValidationParameterError.CreateFromValidationResults(validationResults).ToList())
     {
