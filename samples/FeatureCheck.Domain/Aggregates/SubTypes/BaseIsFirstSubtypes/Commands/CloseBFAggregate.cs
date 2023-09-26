@@ -10,11 +10,10 @@ public record CloseBFAggregate(Guid BfAggregateId) : ICommand<ActiveBFAggregate>
 
     public class Handler : ICommandHandler<ActiveBFAggregate, CloseBFAggregate>
     {
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<ActiveBFAggregate>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<ActiveBFAggregate>> HandleCommand(
             Func<AggregateState<ActiveBFAggregate>> getAggregateState,
             CloseBFAggregate command)
         {
-            await Task.CompletedTask;
             yield return new BFAggregateClosed();
         }
     }

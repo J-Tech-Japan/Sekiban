@@ -31,11 +31,10 @@ public record ReportVersionToSnapshotManger(
 
         public Handler(IAggregateSettings aggregateSettings) => _aggregateSettings = aggregateSettings;
 
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<SnapshotManager>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<SnapshotManager>> HandleCommand(
             Func<AggregateState<SnapshotManager>> getAggregateState,
             ReportVersionToSnapshotManger command)
         {
-            await Task.CompletedTask;
             var snapshotFrequency = _aggregateSettings.SnapshotFrequencyForType(command.AggregateType);
             var snapshotOffset = _aggregateSettings.SnapshotOffsetForType(command.AggregateType);
 

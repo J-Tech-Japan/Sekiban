@@ -16,11 +16,10 @@ public record DeleteLoyaltyPoint(Guid ClientId) : ICommand<LoyaltyPoint>
 
     public class Handler : ICommandHandler<LoyaltyPoint, DeleteLoyaltyPoint>
     {
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommand(
             Func<AggregateState<LoyaltyPoint>> getAggregateState,
             DeleteLoyaltyPoint command)
         {
-            await Task.CompletedTask;
             yield return new LoyaltyPointDeleted();
         }
     }

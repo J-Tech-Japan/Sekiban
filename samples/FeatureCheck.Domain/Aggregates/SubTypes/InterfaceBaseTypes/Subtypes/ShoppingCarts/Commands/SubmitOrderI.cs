@@ -9,20 +9,15 @@ public record SubmitOrderI : IVersionValidationCommand<ShoppingCartI>
     public Guid CartId { get; init; } = Guid.Empty;
     public DateTime OrderSubmittedLocalTime { get; init; }
     public Guid GetAggregateId() => CartId;
-    public int ReferenceVersion
-    {
-        get;
-        init;
-    }
+    public int ReferenceVersion { get; init; }
 
     public class Handler : IVersionValidationCommandHandler<ShoppingCartI, SubmitOrderI>
     {
 
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<ShoppingCartI>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<ShoppingCartI>> HandleCommand(
             Func<AggregateState<ShoppingCartI>> getAggregateState,
             SubmitOrderI command)
         {
-            await Task.CompletedTask;
             yield return new OrderSubmittedI { OrderSubmittedLocalTime = command.OrderSubmittedLocalTime };
         }
     }

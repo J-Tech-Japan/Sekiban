@@ -10,11 +10,10 @@ public record ActivateBFAggregate(Guid BfAggregateId) : ICommand<BaseFirstAggreg
 
     public class Handler : ICommandHandler<BaseFirstAggregate, ActivateBFAggregate>
     {
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<BaseFirstAggregate>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<BaseFirstAggregate>> HandleCommand(
             Func<AggregateState<BaseFirstAggregate>> getAggregateState,
             ActivateBFAggregate command)
         {
-            await Task.CompletedTask;
             yield return new BFAggregateActivated();
         }
     }

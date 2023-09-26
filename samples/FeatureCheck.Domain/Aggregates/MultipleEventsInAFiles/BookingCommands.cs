@@ -16,11 +16,8 @@ public static class BookingCommands
 
         public class Handler : ICommandHandler<Booking, BookRoom>
         {
-            public async IAsyncEnumerable<IEventPayloadApplicableTo<Booking>> HandleCommandAsync(
-                Func<AggregateState<Booking>> getAggregateState,
-                BookRoom command)
+            public IEnumerable<IEventPayloadApplicableTo<Booking>> HandleCommand(Func<AggregateState<Booking>> getAggregateState, BookRoom command)
             {
-                await Task.CompletedTask;
                 yield return new BookingEvents.RoomBooked(
                     command.RoomNumber,
                     command.GuestName,
@@ -36,11 +33,10 @@ public static class BookingCommands
         public class Handler : ICommandHandler<Booking, PayBookedRoom>
         {
 
-            public async IAsyncEnumerable<IEventPayloadApplicableTo<Booking>> HandleCommandAsync(
+            public IEnumerable<IEventPayloadApplicableTo<Booking>> HandleCommand(
                 Func<AggregateState<Booking>> getAggregateState,
                 PayBookedRoom command)
             {
-                await Task.CompletedTask;
                 if (!getAggregateState().Payload.IsFullyPaid() && getAggregateState().Payload.TotalAmount.CanAdd(command.Payment))
                 {
                     yield return new BookingEvents.BookingPaid(command.Payment, command.Note);

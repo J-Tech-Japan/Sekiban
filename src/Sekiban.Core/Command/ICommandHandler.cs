@@ -6,10 +6,42 @@ namespace Sekiban.Core.Command;
 ///     Command Handler Interface for ICommand
 ///     Application developer can implement this interface to define a command handler
 ///     A Command Handler can receive DI objects through constructor.
+///     Handler is not async. If awaiting is required, use
+///     <see cref="IVersionValidationCommandHandlerAsync{TAggregatePayload,TCommand}" />
 /// </summary>
 /// <typeparam name="TAggregatePayload">Target Aggregate</typeparam>
 /// <typeparam name="TCommand">Target Command</typeparam>
 public interface ICommandHandler<TAggregatePayload, TCommand> : ICommandHandlerCommon<TAggregatePayload, TCommand>
+    where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload> where TCommand : ICommand<TAggregatePayload>
+{
+    /// <summary>
+    ///     A Command Handler.
+    ///     Persistent event can be done using yield return.
+    ///     e.g. yield return new Event1();
+    ///     Application developer can return multiple event.
+    ///     All event will be applied to the one Aggregate type with defined AggregateId.
+    /// </summary>
+    /// <param name="getAggregateState">
+    ///     Call this function anytime during command handler to receive current aggregate.
+    ///     After yield return event, already received aggregate will not updated,
+    ///     but you can call this function again to receive updated aggregate.
+    /// </param>
+    /// <param name="command"></param>
+    /// <returns></returns>
+    public IEnumerable<IEventPayloadApplicableTo<TAggregatePayload>> HandleCommand(
+        Func<AggregateState<TAggregatePayload>> getAggregateState,
+        TCommand command);
+}
+/// <summary>
+///     Command Handler Interface for ICommand
+///     Application developer can implement this interface to define a command handler
+///     A Command Handler can receive DI objects through constructor.
+///     Handler is async. If no awaiting is required, use
+///     <see cref="ICommandHandler{TAggregatePayload,TCommand}" />
+/// </summary>
+/// <typeparam name="TAggregatePayload">Target Aggregate</typeparam>
+/// <typeparam name="TCommand">Target Command</typeparam>
+public interface ICommandHandlerAsync<TAggregatePayload, TCommand> : ICommandHandlerCommon<TAggregatePayload, TCommand>
     where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload> where TCommand : ICommand<TAggregatePayload>
 {
     /// <summary>

@@ -14,11 +14,10 @@ public record CreateLoyaltyPoint(Guid ClientId, int InitialPoint) : ICommand<Loy
 
     public class Handler : ICommandHandler<LoyaltyPoint, CreateLoyaltyPoint>
     {
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommand(
             Func<AggregateState<LoyaltyPoint>> getAggregateState,
             CreateLoyaltyPoint command)
         {
-            await Task.CompletedTask;
             yield return new LoyaltyPointCreated(command.InitialPoint);
         }
     }

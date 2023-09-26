@@ -14,13 +14,9 @@ public record CreateProduct : ICommand<Product>
 
     public class Handler : ICommandHandler<Product, CreateProduct>
     {
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<Product>> HandleCommandAsync(
-            Func<AggregateState<Product>> getAggregateState,
-            CreateProduct command)
+        public IEnumerable<IEventPayloadApplicableTo<Product>> HandleCommand(Func<AggregateState<Product>> getAggregateState, CreateProduct command)
         {
-            await Task.CompletedTask;
-            yield return new ProductCreated
-                { Name = command.Name, Code = command.Code, Price = command.Price };
+            yield return new ProductCreated { Name = command.Name, Code = command.Code, Price = command.Price };
         }
     }
 }

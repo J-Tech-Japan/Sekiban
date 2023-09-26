@@ -93,6 +93,7 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
             .AddCommandHandler<CreateRecentActivity, CreateRecentActivity.Handler>()
             .AddCommandHandler<AddRecentActivity, AddRecentActivity.Handler>()
             .AddCommandHandler<OnlyPublishingAddRecentActivity, OnlyPublishingAddRecentActivity.Handler>()
+            .AddCommandHandler<OnlyPublishingAddRecentActivityAsync, OnlyPublishingAddRecentActivityAsync.Handler>()
             .AddSingleProjection<TenRecentProjection>()
             .AddSingleProjectionListQuery<TenRecentQuery>();
 

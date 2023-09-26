@@ -43,4 +43,14 @@ public class RecentActivityTest : AggregateTest<RecentActivity, FeatureCheckDepe
             .ThenGetLatestSingleEvent<RecentActivityAdded>(ev => publishOnlyRecord = ev.Payload.Record)
             .ThenPayloadIs(new RecentActivity(new List<RecentActivityRecord> { publishOnlyRecord, regularRecord, firstRecord }.ToImmutableList()));
     }
+
+    [Fact]
+    public void PublishOnlyAsyncCommandTest()
+    {
+        GivenScenario(AddRegularEventTest)
+            .WhenCommand(new OnlyPublishingAddRecentActivityAsync(GetAggregateId(), "Publish Only Event"))
+            .ThenNotThrowsAnException()
+            .ThenGetLatestSingleEvent<RecentActivityAdded>(ev => publishOnlyRecord = ev.Payload.Record)
+            .ThenPayloadIs(new RecentActivity(new List<RecentActivityRecord> { publishOnlyRecord, regularRecord, firstRecord }.ToImmutableList()));
+    }
 }

@@ -10,7 +10,7 @@ public record AddProductStock : ICommand<ProductStock>
     public Guid ProductId { get; init; }
     public decimal AddedAmount { get; init; }
     public Guid GetAggregateId() => ProductId;
-    public class Handler : ICommandHandler<ProductStock, AddProductStock>
+    public class Handler : ICommandHandlerAsync<ProductStock, AddProductStock>
     {
         private readonly IProductExistsPort _productExistsPort;
         public Handler(IProductExistsPort productExistsPort) => _productExistsPort = productExistsPort;
@@ -19,13 +19,11 @@ public record AddProductStock : ICommand<ProductStock>
             Func<AggregateState<ProductStock>> getAggregateState,
             AddProductStock command)
         {
-            await Task.CompletedTask;
             if (!await _productExistsPort.ProductExistsAsync(command.ProductId))
             {
                 throw new Exception("Product does not exist");
             }
-            yield return new ProductStockAdded
-                { AddedAmount = command.AddedAmount };
+            yield return new ProductStockAdded { AddedAmount = command.AddedAmount };
         }
     }
 }

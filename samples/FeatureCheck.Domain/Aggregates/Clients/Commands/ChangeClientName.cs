@@ -18,11 +18,8 @@ public record ChangeClientName(Guid ClientId, string ClientName) : IVersionValid
 
     public class Handler : IVersionValidationCommandHandler<Client, ChangeClientName>
     {
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<Client>> HandleCommandAsync(
-            Func<AggregateState<Client>> getAggregateState,
-            ChangeClientName command)
+        public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(Func<AggregateState<Client>> getAggregateState, ChangeClientName command)
         {
-            await Task.CompletedTask;
             yield return new ClientNameChanged(command.ClientName);
         }
     }

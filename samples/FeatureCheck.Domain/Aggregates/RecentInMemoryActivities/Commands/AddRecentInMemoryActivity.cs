@@ -21,11 +21,10 @@ public record AddRecentInMemoryActivity(Guid RecentInMemoryActivityId, string Ac
 
         public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
 
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<RecentInMemoryActivity>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<RecentInMemoryActivity>> HandleCommand(
             Func<AggregateState<RecentInMemoryActivity>> getAggregateState,
             AddRecentInMemoryActivity command)
         {
-            await Task.CompletedTask;
             yield return new RecentInMemoryActivityAdded(new RecentInMemoryActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
         }
     }

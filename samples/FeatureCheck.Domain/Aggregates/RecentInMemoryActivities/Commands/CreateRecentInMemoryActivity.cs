@@ -15,11 +15,10 @@ public record CreateRecentInMemoryActivity : ICommand<RecentInMemoryActivity>
 
         public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
 
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<RecentInMemoryActivity>> HandleCommandAsync(
+        public IEnumerable<IEventPayloadApplicableTo<RecentInMemoryActivity>> HandleCommand(
             Func<AggregateState<RecentInMemoryActivity>> getAggregateState,
             CreateRecentInMemoryActivity command)
         {
-            await Task.CompletedTask;
             yield return new RecentInMemoryActivityCreated(new RecentInMemoryActivityRecord("First Event Created", _sekibanDateProducer.UtcNow));
         }
     }

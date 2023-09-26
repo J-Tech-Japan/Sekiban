@@ -20,9 +20,30 @@ public record OnlyPublishingAddRecentActivity(Guid RecentActivityId, string Acti
 
         public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
 
+        public IEnumerable<IEventPayloadApplicableTo<RecentActivity>> HandleCommand(Guid aggregateId, OnlyPublishingAddRecentActivity command)
+        {
+            yield return new RecentActivityAdded(new RecentActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
+        }
+    }
+}
+public record OnlyPublishingAddRecentActivityAsync(Guid RecentActivityId, string Activity) : IOnlyPublishingCommand<RecentActivity>
+{
+
+    public OnlyPublishingAddRecentActivityAsync() : this(Guid.Empty, string.Empty)
+    {
+    }
+
+    public Guid GetAggregateId() => RecentActivityId;
+
+    public class Handler : IOnlyPublishingCommandHandlerAsync<RecentActivity, OnlyPublishingAddRecentActivityAsync>
+    {
+        private readonly ISekibanDateProducer _sekibanDateProducer;
+
+        public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
+
         public async IAsyncEnumerable<IEventPayloadApplicableTo<RecentActivity>> HandleCommandAsync(
             Guid aggregateId,
-            OnlyPublishingAddRecentActivity command)
+            OnlyPublishingAddRecentActivityAsync command)
         {
             await Task.CompletedTask;
             yield return new RecentActivityAdded(new RecentActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
