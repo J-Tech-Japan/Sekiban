@@ -5,13 +5,13 @@ namespace Sekiban.Core.Exceptions;
 /// <summary>
 ///     This exception is thrown when the validation errors are found.
 /// </summary>
-public class SekibanValidationErrorsException(IEnumerable<SekibanValidationParameterError> errors) : Exception, ISekibanException
+// ReSharper disable once ParameterTypeCanBeEnumerable.Local
+public class SekibanValidationErrorsException(List<SekibanValidationParameterError> errors) : Exception(
+        errors.Select(e => e.PropertyName + ":" + e.ErrorMessages.Aggregate("", (s, s1) => s + s1)).Aggregate("", (s, s1) => s + "\n" + s1)),
+    ISekibanException
 {
-
-    public IEnumerable<SekibanValidationParameterError> Errors { get; init; } = errors;
-
     public SekibanValidationErrorsException(IEnumerable<ValidationResult> validationResults) : this(
-        SekibanValidationParameterError.CreateFromValidationResults(validationResults))
+        SekibanValidationParameterError.CreateFromValidationResults(validationResults).ToList())
     {
     }
 }
