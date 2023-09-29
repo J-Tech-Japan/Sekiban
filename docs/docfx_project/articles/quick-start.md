@@ -21,7 +21,7 @@ Get Started Project is made with .NET 7.There is multiple way to test it out Get
 
 Do make your own project, usually you need three projects.
 
-To make your own project, you can refer Tuturial Project in `/Tutorials/1.GetStarted` folder.
+To make your own project, you can refer Tutorial Project in `/Tutorials/1.GetStarted` folder.
 
 1. `Domain Project`. This project is usually only includes Aggregate, Command, Event, Projection, Query etc. core event sourcing contents.
 
@@ -31,7 +31,7 @@ To make your own project, you can refer Tuturial Project in `/Tutorials/1.GetSta
 
     `Domain Project` includes `Domain Dependency Definition`.
 
-2. `Test Project`. This proect tests Domain Project.
+2. `Test Project`. This project tests Domain Project.
 
     `Test Project` will reference `Domain Project`.
     `Test Project` will add `Sekiban.Testing` Nuget Package.

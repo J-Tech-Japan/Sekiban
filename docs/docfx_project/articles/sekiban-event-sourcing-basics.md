@@ -2,7 +2,7 @@
 
 ## Basics of Event Sourcing.
 
-Basic concept of Event Sourcing is, source of truth is always in the events and state can be calculated from stream of events. Events is append only and should contain what happened as events, preferbly contains why that happened as well.
+Basic concept of Event Sourcing is, source of truth is always in the events and state can be calculated from stream of events. Events is append only and should contain what happened as events, preferably contains why that happened as well.
 
 ## Source of the events - stream.
 
@@ -63,7 +63,7 @@ This case aggregate (stream) is named `UserPoint`. In this `UserPoint` stream ma
 
 You can see from the code above, this code represents AggregatePayload and EventPayload. There are common information for the Aggregate and Events, which is AggregateId, TimeStamp, SortKey, PartitionKey etc is in the Aggregates and Events, and developer will write code for the contents, in the Payload.
 
-One important restriction is, event can never throw exception. It will be used whole time when system is runnning, as the way to build aggregate state. If wrong event are sent wrong time, you can just not change aggregate and return.
+One important restriction is, event can never throw exception. It will be used whole time when system is running, as the way to build aggregate state. If wrong event are sent wrong time, you can just not change aggregate and return.
 
 ### "Functional" way to write event sourcing.
 The code above is live code that can run in the Sekiban, it might be slightly different with what you see in other event sourcing library or sample code. Sekiban took event sourcing as "Functional" way and try to use c# feature of the functional side. IAggregatePayload Interface method "CreateInitialPayload" and IEventPayload "OnEvent" method are both static and pure function, which is not changing instance, rather create new instance and returns as a new object. This makes it more compatible for parallel executions and easier to see code base. 
@@ -84,7 +84,7 @@ And `Command` has two main part of it.
     Commands will need to detarmine which stream Events are written by returning Guid Value on `GetAggregateId();`
     In Sekiban, validation attribute takes care of most part of validations that you can define its restrictions.
 
-2. Command Handler - Function or Program that take care the Order (Command.) Handler takes care of Consystency Check and making event(s) to save.
+2. Command Handler - Function or Program that take care the Order (Command.) Handler takes care of Consistency Check and making event(s) to save.
 
 This is sample Command for CreateUserPoint and ChangeUserPointName
 
@@ -137,21 +137,45 @@ public record ChangeUserPointName(
 The code above has two main classes.
 - CreateUserPoint,CreateUserPoint : Command Data Class.
 
-    In Sekiban, comand has responsibility to decide which `Aggregate Id` the stream should save. Stream will be partition with `AggregateId` and `Aggregate Type`. (Actually it has one more key `RootPartitionKey` but it will be explain in other documents.) Since command already has which `Aggregate Type`, command need to determine `Aggregate Id`. 
+    In Sekiban, command has responsibility to decide which `Aggregate Id` the stream should save. Stream will be partition with `AggregateId` and `Aggregate Type`. (Actually it has one more key `RootPartitionKey` but it will be explain in other documents.) Since command already has which `Aggregate Type`, command need to determine `Aggregate Id`. 
     This can be done with returns Guid value on `GetAggregateId()`. If you want to create new stream, you can return `Guid.NewGuid()` to create unique Guid. That is why CreateUserPoint Command returns `GetAggregateId() => Guid.NewGuid().`. On the other hand, to execute CreateUserPoint command, it should refer Aggregate Id that already exists, so CreateUserPoint has property `UserPointId` which will be used in the `GetAggregateId()`.
 
-    Validation is also important role of the Command. In this sample, commands has `[property : Required]` or `[property : EmailAddress]`. Those validation attributes will be execute before command handler, it helps to not adding wrong data into the system. Any other complecated validation can do within Handler methods as well.
+    Validation is also important role of the Command. In this sample, commands has `[property : Required]` or `[property : EmailAddress]`. Those validation attributes will be execute before command handler, it helps to not adding wrong data into the system. Any other complicated validation can do within Handler methods as well.
 
 - CreateUserPoint.Handler, CreateUserPoint.Handler : Command Handler Class.
 
-    Command Handler can check if command can run this command. It is no problem command throws exception when wrong command is sent. (Event is something already happend but command is something we should try in future, so it could have failed in some situations.) Command handler will allow to have DI from dotnet, and Sekiban Command Handler method can be sync/async you can choose which one for each command. Then you can sometime run query etc to detarmine if you can allow to run commands.
+    Command Handler can check if command can run this command. It is no problem command throws exception when wrong command is sent. (Event is something already happened but command is something we should try in future, so it could have failed in some situations.) Command handler will allow to have DI from dotnet, and Sekiban Command Handler method can be sync/async you can choose which one for each command. Then you can sometime run query etc to determine if you can allow to run commands.
 
     When consistency test has passed, you can generate event. Event is something system already allowed, so it will be handled with the fact. 
 
 ### Event and Command Naming.
 
-Because of what we dicsussed in this document, naming of the event, command will be following.
+Because of what we discussed in this document, naming of the event, command will be following.
 
-- **Event** : Past Sentense like `UserCreated` or `NameChanged`
+- **Event** : Past Sentence like `UserCreated` or `NameChanged`
 - **Command** : Order term like `CreateUser` or `ChangeName`
+
+## Dependency Definition
+
+Sekiban has dependency definition settings. If you add what aggregate, commands, projections and queries in the definition file, you can use across testing, execute in production using same definition.
+
+This project we have made, Definition file will be following.
+
+```csharp
+public class DomainDependency : DomainDependencyDefinitionBase
+{
+    public override Assembly GetExecutingAssembly() => Assembly.GetExecutingAssembly();
+
+    public override void Define()
+    {
+        AddAggregate<UserPoint>()
+            .AddCommandHandler<CreateUserPoint, CreateUserPoint.Handler>()
+            .AddCommandHandler<ChangeUserPointName, ChangeUserPointName.Handler>();
+    }
+}
+```
+
+This file can be used either in the Test or the production.
+
+
 
