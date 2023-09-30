@@ -5,13 +5,13 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Testing</PackageId>
-        <Version>0.14.5</Version>
+        <Version>0.14.6</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Testing</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.14.5</PackageVersion>
-        <Description>Command can be sync or async, need to change interfaces.</Description>
+        <PackageVersion>0.14.6</PackageVersion>
+        <Description>Add Default AddSwaggerGen Options</Description>
         <AssemblyName>Sekiban.Testing</AssemblyName>
         <RootNamespace>Sekiban.Testing</RootNamespace>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
