@@ -251,8 +251,126 @@ Those test sample are just few of many features, Sekiban testing package can hel
 
 ## Web API
 
-When developer build aggregates, commands and events and it has tested, you can create 
+When developer build aggregates, commands and events and it has tested, you can create api with very simple addition.
+There are few preparation and addition to the `Program.cs`
 
+1. Make Web Project.
+
+    Make New Web Project with Web API (Controller), and reference `Domain Project`. And you can add web project and add `Sekiban.Web` Nuget Package and Infrastructure package. You can choose Cosmos DB or Dynamo DB and add Nuget Package `Sekiban.Infrastructure.Cosmos` or `Sekiban.Infrastructure.Dynamo`.
+
+2. Make Web Dependency
+    Web Dependency is setting for the web api in that project, if you make restriction for what command or aggregate or queries can be used in certain web, you can make settings in this file. As a start, all aggregate, command and queries can be use in web project, can be written like this.
+
+```csharp
+public class SekibanWebDependency : DomainDependency, IWebDependencyDefinition
+{
+    public bool ShouldMakeSimpleAggregateListQueries => true;
+    public bool ShouldMakeSimpleSingleProjectionListQueries => true;
+    public AuthorizeDefinitionCollection AuthorizationDefinitions => new();
+    public SekibanControllerOptions Options => new();
+}
+```
+
+3. Edit Program.cs
+
+    Program.cs can be very simple to edit. Here is the entire program.cs for CosmosDB Project. (need using before.)
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+// Sekiban Core Setting
+builder.Services.AddSekibanCoreWithDependency(new DomainDependency(), configuration: builder.Configuration);
+// Sekiban Cosmos Setting
+builder.Services.AddSekibanCosmosDB();
+// Change line above to Dynamo DB if you use Dynamo DB
+//builder.Services.AddSekibanCosmosDB();
+
+// Sekiban Web Setting
+builder.Services.AddSekibanWeb(new SekibanWebDependency());
+
+// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+builder.Services.AddEndpointsApiExplorer();
+// Add Sekiban CustomSchemaIds etc.
+builder.Services.AddSwaggerGen(options => options.AddSekibanSwaggerGen());
+
+var app = builder.Build();
+
+// Configure the HTTP request pipeline.
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+app.UseHttpsRedirection();
+
+app.UseAuthorization();
+
+// need this to use Sekiban.Web
+app.MapControllers();
+
+app.Run();
+```
+
+4. Edit appsettings.json
+
+Here is the appsetting.json for cosmos project.
+```json
+
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "Sekiban": {
+    "Default": {
+      "AggregateEventCosmosDbContainer": "events",
+      "AggregateEventCosmosDbContainerDissolvable": "dissolvableevents",
+      "BlobConnectionString": "[Set your blob connection string here. (not necessary for just running the sample)]",
+      "CosmosDbEndPointUrl": "[Set your CosmosDb endpoint url here.]",
+      "CosmosDbAuthorizationKey": "[Set your CosmosDb authorization key here.]",
+      "CosmosDbDatabase": "SekibanBasics",
+      "CosmosDbContainer": "items",
+      "CosmosDbContainerDissolvable": "dissolvableitems"
+    }
+  }
+}
+
+
+```
+You can add Secret Information to set your own setting. 
+
+Dynamo Setting is below.
+```
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "Sekiban": {
+    "Default": {
+      "DynamoDbRegion": "ap-northeast-1",
+      "AwsAccessKeyId": "[Set your dynamo db access id here]",
+      "AwsAccessKey": "[Set your dynamo db access key here]",
+      "DynamoDbItemsTable": "jjlt_items",
+      "DynamoDbEventsTable": "jjlt_events",
+      "DynamoDbItemsTableDissolvable": "jjlt_d_items",
+      "DynamoDbEventsTableDissolvable": "jjlt_d_events",
+      "S3BucketName": "jjlt-s3",
+      "S3Region": "us-west-1",
+    }
+  },
+  "AllowedHosts": "*"
+}
+```
+
+Now you can run the execution and test with Swagger Page.
+
+![Swagger](../images/sekiban-event-sourcing-basics/image3.png)
 
 ## Conclusion
 In this document it explained very basic of how to use Sekiban.

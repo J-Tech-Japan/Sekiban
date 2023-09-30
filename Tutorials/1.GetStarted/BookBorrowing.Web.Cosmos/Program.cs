@@ -3,6 +3,7 @@ using BookBorrowing.Web.Cosmos;
 using Sekiban.Core.Dependency;
 using Sekiban.Infrastructure.Cosmos;
 using Sekiban.Web.Dependency;
+using Sekiban.Web.OpenApi;
 var builder = WebApplication.CreateBuilder(args);
 
 
@@ -19,7 +20,7 @@ builder.Services.AddSekibanWeb(new BookBorrowingWebDependency());
 // Add services to the container.
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options => options.AddSekibanSwaggerGen());
 
 var app = builder.Build();
 
