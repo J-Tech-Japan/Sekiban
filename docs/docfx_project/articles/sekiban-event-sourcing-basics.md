@@ -177,5 +177,92 @@ public class DomainDependency : DomainDependencyDefinitionBase
 
 This file can be used either in the Test or the production.
 
+## Testing
 
+Sekiban has framework that supports testing without actually execute and save data into Cosmos DB / Dynamo DB.
+You do need to make new xTest project to making test project. Reference your domain project. Also add `Sekiban.Testing` Nuget Package.
+
+After those preparation, all you need to do to start testing your Sekiban Aggregate is following code.
+
+```csharp
+public class UserPointSpec : AggregateTest<UserPoint, DomainDependency>
+{
+    [Fact]
+    public void TestCreateUserPoint()
+    {
+        WhenCommand(new CreateUserPoint("John Doe", "john@example.com",0));
+        ThenPayloadIs(new UserPoint("John Doe", "john@example.com", 0));
+    }
+}
+```
+
+Note when inherit `AggregateTest`, you can put `UserPoint` which is your aggregate payload class and `DomainDependency` which is your Dependency Definition class.
+
+Then you can write test of following.
+- `When CreateUserPoint Command is executed`,
+- `Then Aggregate Payload will be specific value`.
+
+This is too simple to test but you can test multiple command as well.
+
+```csharp
+public class UserPointSpec : AggregateTest<UserPoint, DomainDependency>
+{
+   [Fact]
+    public void TestChangeName()
+    {
+        GivenCommand(new CreateUserPoint("John Doe", "john@example.com",0));
+        WhenCommand(new ChangeUserPointName(GetAggregateId(), "John Smith"));
+        ThenPayloadIs(new UserPoint("John Smith", "john@example.com", 0));
+    }
+}
+
+```
+
+Then you can write test of following.
+- `Given CreateUserPoint Command is executed`,
+- `When ChangeUserPointName Command is executed`,
+- `Then Aggregate Payload will be specific value, name should be changed as it is written`.
+
+Also, you can test validation of the command.
+
+```csharp
+public class UserPointSpec : AggregateTest<UserPoint, DomainDependency>
+{
+    [Fact]
+    public void TestCreateUserPointFailedValidation()
+    {
+        // Empty name
+        WhenCommand(new CreateUserPoint("", "john@example.com",0));
+        ThenHasValidationErrors();
+    }
+    [Fact]
+    public void TestCreateUserPointFailedValidation2()
+    {
+        // Wrong email address
+        WhenCommand(new CreateUserPoint("John Doe", "john_example.com",0));
+        ThenHasValidationErrors();
+    }
+}
+```
+
+Those test specified wrong Name or EmailAddress, and Sekiban should throw validation error. Sekiban Testing framework can check those with `ThenHasValidationErrors`.
+
+Those test sample are just few of many features, Sekiban testing package can help developers to check commands, events and aggregates should work as intended.
+
+## Web API
+
+When developer build aggregates, commands and events and it has tested, you can create 
+
+
+## Conclusion
+In this document it explained very basic of how to use Sekiban.
+
+- Aggregate
+- Events
+- Commands
+- Dependency Definition
+- Testing
+- Web
+
+It only explained very first sample of the features. In the other documents, more in depth features will be explained.
 
