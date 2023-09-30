@@ -184,6 +184,8 @@ You do need to make new xTest project to making test project. Reference your dom
 
 After those preparation, all you need to do to start testing your Sekiban Aggregate is following code.
 
+`Sekiban.Testing` package methods uses GWT style naming and you can write Given When Then styles. It does not have Arrange Act Assert methods name but it can be use in AAA style as well. Also it have helper to get events or aggregates, so you can write testing with your own way using `FluentAssertion` or any other C# testing helpers.
+
 ```csharp
 public class UserPointSpec : AggregateTest<UserPoint, DomainDependency>
 {
@@ -196,7 +198,7 @@ public class UserPointSpec : AggregateTest<UserPoint, DomainDependency>
 }
 ```
 
-Note when inherit `AggregateTest`, you can put `UserPoint` which is your aggregate payload class and `DomainDependency` which is your Dependency Definition class.
+Note when inherit `AggregateTest`, you can put `UserPoint` which is your aggregate payload class and `DomainDependency` which is your Dependency Definition class. 
 
 Then you can write test of following.
 - `When CreateUserPoint Command is executed`,
@@ -218,7 +220,8 @@ public class UserPointSpec : AggregateTest<UserPoint, DomainDependency>
 
 ```
 
-Then you can write test of following.
+Then you can write test of following. 
+
 - `Given CreateUserPoint Command is executed`,
 - `When ChangeUserPointName Command is executed`,
 - `Then Aggregate Payload will be specific value, name should be changed as it is written`.
@@ -253,6 +256,8 @@ Those test sample are just few of many features, Sekiban testing package can hel
 
 When developer build aggregates, commands and events and it has tested, you can create api with very simple addition.
 There are few preparation and addition to the `Program.cs`
+
+`Sekiban.Web` Nuget Package provides api generation from domain objects, but it is optional package. You can call Sekiban Commands from your controller or use cases and create your own API. Usually event sourcing command is the usecase, so it is good to generate command itself automatically using `Sekiban.Web`.
 
 1. Make Web Project.
 
