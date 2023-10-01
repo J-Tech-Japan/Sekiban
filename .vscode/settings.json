@@ -1,6 +1,7 @@
 {
     "azureFunctions.projectSubpath": "src\\Sekiban.Testing",
     "cSpell.words": [
+        "appsettings",
         "Stöckl"
     ]
 }

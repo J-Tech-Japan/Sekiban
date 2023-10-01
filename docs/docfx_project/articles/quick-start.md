@@ -48,7 +48,7 @@ To make your own project, you can refer Tutorial Project in `/Tutorials/1.GetSta
 
     If `Executing Project` will use AWS Dynamo DB, add `Sekiban.Infrastructure.Dynamo` Nuget Package.
 
-    When `Executing Prject` will be `Web API Project that uses Sekiban.Web API Generator`, it will includes following items.
+    When `Executing Project` will be `Web API Project that uses Sekiban.Web API Generator`, it will includes following items.
     
     - Add `Sekiban.Web` Nuget Package.
     - `Web Dependency Definition` that inherits IWebDependencyDefinition.

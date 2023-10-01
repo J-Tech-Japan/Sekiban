@@ -81,7 +81,7 @@ List of Events and states created with Events are most fundamental part of Sekib
 
 And `Command` has two main part of it.
 1. Command Data (Usually called `Command`) - Order contents, it usually send from user. Some cases, system can send command for a aggregate (stream) as well.
-    Commands will need to detarmine which stream Events are written by returning Guid Value on `GetAggregateId();`
+    Commands will need to determine which stream Events are written by returning Guid Value on `GetAggregateId();`
     In Sekiban, validation attribute takes care of most part of validations that you can define its restrictions.
 
 2. Command Handler - Function or Program that take care the Order (Command.) Handler takes care of Consistency Check and making event(s) to save.
@@ -319,7 +319,7 @@ app.Run();
 
 4. Edit appsettings.json
 
-Here is the appsetting.json for cosmos project.
+Here is the appsettings.json for cosmos project.
 ```json
 
 {

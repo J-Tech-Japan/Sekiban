@@ -1,5 +1,7 @@
 - name: Articles
   href: articles/
+- name: Articles(ja)
+  href: articles_ja/
 - name: Api Documentation
   href: api/
   homepage: api/index.md
