@@ -180,7 +180,7 @@ This file can be used either in the Test or the production.
 ## Testing
 
 Sekiban has framework that supports testing without actually execute and save data into Cosmos DB / Dynamo DB.
-You do need to make new xTest project to making test project. Reference your domain project. Also add `Sekiban.Testing` Nuget Package.
+You do need to make new xUnit project to making test project. Reference your domain project. Also add `Sekiban.Testing` Nuget Package.
 
 After those preparation, all you need to do to start testing your Sekiban Aggregate is following code.
 
@@ -389,3 +389,4 @@ In this document it explained very basic of how to use Sekiban.
 
 It only explained very first sample of the features. In the other documents, more in depth features will be explained.
 
+[More detail feature index](./sekiban-details.md).
