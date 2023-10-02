@@ -7,7 +7,7 @@
 - [Event Subscription](event-subscription.md)
 - [Query](queries-basic.md)
 - [Retrieve Data](retrieve-data.md)
-- [Snapshot](snapshot.md)
+- [Snapshots](snapshots.md)
 - [Tenants](tenants.md)
 - [Test Details](test-details.md)
 - [Web API](web-api.md)
