@@ -16,40 +16,34 @@ Windowsのローカルエミュレーターについては、[このページ](.
 Azure Cosmos DBについては、[このページ](./prepare-cosmos-db-azure.md)をご覧ください。
 Cosmos DBを準備する際には、***URI*** と ***Primary Key*** を手元に控えておくことを忘れないでください。
 
-## Prepare for Blob Storage (Optional)
+## Blobストレージの準備（オプション）
+Sekibanは以下のデータ用にblobストレージを使用します。
 
-Sekiban uses blob storage for following data.
+- サイズが大きい場合の集計スナップショット。
+    Azure Cosmos DBには4MBのデータ制限がありますが、限度に達しないように、ペイロードjsonが約1MBに達しそうになった時点で、sekibanはスナップショットblobを作成します。
+- プロジェクションスナップショット。
+    プロジェクションスナップショットは常にblobストレージに作成されますが、デフォルト設定では3000イベント以下のスナップショットは作成されません。
 
-- Aggregate Snapshot when size is big. 
+データの取得開始レベルではblobを使用するケースはまれなため、取得開始プロジェクト用にblobストレージを作成する必要はありません。
 
-    Azure Cosmos DB has 4MB data limit, but to be safe not to hit limit, sekiban will make snapshot blob when payload json is about to hit 1MB.
-
-- Projection Snapshot.
-    
-    Projection snapshot is always created in the blob storage but default setting has set not to make snapshot below 3000 events.
-
-Because case that uses blob is rare in the getting started level of the data, you don't need to create blob storage for getting started project. 
-
-There is many way you can execute solution.
+ソリューションを実行する方法はいくつかあります。
 
 1. Visual Studio 2022
-2. Command Line (dotnet commands) - Visual Studio Code or other editor.
+2. コマンドライン（dotnetコマンド） - Visual Studio Codeや他のエディタ。
 3. JetBrains Rider.
 
-Sekiban can be developed with all those application, but first, we explain using visual studio 2022.
+これらのアプリケーションすべてでSekibanを開発することができますが、まずはVisual Studio 2022を使用して説明します。
 
-### Open Solution and set URI and Primary Key Using Visual Studio 2022
+### Visual Studio 2022を使用してソリューションを開き、URIとプライマリキーを設定する
 
-Install Visual Studio 2022. It should be 17.7 (dotnet 7 compatible.)
+Visual Studio 2022をインストールします。バージョンは17.7（dotnet 7互換）か、それより新しいものである必要があります。
 
-1. Open `/Tutorials/1.GetStarted/GetStarted.sln`
+1. /Tutorials/1.GetStarted/GetStarted.slnを開きます
+2. BookBorrowing.Web.Cosmosプロジェクトを右クリックし、`Manage User Secrets`を選択します
+![ユーザーシークレットの管理](../images/test-out-cosmos/image2.png)
+3. User Secretsを編集し、以下の情報を記入します。
 
-2. Right Click on `BookBorrowing.Web.Cosmos` Project and Select `Manage User Secrets`
-    
 
-![Manage User Secrets](../images/test-out-cosmos/image2.png)
-
-3. Edit User Secrets and write following information.
 
 ```json
 {
@@ -63,91 +57,91 @@ Install Visual Studio 2022. It should be 17.7 (dotnet 7 compatible.)
 }
 ```
 
-if URI and Primary Key was correctly set, you can run Sekiban Web API.
 
-### Execute Web Project and Command using Visual Studio 2022.
+URIとプライマリキーが正しく設定されていれば、Sekiban Web APIを実行することができます。
 
-1. Set `BookBorrowing.Web.Cosmos` as startup project and Debug Execute project.
+### Visual Studio 2022を使用してWebプロジェクトとコマンドを実行します。
 
-If program runs correctly, you will see following website.
+1. BookBorrowing.Web.Cosmos をスタートアッププロジェクトとして設定し、プロジェクトをデバック実行します。
+
+もしプログラムが正常に動作した場合、次のようなウェブサイトが表示されます。
 
 ![Background swagger screen](../images/test-out-cosmos/image3.png)
 
-2. Execute `createborrower` command.
+2. createborrower コマンドを実行します。
 
-You can click `createborrower` command and press `Try Out` button.
-You nee to change phonenumber.value to number (more than 6 digits.) and `Execute` command.
+createborrower コマンドをクリックし、 Try Out ボタンを押します。
+
+phonenumber.valueを6桁以上の数値に変更し、`Execute`コマンドを実行します。
 
 ![Background swagger screen](../images/test-out-cosmos/image4.png)
 
-If command return with 200 (Success), you have succeeded to execute command!
+もしコマンドが200（成功）のメッセージを返す場合、コマンドの実行に成功したことになります！
 
 ![Success](../images/test-out-cosmos/image5.png)
 
-You can copy aggregate Id from result.
+結果から集約IDをコピーできます。
 
-It is Guid value, it should always have different id when created new aggregate, but it will share through out same aggregate id. In this case, aggregate Id was `78cacff7-c175-497c-9b5d-62e1292e023b`
+これはGuidの値で、新規の集約を作成する時には常に異なるIDが付けられるはずですが、同じ集約IDを通じて共有されます。このケースでは、集約IDは `78cacff7-c175-497c-9b5d-62e1292e023b` でした。
 
-### Check saved data in Cosmos DB.
+### Cosmos DBに保存されたデータの確認。
 
-#### Local Emulator.
+#### ローカルエミュレータ
 
-Cosmos DB Emulater `2.14.2` can create hieralchical partition key data from sekiban, but Data Explorer can not display json data that saved. It looks like it still have old front end.
+Cosmos DBエミュレータ 2.14.2 では、階層的なパーティションキーデータを石版から作成することができますが、Data Explorerは保存されたjsonデータを表示することができません。まだ旧版のフロントエンドを使用していると考えられます。
 
-To display data, I could use `Azure Databases Extension for VS Code.`
+データを表示するには、`Azure Databases Extension for VS Code` を使用できます。
 
-You can get information from [Cosmos DB Website](https://developer.azurecosmosdb.com/tools)
+詳しい情報は、[Cosmos DBのウェブサイト](https://developer.azurecosmosdb.com/tools)から取得できます。
 
-After you install on Visual Studio Code, you can Click "A" icon from left side bar and open Azure Databases Extension. In the "Workspace" area, there is the `Attached Database Accounts` - `Attach Emulator` button. You can select `Core (SQL)` and connect to local emulator.
+Visual Studio Codeにインストールした後に、左側のバーから"A"アイコンをクリックしてAzure Databases Extensionを開きます。"Workspace"エリアには Attached Database Accounts - Attach Emulator ボタンがあります。`Core (SQL)` を選択してローカルエミュレータに接続できます。
 
-You can select `GetStartedDb` - `Events` - `Documents` and if you have one data that created with first command, you are succeeded!.
+GetStartedDb - Events - Documentsを選択し、最初のコマンドで作成した1つのデータがある場合、成功です。
 
-Note : Maybe this extension is still have many bugs too. I could not get data updated, unless right click `SQL Emulator` and `Detach` to Detach Emulator and Attach again.
+注：おそらくこの拡張機能にもまだ多くのバグがあると思われます。`SQL Emulator` を右クリックして`Detach`を選択してエミュレータをDetachし、再度Attachしなければデータを更新することができませんでした。
 
-![Created Data](../images/test-out-cosmos/image6.png)
+![作成されたデータ](../images/test-out-cosmos/image6.png)
 
 #### Azure Cosmos DB.
 
-In Azure Cosmos DB, you can go to DataExplorer and Find `GetStartedDb` - `Events` - `Items` and you should be able to find data you created with first command. JSON should be same that you can see from local emulator.
+Azure Cosmos DBでは、DataExplorerに移動して GetStartedDb - Events - Items を探し、最初のコマンドで作成したデータを見つけることができます。JSONは、ローカルエミュレータで見ることができるものと同じであるべきです。
+### Sekibanからのクエリ。
+Sekiban Webにもクエリ機能があります。Sekiban Webから1つの集約またはリスト集約を取得することができます。
 
-### Query from Sekiban.
+#### 集約リストを表示する
 
-Sekiban Web also has query feature. You can get one aggregate or list Aggregate from Sekiban Web.
+再度 BookBorrowing.Web.CosmosDB を実行し、`/api/query/borrower/simpleaggregatelistquery1` を選択してから Try Out - Execute を選択します。 入力値を変更する必要はありません。
 
-#### Get List of Aggregate.
+この時点の集計リスト（この時点では1つの集計のみ）を表示できます。
 
-Run `BookBorrowing.Web.CosmosDB` again and select `/api/query/borrower/simpleaggregatelistquery1` and `Try Out` - `Execute`. You don't need to change input value.
+#### 一つの集約(Aggregate)の内容を表示する
 
-You can see list of aggregate (which this time only one aggregate).
+`/api/query/borrower/get/{id}` を見つけて試してみてください。
 
-#### Get one Aggregate
+実行結果から集計idを取得し、`id`に入力してください。集計値を取得できるはずです。
 
-Find `/api/query/borrower/get/{id}` and try it out.
+これがGetStarted Projectを試す方法です。
 
-put aggregate id from command executed result and put in `id`. You should be able to get aggregate value.
+このドキュメントでは、コマンド、イベント、および集計の詳細についてはあまり説明していませんが、セキバンがどのようにデータを作成し保存することができるかにつての概念を掴むことができるでしょう。
 
-This is how you can test out with GetStarted Project.
+`BookBorrowing.Domain` プロジェクトを確認して、以下の項目を見つけることができます。
+-  コマンド `BookBorrowing.Domain/Aggregates/Commands/CreateBorrower.cs`
+- イベント `BookBorrowing.Domain/Aggregates/Events/BorrowerCreated.cs`
+- 集計 `BookBorrowing.Domain/Aggregates/Borrower.cs`
 
-This document does not explain much about what is command, event and aggreagte but hopefully you can get idea of how sekiban can make and save data.
+#### 借り手の名前を変更する。
 
-You can check `BookBorrowing.Domain` Project and find following items.
+次に、借り手の名前を変更してみましょう。同じ集約IDでコマンドを実行すると、新たなイベントを保存することで集約情報を編集することができます。
 
-- Command. `BookBorrowing.Domain/Aggregates/Commands/CreateBorrower.cs` 
-- Event. `BookBorrowing.Domain/Aggregates/Events/BorrowerCreated.cs`
-- Aggregate. `BookBorrowing.Domain/Aggregates/Borrower.cs`
+1. BookBorrowing.Web.Cosmosプロジェクトを再度実行します。
+2. /api/command/borrower/changeborrowernameコマンドを探します。
+3. 情報を入力して試してみてください。
 
-#### Change Borrower's name.
-Now let's change Borrower's name. If you run command in same aggregate id, you can edit aggregate's information by saving new events.
+Aggregate Idを`borrowerId`に入力します。
 
-1. Run `BookBorrowing.Web.Cosmos` Project again.
+新しい名前を`changename.firstname`,lastname,middlenameに入力します。
 
-2. Find `/api/command/borrower/changeborrowername` command.
-
-3. Try it out by putting information.
-
-You need to put your `Aggregate Id` into `borrowerId`
-And new name to `changename.firstname`, `lastname` and `middlename`.
-Only `middlename` can be blank.
+ただし、`middlename`のみ空欄にすることができます。
 
 ```
 {
@@ -161,10 +155,11 @@ Only `middlename` can be blank.
 }
 ```
 
-If you successfully executed, you can check the result.
+もしあなたが正常に実行したら、その結果を確認することができます。
 
-You can do Aggreagte List or Get One Aggreagte Again.
-This case, if you get one aggregate, result should be following json.
+集計リストを作成するか、再度1つの集計を取得することができます。
+
+このケースでは、1つの集計を取得すると、結果は以下のような json 形式になるはずです。
 
 ```
 {
@@ -195,12 +190,8 @@ This case, if you get one aggregate, result should be following json.
 }
 ```
 
-You can see name has been changed.
+名前が変更されたことがわかるでしょう。
 
-Also if you check Cosmos DB Events, now you can see two events.
+また、Cosmos DBのイベントを確認すると、今度は2つのイベントが表示されます。
 
-In Event sourcing, even you edit aggregate, events should not be deleted. It should add events and when system see two events, system can calculate current aggregate state.
-
-
-
-
+イベントソーシングでは、アグリゲートを編集する場合でも、イベントは削除されません。イベントは追加され、システムが2つのイベントを確認すると、現在のアグリゲート状態を計算できます。
