@@ -37,7 +37,6 @@ public static class SekibanOpenApiParameterGenerator
             return type.GenericTypeArguments.ToList()
                 .Aggregate(string.IsNullOrEmpty(prefix) ? regular : $"{prefix}_{regular}", (s, type1) => GetSekibanSchemeName(type1, s));
         }
-        regular = regular.Replace("+", "_");
         return string.IsNullOrEmpty(prefix) ? regular : $"{prefix}_{regular}";
     }
 
