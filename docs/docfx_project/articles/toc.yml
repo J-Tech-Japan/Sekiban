@@ -15,3 +15,24 @@
     href: test-out-dynamo.md
 - name: Sekiban Event Sourcing Basics
   href: sekiban-event-sourcing-basics.md
+- name: Sekiban Details
+  href: sekiban-details.md
+  items:
+  - name: Command Details
+    href: command-details.md
+  - name: Create Projection
+    href: create-projection-data.md
+  - name: Event Subscription
+    href: event-subscription.md
+  - name: Query
+    href: queries-basic.md
+  - name: Retrieve Data
+    href: retrieve-data.md
+  - name: Snapshot
+    href: snapshot.md
+  - name: Tenants
+    href: tenants.md
+  - name: Test Details
+    href: test-details.md
+  - name: Web API
+    href: web-api.md
