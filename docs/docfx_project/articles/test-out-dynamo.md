@@ -1,0 +1,3 @@
+# Test GetStarted Solution with Dynamo DB
+
+Coming soon...
