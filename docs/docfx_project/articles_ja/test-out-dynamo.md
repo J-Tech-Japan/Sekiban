@@ -1,0 +1,3 @@
+# Dynamo DBを用いたGetStartedソリューションのテスト
+
+近日公開...
