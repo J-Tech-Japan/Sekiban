@@ -41,7 +41,7 @@ Sekiban can be developed with all those application, but first, we explain using
 
 ### Open Solution and set URI and Primary Key Using Visual Studio 2022
 
-Install Visual Studio 2022. It should be 17.7 (dotnet 7 compatible.)
+Install Visual Studio 2022. It should be 17.7 or higher version.(dotnet 7 compatible.)
 
 1. Open `/Tutorials/1.GetStarted/GetStarted.sln`
 
