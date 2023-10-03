@@ -1,15 +1,15 @@
 - name: Getting Started
-- name: Sekiban Concepts
+- name: Sekiban のコンセプト
   href: intro.md
-- name: Quick Start
+- name: 試してみる
   href: quick-start.md
   items:
-  - name: Test it out with Cosmos DB
+  - name: Cosmos DBを使用して試してみる
     href: test-out-cosmos.md
     items:
-    - name: Prepare Cosmos DB with local emurator
+    - name: Cosmos DB をローカルエミュレーターで使用する
       href: prepare-cosmos-db-local.md
-    - name: Prepare Cosmos DB with Azure Cosmos DB
+    - name: Azure Cosmos DBを使用して開発する
       href: prepare-cosmos-db-azure.md
   - name: Test it out with Dynamo DB
     href: test-out-dynamo.md
