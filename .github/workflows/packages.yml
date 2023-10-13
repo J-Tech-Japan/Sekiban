@@ -13,7 +13,7 @@ jobs:
     - name: Setup .NET 8
       uses: actions/setup-dotnet@v1
       with:
-        dotnet-version: 8.0.100-rc.1.23455.8
+        dotnet-version: 8.0.100-rc.2.23502.2
     - name: Setup .NET 7
       uses: actions/setup-dotnet@v1
       with:

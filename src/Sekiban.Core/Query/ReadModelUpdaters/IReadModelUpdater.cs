@@ -14,7 +14,6 @@ public record ReadModelUpdated<TReadModel>(TReadModel ReadModel) : IReadModelCha
 public record ReadModelInserted<TReadModel>(TReadModel ReadModel) : IReadModelChange<TReadModel> where TReadModel : IReadModel;
 public record ReadModelDeleted<TReadModel>(TReadModel ReadModel) : IReadModelChange<TReadModel> where TReadModel : IReadModel;
 public record ReadModelUnchanged<TReadModel>(TReadModel ReadModel) : IReadModelChange<TReadModel> where TReadModel : IReadModel;
-
 public interface IReadModelUpdater<TReadModel> where TReadModel : IReadModel
 {
     public static abstract ImmutableList<TReadModel> RetrieveItemsForUpdate(ImmutableList<IEvent> events);

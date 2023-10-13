@@ -3,8 +3,9 @@ using Sekiban.Core.Query;
 using Sekiban.Web.Authorizations;
 using Sekiban.Web.Common;
 namespace Sekiban.Web.Dependency;
+
 /// <summary>
-/// Web Dependency Definition
+///     Web Dependency Definition
 /// </summary>
 public interface IWebDependencyDefinition : IQueryDefinition
 {

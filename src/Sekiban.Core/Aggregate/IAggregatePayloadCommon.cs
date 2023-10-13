@@ -5,7 +5,7 @@ namespace Sekiban.Core.Aggregate;
 ///     Note: Developer does not need to implement this interface.
 ///     It will be implement when you implement <see cref="IAggregatePayload{TAggregatePayload}" />.
 /// </summary>
-public interface IAggregatePayloadCommon 
+public interface IAggregatePayloadCommon
 {
     /// <summary>
     ///     Aggregate Payload Version:

@@ -2,8 +2,9 @@ using Microsoft.AspNetCore.Mvc;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Web.Controllers.Bases;
+
 /// <summary>
-/// base single projection query controller
+///     base single projection query controller
 /// </summary>
 /// <typeparam name="TSingleProjectionPayload"></typeparam>
 /// <typeparam name="TQuery"></typeparam>

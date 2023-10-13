@@ -11,8 +11,6 @@ public class ShippingDependency : DomainDependencyDefinitionBase
 
     public override void Define()
     {
-        AddAggregate<Product>()
-            .AddCommandHandler<CreateProduct, CreateProduct.Handler>()
-            .AddAggregateQuery<ProductExistsQuery>();
+        AddAggregate<Product>().AddCommandHandler<CreateProduct, CreateProduct.Handler>().AddAggregateQuery<ProductExistsQuery>();
     }
 }

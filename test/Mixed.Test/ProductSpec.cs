@@ -9,9 +9,7 @@ public class ProductSpec : AggregateTest<Product, MixedContextDependency>
     [Fact]
     public void Test1()
     {
-        WhenCommand(
-                new CreateProduct
-                    { Code = "001", Name = "Product1", Price = 100 })
+        WhenCommand(new CreateProduct { Code = "001", Name = "Product1", Price = 100 })
             .ThenNotThrowsAnException()
             .ThenPayloadIs(new Product("Product1", "001", 100));
     }

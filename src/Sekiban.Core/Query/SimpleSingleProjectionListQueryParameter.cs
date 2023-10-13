@@ -1,8 +1,9 @@
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Query;
+
 /// <summary>
-/// Generic Query parameter for the single projection.
+///     Generic Query parameter for the single projection.
 /// </summary>
 /// <param name="PageSize"></param>
 /// <param name="PageNumber"></param>

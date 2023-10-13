@@ -10,13 +10,13 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0"/>
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj" />
-        <ProjectReference Include="..\..\src\Sekiban.Web\Sekiban.Web.csproj" />
-        <ProjectReference Include="..\FeatureCheck.Domain\FeatureCheck.Domain.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Web\Sekiban.Web.csproj"/>
+        <ProjectReference Include="..\FeatureCheck.Domain\FeatureCheck.Domain.csproj"/>
     </ItemGroup>
 
 </Project>

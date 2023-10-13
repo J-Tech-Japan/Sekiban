@@ -1,7 +1,7 @@
 namespace Sekiban.Core.Exceptions;
 
 /// <summary>
-/// This exception is thrown when the root partition key is invalid.
+///     This exception is thrown when the root partition key is invalid.
 /// </summary>
 public class SekibanInvalidRootPartitionKeyException : Exception, ISekibanException
 {

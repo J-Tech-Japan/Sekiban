@@ -11,9 +11,9 @@ public class EmptyDependencyDefinition : DomainDependencyDefinitionBase, IWebDep
     public bool ShouldMakeSimpleSingleProjectionListQueries => true;
     public AuthorizeDefinitionCollection AuthorizationDefinitions => new();
     public SekibanControllerOptions Options => new();
-
-    public override Assembly GetExecutingAssembly() => Assembly.GetExecutingAssembly();
     public override void Define()
     {
     }
+
+    public override Assembly GetExecutingAssembly() => Assembly.GetExecutingAssembly();
 }

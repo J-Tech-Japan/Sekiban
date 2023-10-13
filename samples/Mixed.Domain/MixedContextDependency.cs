@@ -10,7 +10,6 @@ public class MixedContextDependency : DomainDependencyDefinitionBase
 
     public override void Define()
     {
-        AddDependency<ShippingDependency>()
-            .AddDependency<WarehouseDependency>();
+        AddDependency<ShippingDependency>().AddDependency<WarehouseDependency>();
     }
 }
