@@ -9,6 +9,8 @@ using FeatureCheck.Domain.Aggregates.Clients.Events;
 using FeatureCheck.Domain.Aggregates.Clients.Projections;
 using FeatureCheck.Domain.Aggregates.Clients.Queries;
 using FeatureCheck.Domain.Aggregates.Clients.Queries.BasicClientFilters;
+using FeatureCheck.Domain.Aggregates.DerivedTypes;
+using FeatureCheck.Domain.Aggregates.DerivedTypes.Commands;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
 using FeatureCheck.Domain.Aggregates.MultipleEventsInAFiles;
@@ -149,5 +151,6 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
             .AddCommandHandler<BookingCommands.BookRoom, BookingCommands.BookRoom.Handler>()
             .AddCommandHandler<BookingCommands.PayBookedRoom, BookingCommands.PayBookedRoom.Handler>();
 
+        AddAggregate<DerivedTypeAggregate>().AddCommandHandler<CreateVehicle, CreateVehicle.Handler>();
     }
 }
