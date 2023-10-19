@@ -4,8 +4,9 @@ using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Web.Authorizations;
 using Sekiban.Web.Dependency;
 namespace Sekiban.Web.Controllers.Bases;
+
 /// <summary>
-/// Base single projection list query controller
+///     Base single projection list query controller
 /// </summary>
 /// <param name="queryExecutor"></param>
 /// <param name="webDependencyDefinition"></param>

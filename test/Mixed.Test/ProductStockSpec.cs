@@ -17,26 +17,15 @@ public class ProductStockSpec : AggregateTest<ProductStock, MixedContextDependen
     [Fact]
     public void AddTest()
     {
-        var productId = RunEnvironmentCommand(
-            new CreateProduct
-                { Name = "Product 1", Code = "001", Price = 100 });
-        WhenCommand(
-                new AddProductStock
-                    { ProductId = productId, AddedAmount = 100 })
+        var productId = RunEnvironmentCommand(new CreateProduct { Name = "Product 1", Code = "001", Price = 100 });
+        WhenCommand(new AddProductStock { ProductId = productId, AddedAmount = 100 })
             .ThenNotThrowsAnException()
-            .ThenPayloadIs(
-                new ProductStock
-                    { Stocks = 100 });
+            .ThenPayloadIs(new ProductStock { Stocks = 100 });
     }
     [Fact]
     public void AddTestProductShouldExist()
     {
-        RunEnvironmentCommand(
-            new CreateProduct
-                { Name = "Product 1", Code = "001", Price = 100 });
-        WhenCommand(
-                new AddProductStock
-                    { ProductId = Guid.NewGuid(), AddedAmount = 100 })
-            .ThenThrowsAnException();
+        RunEnvironmentCommand(new CreateProduct { Name = "Product 1", Code = "001", Price = 100 });
+        WhenCommand(new AddProductStock { ProductId = Guid.NewGuid(), AddedAmount = 100 }).ThenThrowsAnException();
     }
 }

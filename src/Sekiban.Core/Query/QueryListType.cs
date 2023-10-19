@@ -1,6 +1,7 @@
 namespace Sekiban.Core.Query;
+
 /// <summary>
-/// Query List Type.
+///     Query List Type.
 /// </summary>
 public enum QueryListType
 {
