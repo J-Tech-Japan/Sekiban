@@ -3,7 +3,6 @@ using Microsoft.Azure.Cosmos.Linq;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.ValueObjects;
-using Sekiban.Core.Events;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using Sekiban.Infrastructure.Cosmos;
@@ -39,7 +38,7 @@ public class EventsConverter
         _semaphoreCount.Release();
     }
 
-    public async Task<int> StartConvertAsync(AggregateContainerGroup containerGroup, bool convertToHierarchical)
+    public async Task<int> StartConvertAsync(AggregateContainerGroup containerGroup, bool convertToHierarchical, DocumentType documentType)
     {
         await _sekibanContext.SekibanActionAsync(
             SourceDatabase,
@@ -49,20 +48,20 @@ public class EventsConverter
 
                 var last = await _sekibanContext.SekibanActionAsync(
                     ConvertDestination,
-                    async () => await GetLastSortableUniqueIdAsync(containerGroup));
+                    async () => await GetLastSortableUniqueIdAsync(containerGroup, documentType));
 
-                await GetLastSortableUniqueIdAsync(containerGroup);
+                await GetLastSortableUniqueIdAsync(containerGroup, documentType);
 
                 count = 0;
 
                 await _cosmosDbFactory.CosmosActionAsync(
-                    DocumentType.Event,
+                    documentType,
                     containerGroup,
                     async container =>
                     {
                         await Task.CompletedTask;
                         var options = new QueryRequestOptions { MaxConcurrency = -1, MaxItemCount = -1, MaxBufferedItemCount = -1 };
-                        var query = container.GetItemLinqQueryable<IEvent>().AsQueryable();
+                        var query = container.GetItemLinqQueryable<IDocument>().AsQueryable();
                         if (last is not null)
                         {
                             query = query.Where(m => m.SortableUniqueId.CompareTo(last.Value) > 0);
@@ -98,7 +97,7 @@ public class EventsConverter
                                         async () =>
                                         {
                                             await _cosmosDbFactory.CosmosActionAsync(
-                                                DocumentType.Event,
+                                                documentType,
                                                 containerGroup,
                                                 async containerDest =>
                                                 {
@@ -110,7 +109,7 @@ public class EventsConverter
                                         }));
                             }
                             await Task.WhenAll(tasks);
-                            Console.WriteLine($"{count} events has written");
+                            Console.WriteLine($"{count} items has written");
                         }
                     });
 
@@ -119,16 +118,16 @@ public class EventsConverter
         return count;
     }
 
-    public async Task<SortableUniqueIdValue?> GetLastSortableUniqueIdAsync(AggregateContainerGroup containerGroup)
+    public async Task<SortableUniqueIdValue?> GetLastSortableUniqueIdAsync(AggregateContainerGroup containerGroup, DocumentType documentType)
     {
         return await _cosmosDbFactory.CosmosActionAsync(
-            DocumentType.Event,
+            documentType,
             containerGroup,
             async container =>
             {
                 await Task.CompletedTask;
                 var options = new QueryRequestOptions { MaxConcurrency = -1, MaxItemCount = -1, MaxBufferedItemCount = -1 };
-                var query = container.GetItemLinqQueryable<IEvent>();
+                var query = container.GetItemLinqQueryable<IDocument>();
                 query = query.OrderByDescending(m => m.SortableUniqueId);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
                 while (feedIterator.HasMoreResults)

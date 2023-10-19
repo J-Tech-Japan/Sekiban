@@ -6,6 +6,7 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <UserSecretsId>53eef3ef-3c9b-41a3-91f9-c80dcdd6f0e9</UserSecretsId>
+        <RootNamespace>Convert011To012</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>

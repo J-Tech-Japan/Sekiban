@@ -51,7 +51,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MultiTenant.WebApi", "sampl
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tools", "Tools", "{9504B5F4-E803-46E3-B110-CBA8196B03D4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Convert011To012", "tools\Convert011To012\Convert011To012.csproj", "{482C14AE-C213-4234-9B11-F0D7E953EEE2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConvertAndCopyCosmosItems", "tools\ConvertAndCopyCosmosItems\ConvertAndCopyCosmosItems.csproj", "{482C14AE-C213-4234-9B11-F0D7E953EEE2}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mixed.Test", "test\Mixed.Test\Mixed.Test.csproj", "{630F88BB-1967-4F9A-B6E2-771922069319}"
 EndProject
