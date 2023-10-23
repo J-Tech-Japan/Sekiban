@@ -6,13 +6,13 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Core</PackageId>
-        <Version>0.14.7</Version>
+        <Version>0.14.8</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Core</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.14.7</PackageVersion>
-        <Description>Update to Dotnet 8 RC2</Description>
+        <PackageVersion>0.14.8</PackageVersion>
+        <Description>Add AggregateState.IsNew</Description>
         <AssemblyName>Sekiban.Core</AssemblyName>
         <RootNamespace>Sekiban.Core</RootNamespace>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>

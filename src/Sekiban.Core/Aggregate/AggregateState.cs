@@ -14,6 +14,7 @@ public sealed record AggregateState<TPayload> : IAggregateStateCommon where TPay
     public string PayloadTypeName => Payload.GetType().Name;
 
     public TPayload Payload { get; init; } = AggregateCommon.CreatePayload<TPayload>();
+    public bool IsNew => Version == 0;
     public AggregateState()
     {
     }
@@ -67,7 +68,6 @@ public sealed record AggregateState<TPayload> : IAggregateStateCommon where TPay
     public string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();
 
     public bool GetIsDeleted() => Payload is IDeletable { IsDeleted: true };
-
     public dynamic GetComparableObject(AggregateState<TPayload> original, bool copyVersion = true) =>
         this with
         {
