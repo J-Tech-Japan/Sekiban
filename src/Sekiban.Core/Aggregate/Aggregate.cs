@@ -14,6 +14,7 @@ namespace Sekiban.Core.Aggregate;
 public sealed class Aggregate<TAggregatePayload> : AggregateCommon, ISingleProjectionStateConvertible<AggregateState<TAggregatePayload>>
     where TAggregatePayload : IAggregatePayloadCommon
 {
+    public bool IsNew => Version == 0;
     private IAggregatePayloadCommon Payload { get; set; } = CreatePayloadCommon<TAggregatePayload>();
     public bool GetPayloadTypeIs(Type expect)
     {

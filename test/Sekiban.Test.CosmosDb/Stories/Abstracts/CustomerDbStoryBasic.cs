@@ -764,4 +764,14 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         Assert.NotNull(branch);
         Assert.Equal(1, branch.Payload.NumberOfMembers);
     }
+    [Fact]
+    public async Task CheckNewAggregate()
+    {
+        RemoveAllFromDefault();
+        var targetAggregateId = Guid.NewGuid();
+        var result = await aggregateLoader.AsAggregateAsync<Branch>(targetAggregateId) ?? new Aggregate<Branch> { AggregateId = targetAggregateId };
+        Assert.Equal(0, result.Version);
+        Assert.True(result.IsNew);
+        Assert.True(result.ToState().IsNew);
+    }
 }
