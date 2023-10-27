@@ -1,5 +1,4 @@
 using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.PurchasedCarts.Events;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.PurchasedCarts.Commands;
@@ -17,8 +16,8 @@ public class ReceivePaymentToPurchasedCartR : IVersionValidationCommand<Purchase
     public class Handler : IVersionValidationCommandHandler<PurchasedCartR, ReceivePaymentToPurchasedCartR>
     {
         public IEnumerable<IEventPayloadApplicableTo<PurchasedCartR>> HandleCommand(
-            Func<AggregateState<PurchasedCartR>> getAggregateState,
-            ReceivePaymentToPurchasedCartR command)
+            ReceivePaymentToPurchasedCartR command,
+            ICommandContext<PurchasedCartR> context)
         {
             yield return new PaymentReceivedToCartR { PaymentMethod = command.PaymentMethod, Amount = command.Amount, Currency = command.Currency };
             yield return new PaymentCompletedR();

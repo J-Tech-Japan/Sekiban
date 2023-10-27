@@ -1,5 +1,4 @@
 ﻿using FeatureCheck.Domain.Aggregates.Clients.Events;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.Clients.Commands;
@@ -16,7 +15,7 @@ public record DeleteClient(Guid ClientId) : IVersionValidationCommand<Client>
 
     public class Handler : IVersionValidationCommandHandler<Client, DeleteClient>
     {
-        public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(Func<AggregateState<Client>> getAggregateStateState, DeleteClient command)
+        public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(DeleteClient command, ICommandContext<Client> context)
         {
             yield return new ClientDeleted();
         }

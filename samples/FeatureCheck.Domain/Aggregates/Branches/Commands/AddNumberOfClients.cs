@@ -1,6 +1,5 @@
 using FeatureCheck.Domain.Aggregates.Branches.Events;
 using FeatureCheck.Domain.Aggregates.Clients;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 using Sekiban.Core.Query.SingleProjections;
@@ -17,8 +16,8 @@ public class AddNumberOfClients : ICommand<Branch>
         public Handler(IAggregateLoader aggregateLoader) => this.aggregateLoader = aggregateLoader;
 
         public async IAsyncEnumerable<IEventPayloadApplicableTo<Branch>> HandleCommandAsync(
-            Func<AggregateState<Branch>> getAggregateState,
-            AddNumberOfClients command)
+            AddNumberOfClients command,
+            ICommandContext<Branch> context)
         {
             var result = await aggregateLoader.AsDefaultStateAsync<Client>(command.ClientId);
             if (result is not null)

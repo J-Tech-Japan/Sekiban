@@ -1,5 +1,4 @@
 using FeatureCheck.Domain.Aggregates.Branches.Events;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 using System.ComponentModel.DataAnnotations;
@@ -15,9 +14,7 @@ public class CreateBranchWithRootPartitionKey : ICommand<Branch>
 
     public class Handler : ICommandHandler<Branch, CreateBranchWithRootPartitionKey>
     {
-        public IEnumerable<IEventPayloadApplicableTo<Branch>> HandleCommand(
-            Func<AggregateState<Branch>> getAggregateState,
-            CreateBranchWithRootPartitionKey command)
+        public IEnumerable<IEventPayloadApplicableTo<Branch>> HandleCommand(CreateBranchWithRootPartitionKey command, ICommandContext<Branch> context)
         {
             yield return new BranchCreated(command.Name);
         }

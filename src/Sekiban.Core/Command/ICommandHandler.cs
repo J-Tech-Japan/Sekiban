@@ -21,16 +21,10 @@ public interface ICommandHandler<TAggregatePayload, TCommand> : ICommandHandlerC
     ///     Application developer can return multiple event.
     ///     All event will be applied to the one Aggregate type with defined AggregateId.
     /// </summary>
-    /// <param name="getAggregateState">
-    ///     Call this function anytime during command handler to receive current aggregate.
-    ///     After yield return event, already received aggregate will not updated,
-    ///     but you can call this function again to receive updated aggregate.
-    /// </param>
     /// <param name="command"></param>
+    /// <param name="context">Command Context has feature to Get Current Aggregate State</param>
     /// <returns></returns>
-    public IEnumerable<IEventPayloadApplicableTo<TAggregatePayload>> HandleCommand(
-        Func<AggregateState<TAggregatePayload>> getAggregateState,
-        TCommand command);
+    public IEnumerable<IEventPayloadApplicableTo<TAggregatePayload>> HandleCommand(TCommand command, ICommandContext<TAggregatePayload> context);
 }
 /// <summary>
 ///     Command Handler Interface for ICommand
@@ -51,14 +45,24 @@ public interface ICommandHandlerAsync<TAggregatePayload, TCommand> : ICommandHan
     ///     Application developer can return multiple event.
     ///     All event will be applied to the one Aggregate type with defined AggregateId.
     /// </summary>
-    /// <param name="getAggregateState">
-    ///     Call this function anytime during command handler to receive current aggregate.
-    ///     After yield return event, already received aggregate will not updated,
-    ///     but you can call this function again to receive updated aggregate.
-    /// </param>
     /// <param name="command"></param>
+    /// <param name="context">Command Context has feature to Get Current Aggregate State</param>
     /// <returns></returns>
     public IAsyncEnumerable<IEventPayloadApplicableTo<TAggregatePayload>> HandleCommandAsync(
-        Func<AggregateState<TAggregatePayload>> getAggregateState,
-        TCommand command);
+        TCommand command,
+        ICommandContext<TAggregatePayload> context);
+}
+/// <summary>
+///     Command Context has feature to Get Current Aggregate State
+/// </summary>
+/// <typeparam name="TAggregate"></typeparam>
+public interface ICommandContext<TAggregate> where TAggregate : IAggregatePayloadCommon
+{
+    /// <summary>
+    ///     Get current Aggregate State
+    ///     "Current" meaning if you have already yield return event, this function will return the state after adding yield
+    ///     returned events.
+    /// </summary>
+    /// <returns>Current Aggregate State</returns>
+    public AggregateState<TAggregate> GetState();
 }

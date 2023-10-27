@@ -1,4 +1,3 @@
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.MultipleEventsInAFiles;
@@ -16,7 +15,7 @@ public static class BookingCommands
 
         public class Handler : ICommandHandler<Booking, BookRoom>
         {
-            public IEnumerable<IEventPayloadApplicableTo<Booking>> HandleCommand(Func<AggregateState<Booking>> getAggregateState, BookRoom command)
+            public IEnumerable<IEventPayloadApplicableTo<Booking>> HandleCommand(BookRoom command, ICommandContext<Booking> context)
             {
                 yield return new BookingEvents.RoomBooked(
                     command.RoomNumber,
@@ -32,12 +31,9 @@ public static class BookingCommands
         public Guid GetAggregateId() => BookingId;
         public class Handler : ICommandHandler<Booking, PayBookedRoom>
         {
-
-            public IEnumerable<IEventPayloadApplicableTo<Booking>> HandleCommand(
-                Func<AggregateState<Booking>> getAggregateState,
-                PayBookedRoom command)
+            public IEnumerable<IEventPayloadApplicableTo<Booking>> HandleCommand(PayBookedRoom command, ICommandContext<Booking> context)
             {
-                if (!getAggregateState().Payload.IsFullyPaid() && getAggregateState().Payload.TotalAmount.CanAdd(command.Payment))
+                if (!context.GetState().Payload.IsFullyPaid() && context.GetState().Payload.TotalAmount.CanAdd(command.Payment))
                 {
                     yield return new BookingEvents.BookingPaid(command.Payment, command.Note);
                 }

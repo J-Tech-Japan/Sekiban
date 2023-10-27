@@ -1,5 +1,4 @@
 using FeatureCheck.Domain.Aggregates.SubTypes.InheritedSubtypes.Events;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.SubTypes.InheritedSubtypes.Commands;
@@ -13,8 +12,8 @@ public record CloseInheritedAggregate : ICommand<ProcessingSubAggregate>
     public class Handler : ICommandHandler<ProcessingSubAggregate, CloseInheritedAggregate>
     {
         public IEnumerable<IEventPayloadApplicableTo<ProcessingSubAggregate>> HandleCommand(
-            Func<AggregateState<ProcessingSubAggregate>> getAggregateState,
-            CloseInheritedAggregate command)
+            CloseInheritedAggregate command,
+            ICommandContext<ProcessingSubAggregate> context)
         {
             yield return new InheritedAggregateClosed(command.Reason);
         }

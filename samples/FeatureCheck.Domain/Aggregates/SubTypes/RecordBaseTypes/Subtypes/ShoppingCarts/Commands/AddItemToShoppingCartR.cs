@@ -1,5 +1,4 @@
 using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.ShoppingCarts.Events;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 using System.ComponentModel.DataAnnotations;
@@ -18,10 +17,9 @@ public record AddItemToShoppingCartR : ICommand<ShoppingCartR>
 
     public class Handler : ICommandHandler<ShoppingCartR, AddItemToShoppingCartR>
     {
-
         public IEnumerable<IEventPayloadApplicableTo<ShoppingCartR>> HandleCommand(
-            Func<AggregateState<ShoppingCartR>> getAggregateState,
-            AddItemToShoppingCartR command)
+            AddItemToShoppingCartR command,
+            ICommandContext<ShoppingCartR> context)
         {
             yield return new ItemAddedToShoppingCartR { Code = command.Code, Name = command.Name, Quantity = command.Quantity };
         }

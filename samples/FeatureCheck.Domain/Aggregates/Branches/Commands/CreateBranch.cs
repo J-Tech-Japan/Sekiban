@@ -1,5 +1,4 @@
 using FeatureCheck.Domain.Aggregates.Branches.Events;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 using System.ComponentModel.DataAnnotations;
@@ -23,7 +22,7 @@ public record CreateBranch : ICommand<Branch>, ICleanupNecessaryCommand<CreateBr
 
     public class Handler : ICommandHandler<Branch, CreateBranch>
     {
-        public IEnumerable<IEventPayloadApplicableTo<Branch>> HandleCommand(Func<AggregateState<Branch>> getAggregateState, CreateBranch command)
+        public IEnumerable<IEventPayloadApplicableTo<Branch>> HandleCommand(CreateBranch command, ICommandContext<Branch> context)
         {
             yield return new BranchCreated(command.Name);
         }

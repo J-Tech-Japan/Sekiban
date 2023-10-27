@@ -1,5 +1,4 @@
 using MultiTenant.Domain.Aggregates.Clients.Events;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 using System.ComponentModel.DataAnnotations;
@@ -15,9 +14,7 @@ public class CreateClient : ITenantCommand<ClientPayload>
 
     public class Handler : ICommandHandler<ClientPayload, CreateClient>
     {
-        public IEnumerable<IEventPayloadApplicableTo<ClientPayload>> HandleCommand(
-            Func<AggregateState<ClientPayload>> getAggregateState,
-            CreateClient command)
+        public IEnumerable<IEventPayloadApplicableTo<ClientPayload>> HandleCommand(CreateClient command, ICommandContext<ClientPayload> context)
         {
             yield return new ClientCreated(command.Name);
         }

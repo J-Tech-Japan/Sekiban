@@ -1,5 +1,4 @@
 ﻿using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Events;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
@@ -14,9 +13,7 @@ public record CreateLoyaltyPoint(Guid ClientId, int InitialPoint) : ICommand<Loy
 
     public class Handler : ICommandHandler<LoyaltyPoint, CreateLoyaltyPoint>
     {
-        public IEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommand(
-            Func<AggregateState<LoyaltyPoint>> getAggregateState,
-            CreateLoyaltyPoint command)
+        public IEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommand(CreateLoyaltyPoint command, ICommandContext<LoyaltyPoint> context)
         {
             yield return new LoyaltyPointCreated(command.InitialPoint);
         }

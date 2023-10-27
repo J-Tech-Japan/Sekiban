@@ -1,5 +1,4 @@
 ﻿using FeatureCheck.Domain.Aggregates.Clients.Events;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.Clients.Commands;
@@ -18,7 +17,7 @@ public record ChangeClientName(Guid ClientId, string ClientName) : IVersionValid
 
     public class Handler : IVersionValidationCommandHandler<Client, ChangeClientName>
     {
-        public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(Func<AggregateState<Client>> getAggregateState, ChangeClientName command)
+        public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(ChangeClientName command, ICommandContext<Client> context)
         {
             yield return new ClientNameChanged(command.ClientName);
         }

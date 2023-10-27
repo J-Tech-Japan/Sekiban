@@ -1,4 +1,3 @@
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 using Sekiban.Core.Setting;
@@ -32,8 +31,8 @@ public record ReportVersionToSnapshotManger(
         public Handler(IAggregateSettings aggregateSettings) => _aggregateSettings = aggregateSettings;
 
         public IEnumerable<IEventPayloadApplicableTo<SnapshotManager>> HandleCommand(
-            Func<AggregateState<SnapshotManager>> getAggregateState,
-            ReportVersionToSnapshotManger command)
+            ReportVersionToSnapshotManger command,
+            ICommandContext<SnapshotManager> context)
         {
             var snapshotFrequency = _aggregateSettings.SnapshotFrequencyForType(command.AggregateType);
             var snapshotOffset = _aggregateSettings.SnapshotOffsetForType(command.AggregateType);
@@ -45,7 +44,7 @@ public record ReportVersionToSnapshotManger(
                 yield break;
             }
             var key = SnapshotManager.SnapshotKey(command.AggregateType.Name, command.TargetAggregateId, nextSnapshotVersion);
-            if (!getAggregateState().Payload.Requests.Contains(key) && !getAggregateState().Payload.RequestTakens.Contains(key))
+            if (!context.GetState().Payload.Requests.Contains(key) && !context.GetState().Payload.RequestTakens.Contains(key))
             {
                 yield return new SnapshotManagerRequestAdded(
                     command.AggregateType.Name,
@@ -53,8 +52,8 @@ public record ReportVersionToSnapshotManger(
                     nextSnapshotVersion,
                     command.SnapshotVersion);
             }
-            if (getAggregateState().Payload.Requests.Contains(key) &&
-                !getAggregateState().Payload.RequestTakens.Contains(key) &&
+            if (context.GetState().Payload.Requests.Contains(key) &&
+                !context.GetState().Payload.RequestTakens.Contains(key) &&
                 offset > snapshotOffset)
             {
                 yield return new SnapshotManagerSnapshotTaken(

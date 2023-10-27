@@ -1,5 +1,4 @@
 using FeatureCheck.Domain.Aggregates.SubTypes.BaseIsFirstSubtypes.Events;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.SubTypes.BaseIsFirstSubtypes.Commands;
@@ -11,8 +10,8 @@ public record ActivateBFAggregate(Guid BfAggregateId) : ICommand<BaseFirstAggreg
     public class Handler : ICommandHandler<BaseFirstAggregate, ActivateBFAggregate>
     {
         public IEnumerable<IEventPayloadApplicableTo<BaseFirstAggregate>> HandleCommand(
-            Func<AggregateState<BaseFirstAggregate>> getAggregateState,
-            ActivateBFAggregate command)
+            ActivateBFAggregate command,
+            ICommandContext<BaseFirstAggregate> context)
         {
             yield return new BFAggregateActivated();
         }
