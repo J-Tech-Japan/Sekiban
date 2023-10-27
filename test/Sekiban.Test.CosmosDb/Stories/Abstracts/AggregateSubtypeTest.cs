@@ -216,34 +216,26 @@ public abstract class AggregateSubtypeTest : TestBase<FeatureCheckDependency>
         var cartId3 = Guid.NewGuid();
         var cartId4 = Guid.NewGuid();
 
-        commandResponse = commandExecutor.ExecCommandWithEventsAsync(
-                new AddItemToShoppingCartI { CartId = cartId1, Name = "Name1", Code = "Code1", Quantity = 1 })
-            .Result;
-        commandResponse = commandExecutor.ExecCommandWithEventsAsync(
-                new AddItemToShoppingCartI { CartId = cartId1, Name = "Name2", Code = "Code2", Quantity = 2 })
-            .Result;
-        commandResponse = commandExecutor.ExecCommandWithEventsAsync(
-                new SubmitOrderI { CartId = cartId1, OrderSubmittedLocalTime = DateTime.Now, ReferenceVersion = commandResponse.Version })
-            .Result;
+        commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
+            new AddItemToShoppingCartI { CartId = cartId1, Name = "Name1", Code = "Code1", Quantity = 1 });
+        commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
+                new AddItemToShoppingCartI { CartId = cartId1, Name = "Name2", Code = "Code2", Quantity = 2 });
+        commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
+                new SubmitOrderI { CartId = cartId1, OrderSubmittedLocalTime = DateTime.Now, ReferenceVersion = commandResponse.Version });
 
 
-        commandResponse = commandExecutor.ExecCommandWithEventsAsync(
-                new AddItemToShoppingCartI { CartId = cartId2, Name = "Name2", Code = "Code2", Quantity = 1 })
-            .Result;
-        commandResponse = commandExecutor.ExecCommandWithEventsAsync(
-                new SubmitOrderI { CartId = cartId2, OrderSubmittedLocalTime = DateTime.Now, ReferenceVersion = commandResponse.Version })
-            .Result;
+        commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
+                new AddItemToShoppingCartI { CartId = cartId2, Name = "Name2", Code = "Code2", Quantity = 1 });
+        commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
+                new SubmitOrderI { CartId = cartId2, OrderSubmittedLocalTime = DateTime.Now, ReferenceVersion = commandResponse.Version });
 
-        commandResponse = commandExecutor.ExecCommandWithEventsAsync(
-                new AddItemToShoppingCartI { CartId = cartId3, Name = "Name3", Code = "Code3", Quantity = 1 })
-            .Result;
-        commandResponse = commandExecutor.ExecCommandWithEventsAsync(
-                new AddItemToShoppingCartI { CartId = cartId3, Name = "Name2", Code = "Code2", Quantity = 2 })
-            .Result;
+        commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
+                new AddItemToShoppingCartI { CartId = cartId3, Name = "Name3", Code = "Code3", Quantity = 1 });
+        commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
+                new AddItemToShoppingCartI { CartId = cartId3, Name = "Name2", Code = "Code2", Quantity = 2 });
 
-        commandResponse = commandExecutor.ExecCommandWithEventsAsync(
-                new AddItemToShoppingCartI { CartId = cartId4, Name = "Name4", Code = "Code4", Quantity = 1 })
-            .Result;
+        commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
+                new AddItemToShoppingCartI { CartId = cartId4, Name = "Name4", Code = "Code4", Quantity = 1 });
 
         var list = await multiProjectionService.GetAggregateList<ICartAggregate>();
         Assert.Equal(4, list.Count);

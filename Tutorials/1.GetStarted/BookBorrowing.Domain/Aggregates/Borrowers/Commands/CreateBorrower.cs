@@ -14,9 +14,7 @@ public record CreateBorrower(
     public Guid GetAggregateId() => Guid.NewGuid();
     public class Handler : ICommandHandler<Borrower, CreateBorrower>
     {
-        public IEnumerable<IEventPayloadApplicableTo<Borrower>> HandleCommand(
-            Func<AggregateState<Borrower>> getAggregateState,
-            CreateBorrower command)
+        public IEnumerable<IEventPayloadApplicableTo<Borrower>> HandleCommand(CreateBorrower command, ICommandContext<Borrower> context)
         {
             yield return new BorrowerCreated(
                 command.BorrowerCardNo,
