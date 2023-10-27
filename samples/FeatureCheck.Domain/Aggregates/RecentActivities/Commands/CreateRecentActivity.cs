@@ -1,5 +1,4 @@
 using FeatureCheck.Domain.Aggregates.RecentActivities.Events;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 using Sekiban.Core.Shared;
@@ -16,8 +15,8 @@ public record CreateRecentActivity : ICommand<RecentActivity>
         public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
 
         public IEnumerable<IEventPayloadApplicableTo<RecentActivity>> HandleCommand(
-            Func<AggregateState<RecentActivity>> getAggregateState,
-            CreateRecentActivity command)
+            CreateRecentActivity command,
+            ICommandContext<RecentActivity> context)
         {
             yield return new RecentActivityCreated(new RecentActivityRecord("First Event Created", _sekibanDateProducer.UtcNow));
         }

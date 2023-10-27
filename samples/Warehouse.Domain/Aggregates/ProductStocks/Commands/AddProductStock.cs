@@ -1,4 +1,3 @@
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 using Shipping.Port.ProductExistsPorts;
@@ -16,8 +15,8 @@ public record AddProductStock : ICommand<ProductStock>
         public Handler(IProductExistsPort productExistsPort) => _productExistsPort = productExistsPort;
 
         public async IAsyncEnumerable<IEventPayloadApplicableTo<ProductStock>> HandleCommandAsync(
-            Func<AggregateState<ProductStock>> getAggregateState,
-            AddProductStock command)
+            AddProductStock command,
+            ICommandContext<ProductStock> context)
         {
             if (!await _productExistsPort.ProductExistsAsync(command.ProductId))
             {

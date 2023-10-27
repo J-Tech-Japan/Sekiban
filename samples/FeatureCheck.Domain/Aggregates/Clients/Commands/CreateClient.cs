@@ -3,7 +3,6 @@ using FeatureCheck.Domain.Aggregates.Branches.Queries;
 using FeatureCheck.Domain.Aggregates.Clients.Events;
 using FeatureCheck.Domain.Aggregates.Clients.Queries;
 using FeatureCheck.Domain.Shared.Exceptions;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Events;
@@ -43,9 +42,7 @@ public record CreateClient : ICommand<Client>
 
         public Handler(IQueryExecutor queryExecutor) => this.queryExecutor = queryExecutor;
 
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<Client>> HandleCommandAsync(
-            Func<AggregateState<Client>> getAggregateStateState,
-            CreateClient command)
+        public async IAsyncEnumerable<IEventPayloadApplicableTo<Client>> HandleCommandAsync(CreateClient command, ICommandContext<Client> context)
         {
             // Check if branch exists
             var branchExistsOutput = await queryExecutor.ExecuteAsync(new BranchExistsQuery.Parameter(command.BranchId));

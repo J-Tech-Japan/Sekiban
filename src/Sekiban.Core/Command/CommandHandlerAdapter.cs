@@ -9,8 +9,8 @@ namespace Sekiban.Core.Command;
 ///     System use command handler adapter.
 ///     Application Developer does not need to implement this interface
 /// </summary>
-public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>
-    where TCommand : ICommand<TAggregatePayload>
+public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> : ICommandContext<TAggregatePayload>
+    where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload> where TCommand : ICommand<TAggregatePayload>
 {
     private readonly IAggregateLoader _aggregateLoader;
     private readonly bool _checkVersion;
@@ -22,6 +22,7 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> where TAg
         _aggregateLoader = aggregateLoader;
         _checkVersion = checkVersion;
     }
+    public AggregateState<TAggregatePayload> GetState() => GetAggregateState();
     /// <summary>
     ///     Common Command handler, it is used for test and production code.
     ///     internal use only
@@ -63,7 +64,7 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> where TAg
                 throw new SekibanAggregateAlreadyDeletedException();
             }
 
-            foreach (var eventPayload in regularHandler.HandleCommand(GetAggregateState, command))
+            foreach (var eventPayload in regularHandler.HandleCommand(command, this))
             {
                 _events.Add(EventHelper.HandleEvent(_aggregate, eventPayload, rootPartitionKey));
             }
@@ -80,7 +81,7 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> where TAg
             throw new SekibanAggregateAlreadyDeletedException();
         }
 
-        await foreach (var eventPayload in asyncHandler.HandleCommandAsync(GetAggregateState, command))
+        await foreach (var eventPayload in asyncHandler.HandleCommandAsync(command, this))
         {
             _events.Add(EventHelper.HandleEvent(_aggregate, eventPayload, rootPartitionKey));
         }

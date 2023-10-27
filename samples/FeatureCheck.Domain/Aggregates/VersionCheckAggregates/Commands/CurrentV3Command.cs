@@ -1,6 +1,5 @@
 using FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Enums;
 using FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Events;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Commands;
@@ -16,8 +15,8 @@ public record CurrentV3Command : ICommand<VersionCheckAggregate>
     public class Handler : ICommandHandler<VersionCheckAggregate, CurrentV3Command>
     {
         public IEnumerable<IEventPayloadApplicableTo<VersionCheckAggregate>> HandleCommand(
-            Func<AggregateState<VersionCheckAggregate>> getAggregateState,
-            CurrentV3Command command)
+            CurrentV3Command command,
+            ICommandContext<VersionCheckAggregate> context)
         {
             yield return new PaymentAdded_V3(command.Amount, command.PaymentKind, command.Description);
         }

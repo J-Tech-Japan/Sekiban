@@ -1,7 +1,6 @@
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Consts;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Events;
 using FeatureCheck.Domain.Shared.Exceptions;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
@@ -23,11 +22,9 @@ public record AddLoyaltyPoint(
 
     public class Handler : IVersionValidationCommandHandler<LoyaltyPoint, AddLoyaltyPoint>
     {
-        public IEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommand(
-            Func<AggregateState<LoyaltyPoint>> getAggregateState,
-            AddLoyaltyPoint command)
+        public IEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommand(AddLoyaltyPoint command, ICommandContext<LoyaltyPoint> context)
         {
-            if (getAggregateState().Payload.LastOccuredTime is not null && getAggregateState().Payload.LastOccuredTime > command.HappenedDate)
+            if (context.GetState().Payload.LastOccuredTime is not null && context.GetState().Payload.LastOccuredTime > command.HappenedDate)
             {
                 throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
             }

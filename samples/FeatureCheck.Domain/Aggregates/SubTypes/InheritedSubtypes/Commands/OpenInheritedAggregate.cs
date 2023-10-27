@@ -1,5 +1,4 @@
 using FeatureCheck.Domain.Aggregates.SubTypes.InheritedSubtypes.Events;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 using System.ComponentModel.DataAnnotations;
@@ -14,8 +13,8 @@ public record OpenInheritedAggregate : ICommand<ProcessingSubAggregate>
     public class Handler : ICommandHandler<ProcessingSubAggregate, OpenInheritedAggregate>
     {
         public IEnumerable<IEventPayloadApplicableTo<ProcessingSubAggregate>> HandleCommand(
-            Func<AggregateState<ProcessingSubAggregate>> getAggregateState,
-            OpenInheritedAggregate command)
+            OpenInheritedAggregate command,
+            ICommandContext<ProcessingSubAggregate> context)
         {
             yield return new InheritedAggregateOpened(command.YearMonth);
         }

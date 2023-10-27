@@ -1,5 +1,4 @@
 using FeatureCheck.Domain.Aggregates.ALotOfEvents.Events;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.ALotOfEvents.Commands;
@@ -13,8 +12,8 @@ public record ALotOfEventsCreateCommand : ICommand<ALotOfEventsAggregate>
     public class Handler : ICommandHandler<ALotOfEventsAggregate, ALotOfEventsCreateCommand>
     {
         public IEnumerable<IEventPayloadApplicableTo<ALotOfEventsAggregate>> HandleCommand(
-            Func<AggregateState<ALotOfEventsAggregate>> getAggregateState,
-            ALotOfEventsCreateCommand command)
+            ALotOfEventsCreateCommand command,
+            ICommandContext<ALotOfEventsAggregate> context)
         {
             foreach (var i in Enumerable.Range(0, command.NumberOfEvents))
             {

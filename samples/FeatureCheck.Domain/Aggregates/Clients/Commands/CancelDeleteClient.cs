@@ -1,5 +1,4 @@
 using FeatureCheck.Domain.Aggregates.Clients.Events;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 using System.ComponentModel.DataAnnotations;
@@ -18,9 +17,7 @@ public record CancelDeleteClient : IVersionValidationCommand<Client>, ICancelDel
 
     public class Handler : IVersionValidationCommandHandler<Client, CancelDeleteClient>
     {
-        public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(
-            Func<AggregateState<Client>> getAggregateState,
-            CancelDeleteClient command)
+        public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(CancelDeleteClient command, ICommandContext<Client> context)
         {
             yield return new ClientDeleteCancelled();
         }

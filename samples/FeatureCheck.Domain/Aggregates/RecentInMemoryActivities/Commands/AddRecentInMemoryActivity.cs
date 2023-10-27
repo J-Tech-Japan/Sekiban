@@ -1,5 +1,4 @@
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Events;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 using Sekiban.Core.Shared;
@@ -22,8 +21,8 @@ public record AddRecentInMemoryActivity(Guid RecentInMemoryActivityId, string Ac
         public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
 
         public IEnumerable<IEventPayloadApplicableTo<RecentInMemoryActivity>> HandleCommand(
-            Func<AggregateState<RecentInMemoryActivity>> getAggregateState,
-            AddRecentInMemoryActivity command)
+            AddRecentInMemoryActivity command,
+            ICommandContext<RecentInMemoryActivity> context)
         {
             yield return new RecentInMemoryActivityAdded(new RecentInMemoryActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
         }

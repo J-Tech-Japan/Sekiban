@@ -1,4 +1,3 @@
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 using ShippingContext.Aggregates.Products.Events;
@@ -14,7 +13,7 @@ public record CreateProduct : ICommand<Product>
 
     public class Handler : ICommandHandler<Product, CreateProduct>
     {
-        public IEnumerable<IEventPayloadApplicableTo<Product>> HandleCommand(Func<AggregateState<Product>> getAggregateState, CreateProduct command)
+        public IEnumerable<IEventPayloadApplicableTo<Product>> HandleCommand(CreateProduct command, ICommandContext<Product> context)
         {
             yield return new ProductCreated { Name = command.Name, Code = command.Code, Price = command.Price };
         }
