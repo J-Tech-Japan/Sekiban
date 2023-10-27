@@ -102,7 +102,7 @@ public record CreateUserPoint(
 
     public class Handler : ICommandHandler<UserPoint, CreateUserPoint>
     {
-        public IEnumerable<IEventPayloadApplicableTo<UserPoint>> HandleCommand(Func<AggregateState<UserPoint>> getAggregateState, CreateUserPoint command)
+        public IEnumerable<IEventPayloadApplicableTo<UserPoint>> HandleCommand(CreateUserPoint command, ICommandContext<UserPoint> context)
         {
 
             // can check if email is already registered in the system
@@ -123,10 +123,10 @@ public record ChangeUserPointName(
 
     public class Handler : ICommandHandler<UserPoint, ChangeUserPointName>
     {
-        public IEnumerable<IEventPayloadApplicableTo<UserPoint>> HandleCommand(Func<AggregateState<UserPoint>> getAggregateState, ChangeUserPointName command)
+        public IEnumerable<IEventPayloadApplicableTo<UserPoint>> HandleCommand(ChangeUserPointName command, ICommandContext<UserPoint> context)
         {
             // consistency check.
-            if (command.NameToChange == getAggregateState().Payload.Name)
+            if (command.NameToChange == context.GetState().Payload.Name)
                 throw new InvalidOperationException("Already have same name as requested.");
             
             yield return new UserPointNameChanged(command.NameToChange);

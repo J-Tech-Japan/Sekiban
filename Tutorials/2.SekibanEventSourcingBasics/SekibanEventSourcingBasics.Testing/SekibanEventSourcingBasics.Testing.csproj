@@ -11,7 +11,7 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.6.0"/>
-        <PackageReference Include="Sekiban.Testing" Version="0.14.6" />
+        <PackageReference Include="Sekiban.Testing" Version="0.15.0" />
         <PackageReference Include="xunit" Version="2.5.1" />
         <PackageReference Include="xunit.runner.visualstudio" Version="2.5.1">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

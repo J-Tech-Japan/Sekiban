@@ -16,7 +16,7 @@ public record CreateUserPoint(
 
     public class Handler : ICommandHandler<UserPoint, CreateUserPoint>
     {
-        public IEnumerable<IEventPayloadApplicableTo<UserPoint>> HandleCommand(Func<AggregateState<UserPoint>> getAggregateState, CreateUserPoint command)
+        public IEnumerable<IEventPayloadApplicableTo<UserPoint>> HandleCommand(CreateUserPoint command, ICommandContext<UserPoint> context)
         {
             yield return new UserPointCreated(command.Name, command.Email, command.Point);
         }

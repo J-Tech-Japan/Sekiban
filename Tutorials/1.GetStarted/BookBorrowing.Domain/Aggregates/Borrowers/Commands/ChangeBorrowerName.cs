@@ -10,9 +10,7 @@ public record ChangeBorrowerName(Guid BorrowerId, Name ChangedName, string Reaso
     public Guid GetAggregateId() => BorrowerId;
     public class Handler : ICommandHandler<Borrower, ChangeBorrowerName>
     {
-        public IEnumerable<IEventPayloadApplicableTo<Borrower>> HandleCommand(
-            Func<AggregateState<Borrower>> getAggregateState,
-            ChangeBorrowerName command)
+        public IEnumerable<IEventPayloadApplicableTo<Borrower>> HandleCommand(ChangeBorrowerName command, ICommandContext<Borrower> context)
         { 
             yield return new BorrowerNameUpdated(command.ChangedName, command.Reason);
         }

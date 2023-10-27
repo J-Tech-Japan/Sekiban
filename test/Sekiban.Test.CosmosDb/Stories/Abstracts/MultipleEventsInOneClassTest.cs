@@ -32,7 +32,7 @@ public abstract class MultipleEventsInOneClassTest : TestBase<FeatureCheckDepend
         ResetInMemoryDocumentStoreAndCache();
         var booking = await aggregateLoader.AsDefaultStateAsync<Booking>(bookingId);
         Assert.Equal(
-            booking.Payload,
+            booking?.Payload,
             new Booking(
                 new BookingValueObjects.RoomNumber(123),
                 new BookingValueObjects.GuestName("Test", "User"),
@@ -46,7 +46,7 @@ public abstract class MultipleEventsInOneClassTest : TestBase<FeatureCheckDepend
         ResetInMemoryDocumentStoreAndCache();
         booking = await aggregateLoader.AsDefaultStateAsync<Booking>(bookingId);
         Assert.Equal(
-            booking.Payload,
+            booking?.Payload,
             new Booking(
                 new BookingValueObjects.RoomNumber(123),
                 new BookingValueObjects.GuestName("Test", "User"),
@@ -54,6 +54,6 @@ public abstract class MultipleEventsInOneClassTest : TestBase<FeatureCheckDepend
                 BookingValueObjects.DateOnly.CreateFromDateTime(new DateTime(2023, 8, 9)),
                 BookingValueObjects.Money.USDMoney(120),
                 BookingValueObjects.Money.USDMoney(120)));
-        Assert.True(booking.Payload.IsFullyPaid());
+        Assert.True(booking != null && booking.Payload.IsFullyPaid());
     }
 }

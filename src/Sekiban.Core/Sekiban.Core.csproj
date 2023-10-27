@@ -6,13 +6,13 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Core</PackageId>
-        <Version>0.15.0</Version>
+        <Version>0.15.1</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Core</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.15.0</PackageVersion>
-        <Description>Change Command Handler Signiture</Description>
+        <PackageVersion>0.15.1</PackageVersion>
+        <Description>Update packages to newest stable</Description>
         <AssemblyName>Sekiban.Core</AssemblyName>
         <RootNamespace>Sekiban.Core</RootNamespace>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -22,7 +22,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Azure.Storage.Blobs" Version="12.17.0"/>
+        <PackageReference Include="Azure.Storage.Blobs" Version="12.18.0"/>
         <PackageReference Include="MediatR" Version="12.1.1"/>
         <PackageReference Include="Microsoft.AspNetCore.Http" Version="2.2.2"/>
         <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="7.0.0"/>
