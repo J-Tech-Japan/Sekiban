@@ -774,4 +774,10 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         Assert.True(result.IsNew);
         Assert.True(result.ToState().IsNew);
     }
+    [Fact]
+    public async Task CheckNoEventCanGetAggregateId()
+    {
+        var response = await commandExecutor.ExecCommandAsync(new NotAddingAnyEventCommand());
+        Assert.NotNull(response.AggregateId);
+    }
 }

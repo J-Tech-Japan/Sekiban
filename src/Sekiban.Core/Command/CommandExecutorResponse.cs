@@ -15,15 +15,7 @@ public record CommandExecutorResponse(
     int Version,
     IEnumerable<ValidationResult>? ValidationResults,
     string? LastSortableUniqueId,
-    string AggregatePayloadOutTypeName)
+    string AggregatePayloadOutTypeName,
+    int EventCount)
 {
-    public CommandExecutorResponse() : this(
-        null,
-        null,
-        0,
-        null,
-        null,
-        string.Empty)
-    {
-    }
 }
