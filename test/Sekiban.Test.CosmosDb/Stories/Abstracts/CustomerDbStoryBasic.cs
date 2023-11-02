@@ -738,15 +738,20 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         result = await commandExecutor.ExecCommandWithEventsAsync(new CreateClient(branchId, "Test Name", "test@example.com"));
         var clientId = result.AggregateId!.Value;
         result = await commandExecutor.ExecCommandWithEventsAsync(new ClientNoEventsCommand { ClientId = clientId });
-        Assert.Null(result.AggregateId);
+        Assert.NotNull(result.AggregateId);
+        Assert.Equal(0, result.EventCount);
 
         var result2 = await commandExecutor.ExecCommandWithEventsAsync(new ClientNoEventsCommand { ClientId = clientId });
-        Assert.Null(result2.AggregateId);
+        Assert.NotNull(result2.AggregateId);
+        Assert.Equal(0, result2.EventCount);
 
         var result3 = await commandExecutor.ExecCommandWithoutValidationAsync(new ClientNoEventsCommand { ClientId = clientId });
-        Assert.Null(result3.AggregateId);
+        Assert.NotNull(result3.AggregateId);
+        Assert.Equal(0, result3.EventCount);
+
         var result4 = await commandExecutor.ExecCommandWithoutValidationWithEventsAsync(new ClientNoEventsCommand { ClientId = clientId });
-        Assert.Null(result4.AggregateId);
+        Assert.NotNull(result4.AggregateId);
+        Assert.Equal(0, result4.EventCount);
     }
 
     [Fact]
