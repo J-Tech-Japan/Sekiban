@@ -59,6 +59,7 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
             .AddCommandHandler<CreateBranch, CreateBranch.Handler>()
             .AddCommandHandler<CreateBranchWithRootPartitionKey, CreateBranchWithRootPartitionKey.Handler>()
             .AddCommandHandler<AddNumberOfClients, AddNumberOfClients.Handler>()
+            .AddCommandHandler<NotAddingAnyEventCommand, NotAddingAnyEventCommand.Handler>()
             .AddAggregateQuery<BranchExistsQuery>();
 
         AddServices(
