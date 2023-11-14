@@ -4,24 +4,26 @@ using Sekiban.Core.Events;
 using Sekiban.Core.Shared;
 namespace FeatureCheck.Domain.Aggregates.RecentActivities.Commands;
 
-public record OnlyPublishingAddRecentActivity(Guid RecentActivityId, string Activity) : IOnlyPublishingCommand<RecentActivity>
+public record OnlyPublishingAddRecentActivityAsync(Guid RecentActivityId, string Activity) : IOnlyPublishingCommand<RecentActivity>
 {
 
-    public int ReferenceVersion { get; init; }
-    public OnlyPublishingAddRecentActivity() : this(Guid.Empty, string.Empty)
+    public OnlyPublishingAddRecentActivityAsync() : this(Guid.Empty, string.Empty)
     {
     }
 
     public Guid GetAggregateId() => RecentActivityId;
 
-    public class Handler : IOnlyPublishingCommandHandler<RecentActivity, OnlyPublishingAddRecentActivity>
+    public class Handler : IOnlyPublishingCommandHandlerAsync<RecentActivity, OnlyPublishingAddRecentActivityAsync>
     {
         private readonly ISekibanDateProducer _sekibanDateProducer;
 
         public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
 
-        public IEnumerable<IEventPayloadApplicableTo<RecentActivity>> HandleCommand(Guid aggregateId, OnlyPublishingAddRecentActivity command)
+        public async IAsyncEnumerable<IEventPayloadApplicableTo<RecentActivity>> HandleCommandAsync(
+            Guid aggregateId,
+            OnlyPublishingAddRecentActivityAsync command)
         {
+            await Task.CompletedTask;
             yield return new RecentActivityAdded(new RecentActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
         }
     }
