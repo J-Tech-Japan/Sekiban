@@ -61,9 +61,9 @@ jobs:
     - name: Test dotnet
       run: |
         dotnet test Sekiban.sln  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net7.0
-    - uses: mktcode/consecutive-workflow-action@v1
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
+    # - uses: mktcode/consecutive-workflow-action@v1
+    #   with:
+    #     token: ${{ secrets.GITHUB_TOKEN }}
   regular80:
     strategy:
       max-parallel: 2
@@ -113,9 +113,9 @@ jobs:
     - name: Test dotnet
       run: |
         dotnet test Sekiban.sln  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net8.0
-    - uses: mktcode/consecutive-workflow-action@v1
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
+    # - uses: mktcode/consecutive-workflow-action@v1
+    #   with:
+    #     token: ${{ secrets.GITHUB_TOKEN }}
       
   flaky:
     strategy:
@@ -172,9 +172,9 @@ jobs:
         max_attempts: 3
         retry_on: error
         command: dotnet test Sekiban.sln  --filter "Category=Flaky" -v m -c Release -m:1
-    - uses: mktcode/consecutive-workflow-action@v1
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
+    # - uses: mktcode/consecutive-workflow-action@v1
+    #   with:
+    #     token: ${{ secrets.GITHUB_TOKEN }}
 
   performance70:
     strategy:
