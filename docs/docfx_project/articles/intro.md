@@ -1,5 +1,7 @@
 # Introducing Sekiban - Event Sourcing and CQRS Framework.
 
+![Sekiban Logo](../images/Sekiban_Signature.svg)
+
 ## What is Sekiban?
 
 **Sekiban** is an application development framework that leverages **Event Sourcing and CQRS** principles. Built with C# and .NET Core 7+, it allows developers to use a declarative API to create event sourcing applications. Sekiban supports various event stores such as [Microsoft Azure Cosmos DB](https://azure.microsoft.com/en-us/products/cosmos-db) and [Amazon Dynamo DB](https://aws.amazon.com/dynamodb/), facilitating deployment on either Azure or AWS.

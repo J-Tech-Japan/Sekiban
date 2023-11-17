@@ -2,7 +2,7 @@
 
 Sekiban - Event Sourcing Framework using .NET. Can store data into Cosmos DB and Dynamo DB
 
-Logo is under redesign process.
+![Sekiban Logo](/docs/images/Sekiban_Signature.svg)
 
 ## What is Sekiban?
 

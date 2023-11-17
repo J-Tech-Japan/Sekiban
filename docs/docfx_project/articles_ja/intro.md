@@ -1,5 +1,7 @@
 # Sekiban - イベントソーシングとCQRSフレームワークの紹介
 
+![Sekiban Logo](../images/Sekiban_Signature.svg)
+
 ## Sekibanとは何ですか？
 
 **Sekiban** は、**イベントソーシングとCQRS** を活用したアプリケーション開発フレームワークです。C#　.NET Core 7+を使用して構築され、開発者が宣言的なAPIを使用してイベントソーシング应用を作成することを可能にします。Sekibanは、[Microsoft Azure Cosmos DB](https://azure.microsoft.com/en-us/products/cosmos-db)や[Amazon Dynamo DB](https://aws.amazon.com/dynamodb/)などのさまざまなイベントストアをサポートしており、AzureまたはAWS上での展開を容易にします。
