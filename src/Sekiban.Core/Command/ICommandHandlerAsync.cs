@@ -6,12 +6,12 @@ namespace Sekiban.Core.Command;
 ///     Command Handler Interface for ICommand
 ///     Application developer can implement this interface to define a command handler
 ///     A Command Handler can receive DI objects through constructor.
-///     Handler is not async. If awaiting is required, use
-///     <see cref="IVersionValidationCommandHandlerAsync{TAggregatePayload,TCommand}" />
+///     Handler is async. If no awaiting is required, use
+///     <see cref="ICommandHandler{TAggregatePayload,TCommand}" />
 /// </summary>
 /// <typeparam name="TAggregatePayload">Target Aggregate</typeparam>
 /// <typeparam name="TCommand">Target Command</typeparam>
-public interface ICommandHandler<TAggregatePayload, TCommand> : ICommandHandlerCommon<TAggregatePayload, TCommand>
+public interface ICommandHandlerAsync<TAggregatePayload, TCommand> : ICommandHandlerCommon<TAggregatePayload, TCommand>
     where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload> where TCommand : ICommand<TAggregatePayload>
 {
     /// <summary>
@@ -24,5 +24,7 @@ public interface ICommandHandler<TAggregatePayload, TCommand> : ICommandHandlerC
     /// <param name="command"></param>
     /// <param name="context">Command Context has feature to Get Current Aggregate State</param>
     /// <returns></returns>
-    public IEnumerable<IEventPayloadApplicableTo<TAggregatePayload>> HandleCommand(TCommand command, ICommandContext<TAggregatePayload> context);
+    public IAsyncEnumerable<IEventPayloadApplicableTo<TAggregatePayload>> HandleCommandAsync(
+        TCommand command,
+        ICommandContext<TAggregatePayload> context);
 }
