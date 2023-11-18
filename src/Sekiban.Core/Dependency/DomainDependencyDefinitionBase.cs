@@ -12,7 +12,7 @@ namespace Sekiban.Core.Dependency;
 /// </summary>
 public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
 {
-
+    public bool ShouldAddExceptionFilter => true;
     private ImmutableList<IAggregateDependencyDefinition> AggregateDefinitions { get; set; } = ImmutableList<IAggregateDependencyDefinition>.Empty;
 
     private ImmutableList<Type> MultiProjectionQueryTypes { get; set; } = ImmutableList<Type>.Empty;

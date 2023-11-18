@@ -13,6 +13,8 @@ public interface IWebDependencyDefinition : IQueryDefinition
 
     public bool ShouldMakeSimpleSingleProjectionListQueries { get; }
 
+    public bool ShouldAddExceptionFilter { get; }
+
     // Pattern 1: Only Member command requires Administrator.
     //new AuthorizeDefinitionCollection(
     //    // For Member commands, only allow SiteAdministrator.

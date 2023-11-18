@@ -9,6 +9,7 @@ public class EmptyDependencyDefinition : DomainDependencyDefinitionBase, IWebDep
 {
     public bool ShouldMakeSimpleAggregateListQueries => true;
     public bool ShouldMakeSimpleSingleProjectionListQueries => true;
+    public bool ShouldAddExceptionFilter => true;
     public AuthorizeDefinitionCollection AuthorizationDefinitions => new();
     public SekibanControllerOptions Options => new();
     public override void Define()

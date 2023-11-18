@@ -20,6 +20,10 @@ public static class WebServiceExtension
                 {
                     configure.Conventions.Add(new SekibanControllerRouteConvention(definition));
                     configure.ModelValidatorProviders.Clear();
+                    if (definition.ShouldAddExceptionFilter)
+                    {
+                        configure.Filters.Add<SimpleExceptionFilter>();
+                    }
                 })
             .ConfigureApplicationPartManager(setupAction => { setupAction.FeatureProviders.Add(new SekibanControllerFeatureProvider(definition)); });
         services.AddQueriesFromDependencyDefinition(definition);
