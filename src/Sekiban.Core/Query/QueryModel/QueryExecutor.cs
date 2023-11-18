@@ -1,8 +1,10 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents.ValueObjects;
+using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Types;
+using Sekiban.Core.Validation;
 using System.Reflection;
 namespace Sekiban.Core.Query.QueryModel;
 
@@ -23,6 +25,11 @@ public class QueryExecutor : IQueryExecutor
     }
     public async Task<ListQueryResult<TOutput>> ExecuteAsync<TOutput>(IListQueryInput<TOutput> param) where TOutput : IQueryResponse
     {
+        var validationResult = param.ValidateProperties().ToList();
+        if (validationResult.Any())
+        {
+            throw new SekibanValidationErrorsException(validationResult);
+        }
         var paramType = param.GetType();
         if (!paramType.IsListQueryInputType()) { throw new Exception("Invalid parameter type"); }
         var outputType = paramType.GetOutputClassFromListQueryInputType();
@@ -76,6 +83,11 @@ public class QueryExecutor : IQueryExecutor
     }
     public async Task<TOutput> ExecuteAsync<TOutput>(IQueryInput<TOutput> param) where TOutput : IQueryResponse
     {
+        var validationResult = param.ValidateProperties().ToList();
+        if (validationResult.Any())
+        {
+            throw new SekibanValidationErrorsException(validationResult);
+        }
         var paramType = param.GetType();
         if (!paramType.IsQueryInputType()) { throw new Exception("Invalid parameter type"); }
         var outputType = paramType.GetOutputClassFromQueryInputType();
