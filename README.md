@@ -2,7 +2,9 @@
 
 Sekiban - Event Sourcing Framework using .NET. Can store data into Cosmos DB and Dynamo DB
 
-![Sekiban Logo](/docs/images/Sekiban_Signature.svg)
+<p align="center">
+  <img alt="Sekiban Logo" src="https://raw.githubusercontent.com/J-Tech-Japan/Sekiban/main/docs/images/Sekiban_Signature.svg?token=GHSAT0AAAAAABPAMU6FGBX5YAVKKZPWJCTCZK72KMQ" width="600">
+</p>
 
 ## What is Sekiban?
 
@@ -10,6 +12,24 @@ Sekiban - Event Sourcing Framework using .NET. Can store data into Cosmos DB and
 and .NET Core 7+, it allows developers to use a declarative API to create event sourcing applications. Sekiban supports
 various event stores such as [Microsoft Azure Cosmos DB](https://azure.microsoft.com/en-us/products/cosmos-db)
 and [Amazon Dynamo DB](https://aws.amazon.com/dynamodb/), facilitating deployment on either Azure or AWS.
+
+## Getting started
+Do you want to start coding? If so, please see [Quick Start](https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/docfx_project/articles/quick-start.md)
+
+## Sponsors
+
+Sekiban is an Apache 2.0 open source project with its ongoing development. We will launch soon for the sponsorship information. If you are interested in the special sponsorship, please [contact us](https://github.com/J-Tech-Japan/Sekiban#support-and-training).
+
+<p align="center">
+  <h3 align="center">Special Sponsor</h3>
+</p>
+
+<p align="center">
+  <a target="_blank" href="https://www.jtsnet.co.jp">
+  <img alt="special sponsor jts" src="./docs/images/jtslogo.png" width="500">
+  </a>
+</p>
+
 
 ## Understanding Event Sourcing and CQRS
 
@@ -84,7 +104,7 @@ detailed [Contribution Guideline](https://github.com/J-Tech-Japan/Sekiban/blob/m
 and [Code of Conduct](https://github.com/J-Tech-Japan/Sekiban/blob/main/CODE_OF_CONDUCT.md). J-Tech Japan owns this
 project and determines its future direction.
 
-# Documentation
+## Documentation
 
 We are planning to deploy documentation, eventually please see
 
@@ -99,7 +119,17 @@ seminars, please contact us at [sekibanadmin@jtechs.com](mailto:sekibanadmin@jte
 
 [Code of Conduct](https://github.com/J-Tech-Japan/Sekiban/blob/main/CODE_OF_CONDUCT.md)
 
+## About Us
+**J-Tech Japan (株式会社ジェイテックジャパン)** has been developing sekiban since 2022. We are located in Tokyo, Japan and we have been developing enterprize web application since 2008.
+<p align="center">
+  <a target="_blank" href="https://www.jtechs.com/japan/">
+  <img alt="developer J-Tech Japan." src="./docs/images/jtechjapanlogo.svg" width="500">
+  </a>
+</p>
+
 # License
 
 Apache 2.0
 [See License](https://github.com/J-Tech-Japan/Sekiban/blob/main/LICENSE)
+
+Copyright (c) 2022- J-Tech Japan
