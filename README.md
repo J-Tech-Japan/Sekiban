@@ -120,7 +120,7 @@ seminars, please contact us at [sekibanadmin@jtechs.com](mailto:sekibanadmin@jte
 [Code of Conduct](https://github.com/J-Tech-Japan/Sekiban/blob/main/CODE_OF_CONDUCT.md)
 
 ## About Us
-**J-Tech Japan (株式会社ジェイテックジャパン)** has been developing sekiban since 2022. We are located in Tokyo, Japan and we have been developing enterprize web application since 2008.
+**J-Tech Japan (株式会社ジェイテックジャパン)** has been developing sekiban since 2022. We are located in Tokyo, Japan and we have been developing enterprise web application since 2008.
 <p align="center">
   <a target="_blank" href="https://www.jtechs.com/japan/">
   <img alt="developer J-Tech Japan." src="https://raw.githubusercontent.com/J-Tech-Japan/Sekiban/main/docs/images/jtechjapanlogo.svg?token=GHSAT0AAAAAABPAMU6EIBCO4TDKN2AVMCVMZK73CFA" width="500">
