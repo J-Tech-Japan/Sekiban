@@ -3,7 +3,7 @@
 Sekiban - Event Sourcing Framework using .NET. Can store data into Cosmos DB and Dynamo DB
 
 <p align="center">
-  <img alt="Sekiban Logo" src="https://raw.githubusercontent.com/J-Tech-Japan/Sekiban/main/docs/images/Sekiban_Signature.svg?token=GHSAT0AAAAAABPAMU6FGBX5YAVKKZPWJCTCZK72KMQ" width="600">
+  <img alt="Sekiban Logo" src="./docs/images/Sekiban_Signature.svg" width="600">
 </p>
 
 ## What is Sekiban?
@@ -26,7 +26,7 @@ Sekiban is an Apache 2.0 open source project with its ongoing development. We wi
 
 <p align="center">
   <a target="_blank" href="https://www.jtsnet.co.jp">
-  <img alt="special sponsor jts" src="https://raw.githubusercontent.com/J-Tech-Japan/Sekiban/main/docs/images/jtslogo.png?token=GHSAT0AAAAAABPAMU6ESWRYDMOT6PVFKJT4ZK73F3Q" width="500">
+  <img alt="special sponsor jts" src="./docs/images/jtslogo.png" width="500">
   </a>
 </p>
 
@@ -123,7 +123,7 @@ seminars, please contact us at [sekibanadmin@jtechs.com](mailto:sekibanadmin@jte
 **J-Tech Japan (株式会社ジェイテックジャパン)** has been developing sekiban since 2022. We are located in Tokyo, Japan and we have been developing enterprise web application since 2008.
 <p align="center">
   <a target="_blank" href="https://www.jtechs.com/japan/">
-  <img alt="developer J-Tech Japan." src="https://raw.githubusercontent.com/J-Tech-Japan/Sekiban/main/docs/images/jtechjapanlogo.svg?token=GHSAT0AAAAAABPAMU6EIBCO4TDKN2AVMCVMZK73CFA" width="500">
+  <img alt="developer J-Tech Japan." src="./docs/images/jtechjapanlogo.svg" width="500">
   </a>
 </p>
 
