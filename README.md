@@ -1,6 +1,6 @@
 # Sekiban
 
-Sekiban - Event Sourcing Framework using .NET. Can store data into Cosmos DB and Dynamo DB
+pSekiban - Event Sourcing and CQRS Framework using C#. It can store data into Azure Cosmos DB or AWS Dynamo DB
 
 <p align="center">
   <img alt="Sekiban Logo" src="./docs/images/Sekiban_Signature.svg" width="600">
@@ -63,7 +63,7 @@ effectiveness:
 - **Projections Snapshots:** Offers the ability to capture the state of a projection at a certain point in time.
 - **Large Snapshots Storage:** Accommodate sizable snapshots using Azure Blob Storage or Amazon S3.
 - **Built-in Testing Framework:** Simplifies testing with an integrated suite.
-- **Cosmos DB / Dynamo DB Datastore:** Provides scalable and globally distributed data storage solutions.
+- **Azure Cosmos DB / Dynamo DB Datastore:** Provides scalable and globally distributed data storage solutions.
 - **Tenant Partitions:** Facilitates separation of data based on tenant for easier data management and handling.
 - **Query from Multiple Projections:** Enables querying from a range of projections for more dynamic data analysis.
 - **Command and Query Web API Generator with Swagger Support:** Streamlines API design, building, and documentation.
@@ -75,9 +75,9 @@ projections, tests, and queries for practical solutions without unnecessary comp
 
 Sekiban is compatible with .NET 7 and 8.
 
-For **Cosmos DB**, Sekiban supports
+For **Azure Cosmos DB**, Sekiban supports
 the [Hierarchical Partition Key](https://learn.microsoft.com/en-us/azure/cosmos-db/hierarchical-partition-keys?tabs=net-v3%2Cbicep)
-feature. This enables more efficient querying using Cosmos DB by creating a Tenant (or Root Partition Key), Aggregate
+feature. This enables more efficient querying using Azure Cosmos DB by creating a Tenant (or Root Partition Key), Aggregate
 Type, and Partition Key.
 
 When using **Dynamo DB** with Sekiban, you need to set up a Partition Key and Sort Key.
@@ -91,7 +91,7 @@ provided the system memory can accommodate the size of the Multiple Projections.
 For more insights on Live Projections, please reference this informative article by Anton
 Stöckl: [Live Projections for Read Models with Event Sourcing and CQRS](https://medium.com/@TonyBologni/live-projections-for-read-models-with-event-sourcing-and-cqrs-42dd18b19fd0).
 
-Developers can implement materialized views using Cosmos DB's and Dynamo DB's change feed feature. Although creation of
+Developers can implement materialized views using Azure Cosmos DB's and Dynamo DB's change feed feature. Although creation of
 materialized views with Change Feed is a straightforward process, it does not directly pertain to the Sekiban
 Framework's core functions, hence it hasn't been included within the framework.
 
