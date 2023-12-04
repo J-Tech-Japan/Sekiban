@@ -11,7 +11,7 @@ type Branch =
     { Name: string }
 
     interface IAggregatePayload<Branch> with
-        member this.CreateInitialPayload(_) = { Name = "" }
+        static member CreateInitialPayload(_ :Branch): Branch = { Name = "" }
 
 type CreateBranch(name: string) =
     member this.Name = name
@@ -37,7 +37,7 @@ type Client(name: string, email: string, branchId: Guid) =
     member this.BranchId = branchId
 
     interface IAggregatePayload<Client> with
-        member this.CreateInitialPayload(_) = Client("", "", Guid.Empty)
+        static member CreateInitialPayload(_) = Client("", "", Guid.Empty)
 
     new() = Client("", "", Guid.Empty)
 
