@@ -17,12 +17,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="20f8dbcd-4e45-483f-80cb-315c03ad723f" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/samples/fsharp/Domain.fs" beforeDir="false" afterPath="$PROJECT_DIR$/samples/fsharp/Domain.fs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/samples/fsharp/fsCustomer.fsproj" beforeDir="false" afterPath="$PROJECT_DIR$/samples/fsharp/fsCustomer.fsproj" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Sekiban.Core/Query/ReadModelUpdaters/IReadModel.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Sekiban.Core/Query/ReadModelUpdaters/IReadModel.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/test/fsCustomerTest/fsCustomerTest.fsproj" beforeDir="false" afterPath="$PROJECT_DIR$/test/fsCustomerTest/fsCustomerTest.fsproj" afterDir="false" />
-    </list>
+    <list default="true" id="20f8dbcd-4e45-483f-80cb-315c03ad723f" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -52,6 +47,7 @@
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
     "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
     "settings.editor.selected.configurable": "project.propVCSSupport.Mappings",
     "vue.rearranger.settings.migration": "true"
   },
@@ -76,7 +72,7 @@
       <option name="PROJECT_EXE_PATH_TRACKING" value="1" />
       <option name="PROJECT_ARGUMENTS_TRACKING" value="1" />
       <option name="PROJECT_WORKING_DIRECTORY_TRACKING" value="1" />
-      <option name="PROJECT_KIND" value="RunnableProjectKind(name=RunnableProjectKind(name=None))" />
+      <option name="PROJECT_KIND" value="RunnableProjectKind(name=RunnableProjectKind(name=RunnableProjectKind(name=None)))" />
       <option name="PROJECT_TFM" value="" />
       <option name="FUNCTION_NAMES" value="" />
       <method v="2">
@@ -266,6 +262,7 @@
       <updated>1701296171486</updated>
       <workItem from="1701296174080" duration="158000" />
       <workItem from="1701296345079" duration="1544000" />
+      <workItem from="1701762452033" duration="2000" />
     </task>
     <servers />
   </component>
