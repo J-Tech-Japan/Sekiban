@@ -16,6 +16,8 @@ and [Amazon Dynamo DB](https://aws.amazon.com/dynamodb/), facilitating deploymen
 ## Getting started
 Do you want to start coding? If so, please see [Quick Start](https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/docfx_project/articles/quick-start.md)
 
+日本語の情報をお探しでしょうか？ [Sekiban - イベントソーシングとCQRSフレームワークの紹介](https://github.com/J-Tech-Japan/Sekiban/blob/main/docs/docfx_project/articles_ja/intro.md) のページから幾らかの記事が日本語で書かれています。開発者は日本語も分かりますので日本語の情報も増やしていきたいと思っています。
+
 ## Sponsors
 
 Sekiban is an Apache 2.0 open source project with its ongoing development. We will launch soon for the sponsorship information. If you are interested in the special sponsorship, please [contact us](https://github.com/J-Tech-Japan/Sekiban#support-and-training).
