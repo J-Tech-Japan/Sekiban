@@ -20,7 +20,7 @@ Do you want to start coding? If so, please see [Quick Start](https://github.com/
 
 ## Sponsors
 
-Sekiban is an Apache 2.0 open source project with its ongoing development. We will launch soon for the sponsorship information. If you are interested in the special sponsorship, please [contact us](https://github.com/J-Tech-Japan/Sekiban#support-and-training).
+Sekiban is an Apache 2.0 open source project with its ongoing development. We will launch soon for the sponsorship information. If you are interested in the special sponsorship, please [contact us](https://github.com/J-Tech-Japan/Sekiban#support-and-training). Also, you can sponsor us from [Github Sponsors](https://github.com/sponsors/J-Tech-Japan)
 
 <p align="center">
   <h3 align="center">Special Sponsor</h3>
