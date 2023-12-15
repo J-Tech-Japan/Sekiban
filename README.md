@@ -1,4 +1,4 @@
-# Sekiban
+# Sekiban - Event Sourcing and CQRS Framework using C#
 
 Sekiban - Event Sourcing and CQRS Framework using C#. It can store data into Azure Cosmos DB or AWS Dynamo DB
 
