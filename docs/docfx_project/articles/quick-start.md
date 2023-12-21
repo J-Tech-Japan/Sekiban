@@ -14,7 +14,7 @@ Get Started Project is made with .NET 7.There is multiple way to test it out Get
 
 
 1. Using Cosmos DB  [Test out with Cosmos DB](./test-out-cosmos.md).
-2. Using Cosmos DB  [Test out with Dynamo DB](./test-out-dynamo.md).
+2. Using Dynamo DB  [Test out with Dynamo DB](./test-out-dynamo.md).
 
 
 ### Create your own Sekiban Project.
