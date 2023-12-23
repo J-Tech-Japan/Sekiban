@@ -20,8 +20,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="AWSSDK.DynamoDBv2" Version="3.7.300.14"/>
-        <PackageReference Include="AWSSDK.S3" Version="3.7.304.3"/>
+        <PackageReference Include="AWSSDK.DynamoDBv2" Version="3.7.300.25"/>
+        <PackageReference Include="AWSSDK.S3" Version="3.7.305"/>
         <PackageReference Include="SharpZipLib" Version="1.4.2"/>
         <None Include="..\..\README.md" Pack="true" PackagePath="\"/>
     </ItemGroup>
