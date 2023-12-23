@@ -7,19 +7,19 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Sekiban.Core", "src\Sekiban
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Lib", "Lib", "{76D7B2DA-2E6B-4078-AC01-B29BCA83411A}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Samples", "Samples", "{B85F80AE-6A27-402C-93FA-352D938EDA8D}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "TestInternalUsages", "TestInternalUsages", "{B85F80AE-6A27-402C-93FA-352D938EDA8D}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{4C34F748-F223-44DD-899D-029F9CEF7780}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Infrastructure.Cosmos", "src\Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj", "{76237ABB-237D-495B-BC3F-7BA27B0DD864}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SampleProject.Common", "samples\SampleProject.Common\SampleProject.Common.csproj", "{1CF536F2-03E7-4F6A-816C-86FDC6D00BE7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SampleProject.Common", "internalUsages\SampleProject.Common\SampleProject.Common.csproj", "{1CF536F2-03E7-4F6A-816C-86FDC6D00BE7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FeatureCheck.Domain", "samples\FeatureCheck.Domain\FeatureCheck.Domain.csproj", "{2F0DD143-F713-4CFF-B613-C9FDA6DF112C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FeatureCheck.Domain", "internalUsages\FeatureCheck.Domain\FeatureCheck.Domain.csproj", "{2F0DD143-F713-4CFF-B613-C9FDA6DF112C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Test.CosmosDb", "test\Sekiban.Test.CosmosDb\Sekiban.Test.CosmosDb.csproj", "{B0B36E7C-A6F9-49CD-9A3C-AD66E500EB45}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Test.CosmosDb", "tests\Sekiban.Test.CosmosDb\Sekiban.Test.CosmosDb.csproj", "{B0B36E7C-A6F9-49CD-9A3C-AD66E500EB45}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Test.Dynamo", "test\Sekiban.Test.Dynamo\Sekiban.Test.Dynamo.csproj", "{10484E19-2157-4EF3-9291-AEB3A62A0408}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Test.Dynamo", "tests\Sekiban.Test.Dynamo\Sekiban.Test.Dynamo.csproj", "{10484E19-2157-4EF3-9291-AEB3A62A0408}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Testing", "src\Sekiban.Testing\Sekiban.Testing.csproj", "{F50A4BE7-D080-4B8E-B1DF-E97F465D550A}"
 EndProject
@@ -27,35 +27,35 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Infrastructure.Dyna
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Web", "src\Sekiban.Web\Sekiban.Web.csproj", "{2B08407D-CB89-42AC-AEA1-2EFE8F793F94}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FeatureCheck.WebApi", "samples\FeatureCheck.WebApi\FeatureCheck.WebApi.csproj", "{F24F294A-7BD9-42EB-B0A1-F4E8EFCB6643}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FeatureCheck.WebApi", "internalUsages\FeatureCheck.WebApi\FeatureCheck.WebApi.csproj", "{F24F294A-7BD9-42EB-B0A1-F4E8EFCB6643}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FeatureCheck.WebApi.Dynamo", "samples\FeatureCheck.WebApi.Dynamo\FeatureCheck.WebApi.Dynamo.csproj", "{D5C1FED2-0F28-43F1-A425-72DB68483A41}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FeatureCheck.WebApi.Dynamo", "internalUsages\FeatureCheck.WebApi.Dynamo\FeatureCheck.WebApi.Dynamo.csproj", "{D5C1FED2-0F28-43F1-A425-72DB68483A41}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Warehouse.Domain", "samples\Warehouse.Domain\Warehouse.Domain.csproj", "{D0E55A95-AE2E-4BE5-B165-DC4A590A7EF3}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Warehouse.Domain", "internalUsages\Warehouse.Domain\Warehouse.Domain.csproj", "{D0E55A95-AE2E-4BE5-B165-DC4A590A7EF3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Warehouse.Port", "samples\Warehouse.Port\Warehouse.Port.csproj", "{ACC0B003-49BA-4088-9F56-5200B75B2EBC}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Warehouse.Port", "internalUsages\Warehouse.Port\Warehouse.Port.csproj", "{ACC0B003-49BA-4088-9F56-5200B75B2EBC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shipping.Domain", "samples\Shipping.Domain\Shipping.Domain.csproj", "{995AD8A8-4755-48C8-AC65-E8BCBD6A7204}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shipping.Domain", "internalUsages\Shipping.Domain\Shipping.Domain.csproj", "{995AD8A8-4755-48C8-AC65-E8BCBD6A7204}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shipping.Port", "samples\Shipping.Port\Shipping.Port.csproj", "{EF8C7777-BFE1-4D30-8A8E-B203139EFA55}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shipping.Port", "internalUsages\Shipping.Port\Shipping.Port.csproj", "{EF8C7777-BFE1-4D30-8A8E-B203139EFA55}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mixed.Domain", "samples\Mixed.Domain\Mixed.Domain.csproj", "{D13DB506-05EB-4C77-9051-EFC3DD14C8BA}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mixed.Domain", "internalUsages\Mixed.Domain\Mixed.Domain.csproj", "{D13DB506-05EB-4C77-9051-EFC3DD14C8BA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MultiContext.WebApi", "samples\MultiContext.WebApi\MultiContext.WebApi.csproj", "{1912FB52-FC9A-4541-B9FD-B1EFF5C6525D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MultiContext.WebApi", "internalUsages\MultiContext.WebApi\MultiContext.WebApi.csproj", "{1912FB52-FC9A-4541-B9FD-B1EFF5C6525D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MultiTenant.Domain", "samples\MultiTenant.Domain\MultiTenant.Domain.csproj", "{3E9F6FD7-81D2-4CA9-988F-267A6A14993C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MultiTenant.Domain", "internalUsages\MultiTenant.Domain\MultiTenant.Domain.csproj", "{3E9F6FD7-81D2-4CA9-988F-267A6A14993C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MultiTenant.AggregateTest", "test\MultiTenant.AggregateTest\MultiTenant.AggregateTest.csproj", "{7774CC25-EF36-4DA3-ADAF-B98F4274CBFD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MultiTenant.AggregateTest", "tests\MultiTenant.AggregateTest\MultiTenant.AggregateTest.csproj", "{7774CC25-EF36-4DA3-ADAF-B98F4274CBFD}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MultiTenant.WebApi", "samples\MultiTenant.WebApi\MultiTenant.WebApi.csproj", "{091121AC-BDAB-46B3-8A49-A63D0EF6FAA5}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MultiTenant.WebApi", "internalUsages\MultiTenant.WebApi\MultiTenant.WebApi.csproj", "{091121AC-BDAB-46B3-8A49-A63D0EF6FAA5}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tools", "Tools", "{9504B5F4-E803-46E3-B110-CBA8196B03D4}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConvertAndCopyCosmosItems", "tools\ConvertAndCopyCosmosItems\ConvertAndCopyCosmosItems.csproj", "{482C14AE-C213-4234-9B11-F0D7E953EEE2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mixed.Test", "test\Mixed.Test\Mixed.Test.csproj", "{630F88BB-1967-4F9A-B6E2-771922069319}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mixed.Test", "tests\Mixed.Test\Mixed.Test.csproj", "{630F88BB-1967-4F9A-B6E2-771922069319}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FeatureCheck.Test", "test\FeatureCheck.Test\FeatureCheck.Test.csproj", "{E89A2E97-1EFE-44F0-A4DA-7162AFF8C26F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FeatureCheck.Test", "tests\FeatureCheck.Test\FeatureCheck.Test.csproj", "{E89A2E97-1EFE-44F0-A4DA-7162AFF8C26F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Infrastructure.EFReadModel", "src\Sekiban.Infrastructure.EFReadModel\Sekiban.Infrastructure.EFReadModel.csproj", "{A329B921-F9D5-4CC8-B48F-5DB74E04C0F2}"
 EndProject

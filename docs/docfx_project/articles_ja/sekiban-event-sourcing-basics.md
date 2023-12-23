@@ -19,7 +19,7 @@
 
 この画像と説明のように、あなたはアグリゲートとイベントを定義し、イベントがアグリゲートの状態を変えることができます。Sekibanでは、以下のようにAggregateとEventを定義することができます。
 
-これはSekibanイベントソーシングの基礎チュートリアルからのもので、レポジトリの `/Tutorials/1.SekibanEventSourcingBasics` フォルダにあります。
+これはSekibanイベントソーシングの基礎チュートリアルからのもので、レポジトリの `/Samples/Tutorials/1.SekibanEventSourcingBasics` フォルダにあります。
 
 ```csharp
    public record UserPoint(string Name, string Email, int Point) : IAggregatePayload<UserPoint>

@@ -4,7 +4,7 @@
 
 迅速に始めるために、まずはすでに設定されたプロジェクトを使ってsekibanをテストしてみることをおすすめします。
 
-リポジトリ内の`/Tutorials/1.GetStarted` フォルダにあります。
+リポジトリ内の`/Samples/Tutorials/1.GetStarted` フォルダにあります。
 
 ### GetStarted Solutionを開く。
 
@@ -18,7 +18,7 @@ Get Started .NET 7で作成されています。試す方法は複数ありま�
 
 基本的に、自分のプロジェクトを作成するためには3つのプロジェクトが必要です。
 
-自分のプロジェクトを作成するためには、`/Tutorials/1.GetStarted` フォルダ内のチュートリアルプロジェクトを参考にできます。
+自分のプロジェクトを作成するためには、`/Samples/Tutorials/1.GetStarted` フォルダ内のチュートリアルプロジェクトを参考にできます。
 
 1. Domain Project。このプロジェクトは通常、Aggregate、Command、Event、Projection、Queryなどのコアなイベントソーシングの内容のみを含みます。
 
