@@ -10,7 +10,7 @@ public static class TypeExtensions
             return true;
         }
 
-        if (givenType.BaseType is Type baseType && baseType.IsAssignableToGenericType(openGenericType, out closedGenericType))
+        if (givenType.BaseType is { } baseType && baseType.IsAssignableToGenericType(openGenericType, out closedGenericType))
         {
             return true;
         }

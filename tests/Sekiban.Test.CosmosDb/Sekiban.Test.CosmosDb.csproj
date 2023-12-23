@@ -1,0 +1,63 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <Nullable>enable</Nullable>
+
+        <IsPackable>false</IsPackable>
+
+        <LangVersion>preview</LangVersion>
+        <OpenApiGenerateDocuments>false</OpenApiGenerateDocuments>
+        <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
+        <UserSecretsId>55f43f08-0c5d-41bd-8846-13832dbc5714</UserSecretsId>
+        <RootNamespace>Sekiban.Test.CosmosDb</RootNamespace>
+        <AssemblyName>Sekiban.Test.CosmosDb</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="MartinCostello.Logging.XUnit" Version="0.3.0"/>
+        <PackageReference Include="Microsoft.DotNet.PlatformAbstractions" Version="3.1.6"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="8.0.0"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="8.0.0"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0"/>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0"/>
+        <PackageReference Include="xunit" Version="2.6.4"/>
+        <PackageReference Include="xunit.runner.visualstudio" Version="2.5.6">
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="coverlet.collector" Version="6.0.0">
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Reference Include="Microsoft.Extensions.DependencyInjection">
+            <HintPath>..\..\..\..\..\..\..\usr\local\share\dotnet\arm64\shared\Microsoft.AspNetCore.App\6.0.3\Microsoft.Extensions.DependencyInjection.dll</HintPath>
+        </Reference>
+        <Reference Include="Microsoft.Extensions.DependencyInjection.Abstractions">
+            <HintPath>..\..\..\..\..\..\..\usr\local\share\dotnet\arm64\shared\Microsoft.AspNetCore.App\6.0.3\Microsoft.Extensions.DependencyInjection.Abstractions.dll</HintPath>
+        </Reference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\internalUsages\FeatureCheck.Domain\FeatureCheck.Domain.csproj"/>
+        <ProjectReference Include="..\..\internalUsages\MultiTenant.Domain\MultiTenant.Domain.csproj"/>
+        <ProjectReference Include="..\..\internalUsages\SampleProject.Common\SampleProject.Common.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Infrastructure.Dynamo\Sekiban.Infrastructure.Dynamo.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Testing\Sekiban.Testing.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Update="appsettings.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Folder Include="Stories\QueryPerformances\"/>
+    </ItemGroup>
+
+</Project>

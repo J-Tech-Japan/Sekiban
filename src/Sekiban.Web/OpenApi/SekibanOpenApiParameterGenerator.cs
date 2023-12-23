@@ -7,15 +7,13 @@ namespace Sekiban.Web.OpenApi;
 
 public static class SekibanOpenApiParameterGenerator
 {
-    private static readonly NullabilityInfoContext _nullabilityContext = new();
-
     private static string GetRegularName(Type type)
     {
         if (type.IsGenericType)
         {
             return type.GetGenericTypeDefinition().Name.Split("`").FirstOrDefault() ?? string.Empty;
         }
-        return type.FullName!.Contains('+') ? type.FullName.Split(".").LastOrDefault() ?? string.Empty : type.Name ?? string.Empty;
+        return type.FullName!.Contains('+') ? type.FullName.Split(".").LastOrDefault() ?? string.Empty : type.Name;
     }
 
     private static string GetRegularNameWithReplacedSymbol(Type type) =>
@@ -57,9 +55,10 @@ public static class SekibanOpenApiParameterGenerator
         var displayNames = Enum.GetValues(baseType)
             .Cast<Enum>()
             .Select(
-                enm => enm.GetType().GetMember(enm.ToString()) is MemberInfo[] members && members.FirstOrDefault() is MemberInfo member
+                enm => enm.GetType().GetMember(enm.ToString()) is { } members && members.FirstOrDefault() is { } member
                     ? member.GetCustomAttribute<DisplayAttribute>()?.Name ?? member.GetCustomAttribute<DisplayNameAttribute>()?.DisplayName
-                    : null);
+                    : null)
+            .ToList();
         if (displayNames.Any(a => !string.IsNullOrEmpty(a)))
         {
             var enumVarNames = new OpenApiArray();
@@ -70,9 +69,10 @@ public static class SekibanOpenApiParameterGenerator
         var descriptions = Enum.GetValues(baseType)
             .Cast<Enum>()
             .Select(
-                enm => enm.GetType().GetMember(enm.ToString()) is MemberInfo[] members && members.FirstOrDefault() is MemberInfo member
+                enm => enm.GetType().GetMember(enm.ToString()) is { } members && members.FirstOrDefault() is { } member
                     ? member.GetCustomAttribute<DisplayAttribute>()?.Description ?? member.GetCustomAttribute<DescriptionAttribute>()?.Description
-                    : null);
+                    : null)
+            .ToList();
         if (descriptions.Any(a => !string.IsNullOrEmpty(a)))
         {
             var enumDescriptions = new OpenApiArray();

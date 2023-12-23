@@ -4,7 +4,7 @@
 ## Test it out.
 
 To start quickly, we recommend you to start testing sekiban with already set up get started project.
-It is located in the repository, `/Tutorials/1.GetStarted` folder.
+It is located in the repository, `/Samples/Tutorials/1.GetStarted` folder.
 
 ### Open GetStarted Solution.
 
@@ -21,7 +21,7 @@ Get Started Project is made with .NET 7.There is multiple way to test it out Get
 
 Do make your own project, usually you need three projects.
 
-To make your own project, you can refer Tutorial Project in `/Tutorials/1.GetStarted` folder.
+To make your own project, you can refer Tutorial Project in `/Samples/Tutorials/1.GetStarted` folder.
 
 1. `Domain Project`. This project is usually only includes Aggregate, Command, Event, Projection, Query etc. core event sourcing contents.
 

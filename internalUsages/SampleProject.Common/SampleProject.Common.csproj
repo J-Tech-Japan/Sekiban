@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
+        <RootNamespace>ESSampleProjectLib</RootNamespace>
+        <LangVersion>preview</LangVersion>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\Sekiban.Core\Sekiban.Core.csproj"/>
+    </ItemGroup>
+
+</Project>

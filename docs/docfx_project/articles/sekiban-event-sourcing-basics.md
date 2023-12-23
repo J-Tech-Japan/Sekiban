@@ -19,7 +19,7 @@ This image shows how aggregate is changed with stream of events.
 
 Like this image and explains, you can define aggregate and events, and event will change state of aggregate. In Sekiban, we can define Aggregate and Event as below.
 
-This is from SekibanEventSourcingBasics Tutorial, located in the repository, `/Tutorials/1.SekibanEventSourcingBasics` folder.
+This is from SekibanEventSourcingBasics Tutorial, located in the repository, `/Samples/Tutorials/1.SekibanEventSourcingBasics` folder.
 
 ```csharp
    public record UserPoint(string Name, string Email, int Point) : IAggregatePayload<UserPoint>

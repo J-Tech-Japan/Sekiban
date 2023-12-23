@@ -16,6 +16,4 @@ public record CommandExecutorResponse(
     IEnumerable<ValidationResult>? ValidationResults,
     string? LastSortableUniqueId,
     string AggregatePayloadOutTypeName,
-    int EventCount)
-{
-}
+    int EventCount);
