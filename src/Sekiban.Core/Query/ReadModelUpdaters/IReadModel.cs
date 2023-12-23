@@ -1,6 +1,6 @@
 namespace Sekiban.Core.Query.ReadModelUpdaters;
 
-public interface IReadModel
+public interface IReadModel<TId>
 {
-    string LastSortableUniqueId { get; }
+    public TId Id { get; }
 }
