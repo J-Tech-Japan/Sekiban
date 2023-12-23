@@ -26,6 +26,6 @@ public static class AttributeExtensions
     private static U? GetAttribute<T, U>(this T p, bool inherit) where T : ICustomAttributeProvider where U : Attribute
     {
         var attributes = p.GetCustomAttributes(inherit);
-        return attributes?.FirstOrDefault(f => f.GetType() == typeof(U) || f.GetType().BaseType == typeof(U)) as U;
+        return attributes.FirstOrDefault(f => f.GetType() == typeof(U) || f.GetType().BaseType == typeof(U)) as U;
     }
 }

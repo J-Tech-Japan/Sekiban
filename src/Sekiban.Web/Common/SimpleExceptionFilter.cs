@@ -25,8 +25,7 @@ public class SimpleExceptionFilter : ExceptionFilterAttribute
         context.Exception switch
         {
             ISekibanException sekibanException => new JsonResult(
-                SekibanExceptionApiResponse.Create(sekibanException, context.HttpContext?.Request?.Path ?? string.Empty)),
-            _ => new JsonResult(
-                SekibanExceptionApiResponse.CreateFromException(context.Exception, context.HttpContext?.Request?.Path ?? string.Empty))
+                SekibanExceptionApiResponse.Create(sekibanException, context.HttpContext.Request.Path)),
+            _ => new JsonResult(SekibanExceptionApiResponse.CreateFromException(context.Exception, context.HttpContext.Request.Path))
         };
 }

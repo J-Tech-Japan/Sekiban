@@ -41,8 +41,7 @@ public abstract class MultipleEventsInOneClassTest : TestBase<FeatureCheckDepend
                 BookingValueObjects.Money.USDMoney(120),
                 BookingValueObjects.Money.ZeroMoney));
 
-        commandResult = await commandExecutor.ExecCommandAsync(
-            new BookingCommands.PayBookedRoom(bookingId, BookingValueObjects.Money.USDMoney(120), "Paid in full"));
+        await commandExecutor.ExecCommandAsync(new BookingCommands.PayBookedRoom(bookingId, BookingValueObjects.Money.USDMoney(120), "Paid in full"));
         ResetInMemoryDocumentStoreAndCache();
         booking = await aggregateLoader.AsDefaultStateAsync<Booking>(bookingId);
         Assert.Equal(

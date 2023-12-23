@@ -5,6 +5,7 @@
         <Nullable>enable</Nullable>
         <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
         <RootNamespace>ESSampleProjectLib</RootNamespace>
+        <LangVersion>preview</LangVersion>
     </PropertyGroup>
 
     <ItemGroup>
