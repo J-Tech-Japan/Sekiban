@@ -5,7 +5,7 @@ public record EmailString : IValueObject<string>
 {
     public EmailString(string email)
     {
-        if (!Regex.IsMatch(email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.IgnoreCase))
+        if (!Regex.IsMatch(email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(250)))
         {
             throw new InvalidValueException("The email address is not correct.");
         }

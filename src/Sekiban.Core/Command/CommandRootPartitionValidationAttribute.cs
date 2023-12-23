@@ -21,7 +21,7 @@ public class CommandRootPartitionValidationAttribute : ValidationAttribute
             return new ValidationResult("Root Partition Key only allow a-z, 0-9, -, _ and length 1-36");
         }
 
-        if (Regex.IsMatch(rootPartitionKey, RootPartitionKeyRegexPattern))
+        if (Regex.IsMatch(rootPartitionKey, RootPartitionKeyRegexPattern, RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(250)))
         {
             return ValidationResult.Success;
         }
@@ -36,7 +36,7 @@ public class CommandRootPartitionValidationAttribute : ValidationAttribute
             return false;
         }
 
-        if (Regex.IsMatch(rootPartitionKey, RootPartitionKeyRegexPattern))
+        if (Regex.IsMatch(rootPartitionKey, RootPartitionKeyRegexPattern, RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(250)))
         {
             return true;
         }
