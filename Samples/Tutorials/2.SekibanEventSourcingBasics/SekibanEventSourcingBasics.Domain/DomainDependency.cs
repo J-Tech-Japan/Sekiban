@@ -1,12 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
-using Sekiban.Core.Dependency;
+﻿using Sekiban.Core.Dependency;
 using SekibanEventSourcingBasics.Domain.Aggregates.UserPoints;
 using SekibanEventSourcingBasics.Domain.Aggregates.UserPoints.Commands;
+using System.Reflection;
 
 namespace SekibanEventSourcingBasics.Domain;
 
