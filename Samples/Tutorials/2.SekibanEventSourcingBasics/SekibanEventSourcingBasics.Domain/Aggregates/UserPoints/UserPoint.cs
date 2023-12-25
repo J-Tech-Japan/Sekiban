@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Sekiban.Core.Aggregate;
+﻿using Sekiban.Core.Aggregate;
 
 namespace SekibanEventSourcingBasics.Domain.Aggregates.UserPoints;
 

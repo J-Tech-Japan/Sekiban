@@ -1,5 +1,4 @@
-﻿using Sekiban.Core.Aggregate;
-using Sekiban.Core.Command;
+﻿using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 using SekibanEventSourcingBasics.Domain.Aggregates.UserPoints.Events;
 using System.ComponentModel.DataAnnotations;

@@ -1,6 +1,5 @@
 using BookBorrowing.Domain.Aggregates.Borrowers.Events;
 using BookBorrowing.Domain.ValueObjects;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 namespace BookBorrowing.Domain.Aggregates.Borrowers.Commands;
