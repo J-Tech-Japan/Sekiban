@@ -16,7 +16,7 @@
         <LangVersion>preview</LangVersion>
         <OpenApiGenerateDocuments>false</OpenApiGenerateDocuments>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-        <PackageReadmeFile>src/README.md</PackageReadmeFile>
+        <PackageReadmeFile>../README.md</PackageReadmeFile>
         <IncludeSymbols>true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     </PropertyGroup>

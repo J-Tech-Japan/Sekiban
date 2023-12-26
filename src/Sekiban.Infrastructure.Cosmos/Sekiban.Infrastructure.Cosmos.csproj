@@ -14,7 +14,7 @@
         <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
         <LangVersion>preview</LangVersion>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-        <PackageReadmeFile>src/README.md</PackageReadmeFile>
+        <PackageReadmeFile>../README.md</PackageReadmeFile>
         <IncludeSymbols>true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     </PropertyGroup>
