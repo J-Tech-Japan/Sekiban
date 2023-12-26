@@ -56,7 +56,7 @@ Install Visual Studio 2022. It should be 17.7 or higher version.(dotnet 7 compat
   "Sekiban": {
     "Default": {
       "BlobConnectionString": "[Set your blob connection string here. (not necessary for just running the sample)]",
-      "CosmosDbConnectionString": "write your CosmosDB Connection String"
+      "CosmosDbConnectionString": "[Set your cosmosDB connection string here.]",
     }
   }
 }

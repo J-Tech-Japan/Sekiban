@@ -334,8 +334,7 @@ app.Run();
       "AggregateEventCosmosDbContainer": "events",
       "AggregateEventCosmosDbContainerDissolvable": "dissolvableevents",
       "BlobConnectionString": "[Set your blob connection string here. (not necessary for just running the sample)]",
-      "CosmosDbEndPointUrl": "[Set your CosmosDb endpoint url here.]",
-      "CosmosDbAuthorizationKey": "[Set your CosmosDb authorization key here.]",
+      "CosmosDbConnectionString": "[Set your cosmosDB connection string here.]",
       "CosmosDbDatabase": "SekibanBasics",
       "CosmosDbContainer": "items",
       "CosmosDbContainerDissolvable": "dissolvableitems"
