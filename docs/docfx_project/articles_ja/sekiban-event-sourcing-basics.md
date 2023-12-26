@@ -331,13 +331,13 @@ app.Run();
   },
   "Sekiban": {
     "Default": {
-      "AggregateEventCosmosDbContainer": "events",
-      "AggregateEventCosmosDbContainerDissolvable": "dissolvableevents",
+      "CosmosDbEventsContainer": "events",
+      "CosmosDbEventsContainerDissolvable": "dissolvableevents",
       "BlobConnectionString": "[Set your blob connection string here. (not necessary for just running the sample)]",
       "CosmosDbConnectionString": "[Set your cosmosDB connection string here.]",
       "CosmosDbDatabase": "SekibanBasics",
-      "CosmosDbContainer": "items",
-      "CosmosDbContainerDissolvable": "dissolvableitems"
+      "CosmosDbItemsContainer": "items",
+      "CosmosDbItemsContainerDissolvable": "dissolvableitems"
     }
   }
 }

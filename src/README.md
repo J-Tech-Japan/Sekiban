@@ -2,9 +2,7 @@
 
 Sekiban - Event Sourcing and CQRS Framework using C#. It can store data into Azure Cosmos DB or AWS Dynamo DB
 
-<p align="center">
-  <img alt="Sekiban Logo" src="./docs/images/Sekiban_Signature.svg" width="600">
-</p>
+![sekiban logo](https://raw.githubusercontent.com/J-Tech-Japan/Sekiban/main/docs/images/Sekiban_Signature.svg)
 
 ## What is Sekiban?
 
@@ -22,15 +20,9 @@ Do you want to start coding? If so, please see [Quick Start](https://github.com/
 
 Sekiban is an Apache 2.0 open source project with its ongoing development. We will launch soon for the sponsorship information. If you are interested in the special sponsorship, please [contact us](https://github.com/J-Tech-Japan/Sekiban#support-and-training). Also, you can sponsor us from [Github Sponsors](https://github.com/sponsors/J-Tech-Japan)
 
-<p align="center">
-  <h3 align="center">Special Sponsor</h3>
-</p>
+### Special Sponsor
 
-<p align="center">
-  <a target="_blank" href="https://www.jtsnet.co.jp">
-  <img alt="special sponsor jts" src="./docs/images/jtslogo.png" width="500">
-  </a>
-</p>
+[![JTS](https://raw.githubusercontent.com/J-Tech-Japan/Sekiban/main/docs/images/jtslogo.png)](https://www.jtsnet.co.jp)
 
 
 ## Understanding Event Sourcing and CQRS
@@ -123,11 +115,8 @@ seminars, please contact us at [sekibanadmin@jtechs.com](mailto:sekibanadmin@jte
 
 ## About Us
 **J-Tech Japan (株式会社ジェイテックジャパン)** has been developing sekiban since 2022. We are located in Tokyo, Japan and we have been developing enterprise web application since 2008.
-<p align="center">
-  <a target="_blank" href="https://www.jtechs.com/japan/">
-  <img alt="developer J-Tech Japan." src="./docs/images/jtechjapanlogo.svg" width="500">
-  </a>
-</p>
+[![J-Tech Japan](https://raw.githubusercontent.com/J-Tech-Japan/Sekiban/main/docs/images/jtechjapanlogo.svg)](https://www.jtechs.com/japan)
+
 
 # License
 

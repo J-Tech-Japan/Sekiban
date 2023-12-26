@@ -16,7 +16,6 @@ Azure Cosmos DB Emulatorを起動すると、Windowsタスクバーのアイコ�
 
 Data Explorerでクイックスタートを開き、次の情報をコピーします。
 
-- **URI**
-- **Primary Key**
+- **Connection String**
 
 これらの情報はアプリケーションのテスト時に使用します。
