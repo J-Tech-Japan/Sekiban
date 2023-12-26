@@ -15,7 +15,6 @@ When you launch Azure Cosmos DB Emulator, you can access from windows task bar i
 
 In the Data Explorer, open Quick Start and copy following information.
 
-- **URI**
-- **Primary Key**
+- **Connection String**
 
 Those information will use when you test the application.

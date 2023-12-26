@@ -56,4 +56,49 @@ To make your own project, you can refer Tutorial Project in `/Samples/Tutorials/
     - `Program.cs` will have `AddSekibanCosmosDB` as Infrastructure Settings.
     - `Program.cs` will have `AddSekibanWeb` as Web Settings.
 
+    - `appsettings.json` will needs basic settings.
+#### appsettings.json for Azure Cosmos DB.
+Below is minimum setting for the Cosmos DB. You can obtain Cosmos DB connection string from Cosmos DB website or azure cli. `CosmosDbDatabase` should be database name you use, container name can be define with appsettings but it uses `events` for events, and `items` for commands and snapshots.
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "Sekiban": {
+    "Default": {
+      "CosmosDbConnectionString": "[Set your cosmos db connection string]",
+      "BlobConnectionString": "[Set your blob connection string here. (not necessary for just running the sample)]",
+      "CosmosDbDatabase": "GetStartedDb"
+    }
+  }
+}
+```
+
+#### appsettings.json for Dynamo DB.
+Below is minimum setting for the Dynamo DB. Table names `DynamoDbEventsTable` `DynamoDbItemsTable` can be define with appsettings but it uses `events` for events, and `items` for commands and snapshots.
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "Sekiban": {
+    "Default": {
+      "DynamoDbRegion": "us-east-1",
+      "AwsAccessKeyId": "[Set your dynamo db access id here]",
+      "AwsAccessKey": "[Set your dynamo db access key here]",
+      "DynamoDbItemsTable": "jjlt_items",
+      "DynamoDbEventsTable": "jjlt_events",
+      "S3BucketName": "jjlt-s3",
+      "S3Region": "us-west-1"
+    }
+  }
+}
+```
+
 Those are basic Project Settings. Detail information will follow with  [Sekiban Event Sourcing Basics](./sekiban-event-sourcing-basics.md).
