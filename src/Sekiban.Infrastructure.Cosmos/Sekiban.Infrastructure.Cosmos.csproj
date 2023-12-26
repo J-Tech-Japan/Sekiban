@@ -4,13 +4,13 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Infrastructure.Cosmos</PackageId>
-        <Version>0.15.3</Version>
+        <Version>0.15.4</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework CosmosInfrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.15.3</PackageVersion>
-        <Description>Query is validated by default</Description>
+        <PackageVersion>0.15.4</PackageVersion>
+        <Description>Supports CosmoDb ConnectionString</Description>
         <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
         <LangVersion>preview</LangVersion>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
