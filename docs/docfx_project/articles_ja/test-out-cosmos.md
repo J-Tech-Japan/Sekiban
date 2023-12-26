@@ -8,8 +8,7 @@ GetStartedソリューションをテストするには、Cosmos DBが必要で�
 
 どちらを使用する場合も、以下の情報を取得する必要があります。
 
-- **URI**
-- **Primary Key**
+- **CosmosDB Connection String**
 
 Windowsのローカルエミュレーターについては、[このページ](./prepare-cosmos-db-local.md)をご覧ください。
 
@@ -50,8 +49,7 @@ Visual Studio 2022をインストールします。バージョンは17.7（dotn
   "Sekiban": {
     "Default": {
       "BlobConnectionString": "[Set your blob connection string here. (not necessary for just running the sample)]",
-      "CosmosDbEndPointUrl": "write your URI",
-      "CosmosDbAuthorizationKey": "write your primary key"
+      "CosmosDbConnectionString": "write your CosmosDB Connection String"
     }
   }
 }
