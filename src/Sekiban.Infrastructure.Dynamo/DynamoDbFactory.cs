@@ -55,14 +55,15 @@ public class DynamoDbFactory
         {
             DocumentType.Event => _section.GetValue<string>(
                     $"DynamoDbEventsTable{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _section.GetValue<string>($"DynamoDbItemsTable{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _section.GetValue<string>("DynamoDbItemsTable") ?? throw new Exception("DynamoDb Table not found"),
+                (containerGroup == AggregateContainerGroup.Dissolvable ? "dissolvableevents" : "events"),
             DocumentType.Command => _section.GetValue<string>(
                     $"DynamoDbCommandsTable{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
                 _section.GetValue<string>($"DynamoDbItemsTable{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _section.GetValue<string>("DynamoDbItemsTable") ?? throw new Exception("DynamoDb Container not found"),
+                _section.GetValue<string>("DynamoDbItemsTable") ??
+                (containerGroup == AggregateContainerGroup.Dissolvable ? "dissolvableitems" : "items"),
             _ => _section.GetValue<string>($"DynamoDbItemsTable{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _section.GetValue<string>("DynamoDbItemsTable") ?? throw new Exception("DynamoDb Container not found")
+                _section.GetValue<string>("DynamoDbItemsTable") ??
+                (containerGroup == AggregateContainerGroup.Dissolvable ? "dissolvableitems" : "items")
         };
     }
 

@@ -46,15 +46,23 @@ public class CosmosDbFactory(
         return documentType switch
         {
             DocumentType.Event => _section.GetValue<string>(
+                    $"CosmosDbEventsContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
+                _section.GetValue<string>(
                     $"AggregateEventCosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _section.GetValue<string>($"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _section.GetValue<string>("CosmosDbContainer") ?? throw new Exception("CosmosDbContainer not found"),
-            DocumentType.Command => _section.GetValue<string>(
+                (containerGroup == AggregateContainerGroup.Dissolvable ? "dissolvableevents" : "events"),
+            DocumentType.Command =>
+                _section.GetValue<string>(
                     $"AggregateCommandCosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
+                _section.GetValue<string>(
+                    $"CosmosDbCommandsContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
+                _section.GetValue<string>($"CosmosDbItemsContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "dissolvable" : "")}") ??
                 _section.GetValue<string>($"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "dissolvable" : "")}") ??
-                _section.GetValue<string>("CosmosDbContainer") ?? throw new Exception("CosmosDbContainer not found"),
-            _ => _section.GetValue<string>($"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _section.GetValue<string>("CosmosDbContainer") ?? throw new Exception("CosmosDbContainer not found")
+                _section.GetValue<string>("CosmosDbContainer") ??
+                (containerGroup == AggregateContainerGroup.Dissolvable ? "dissolvableitems" : "items"),
+            _ => _section.GetValue<string>($"CosmosDbItemsContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
+                _section.GetValue<string>($"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
+                _section.GetValue<string>("CosmosDbContainer") ??
+                (containerGroup == AggregateContainerGroup.Dissolvable ? "dissolvableitems" : "items")
         };
     }
 
