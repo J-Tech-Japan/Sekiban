@@ -4,10 +4,8 @@ using Sekiban.Core.Dependency;
 using Sekiban.Infrastructure.Cosmos;
 using Sekiban.Web.Dependency;
 using Sekiban.Web.OpenApi;
+
 var builder = WebApplication.CreateBuilder(args);
-
-
-
 
 // Sekiban Core Setting
 builder.Services.AddSekibanCoreWithDependency(new BookBorrowingDependency(), configuration: builder.Configuration);
@@ -15,7 +13,6 @@ builder.Services.AddSekibanCoreWithDependency(new BookBorrowingDependency(), con
 builder.Services.AddSekibanCosmosDB();
 // Sekiban Web Setting
 builder.Services.AddSekibanWeb(new BookBorrowingWebDependency());
-
 
 // Add services to the container.
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -32,5 +29,6 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseAuthorization();
 app.MapControllers();
 app.Run();
