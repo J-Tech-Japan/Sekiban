@@ -149,6 +149,16 @@ public static class GeneralTypeExtensions
             }
             return firstConstructor.Invoke(parameters);
         }
+
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IEnumerable<>))
+        {
+            Type genericType = type.GetGenericArguments()[0];
+            var constructedListType = typeof(List<>).MakeGenericType(genericType);
+            var genericTypeList = (dynamic?)Activator.CreateInstance(constructedListType) ?? throw new InvalidCastException();
+            genericTypeList.Add(genericType.CreateDefaultInstance());
+            return genericTypeList;
+        }
+
         return "No default constructor found";
     }
 }
