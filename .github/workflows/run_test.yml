@@ -28,7 +28,7 @@ jobs:
         dotnet-version: 7.0.x
     - name: Secret Settings
       run: |
-        pushd ./test/Sekiban.Test.CosmosDb
+        pushd ./tests/Sekiban.Test.CosmosDb
         dotnet user-secrets set "Sekiban:Default:BlobConnectionString" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
         dotnet user-secrets set "Sekiban:Default:CosmosDbConnectionString" "${{secrets.TEST_COSMOS_CONNECTION_STRING}}"
         dotnet user-secrets set "Sekiban:Secondary:CosmosDbConnectionString" "${{secrets.TEST_COSMOS_CONNECTION_STRING}}"
@@ -78,7 +78,7 @@ jobs:
         dotnet-version: 7.0.x
     - name: Secret Settings
       run: |
-        pushd ./test/Sekiban.Test.CosmosDb
+        pushd ./tests/Sekiban.Test.CosmosDb
         dotnet user-secrets set "Sekiban:Default:BlobConnectionString" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
         dotnet user-secrets set "Sekiban:Default:CosmosDbConnectionString" "${{secrets.TEST_COSMOS_CONNECTION_STRING}}"
         dotnet user-secrets set "Sekiban:Secondary:CosmosDbConnectionString" "${{secrets.TEST_COSMOS_CONNECTION_STRING}}"
@@ -131,7 +131,7 @@ jobs:
         dotnet-version: 7.0.x
     - name: Secret Settings
       run: |
-        pushd ./test/Sekiban.Test.CosmosDb
+        pushd ./tests/Sekiban.Test.CosmosDb
         dotnet user-secrets set "Sekiban:Default:BlobConnectionString" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
         dotnet user-secrets set "Sekiban:Default:CosmosDbConnectionString" "${{secrets.TEST_COSMOS_CONNECTION_STRING}}"
         dotnet user-secrets set "Sekiban:Secondary:CosmosDbConnectionString" "${{secrets.TEST_COSMOS_CONNECTION_STRING}}"
@@ -188,7 +188,7 @@ jobs:
         dotnet-version: 7.0.x
     - name: Secret Settings
       run: |
-        pushd ./test/Sekiban.Test.CosmosDb
+        pushd ./tests/Sekiban.Test.CosmosDb
         dotnet user-secrets set "Sekiban:Default:BlobConnectionString" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
         dotnet user-secrets set "Sekiban:Default:CosmosDbConnectionString" "${{secrets.TEST_COSMOS_CONNECTION_STRING}}"
         dotnet user-secrets set "Sekiban:Secondary:CosmosDbConnectionString" "${{secrets.TEST_COSMOS_CONNECTION_STRING}}"
@@ -219,7 +219,7 @@ jobs:
         dotnet restore Sekiban.sln
     - name: Test dotnet
       run: |
-        dotnet test test/Sekiban.Test.CosmosDb/Sekiban.Test.CosmosDb.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net7.0
+        dotnet test tests/Sekiban.Test.CosmosDb/Sekiban.Test.CosmosDb.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net7.0
 
   performance80:
     strategy:
@@ -239,7 +239,7 @@ jobs:
         dotnet-version: 7.0.x
     - name: Secret Settings
       run: |
-        pushd ./test/Sekiban.Test.CosmosDb
+        pushd ./tests/Sekiban.Test.CosmosDb
         dotnet user-secrets set "Sekiban:Default:BlobConnectionString" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
         dotnet user-secrets set "Sekiban:Default:CosmosDbConnectionString" "${{secrets.TEST_COSMOS_CONNECTION_STRING}}"
         dotnet user-secrets set "Sekiban:Secondary:CosmosDbConnectionString" "${{secrets.TEST_COSMOS_CONNECTION_STRING}}"
@@ -269,7 +269,7 @@ jobs:
         dotnet restore Sekiban.sln
     - name: Test dotnet
       run: |
-        dotnet test test/Sekiban.Test.CosmosDb/Sekiban.Test.CosmosDb.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net8.0
+        dotnet test tests/Sekiban.Test.CosmosDb/Sekiban.Test.CosmosDb.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net8.0
 
   performance70dynamo:
     strategy:
@@ -289,7 +289,7 @@ jobs:
         dotnet-version: 7.0.x
     - name: Secret Settings
       run: |
-        pushd ./test/Sekiban.Test.CosmosDb
+        pushd ./tests/Sekiban.Test.CosmosDb
         dotnet user-secrets set "Sekiban:Default:BlobConnectionString" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
         dotnet user-secrets set "Sekiban:Default:CosmosDbConnectionString" "${{secrets.TEST_COSMOS_CONNECTION_STRING}}"
         dotnet user-secrets set "Sekiban:Secondary:CosmosDbConnectionString" "${{secrets.TEST_COSMOS_CONNECTION_STRING}}"
@@ -319,7 +319,7 @@ jobs:
         dotnet restore Sekiban.sln
     - name: Test dotnet
       run: |
-        dotnet test test/Sekiban.Test.Dynamo/Sekiban.Test.Dynamo.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net7.0
+        dotnet test tests/Sekiban.Test.Dynamo/Sekiban.Test.Dynamo.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net7.0
 
   performance80dynamo:
     strategy:
@@ -339,7 +339,7 @@ jobs:
         dotnet-version: 7.0.x
     - name: Secret Settings
       run: |
-        pushd ./test/Sekiban.Test.CosmosDb
+        pushd ./tests/Sekiban.Test.CosmosDb
         dotnet user-secrets set "Sekiban:Default:BlobConnectionString" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
         dotnet user-secrets set "Sekiban:Default:CosmosDbConnectionString" "${{secrets.TEST_COSMOS_CONNECTION_STRING}}"
         dotnet user-secrets set "Sekiban:Secondary:CosmosDbConnectionString" "${{secrets.TEST_COSMOS_CONNECTION_STRING}}"
@@ -369,4 +369,4 @@ jobs:
         dotnet restore Sekiban.sln
     - name: Test dotnet
       run: |
-        dotnet test test/Sekiban.Test.Dynamo/Sekiban.Test.Dynamo.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net8.0
+        dotnet test tests/Sekiban.Test.Dynamo/Sekiban.Test.Dynamo.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net8.0
