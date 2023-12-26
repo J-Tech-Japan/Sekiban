@@ -1,3 +1,4 @@
+using LanguageExt.Common;
 using Microsoft.Azure.Cosmos.Linq;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
@@ -88,6 +89,12 @@ public class CosmosDbFactory(
             : _section.GetValue<string>("CosmosDbAuthorizationKey")) ??
         throw new Exception("CosmosDbAuthorizationKey not found");
 
+    private Result<string> GetConnectionString(DocumentType documentType) =>
+        (documentType == DocumentType.Event
+            ? _section.GetValue<string>("EventCosmosDbConnectionString") ?? _section.GetValue<string>("CosmosDbConnectionString")
+            : _section.GetValue<string>("CosmosDbConnectionString")) ??
+        new Result<string>(new Exception("CosmosDbConnectionString not found"));
+
     private string GetDatabaseId(DocumentType documentType) =>
         (documentType == DocumentType.Event
             ? _section.GetValue<string>("EventCosmosDbDatabase") ?? _section.GetValue<string>("CosmosDbDatabase")
@@ -105,15 +112,19 @@ public class CosmosDbFactory(
         {
             return container;
         }
-
-        var uri = GetUri(documentType);
-        var securityKey = GetSecurityKey(documentType);
-
-        var clientOptions = options.ClientOptions;
         var client = memoryCache.Cache.Get<CosmosClient?>(GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier));
         if (client is null)
         {
-            client = new CosmosClient(uri, securityKey, clientOptions);
+            var clientOptions = options.ClientOptions;
+            var connectionString = GetConnectionString(documentType);
+            client = connectionString.Match(
+                v => new CosmosClient(v, clientOptions),
+                _ =>
+                {
+                    var uri = GetUri(documentType);
+                    var securityKey = GetSecurityKey(documentType);
+                    return new CosmosClient(uri, securityKey, clientOptions);
+                });
             memoryCache.Cache.Set(GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier), client, new MemoryCacheEntryOptions());
         }
 
