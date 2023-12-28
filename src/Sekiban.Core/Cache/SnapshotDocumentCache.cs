@@ -10,8 +10,8 @@ namespace Sekiban.Core.Cache;
 public class SnapshotDocumentCache : ISnapshotDocumentCache
 {
     private readonly IMemoryCacheAccessor _memoryCache;
-    private readonly IMemoryCacheSettings _memoryCacheSettings;
-    public SnapshotDocumentCache(IMemoryCacheAccessor memoryCache, IMemoryCacheSettings memoryCacheSettings)
+    private readonly MemoryCacheSetting _memoryCacheSettings;
+    public SnapshotDocumentCache(IMemoryCacheAccessor memoryCache, MemoryCacheSetting memoryCacheSettings)
     {
         _memoryCache = memoryCache;
         _memoryCacheSettings = memoryCacheSettings;
@@ -30,8 +30,8 @@ public class SnapshotDocumentCache : ISnapshotDocumentCache
     private MemoryCacheEntryOptions GetMemoryCacheOptions() =>
         new()
         {
-            AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(_memoryCacheSettings.SnapshotAbsoluteExpirationMinutes),
-            SlidingExpiration = TimeSpan.FromMinutes(_memoryCacheSettings.SnapshotSlidingExpirationMinutes)
+            AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(_memoryCacheSettings.Snapshot.AbsoluteExpirationMinutes),
+            SlidingExpiration = TimeSpan.FromMinutes(_memoryCacheSettings.Snapshot.SlidingExpirationMinutes)
             // If not accessed 5 minutes it will be deleted. Anyway it will be deleted after two hours
         };
     public string GetCacheKey(SnapshotDocument document) => "SnapshotDocument" + document.PartitionKey;

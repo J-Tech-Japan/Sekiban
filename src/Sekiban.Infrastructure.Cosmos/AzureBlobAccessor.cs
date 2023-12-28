@@ -3,8 +3,9 @@ using Azure.Storage.Blobs.Models;
 using ICSharpCode.SharpZipLib.GZip;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Sekiban.Core.Setting;
 using System.IO.Compression;
-namespace Sekiban.Core.Setting;
+namespace Sekiban.Infrastructure.Cosmos;
 
 /// <summary>
 ///     Blob accessor implementation for Azure Blob Storage.

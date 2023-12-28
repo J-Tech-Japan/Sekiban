@@ -12,9 +12,9 @@ namespace Sekiban.Core.Cache;
 public class MultiProjectionCache : IMultiProjectionCache
 {
     private readonly IMemoryCacheAccessor _memoryCache;
-    private readonly IMemoryCacheSettings _memoryCacheSettings;
+    private readonly MemoryCacheSetting _memoryCacheSettings;
     private readonly IServiceProvider _serviceProvider;
-    public MultiProjectionCache(IMemoryCacheAccessor memoryCache, IServiceProvider serviceProvider, IMemoryCacheSettings memoryCacheSettings)
+    public MultiProjectionCache(IMemoryCacheAccessor memoryCache, IServiceProvider serviceProvider, MemoryCacheSetting memoryCacheSettings)
     {
         _memoryCache = memoryCache;
         _serviceProvider = serviceProvider;
@@ -40,8 +40,8 @@ public class MultiProjectionCache : IMultiProjectionCache
     private MemoryCacheEntryOptions GetMemoryCacheOptions() =>
         new()
         {
-            AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(_memoryCacheSettings.MultiProjectionAbsoluteExpirationMinutes),
-            SlidingExpiration = TimeSpan.FromMinutes(_memoryCacheSettings.MultiProjectionSlidingExpirationMinutes)
+            AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(_memoryCacheSettings.MultiProjection.AbsoluteExpirationMinutes),
+            SlidingExpiration = TimeSpan.FromMinutes(_memoryCacheSettings.MultiProjection.SlidingExpirationMinutes)
             // If not accessed 5 minutes it will be deleted. Anyway it will be deleted after two hours
         };
 

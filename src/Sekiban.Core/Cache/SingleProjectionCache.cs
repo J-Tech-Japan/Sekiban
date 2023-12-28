@@ -13,9 +13,9 @@ namespace Sekiban.Core.Cache;
 public class SingleProjectionCache : ISingleProjectionCache
 {
     private readonly IMemoryCacheAccessor _memoryCache;
-    private readonly IMemoryCacheSettings _memoryCacheSettings;
+    private readonly MemoryCacheSetting _memoryCacheSettings;
 
-    public SingleProjectionCache(IMemoryCacheAccessor memoryCache, IMemoryCacheSettings memoryCacheSettings)
+    public SingleProjectionCache(IMemoryCacheAccessor memoryCache, MemoryCacheSetting memoryCacheSettings)
     {
         _memoryCache = memoryCache;
         _memoryCacheSettings = memoryCacheSettings;
@@ -38,8 +38,8 @@ public class SingleProjectionCache : ISingleProjectionCache
     private MemoryCacheEntryOptions GetMemoryCacheOptionsForSingleProjectionContainer() =>
         new()
         {
-            AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(_memoryCacheSettings.SingleProjectionAbsoluteExpirationMinutes),
-            SlidingExpiration = TimeSpan.FromMinutes(_memoryCacheSettings.SingleProjectionSlidingExpirationMinutes)
+            AbsoluteExpiration = DateTimeOffset.UtcNow.AddMinutes(_memoryCacheSettings.SingleProjection.AbsoluteExpirationMinutes),
+            SlidingExpiration = TimeSpan.FromMinutes(_memoryCacheSettings.SingleProjection.SlidingExpirationMinutes)
             // If not accessed 5 minutes it will be deleted. Anyway it will be d
             // eleted after two hours
         };
