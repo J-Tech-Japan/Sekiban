@@ -74,14 +74,12 @@ public class DynamoDbFactory(SekibanDynamoDbOptions dbOptions, IMemoryCacheAcces
         var awsAccessKeyId = GetAwsAccessKeyId(documentType);
         var awsAccessKey = GetAwsAccessKey(documentType);
         var region = GetDynamoDbRegion();
-
-        var client = (AmazonDynamoDBClient?)memoryCache.Cache.Get(GetMemoryCacheClientKey(documentType, SekibanContextIdentifier())) ??
-            new AmazonDynamoDBClient(awsAccessKeyId, awsAccessKey, region);
-        if ((AmazonDynamoDBClient?)memoryCache.Cache.Get(GetMemoryCacheClientKey(documentType, SekibanContextIdentifier())) == null)
+        var client = (AmazonDynamoDBClient?)memoryCache.Cache.Get(GetMemoryCacheClientKey(documentType, SekibanContextIdentifier()));
+        if (client is null)
         {
+            client = new AmazonDynamoDBClient(awsAccessKeyId, awsAccessKey, region);
             memoryCache.Cache.Set(GetMemoryCacheClientKey(documentType, SekibanContextIdentifier()), client);
         }
-
         var table = Table.LoadTable(client, tableId);
 
         memoryCache.Cache.Set(GetMemoryCacheTableKey(documentType, tableId, SekibanContextIdentifier()), table, new MemoryCacheEntryOptions());
