@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Dependency;
-using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using Sekiban.Testing.Story;
 namespace Sekiban.Infrastructure.Dynamo;
@@ -28,8 +27,8 @@ public class DynamoSekibanServiceProviderGenerator : ISekibanServiceProviderGene
     {
         IServiceCollection services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(fixture.Configuration);
-        services.AddSekibanCoreWithDependency(dependencyDefinition, SekibanSettings.Default);
-        services.AddSekibanDynamoDB();
+        services.AddSekibanWithDependency(dependencyDefinition, fixture.Configuration);
+        services.AddSekibanDynamoDB(fixture.Configuration);
         if (fixture.TestOutputHelper is not null)
         {
             services.AddSingleton(fixture.TestOutputHelper);
