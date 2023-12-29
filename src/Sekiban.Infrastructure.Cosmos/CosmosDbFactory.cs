@@ -21,19 +21,19 @@ public class CosmosDbFactory(
         var sekibanContext = serviceProvider.GetService<ISekibanContext>();
         return sekibanContext?.SettingGroupIdentifier ?? SekibanContext.Default;
     }
-    private SekibanCosmosDbOption GetSekibanCosmosDbOption()
+    private SekibanAzureOption GetSekibanCosmosDbOption()
     {
-        return cosmosDbOptions.Contexts.FirstOrDefault(m => m.Context == SekibanContextIdentifier()) ?? new SekibanCosmosDbOption();
+        return cosmosDbOptions.Contexts.FirstOrDefault(m => m.Context == SekibanContextIdentifier()) ?? new SekibanAzureOption();
     }
     private string GetContainerId(DocumentType documentType, AggregateContainerGroup containerGroup)
     {
         var dbOption = GetSekibanCosmosDbOption();
         return (documentType, containerGroup) switch
         {
-            (DocumentType.Event, AggregateContainerGroup.Default) => dbOption.CosmosDbEventsContainer,
-            (DocumentType.Event, AggregateContainerGroup.Dissolvable) => dbOption.CosmosDbEventsContainerDissolvable,
-            (_, AggregateContainerGroup.Default) => dbOption.CosmosDbItemsContainer,
-            _ => dbOption.CosmosDbItemsContainerDissolvable
+            (DocumentType.Event, AggregateContainerGroup.Default) => dbOption.CosmosEventsContainer,
+            (DocumentType.Event, AggregateContainerGroup.Dissolvable) => dbOption.CosmosEventsContainerDissolvable,
+            (_, AggregateContainerGroup.Default) => dbOption.CosmosItemsContainer,
+            _ => dbOption.CosmosItemsContainerDissolvable
         };
     }
 
@@ -59,29 +59,29 @@ public class CosmosDbFactory(
     private string GetUri(DocumentType documentType)
     {
         var dbOption = GetSekibanCosmosDbOption();
-        return dbOption.CosmosDbEndPointUrl ?? string.Empty;
+        return dbOption.CosmosEndPointUrl ?? string.Empty;
     }
 
     private string GetSecurityKey(DocumentType documentType)
     {
         var dbOption = GetSekibanCosmosDbOption();
-        return dbOption.CosmosDbAuthorizationKey ?? string.Empty;
+        return dbOption.CosmosAuthorizationKey ?? string.Empty;
     }
 
 
     private Result<string> GetConnectionString(DocumentType documentType)
     {
         var dbOption = GetSekibanCosmosDbOption();
-        if (string.IsNullOrWhiteSpace(dbOption.CosmosDbConnectionString))
+        if (string.IsNullOrWhiteSpace(dbOption.CosmosConnectionString))
         {
             return new Result<string>(new InvalidDataException(""));
         }
-        return dbOption.CosmosDbConnectionString ?? string.Empty;
+        return dbOption.CosmosConnectionString ?? string.Empty;
     }
     private string GetDatabaseId(DocumentType documentType)
     {
         var dbOption = GetSekibanCosmosDbOption();
-        return dbOption.CosmosDbDatabase ?? string.Empty;
+        return dbOption.CosmosDatabase ?? string.Empty;
     }
 
     private async Task<Container> GetContainerAsync(DocumentType documentType, AggregateContainerGroup containerGroup)

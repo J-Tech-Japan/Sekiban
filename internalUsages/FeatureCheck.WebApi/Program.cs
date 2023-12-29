@@ -10,8 +10,10 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Sekiban Web Setting
 builder.Services.AddSekibanWeb(new FeatureCheckWebDependency());
+
 // Sekiban Core Setting
 builder.Services.AddSekibanWithDependency(new FeatureCheckDependency(), builder.Configuration);
+
 // Sekiban Cosmos Setting
 builder.Services.AddSekibanCosmosDB(
     builder.Configuration,
