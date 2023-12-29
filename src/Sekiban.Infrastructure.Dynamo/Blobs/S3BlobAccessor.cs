@@ -2,8 +2,6 @@ using Amazon;
 using Amazon.S3;
 using Amazon.S3.Model;
 using ICSharpCode.SharpZipLib.GZip;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Setting;
 using System.IO.Compression;
@@ -12,36 +10,14 @@ namespace Sekiban.Infrastructure.Dynamo.Blobs;
 /// <summary>
 ///     BlobAccessor for AWS S3
 /// </summary>
-public class S3BlobAccessor : IBlobAccessor
+public class S3BlobAccessor(SekibanDynamoDbOptions options, IServiceProvider serviceProvider) : IBlobAccessor
 {
-    private const string SekibanSection = "Sekiban";
-
-    private readonly IConfiguration _configuration;
-    private readonly IServiceProvider _serviceProvider;
-
-    private IConfigurationSection _section
-    {
-        get
-        {
-            var section = _configuration.GetSection(SekibanSection);
-            var _sekibanContext = _serviceProvider.GetService<ISekibanContext>();
-            if (!string.IsNullOrEmpty(_sekibanContext?.SettingGroupIdentifier))
-            {
-                section = section.GetSection(_sekibanContext.SettingGroupIdentifier);
-            }
-            return section;
-        }
-    }
-    private string AwsAccessKeyId => _section.GetValue<string>("AwsAccessKeyId") ?? throw new SekibanConfigurationException("AwsAccessKeyId");
-    private string AwsAccessKey => _section.GetValue<string>("AwsAccessKey") ?? throw new SekibanConfigurationException("AwsAccessKey");
-    private string S3BucketName => _section.GetValue<string>("S3BucketName") ?? throw new SekibanConfigurationException("S3BucketName");
-    private RegionEndpoint S3RegionEndpoint =>
-        RegionEndpoint.GetBySystemName(_section.GetValue<string>("S3Region") ?? throw new SekibanConfigurationException("S3Region"));
-    public S3BlobAccessor(IConfiguration configuration, IServiceProvider serviceProvider)
-    {
-        _configuration = configuration;
-        _serviceProvider = serviceProvider;
-    }
+    private string AwsAccessKeyId =>
+        options.GetContextOption(serviceProvider).AwsAccessKeyId ?? throw new SekibanConfigurationException("AwsAccessKeyId");
+    private string AwsAccessKey => options.GetContextOption(serviceProvider).AwsAccessKey ?? throw new SekibanConfigurationException("AwsAccessKey");
+    private string S3BucketName => options.GetContextOption(serviceProvider).S3BucketName ?? throw new SekibanConfigurationException("S3BucketName");
+    private RegionEndpoint S3RegionEndpoint => RegionEndpoint.GetBySystemName(
+        options.GetContextOption(serviceProvider).S3Region ?? throw new SekibanConfigurationException("S3Region"));
     public async Task<Stream?> GetBlobAsync(SekibanBlobContainer container, string blobName)
     {
         var client = await GetS3ClientAsync();

@@ -16,15 +16,7 @@ public class CosmosDbFactory(
     SekibanCosmosClientOptions options,
     SekibanCosmosDbOptions cosmosDbOptions)
 {
-    private string SekibanContextIdentifier()
-    {
-        var sekibanContext = serviceProvider.GetService<ISekibanContext>();
-        return sekibanContext?.SettingGroupIdentifier ?? SekibanContext.Default;
-    }
-    private SekibanAzureOption GetSekibanCosmosDbOption()
-    {
-        return cosmosDbOptions.Contexts.FirstOrDefault(m => m.Context == SekibanContextIdentifier()) ?? new SekibanAzureOption();
-    }
+    private SekibanAzureOption GetSekibanCosmosDbOption() => cosmosDbOptions.GetContextOption(serviceProvider);
     private string GetContainerId(DocumentType documentType, AggregateContainerGroup containerGroup)
     {
         var dbOption = GetSekibanCosmosDbOption();
@@ -35,6 +27,11 @@ public class CosmosDbFactory(
             (_, AggregateContainerGroup.Default) => dbOption.CosmosItemsContainer,
             _ => dbOption.CosmosItemsContainerDissolvable
         };
+    }
+    private string SekibanContextIdentifier()
+    {
+        var sekibanContext = serviceProvider.GetService<ISekibanContext>();
+        return sekibanContext?.SettingGroupIdentifier ?? SekibanContext.Default;
     }
 
     private bool GetSupportsHierarchicalPartitions()

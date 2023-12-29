@@ -24,6 +24,7 @@
         <PackageReference Include="AWSSDK.S3" Version="3.7.305"/>
         <PackageReference Include="SharpZipLib" Version="1.4.2"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
+        <PackageReference Include="System.Configuration.ConfigurationManager" Version="6.0.0"/>
     </ItemGroup>
 
     <ItemGroup>

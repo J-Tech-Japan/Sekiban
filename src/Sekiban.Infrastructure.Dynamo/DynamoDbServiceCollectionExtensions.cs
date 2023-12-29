@@ -11,19 +11,22 @@ namespace Sekiban.Infrastructure.Dynamo;
 /// </summary>
 public static class DynamoDbServiceCollectionExtensions
 {
-    public static IServiceCollection AddSekibanDynamoDB(this IServiceCollection services, IConfiguration configuration)
+    public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDB(this IServiceCollection services, IConfiguration configuration)
     {
         var options = SekibanDynamoDbOptions.FromConfiguration(configuration);
         return AddSekibanDynamoDB(services, options);
     }
-    public static IServiceCollection AddSekibanDynamoDBFromConfigurationSection(this IServiceCollection services, IConfigurationSection section)
+    public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDBFromConfigurationSection(
+        this IServiceCollection services,
+        IConfigurationSection section,
+        IConfigurationRoot configurationRoot)
     {
-        var options = SekibanDynamoDbOptions.FromConfigurationSection(section);
+        var options = SekibanDynamoDbOptions.FromConfigurationSection(section, configurationRoot);
         return AddSekibanDynamoDB(services, options);
     }
 
 
-    public static IServiceCollection AddSekibanDynamoDB(this IServiceCollection services, SekibanDynamoDbOptions dynamoDbOptions)
+    public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDB(this IServiceCollection services, SekibanDynamoDbOptions dynamoDbOptions)
     {
         // データストア
         services.AddTransient<DynamoDbFactory>();
@@ -33,6 +36,6 @@ public static class DynamoDbServiceCollectionExtensions
         services.AddTransient<IDocumentRemover, DynamoDbDocumentRemover>();
 
         services.AddTransient<IBlobAccessor, S3BlobAccessor>();
-        return services;
+        return new SekibanDynamoDbOptionsServiceCollection(dynamoDbOptions, services);
     }
 }

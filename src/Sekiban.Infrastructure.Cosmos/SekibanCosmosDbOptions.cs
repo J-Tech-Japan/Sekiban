@@ -1,13 +1,24 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Sekiban.Core.Setting;
 using System.Configuration;
 namespace Sekiban.Infrastructure.Cosmos;
 
 public class SekibanCosmosDbOptions
 {
     public List<SekibanAzureOption> Contexts { get; init; } = new();
-
     public static SekibanCosmosDbOptions Default => new();
+    private static string SekibanContextIdentifier(IServiceProvider serviceProvider)
+    {
+        var sekibanContext = serviceProvider.GetService<ISekibanContext>();
+        return sekibanContext?.SettingGroupIdentifier ?? SekibanContext.Default;
+    }
+
+    public SekibanAzureOption GetContextOption(string context) => Contexts.Find(x => x.Context == context) ?? new SekibanAzureOption();
+    public SekibanAzureOption GetContextOption(IServiceProvider serviceProvider) =>
+        Contexts.Find(x => x.Context == SekibanContextIdentifier(serviceProvider)) ?? new SekibanAzureOption();
+    public SekibanAzureOption GetContextOption(ISekibanContext context) =>
+        Contexts.Find(x => x.Context == context.SettingGroupIdentifier) ?? new SekibanAzureOption();
 
     public static SekibanCosmosDbOptions FromConfiguration(IConfiguration configuration) =>
         FromConfigurationSection(
@@ -29,13 +40,4 @@ public class SekibanCosmosDbOptions
         return new SekibanCosmosDbOptions { Contexts = contextSettings };
     }
     private static string GetLastPathComponent(IConfigurationSection section) => section.Path.Split(':').LastOrDefault() ?? section.Path;
-}
-public class SekibanCosmosDbOptionsServiceCollection(
-    SekibanCosmosDbOptions sekibanCosmosDbOptions,
-    SekibanCosmosClientOptions cosmosClientOptions,
-    IServiceCollection serviceCollection)
-{
-    public SekibanCosmosDbOptions SekibanCosmosDbOptions { get; init; } = sekibanCosmosDbOptions;
-    public SekibanCosmosClientOptions CosmosClientOptions { get; init; } = cosmosClientOptions;
-    public IServiceCollection ServiceCollection { get; init; } = serviceCollection;
 }

@@ -21,9 +21,9 @@ public class DynamoDbFactory(SekibanDynamoDbOptions dbOptions, IMemoryCacheAcces
         var sekibanContext = serviceProvider.GetService<ISekibanContext>();
         return sekibanContext?.SettingGroupIdentifier ?? SekibanContext.Default;
     }
-    private SekibanDynamoDbOption GetSekibanDynamoDbOption()
+    private SekibanAwsOption GetSekibanDynamoDbOption()
     {
-        return dbOptions.Contexts.FirstOrDefault(m => m.Context == SekibanContextIdentifier()) ?? new SekibanDynamoDbOption();
+        return dbOptions.Contexts.Find(m => m.Context == SekibanContextIdentifier()) ?? new SekibanAwsOption();
     }
 
     private string GetTableId(DocumentType documentType, AggregateContainerGroup containerGroup)
