@@ -17,17 +17,6 @@ public static class CosmosDbServiceCollectionExtensions
         var options = SekibanCosmosDbOptions.FromConfiguration(configuration);
         return AddSekibanCosmosDB(services, options, optionsFunc);
     }
-    public static SekibanCosmosDbOptionsServiceCollection AddSekibanCosmosDBFromConfigurationSection(
-        this IServiceCollection services,
-        IConfigurationSection section,
-        IConfiguration configurationRoot,
-        Func<SekibanCosmosClientOptions, SekibanCosmosClientOptions>? optionsFunc = null)
-    {
-        var options = SekibanCosmosDbOptions.FromConfigurationSection(
-            section,
-            configurationRoot as IConfigurationRoot ?? throw new ConfigurationErrorsException("cosmos db failed to configure."));
-        return AddSekibanCosmosDB(services, options, optionsFunc);
-    }
     /// <summary>
     ///     Setup Sekiban for CosmosDB
     ///     can setup options for CosmosDB.
@@ -51,5 +40,16 @@ public static class CosmosDbServiceCollectionExtensions
         services.AddTransient<IDocumentRemover, CosmosDbDocumentRemover>();
         services.AddTransient<IBlobAccessor, AzureBlobAccessor>();
         return new SekibanCosmosDbOptionsServiceCollection(cosmosDbOptions, options, services);
+    }
+    public static SekibanCosmosDbOptionsServiceCollection AddSekibanCosmosDBFromConfigurationSection(
+        this IServiceCollection services,
+        IConfigurationSection section,
+        IConfiguration configurationRoot,
+        Func<SekibanCosmosClientOptions, SekibanCosmosClientOptions>? optionsFunc = null)
+    {
+        var options = SekibanCosmosDbOptions.FromConfigurationSection(
+            section,
+            configurationRoot as IConfigurationRoot ?? throw new ConfigurationErrorsException("cosmos db failed to configure."));
+        return AddSekibanCosmosDB(services, options, optionsFunc);
     }
 }

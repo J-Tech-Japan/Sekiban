@@ -43,12 +43,12 @@ public class DynamoDbFactory(SekibanDynamoDbOptions dbOptions, IMemoryCacheAcces
     private static string GetMemoryCacheClientKey(DocumentType documentType, string sekibanContextIdentifier) =>
         $"{(documentType == DocumentType.Event ? "event." : "")}dynamo.client.{sekibanContextIdentifier}";
 
-    private string GetAwsAccessKeyId(DocumentType documentType)
+    private string GetAwsAccessKeyId()
     {
         var dbOption = GetSekibanDynamoDbOption();
         return dbOption.AwsAccessKeyId ?? string.Empty;
     }
-    private string GetAwsAccessKey(DocumentType documentType)
+    private string GetAwsAccessKey()
     {
         var dbOption = GetSekibanDynamoDbOption();
         return dbOption.AwsAccessKey ?? string.Empty;
@@ -71,8 +71,8 @@ public class DynamoDbFactory(SekibanDynamoDbOptions dbOptions, IMemoryCacheAcces
             return tableFromCache;
         }
 
-        var awsAccessKeyId = GetAwsAccessKeyId(documentType);
-        var awsAccessKey = GetAwsAccessKey(documentType);
+        var awsAccessKeyId = GetAwsAccessKeyId();
+        var awsAccessKey = GetAwsAccessKey();
         var region = GetDynamoDbRegion();
         var client = (AmazonDynamoDBClient?)memoryCache.Cache.Get(GetMemoryCacheClientKey(documentType, SekibanContextIdentifier()));
         if (client is null)
@@ -124,6 +124,14 @@ public class DynamoDbFactory(SekibanDynamoDbOptions dbOptions, IMemoryCacheAcces
     {
         await DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command, containerGroup);
     }
+    private void ResetMemoryCache(DocumentType documentType, AggregateContainerGroup containerGroup)
+    {
+        var containerId = GetTableId(documentType, containerGroup);
+        // There may be a network error, so initialize the container.
+        // This allows reconnection when recovered next time.
+        memoryCache.Cache.Remove(GetMemoryCacheClientKey(documentType, SekibanContextIdentifier()));
+        memoryCache.Cache.Remove(GetMemoryCacheTableKey(documentType, containerId, SekibanContextIdentifier()));
+    }
     public async Task<T> DynamoActionAsync<T>(DocumentType documentType, AggregateContainerGroup containerGroup, Func<Table, Task<T>> dynamoAction)
     {
         try
@@ -137,16 +145,6 @@ public class DynamoDbFactory(SekibanDynamoDbOptions dbOptions, IMemoryCacheAcces
             throw;
         }
     }
-
-    private void ResetMemoryCache(DocumentType documentType, AggregateContainerGroup containerGroup)
-    {
-        var containerId = GetTableId(documentType, containerGroup);
-        // There may be a network error, so initialize the container.
-        // This allows reconnection when recovered next time.
-        memoryCache.Cache.Remove(GetMemoryCacheClientKey(documentType, SekibanContextIdentifier()));
-        memoryCache.Cache.Remove(GetMemoryCacheTableKey(documentType, containerId, SekibanContextIdentifier()));
-    }
-
     public async Task DynamoActionAsync(DocumentType documentType, AggregateContainerGroup containerGroup, Func<Table, Task> dynamoAction)
     {
         try

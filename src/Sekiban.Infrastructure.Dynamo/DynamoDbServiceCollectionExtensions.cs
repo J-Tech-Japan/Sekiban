@@ -16,16 +16,6 @@ public static class DynamoDbServiceCollectionExtensions
         var options = SekibanDynamoDbOptions.FromConfiguration(configuration);
         return AddSekibanDynamoDB(services, options);
     }
-    public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDBFromConfigurationSection(
-        this IServiceCollection services,
-        IConfigurationSection section,
-        IConfigurationRoot configurationRoot)
-    {
-        var options = SekibanDynamoDbOptions.FromConfigurationSection(section, configurationRoot);
-        return AddSekibanDynamoDB(services, options);
-    }
-
-
     public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDB(this IServiceCollection services, SekibanDynamoDbOptions dynamoDbOptions)
     {
         // データストア
@@ -37,5 +27,13 @@ public static class DynamoDbServiceCollectionExtensions
 
         services.AddTransient<IBlobAccessor, S3BlobAccessor>();
         return new SekibanDynamoDbOptionsServiceCollection(dynamoDbOptions, services);
+    }
+    public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDBFromConfigurationSection(
+        this IServiceCollection services,
+        IConfigurationSection section,
+        IConfigurationRoot configurationRoot)
+    {
+        var options = SekibanDynamoDbOptions.FromConfigurationSection(section, configurationRoot);
+        return AddSekibanDynamoDB(services, options);
     }
 }
