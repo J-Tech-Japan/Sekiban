@@ -8,9 +8,9 @@ using Sekiban.Web.OpenApi;
 var builder = WebApplication.CreateBuilder(args);
 
 // Sekiban Core Setting
-builder.Services.AddSekibanCoreWithDependency(new BookBorrowingDependency(), configuration: builder.Configuration);
+builder.Services.AddSekibanWithDependency(new BookBorrowingDependency(), configuration: builder.Configuration);
 // Sekiban Cosmos Setting
-builder.Services.AddSekibanDynamoDB();
+builder.Services.AddSekibanDynamoDB(builder.Configuration);
 // Sekiban Web Setting
 builder.Services.AddSekibanWeb(new BookBorrowingWebDependency());
 

@@ -23,7 +23,7 @@ public class SekibanCosmosDbOptions
     public static SekibanCosmosDbOptions FromConfiguration(IConfiguration configuration) =>
         FromConfigurationSection(
             configuration.GetSection("Sekiban"),
-            configuration as ConfigurationRoot ?? throw new ConfigurationErrorsException("cosmos configuration failed."));
+            configuration as IConfigurationRoot ?? throw new ConfigurationErrorsException("cosmos configuration failed."));
     public static SekibanCosmosDbOptions FromConfigurationSection(IConfigurationSection section, IConfigurationRoot configurationRoot)
     {
         var defaultContextSection = section.GetSection("Default");

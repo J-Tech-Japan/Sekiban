@@ -11,8 +11,8 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
-        <PackageReference Include="Sekiban.Infrastructure.Cosmos" Version="0.15.5" />
-        <PackageReference Include="Sekiban.Web" Version="0.15.5" />
+        <PackageReference Include="Sekiban.Infrastructure.Cosmos" Version="0.16.0" />
+        <PackageReference Include="Sekiban.Web" Version="0.16.0" />
         <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
     </ItemGroup>
 
