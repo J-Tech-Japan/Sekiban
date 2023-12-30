@@ -284,9 +284,9 @@ public class SekibanWebDependency : DomainDependency, IWebDependencyDefinition
 var builder = WebApplication.CreateBuilder(args);
 
 // Sekiban Core Setting
-builder.Services.AddSekibanCoreWithDependency(new DomainDependency(), configuration: builder.Configuration);
+builder.Services.AddSekibanWithDependency(new DomainDependency(), configuration: builder.Configuration);
 // Sekiban Cosmos Setting
-builder.Services.AddSekibanCosmosDB();
+builder.Services.AddSekibanCosmosDB(builder.Configuration);
 // Change line above to Dynamo DB if you use Dynamo DB
 //builder.Services.AddSekibanCosmosDB();
 
@@ -329,16 +329,9 @@ Here is the appsettings.json for cosmos project.
       "Microsoft.AspNetCore": "Warning"
     }
   },
-  "Sekiban": {
-    "Default": {
-      "CosmosDbEventsContainer": "events",
-      "CosmosDbEventsContainerDissolvable": "dissolvableevents",
-      "BlobConnectionString": "[Set your blob connection string here. (not necessary for just running the sample)]",
-      "CosmosDbConnectionString": "[Set your cosmosDB connection string here.]",
-      "CosmosDbDatabase": "SekibanBasics",
-      "CosmosDbItemsContainer": "items",
-      "CosmosDbItemsContainerDissolvable": "dissolvableitems"
-    }
+  "ConnectionStrings" : {
+    "SekibanCosmos": "[Set your cosmosDB connection string here.]",
+    "SekibanBlob": "[Set your blob connection string here. (not necessary for just running the sample)]",
   }
 }
 
@@ -347,7 +340,8 @@ Here is the appsettings.json for cosmos project.
 You can add Secret Information to set your own setting. 
 
 Dynamo Setting is below.
-```
+
+```json
 {
   "Logging": {
     "LogLevel": {
@@ -357,15 +351,17 @@ Dynamo Setting is below.
   },
   "Sekiban": {
     "Default": {
-      "DynamoDbRegion": "ap-northeast-1",
-      "AwsAccessKeyId": "[Set your dynamo db access id here]",
-      "AwsAccessKey": "[Set your dynamo db access key here]",
-      "DynamoDbItemsTable": "jjlt_items",
-      "DynamoDbEventsTable": "jjlt_events",
-      "DynamoDbItemsTableDissolvable": "jjlt_d_items",
-      "DynamoDbEventsTableDissolvable": "jjlt_d_events",
-      "S3BucketName": "jjlt-s3",
-      "S3Region": "us-west-1",
+      "Aws" : {
+        "DynamoRegion": "ap-northeast-1",
+        "AccessKeyId": "[Set your dynamo db access id here]",
+        "AccessKey": "[Set your dynamo db access key here]",
+        "DynamoItemsTable": "jjlt_items",
+        "DynamoEventsTable": "jjlt_events",
+        "DynamoItemsTableDissolvable": "jjlt_d_items",
+        "DynamoEventsTableDissolvable": "jjlt_d_events",
+        "S3BucketName": "jjlt-s3",
+        "S3Region": "us-west-1",
+      }
     }
   },
   "AllowedHosts": "*"
