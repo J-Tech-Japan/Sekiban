@@ -29,7 +29,7 @@ public class SekibanAwsOption
             awsSection.GetValue<string>("DynamoDbItemsTableDissolvable") ?? "dissolvableitems";
         var awsAccessKeyId = awsSection.GetValue<string>("AccessKeyId") ?? awsSection.GetValue<string>("AwsAccessKeyId");
         var awsAccessKey = awsSection.GetValue<string>("AccessKey") ?? awsSection.GetValue<string>("AwsAccessKey");
-        var dynamoDbRegion = awsSection.GetValue<string>("DynamoDbRegion");
+        var dynamoDbRegion = awsSection.GetValue<string>("DynamoRegion") ?? awsSection.GetValue<string>("DynamoDbRegion");
         var s3BucketName = awsSection.GetValue<string>("S3BucketName");
         var s3Region = awsSection.GetValue<string>("S3Region");
         return new SekibanAwsOption
