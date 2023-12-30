@@ -57,6 +57,8 @@ To make your own project, you can refer Tutorial Project in `/Samples/Tutorials/
     - `Program.cs` will have `AddSekibanWeb` as Web Settings.
 
     - `appsettings.json` will needs basic settings.
+
+
 #### appsettings.json for Azure Cosmos DB.
 Below is minimum setting for the Cosmos DB. You can obtain Cosmos DB connection string from Cosmos DB website or azure cli. `CosmosDbDatabase` should be database name you use, container name can be define with appsettings but it uses `events` for events, and `items` for commands and snapshots.
 ```json
@@ -67,18 +69,26 @@ Below is minimum setting for the Cosmos DB. You can obtain Cosmos DB connection 
       "Microsoft.AspNetCore": "Warning"
     }
   },
-  "Sekiban": {
-    "Default": {
-      "CosmosDbConnectionString": "[Set your cosmos db connection string]",
-      "BlobConnectionString": "[Set your blob connection string here. (not necessary for just running the sample)]",
-      "CosmosDbDatabase": "GetStartedDb"
-    }
+  "ConnectionStrings" : {
+    "SekibanCosmos" : "[Set your cosmos db connection string]",
+    "SekibanBlob": "[Set your blob connection string here. (not necessary for just running the sample)]"
   }
 }
 ```
 
+With this simple way of the settings, sekiban will connect to following Cosmos Db instances.
+- Azure Cosmos DB Endpoint : one you set on "ConnectionStrings:SekibanCosmos"
+- Azure Cosmos DB Database : Default Database Name "SekibanDb", also you can set on appsettings by "Sekiban:Default:Azure:CosmosDatabase" 
+- Azure Cosmos DB Container : Two container will be needed.
+  - 1. "events" container. Stores all events.
+  - 2. "items" container.
+
+It looks like following image.
+![Cosmos DB](../images/quick-start/image1.png)
+
+
 #### appsettings.json for Dynamo DB.
-Below is minimum setting for the Dynamo DB. Table names `DynamoDbEventsTable` `DynamoDbItemsTable` can be define with appsettings but it uses `events` for events, and `items` for commands and snapshots.
+Below is minimum setting for the Dynamo DB. Table names `DynamoEventsTable` `DynamoItemsTable` can be define with appsettings but it uses `events` for events, and `items` for commands and snapshots.
 ```json
 {
   "Logging": {
@@ -89,13 +99,15 @@ Below is minimum setting for the Dynamo DB. Table names `DynamoDbEventsTable` `D
   },
   "Sekiban": {
     "Default": {
-      "DynamoDbRegion": "us-east-1",
-      "AwsAccessKeyId": "[Set your dynamo db access id here]",
-      "AwsAccessKey": "[Set your dynamo db access key here]",
-      "DynamoDbItemsTable": "jjlt_items",
-      "DynamoDbEventsTable": "jjlt_events",
-      "S3BucketName": "jjlt-s3",
-      "S3Region": "us-west-1"
+      "Aws" : {
+        "DynamoRegion": "us-east-1",
+        "AccessKeyId": "[Set your dynamo db access id here]",
+        "AccessKey": "[Set your dynamo db access key here]",
+        "DynamoItemsTable": "jjlt_items",
+        "DynamoEventsTable": "jjlt_events",
+        "S3BucketName": "jjlt-s3",
+        "S3Region": "us-west-1"
+      }
     }
   }
 }

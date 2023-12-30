@@ -46,11 +46,9 @@ Visual Studio 2022をインストールします。バージョンは17.7（dotn
 
 ```json
 {
-  "Sekiban": {
-    "Default": {
-      "BlobConnectionString": "[Set your blob connection string here. (not necessary for just running the sample)]",
-      "CosmosDbConnectionString": "[Set your CosmosDB Connection String here.]",
-    }
+  "ConnectionStrings" : {
+    "SekibanCosmos" :"[Set your cosmosDB connection string here.]",
+    "SekibanBlob" : "[Set your blob connection string here. (not necessary for just running the sample)]"
   }
 }
 ```
