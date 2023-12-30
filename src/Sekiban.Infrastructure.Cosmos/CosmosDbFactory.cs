@@ -1,7 +1,6 @@
 using LanguageExt.Common;
 using Microsoft.Azure.Cosmos.Linq;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Cache;
@@ -12,64 +11,33 @@ using Sekiban.Core.Shared;
 namespace Sekiban.Infrastructure.Cosmos;
 
 public class CosmosDbFactory(
-    IConfiguration configuration,
     IMemoryCacheAccessor memoryCache,
     IServiceProvider serviceProvider,
-    SekibanCosmosOptions options)
+    SekibanCosmosClientOptions options,
+    SekibanCosmosDbOptions cosmosDbOptions)
 {
-    private const string SekibanSection = "Sekiban";
-    private string _sekibanContextIdentifier
-    {
-        get
-        {
-            var sekibanContext = serviceProvider.GetService<ISekibanContext>();
-            return sekibanContext?.SettingGroupIdentifier ?? SekibanContext.Default;
-        }
-    }
-
-    private IConfigurationSection _section
-    {
-        get
-        {
-            var section = configuration.GetSection(SekibanSection);
-            var sekibanContext = serviceProvider.GetService<ISekibanContext>();
-            if (!string.IsNullOrEmpty(sekibanContext?.SettingGroupIdentifier))
-            {
-                section = section.GetSection(sekibanContext.SettingGroupIdentifier);
-            }
-            return section;
-        }
-    }
-
+    private SekibanAzureOption GetSekibanCosmosDbOption() => cosmosDbOptions.GetContextOption(serviceProvider);
     private string GetContainerId(DocumentType documentType, AggregateContainerGroup containerGroup)
     {
-        return documentType switch
+        var dbOption = GetSekibanCosmosDbOption();
+        return (documentType, containerGroup) switch
         {
-            DocumentType.Event => _section.GetValue<string>(
-                    $"CosmosDbEventsContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _section.GetValue<string>(
-                    $"AggregateEventCosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                (containerGroup == AggregateContainerGroup.Dissolvable ? "dissolvableevents" : "events"),
-            DocumentType.Command =>
-                _section.GetValue<string>(
-                    $"AggregateCommandCosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _section.GetValue<string>(
-                    $"CosmosDbCommandsContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _section.GetValue<string>($"CosmosDbItemsContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "dissolvable" : "")}") ??
-                _section.GetValue<string>($"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "dissolvable" : "")}") ??
-                _section.GetValue<string>("CosmosDbContainer") ??
-                (containerGroup == AggregateContainerGroup.Dissolvable ? "dissolvableitems" : "items"),
-            _ => _section.GetValue<string>($"CosmosDbItemsContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _section.GetValue<string>($"CosmosDbContainer{(containerGroup == AggregateContainerGroup.Dissolvable ? "Dissolvable" : "")}") ??
-                _section.GetValue<string>("CosmosDbContainer") ??
-                (containerGroup == AggregateContainerGroup.Dissolvable ? "dissolvableitems" : "items")
+            (DocumentType.Event, AggregateContainerGroup.Default) => dbOption.CosmosEventsContainer,
+            (DocumentType.Event, AggregateContainerGroup.Dissolvable) => dbOption.CosmosEventsContainerDissolvable,
+            (_, AggregateContainerGroup.Default) => dbOption.CosmosItemsContainer,
+            _ => dbOption.CosmosItemsContainerDissolvable
         };
+    }
+    private string SekibanContextIdentifier()
+    {
+        var sekibanContext = serviceProvider.GetService<ISekibanContext>();
+        return sekibanContext?.SettingGroupIdentifier ?? SekibanContext.Default;
     }
 
     private bool GetSupportsHierarchicalPartitions()
     {
-        var legacy = _section.GetValue<bool?>("LegacyPartitions") ?? false;
-        return !legacy;
+        var dbOption = GetSekibanCosmosDbOption();
+        return !dbOption.LegacyPartitions;
     }
 
     private static string GetMemoryCacheContainerKey(
@@ -85,63 +53,67 @@ public class CosmosDbFactory(
     private static string GetMemoryCacheDatabaseKey(DocumentType documentType, string databaseId, string sekibanContextIdentifier) =>
         $"{(documentType == DocumentType.Event ? "event." : "")}cosmosdb.container.{databaseId}.{sekibanContextIdentifier}";
 
-    private string GetUri(DocumentType documentType) =>
-        (documentType == DocumentType.Event
-            ? _section.GetValue<string>("EventCosmosDbEndPointUrl") ?? _section.GetValue<string>("CosmosDbEndPointUrl")
-            : _section.GetValue<string>("CosmosDbEndPointUrl")) ??
-        throw new Exception("CosmosDbEndPointUrl not found");
+    private string GetUri()
+    {
+        var dbOption = GetSekibanCosmosDbOption();
+        return dbOption.CosmosEndPointUrl ?? string.Empty;
+    }
 
-    private string GetSecurityKey(DocumentType documentType) =>
-        (documentType == DocumentType.Event
-            ? _section.GetValue<string>("EventCosmosDbAuthorizationKey") ?? _section.GetValue<string>("CosmosDbAuthorizationKey")
-            : _section.GetValue<string>("CosmosDbAuthorizationKey")) ??
-        throw new Exception("CosmosDbAuthorizationKey not found");
+    private string GetSecurityKey()
+    {
+        var dbOption = GetSekibanCosmosDbOption();
+        return dbOption.CosmosAuthorizationKey ?? string.Empty;
+    }
 
-    private Result<string> GetConnectionString(DocumentType documentType) =>
-        (documentType == DocumentType.Event
-            ? _section.GetValue<string>("EventCosmosDbConnectionString") ?? _section.GetValue<string>("CosmosDbConnectionString")
-            : _section.GetValue<string>("CosmosDbConnectionString")) ??
-        new Result<string>(new Exception("CosmosDbConnectionString not found"));
 
-    private string GetDatabaseId(DocumentType documentType) =>
-        (documentType == DocumentType.Event
-            ? _section.GetValue<string>("EventCosmosDbDatabase") ?? _section.GetValue<string>("CosmosDbDatabase")
-            : _section.GetValue<string>("CosmosDbDatabase")) ??
-        throw new Exception("CosmosDbDatabase not found");
+    private Result<string> GetConnectionString()
+    {
+        var dbOption = GetSekibanCosmosDbOption();
+        if (string.IsNullOrWhiteSpace(dbOption.CosmosConnectionString))
+        {
+            return new Result<string>(new InvalidDataException(""));
+        }
+        return dbOption.CosmosConnectionString ?? string.Empty;
+    }
+    private string GetDatabaseId()
+    {
+        var dbOption = GetSekibanCosmosDbOption();
+        return dbOption.CosmosDatabase ?? string.Empty;
+    }
 
     private async Task<Container> GetContainerAsync(DocumentType documentType, AggregateContainerGroup containerGroup)
     {
-        var databaseId = GetDatabaseId(documentType);
+        var databaseId = GetDatabaseId();
         var containerId = GetContainerId(documentType, containerGroup);
         var container = (Container?)memoryCache.Cache.Get(
-            GetMemoryCacheContainerKey(documentType, databaseId, containerId, _sekibanContextIdentifier));
+            GetMemoryCacheContainerKey(documentType, databaseId, containerId, SekibanContextIdentifier()));
 
         if (container is not null)
         {
             return container;
         }
-        var client = memoryCache.Cache.Get<CosmosClient?>(GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier));
+        var client = memoryCache.Cache.Get<CosmosClient?>(GetMemoryCacheClientKey(documentType, SekibanContextIdentifier()));
         if (client is null)
         {
             var clientOptions = options.ClientOptions;
-            var connectionString = GetConnectionString(documentType);
+            var connectionString = GetConnectionString();
             client = connectionString.Match(
                 v => new CosmosClient(v, clientOptions),
                 _ =>
                 {
-                    var uri = GetUri(documentType);
-                    var securityKey = GetSecurityKey(documentType);
+                    var uri = GetUri();
+                    var securityKey = GetSecurityKey();
                     return new CosmosClient(uri, securityKey, clientOptions);
                 });
-            memoryCache.Cache.Set(GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier), client, new MemoryCacheEntryOptions());
+            memoryCache.Cache.Set(GetMemoryCacheClientKey(documentType, SekibanContextIdentifier()), client, new MemoryCacheEntryOptions());
         }
 
-        var database = memoryCache.Cache.Get<Database?>(GetMemoryCacheDatabaseKey(documentType, databaseId, _sekibanContextIdentifier));
+        var database = memoryCache.Cache.Get<Database?>(GetMemoryCacheDatabaseKey(documentType, databaseId, SekibanContextIdentifier()));
         if (database is null)
         {
             database = await client.CreateDatabaseIfNotExistsAsync(databaseId);
             memoryCache.Cache.Set(
-                GetMemoryCacheDatabaseKey(documentType, databaseId, _sekibanContextIdentifier),
+                GetMemoryCacheDatabaseKey(documentType, databaseId, SekibanContextIdentifier()),
                 database,
                 new MemoryCacheEntryOptions());
         }
@@ -149,7 +121,7 @@ public class CosmosDbFactory(
         var containerProperties = new ContainerProperties(containerId, GetPartitionKeyPaths(GetSupportsHierarchicalPartitions()));
         container = await database.CreateContainerIfNotExistsAsync(containerProperties, 400);
         memoryCache.Cache.Set(
-            GetMemoryCacheContainerKey(documentType, databaseId, containerId, _sekibanContextIdentifier),
+            GetMemoryCacheContainerKey(documentType, databaseId, containerId, SekibanContextIdentifier()),
             container,
             new MemoryCacheEntryOptions());
 
@@ -227,12 +199,12 @@ public class CosmosDbFactory(
     private void ResetMemoryCache(DocumentType documentType, AggregateContainerGroup containerGroup)
     {
         var containerId = GetContainerId(documentType, containerGroup);
-        var databaseId = GetDatabaseId(documentType);
+        var databaseId = GetDatabaseId();
         // There may be a network error, so initialize the container.
         // This allows reconnection when recovered next time.
-        memoryCache.Cache.Remove(GetMemoryCacheClientKey(documentType, _sekibanContextIdentifier));
-        memoryCache.Cache.Remove(GetMemoryCacheDatabaseKey(documentType, databaseId, _sekibanContextIdentifier));
-        memoryCache.Cache.Remove(GetMemoryCacheContainerKey(documentType, databaseId, containerId, _sekibanContextIdentifier));
+        memoryCache.Cache.Remove(GetMemoryCacheClientKey(documentType, SekibanContextIdentifier()));
+        memoryCache.Cache.Remove(GetMemoryCacheDatabaseKey(documentType, databaseId, SekibanContextIdentifier()));
+        memoryCache.Cache.Remove(GetMemoryCacheContainerKey(documentType, databaseId, containerId, SekibanContextIdentifier()));
     }
 
     public async Task CosmosActionAsync(DocumentType documentType, AggregateContainerGroup containerGroup, Func<Container, Task> cosmosAction)

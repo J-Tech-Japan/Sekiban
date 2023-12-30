@@ -1,10 +1,7 @@
 using Sekiban.Infrastructure.Cosmos.Lib.Json;
 namespace Sekiban.Infrastructure.Cosmos;
 
-/// <summary>
-///     Cosmos DB options
-/// </summary>
-public record SekibanCosmosOptions
+public record SekibanCosmosClientOptions
 {
     /// <summary>
     ///     Cosmos Db Options.

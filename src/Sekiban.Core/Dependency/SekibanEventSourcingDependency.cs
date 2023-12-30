@@ -16,16 +16,38 @@ public static class SekibanEventSourcingDependency
 {
     public static Assembly GetAssembly() => Assembly.GetExecutingAssembly();
 
+    public static IServiceCollection AddSekibanWithDependency(
+        this IServiceCollection services,
+        IDependencyDefinition dependencyDefinition,
+        IConfiguration configuration)
+    {
+        var settings = SekibanSettings.FromConfiguration(configuration);
+        return AddSekibanCoreWithDependency(services, dependencyDefinition, settings);
+    }
+    public static IServiceCollection AddSekibanWithDependency(
+        this IServiceCollection services,
+        IDependencyDefinition dependencyDefinition,
+        SekibanSettings settings) =>
+        AddSekibanCoreWithDependency(services, dependencyDefinition, settings);
+
     public static IServiceCollection AddSekibanCoreWithDependency(
         this IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
+        SekibanSettings settings,
         ISekibanDateProducer? sekibanDateProducer = null,
-        ServiceCollectionExtensions.MultiProjectionType multiProjectionType = ServiceCollectionExtensions.MultiProjectionType.MemoryCache,
-        IConfiguration? configuration = null)
-
+        ServiceCollectionExtensions.MultiProjectionType multiProjectionType = ServiceCollectionExtensions.MultiProjectionType.MemoryCache)
     {
-        Register(services, dependencyDefinition, sekibanDateProducer, multiProjectionType, configuration);
+        Register(services, dependencyDefinition, settings, sekibanDateProducer, multiProjectionType);
         return services;
+    }
+
+    public static IServiceCollection AddSekibanWithDependencyWithConfigurationSection(
+        this IServiceCollection services,
+        IDependencyDefinition dependencyDefinition,
+        IConfigurationSection section)
+    {
+        var settings = SekibanSettings.FromConfigurationSection(section);
+        return AddSekibanCoreWithDependency(services, dependencyDefinition, settings);
     }
 
     public static IEnumerable<(Type serviceType, Type? implementationType)> GetDependencies()
@@ -38,16 +60,17 @@ public static class SekibanEventSourcingDependency
     public static void Register(
         IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
+        SekibanSettings settings,
         ISekibanDateProducer? sekibanDateProducer = null,
-        ServiceCollectionExtensions.MultiProjectionType multiProjectionType = ServiceCollectionExtensions.MultiProjectionType.MemoryCache,
-        IConfiguration? configuration = null)
+        ServiceCollectionExtensions.MultiProjectionType multiProjectionType = ServiceCollectionExtensions.MultiProjectionType.MemoryCache)
     {
         // MediatR
         services.AddMediatR(new MediatRServiceConfiguration().RegisterServicesFromAssemblies(Assembly.GetExecutingAssembly(), GetAssembly()));
         // Sekiban Event Sourcing
-        services.AddSekibanCore(sekibanDateProducer ?? new SekibanDateProducer(), multiProjectionType, configuration);
+        services.AddSekibanCore(settings, sekibanDateProducer ?? new SekibanDateProducer(), multiProjectionType);
         services.AddSekibanHTTPUser();
-        services.AddSekibanSettingsFromAppSettings();
+        services.AddSingleton(settings);
+        services.AddTransient<IAggregateSettings, ContextAggregateSettings>();
         // run Define() before using.
         dependencyDefinition.Define();
         // Each Domain contexts
@@ -87,8 +110,8 @@ public static class SekibanEventSourcingDependency
         services.AddSekibanCoreInMemory(sekibanDateProducer);
 
         services.AddSekibanHTTPUser();
-
-        services.AddSekibanSettingsFromAppSettings();
+        services.AddSingleton(SekibanSettings.Default);
+        services.AddTransient<IAggregateSettings, ContextAggregateSettings>();
         // run Define() before using.
         dependencyDefinition.Define();
 
@@ -128,7 +151,7 @@ public static class SekibanEventSourcingDependency
         services.AddSekibanCoreAggregateTest(sekibanDateProducer);
 
         services.AddSekibanHTTPUser();
-
+        services.AddSingleton(SekibanSettings.Default);
         services.AddSekibanAppSettingsFromObject(new AggregateSettings());
         // run Define() before using.
         dependencyDefinition.Define();
@@ -152,7 +175,8 @@ public static class SekibanEventSourcingDependency
             if (implementationType is null)
             {
                 services.AddTransient(serviceType);
-            } else
+            }
+            else
             {
                 services.AddTransient(serviceType, implementationType);
             }

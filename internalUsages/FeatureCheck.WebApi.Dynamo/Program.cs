@@ -10,9 +10,9 @@ var builder = WebApplication.CreateBuilder(args);
 // Sekiban Web Setting
 builder.Services.AddSekibanWeb(new FeatureCheckWebDependency());
 // Sekiban Core Setting
-builder.Services.AddSekibanCoreWithDependency(new FeatureCheckDependency(), configuration: builder.Configuration);
+builder.Services.AddSekibanWithDependency(new FeatureCheckDependency(), builder.Configuration);
 // Sekiban Dynamo Setting
-builder.Services.AddSekibanDynamoDB();
+builder.Services.AddSekibanDynamoDB(builder.Configuration);
 
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle

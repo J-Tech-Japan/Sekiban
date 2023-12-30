@@ -1,40 +1,15 @@
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using ICSharpCode.SharpZipLib.GZip;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
+using Sekiban.Core.Setting;
 using System.IO.Compression;
-namespace Sekiban.Core.Setting;
+namespace Sekiban.Infrastructure.Cosmos;
 
 /// <summary>
 ///     Blob accessor implementation for Azure Blob Storage.
 /// </summary>
-public class AzureBlobAccessor : IBlobAccessor
+public class AzureBlobAccessor(IServiceProvider serviceProvider, SekibanCosmosDbOptions cosmosDbOptions) : IBlobAccessor
 {
-    private const string SekibanSection = "Sekiban";
-
-    private readonly IConfiguration _configuration;
-    private readonly IServiceProvider _serviceProvider;
-
-    private IConfigurationSection _section
-    {
-        get
-        {
-            var section = _configuration.GetSection(SekibanSection);
-            var _sekibanContext = _serviceProvider.GetService<ISekibanContext>();
-            if (!string.IsNullOrEmpty(_sekibanContext?.SettingGroupIdentifier))
-            {
-                section = section.GetSection(_sekibanContext.SettingGroupIdentifier);
-            }
-            return section;
-        }
-    }
-
-    public AzureBlobAccessor(IServiceProvider serviceProvider, IConfiguration configuration)
-    {
-        _serviceProvider = serviceProvider;
-        _configuration = configuration;
-    }
     public async Task<Stream?> GetBlobAsync(SekibanBlobContainer container, string blobName)
     {
         var containerClient = await GetContainerAsync(container.ToString());
@@ -88,7 +63,7 @@ public class AzureBlobAccessor : IBlobAccessor
     }
 
     public string BlobConnectionString() =>
-        _section.GetValue<string>("BlobConnectionString") ?? throw new Exception("BlobConnectionString not found");
+        cosmosDbOptions.GetContextOption(serviceProvider).BlobConnectionString ?? throw new InvalidDataException("BlobConnectionString not found");
     private async Task<BlobContainerClient> GetContainerAsync(string containerName)
     {
         var connectionString = BlobConnectionString();

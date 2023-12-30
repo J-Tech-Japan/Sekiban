@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Command;
@@ -35,9 +34,9 @@ public static class ServiceCollectionExtensions
 
     public static IServiceCollection AddSekibanCore(
         this IServiceCollection services,
+        SekibanSettings settings,
         ISekibanDateProducer? sekibanDateProducer = null,
-        MultiProjectionType multiProjectionType = MultiProjectionType.MemoryCache,
-        IConfiguration? configuration = null)
+        MultiProjectionType multiProjectionType = MultiProjectionType.MemoryCache)
     {
         services.AddMemoryCache();
         services.AddLogging();
@@ -72,13 +71,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISekibanContext, SekibanContext>();
         services.AddTransient<IQueryExecutor, QueryExecutor>();
         services.AddTransient<QueryHandler>();
-        if (configuration is not null)
-        {
-            services.AddSingleton<IMemoryCacheSettings>(new MemoryCacheSetting(configuration));
-        } else
-        {
-            services.AddScoped<IMemoryCacheSettings, MemoryCacheSetting>();
-        }
+        services.AddSingleton(settings.MemoryCache);
         services.AddTransient<ISingleProjectionCache, SingleProjectionCache>();
         services.AddTransient<IMultiProjectionCache, MultiProjectionCache>();
         services.AddTransient<ISnapshotDocumentCache, SnapshotDocumentCache>();
@@ -130,7 +123,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IDocumentRemover, InMemoryDocumentRemover>();
         services.AddTransient<IQueryExecutor, QueryExecutor>();
         services.AddTransient<QueryHandler>();
-        services.AddScoped<IMemoryCacheSettings, MemoryCacheSetting>();
+        services.AddScoped<MemoryCacheSetting>();
         services.AddTransient<ISingleProjectionCache, SingleProjectionCache>();
         services.AddTransient<IMultiProjectionCache, MultiProjectionCache>();
         services.AddTransient<ISnapshotDocumentCache, SnapshotDocumentCache>();
@@ -183,7 +176,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IDocumentPersistentWriter, InMemoryDocumentWriter>();
         services.AddTransient<IQueryExecutor, QueryExecutor>();
         services.AddTransient<QueryHandler>();
-        services.AddScoped<IMemoryCacheSettings, MemoryCacheSetting>();
+        services.AddScoped<MemoryCacheSetting>();
         services.AddTransient<ISingleProjectionCache, SingleProjectionCache>();
         services.AddTransient<IMultiProjectionCache, MultiProjectionCache>();
         services.AddTransient<ISnapshotDocumentCache, SnapshotDocumentCache>();
@@ -229,13 +222,6 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<MultiProjectionSnapshotCollectionBackgroundService<TSettings>>();
         return services;
     }
-    public static IServiceCollection AddSekibanSettingsFromAppSettings(this IServiceCollection services)
-    {
-        // Settings can be specified from the Configuration, and a settings object can also be created with new.
-        services.AddTransient<IAggregateSettings, ConfigurationAggregateSettings>();
-        return services;
-    }
-
     public static IServiceCollection AddSekibanAppSettingsFromObject(this IServiceCollection services, AggregateSettings settings)
     {
         // Example

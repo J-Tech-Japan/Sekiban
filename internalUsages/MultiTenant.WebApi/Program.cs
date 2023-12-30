@@ -10,9 +10,9 @@ var builder = WebApplication.CreateBuilder(args);
 // Sekiban Web Setting
 builder.Services.AddSekibanWeb(new MultiTenantWebDependency());
 // Sekiban Core Setting
-builder.Services.AddSekibanCoreWithDependency(new MultiTenantWebDependency(), configuration: builder.Configuration);
+builder.Services.AddSekibanWithDependency(new MultiTenantWebDependency(), builder.Configuration);
 // Sekiban Cosmos Setting
-builder.Services.AddSekibanCosmosDB();
+builder.Services.AddSekibanCosmosDB(builder.Configuration);
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
