@@ -53,20 +53,20 @@ public class CosmosDbFactory(
     private static string GetMemoryCacheDatabaseKey(DocumentType documentType, string databaseId, string sekibanContextIdentifier) =>
         $"{(documentType == DocumentType.Event ? "event." : "")}cosmosdb.container.{databaseId}.{sekibanContextIdentifier}";
 
-    private string GetUri(DocumentType documentType)
+    private string GetUri()
     {
         var dbOption = GetSekibanCosmosDbOption();
         return dbOption.CosmosEndPointUrl ?? string.Empty;
     }
 
-    private string GetSecurityKey(DocumentType documentType)
+    private string GetSecurityKey()
     {
         var dbOption = GetSekibanCosmosDbOption();
         return dbOption.CosmosAuthorizationKey ?? string.Empty;
     }
 
 
-    private Result<string> GetConnectionString(DocumentType documentType)
+    private Result<string> GetConnectionString()
     {
         var dbOption = GetSekibanCosmosDbOption();
         if (string.IsNullOrWhiteSpace(dbOption.CosmosConnectionString))
@@ -75,7 +75,7 @@ public class CosmosDbFactory(
         }
         return dbOption.CosmosConnectionString ?? string.Empty;
     }
-    private string GetDatabaseId(DocumentType documentType)
+    private string GetDatabaseId()
     {
         var dbOption = GetSekibanCosmosDbOption();
         return dbOption.CosmosDatabase ?? string.Empty;
@@ -83,7 +83,7 @@ public class CosmosDbFactory(
 
     private async Task<Container> GetContainerAsync(DocumentType documentType, AggregateContainerGroup containerGroup)
     {
-        var databaseId = GetDatabaseId(documentType);
+        var databaseId = GetDatabaseId();
         var containerId = GetContainerId(documentType, containerGroup);
         var container = (Container?)memoryCache.Cache.Get(
             GetMemoryCacheContainerKey(documentType, databaseId, containerId, SekibanContextIdentifier()));
@@ -96,13 +96,13 @@ public class CosmosDbFactory(
         if (client is null)
         {
             var clientOptions = options.ClientOptions;
-            var connectionString = GetConnectionString(documentType);
+            var connectionString = GetConnectionString();
             client = connectionString.Match(
                 v => new CosmosClient(v, clientOptions),
                 _ =>
                 {
-                    var uri = GetUri(documentType);
-                    var securityKey = GetSecurityKey(documentType);
+                    var uri = GetUri();
+                    var securityKey = GetSecurityKey();
                     return new CosmosClient(uri, securityKey, clientOptions);
                 });
             memoryCache.Cache.Set(GetMemoryCacheClientKey(documentType, SekibanContextIdentifier()), client, new MemoryCacheEntryOptions());
@@ -199,7 +199,7 @@ public class CosmosDbFactory(
     private void ResetMemoryCache(DocumentType documentType, AggregateContainerGroup containerGroup)
     {
         var containerId = GetContainerId(documentType, containerGroup);
-        var databaseId = GetDatabaseId(documentType);
+        var databaseId = GetDatabaseId();
         // There may be a network error, so initialize the container.
         // This allows reconnection when recovered next time.
         memoryCache.Cache.Remove(GetMemoryCacheClientKey(documentType, SekibanContextIdentifier()));

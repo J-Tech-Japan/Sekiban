@@ -24,14 +24,6 @@ public static class SekibanEventSourcingDependency
         var settings = SekibanSettings.FromConfiguration(configuration);
         return AddSekibanCoreWithDependency(services, dependencyDefinition, settings);
     }
-    public static IServiceCollection AddSekibanWithDependencyWithConfigurationSection(
-        this IServiceCollection services,
-        IDependencyDefinition dependencyDefinition,
-        IConfigurationSection section)
-    {
-        var settings = SekibanSettings.FromConfigurationSection(section);
-        return AddSekibanCoreWithDependency(services, dependencyDefinition, settings);
-    }
     public static IServiceCollection AddSekibanWithDependency(
         this IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
@@ -47,6 +39,15 @@ public static class SekibanEventSourcingDependency
     {
         Register(services, dependencyDefinition, settings, sekibanDateProducer, multiProjectionType);
         return services;
+    }
+
+    public static IServiceCollection AddSekibanWithDependencyWithConfigurationSection(
+        this IServiceCollection services,
+        IDependencyDefinition dependencyDefinition,
+        IConfigurationSection section)
+    {
+        var settings = SekibanSettings.FromConfigurationSection(section);
+        return AddSekibanCoreWithDependency(services, dependencyDefinition, settings);
     }
 
     public static IEnumerable<(Type serviceType, Type? implementationType)> GetDependencies()
@@ -174,7 +175,8 @@ public static class SekibanEventSourcingDependency
             if (implementationType is null)
             {
                 services.AddTransient(serviceType);
-            } else
+            }
+            else
             {
                 services.AddTransient(serviceType, implementationType);
             }

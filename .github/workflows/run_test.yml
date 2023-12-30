@@ -31,8 +31,8 @@ jobs:
         pushd ./tests/Sekiban.Test.CosmosDb
         dotnet user-secrets set "ConnectionStrings:SekibanBlob" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
         dotnet user-secrets set "ConnectionStrings:SekibanCosmos" "${{secrets.TEST_COSMOS_CONNECTION_STRING}}"
-        dotnet user-secrets set "Sekiban:Default:CosmosDatabase" "GithubActions"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:CosmosDatabase" "GithubActions"
+        dotnet user-secrets set "Sekiban:Default:Azure:CosmosDatabase" "GithubActions"
+        dotnet user-secrets set "Sekiban:Contexts:Secondary:Azure:CosmosDatabase" "GithubActions"
         dotnet user-secrets set "Sekiban:Default:Aws:AccessKeyId" "${{secrets.TEST_AWS_ACCESS_KEY_ID}}"
         dotnet user-secrets set "Sekiban:Default:Aws:AccessKey" "${{secrets.TEST_AWS_ACCESS_KEY}}"
         dotnet user-secrets set "Sekiban:Default:Aws:DynamoRegion" "us-west-1"

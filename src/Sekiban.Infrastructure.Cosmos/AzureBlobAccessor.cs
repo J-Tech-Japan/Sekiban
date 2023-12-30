@@ -63,7 +63,7 @@ public class AzureBlobAccessor(IServiceProvider serviceProvider, SekibanCosmosDb
     }
 
     public string BlobConnectionString() =>
-        cosmosDbOptions.GetContextOption(serviceProvider).BlobConnectionString ?? throw new Exception("BlobConnectionString not found");
+        cosmosDbOptions.GetContextOption(serviceProvider).BlobConnectionString ?? throw new InvalidDataException("BlobConnectionString not found");
     private async Task<BlobContainerClient> GetContainerAsync(string containerName)
     {
         var connectionString = BlobConnectionString();
