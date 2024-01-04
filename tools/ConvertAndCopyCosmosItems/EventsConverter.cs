@@ -16,11 +16,11 @@ public class EventsConverter
     private const string SourceDatabase = "Default";
     private const string ConvertDestination = nameof(ConvertDestination);
     private static readonly SemaphoreSlim _semaphoreCount = new(1, 1);
-    private readonly CosmosDbFactory _cosmosDbFactory;
+    private readonly ICosmosDbFactory _cosmosDbFactory;
     private readonly ISekibanContext _sekibanContext;
     private int count;
 
-    public EventsConverter(ISekibanContext sekibanContext, CosmosDbFactory cosmosDbFactory)
+    public EventsConverter(ISekibanContext sekibanContext, ICosmosDbFactory cosmosDbFactory)
     {
         _sekibanContext = sekibanContext;
         _cosmosDbFactory = cosmosDbFactory;

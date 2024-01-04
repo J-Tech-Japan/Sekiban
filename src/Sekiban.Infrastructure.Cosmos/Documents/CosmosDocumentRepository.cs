@@ -20,7 +20,7 @@ namespace Sekiban.Infrastructure.Cosmos.Documents;
 /// <param name="registeredEventTypes"></param>
 /// <param name="singleProjectionSnapshotAccessor"></param>
 public class CosmosDocumentRepository(
-    CosmosDbFactory cosmosDbFactory,
+    ICosmosDbFactory cosmosDbFactory,
     RegisteredEventTypes registeredEventTypes,
     ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor) : IDocumentPersistentRepository
 {
