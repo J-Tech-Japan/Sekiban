@@ -10,12 +10,62 @@ using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 namespace Sekiban.Infrastructure.Cosmos;
 
+public interface ICosmosDbFactory
+{
+    Task<T> CosmosActionAsync<T>(DocumentType documentType, AggregateContainerGroup containerGroup, Func<Container, Task<T>> cosmosAction);
+
+    Task CosmosActionAsync(DocumentType documentType, AggregateContainerGroup containerGroup, Func<Container, Task> cosmosAction);
+
+    Task DeleteAllFromEventContainer(AggregateContainerGroup containerGroup);
+    Task DeleteAllFromItemsContainer(AggregateContainerGroup containerGroup);
+}
 public class CosmosDbFactory(
     IMemoryCacheAccessor memoryCache,
     IServiceProvider serviceProvider,
     SekibanCosmosClientOptions options,
-    SekibanCosmosDbOptions cosmosDbOptions)
+    SekibanCosmosDbOptions cosmosDbOptions) : ICosmosDbFactory
 {
+
+    public async Task DeleteAllFromEventContainer(AggregateContainerGroup containerGroup)
+    {
+        await DeleteAllFromAggregateFromContainerIncludes(DocumentType.Event, containerGroup);
+    }
+    public async Task DeleteAllFromItemsContainer(AggregateContainerGroup containerGroup)
+    {
+        await DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command, containerGroup);
+    }
+
+    public async Task<T> CosmosActionAsync<T>(
+        DocumentType documentType,
+        AggregateContainerGroup containerGroup,
+        Func<Container, Task<T>> cosmosAction)
+    {
+        try
+        {
+            var result = await cosmosAction(await GetContainerAsync(documentType, containerGroup));
+            return result;
+        }
+        catch
+        {
+            ResetMemoryCache(documentType, containerGroup);
+            throw;
+        }
+    }
+
+    public async Task CosmosActionAsync(DocumentType documentType, AggregateContainerGroup containerGroup, Func<Container, Task> cosmosAction)
+    {
+        try
+        {
+            await cosmosAction(await GetContainerAsync(documentType, containerGroup));
+        }
+        catch
+        {
+            // There may be a network error, so initialize the container.
+            // This allows reconnection when recovered next time.
+            ResetMemoryCache(documentType, containerGroup);
+            throw;
+        }
+    }
     private SekibanAzureOption GetSekibanCosmosDbOption() => cosmosDbOptions.GetContextOption(serviceProvider);
     private string GetContainerId(DocumentType documentType, AggregateContainerGroup containerGroup)
     {
@@ -170,32 +220,6 @@ public class CosmosDbFactory(
             });
     }
 
-    public async Task DeleteAllFromEventContainer(AggregateContainerGroup containerGroup)
-    {
-        await DeleteAllFromAggregateFromContainerIncludes(DocumentType.Event, containerGroup);
-    }
-    public async Task DeleteAllFromItemsContainer(AggregateContainerGroup containerGroup)
-    {
-        await DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command, containerGroup);
-    }
-
-    public async Task<T> CosmosActionAsync<T>(
-        DocumentType documentType,
-        AggregateContainerGroup containerGroup,
-        Func<Container, Task<T>> cosmosAction)
-    {
-        try
-        {
-            var result = await cosmosAction(await GetContainerAsync(documentType, containerGroup));
-            return result;
-        }
-        catch
-        {
-            ResetMemoryCache(documentType, containerGroup);
-            throw;
-        }
-    }
-
     private void ResetMemoryCache(DocumentType documentType, AggregateContainerGroup containerGroup)
     {
         var containerId = GetContainerId(documentType, containerGroup);
@@ -205,21 +229,6 @@ public class CosmosDbFactory(
         memoryCache.Cache.Remove(GetMemoryCacheClientKey(documentType, SekibanContextIdentifier()));
         memoryCache.Cache.Remove(GetMemoryCacheDatabaseKey(documentType, databaseId, SekibanContextIdentifier()));
         memoryCache.Cache.Remove(GetMemoryCacheContainerKey(documentType, databaseId, containerId, SekibanContextIdentifier()));
-    }
-
-    public async Task CosmosActionAsync(DocumentType documentType, AggregateContainerGroup containerGroup, Func<Container, Task> cosmosAction)
-    {
-        try
-        {
-            await cosmosAction(await GetContainerAsync(documentType, containerGroup));
-        }
-        catch
-        {
-            // There may be a network error, so initialize the container.
-            // This allows reconnection when recovered next time.
-            ResetMemoryCache(documentType, containerGroup);
-            throw;
-        }
     }
 
     private IReadOnlyList<string> GetPartitionKeyPaths(bool supportsHierarchicalPartitions) =>

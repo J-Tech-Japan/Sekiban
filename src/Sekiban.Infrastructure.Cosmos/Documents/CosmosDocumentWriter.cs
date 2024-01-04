@@ -15,8 +15,8 @@ namespace Sekiban.Infrastructure.Cosmos.Documents;
 /// <param name="cosmosDbFactory"></param>
 /// <param name="eventPublisher"></param>
 /// <param name="blobAccessor"></param>
-public class CosmosDocumentWriter
-    (CosmosDbFactory cosmosDbFactory, EventPublisher eventPublisher, IBlobAccessor blobAccessor) : IDocumentPersistentWriter
+public class CosmosDocumentWriter(ICosmosDbFactory cosmosDbFactory, EventPublisher eventPublisher, IBlobAccessor blobAccessor)
+    : IDocumentPersistentWriter
 {
 
     public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType) where TDocument : IDocument

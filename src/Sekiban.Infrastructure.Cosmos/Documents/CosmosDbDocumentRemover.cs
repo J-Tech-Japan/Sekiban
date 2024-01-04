@@ -6,7 +6,7 @@ namespace Sekiban.Infrastructure.Cosmos.Documents;
 ///     Remove all documents from CosmosDB
 ///     Usually only use in test
 /// </summary>
-public class CosmosDbDocumentRemover(CosmosDbFactory cosmosDbFactory) : IDocumentRemover
+public class CosmosDbDocumentRemover(ICosmosDbFactory cosmosDbFactory) : IDocumentRemover
 {
 
     public async Task RemoveAllEventsAsync(AggregateContainerGroup aggregateContainerGroup)
