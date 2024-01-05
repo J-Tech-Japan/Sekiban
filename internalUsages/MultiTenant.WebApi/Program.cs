@@ -7,10 +7,9 @@ using Sekiban.Web.OpenApi.Extensions;
 var builder = WebApplication.CreateBuilder(args);
 
 // Sekiban Core Setting
-builder.Services.AddSekibanWithDependency(new MultiTenantWebDependency(), builder.Configuration);
-
+builder.AddSekibanWithDependency(new MultiTenantWebDependency());
 // Sekiban Cosmos Setting
-builder.Services.AddSekibanCosmosDB(builder.Configuration);
+builder.AddSekibanCosmosDB();
 
 // Sekiban Web Setting
 builder.Services.AddSekibanWeb<MultiTenantWebDependency>()

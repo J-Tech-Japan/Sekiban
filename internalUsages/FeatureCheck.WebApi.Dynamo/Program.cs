@@ -8,10 +8,9 @@ using Sekiban.Web.OpenApi.Extensions;
 var builder = WebApplication.CreateBuilder(args);
 
 // Sekiban Core Setting
-builder.Services.AddSekibanWithDependency(new FeatureCheckDependency(), builder.Configuration);
-
+builder.AddSekibanWithDependency(new FeatureCheckDependency());
 // Sekiban Dynamo Setting
-builder.Services.AddSekibanDynamoDB(builder.Configuration);
+builder.AddSekibanDynamoDB();
 
 // Sekiban Web Setting
 builder.Services.AddSekibanWeb<FeatureCheckWebDependency>()
