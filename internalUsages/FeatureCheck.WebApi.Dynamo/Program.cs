@@ -14,7 +14,7 @@ builder.Services.AddSekibanWithDependency(new FeatureCheckDependency(), builder.
 builder.Services.AddSekibanDynamoDB(builder.Configuration);
 
 // Sekiban Web Setting
-builder.Services.AddSekibanWeb(new FeatureCheckWebDependency())
+builder.Services.AddSekibanWeb<FeatureCheckWebDependency>()
     .AddSwaggerGenWithSekibanOpenApiFilter();
 
 builder.Services.AddEndpointsApiExplorer();

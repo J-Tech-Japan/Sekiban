@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Dependency;
 using Sekiban.Web.Common;
@@ -11,7 +12,8 @@ public static class WebServiceExtension
     /// <param name="services"></param>
     /// <param name="definition"></param>
     /// <returns></returns>
-    public static IServiceCollection AddSekibanWeb(this IServiceCollection services, IWebDependencyDefinition definition)
+    public static IServiceCollection AddSekibanWeb(this IServiceCollection services, IWebDependencyDefinition definition,
+        Action<MvcOptions>? configurateMvcAction = null)
     {
         definition.Define();
         services.AddSingleton(definition);
@@ -24,10 +26,21 @@ public static class WebServiceExtension
                     {
                         configure.Filters.Add<SimpleExceptionFilter>();
                     }
+
+                    configurateMvcAction?.Invoke(configure);
                 })
             .ConfigureApplicationPartManager(setupAction => { setupAction.FeatureProviders.Add(new SekibanControllerFeatureProvider(definition)); });
         services.AddQueriesFromDependencyDefinition(definition);
         services.AddQueries(definition.GetSimpleAggregateListQueryTypes(), definition.GetSimpleSingleProjectionListQueryTypes());
         return services;
     }
+
+    /// <summary>
+    ///     Add Sekiban web
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="services"></param>
+    /// <returns></returns>
+    public static IServiceCollection AddSekibanWeb<T>(this IServiceCollection services, Action<MvcOptions>? configurateMvcAction = null)
+        where T : IWebDependencyDefinition, new() => services.AddSekibanWeb(new T(), configurateMvcAction);
 }
