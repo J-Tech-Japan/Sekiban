@@ -12,11 +12,10 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSekibanWeb(new FeatureCheckWebDependency());
 
 // Sekiban Core Setting
-builder.Services.AddSekibanWithDependency(new FeatureCheckDependency(), builder.Configuration);
+builder.AddSekibanWithDependency(new FeatureCheckDependency());
 
 // Sekiban Cosmos Setting
-builder.Services.AddSekibanCosmosDB(
-    builder.Configuration,
+builder.AddSekibanCosmosDB(
     options => options with
     {
         // this is same as default but for sample, it is explicitly written.

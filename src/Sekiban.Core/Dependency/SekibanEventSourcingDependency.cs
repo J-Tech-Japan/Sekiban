@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Command;
@@ -15,7 +16,39 @@ namespace Sekiban.Core.Dependency;
 public static class SekibanEventSourcingDependency
 {
     public static Assembly GetAssembly() => Assembly.GetExecutingAssembly();
-
+    /// <summary>
+    ///     Add Sekiban with Dependency
+    /// </summary>
+    /// <param name="builder"></param>
+    /// <param name="dependencyDefinition"></param>
+    /// <returns></returns>
+    public static WebApplicationBuilder AddSekibanWithDependency(this WebApplicationBuilder builder, IDependencyDefinition dependencyDefinition)
+    {
+        builder.Services.AddSekibanWithDependency(dependencyDefinition, builder.Configuration);
+        return builder;
+    }
+    /// <summary>
+    ///     Add Sekiban with Dependency
+    /// </summary>
+    /// <param name="builder"></param>
+    /// <param name="dependencyDefinition"></param>
+    /// <param name="settings"></param>
+    /// <returns></returns>
+    public static WebApplicationBuilder AddSekibanWithDependency(
+        this WebApplicationBuilder builder,
+        IDependencyDefinition dependencyDefinition,
+        SekibanSettings settings)
+    {
+        builder.Services.AddSekibanWithDependency(dependencyDefinition, settings);
+        return builder;
+    }
+    /// <summary>
+    ///     Add Sekiban with Dependency
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="dependencyDefinition"></param>
+    /// <param name="configuration"></param>
+    /// <returns></returns>
     public static IServiceCollection AddSekibanWithDependency(
         this IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
@@ -24,12 +57,27 @@ public static class SekibanEventSourcingDependency
         var settings = SekibanSettings.FromConfiguration(configuration);
         return AddSekibanCoreWithDependency(services, dependencyDefinition, settings);
     }
+    /// <summary>
+    ///     Add Sekiban with Dependency
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="dependencyDefinition"></param>
+    /// <param name="settings"></param>
+    /// <returns></returns>
     public static IServiceCollection AddSekibanWithDependency(
         this IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
         SekibanSettings settings) =>
         AddSekibanCoreWithDependency(services, dependencyDefinition, settings);
-
+    /// <summary>
+    ///     Add Sekiban with Dependency
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="dependencyDefinition"></param>
+    /// <param name="settings"></param>
+    /// <param name="sekibanDateProducer"></param>
+    /// <param name="multiProjectionType"></param>
+    /// <returns></returns>
     public static IServiceCollection AddSekibanCoreWithDependency(
         this IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
@@ -40,7 +88,13 @@ public static class SekibanEventSourcingDependency
         Register(services, dependencyDefinition, settings, sekibanDateProducer, multiProjectionType);
         return services;
     }
-
+    /// <summary>
+    ///     Add Sekiban with Dependency
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="dependencyDefinition"></param>
+    /// <param name="section"></param>
+    /// <returns></returns>
     public static IServiceCollection AddSekibanWithDependencyWithConfigurationSection(
         this IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
@@ -49,7 +103,10 @@ public static class SekibanEventSourcingDependency
         var settings = SekibanSettings.FromConfigurationSection(section);
         return AddSekibanCoreWithDependency(services, dependencyDefinition, settings);
     }
-
+    /// <summary>
+    ///     Get Dependencies
+    /// </summary>
+    /// <returns></returns>
     public static IEnumerable<(Type serviceType, Type? implementationType)> GetDependencies()
     {
         // AddAggregate: RecentInMemoryActivity
@@ -87,7 +144,13 @@ public static class SekibanEventSourcingDependency
         }
 
     }
-
+    /// <summary>
+    ///     Add Sekiban with Dependency for InMemory Test
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="dependencyDefinition"></param>
+    /// <param name="sekibanDateProducer"></param>
+    /// <returns></returns>
     public static IServiceCollection AddSekibanCoreInMemoryTestWithDependency(
         this IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
@@ -97,7 +160,12 @@ public static class SekibanEventSourcingDependency
         RegisterForInMemoryTest(services, dependencyDefinition, sekibanDateProducer);
         return services;
     }
-
+    /// <summary>
+    ///     Register Sekiban with Dependency for InMemory Test
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="dependencyDefinition"></param>
+    /// <param name="sekibanDateProducer"></param>
     public static void RegisterForInMemoryTest(
         IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
@@ -128,7 +196,13 @@ public static class SekibanEventSourcingDependency
         }
 
     }
-
+    /// <summary>
+    ///     Add Sekiban with Dependency for Aggregate Test
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="dependencyDefinition"></param>
+    /// <param name="sekibanDateProducer"></param>
+    /// <returns></returns>
     public static IServiceCollection AddSekibanCoreForAggregateTestWithDependency(
         this IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
@@ -138,7 +212,12 @@ public static class SekibanEventSourcingDependency
         RegisterForAggregateTest(services, dependencyDefinition, sekibanDateProducer);
         return services;
     }
-
+    /// <summary>
+    ///     Register Sekiban with Dependency for Aggregate Test
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="dependencyDefinition"></param>
+    /// <param name="sekibanDateProducer"></param>
     public static void RegisterForAggregateTest(
         IServiceCollection services,
         IDependencyDefinition dependencyDefinition,
@@ -175,8 +254,7 @@ public static class SekibanEventSourcingDependency
             if (implementationType is null)
             {
                 services.AddTransient(serviceType);
-            }
-            else
+            } else
             {
                 services.AddTransient(serviceType, implementationType);
             }
