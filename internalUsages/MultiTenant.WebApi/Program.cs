@@ -3,20 +3,21 @@ using Sekiban.Core.Dependency;
 using Sekiban.Infrastructure.Cosmos;
 using Sekiban.Web.Dependency;
 using Sekiban.Web.OpenApi.Extensions;
+
 var builder = WebApplication.CreateBuilder(args);
 
-
-
-// Sekiban Web Setting
-builder.Services.AddSekibanWeb(new MultiTenantWebDependency());
 // Sekiban Core Setting
 builder.Services.AddSekibanWithDependency(new MultiTenantWebDependency(), builder.Configuration);
+
 // Sekiban Cosmos Setting
 builder.Services.AddSekibanCosmosDB(builder.Configuration);
 
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+// Sekiban Web Setting
+builder.Services.AddSekibanWeb(new MultiTenantWebDependency())
+    .AddSwaggerGenWithSekibanOpenApiFilter();
+
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(options => options.AddSekibanSwaggerGen());
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -31,8 +32,5 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 
 app.MapControllers();
-
-app.Run();
-
 
 app.Run();
