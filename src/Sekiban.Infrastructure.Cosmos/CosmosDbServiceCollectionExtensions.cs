@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Documents;
@@ -8,7 +9,38 @@ namespace Sekiban.Infrastructure.Cosmos;
 
 public static class CosmosDbServiceCollectionExtensions
 {
-
+    /// <summary>
+    ///     Add Sekiban for CosmosDB
+    /// </summary>
+    /// <param name="builder"></param>
+    /// <param name="optionsFunc"></param>
+    /// <returns></returns>
+    public static SekibanCosmosDbOptionsServiceCollection AddSekibanCosmosDB(
+        this WebApplicationBuilder builder,
+        Func<SekibanCosmosClientOptions, SekibanCosmosClientOptions>? optionsFunc = null)
+    {
+        var options = SekibanCosmosDbOptions.FromConfiguration(builder.Configuration);
+        return AddSekibanCosmosDB(builder.Services, options, optionsFunc);
+    }
+    /// <summary>
+    ///     Add Sekiban for CosmosDB
+    /// </summary>
+    /// <param name="builder"></param>
+    /// <param name="cosmosDbOptions"></param>
+    /// <param name="optionsFunc"></param>
+    /// <returns></returns>
+    public static SekibanCosmosDbOptionsServiceCollection AddSekibanCosmosDB(
+        this WebApplicationBuilder builder,
+        SekibanCosmosDbOptions cosmosDbOptions,
+        Func<SekibanCosmosClientOptions, SekibanCosmosClientOptions>? optionsFunc = null) =>
+        AddSekibanCosmosDB(builder.Services, cosmosDbOptions, optionsFunc);
+    /// <summary>
+    ///     Add Sekiban for CosmosDB
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="configuration"></param>
+    /// <param name="optionsFunc"></param>
+    /// <returns></returns>
     public static SekibanCosmosDbOptionsServiceCollection AddSekibanCosmosDB(
         this IServiceCollection services,
         IConfiguration configuration,
@@ -41,6 +73,15 @@ public static class CosmosDbServiceCollectionExtensions
         services.AddTransient<IBlobAccessor, AzureBlobAccessor>();
         return new SekibanCosmosDbOptionsServiceCollection(cosmosDbOptions, options, services);
     }
+    /// <summary>
+    ///     Add Sekiban for CosmosDB
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="section"></param>
+    /// <param name="configurationRoot">Configuration root to get ConnectionStrings</param>
+    /// <param name="optionsFunc"></param>
+    /// <returns></returns>
+    /// <exception cref="ConfigurationErrorsException"></exception>
     public static SekibanCosmosDbOptionsServiceCollection AddSekibanCosmosDBFromConfigurationSection(
         this IServiceCollection services,
         IConfigurationSection section,
