@@ -3,7 +3,6 @@ using Sekiban.Core.Dependency;
 using Sekiban.Infrastructure.Cosmos;
 using Sekiban.Web.Dependency;
 using Sekiban.Web.OpenApi.Extensions;
-
 var builder = WebApplication.CreateBuilder(args);
 
 // Sekiban Core Setting
