@@ -1,4 +1,4 @@
-﻿namespace Sekiban.Web.OpenApi;
+﻿namespace Sekiban.Web.OpenApi.Extensions;
 
 public static class TypeExtensions
 {

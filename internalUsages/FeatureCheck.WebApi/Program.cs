@@ -5,7 +5,7 @@ using Sekiban.Core.Dependency;
 using Sekiban.Infrastructure.Cosmos;
 using Sekiban.Infrastructure.Cosmos.Lib.Json;
 using Sekiban.Web.Dependency;
-using Sekiban.Web.OpenApi;
+using Sekiban.Web.OpenApi.Extensions;
 var builder = WebApplication.CreateBuilder(args);
 
 // Sekiban Web Setting

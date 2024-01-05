@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Swashbuckle.AspNetCore.SwaggerGen;
-namespace Sekiban.Web.OpenApi;
+namespace Sekiban.Web.OpenApi.Extensions;
 
 public static class SwaggerGenExtensions
 {

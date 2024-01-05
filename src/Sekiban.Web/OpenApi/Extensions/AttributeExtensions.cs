@@ -1,7 +1,7 @@
 ﻿using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Reflection;
-namespace Sekiban.Web.OpenApi;
+namespace Sekiban.Web.OpenApi.Extensions;
 
 public static class AttributeExtensions
 {

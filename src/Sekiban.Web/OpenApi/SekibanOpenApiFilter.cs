@@ -1,4 +1,5 @@
 ﻿using Microsoft.OpenApi.Models;
+using Sekiban.Web.OpenApi.Extensions;
 using Swashbuckle.AspNetCore.SwaggerGen;
 namespace Sekiban.Web.OpenApi;
 

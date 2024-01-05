@@ -3,7 +3,7 @@ using FeatureCheck.WebApi.Dynamo;
 using Sekiban.Core.Dependency;
 using Sekiban.Infrastructure.Dynamo;
 using Sekiban.Web.Dependency;
-using Sekiban.Web.OpenApi;
+using Sekiban.Web.OpenApi.Extensions;
 var builder = WebApplication.CreateBuilder(args);
 
 
