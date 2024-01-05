@@ -7,7 +7,7 @@ public static class SwaggerGenExtensions
     [Obsolete($"{nameof(AddSekibanSwaggerGen)} is obsolete. Use the IServiceCollection.AddSwaggerGenWithSekibanOpenApiFilter method instead.")]
     public static SwaggerGenOptions AddSekibanSwaggerGen(this SwaggerGenOptions options)
     {
-        options.CustomSchemaIds(SekibanOpenApiParameterGenerator.GenerateCustomSchemaName);
+        options.CustomSchemaIds(SekibanOpenApiSchemaIdGenerator.Generate);
         options.SchemaFilter<SekibanOpenApiFilter>();
         options.OperationFilter<SekibanOpenApiFilter>();
         return options;

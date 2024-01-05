@@ -6,17 +6,17 @@ namespace Sekiban.Web.OpenApi.Extensions;
 public static class IServiceCollectionExtensions
 {
     public static IServiceCollection AddSwaggerGenWithSekibanOpenApiFilter(this IServiceCollection services,
-        Action<SwaggerGenOptions>? setupSwaggerGenAction = null,
-        Func<Type, string>? openApiCustomSchemaIdSelector = null)
+        Action<SwaggerGenOptions>? configureSwaggerGenOptions = null,
+        Func<Type, string>? generateOpenApiSchemaId = null)
     {
         services.AddSwaggerGen(options =>
         {
-            options.CustomSchemaIds(openApiCustomSchemaIdSelector ?? SekibanOpenApiParameterGenerator.GenerateCustomSchemaName);
+            options.CustomSchemaIds(generateOpenApiSchemaId ?? SekibanOpenApiSchemaIdGenerator.Generate);
 
             options.SchemaFilter<SekibanOpenApiFilter>();
             options.OperationFilter<SekibanOpenApiFilter>();
 
-            setupSwaggerGenAction?.Invoke(options);
+            configureSwaggerGenOptions?.Invoke(options);
         });
 
         return services;

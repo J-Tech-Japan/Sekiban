@@ -5,17 +5,17 @@ using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 namespace Sekiban.Web.OpenApi;
 
-public static class SekibanOpenApiParameterGenerator
+public static class SekibanOpenApiSchemaIdGenerator
 {
-    public static string GenerateCustomSchemaName(Type type) => GetSekibanSchemeName(type);
+    public static string Generate(Type type) => GenerateSchemaId(type, string.Empty);
 
-    private static string GetSekibanSchemeName(Type type, string prefix = "")
+    private static string GenerateSchemaId(Type type, string prefix = "")
     {
         var regular = GetRegularNameWithReplacedSymbol(type);
         if (type.IsGenericType)
         {
             return type.GenericTypeArguments.ToList()
-                .Aggregate(string.IsNullOrEmpty(prefix) ? regular : $"{prefix}_{regular}", (s, type1) => GetSekibanSchemeName(type1, s));
+                .Aggregate(string.IsNullOrEmpty(prefix) ? regular : $"{prefix}_{regular}", (s, type1) => GenerateSchemaId(type1, s));
         }
         return string.IsNullOrEmpty(prefix) ? regular : $"{prefix}_{regular}";
     }

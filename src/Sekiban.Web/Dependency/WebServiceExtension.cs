@@ -11,27 +11,34 @@ public static class WebServiceExtension
     /// </summary>
     /// <param name="services"></param>
     /// <param name="definition"></param>
+    /// <param name="configureMvcOptions"></param>
     /// <returns></returns>
     public static IServiceCollection AddSekibanWeb(this IServiceCollection services, IWebDependencyDefinition definition,
-        Action<MvcOptions>? configurateMvcAction = null)
+        Action<MvcOptions>? configureMvcOptions = null)
     {
         definition.Define();
         services.AddSingleton(definition);
-        services.AddControllers(
-                configure =>
-                {
-                    configure.Conventions.Add(new SekibanControllerRouteConvention(definition));
-                    configure.ModelValidatorProviders.Clear();
-                    if (definition.ShouldAddExceptionFilter)
-                    {
-                        configure.Filters.Add<SimpleExceptionFilter>();
-                    }
 
-                    configurateMvcAction?.Invoke(configure);
-                })
-            .ConfigureApplicationPartManager(setupAction => { setupAction.FeatureProviders.Add(new SekibanControllerFeatureProvider(definition)); });
+        services
+            .AddControllers(configure =>
+            {
+                configure.Conventions.Add(new SekibanControllerRouteConvention(definition));
+                configure.ModelValidatorProviders.Clear();
+                if (definition.ShouldAddExceptionFilter)
+                {
+                    configure.Filters.Add<SimpleExceptionFilter>();
+                }
+
+                configureMvcOptions?.Invoke(configure);
+            })
+            .ConfigureApplicationPartManager(setupAction =>
+            {
+                setupAction.FeatureProviders.Add(new SekibanControllerFeatureProvider(definition));
+            });
+
         services.AddQueriesFromDependencyDefinition(definition);
         services.AddQueries(definition.GetSimpleAggregateListQueryTypes(), definition.GetSimpleSingleProjectionListQueryTypes());
+
         return services;
     }
 
@@ -40,7 +47,8 @@ public static class WebServiceExtension
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <param name="services"></param>
+    /// <param name="configureMvcOptions"></param>
     /// <returns></returns>
-    public static IServiceCollection AddSekibanWeb<T>(this IServiceCollection services, Action<MvcOptions>? configurateMvcAction = null)
-        where T : IWebDependencyDefinition, new() => services.AddSekibanWeb(new T(), configurateMvcAction);
+    public static IServiceCollection AddSekibanWeb<T>(this IServiceCollection services, Action<MvcOptions>? configureMvcOptions = null)
+        where T : IWebDependencyDefinition, new() => services.AddSekibanWeb(new T(), configureMvcOptions);
 }
