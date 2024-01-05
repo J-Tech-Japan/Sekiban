@@ -1,9 +1,4 @@
-﻿using Microsoft.OpenApi.Any;
-using Microsoft.OpenApi.Models;
-using System.ComponentModel;
-using System.ComponentModel.DataAnnotations;
-using System.Reflection;
-namespace Sekiban.Web.OpenApi;
+﻿namespace Sekiban.Web.OpenApi;
 
 public static class SekibanOpenApiSchemaIdGenerator
 {

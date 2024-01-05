@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using Sekiban.Web.Dependency;
 using Swashbuckle.AspNetCore.SwaggerGen;
 namespace Sekiban.Web.OpenApi.Extensions;
 
