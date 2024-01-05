@@ -284,11 +284,11 @@ public class SekibanWebDependency : DomainDependency, IWebDependencyDefinition
 var builder = WebApplication.CreateBuilder(args);
 
 // Sekiban Core Setting
-builder.Services.AddSekibanWithDependency(new DomainDependency(), configuration: builder.Configuration);
+builder.AddSekibanWithDependency(new DomainDependency());
 // Sekiban Cosmos Setting
-builder.Services.AddSekibanCosmosDB(builder.Configuration);
+builder.AddSekibanCosmosDB();
 // Change line above to Dynamo DB if you use Dynamo DB
-//builder.Services.AddSekibanCosmosDB();
+//builder.AddSekibanDynamoDB();
 
 // Sekiban Web Setting
 builder.Services.AddSekibanWeb(new SekibanWebDependency());

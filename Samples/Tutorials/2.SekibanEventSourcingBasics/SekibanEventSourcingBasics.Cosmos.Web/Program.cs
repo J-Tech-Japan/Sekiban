@@ -7,9 +7,9 @@ using SekibanEventSourcingBasics.Domain;
 var builder = WebApplication.CreateBuilder(args);
 
 // Sekiban Core Setting
-builder.Services.AddSekibanWithDependency(new DomainDependency(), configuration: builder.Configuration);
+builder.AddSekibanWithDependency(new DomainDependency());
 // Sekiban Cosmos Setting
-builder.Services.AddSekibanCosmosDB(builder.Configuration);
+builder.AddSekibanCosmosDB();
 // Sekiban Web Setting
 builder.Services.AddSekibanWeb(new SekibanWebDependency());
 
