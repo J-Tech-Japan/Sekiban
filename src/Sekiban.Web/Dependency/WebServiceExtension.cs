@@ -11,10 +11,10 @@ public static class WebServiceExtension
     /// </summary>
     /// <param name="services"></param>
     /// <param name="definition"></param>
-    /// <param name="configureMvcOptions"></param>
+    /// <param name="configureMvc"></param>
     /// <returns></returns>
     public static IServiceCollection AddSekibanWeb(this IServiceCollection services, IWebDependencyDefinition definition,
-        Action<MvcOptions>? configureMvcOptions = null)
+        Action<MvcOptions>? configureMvc = null)
     {
         definition.Define();
         services.AddSingleton(definition);
@@ -29,7 +29,7 @@ public static class WebServiceExtension
                     configure.Filters.Add<SimpleExceptionFilter>();
                 }
 
-                configureMvcOptions?.Invoke(configure);
+                configureMvc?.Invoke(configure);
             })
             .ConfigureApplicationPartManager(setupAction =>
             {

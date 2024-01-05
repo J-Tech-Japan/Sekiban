@@ -14,7 +14,7 @@ builder.AddSekibanDynamoDB();
 
 // Sekiban Web Setting
 builder.Services.AddSekibanWeb<FeatureCheckWebDependency>()
-    .AddSwaggerGenWithSekibanOpenApiFilter();
+    .AddSwaggerGen(options => options.ConfigureForSekiban());
 
 builder.Services.AddEndpointsApiExplorer();
 

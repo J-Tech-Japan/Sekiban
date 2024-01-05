@@ -13,7 +13,7 @@ builder.AddSekibanCosmosDB();
 
 // Sekiban Web Setting
 builder.Services.AddSekibanWeb<MultiTenantWebDependency>()
-    .AddSwaggerGenWithSekibanOpenApiFilter();
+    .AddSwaggerGen(options => options.ConfigureForSekiban());
 
 builder.Services.AddEndpointsApiExplorer();
 
