@@ -20,7 +20,7 @@ public static class CosmosDbServiceCollectionExtensions
         Func<SekibanCosmosClientOptions, SekibanCosmosClientOptions>? optionsFunc = null)
     {
         var options = SekibanCosmosDbOptions.FromConfiguration(builder.Configuration);
-        return AddSekibanCosmosDB(builder.Services, options, optionsFunc);
+        return AddSekibanCosmosDB(builder, options, optionsFunc);
     }
     /// <summary>
     ///     Add Sekiban for CosmosDB
@@ -32,8 +32,12 @@ public static class CosmosDbServiceCollectionExtensions
     public static SekibanCosmosDbOptionsServiceCollection AddSekibanCosmosDB(
         this WebApplicationBuilder builder,
         SekibanCosmosDbOptions cosmosDbOptions,
-        Func<SekibanCosmosClientOptions, SekibanCosmosClientOptions>? optionsFunc = null) =>
-        AddSekibanCosmosDB(builder.Services, cosmosDbOptions, optionsFunc);
+        Func<SekibanCosmosClientOptions, SekibanCosmosClientOptions>? optionsFunc = null)
+    {
+        var options = optionsFunc is null ? new SekibanCosmosClientOptions() : optionsFunc(new SekibanCosmosClientOptions());
+        AddSekibanCosmosDB(builder.Services, cosmosDbOptions, options);
+        return new SekibanCosmosDbOptionsServiceCollection(cosmosDbOptions, options, builder);
+    }
     /// <summary>
     ///     Add Sekiban for CosmosDB
     /// </summary>
@@ -41,13 +45,14 @@ public static class CosmosDbServiceCollectionExtensions
     /// <param name="configuration"></param>
     /// <param name="optionsFunc"></param>
     /// <returns></returns>
-    public static SekibanCosmosDbOptionsServiceCollection AddSekibanCosmosDB(
+    public static IServiceCollection AddSekibanCosmosDB(
         this IServiceCollection services,
         IConfiguration configuration,
         Func<SekibanCosmosClientOptions, SekibanCosmosClientOptions>? optionsFunc = null)
     {
-        var options = SekibanCosmosDbOptions.FromConfiguration(configuration);
-        return AddSekibanCosmosDB(services, options, optionsFunc);
+        var dbOptions = SekibanCosmosDbOptions.FromConfiguration(configuration);
+        var options = optionsFunc is null ? new SekibanCosmosClientOptions() : optionsFunc(new SekibanCosmosClientOptions());
+        return AddSekibanCosmosDB(services, dbOptions, options);
     }
     /// <summary>
     ///     Setup Sekiban for CosmosDB
@@ -58,20 +63,27 @@ public static class CosmosDbServiceCollectionExtensions
     /// <param name="cosmosDbOptions"></param>
     /// <param name="optionsFunc"></param>
     /// <returns></returns>
-    public static SekibanCosmosDbOptionsServiceCollection AddSekibanCosmosDB(
+    public static IServiceCollection AddSekibanCosmosDB(
         this IServiceCollection services,
         SekibanCosmosDbOptions cosmosDbOptions,
         Func<SekibanCosmosClientOptions, SekibanCosmosClientOptions>? optionsFunc = null)
     {
         var options = optionsFunc is null ? new SekibanCosmosClientOptions() : optionsFunc(new SekibanCosmosClientOptions());
-        services.AddSingleton(options);
+        return AddSekibanCosmosDB(services, cosmosDbOptions, options);
+    }
+    private static IServiceCollection AddSekibanCosmosDB(
+        this IServiceCollection services,
+        SekibanCosmosDbOptions cosmosDbOptions,
+        SekibanCosmosClientOptions? options = null)
+    {
+        services.AddSingleton(options ?? new SekibanCosmosClientOptions());
         services.AddSingleton(cosmosDbOptions);
         services.AddTransient<ICosmosDbFactory, CosmosDbFactory>();
         services.AddTransient<IDocumentPersistentWriter, CosmosDocumentWriter>();
         services.AddTransient<IDocumentPersistentRepository, CosmosDocumentRepository>();
         services.AddTransient<IDocumentRemover, CosmosDbDocumentRemover>();
         services.AddTransient<IBlobAccessor, AzureBlobAccessor>();
-        return new SekibanCosmosDbOptionsServiceCollection(cosmosDbOptions, options, services);
+        return services;
     }
     /// <summary>
     ///     Add Sekiban for CosmosDB
@@ -82,7 +94,7 @@ public static class CosmosDbServiceCollectionExtensions
     /// <param name="optionsFunc"></param>
     /// <returns></returns>
     /// <exception cref="ConfigurationErrorsException"></exception>
-    public static SekibanCosmosDbOptionsServiceCollection AddSekibanCosmosDBFromConfigurationSection(
+    public static IServiceCollection AddSekibanCosmosDBFromConfigurationSection(
         this IServiceCollection services,
         IConfigurationSection section,
         IConfiguration configurationRoot,

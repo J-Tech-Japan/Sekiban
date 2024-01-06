@@ -42,8 +42,3 @@ public class SekibanDynamoDbOptions
     }
     private static string GetLastPathComponent(IConfigurationSection section) => section.Path.Split(':').LastOrDefault() ?? section.Path;
 }
-public class SekibanDynamoDbOptionsServiceCollection(SekibanDynamoDbOptions sekibanDynamoDbOptions, IServiceCollection serviceCollection)
-{
-    public SekibanDynamoDbOptions SekibanDynamoDbOptions { get; init; } = sekibanDynamoDbOptions;
-    public IServiceCollection ServiceCollection { get; init; } = serviceCollection;
-}
