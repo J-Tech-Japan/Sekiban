@@ -23,7 +23,6 @@ public class DynamoDocumentRepository(
     RegisteredEventTypes registeredEventTypes,
     ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor) : IDocumentPersistentRepository
 {
-
     public async Task GetAllEventsForAggregateIdAsync(
         Guid aggregateId,
         Type aggregatePayloadType,
@@ -39,42 +38,14 @@ public class DynamoDocumentRepository(
             aggregateContainerGroup,
             async table =>
             {
-                var types = registeredEventTypes.RegisteredTypes;
-
                 var filter = new QueryFilter();
                 filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
                 filter.AddSortableUniqueIdIfNull(sinceSortableUniqueId);
                 var config = new QueryOperationConfig { Filter = filter, BackwardSearch = false };
                 var search = table.Query(config);
 
-                var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
-                do
-                {
-                    if (search is null)
-                    {
-                        break;
-                    }
-                    var nextSet = await search.GetNextSetAsync();
-                    resultList.AddRange(nextSet);
-                } while (!search.IsDone);
-                var events = new List<IEvent>();
-                foreach (var document in resultList)
-                {
-                    var json = document.ToJson();
-                    var jsonElement = JsonDocument.Parse(json).RootElement;
-                    var documentTypeName = document[nameof(IDocument.DocumentTypeName)].AsString();
-                    if (documentTypeName is null) { continue; }
-                    var toAdd = (types.Where(m => m.Name == documentTypeName)
-                                .Select(m => SekibanJsonHelper.Deserialize(json, typeof(Event<>).MakeGenericType(m)) as IEvent)
-                                .FirstOrDefault(m => m is not null) ??
-                            EventHelper.GetUnregisteredEvent(jsonElement)) ??
-                        throw new SekibanUnregisteredEventFoundException();
-                    if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
-                    {
-                        continue;
-                    }
-                    events.Add(toAdd);
-                }
+                var resultList = await FetchDocumentsAsync(search);
+                var events = ProcessEventDocuments(resultList, sinceSortableUniqueId);
                 resultAction(events.OrderBy(m => m.SortableUniqueId));
 
 
@@ -124,16 +95,7 @@ public class DynamoDocumentRepository(
                 var config = new QueryOperationConfig { Filter = filter, BackwardSearch = false };
                 var search = table.Query(config);
 
-                var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
-                do
-                {
-                    if (search is null)
-                    {
-                        break;
-                    }
-                    var nextSet = await search.GetNextSetAsync();
-                    resultList.AddRange(nextSet);
-                } while (!search.IsDone);
+                var resultList = await FetchDocumentsAsync(search);
                 var commands = (from document in resultList
                                 let json = document.ToJson()
                                 let sortableUniqueId = document[nameof(IDocument.SortableUniqueId)].AsString()
@@ -157,8 +119,6 @@ public class DynamoDocumentRepository(
             aggregateContainerGroup,
             async table =>
             {
-                var types = registeredEventTypes.RegisteredTypes;
-
                 var filter = new QueryFilter();
                 filter.AddCondition(nameof(IEvent.AggregateType), QueryOperator.Equal, aggregatePayloadType.Name);
                 if (rootPartitionKey != IMultiProjectionService.ProjectionAllRootPartitions)
@@ -169,34 +129,8 @@ public class DynamoDocumentRepository(
                 var config = new QueryOperationConfig { Filter = filter, BackwardSearch = true };
                 var search = table.Query(config);
 
-                var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
-                do
-                {
-                    if (search is null)
-                    {
-                        break;
-                    }
-                    var nextSet = await search.GetNextSetAsync();
-                    resultList.AddRange(nextSet);
-                } while (!search.IsDone);
-                var events = new List<IEvent>();
-                foreach (var document in resultList)
-                {
-                    var json = document.ToJson();
-                    var jsonElement = JsonDocument.Parse(json).RootElement;
-                    var documentTypeName = document[nameof(IDocument.DocumentTypeName)].AsString();
-                    if (documentTypeName is null) { continue; }
-                    var toAdd = (types.Where(m => m.Name == documentTypeName)
-                                .Select(m => SekibanJsonHelper.Deserialize(json, typeof(Event<>).MakeGenericType(m)) as IEvent)
-                                .FirstOrDefault(m => m is not null) ??
-                            EventHelper.GetUnregisteredEvent(jsonElement)) ??
-                        throw new SekibanUnregisteredEventFoundException();
-                    if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
-                    {
-                        continue;
-                    }
-                    events.Add(toAdd);
-                }
+                var resultList = await FetchDocumentsAsync(search);
+                var events = ProcessEventDocuments(resultList, sinceSortableUniqueId);
                 resultAction(events.OrderBy(m => m.SortableUniqueId));
             });
     }
@@ -214,8 +148,6 @@ public class DynamoDocumentRepository(
             aggregateContainerGroup,
             async table =>
             {
-                var types = registeredEventTypes.RegisteredTypes;
-
                 var filter = new ScanFilter();
                 if (targetAggregateNames.Count > 0)
                 {
@@ -232,38 +164,8 @@ public class DynamoDocumentRepository(
                 var config = new ScanOperationConfig { Filter = filter };
                 var search = table.Scan(config);
 
-                var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
-                do
-                {
-                    if (search is null)
-                    {
-                        break;
-                    }
-                    var nextSet = await search.GetNextSetAsync();
-                    if (nextSet is null)
-                    {
-                        continue;
-                    }
-                    resultList.AddRange(nextSet);
-                } while (!search.IsDone);
-                var events = new List<IEvent>();
-                foreach (var document in resultList)
-                {
-                    var json = document.ToJson();
-                    var jsonElement = JsonDocument.Parse(json).RootElement;
-                    var documentTypeName = document[nameof(IDocument.DocumentTypeName)].AsString();
-                    if (documentTypeName is null) { continue; }
-                    var toAdd = (types.Where(m => m.Name == documentTypeName)
-                                .Select(m => SekibanJsonHelper.Deserialize(json, typeof(Event<>).MakeGenericType(m)) as IEvent)
-                                .FirstOrDefault(m => m is not null) ??
-                            EventHelper.GetUnregisteredEvent(jsonElement)) ??
-                        throw new SekibanUnregisteredEventFoundException();
-                    if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
-                    {
-                        continue;
-                    }
-                    events.Add(toAdd);
-                }
+                var resultList = await FetchDocumentsAsync(search);
+                var events = ProcessEventDocuments(resultList, sinceSortableUniqueId);
                 resultAction(events.OrderBy(m => m.SortableUniqueId));
             });
     }
@@ -292,21 +194,7 @@ public class DynamoDocumentRepository(
                 var config = new QueryOperationConfig { Filter = filter, BackwardSearch = true };
                 var search = table.Query(config);
 
-                var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
-                do
-                {
-                    if (search is null)
-                    {
-                        break;
-                    }
-                    var nextSet = await search.GetNextSetAsync();
-                    if (nextSet is null)
-                    {
-                        continue;
-                    }
-                    resultList.AddRange(nextSet);
-                    if (resultList.Count != 0) { break; }
-                } while (!search.IsDone);
+                var resultList = await FetchDocumentsAsync(search);
                 var snapshots = (from document in resultList
                                  let json = document.ToJson()
                                  let sortableUniqueId = document[nameof(IDocument.SortableUniqueId)].AsString()
@@ -320,7 +208,7 @@ public class DynamoDocumentRepository(
     public async Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(
         Type multiProjectionPayloadType,
         string payloadVersionIdentifier,
-        string rootPartitionKey)
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionPayloadType);
         return await dbFactory.DynamoActionAsync(
@@ -336,21 +224,7 @@ public class DynamoDocumentRepository(
                 var config = new QueryOperationConfig { Filter = filter, BackwardSearch = true };
                 var search = table.Query(config);
 
-                var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
-                do
-                {
-                    if (search is null)
-                    {
-                        break;
-                    }
-                    var nextSet = await search.GetNextSetAsync();
-                    if (nextSet is null)
-                    {
-                        continue;
-                    }
-                    resultList.AddRange(nextSet);
-                    if (resultList.Count != 0) { break; }
-                } while (!search.IsDone);
+                var resultList = await FetchDocumentsAsync(search);
 
                 foreach (var result in resultList)
                 {
@@ -389,21 +263,7 @@ public class DynamoDocumentRepository(
                 var config = new QueryOperationConfig { Filter = filter, BackwardSearch = true };
                 var search = table.Query(config);
 
-                var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
-                do
-                {
-                    if (search is null)
-                    {
-                        break;
-                    }
-                    var nextSet = await search.GetNextSetAsync();
-                    if (nextSet is null)
-                    {
-                        continue;
-                    }
-                    resultList.AddRange(nextSet);
-                    if (resultList.Count != 0) { break; }
-                } while (!search.IsDone);
+                var resultList = await FetchDocumentsAsync(search);
                 var snapshots = (from document in resultList
                                  let json = document.ToJson()
                                  let sortableUniqueId = document[nameof(IDocument.SortableUniqueId)].AsString()
@@ -418,7 +278,7 @@ public class DynamoDocumentRepository(
         Guid aggregateId,
         Type aggregatePayloadType,
         Type projectionPayloadType,
-        string rootPartitionKey)
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         return await dbFactory.DynamoActionAsync<List<SnapshotDocument>>(
@@ -436,20 +296,7 @@ public class DynamoDocumentRepository(
                 var config = new QueryOperationConfig { Filter = filter, BackwardSearch = true };
                 var search = table.Query(config);
 
-                var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
-                do
-                {
-                    if (search is null)
-                    {
-                        break;
-                    }
-                    var nextSet = await search.GetNextSetAsync();
-                    if (nextSet is null)
-                    {
-                        continue;
-                    }
-                    resultList.AddRange(nextSet);
-                } while (!search.IsDone);
+                var resultList = await FetchDocumentsAsync(search);
                 var snapshots = (from document in resultList
                                  let json = document.ToJson()
                                  let sortableUniqueId = document[nameof(IDocument.SortableUniqueId)].AsString()
@@ -489,21 +336,7 @@ public class DynamoDocumentRepository(
                 var config = new QueryOperationConfig { Filter = filter, BackwardSearch = true };
                 var search = table.Query(config);
 
-                var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
-                do
-                {
-                    if (search is null)
-                    {
-                        break;
-                    }
-                    var nextSet = await search.GetNextSetAsync();
-                    if (nextSet is null)
-                    {
-                        continue;
-                    }
-                    resultList.AddRange(nextSet);
-                    if (resultList.Count != 0) { break; }
-                } while (!search.IsDone);
+                var resultList = await FetchDocumentsAsync(search);
                 var snapshots = (from document in resultList
                                  let json = document.ToJson()
                                  let sortableUniqueId = document[nameof(IDocument.SortableUniqueId)].AsString()
@@ -513,5 +346,42 @@ public class DynamoDocumentRepository(
                 var snapshot = SekibanJsonHelper.Deserialize<SnapshotDocument>(snapshotJson);
                 return snapshot is null ? null : await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshot);
             });
+    }
+    private async Task<List<Amazon.DynamoDBv2.DocumentModel.Document>> FetchDocumentsAsync(Search? search)
+    {
+        var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
+        do
+        {
+            if (search is null)
+            {
+                break;
+            }
+            var nextSet = await search.GetNextSetAsync();
+            resultList.AddRange(nextSet);
+        } while (!search.IsDone);
+        return resultList;
+    }
+    private List<IEvent> ProcessEventDocuments(List<Amazon.DynamoDBv2.DocumentModel.Document> documents, string? sinceSortableUniqueId)
+    {
+        var types = registeredEventTypes.RegisteredTypes;
+        var events = new List<IEvent>();
+        foreach (var document in documents)
+        {
+            var json = document.ToJson();
+            var jsonElement = JsonDocument.Parse(json).RootElement;
+            var documentTypeName = document[nameof(IDocument.DocumentTypeName)].AsString();
+            if (documentTypeName is null) { continue; }
+            var toAdd = (types.Where(m => m.Name == documentTypeName)
+                        .Select(m => SekibanJsonHelper.Deserialize(json, typeof(Event<>).MakeGenericType(m)) as IEvent)
+                        .FirstOrDefault(m => m is not null) ??
+                    EventHelper.GetUnregisteredEvent(jsonElement)) ??
+                throw new SekibanUnregisteredEventFoundException();
+            if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
+            {
+                continue;
+            }
+            events.Add(toAdd);
+        }
+        return events;
     }
 }
