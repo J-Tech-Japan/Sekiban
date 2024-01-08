@@ -24,11 +24,11 @@ public class InMemoryDocumentStore
         }
         var eventContainer = _containerDictionary[sekibanContextIdentifier];
         eventContainer.All.Add(document);
-        if (eventContainer.Partitions.ContainsKey(partition))
+        if (eventContainer.Partitions.TryGetValue(partition, out var value))
         {
-            if (eventContainer.Partitions[partition].All(m => m.Id != document.Id))
+            if (value.All(m => m.Id != document.Id))
             {
-                eventContainer.Partitions[partition].Add(document);
+                value.Add(document);
             }
         } else
         {
