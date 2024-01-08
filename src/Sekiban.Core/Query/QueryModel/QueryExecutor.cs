@@ -26,7 +26,7 @@ public class QueryExecutor : IQueryExecutor
     public async Task<ListQueryResult<TOutput>> ExecuteAsync<TOutput>(IListQueryInput<TOutput> param) where TOutput : IQueryResponse
     {
         var validationResult = param.ValidateProperties().ToList();
-        if (validationResult.Any())
+        if (validationResult.Count != 0)
         {
             throw new SekibanValidationErrorsException(validationResult);
         }
@@ -84,7 +84,7 @@ public class QueryExecutor : IQueryExecutor
     public async Task<TOutput> ExecuteAsync<TOutput>(IQueryInput<TOutput> param) where TOutput : IQueryResponse
     {
         var validationResult = param.ValidateProperties().ToList();
-        if (validationResult.Any())
+        if (validationResult.Count != 0)
         {
             throw new SekibanValidationErrorsException(validationResult);
         }

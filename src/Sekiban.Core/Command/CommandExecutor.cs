@@ -81,7 +81,7 @@ public class CommandExecutor(
         where TCommand : ICommand<TAggregatePayload>
     {
         var validationResult = command.ValidateProperties().ToList();
-        if (validationResult.Any())
+        if (validationResult.Count != 0)
         {
             return (new CommandExecutorResponse(
                 null,
@@ -193,7 +193,7 @@ public class CommandExecutor(
     private static string GetAggregatePayloadOut<TAggregatePayload>(IEnumerable<IEvent> events)
     {
         var enumerable = events.ToList();
-        return enumerable.Any() ? enumerable.Last().GetPayload().GetAggregatePayloadOutType().Name : typeof(TAggregatePayload).Name;
+        return enumerable.Count != 0 ? enumerable.Last().GetPayload().GetAggregatePayloadOutType().Name : typeof(TAggregatePayload).Name;
     }
 
     private async Task<List<IEvent>> HandleEventsAsync<TAggregatePayload, TCommand>(
@@ -201,7 +201,7 @@ public class CommandExecutor(
         CommandDocument<TCommand> commandDocument) where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayload>
     {
         var toReturnEvents = new List<IEvent>();
-        if (!events.Any())
+        if (events.Count == 0)
         {
             return toReturnEvents;
         }

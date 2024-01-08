@@ -67,7 +67,7 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
     {
         var rootPartitionKey = command.GetRootPartitionKey();
         var validationResults = command.ValidateProperties().ToList();
-        if (validationResults.Any())
+        if (validationResults.Count != 0)
         {
             throw new ValidationException($"{command.GetType().Name} command validation failed :" + validationResults);
         }

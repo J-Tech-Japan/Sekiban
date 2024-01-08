@@ -326,7 +326,7 @@ public class DynamoDocumentRepository(
                         continue;
                     }
                     resultList.AddRange(nextSet);
-                    if (resultList.Any()) { break; }
+                    if (resultList.Count != 0) { break; }
                 } while (!search.IsDone);
                 var snapshots = (from document in resultList
                                  let json = document.ToJson()
@@ -371,7 +371,7 @@ public class DynamoDocumentRepository(
                         continue;
                     }
                     resultList.AddRange(nextSet);
-                    if (resultList.Any()) { break; }
+                    if (resultList.Count != 0) { break; }
                 } while (!search.IsDone);
 
                 foreach (var result in resultList)
@@ -424,7 +424,7 @@ public class DynamoDocumentRepository(
                         continue;
                     }
                     resultList.AddRange(nextSet);
-                    if (resultList.Any()) { break; }
+                    if (resultList.Count != 0) { break; }
                 } while (!search.IsDone);
                 var snapshots = (from document in resultList
                                  let json = document.ToJson()
@@ -478,9 +478,9 @@ public class DynamoDocumentRepository(
                                  let json = document.ToJson()
                                  let sortableUniqueId = document[nameof(IDocument.SortableUniqueId)].AsString()
                                  select json).ToList();
-                if (!snapshots.Any()) { return new List<SnapshotDocument>(); }
+                if (snapshots.Count == 0) { return new List<SnapshotDocument>(); }
                 var snapshotDocuments = snapshots.Select(m => SekibanJsonHelper.Deserialize<SnapshotDocument>(m)).ToList();
-                if (!snapshotDocuments.Any()) { return new List<SnapshotDocument>(); }
+                if (snapshotDocuments.Count == 0) { return new List<SnapshotDocument>(); }
                 var toReturn = new List<SnapshotDocument>();
                 foreach (var snapshotDocument in snapshotDocuments)
                 {
@@ -526,7 +526,7 @@ public class DynamoDocumentRepository(
                         continue;
                     }
                     resultList.AddRange(nextSet);
-                    if (resultList.Any()) { break; }
+                    if (resultList.Count != 0) { break; }
                 } while (!search.IsDone);
                 var snapshots = (from document in resultList
                                  let json = document.ToJson()

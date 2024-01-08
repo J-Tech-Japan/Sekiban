@@ -119,7 +119,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             _latestException = null;
             throw error;
         }
-        if (_latestValidationErrors.Any())
+        if (_latestValidationErrors.Count != 0)
         {
             var first = _latestValidationErrors.First();
             _latestValidationErrors = new List<SekibanValidationParameterError>();
@@ -602,7 +602,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var command = commandFunc(GetAggregateStateIfNotNullEmptyAggregate());
         _latestCommand = command;
         var validationResults = command.ValidateProperties().ToList();
-        if (validationResults.Any())
+        if (validationResults.Count != 0)
         {
             _latestValidationErrors = SekibanValidationParameterError.CreateFromValidationResults(validationResults).ToList();
             return this;
