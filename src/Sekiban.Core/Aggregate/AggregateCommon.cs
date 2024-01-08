@@ -29,7 +29,7 @@ public abstract class AggregateCommon : IAggregate
     public abstract string GetPayloadVersionIdentifier();
     public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().IsLaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
 
-    public bool CanApplyEvent(IEvent ev) => true;
+    public static bool CanApplyEvent(IEvent ev) => true;
 
     public static UAggregate Create<UAggregate>(Guid aggregateId) where UAggregate : AggregateCommon
     {

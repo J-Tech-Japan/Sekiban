@@ -66,14 +66,14 @@ public class MultiProjectionSnapshotGenerator(
             await documentWriter.SaveAsync(snapshotDocument, typeof(TProjectionPayload));
             logger.LogInformation(
                 "Generate multi snapshot for {ProjectionName} and rootPartitionKey {RootPartitionKey} because used version is {UsedVersion}",
-                ProjectionName(typeof(TProjectionPayload)),
+                MultiProjectionSnapshotGenerator.ProjectionName(typeof(TProjectionPayload)),
                 rootPartitionKey,
                 usedVersion);
         } else
         {
             logger.LogInformation(
                 "skip making snapshot for {ProjectionName} and rootPartitionKey {RootPartitionKey} because used version is {UsedVersion} and minimum is {MinimumNumberOfEventsToGenerateSnapshot}",
-                ProjectionName(typeof(TProjectionPayload)),
+                MultiProjectionSnapshotGenerator.ProjectionName(typeof(TProjectionPayload)),
                 rootPartitionKey,
                 usedVersion,
                 minimumNumberOfEventsToGenerateSnapshot);
@@ -132,9 +132,9 @@ public class MultiProjectionSnapshotGenerator(
     }
 
     public string FilenameForSnapshot(Type projectionPayload, Guid id, SortableUniqueIdValue sortableUniqueId) =>
-        $"{ProjectionName(projectionPayload)}_{sortableUniqueId.GetTicks().Ticks:00000000000000000000}_{id}.json.gz";
+        $"{MultiProjectionSnapshotGenerator.ProjectionName(projectionPayload)}_{sortableUniqueId.GetTicks().Ticks:00000000000000000000}_{id}.json.gz";
 
-    private string ProjectionName(Type projectionType) =>
+    private static string ProjectionName(Type projectionType) =>
         projectionType.IsSingleProjectionListStateType()
             ? $"list_{projectionType.GetAggregatePayloadOrSingleProjectionPayloadTypeFromSingleProjectionListStateType().Name}"
             : projectionType.Name;

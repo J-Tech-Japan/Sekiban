@@ -168,7 +168,7 @@ public class CosmosDbFactory(
                 new MemoryCacheEntryOptions());
         }
 
-        var containerProperties = new ContainerProperties(containerId, GetPartitionKeyPaths(GetSupportsHierarchicalPartitions()));
+        var containerProperties = new ContainerProperties(containerId, CosmosDbFactory.GetPartitionKeyPaths(GetSupportsHierarchicalPartitions()));
         container = await database.CreateContainerIfNotExistsAsync(containerProperties, 400);
         memoryCache.Cache.Set(
             GetMemoryCacheContainerKey(documentType, databaseId, containerId, SekibanContextIdentifier()),
@@ -231,7 +231,7 @@ public class CosmosDbFactory(
         memoryCache.Cache.Remove(GetMemoryCacheContainerKey(documentType, databaseId, containerId, SekibanContextIdentifier()));
     }
 
-    private IReadOnlyList<string> GetPartitionKeyPaths(bool supportsHierarchicalPartitions) =>
+    private static IReadOnlyList<string> GetPartitionKeyPaths(bool supportsHierarchicalPartitions) =>
         supportsHierarchicalPartitions
             ? new List<string> { "/RootPartitionKey", "/AggregateType", "/PartitionKey" }
             : new List<string> { "/PartitionKey" };

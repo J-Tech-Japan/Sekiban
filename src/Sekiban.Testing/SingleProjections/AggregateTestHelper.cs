@@ -611,7 +611,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         AggregateIdHolder.RootPartitionKey = command.GetRootPartitionKey();
 
         var commandDocument = new CommandDocument<TCommand>(GetAggregateId(), command, typeof(TAggregatePayload), GetRootPartitionKey());
-        CheckCommandJSONSupports(commandDocument);
+        AggregateTestHelper<TAggregatePayload>.CheckCommandJSONSupports(commandDocument);
 
         var aggregateId = GetAggregateId();
         var rootPartitionKey = command.GetRootPartitionKey();
@@ -738,7 +738,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         CheckEventJsonCompatibility();
     }
 
-    private void CheckCommandJSONSupports(IDocument command)
+    private static void CheckCommandJSONSupports(IDocument command)
     {
         var type = command.GetType();
         var json = SekibanJsonHelper.Serialize(command);

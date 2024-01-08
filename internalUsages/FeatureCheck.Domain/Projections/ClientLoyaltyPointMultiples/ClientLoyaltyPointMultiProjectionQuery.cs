@@ -22,7 +22,7 @@ public class ClientLoyaltyPointMultiProjectionQuery : IMultiProjectionQuery<Clie
             projection.Payload.Records.Where(m => m.BranchId == param.BranchId).ToImmutableList());
     }
 
-    public ClientLoyaltyPointMultiProjection HandleSortAndPagingIfNeeded(Parameter param, ClientLoyaltyPointMultiProjection response)
+    public static ClientLoyaltyPointMultiProjection HandleSortAndPagingIfNeeded(Parameter param, ClientLoyaltyPointMultiProjection response)
     {
         if (param.SortKey == QuerySortKeys.ClientName)
         {
