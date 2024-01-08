@@ -81,10 +81,8 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
                     }
                 }
             });
-        if (aggregate.Version == 0)
-        {
-            return default;
-        }
-        return toVersion.HasValue && aggregate.Version < toVersion.Value ? throw new SekibanVersionNotReachToSpecificVersion() : aggregate;
+        return aggregate.Version == 0
+            ? default
+            : toVersion.HasValue && aggregate.Version < toVersion.Value ? throw new SekibanVersionNotReachToSpecificVersion() : aggregate;
     }
 }

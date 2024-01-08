@@ -24,12 +24,9 @@ public static class GeneralTypeExtensions
             throw new ArgumentNullException(nameof(genericType));
         }
 
-        if (!genericType.IsGenericTypeDefinition)
-        {
-            throw new ArgumentException("The genericType must be a generic type definition.", nameof(genericType));
-        }
-
-        return type.IsGenericType && type.GetGenericTypeDefinition() == genericType
+        return !genericType.IsGenericTypeDefinition
+            ? throw new ArgumentException("The genericType must be a generic type definition.", nameof(genericType))
+            : type.IsGenericType && type.GetGenericTypeDefinition() == genericType
             ? true
             : type.BaseType != null && DoesInheritFromGenericType(type.BaseType, genericType);
     }
@@ -52,12 +49,9 @@ public static class GeneralTypeExtensions
             throw new ArgumentNullException(nameof(genericType));
         }
 
-        if (!genericType.IsGenericTypeDefinition)
-        {
-            throw new ArgumentException("The genericType must be a generic type definition.", nameof(genericType));
-        }
-
-        return type.IsGenericType && type.GetGenericTypeDefinition() == genericType
+        return !genericType.IsGenericTypeDefinition
+            ? throw new ArgumentException("The genericType must be a generic type definition.", nameof(genericType))
+            : type.IsGenericType && type.GetGenericTypeDefinition() == genericType
             ? type
             : type.BaseType != null
             ? GetInheritFromGenericType(type.BaseType, genericType)

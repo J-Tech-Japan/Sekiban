@@ -20,11 +20,9 @@ public static class SingleProjectionListStateTypesExtensions
             singleProjectionListStateType.GetGenericTypeDefinition() == typeof(SingleProjectionListState<>))
         {
             var aggregateStateType = singleProjectionListStateType.GetGenericArguments()[0];
-            if (aggregateStateType.IsGenericType && aggregateStateType.GetGenericTypeDefinition() == typeof(AggregateState<>))
-            {
-                return aggregateStateType.GetGenericArguments()[0];
-            }
-            return aggregateStateType.IsGenericType && aggregateStateType.GetGenericTypeDefinition() == typeof(SingleProjectionState<>)
+            return aggregateStateType.IsGenericType && aggregateStateType.GetGenericTypeDefinition() == typeof(AggregateState<>)
+                ? aggregateStateType.GetGenericArguments()[0]
+                : aggregateStateType.IsGenericType && aggregateStateType.GetGenericTypeDefinition() == typeof(SingleProjectionState<>)
                 ? aggregateStateType.GetGenericArguments()[0]
                 : throw new Exception(singleProjectionListStateType.FullName + " is not an Single Projection List state");
         }

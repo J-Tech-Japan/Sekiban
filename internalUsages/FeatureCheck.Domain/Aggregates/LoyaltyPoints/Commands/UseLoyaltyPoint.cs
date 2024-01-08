@@ -24,11 +24,9 @@ public record UseLoyaltyPoint(
     {
         public IEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommand(UseLoyaltyPoint command, ICommandContext<LoyaltyPoint> context)
         {
-            if (context.GetState().Payload.LastOccuredTime > command.HappenedDate)
-            {
-                throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
-            }
-            yield return context.GetState().Payload.CurrentPoint - command.PointAmount < 0
+            yield return context.GetState().Payload.LastOccuredTime > command.HappenedDate
+                ? throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException()
+                : context.GetState().Payload.CurrentPoint - command.PointAmount < 0
                 ? throw new SekibanLoyaltyPointNotEnoughException()
                 : (IEventPayloadApplicableTo<LoyaltyPoint>)new LoyaltyPointUsed(command.HappenedDate, command.Reason, command.PointAmount, command.Note);
         }

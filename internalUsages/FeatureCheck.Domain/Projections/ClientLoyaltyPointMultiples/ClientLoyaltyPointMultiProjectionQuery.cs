@@ -22,16 +22,14 @@ public class ClientLoyaltyPointMultiProjectionQuery : IMultiProjectionQuery<Clie
 
     public static ClientLoyaltyPointMultiProjection HandleSortAndPagingIfNeeded(Parameter param, ClientLoyaltyPointMultiProjection response)
     {
-        if (param.SortKey == QuerySortKeys.ClientName)
-        {
-            return response with
+        return param.SortKey == QuerySortKeys.ClientName
+            ? (response with
             {
                 Records = param.SortIsAsc
                     ? response.Records.OrderBy(x => x.ClientName).ToImmutableList()
                     : response.Records.OrderByDescending(x => x.ClientName).ToImmutableList()
-            };
-        }
-        return param.SortKey == QuerySortKeys.Points
+            })
+            : param.SortKey == QuerySortKeys.Points
             ? (response with
             {
                 Records = param.SortIsAsc

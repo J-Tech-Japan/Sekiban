@@ -33,11 +33,9 @@ public class SekibanUpdateNoticeManager : IUpdateNotice
         SortableUniqueIdValue? sortableUniqueId)
     {
         var current = UpdateDictionary.GetValueOrDefault(GetKeyForAggregate(rootPartitionKey, aggregateName, aggregateId));
-        if (current is null || string.IsNullOrEmpty(current.SortableUniqueId))
-        {
-            return (false, null);
-        }
-        return string.IsNullOrEmpty(sortableUniqueId?.Value)
+        return current is null || string.IsNullOrEmpty(current.SortableUniqueId)
+            ? (false, null)
+            : string.IsNullOrEmpty(sortableUniqueId?.Value)
             ? (true, null)
             : ((bool, UpdatedLocationType?))(sortableUniqueId.IsEarlierThanOrEqual(current.SortableUniqueId), current.LocationType);
     }
@@ -47,20 +45,16 @@ public class SekibanUpdateNoticeManager : IUpdateNotice
         if (rootPartitionKey.Equals(IMultiProjectionService.ProjectionAllRootPartitions))
         {
             var currentAll = UpdateDictionary.GetValueOrDefault(GetKeyForType(aggregateName));
-            if (currentAll is null || string.IsNullOrEmpty(currentAll.SortableUniqueId))
-            {
-                return (false, null);
-            }
-            return sortableUniqueId is null
+            return currentAll is null || string.IsNullOrEmpty(currentAll.SortableUniqueId)
+                ? (false, null)
+                : sortableUniqueId is null
                 ? (true, null)
                 : ((bool, UpdatedLocationType?))(sortableUniqueId.IsEarlierThanOrEqual(currentAll.SortableUniqueId), currentAll.LocationType);
         }
         var current = UpdateDictionary.GetValueOrDefault(GetKeyForType(rootPartitionKey, aggregateName));
-        if (current is null || string.IsNullOrEmpty(current.SortableUniqueId))
-        {
-            return (false, null);
-        }
-        return sortableUniqueId is null
+        return current is null || string.IsNullOrEmpty(current.SortableUniqueId)
+            ? (false, null)
+            : sortableUniqueId is null
             ? (true, null)
             : ((bool, UpdatedLocationType?))(sortableUniqueId.IsEarlierThanOrEqual(current.SortableUniqueId), current.LocationType);
     }

@@ -25,11 +25,8 @@ public class CommandRootPartitionValidationAttribute : ValidationAttribute
 
     public static bool IsValidRootPartitionKey(string rootPartitionKey)
     {
-        if (string.IsNullOrWhiteSpace(rootPartitionKey))
-        {
-            return false;
-        }
-
-        return Regex.IsMatch(rootPartitionKey, RootPartitionKeyRegexPattern, RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(250));
+        return string.IsNullOrWhiteSpace(rootPartitionKey)
+            ? false
+            : Regex.IsMatch(rootPartitionKey, RootPartitionKeyRegexPattern, RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(250));
     }
 }
