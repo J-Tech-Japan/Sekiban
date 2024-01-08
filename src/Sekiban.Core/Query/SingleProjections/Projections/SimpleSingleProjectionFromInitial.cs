@@ -45,10 +45,6 @@ public class SimpleSingleProjectionFromInitial : ISingleProjectionFromInitial
                     }
                 }
             });
-        if (aggregate.Version == 0)
-        {
-            return default;
-        }
-        return aggregate;
+        return aggregate.Version == 0 ? default : aggregate;
     }
 }

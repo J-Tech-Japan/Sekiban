@@ -24,11 +24,9 @@ public static class SingleProjectionListStateTypesExtensions
             {
                 return aggregateStateType.GetGenericArguments()[0];
             }
-            if (aggregateStateType.IsGenericType && aggregateStateType.GetGenericTypeDefinition() == typeof(SingleProjectionState<>))
-            {
-                return aggregateStateType.GetGenericArguments()[0];
-            }
-            throw new Exception(singleProjectionListStateType.FullName + " is not an Single Projection List state");
+            return aggregateStateType.IsGenericType && aggregateStateType.GetGenericTypeDefinition() == typeof(SingleProjectionState<>)
+                ? aggregateStateType.GetGenericArguments()[0]
+                : throw new Exception(singleProjectionListStateType.FullName + " is not an Single Projection List state");
         }
         throw new Exception(singleProjectionListStateType.FullName + " is not an Single Projection List state");
     }
@@ -39,11 +37,7 @@ public static class SingleProjectionListStateTypesExtensions
     /// <returns></returns>
     public static bool IsSingleProjectionListStateType(this Type singleProjectionListStateType)
     {
-        if (singleProjectionListStateType.IsGenericType &&
-            singleProjectionListStateType.GetGenericTypeDefinition() == typeof(SingleProjectionListState<>))
-        {
-            return true;
-        }
-        return false;
+        return singleProjectionListStateType.IsGenericType &&
+            singleProjectionListStateType.GetGenericTypeDefinition() == typeof(SingleProjectionListState<>);
     }
 }

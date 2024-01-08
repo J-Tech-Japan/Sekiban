@@ -425,8 +425,7 @@ public class CosmosDocumentRepository(
                 var response = await container.ReadItemAsync<SnapshotDocument>(
                     id.ToString(),
                     CosmosPartitionGenerator.ForSingleProjectionSnapshot(rootPartitionKey, aggregatePayloadType, projectionPayloadType, aggregateId));
-                if (response.Resource is null) { return null; }
-                return await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(response.Resource);
+                return response.Resource is null ? null : await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(response.Resource);
             });
     }
 }

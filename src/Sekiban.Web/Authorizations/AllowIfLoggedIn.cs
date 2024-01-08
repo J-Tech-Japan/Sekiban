@@ -21,10 +21,8 @@ public class AllowIfLoggedIn<TDefinitionType> : IAuthorizeDefinition where TDefi
             return AuthorizeResultType.Passed;
         }
         // Check Authentication
-        if (!(httpContext.User.Identity?.IsAuthenticated ?? false))
-        {
-            return httpContext.User.Identity?.IsAuthenticated ?? false ? AuthorizeResultType.Allowed : AuthorizeResultType.Denied;
-        }
-        return AuthorizeResultType.Passed;
+        return !(httpContext.User.Identity?.IsAuthenticated ?? false)
+            ? httpContext.User.Identity?.IsAuthenticated ?? false ? AuthorizeResultType.Allowed : AuthorizeResultType.Denied
+            : AuthorizeResultType.Passed;
     }
 }

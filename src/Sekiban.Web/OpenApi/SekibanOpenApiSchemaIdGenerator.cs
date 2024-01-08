@@ -7,12 +7,10 @@ public static class SekibanOpenApiSchemaIdGenerator
     private static string GenerateSchemaId(Type type, string prefix = "")
     {
         var regular = GetRegularNameWithReplacedSymbol(type);
-        if (type.IsGenericType)
-        {
-            return type.GenericTypeArguments.ToList()
-                .Aggregate(string.IsNullOrEmpty(prefix) ? regular : $"{prefix}_{regular}", (s, type1) => GenerateSchemaId(type1, s));
-        }
-        return string.IsNullOrEmpty(prefix) ? regular : $"{prefix}_{regular}";
+        return type.IsGenericType
+            ? type.GenericTypeArguments.ToList()
+                .Aggregate(string.IsNullOrEmpty(prefix) ? regular : $"{prefix}_{regular}", (s, type1) => GenerateSchemaId(type1, s))
+            : string.IsNullOrEmpty(prefix) ? regular : $"{prefix}_{regular}";
     }
 
     private static string GetRegularNameWithReplacedSymbol(Type type) =>
@@ -28,10 +26,8 @@ public static class SekibanOpenApiSchemaIdGenerator
 
     private static string GetRegularName(Type type)
     {
-        if (type.IsGenericType)
-        {
-            return type.GetGenericTypeDefinition().Name.Split("`").FirstOrDefault() ?? string.Empty;
-        }
-        return type.FullName!.Contains('+') ? type.FullName.Split(".").LastOrDefault() ?? string.Empty : type.Name;
+        return type.IsGenericType
+            ? type.GetGenericTypeDefinition().Name.Split("`").FirstOrDefault() ?? string.Empty
+            : type.FullName!.Contains('+') ? type.FullName.Split(".").LastOrDefault() ?? string.Empty : type.Name;
     }
 }

@@ -64,12 +64,9 @@ public record CreateClientWithBranchSubscriber : ICommand<Client>
             }
 
             var emailExistsOutput2 = await dependencyInjectionSampleService.ExistsClientEmail(command.ClientEmail);
-            if (emailExistsOutput2)
-            {
-                throw new SekibanEmailAlreadyRegistered();
-            }
-
-            yield return new ClientCreatedWithBranchAdd(command.BranchId, command.ClientName, command.ClientEmail);
+            yield return emailExistsOutput2
+                ? throw new SekibanEmailAlreadyRegistered()
+                : (IEventPayloadApplicableTo<Client>)new ClientCreatedWithBranchAdd(command.BranchId, command.ClientName, command.ClientEmail);
         }
     }
 }

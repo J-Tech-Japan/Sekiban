@@ -18,11 +18,9 @@ public record AddProductStock : ICommand<ProductStock>
             AddProductStock command,
             ICommandContext<ProductStock> context)
         {
-            if (!await _productExistsPort.ProductExistsAsync(command.ProductId))
-            {
-                throw new Exception("Product does not exist");
-            }
-            yield return new ProductStockAdded { AddedAmount = command.AddedAmount };
+            yield return !await _productExistsPort.ProductExistsAsync(command.ProductId)
+                ? throw new Exception("Product does not exist")
+                : (IEventPayloadApplicableTo<ProductStock>)new ProductStockAdded { AddedAmount = command.AddedAmount };
         }
     }
 }

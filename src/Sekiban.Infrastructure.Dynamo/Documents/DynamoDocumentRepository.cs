@@ -323,8 +323,7 @@ public class DynamoDocumentRepository(
                 var snapshotJson = snapshots.FirstOrDefault();
                 if (string.IsNullOrEmpty(snapshotJson)) { return null; }
                 var snapshot = SekibanJsonHelper.Deserialize<SnapshotDocument>(snapshotJson);
-                if (snapshot is null) { return null; }
-                return await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshot);
+                return snapshot is null ? null : await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshot);
             });
     }
     public async Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(
@@ -421,9 +420,7 @@ public class DynamoDocumentRepository(
                 var snapshotJson = snapshots.FirstOrDefault();
                 if (string.IsNullOrEmpty(snapshotJson)) { return false; }
                 var snapshot = SekibanJsonHelper.Deserialize<SnapshotDocument>(snapshotJson);
-                if (snapshot is null) { return false; }
-
-                return true;
+                return snapshot is not null;
             });
     }
     public async Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(
@@ -523,8 +520,7 @@ public class DynamoDocumentRepository(
                 var snapshotJson = snapshots.FirstOrDefault();
                 if (string.IsNullOrEmpty(snapshotJson)) { return null; }
                 var snapshot = SekibanJsonHelper.Deserialize<SnapshotDocument>(snapshotJson);
-                if (snapshot is null) { return null; }
-                return await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshot);
+                return snapshot is null ? null : await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshot);
             });
     }
 }

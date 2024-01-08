@@ -53,11 +53,8 @@ public static class PartitionKeyGenerator
             ? MultiProjectionSnapshotDocument.AllRootPartitionKeySnapshotValue
             : rootPartitionKey;
 
-        if (projectionType.IsSingleProjectionListStateType())
-        {
-            return
-                $"m_list_{projectionType.GetAggregatePayloadOrSingleProjectionPayloadTypeFromSingleProjectionListStateType().Name}_{rootPartitionKeyToUse}";
-        }
-        return $"m_{projectionType.Name}_{rootPartitionKeyToUse}";
+        return projectionType.IsSingleProjectionListStateType()
+            ? $"m_list_{projectionType.GetAggregatePayloadOrSingleProjectionPayloadTypeFromSingleProjectionListStateType().Name}_{rootPartitionKeyToUse}"
+            : $"m_{projectionType.Name}_{rootPartitionKeyToUse}";
     }
 }

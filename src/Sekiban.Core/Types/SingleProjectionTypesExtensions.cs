@@ -38,11 +38,9 @@ public static class SingleProjectionTypesExtensions
     /// <exception cref="Exception"></exception>
     public static Type GetSingleProjectionPayloadFromSingleProjectionType(this Type type)
     {
-        if (type.IsSingleProjectionType())
-        {
-            return type.GenericTypeArguments[0];
-        }
-        throw new Exception(type.FullName + "is not Single Projection Type");
+        return type.IsSingleProjectionType()
+            ? type.GenericTypeArguments[0]
+            : throw new Exception(type.FullName + "is not Single Projection Type");
     }
     /// <summary>
     ///     Check whether the given type is Single Projection Payload Type or not.

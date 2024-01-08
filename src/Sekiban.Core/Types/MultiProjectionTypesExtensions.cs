@@ -45,10 +45,8 @@ public static class MultiProjectionTypesExtensions
     /// <exception cref="Exception"></exception>
     public static Type GetMultiProjectionPayloadTypeFromMultiProjection(this Type projectionType)
     {
-        if (projectionType.IsMultiProjectionType())
-        {
-            return projectionType.GenericTypeArguments[0];
-        }
-        throw new Exception(projectionType.FullName + " is not multi projection type");
+        return projectionType.IsMultiProjectionType()
+            ? projectionType.GenericTypeArguments[0]
+            : throw new Exception(projectionType.FullName + " is not multi projection type");
     }
 }

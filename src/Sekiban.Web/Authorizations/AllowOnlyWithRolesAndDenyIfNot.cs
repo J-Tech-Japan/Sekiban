@@ -30,10 +30,8 @@ public class AllowOnlyWithRolesAndDenyIfNot<TDefinitionType, TRoleEnum> : IAutho
         HttpContext httpContext,
         IServiceProvider serviceProvider)
     {
-        if (!new TDefinitionType().IsMatches(authorizeMethodType, aggregateType, commandType))
-        {
-            return AuthorizeResultType.Passed;
-        }
-        return checkRoles(Roles) ? AuthorizeResultType.Allowed : AuthorizeResultType.Denied;
+        return !new TDefinitionType().IsMatches(authorizeMethodType, aggregateType, commandType)
+            ? AuthorizeResultType.Passed
+            : checkRoles(Roles) ? AuthorizeResultType.Allowed : AuthorizeResultType.Denied;
     }
 }

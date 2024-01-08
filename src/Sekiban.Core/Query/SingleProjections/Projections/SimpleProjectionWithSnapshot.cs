@@ -85,10 +85,6 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
         {
             return default;
         }
-        if (toVersion.HasValue && aggregate.Version < toVersion.Value)
-        {
-            throw new SekibanVersionNotReachToSpecificVersion();
-        }
-        return aggregate;
+        return toVersion.HasValue && aggregate.Version < toVersion.Value ? throw new SekibanVersionNotReachToSpecificVersion() : aggregate;
     }
 }

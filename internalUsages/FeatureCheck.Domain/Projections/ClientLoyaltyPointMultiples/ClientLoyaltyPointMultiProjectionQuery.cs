@@ -13,11 +13,9 @@ public class ClientLoyaltyPointMultiProjectionQuery : IMultiProjectionQuery<Clie
 
     public Response HandleFilter(Parameter param, MultiProjectionState<ClientLoyaltyPointMultiProjection> projection)
     {
-        if (param.BranchId is null)
-        {
-            return new Response(projection.Payload.Branches, projection.Payload.Records);
-        }
-        return new Response(
+        return param.BranchId is null
+            ? new Response(projection.Payload.Branches, projection.Payload.Records)
+            : new Response(
             projection.Payload.Branches.Where(x => x.BranchId == param.BranchId).ToImmutableList(),
             projection.Payload.Records.Where(m => m.BranchId == param.BranchId).ToImmutableList());
     }
@@ -33,16 +31,14 @@ public class ClientLoyaltyPointMultiProjectionQuery : IMultiProjectionQuery<Clie
                     : response.Records.OrderByDescending(x => x.ClientName).ToImmutableList()
             };
         }
-        if (param.SortKey == QuerySortKeys.Points)
-        {
-            return response with
+        return param.SortKey == QuerySortKeys.Points
+            ? (response with
             {
                 Records = param.SortIsAsc
                     ? response.Records.OrderBy(x => x.Point).ToImmutableList()
                     : response.Records.OrderByDescending(x => x.Point).ToImmutableList()
-            };
-        }
-        return response with { Records = response.Records.OrderBy(x => x.ClientName).ToImmutableList() };
+            })
+            : (response with { Records = response.Records.OrderBy(x => x.ClientName).ToImmutableList() });
     }
 
     public record Parameter(Guid? BranchId, QuerySortKeys SortKey, bool SortIsAsc = true) : IQueryParameter<Response>;

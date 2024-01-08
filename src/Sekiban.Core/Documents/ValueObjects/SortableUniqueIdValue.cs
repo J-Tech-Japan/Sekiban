@@ -100,13 +100,11 @@ public record SortableUniqueIdValue(string Value)
     public static string GetIdString(Guid id) => (Math.Abs(id.GetHashCode()) % IdModBase).ToString(IdFormatter);
     public static SortableUniqueIdValue? GetSortableUniqueIdValueFromQuery(object target)
     {
-        if (target is IShouldIncludesSortableUniqueId sortableUniqueId)
-        {
-            return !string.IsNullOrWhiteSpace(sortableUniqueId.IncludesSortableUniqueIdValue)
+        return target is IShouldIncludesSortableUniqueId sortableUniqueId
+            ? !string.IsNullOrWhiteSpace(sortableUniqueId.IncludesSortableUniqueIdValue)
                 ? new SortableUniqueIdValue(sortableUniqueId.IncludesSortableUniqueIdValue.Trim())
-                : null;
-        }
-        return null;
+                : null
+            : null;
     }
     public static SortableUniqueIdValue? NullableValue(string? value) => value != null ? new SortableUniqueIdValue(value) : null;
 }

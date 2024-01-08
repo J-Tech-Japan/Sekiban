@@ -67,11 +67,9 @@ public static class AggregateTypesExtensions
             var baseType = aggregateType.GetImplementingFromGenericInterfaceType(typeof(IParentAggregatePayload<,>));
             return baseType.GenericTypeArguments[0];
         }
-        if (aggregateType.GetInterfaces().Any(m => m == typeof(IAggregatePayloadCommon)))
-        {
-            return aggregateType;
-        }
-        throw new Exception(aggregateType.FullName + " is not an aggregate");
+        return aggregateType.GetInterfaces().Any(m => m == typeof(IAggregatePayloadCommon))
+            ? aggregateType
+            : throw new Exception(aggregateType.FullName + " is not an aggregate");
     }
     /// <summary>
     ///     Get first Aggregate Payload type from given Aggregate Payload.
@@ -87,11 +85,9 @@ public static class AggregateTypesExtensions
             var baseType = aggregateType.GetImplementingFromGenericInterfaceType(typeof(IParentAggregatePayload<,>));
             return baseType.GenericTypeArguments[1];
         }
-        if (aggregateType.GetInterfaces().Any(m => m == typeof(IAggregatePayloadCommon)))
-        {
-            return aggregateType;
-        }
-        throw new Exception(aggregateType.FullName + " is not an aggregate");
+        return aggregateType.GetInterfaces().Any(m => m == typeof(IAggregatePayloadCommon))
+            ? aggregateType
+            : throw new Exception(aggregateType.FullName + " is not an aggregate");
     }
     /// <summary>
     ///     Check if given type is Aggregate Payload Type.
@@ -137,11 +133,9 @@ public static class AggregateTypesExtensions
     /// <exception cref="Exception"></exception>
     public static Type GetAggregatePayloadTypeFromAggregate(this Type aggregateType)
     {
-        if (aggregateType.IsGenericType && aggregateType.GetGenericTypeDefinition() == typeof(Aggregate<>))
-        {
-            return aggregateType.GenericTypeArguments[0];
-        }
-        throw new Exception(aggregateType.FullName + " is not an aggregate");
+        return aggregateType.IsGenericType && aggregateType.GetGenericTypeDefinition() == typeof(Aggregate<>)
+            ? aggregateType.GenericTypeArguments[0]
+            : throw new Exception(aggregateType.FullName + " is not an aggregate");
     }
     /// <summary>
     ///     Get Aggregate Payload Type from given Aggregate State.
@@ -151,10 +145,8 @@ public static class AggregateTypesExtensions
     /// <exception cref="Exception"></exception>
     public static Type GetAggregatePayloadTypeFromAggregateState(this Type aggregateStateType)
     {
-        if (aggregateStateType.IsGenericType && aggregateStateType.GetGenericTypeDefinition() == typeof(AggregateState<>))
-        {
-            return aggregateStateType.GenericTypeArguments[0];
-        }
-        throw new Exception(aggregateStateType.FullName + " is not an aggregate state");
+        return aggregateStateType.IsGenericType && aggregateStateType.GetGenericTypeDefinition() == typeof(AggregateState<>)
+            ? aggregateStateType.GenericTypeArguments[0]
+            : throw new Exception(aggregateStateType.FullName + " is not an aggregate state");
     }
 }

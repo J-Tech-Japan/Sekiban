@@ -29,12 +29,7 @@ public static class SekibanJsonHelper
     /// <returns></returns>
     public static string? Serialize(dynamic? obj)
     {
-        if (obj is null)
-        {
-            return null;
-        }
-
-        return JsonSerializer.Serialize(obj, GetDefaultJsonSerializerOptions());
+        return obj is null ? null : (string)JsonSerializer.Serialize(obj, GetDefaultJsonSerializerOptions());
     }
 
     /// <summary>
@@ -54,12 +49,9 @@ public static class SekibanJsonHelper
     /// <returns></returns>
     public static object? Deserialize(string? jsonString, Type returnType)
     {
-        if (string.IsNullOrEmpty(jsonString))
-        {
-            return default;
-        }
-
-        return JsonSerializer.Deserialize(jsonString, returnType, GetDefaultJsonSerializerOptions());
+        return string.IsNullOrEmpty(jsonString)
+            ? default
+            : JsonSerializer.Deserialize(jsonString, returnType, GetDefaultJsonSerializerOptions());
     }
 
     /// <summary>
@@ -70,12 +62,7 @@ public static class SekibanJsonHelper
     /// <returns></returns>
     public static T? Deserialize<T>(string? jsonString)
     {
-        if (string.IsNullOrEmpty(jsonString))
-        {
-            return default;
-        }
-
-        return JsonSerializer.Deserialize<T>(jsonString, GetDefaultJsonSerializerOptions());
+        return string.IsNullOrEmpty(jsonString) ? default : JsonSerializer.Deserialize<T>(jsonString, GetDefaultJsonSerializerOptions());
     }
 
     /// <summary>
@@ -86,12 +73,9 @@ public static class SekibanJsonHelper
     /// <returns></returns>
     public static IEvent? DeserializeToEvent(JsonElement jsonElement, ReadOnlyCollection<Type> registeredTypes)
     {
-        if (GetValue<string>(jsonElement, nameof(IDocument.DocumentTypeName)) is not { } typeName)
-        {
-            return null;
-        }
-
-        return registeredTypes.Where(m => m.Name == typeName)
+        return GetValue<string>(jsonElement, nameof(IDocument.DocumentTypeName)) is not { } typeName
+            ? null
+            : registeredTypes.Where(m => m.Name == typeName)
                 .Select(m => ConvertTo(jsonElement, typeof(Event<>).MakeGenericType(m)) as IEvent)
                 .FirstOrDefault(m => m is not null) ??
             EventHelper.GetUnregisteredEvent(jsonElement);
@@ -154,11 +138,6 @@ public static class SekibanJsonHelper
         }
 
         var node = JsonNode.Parse(jsonString, new JsonNodeOptions { PropertyNameCaseInsensitive = true })?[propertyName];
-        if (node is null)
-        {
-            return default;
-        }
-
-        return node.GetValue<T>();
+        return node is null ? default : node.GetValue<T>();
     }
 }

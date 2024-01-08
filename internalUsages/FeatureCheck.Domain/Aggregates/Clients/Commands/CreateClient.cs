@@ -54,12 +54,9 @@ public record CreateClient : ICommand<Client>
             // Check no email duplicates
             var emailExistsOutput = await queryExecutor.ExecuteAsync(
                 new ClientEmailExistsQuery.Parameter(command.ClientEmail) { RootPartitionKey = (command as ICommandCommon).GetRootPartitionKey() });
-            if (emailExistsOutput.Exists)
-            {
-                throw new SekibanEmailAlreadyRegistered();
-            }
-
-            yield return new ClientCreated(command.BranchId, command.ClientName, command.ClientEmail);
+            yield return emailExistsOutput.Exists
+                ? throw new SekibanEmailAlreadyRegistered()
+                : (IEventPayloadApplicableTo<Client>)new ClientCreated(command.BranchId, command.ClientName, command.ClientEmail);
         }
     }
 }

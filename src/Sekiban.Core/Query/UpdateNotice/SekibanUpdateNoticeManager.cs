@@ -37,11 +37,9 @@ public class SekibanUpdateNoticeManager : IUpdateNotice
         {
             return (false, null);
         }
-        if (string.IsNullOrEmpty(sortableUniqueId?.Value))
-        {
-            return (true, null);
-        }
-        return (sortableUniqueId.IsEarlierThanOrEqual(current.SortableUniqueId), current.LocationType);
+        return string.IsNullOrEmpty(sortableUniqueId?.Value)
+            ? (true, null)
+            : ((bool, UpdatedLocationType?))(sortableUniqueId.IsEarlierThanOrEqual(current.SortableUniqueId), current.LocationType);
     }
 
     public (bool, UpdatedLocationType?) HasUpdateAfter(string rootPartitionKey, string aggregateName, SortableUniqueIdValue? sortableUniqueId)
@@ -53,22 +51,18 @@ public class SekibanUpdateNoticeManager : IUpdateNotice
             {
                 return (false, null);
             }
-            if (sortableUniqueId is null)
-            {
-                return (true, null);
-            }
-            return (sortableUniqueId.IsEarlierThanOrEqual(currentAll.SortableUniqueId), currentAll.LocationType);
+            return sortableUniqueId is null
+                ? (true, null)
+                : ((bool, UpdatedLocationType?))(sortableUniqueId.IsEarlierThanOrEqual(currentAll.SortableUniqueId), currentAll.LocationType);
         }
         var current = UpdateDictionary.GetValueOrDefault(GetKeyForType(rootPartitionKey, aggregateName));
         if (current is null || string.IsNullOrEmpty(current.SortableUniqueId))
         {
             return (false, null);
         }
-        if (sortableUniqueId is null)
-        {
-            return (true, null);
-        }
-        return (sortableUniqueId.IsEarlierThanOrEqual(current.SortableUniqueId), current.LocationType);
+        return sortableUniqueId is null
+            ? (true, null)
+            : ((bool, UpdatedLocationType?))(sortableUniqueId.IsEarlierThanOrEqual(current.SortableUniqueId), current.LocationType);
     }
 
     public static string GetKeyForAggregate(string rootPartitionKey, string aggregateName, Guid aggregateId) =>

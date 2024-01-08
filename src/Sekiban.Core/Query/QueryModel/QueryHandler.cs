@@ -25,11 +25,9 @@ public class QueryHandler
         var filtered = query.HandleFilter(param, projection);
         var sorted = query.HandleSort(param, filtered);
         var queryResponses = sorted.ToList();
-        if (param is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam)
-        {
-            return MakeQueryListResult(pagingParam, queryResponses);
-        }
-        return new ListQueryResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
+        return param is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam
+            ? MakeQueryListResult(pagingParam, queryResponses)
+            : new ListQueryResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
     }
 
     public TQueryResponse GetMultiProjectionQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
@@ -54,11 +52,9 @@ public class QueryHandler
         var filtered = await query.HandleFilterAsync(param);
         var sorted = query.HandleSort(param, filtered);
         var queryResponses = sorted.ToList();
-        if (param is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam)
-        {
-            return MakeQueryListResult(pagingParam, queryResponses);
-        }
-        return new ListQueryResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
+        return param is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam
+            ? MakeQueryListResult(pagingParam, queryResponses)
+            : new ListQueryResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
     }
 
     public async Task<TQueryResponse> GetGeneralQueryAsync<TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
@@ -87,11 +83,9 @@ public class QueryHandler
         var filtered = queryImplement.HandleFilter(param, list);
         var sorted = queryImplement.HandleSort(param, filtered);
         var queryResponses = sorted.ToList();
-        if (param is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam)
-        {
-            return MakeQueryListResult(pagingParam, queryResponses);
-        }
-        return new ListQueryResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
+        return param is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam
+            ? MakeQueryListResult(pagingParam, queryResponses)
+            : new ListQueryResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
     }
 
     public TQueryResponse GetAggregateQuery<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
@@ -117,11 +111,9 @@ public class QueryHandler
         var filtered = query.HandleFilter(param, projections);
         var sorted = query.HandleSort(param, filtered);
         var queryResponses = sorted.ToList();
-        if (param is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam)
-        {
-            return MakeQueryListResult(pagingParam, queryResponses);
-        }
-        return new ListQueryResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
+        return param is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam
+            ? MakeQueryListResult(pagingParam, queryResponses)
+            : new ListQueryResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
     }
 
     private static ListQueryResult<TQueryResponse> MakeQueryListResult<TQueryResponse>(
@@ -136,11 +128,9 @@ public class QueryHandler
         var pageSize = pagingParam.PageSize.Value;
         var total = queryResponses.ToList().Count;
         var totalPages = total / pagingParam.PageSize.Value + (total % pagingParam.PageSize.Value > 0 ? 1 : 0);
-        if (pageNumber < 1 || pageNumber > totalPages)
-        {
-            return new ListQueryResult<TQueryResponse>(total, totalPages, pageNumber, pageSize, new List<TQueryResponse>());
-        }
-        return new ListQueryResult<TQueryResponse>(
+        return pageNumber < 1 || pageNumber > totalPages
+            ? new ListQueryResult<TQueryResponse>(total, totalPages, pageNumber, pageSize, new List<TQueryResponse>())
+            : new ListQueryResult<TQueryResponse>(
             total,
             totalPages,
             pageNumber,

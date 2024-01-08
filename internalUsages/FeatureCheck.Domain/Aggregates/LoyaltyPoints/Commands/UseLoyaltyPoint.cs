@@ -28,11 +28,9 @@ public record UseLoyaltyPoint(
             {
                 throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
             }
-            if (context.GetState().Payload.CurrentPoint - command.PointAmount < 0)
-            {
-                throw new SekibanLoyaltyPointNotEnoughException();
-            }
-            yield return new LoyaltyPointUsed(command.HappenedDate, command.Reason, command.PointAmount, command.Note);
+            yield return context.GetState().Payload.CurrentPoint - command.PointAmount < 0
+                ? throw new SekibanLoyaltyPointNotEnoughException()
+                : (IEventPayloadApplicableTo<LoyaltyPoint>)new LoyaltyPointUsed(command.HappenedDate, command.Reason, command.PointAmount, command.Note);
         }
     }
 }

@@ -213,16 +213,14 @@ public class DocumentRepositorySplitter : IDocumentRepository
         string payloadVersionIdentifier)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-        if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
-        {
-            return await _documentTemporaryRepository.GetLatestSnapshotForAggregateAsync(
+        return aggregateContainerGroup == AggregateContainerGroup.InMemory
+            ? await _documentTemporaryRepository.GetLatestSnapshotForAggregateAsync(
                 aggregateId,
                 aggregatePayloadType,
                 projectionPayloadType,
                 rootPartitionKey,
-                payloadVersionIdentifier);
-        }
-        return await _documentTemporaryRepository.GetLatestSnapshotForAggregateAsync(
+                payloadVersionIdentifier)
+            : await _documentTemporaryRepository.GetLatestSnapshotForAggregateAsync(
                 aggregateId,
                 aggregatePayloadType,
                 projectionPayloadType,
@@ -241,14 +239,12 @@ public class DocumentRepositorySplitter : IDocumentRepository
         string rootPartitionKey)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionPayloadType);
-        if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
-        {
-            return await _documentTemporaryRepository.GetLatestSnapshotForMultiProjectionAsync(
+        return aggregateContainerGroup == AggregateContainerGroup.InMemory
+            ? await _documentTemporaryRepository.GetLatestSnapshotForMultiProjectionAsync(
                 multiProjectionPayloadType,
                 payloadVersionIdentifier,
-                rootPartitionKey);
-        }
-        return await _documentTemporaryRepository.GetLatestSnapshotForMultiProjectionAsync(
+                rootPartitionKey)
+            : await _documentTemporaryRepository.GetLatestSnapshotForMultiProjectionAsync(
                 multiProjectionPayloadType,
                 payloadVersionIdentifier,
                 rootPartitionKey) ??
@@ -267,17 +263,15 @@ public class DocumentRepositorySplitter : IDocumentRepository
         string rootPartitionKey)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-        if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
-        {
-            return _documentTemporaryRepository.GetSnapshotByIdAsync(
+        return aggregateContainerGroup == AggregateContainerGroup.InMemory
+            ? _documentTemporaryRepository.GetSnapshotByIdAsync(
                 id,
                 aggregateId,
                 aggregatePayloadType,
                 projectionPayloadType,
                 partitionKey,
-                rootPartitionKey);
-        }
-        return _documentPersistentRepository.GetSnapshotByIdAsync(
+                rootPartitionKey)
+            : _documentPersistentRepository.GetSnapshotByIdAsync(
             id,
             aggregateId,
             aggregatePayloadType,
@@ -293,15 +287,13 @@ public class DocumentRepositorySplitter : IDocumentRepository
         Action<IEnumerable<IEvent>> resultAction)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-        if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
-        {
-            return _documentTemporaryRepository.GetAllEventsForAggregateAsync(
+        return aggregateContainerGroup == AggregateContainerGroup.InMemory
+            ? _documentTemporaryRepository.GetAllEventsForAggregateAsync(
                 aggregatePayloadType,
                 sinceSortableUniqueId,
                 rootPartitionKey,
-                resultAction);
-        }
-        return _documentPersistentRepository.GetAllEventsForAggregateAsync(
+                resultAction)
+            : _documentPersistentRepository.GetAllEventsForAggregateAsync(
             aggregatePayloadType,
             sinceSortableUniqueId,
             rootPartitionKey,
@@ -317,11 +309,9 @@ public class DocumentRepositorySplitter : IDocumentRepository
         string payloadVersionIdentifier)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-        if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
-        {
-            return false;
-        }
-        return await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
+        return aggregateContainerGroup == AggregateContainerGroup.InMemory
+            ? false
+            : await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
             aggregateId,
             aggregatePayloadType,
             projectionPayloadType,

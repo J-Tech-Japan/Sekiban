@@ -46,11 +46,8 @@ public class SingleProjectionCache : ISingleProjectionCache
 
     public static string GetCacheKeyForSingleProjectionContainer<TSingleProjectionOrAggregate>(Guid aggregateId)
     {
-        if (typeof(TSingleProjectionOrAggregate).IsSingleProjectionType())
-        {
-            return
-                $"{typeof(TSingleProjectionOrAggregate).GetSingleProjectionPayloadFromSingleProjectionType().GetAggregatePayloadTypeFromSingleProjectionPayload().Name}_{aggregateId}";
-        }
-        return "Aggregate" + typeof(TSingleProjectionOrAggregate).GetAggregatePayloadTypeFromAggregate().Name + aggregateId;
+        return typeof(TSingleProjectionOrAggregate).IsSingleProjectionType()
+            ? $"{typeof(TSingleProjectionOrAggregate).GetSingleProjectionPayloadFromSingleProjectionType().GetAggregatePayloadTypeFromSingleProjectionPayload().Name}_{aggregateId}"
+            : "Aggregate" + typeof(TSingleProjectionOrAggregate).GetAggregatePayloadTypeFromAggregate().Name + aggregateId;
     }
 }

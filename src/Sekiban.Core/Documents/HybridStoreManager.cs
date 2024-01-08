@@ -34,11 +34,7 @@ public class HybridStoreManager
         {
             return null;
         }
-        if (HybridPartitionKeys.Keys.Contains(partitionKey))
-        {
-            return HybridPartitionKeys[partitionKey].SortableUniqueId;
-        }
-        return null;
+        return HybridPartitionKeys.Keys.Contains(partitionKey) ? HybridPartitionKeys[partitionKey].SortableUniqueId : null;
     }
     public bool FromInitialForPartitionKey(string partitionKey)
     {
@@ -46,11 +42,7 @@ public class HybridStoreManager
         {
             return false;
         }
-        if (HybridPartitionKeys.Keys.Contains(partitionKey))
-        {
-            return HybridPartitionKeys[partitionKey].FromInitial;
-        }
-        return false;
+        return HybridPartitionKeys.Keys.Contains(partitionKey) ? HybridPartitionKeys[partitionKey].FromInitial : false;
     }
 
     private record HybridStatus(bool FromInitial, string SortableUniqueId);

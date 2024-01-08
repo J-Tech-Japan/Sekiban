@@ -146,11 +146,9 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
         string payloadVersionIdentifier)
     {
         await Task.CompletedTask;
-        if (_snapshotDocumentCache.Get(aggregateId, projectionPayloadType, projectionPayloadType, rootPartitionKey) is { } snapshotDocument)
-        {
-            return snapshotDocument;
-        }
-        return null;
+        return _snapshotDocumentCache.Get(aggregateId, projectionPayloadType, projectionPayloadType, rootPartitionKey) is { } snapshotDocument
+            ? snapshotDocument
+            : null;
     }
     public async Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(
         Type multiProjectionPayloadType,
@@ -187,11 +185,7 @@ public class InMemoryDocumentRepository : IDocumentTemporaryRepository, IDocumen
             return false;
         }
         var list = _inMemoryDocumentStore.GetEventPartition(partitionKey, sekibanIdentifier).ToList();
-        if (string.IsNullOrWhiteSpace(sortableUniqueId))
-        {
-            return false;
-        }
-        return list.Any(m => m.SortableUniqueId == sortableUniqueId);
+        return string.IsNullOrWhiteSpace(sortableUniqueId) ? false : list.Any(m => m.SortableUniqueId == sortableUniqueId);
     }
 
     public async Task GetAllEventsForAggregateAsync(

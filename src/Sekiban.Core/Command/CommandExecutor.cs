@@ -81,18 +81,16 @@ public class CommandExecutor(
         where TCommand : ICommand<TAggregatePayload>
     {
         var validationResult = command.ValidateProperties().ToList();
-        if (validationResult.Count != 0)
-        {
-            return (new CommandExecutorResponse(
+        return validationResult.Count != 0
+            ? (new CommandExecutorResponse(
                 null,
                 null,
                 0,
                 validationResult,
                 null,
                 CommandExecutor.GetAggregatePayloadOut<TAggregatePayload>(Enumerable.Empty<IEvent>()),
-                0), Enumerable.Empty<IEvent>().ToList());
-        }
-        return await ExecCommandWithoutValidationAsyncTyped<TAggregatePayload, TCommand>(command, callHistories);
+                0), Enumerable.Empty<IEvent>().ToList())
+            : await ExecCommandWithoutValidationAsyncTyped<TAggregatePayload, TCommand>(command, callHistories);
     }
 
     public async Task<(CommandExecutorResponse, List<IEvent>)> ExecCommandWithoutValidationAsyncTyped<TAggregatePayload, TCommand>(
