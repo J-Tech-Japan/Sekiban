@@ -67,9 +67,10 @@ public class CosmosDocumentRepository(
                         }
 
                         var toAdd = (registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
-                                .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(Event<>).MakeGenericType(m)) as IEvent)
-                                .FirstOrDefault(m => m is not null) ??
-                            EventHelper.GetUnregisteredEvent(item)) ?? throw new SekibanUnregisteredEventFoundException();
+                                    .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(Event<>).MakeGenericType(m)) as IEvent)
+                                    .FirstOrDefault(m => m is not null) ??
+                                EventHelper.GetUnregisteredEvent(item)) ??
+                            throw new SekibanUnregisteredEventFoundException();
                         if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
                         {
                             continue;
@@ -194,9 +195,10 @@ public class CosmosDocumentRepository(
                         }
 
                         var toAdd = (types.Where(m => m.Name == typeName)
-                                .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(Event<>).MakeGenericType(m)) as IEvent)
-                                .FirstOrDefault(m => m is not null) ??
-                            EventHelper.GetUnregisteredEvent(item)) ?? throw new SekibanUnregisteredEventFoundException();
+                                    .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(Event<>).MakeGenericType(m)) as IEvent)
+                                    .FirstOrDefault(m => m is not null) ??
+                                EventHelper.GetUnregisteredEvent(item)) ??
+                            throw new SekibanUnregisteredEventFoundException();
                         if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
                         {
                             continue;
@@ -236,15 +238,10 @@ public class CosmosDocumentRepository(
                 while (feedIterator.HasMoreResults)
                 {
                     var response = await feedIterator.ReadNextAsync();
-                    foreach (var item in response)
-                    {
-                        if (sinceSortableUniqueId is not null &&
-                            new SortableUniqueIdValue(item.SortableUniqueId).IsEarlierThan(sinceSortableUniqueId))
-                        {
-                            continue;
-                        }
-                        commands.Add(SekibanJsonHelper.Serialize(item));
-                    }
+                    commands.AddRange(
+                        (from item in response
+                         where sinceSortableUniqueId is null || !new SortableUniqueIdValue(item.SortableUniqueId).IsEarlierThan(sinceSortableUniqueId)
+                         select SekibanJsonHelper.Serialize(item)).Cast<string>());
                 }
 
                 resultAction(commands);
@@ -289,9 +286,10 @@ public class CosmosDocumentRepository(
                         }
 
                         var toAdd = (registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
-                                .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(Event<>).MakeGenericType(m)) as IEvent)
-                                .FirstOrDefault(m => m is not null) ??
-                            EventHelper.GetUnregisteredEvent(item)) ?? throw new SekibanUnregisteredEventFoundException();
+                                    .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(Event<>).MakeGenericType(m)) as IEvent)
+                                    .FirstOrDefault(m => m is not null) ??
+                                EventHelper.GetUnregisteredEvent(item)) ??
+                            throw new SekibanUnregisteredEventFoundException();
                         if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
                         {
                             continue;
