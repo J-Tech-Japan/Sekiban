@@ -67,14 +67,10 @@ public class DynamoDocumentRepository(
                     var jsonElement = JsonDocument.Parse(json).RootElement;
                     var documentTypeName = document[nameof(IDocument.DocumentTypeName)].AsString();
                     if (documentTypeName is null) { continue; }
-                    var toAdd = types.Where(m => m.Name == documentTypeName)
+                    var toAdd = (types.Where(m => m.Name == documentTypeName)
                             .Select(m => SekibanJsonHelper.Deserialize(json, typeof(Event<>).MakeGenericType(m)) as IEvent)
                             .FirstOrDefault(m => m is not null) ??
-                        EventHelper.GetUnregisteredEvent(jsonElement);
-                    if (toAdd is null)
-                    {
-                        throw new SekibanUnregisteredEventFoundException();
-                    }
+                        EventHelper.GetUnregisteredEvent(jsonElement)) ?? throw new SekibanUnregisteredEventFoundException();
                     if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
                     {
                         continue;
@@ -198,14 +194,10 @@ public class DynamoDocumentRepository(
                     var jsonElement = JsonDocument.Parse(json).RootElement;
                     var documentTypeName = document[nameof(IDocument.DocumentTypeName)].AsString();
                     if (documentTypeName is null) { continue; }
-                    var toAdd = types.Where(m => m.Name == documentTypeName)
+                    var toAdd = (types.Where(m => m.Name == documentTypeName)
                             .Select(m => SekibanJsonHelper.Deserialize(json, typeof(Event<>).MakeGenericType(m)) as IEvent)
                             .FirstOrDefault(m => m is not null) ??
-                        EventHelper.GetUnregisteredEvent(jsonElement);
-                    if (toAdd is null)
-                    {
-                        throw new SekibanUnregisteredEventFoundException();
-                    }
+                        EventHelper.GetUnregisteredEvent(jsonElement)) ?? throw new SekibanUnregisteredEventFoundException();
                     if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
                     {
                         continue;
@@ -271,14 +263,10 @@ public class DynamoDocumentRepository(
                     var jsonElement = JsonDocument.Parse(json).RootElement;
                     var documentTypeName = document[nameof(IDocument.DocumentTypeName)].AsString();
                     if (documentTypeName is null) { continue; }
-                    var toAdd = types.Where(m => m.Name == documentTypeName)
+                    var toAdd = (types.Where(m => m.Name == documentTypeName)
                             .Select(m => SekibanJsonHelper.Deserialize(json, typeof(Event<>).MakeGenericType(m)) as IEvent)
                             .FirstOrDefault(m => m is not null) ??
-                        EventHelper.GetUnregisteredEvent(jsonElement);
-                    if (toAdd is null)
-                    {
-                        throw new SekibanUnregisteredEventFoundException();
-                    }
+                        EventHelper.GetUnregisteredEvent(jsonElement)) ?? throw new SekibanUnregisteredEventFoundException();
                     if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
                     {
                         continue;

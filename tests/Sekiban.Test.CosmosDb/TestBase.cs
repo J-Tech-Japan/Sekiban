@@ -80,11 +80,7 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
 
     public T GetService<T>()
     {
-        var toReturn = serviceProvider.GetService<T>();
-        if (toReturn is null)
-        {
-            throw new Exception("The object has not been registered." + typeof(T));
-        }
+        var toReturn = serviceProvider.GetService<T>() ?? throw new Exception("The object has not been registered." + typeof(T));
         return toReturn;
     }
 

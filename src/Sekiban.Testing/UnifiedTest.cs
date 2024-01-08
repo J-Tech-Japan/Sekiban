@@ -280,11 +280,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     public UnifiedTest<TDependencyDefinition> ThenQueryResponseIsFromJson<TQueryResponse>(IListQueryInput<TQueryResponse> param, string responseJson)
         where TQueryResponse : IQueryResponse
     {
-        var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(responseJson);
-        if (response is null)
-        {
-            throw new InvalidDataException("Failed to serialize in JSON.");
-        }
+        var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(responseJson) ?? throw new InvalidDataException("Failed to serialize in JSON.");
         ThenQueryResponseIs(param, response);
         return this;
     }
@@ -301,11 +297,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         string responseFilename) where TQueryResponse : IQueryResponse
     {
         using var openStream = File.OpenRead(responseFilename);
-        var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(openStream);
-        if (response is null)
-        {
-            throw new InvalidDataException("Failed to serialize in JSON.");
-        }
+        var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(openStream) ?? throw new InvalidDataException("Failed to serialize in JSON.");
         ThenQueryResponseIs(param, response);
         return this;
     }
@@ -466,11 +458,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     public UnifiedTest<TDependencyDefinition> ThenQueryResponseIsFromJson<TQueryResponse>(IQueryInput<TQueryResponse> param, string responseJson)
         where TQueryResponse : IQueryResponse
     {
-        var response = JsonSerializer.Deserialize<TQueryResponse>(responseJson);
-        if (response is null)
-        {
-            throw new InvalidDataException("Failed to serialize in JSON.");
-        }
+        var response = JsonSerializer.Deserialize<TQueryResponse>(responseJson) ?? throw new InvalidDataException("Failed to serialize in JSON.");
         ThenQueryResponseIs(param, response);
         return this;
     }
@@ -486,11 +474,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         where TQueryResponse : IQueryResponse
     {
         using var openStream = File.OpenRead(responseFilename);
-        var response = JsonSerializer.Deserialize<TQueryResponse>(openStream);
-        if (response is null)
-        {
-            throw new InvalidDataException("Failed to serialize in JSON.");
-        }
+        var response = JsonSerializer.Deserialize<TQueryResponse>(openStream) ?? throw new InvalidDataException("Failed to serialize in JSON.");
         ThenQueryResponseIs(param, response);
         return this;
     }
@@ -525,11 +509,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TMultiProjectionPayload : IMultiProjectionPayloadCommon
     {
         using var openStream = File.OpenRead(filename);
-        var projection = JsonSerializer.Deserialize<TMultiProjectionPayload>(openStream);
-        if (projection is null)
-        {
-            throw new InvalidDataException("Failed to serialize in JSON.");
-        }
+        var projection = JsonSerializer.Deserialize<TMultiProjectionPayload>(openStream) ?? throw new InvalidDataException("Failed to serialize in JSON.");
         return ThenMultiProjectionPayloadIs(projection, rootPartitionKey);
     }
     /// <summary>
@@ -614,11 +594,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TMultiProjectionPayload : IMultiProjectionPayloadCommon
     {
         using var openStream = File.OpenRead(filename);
-        var projection = JsonSerializer.Deserialize<MultiProjectionState<TMultiProjectionPayload>>(openStream);
-        if (projection is null)
-        {
-            throw new InvalidDataException("Failed to serialize in JSON.");
-        }
+        var projection = JsonSerializer.Deserialize<MultiProjectionState<TMultiProjectionPayload>>(openStream) ?? throw new InvalidDataException("Failed to serialize in JSON.");
         return ThenMultiProjectionStateIs(rootPartitionKey, projection);
     }
     /// <summary>
@@ -667,11 +643,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TAggregatePayload : IAggregatePayloadCommon
     {
         using var openStream = File.OpenRead(filename);
-        var projection = JsonSerializer.Deserialize<SingleProjectionListState<AggregateState<TAggregatePayload>>>(openStream);
-        if (projection is null)
-        {
-            throw new InvalidDataException("Failed to serialize in JSON.");
-        }
+        var projection = JsonSerializer.Deserialize<SingleProjectionListState<AggregateState<TAggregatePayload>>>(openStream) ?? throw new InvalidDataException("Failed to serialize in JSON.");
         return ThenAggregateListProjectionPayloadIs(rootPartitionKey, projection);
     }
     /// <summary>
@@ -781,11 +753,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         where TAggregatePayload : IAggregatePayloadCommon
     {
         using var openStream = File.OpenRead(filename);
-        var projection = JsonSerializer.Deserialize<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>>(openStream);
-        if (projection is null)
-        {
-            throw new InvalidDataException("Failed to serialize in JSON.");
-        }
+        var projection = JsonSerializer.Deserialize<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>>(openStream) ?? throw new InvalidDataException("Failed to serialize in JSON.");
         return ThenAggregateListProjectionStateIs(rootPartitionKey, projection);
     }
     /// <summary>
@@ -835,11 +803,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         string filename) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
         using var openStream = File.OpenRead(filename);
-        var projection = JsonSerializer.Deserialize<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>(openStream);
-        if (projection is null)
-        {
-            throw new InvalidDataException("Failed to serialize in JSON.");
-        }
+        var projection = JsonSerializer.Deserialize<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>(openStream) ?? throw new InvalidDataException("Failed to serialize in JSON.");
         return ThenSingleProjectionListPayloadIs(rootPartitionKey, projection);
     }
     /// <summary>
@@ -929,11 +893,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         using var openStream = File.OpenRead(filename);
         var projection
             = JsonSerializer
-                .Deserialize<MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>(openStream);
-        if (projection is null)
-        {
-            throw new InvalidDataException("Failed to serialize in JSON.");
-        }
+                .Deserialize<MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>(openStream) ?? throw new InvalidDataException("Failed to serialize in JSON.");
         return ThenSingleProjectionListStateIs(rootPartitionKey, projection);
     }
     /// <summary>
@@ -977,11 +937,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey) where TEnvironmentAggregatePayload : IAggregatePayloadCommon
     {
-        var singleProjectionService = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader;
-        if (singleProjectionService is null)
-        {
-            throw new Exception("Failed to get single aggregate service");
-        }
+        var singleProjectionService = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ?? throw new Exception("Failed to get single aggregate service");
         var aggregate = singleProjectionService.AsDefaultStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name, rootPartitionKey);
     }

@@ -567,11 +567,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
                 throw new SekibanInvalidArgumentException($"Snapshot {snapshot.AggregateType} {snapshot.SavedVersion}  is null");
             }
             _testOutputHelper.WriteLine($"Snapshot {snapshot.AggregateType}  {snapshot.Id}  {snapshot.SavedVersion}  is not null");
-            var fromInitial = await aggregateLoader.AsDefaultStateFromInitialAsync<TAggregatePayload>(aggregateId, toVersion: state.Version);
-            if (fromInitial is null)
-            {
-                throw new SekibanInvalidArgumentException();
-            }
+            var fromInitial = await aggregateLoader.AsDefaultStateFromInitialAsync<TAggregatePayload>(aggregateId, toVersion: state.Version) ?? throw new SekibanInvalidArgumentException();
             Assert.Equal(fromInitial.Version, state.Version);
             Assert.Equal(fromInitial.LastEventId, state.LastEventId);
         }
@@ -595,11 +591,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
             }
             _testOutputHelper.WriteLine(
                 $"Snapshot {snapshot.AggregateType} {snapshot.DocumentTypeName} {snapshot.Id}  {snapshot.SavedVersion}  is not null");
-            var fromInitial = await aggregateLoader.AsSingleProjectionStateFromInitialAsync<TAggregatePayload>(aggregateId, toVersion: state.Version);
-            if (fromInitial is null)
-            {
-                throw new SekibanInvalidArgumentException();
-            }
+            var fromInitial = await aggregateLoader.AsSingleProjectionStateFromInitialAsync<TAggregatePayload>(aggregateId, toVersion: state.Version) ?? throw new SekibanInvalidArgumentException();
             Assert.Equal(fromInitial.Version, state.Version);
             Assert.Equal(fromInitial.LastEventId, state.LastEventId);
         }

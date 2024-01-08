@@ -103,11 +103,7 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon, ISingleProje
         var aggregatePayloadBase = Payload.GetBaseAggregatePayloadType();
         // var aggregatePayloadBase = typeof(TEventPayload);
         var ev = Event<TEventPayload>.GenerateEvent(AggregateId, aggregatePayloadBase, eventPayload, rootPartitionKey);
-        var result = GetAggregatePayloadWithAppliedEvent(Payload, ev);
-        if (result is null)
-        {
-            throw new SekibanEventNotImplementedException($"{eventPayload.GetType().Name} Event not implemented on {GetType().Name} Aggregate");
-        }
+        var result = GetAggregatePayloadWithAppliedEvent(Payload, ev) ?? throw new SekibanEventNotImplementedException($"{eventPayload.GetType().Name} Event not implemented on {GetType().Name} Aggregate");
         ev = ev with { Version = Version };
         ApplyEvent(ev);
         ev = ev with { Version = Version };

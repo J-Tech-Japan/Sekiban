@@ -90,11 +90,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         Guid aggregateId,
         string rootPartitionKey) where TEnvironmentAggregatePayload : IAggregatePayloadCommon
     {
-        var singleProjectionService = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader;
-        if (singleProjectionService is null)
-        {
-            throw new Exception("Failed to get single aggregate service");
-        }
+        var singleProjectionService = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ?? throw new Exception("Failed to get single aggregate service");
         var aggregate = singleProjectionService.AsDefaultStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name, rootPartitionKey);
     }
@@ -168,11 +164,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommandWithPublishAndBlockingSubscriber<TAggregateSubtype>(
         ICommand<TAggregateSubtype> command) where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload>
     {
-        var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>();
-        if (nonBlockingStatus == null)
-        {
-            throw new Exception("EventNonBlockingStatus is not registered");
-        }
+        var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>() ?? throw new Exception("EventNonBlockingStatus is not registered");
         nonBlockingStatus.RunBlockingAction(() => WhenSubtypeCommandPrivate(command, true));
         return this;
     }
@@ -189,11 +181,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublishAndBlockingSubscriber<TCommand>(TCommand command)
         where TCommand : ICommand<TAggregatePayload>
     {
-        var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>();
-        if (nonBlockingStatus == null)
-        {
-            throw new Exception("EventNonBlockingStatus is not registered");
-        }
+        var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>() ?? throw new Exception("EventNonBlockingStatus is not registered");
         nonBlockingStatus.RunBlockingAction(() => WhenCommandWithPublish(command));
         return this;
     }
@@ -204,11 +192,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublishAndBlockingSubscriber<TCommand>(
         Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommand<TAggregatePayload>
     {
-        var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>();
-        if (nonBlockingStatus == null)
-        {
-            throw new Exception("EventNonBlockingStatus is not registered");
-        }
+        var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>() ?? throw new Exception("EventNonBlockingStatus is not registered");
         nonBlockingStatus.RunBlockingAction(() => WhenCommandPrivateFunc<TAggregatePayload, TCommand>(commandFunc, true));
         return this;
     }
@@ -401,11 +385,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> ThenStateIsFromJson(string stateJson)
     {
         ThenNotThrowsAnException();
-        var state = JsonSerializer.Deserialize<AggregateState<TAggregatePayload>>(stateJson);
-        if (state is null)
-        {
-            throw new InvalidDataException("Failed to serialize in JSON.");
-        }
+        var state = JsonSerializer.Deserialize<AggregateState<TAggregatePayload>>(stateJson) ?? throw new InvalidDataException("Failed to serialize in JSON.");
         var actual = GetAggregateState();
         var expected = state.GetComparableObject(actual);
         var actualJson = SekibanJsonHelper.Serialize(actual);
@@ -418,11 +398,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     {
         ThenNotThrowsAnException();
         using var openStream = File.OpenRead(stateFileName);
-        var state = JsonSerializer.Deserialize<AggregateState<TAggregatePayload>>(openStream);
-        if (state is null)
-        {
-            throw new InvalidDataException("Failed to serialize in JSON.");
-        }
+        var state = JsonSerializer.Deserialize<AggregateState<TAggregatePayload>>(openStream) ?? throw new InvalidDataException("Failed to serialize in JSON.");
         var actual = GetAggregateState();
         var expected = state.GetComparableObject(actual);
         var actualJson = SekibanJsonHelper.Serialize(actual);
@@ -434,11 +410,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> ThenPayloadIsFromJson(string payloadJson)
     {
         ThenNotThrowsAnException();
-        var payload = JsonSerializer.Deserialize<TAggregatePayload>(payloadJson);
-        if (payload is null)
-        {
-            throw new InvalidDataException("Failed to serialize in JSON.");
-        }
+        var payload = JsonSerializer.Deserialize<TAggregatePayload>(payloadJson) ?? throw new InvalidDataException("Failed to serialize in JSON.");
         var actual = GetAggregateState().Payload;
         var expected = payload;
         var actualJson = SekibanJsonHelper.Serialize(actual);
@@ -451,11 +423,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     {
         ThenNotThrowsAnException();
         using var openStream = File.OpenRead(payloadFileName);
-        var payload = JsonSerializer.Deserialize<TAggregatePayload>(openStream);
-        if (payload is null)
-        {
-            throw new InvalidDataException("Failed to serialize in JSON.");
-        }
+        var payload = JsonSerializer.Deserialize<TAggregatePayload>(openStream) ?? throw new InvalidDataException("Failed to serialize in JSON.");
         var actual = GetAggregateState().Payload;
         var expected = payload;
         var actualJson = SekibanJsonHelper.Serialize(actual);
@@ -475,11 +443,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventWithPublish(IEvent ev) => SaveEvent(ev, true);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventWithPublishAndBlockingEvent(IEvent ev)
     {
-        var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>();
-        if (nonBlockingStatus == null)
-        {
-            throw new Exception("EventNonBlockingStatus is not registered");
-        }
+        var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>() ?? throw new Exception("EventNonBlockingStatus is not registered");
         nonBlockingStatus.RunBlockingAction(() => GivenEnvironmentEventWithPublish(ev));
         return this;
 
@@ -488,11 +452,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsWithPublish(IEnumerable<IEvent> events) => SaveEvents(events, true);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsWithPublishAndBlockingEvents(IEnumerable<IEvent> events)
     {
-        var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>();
-        if (nonBlockingStatus == null)
-        {
-            throw new Exception("EventNonBlockingStatus is not registered");
-        }
+        var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>() ?? throw new Exception("EventNonBlockingStatus is not registered");
         nonBlockingStatus.RunBlockingAction(() => GivenEnvironmentEventsWithPublish(events));
         return this;
     }
@@ -501,11 +461,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         GivenEnvironmentEventsFile(filename, true);
     public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFileWithPublishAndBlockingEvents(string filename)
     {
-        var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>();
-        if (nonBlockingStatus == null)
-        {
-            throw new Exception("EventNonBlockingStatus is not registered");
-        }
+        var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>() ?? throw new Exception("EventNonBlockingStatus is not registered");
         nonBlockingStatus.RunBlockingAction(() => GivenEnvironmentEventsFileWithPublish(filename));
         return this;
     }
@@ -522,11 +478,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         ICommand<TEnvironmentAggregatePayload> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon
     {
-        var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>();
-        if (nonBlockingStatus == null)
-        {
-            throw new Exception("EventNonBlockingStatus is not registered");
-        }
+        var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>() ?? throw new Exception("EventNonBlockingStatus is not registered");
         return nonBlockingStatus.RunBlockingFunc(() => RunEnvironmentCommandWithPublish(command));
     }
     public Guid GivenEnvironmentCommandWithPublishAndBlockingEvent<TEnvironmentAggregatePayload>(
@@ -557,11 +509,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var commandType = command.GetType();
         var aggregateIn = commandType.GetAggregatePayloadTypeFromCommandType();
         var method = GetType().GetMethod(nameof(WhenCommandPrivate), BindingFlags.NonPublic | BindingFlags.Instance);
-        var genericMethod = method?.MakeGenericMethod(aggregateIn, commandType);
-        if (genericMethod is null)
-        {
-            throw new Exception("Failed to get WhenCommandPrivate method");
-        }
+        var genericMethod = (method?.MakeGenericMethod(aggregateIn, commandType)) ?? throw new Exception("Failed to get WhenCommandPrivate method");
         return (IAggregateTestHelper<TAggregatePayload>)genericMethod.Invoke(this, new object?[] { command, withPublish })!;
     }
     public AggregateState<TAggregatePayload> GetAggregateStateIfNotNullEmptyAggregate()
@@ -576,11 +524,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     private IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFile(string filename, bool withPublish)
     {
         using var openStream = File.OpenRead(filename);
-        var list = JsonSerializer.Deserialize<List<JsonElement>>(openStream);
-        if (list is null)
-        {
-            throw new InvalidDataException("Failed to serialize in JSON.");
-        }
+        var list = JsonSerializer.Deserialize<List<JsonElement>>(openStream) ?? throw new InvalidDataException("Failed to serialize in JSON.");
         AddEventsFromList(list, withPublish);
         return this;
     }
@@ -594,11 +538,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         ResetBeforeCommand();
         var handler
             = _serviceProvider.GetService(typeof(ICommandHandlerCommon<TAggregatePayloadIn, TCommand>)) as
-                ICommandHandlerCommon<TAggregatePayloadIn, TCommand>;
-        if (handler is null)
-        {
-            throw new SekibanCommandNotRegisteredException(typeof(TCommand).Name);
-        }
+                ICommandHandlerCommon<TAggregatePayloadIn, TCommand> ?? throw new SekibanCommandNotRegisteredException(typeof(TCommand).Name);
         var command = commandFunc(GetAggregateStateIfNotNullEmptyAggregate());
         _latestCommand = command;
         var validationResults = command.ValidateProperties().ToList();
@@ -615,11 +555,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
         var aggregateId = GetAggregateId();
         var rootPartitionKey = command.GetRootPartitionKey();
-        var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader;
-        if (aggregateLoader is null)
-        {
-            throw new Exception("Failed to get AddAggregate Service");
-        }
+        var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ?? throw new Exception("Failed to get AddAggregate Service");
         try
         {
             if (command is IOnlyPublishingCommandCommon)
@@ -659,11 +595,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     private IAggregateTestHelper<TAggregatePayload> SaveEvent(IEvent ev, bool withPublish)
     {
-        var documentWriter = _serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter;
-        if (documentWriter is null)
-        {
-            throw new Exception("Failed to get document writer");
-        }
+        var documentWriter = _serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter ?? throw new Exception("Failed to get document writer");
         if (withPublish)
         {
             documentWriter.SaveAndPublishEvents(new List<IEvent> { ev }, typeof(TAggregatePayload)).Wait();
@@ -685,29 +617,13 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     private void AddEventsFromList(List<JsonElement> list, bool withPublish)
     {
-        var registeredEventTypes = _serviceProvider.GetService<RegisteredEventTypes>();
-        if (registeredEventTypes is null)
-        {
-            throw new InvalidOperationException("RegisteredEventTypes is not registered.");
-        }
+        var registeredEventTypes = _serviceProvider.GetService<RegisteredEventTypes>() ?? throw new InvalidOperationException("RegisteredEventTypes is not registered.");
         foreach (var json in list)
         {
             var documentTypeName = json.GetProperty("DocumentTypeName").ToString();
-            var eventPayloadType = registeredEventTypes.RegisteredTypes.FirstOrDefault(e => e.Name == documentTypeName);
-            if (eventPayloadType is null)
-            {
-                throw new InvalidDataException($"Event Type {documentTypeName} is not registered.");
-            }
-            var eventType = typeof(Event<>).MakeGenericType(eventPayloadType);
-            if (eventType is null)
-            {
-                throw new InvalidDataException($"Event {documentTypeName} failed to generate type.");
-            }
-            var eventInstance = JsonSerializer.Deserialize(json.ToString(), eventType);
-            if (eventInstance is null)
-            {
-                throw new InvalidDataException($"Event {documentTypeName} failed to deserialize.");
-            }
+            var eventPayloadType = registeredEventTypes.RegisteredTypes.FirstOrDefault(e => e.Name == documentTypeName) ?? throw new InvalidDataException($"Event Type {documentTypeName} is not registered.");
+            var eventType = typeof(Event<>).MakeGenericType(eventPayloadType) ?? throw new InvalidDataException($"Event {documentTypeName} failed to generate type.");
+            var eventInstance = JsonSerializer.Deserialize(json.ToString(), eventType) ?? throw new InvalidDataException($"Event {documentTypeName} failed to deserialize.");
             SaveEvent((Event<IEventPayloadCommon>)eventInstance, withPublish);
         }
     }
@@ -828,11 +744,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     {
         ThenNotThrowsAnException();
         var actual = GetSingleProjectionState<TSingleProjectionPayload>().Payload;
-        var payload = JsonSerializer.Deserialize<TSingleProjectionPayload>(payloadJson);
-        if (payload is null)
-        {
-            throw new InvalidDataException("Failed to serialize in JSON.");
-        }
+        var payload = JsonSerializer.Deserialize<TSingleProjectionPayload>(payloadJson) ?? throw new InvalidDataException("Failed to serialize in JSON.");
         var expected = payload;
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
@@ -846,11 +758,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         ThenNotThrowsAnException();
         using var openStream = File.OpenRead(payloadFilename);
         var actual = GetSingleProjectionState<TSingleProjectionPayload>().Payload;
-        var payload = JsonSerializer.Deserialize<TSingleProjectionPayload>(openStream);
-        if (payload is null)
-        {
-            throw new InvalidDataException("Failed to serialize in JSON.");
-        }
+        var payload = JsonSerializer.Deserialize<TSingleProjectionPayload>(openStream) ?? throw new InvalidDataException("Failed to serialize in JSON.");
         var expected = payload;
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
@@ -918,11 +826,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         string responseJson) where TQueryResponse : IQueryResponse
     {
         ThenNotThrowsAnException();
-        var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(responseJson);
-        if (response is null)
-        {
-            throw new InvalidDataException("Failed to serialize in JSON.");
-        }
+        var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(responseJson) ?? throw new InvalidDataException("Failed to serialize in JSON.");
         ThenQueryResponseIs(param, response);
         return this;
     }
@@ -933,11 +837,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     {
         ThenNotThrowsAnException();
         using var openStream = File.OpenRead(responseFilename);
-        var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(openStream);
-        if (response is null)
-        {
-            throw new InvalidDataException("Failed to serialize in JSON.");
-        }
+        var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(openStream) ?? throw new InvalidDataException("Failed to serialize in JSON.");
         ThenQueryResponseIs(param, response);
         return this;
     }
@@ -1040,11 +940,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         where TQueryResponse : IQueryResponse
     {
         ThenNotThrowsAnException();
-        var response = JsonSerializer.Deserialize<TQueryResponse>(responseJson);
-        if (response is null)
-        {
-            throw new InvalidDataException("Failed to serialize in JSON.");
-        }
+        var response = JsonSerializer.Deserialize<TQueryResponse>(responseJson) ?? throw new InvalidDataException("Failed to serialize in JSON.");
         ThenQueryResponseIs(param, response);
         return this;
     }
@@ -1055,11 +951,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     {
         ThenNotThrowsAnException();
         using var openStream = File.OpenRead(responseFilename);
-        var response = JsonSerializer.Deserialize<TQueryResponse>(openStream);
-        if (response is null)
-        {
-            throw new InvalidDataException("Failed to serialize in JSON.");
-        }
+        var response = JsonSerializer.Deserialize<TQueryResponse>(openStream) ?? throw new InvalidDataException("Failed to serialize in JSON.");
         ThenQueryResponseIs(param, response);
         return this;
     }

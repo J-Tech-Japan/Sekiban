@@ -66,15 +66,10 @@ public class CosmosDocumentRepository(
                             continue;
                         }
 
-                        var toAdd = registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
+                        var toAdd = (registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
                                 .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(Event<>).MakeGenericType(m)) as IEvent)
                                 .FirstOrDefault(m => m is not null) ??
-                            EventHelper.GetUnregisteredEvent(item);
-                        if (toAdd is null)
-                        {
-                            throw new SekibanUnregisteredEventFoundException();
-                        }
-
+                            EventHelper.GetUnregisteredEvent(item)) ?? throw new SekibanUnregisteredEventFoundException();
                         if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
                         {
                             continue;
@@ -198,15 +193,10 @@ public class CosmosDocumentRepository(
                             continue;
                         }
 
-                        var toAdd = types.Where(m => m.Name == typeName)
+                        var toAdd = (types.Where(m => m.Name == typeName)
                                 .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(Event<>).MakeGenericType(m)) as IEvent)
                                 .FirstOrDefault(m => m is not null) ??
-                            EventHelper.GetUnregisteredEvent(item);
-                        if (toAdd is null)
-                        {
-                            throw new SekibanUnregisteredEventFoundException();
-                        }
-
+                            EventHelper.GetUnregisteredEvent(item)) ?? throw new SekibanUnregisteredEventFoundException();
                         if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
                         {
                             continue;
@@ -298,15 +288,10 @@ public class CosmosDocumentRepository(
                             continue;
                         }
 
-                        var toAdd = registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
+                        var toAdd = (registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
                                 .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(Event<>).MakeGenericType(m)) as IEvent)
                                 .FirstOrDefault(m => m is not null) ??
-                            EventHelper.GetUnregisteredEvent(item);
-                        if (toAdd is null)
-                        {
-                            throw new SekibanUnregisteredEventFoundException();
-                        }
-
+                            EventHelper.GetUnregisteredEvent(item)) ?? throw new SekibanUnregisteredEventFoundException();
                         if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
                         {
                             continue;

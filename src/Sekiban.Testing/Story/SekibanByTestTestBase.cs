@@ -25,11 +25,7 @@ public abstract class SekibanByTestTestBase : IDisposable
     /// <exception cref="Exception"></exception>
     public T GetService<T>()
     {
-        var toreturn = ServiceProvider.GetService<T>();
-        if (toreturn is null)
-        {
-            throw new Exception("The object has not been registered." + typeof(T));
-        }
+        var toreturn = ServiceProvider.GetService<T>() ?? throw new Exception("The object has not been registered." + typeof(T));
         return toreturn;
     }
 }

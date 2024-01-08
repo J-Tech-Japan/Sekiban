@@ -57,8 +57,7 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
         ICommand<TAggregatePayload> command,
         Guid? injectingAggregateId = null) where TAggregatePayload : IAggregatePayloadCommon
     {
-        var nonBlockingStatus = serviceProvider.GetService<EventNonBlockingStatus>();
-        if (nonBlockingStatus is null) { throw new Exception("EventNonBlockingStatus could not be found."); }
+        var nonBlockingStatus = serviceProvider.GetService<EventNonBlockingStatus>() ?? throw new Exception("EventNonBlockingStatus could not be found.");
         return nonBlockingStatus.RunBlockingFunc(() => ExecuteCommand(command, injectingAggregateId, true));
     }
 
@@ -74,11 +73,7 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
 
         var baseType = typeof(ICommandHandlerCommon<,>);
         var genericType = baseType.MakeGenericType(typeof(TAggregatePayload), command.GetType());
-        var handler = serviceProvider.GetService(genericType);
-        if (handler is null)
-        {
-            throw new SekibanCommandNotRegisteredException(command.GetType().Name);
-        }
+        var handler = serviceProvider.GetService(genericType) ?? throw new SekibanCommandNotRegisteredException(command.GetType().Name);
         var aggregateId = injectingAggregateId ?? command.GetAggregateId();
         if (command is not IOnlyPublishingCommandCommon)
         {
@@ -92,12 +87,7 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
                 rootPartitionKey,
                 null);
 
-            var aggregateLoader = serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader;
-            if (aggregateLoader is null)
-            {
-                throw new Exception("Failed to get AddAggregate Service");
-            }
-
+            var aggregateLoader = serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ?? throw new Exception("Failed to get AddAggregate Service");
             var baseClass = typeof(CommandHandlerAdapter<,>);
             var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), command.GetType());
             var adapter = Activator.CreateInstance(adapterClass, aggregateLoader, false) ?? throw new Exception("Adapter not found");
@@ -126,11 +116,7 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
             LatestEvents = commandResponse.Events;
         }
 
-        var documentWriter = serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter;
-        if (documentWriter is null)
-        {
-            throw new Exception("Failed to get document writer");
-        }
+        var documentWriter = serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter ?? throw new Exception("Failed to get document writer");
         foreach (var e in LatestEvents)
         {
             if (withPublish)

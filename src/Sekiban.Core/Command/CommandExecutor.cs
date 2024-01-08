@@ -125,11 +125,7 @@ public class CommandExecutor(
 
             var handler
                 = serviceProvider.GetService(typeof(ICommandHandlerCommon<TAggregatePayload, TCommand>)) as
-                    ICommandHandlerCommon<TAggregatePayload, TCommand>;
-            if (handler is null)
-            {
-                throw new SekibanCommandNotRegisteredException(typeof(TCommand).Name);
-            }
+                    ICommandHandlerCommon<TAggregatePayload, TCommand> ?? throw new SekibanCommandNotRegisteredException(typeof(TCommand).Name);
             if (command is not IOnlyPublishingCommandCommon)
             {
                 await SemaphoreAwaiter.WaitAsync();

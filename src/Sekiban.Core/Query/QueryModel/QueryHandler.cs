@@ -21,11 +21,7 @@ public class QueryHandler
         where TQueryParameter : IListQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
-        var query = _serviceProvider.GetService<TQuery>();
-        if (query is null)
-        {
-            throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
-        }
+        var query = _serviceProvider.GetService<TQuery>() ?? throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
         var filtered = query.HandleFilter(param, projection);
         var sorted = query.HandleSort(param, filtered);
         var queryResponses = sorted.ToList();
@@ -43,11 +39,7 @@ public class QueryHandler
         where TQueryParameter : IQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
-        var query = _serviceProvider.GetService<TQuery>();
-        if (query is null)
-        {
-            throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
-        }
+        var query = _serviceProvider.GetService<TQuery>() ?? throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
         var filtered = query.HandleFilter(param, projection);
         return filtered;
     }
@@ -58,11 +50,7 @@ public class QueryHandler
         where TQueryParameter : IListQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
-        var query = _serviceProvider.GetService<TQuery>();
-        if (query is null)
-        {
-            throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
-        }
+        var query = _serviceProvider.GetService<TQuery>() ?? throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
         var filtered = await query.HandleFilterAsync(param);
         var sorted = query.HandleSort(param, filtered);
         var queryResponses = sorted.ToList();
@@ -78,11 +66,7 @@ public class QueryHandler
         where TQueryParameter : IQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
-        var query = _serviceProvider.GetService<TQuery>();
-        if (query is null)
-        {
-            throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
-        }
+        var query = _serviceProvider.GetService<TQuery>() ?? throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
         var filtered = await query.HandleFilterAsync(param);
         return filtered;
     }
@@ -95,11 +79,7 @@ public class QueryHandler
         where TQueryParameter : IListQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
-        var query = _serviceProvider.GetService<TQuery>();
-        if (query is null)
-        {
-            throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
-        }
+        var query = _serviceProvider.GetService<TQuery>() ?? throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
         if (query is not IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse> queryImplement)
         {
             throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
@@ -121,11 +101,7 @@ public class QueryHandler
         where TQueryParameter : IQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
-        var query = _serviceProvider.GetService<TQuery>();
-        if (query is null)
-        {
-            throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
-        }
+        var query = _serviceProvider.GetService<TQuery>() ?? throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
         var filtered = query.HandleFilter(param, list);
         return filtered;
     }
@@ -137,11 +113,7 @@ public class QueryHandler
         where TQueryParameter : IListQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
-        var query = _serviceProvider.GetService<TQuery>();
-        if (query is null)
-        {
-            throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
-        }
+        var query = _serviceProvider.GetService<TQuery>() ?? throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
         var filtered = query.HandleFilter(param, projections);
         var sorted = query.HandleSort(param, filtered);
         var queryResponses = sorted.ToList();
@@ -183,11 +155,7 @@ public class QueryHandler
         where TQueryParameter : IQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
-        var query = _serviceProvider.GetService<TQuery>();
-        if (query is null)
-        {
-            throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
-        }
+        var query = _serviceProvider.GetService<TQuery>() ?? throw new Exception($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
         var filtered = query.HandleFilter(param, projections);
         return filtered;
     }
