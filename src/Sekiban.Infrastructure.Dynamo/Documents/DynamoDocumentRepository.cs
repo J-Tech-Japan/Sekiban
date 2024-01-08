@@ -43,10 +43,7 @@ public class DynamoDocumentRepository(
 
                 var filter = new QueryFilter();
                 filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
-                if (sinceSortableUniqueId is not null)
-                {
-                    filter.AddCondition(nameof(Document.SortableUniqueId), QueryOperator.GreaterThan, sinceSortableUniqueId);
-                }
+                filter.AddSortableUniqueIdIfNull(sinceSortableUniqueId);
                 var config = new QueryOperationConfig { Filter = filter, BackwardSearch = false };
                 var search = table.Query(config);
 
@@ -68,9 +65,10 @@ public class DynamoDocumentRepository(
                     var documentTypeName = document[nameof(IDocument.DocumentTypeName)].AsString();
                     if (documentTypeName is null) { continue; }
                     var toAdd = (types.Where(m => m.Name == documentTypeName)
-                            .Select(m => SekibanJsonHelper.Deserialize(json, typeof(Event<>).MakeGenericType(m)) as IEvent)
-                            .FirstOrDefault(m => m is not null) ??
-                        EventHelper.GetUnregisteredEvent(jsonElement)) ?? throw new SekibanUnregisteredEventFoundException();
+                                .Select(m => SekibanJsonHelper.Deserialize(json, typeof(Event<>).MakeGenericType(m)) as IEvent)
+                                .FirstOrDefault(m => m is not null) ??
+                            EventHelper.GetUnregisteredEvent(jsonElement)) ??
+                        throw new SekibanUnregisteredEventFoundException();
                     if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
                     {
                         continue;
@@ -122,10 +120,7 @@ public class DynamoDocumentRepository(
                     rootPartitionKey);
                 var filter = new QueryFilter();
                 filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
-                if (sinceSortableUniqueId is not null)
-                {
-                    filter.AddCondition(nameof(Document.SortableUniqueId), QueryOperator.GreaterThan, sinceSortableUniqueId);
-                }
+                filter.AddSortableUniqueIdIfNull(sinceSortableUniqueId);
                 var config = new QueryOperationConfig { Filter = filter, BackwardSearch = false };
                 var search = table.Query(config);
 
@@ -170,10 +165,7 @@ public class DynamoDocumentRepository(
                 {
                     filter.AddCondition(nameof(Document.RootPartitionKey), QueryOperator.Equal, rootPartitionKey);
                 }
-                if (sinceSortableUniqueId is not null)
-                {
-                    filter.AddCondition(nameof(Document.SortableUniqueId), QueryOperator.GreaterThan, sinceSortableUniqueId);
-                }
+                filter.AddSortableUniqueIdIfNull(sinceSortableUniqueId);
                 var config = new QueryOperationConfig { Filter = filter, BackwardSearch = true };
                 var search = table.Query(config);
 
@@ -195,9 +187,10 @@ public class DynamoDocumentRepository(
                     var documentTypeName = document[nameof(IDocument.DocumentTypeName)].AsString();
                     if (documentTypeName is null) { continue; }
                     var toAdd = (types.Where(m => m.Name == documentTypeName)
-                            .Select(m => SekibanJsonHelper.Deserialize(json, typeof(Event<>).MakeGenericType(m)) as IEvent)
-                            .FirstOrDefault(m => m is not null) ??
-                        EventHelper.GetUnregisteredEvent(jsonElement)) ?? throw new SekibanUnregisteredEventFoundException();
+                                .Select(m => SekibanJsonHelper.Deserialize(json, typeof(Event<>).MakeGenericType(m)) as IEvent)
+                                .FirstOrDefault(m => m is not null) ??
+                            EventHelper.GetUnregisteredEvent(jsonElement)) ??
+                        throw new SekibanUnregisteredEventFoundException();
                     if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
                     {
                         continue;
@@ -235,10 +228,7 @@ public class DynamoDocumentRepository(
                 {
                     filter.AddCondition(nameof(IDocument.RootPartitionKey), ScanOperator.Equal, rootPartitionKey);
                 }
-                if (sinceSortableUniqueId is not null)
-                {
-                    filter.AddCondition(nameof(Document.SortableUniqueId), ScanOperator.GreaterThan, sinceSortableUniqueId);
-                }
+                filter.AddSortableUniqueIdIfNull(sinceSortableUniqueId);
                 var config = new ScanOperationConfig { Filter = filter };
                 var search = table.Scan(config);
 
@@ -264,9 +254,10 @@ public class DynamoDocumentRepository(
                     var documentTypeName = document[nameof(IDocument.DocumentTypeName)].AsString();
                     if (documentTypeName is null) { continue; }
                     var toAdd = (types.Where(m => m.Name == documentTypeName)
-                            .Select(m => SekibanJsonHelper.Deserialize(json, typeof(Event<>).MakeGenericType(m)) as IEvent)
-                            .FirstOrDefault(m => m is not null) ??
-                        EventHelper.GetUnregisteredEvent(jsonElement)) ?? throw new SekibanUnregisteredEventFoundException();
+                                .Select(m => SekibanJsonHelper.Deserialize(json, typeof(Event<>).MakeGenericType(m)) as IEvent)
+                                .FirstOrDefault(m => m is not null) ??
+                            EventHelper.GetUnregisteredEvent(jsonElement)) ??
+                        throw new SekibanUnregisteredEventFoundException();
                     if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
                     {
                         continue;
