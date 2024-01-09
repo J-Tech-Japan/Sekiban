@@ -44,12 +44,12 @@ public sealed record CommandDocument<T> : Document, ICommandDocumentCommon, ICal
             rootPartitionKey)
     {
         Payload = commandPayload;
-        CallHistories = callHistories ?? new List<CallHistory>();
+        CallHistories = callHistories ?? [];
     }
     /// <summary>
     ///     Command call histories it will be set by <see cref="ICommandExecutor" />
     /// </summary>
-    public List<CallHistory> CallHistories { get; init; } = new();
+    public List<CallHistory> CallHistories { get; init; } = [];
     /// <summary>
     ///     Get call histories includes itself.
     ///     This is used to create history next to this command.

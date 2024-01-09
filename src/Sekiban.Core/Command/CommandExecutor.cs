@@ -31,7 +31,7 @@ public class CommandExecutor(
         var method = GetType().GetMethod(nameof(ExecCommandAsyncTyped)) ?? throw new MissingMethodException("Method not found");
         var genericMethod = method.MakeGenericMethod(command.GetType().GetAggregatePayloadTypeFromCommandType(), command.GetType());
         var (response, _)
-            = ((CommandExecutorResponse, List<IEvent>))await (dynamic)(genericMethod.Invoke(this, new object?[] { command, callHistories }) ??
+            = ((CommandExecutorResponse, List<IEvent>))await (dynamic)(genericMethod.Invoke(this, [command, callHistories]) ??
                 throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
         return response;
     }
@@ -44,7 +44,7 @@ public class CommandExecutor(
         var method = GetType().GetMethod(nameof(ExecCommandAsyncTyped)) ?? throw new MissingMethodException("Method not found");
         var genericMethod = method.MakeGenericMethod(command.GetType().GetAggregatePayloadTypeFromCommandType(), command.GetType());
         var (response, generatedEvents)
-            = ((CommandExecutorResponse, List<IEvent>))await (dynamic)(genericMethod.Invoke(this, new object?[] { command, callHistories }) ??
+            = ((CommandExecutorResponse, List<IEvent>))await (dynamic)(genericMethod.Invoke(this, [command, callHistories]) ??
                 throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
         return new CommandExecutorResponseWithEvents(response, generatedEvents.ToImmutableList());
     }
@@ -57,7 +57,7 @@ public class CommandExecutor(
         var method = GetType().GetMethod(nameof(ExecCommandWithoutValidationAsyncTyped)) ?? throw new MissingMethodException("Method not found");
         var genericMethod = method.MakeGenericMethod(command.GetType().GetAggregatePayloadTypeFromCommandType(), command.GetType());
         var (response, _)
-            = ((CommandExecutorResponse, List<IEvent>))await (dynamic)(genericMethod.Invoke(this, new object?[] { command, callHistories }) ??
+            = ((CommandExecutorResponse, List<IEvent>))await (dynamic)(genericMethod.Invoke(this, [command, callHistories]) ??
                 throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
         return response;
     }
@@ -70,7 +70,7 @@ public class CommandExecutor(
         var method = GetType().GetMethod(nameof(ExecCommandWithoutValidationAsyncTyped)) ?? throw new MissingMethodException("Method not found");
         var genericMethod = method.MakeGenericMethod(command.GetType().GetAggregatePayloadTypeFromCommandType(), command.GetType());
         var (response, generatedEvents)
-            = ((CommandExecutorResponse, List<IEvent>))await (dynamic)(genericMethod.Invoke(this, new object?[] { command, callHistories }) ??
+            = ((CommandExecutorResponse, List<IEvent>))await (dynamic)(genericMethod.Invoke(this, [command, callHistories]) ??
                 throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
         return new CommandExecutorResponseWithEvents(response, generatedEvents.ToImmutableList());
     }
@@ -146,7 +146,7 @@ public class CommandExecutor(
                 var commandResponse
                     = (CommandResponse)await ((dynamic?)method.Invoke(
                             adapter,
-                            new object?[] { commandDocument, handler, aggregateId, rootPartitionKey }) ??
+                            [commandDocument, handler, aggregateId, rootPartitionKey]) ??
                         throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
                 events = await HandleEventsAsync<TAggregatePayload, TCommand>(commandResponse.Events, commandDocument);
                 version = commandResponse.Version;

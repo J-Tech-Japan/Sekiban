@@ -26,5 +26,5 @@ public class Member
 
     public Member? Partner { get; init; }
 
-    public List<Member> Friends { get; init; } = new();
+    public List<Member> Friends { get; init; } = [];
 }

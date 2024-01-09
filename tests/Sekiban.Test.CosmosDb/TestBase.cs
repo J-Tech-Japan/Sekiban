@@ -40,7 +40,9 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
     protected readonly IQueryExecutor queryExecutor;
     protected readonly SekibanTestFixture sekibanTestFixture;
     protected readonly IServiceProvider serviceProvider;
-    protected ITestOutputHelper _testOutputHelper => sekibanTestFixture.TestOutputHelper!;
+
+    protected ITestOutputHelper TestOutputHelper => sekibanTestFixture.TestOutputHelper!;
+
     public TestBase(SekibanTestFixture sekibanTestFixture, ITestOutputHelper output, ISekibanServiceProviderGenerator providerGenerator)
     {
         sekibanTestFixture.TestOutputHelper = output;
@@ -91,6 +93,7 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
         documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Default).Wait();
         documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Default).Wait();
     }
+
     protected void RemoveAllFromDefaultAndDissolvable()
     {
         ResetInMemoryDocumentStoreAndCache();

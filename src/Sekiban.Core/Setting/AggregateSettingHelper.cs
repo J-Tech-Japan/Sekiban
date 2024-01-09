@@ -46,7 +46,7 @@ public class AggregateSettingHelper
         var snapshotFrequencyDefault = section.GetValue<int?>("SnapshotFrequencyDefault") ?? 80;
         var snapshotOffsetDefault = section.GetValue<int?>("SnapshotOffsetDefault") ?? 15;
         var useUpdateMarker = section.GetValue<bool?>("UseUpdateMarker") ?? false;
-        var exceptions = section.GetSection("SingleAggregateExceptions").Get<List<AggregateSetting>>() ?? new List<AggregateSetting>();
+        var exceptions = section.GetSection("SingleAggregateExceptions").Get<List<AggregateSetting>>() ?? [];
         return new AggregateSettingHelper(
             takeSnapshotDefault,
             useHybridDefault,

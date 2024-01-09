@@ -87,7 +87,7 @@ public class CosmosDocumentRepository(
                 while (feedIterator.HasMoreResults)
                 {
                     var next = await feedIterator.ReadNextAsync();
-                    if (next.Any())
+                    if (next.Count > 0)
                     {
                         return next.First();
                     }
@@ -278,7 +278,7 @@ public class CosmosDocumentRepository(
                 while (feedIterator.HasMoreResults)
                 {
                     var searched = await feedIterator.ReadNextAsync();
-                    if (searched.Any())
+                    if (searched.Count > 0)
                     {
                         return true;
                     }
@@ -396,6 +396,6 @@ public class CosmosDocumentRepository(
 
         return events;
     }
-    private QueryRequestOptions CreateDefaultOptions() =>
+    private static QueryRequestOptions CreateDefaultOptions() =>
         new() { MaxConcurrency = DefaultOptionsMax, MaxItemCount = DefaultOptionsMax, MaxBufferedItemCount = DefaultOptionsMax };
 }

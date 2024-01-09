@@ -52,6 +52,7 @@ public class DynamoDocumentRepository(
             });
 
     }
+
     public async Task GetAllEventStringsForAggregateIdAsync(
         Guid aggregateId,
         Type aggregatePayloadType,
@@ -71,6 +72,7 @@ public class DynamoDocumentRepository(
                 resultAction(events.Select(SekibanJsonHelper.Serialize).Where(m => !string.IsNullOrEmpty(m))!);
             });
     }
+
     public async Task GetAllCommandStringsForAggregateIdAsync(
         Guid aggregateId,
         Type aggregatePayloadType,
@@ -106,6 +108,7 @@ public class DynamoDocumentRepository(
             });
 
     }
+
     public async Task GetAllEventsForAggregateAsync(
         Type aggregatePayloadType,
         string? sinceSortableUniqueId,
@@ -134,6 +137,7 @@ public class DynamoDocumentRepository(
                 resultAction(events.OrderBy(m => m.SortableUniqueId));
             });
     }
+
     public async Task GetAllEventsAsync(
         Type multiProjectionType,
         IList<string> targetAggregateNames,
@@ -169,6 +173,7 @@ public class DynamoDocumentRepository(
                 resultAction(events.OrderBy(m => m.SortableUniqueId));
             });
     }
+
     public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
         Guid aggregateId,
         Type aggregatePayloadType,
@@ -205,6 +210,7 @@ public class DynamoDocumentRepository(
                 return snapshot is null ? null : await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshot);
             });
     }
+
     public async Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(
         Type multiProjectionPayloadType,
         string payloadVersionIdentifier,
@@ -236,6 +242,7 @@ public class DynamoDocumentRepository(
                 return null;
             });
     }
+
     public async Task<bool> ExistsSnapshotForAggregateAsync(
         Guid aggregateId,
         Type aggregatePayloadType,
@@ -274,6 +281,7 @@ public class DynamoDocumentRepository(
                 return snapshot is not null;
             });
     }
+
     public async Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(
         Guid aggregateId,
         Type aggregatePayloadType,
@@ -301,9 +309,9 @@ public class DynamoDocumentRepository(
                                  let json = document.ToJson()
                                  let sortableUniqueId = document[nameof(IDocument.SortableUniqueId)].AsString()
                                  select json).ToList();
-                if (snapshots.Count == 0) { return new List<SnapshotDocument>(); }
+                if (snapshots.Count == 0) { return []; }
                 var snapshotDocuments = snapshots.Select(m => SekibanJsonHelper.Deserialize<SnapshotDocument>(m)).ToList();
-                if (snapshotDocuments.Count == 0) { return new List<SnapshotDocument>(); }
+                if (snapshotDocuments.Count == 0) { return []; }
                 var toReturn = new List<SnapshotDocument>();
                 foreach (var snapshotDocument in snapshotDocuments)
                 {
@@ -316,6 +324,7 @@ public class DynamoDocumentRepository(
             });
 
     }
+
     public async Task<SnapshotDocument?> GetSnapshotByIdAsync(
         Guid id,
         Guid aggregateId,
@@ -347,7 +356,8 @@ public class DynamoDocumentRepository(
                 return snapshot is null ? null : await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshot);
             });
     }
-    private async Task<List<Amazon.DynamoDBv2.DocumentModel.Document>> FetchDocumentsAsync(Search? search)
+
+    private static async Task<List<Amazon.DynamoDBv2.DocumentModel.Document>> FetchDocumentsAsync(Search? search)
     {
         var resultList = new List<Amazon.DynamoDBv2.DocumentModel.Document>();
         do
@@ -361,6 +371,7 @@ public class DynamoDocumentRepository(
         } while (!search.IsDone);
         return resultList;
     }
+
     private List<IEvent> ProcessEventDocuments(List<Amazon.DynamoDBv2.DocumentModel.Document> documents, string? sinceSortableUniqueId)
     {
         var types = registeredEventTypes.RegisteredTypes;

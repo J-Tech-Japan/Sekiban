@@ -239,18 +239,18 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         var snapshotManager = await aggregateLoader.AsDefaultStateFromInitialAsync<SnapshotManager>(SnapshotManager.SharedId);
         if (snapshotManager is null)
         {
-            _testOutputHelper.WriteLine("snapshot manager is null");
+            TestOutputHelper.WriteLine("snapshot manager is null");
         } else
         {
-            _testOutputHelper.WriteLine("-requests-");
+            TestOutputHelper.WriteLine("-requests-");
             foreach (var key in snapshotManager.Payload.Requests)
             {
-                _testOutputHelper.WriteLine(key);
+                TestOutputHelper.WriteLine(key);
             }
-            _testOutputHelper.WriteLine("-request takens-");
+            TestOutputHelper.WriteLine("-request takens-");
             foreach (var key in snapshotManager.Payload.RequestTakens)
             {
-                _testOutputHelper.WriteLine(key);
+                TestOutputHelper.WriteLine(key);
             }
         }
 
@@ -366,7 +366,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
     public void CheckBlobAccessorBlobConnectionString()
     {
         var connectionString = blobAccessor.BlobConnectionString();
-        _testOutputHelper.WriteLine("BlobConnectionString: " + connectionString);
+        TestOutputHelper.WriteLine("BlobConnectionString: " + connectionString);
         Assert.NotNull(connectionString);
     }
     [Fact]
@@ -481,15 +481,15 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
 
         var snapshotManager = await aggregateLoader.AsDefaultStateFromInitialAsync<SnapshotManager>(SnapshotManager.SharedId);
-        _testOutputHelper.WriteLine("-requests-");
+        TestOutputHelper.WriteLine("-requests-");
         foreach (var key in snapshotManager!.Payload.Requests)
         {
-            _testOutputHelper.WriteLine(key);
+            TestOutputHelper.WriteLine(key);
         }
-        _testOutputHelper.WriteLine("-request takens-");
+        TestOutputHelper.WriteLine("-request takens-");
         foreach (var key in snapshotManager.Payload.RequestTakens)
         {
-            _testOutputHelper.WriteLine(key);
+            TestOutputHelper.WriteLine(key);
         }
 
         var snapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(
@@ -556,17 +556,17 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
     private async Task CheckSnapshots<TAggregatePayload>(List<SnapshotDocument> snapshots, Guid aggregateId)
         where TAggregatePayload : IAggregatePayloadCommon
     {
-        _testOutputHelper.WriteLine($"snapshots {typeof(TAggregatePayload).Name} {snapshots.Count} ");
+        TestOutputHelper.WriteLine($"snapshots {typeof(TAggregatePayload).Name} {snapshots.Count} ");
         foreach (var snapshot in snapshots)
         {
-            _testOutputHelper.WriteLine($"snapshot {snapshot.AggregateType}  {snapshot.Id}  {snapshot.SavedVersion} is checking");
+            TestOutputHelper.WriteLine($"snapshot {snapshot.AggregateType}  {snapshot.Id}  {snapshot.SavedVersion} is checking");
             var state = snapshot.GetState();
             if (state is null)
             {
-                _testOutputHelper.WriteLine($"Snapshot {snapshot.AggregateType} {snapshot.Id} {snapshot.SavedVersion}  is null");
+                TestOutputHelper.WriteLine($"Snapshot {snapshot.AggregateType} {snapshot.Id} {snapshot.SavedVersion}  is null");
                 throw new SekibanInvalidArgumentException($"Snapshot {snapshot.AggregateType} {snapshot.SavedVersion}  is null");
             }
-            _testOutputHelper.WriteLine($"Snapshot {snapshot.AggregateType}  {snapshot.Id}  {snapshot.SavedVersion}  is not null");
+            TestOutputHelper.WriteLine($"Snapshot {snapshot.AggregateType}  {snapshot.Id}  {snapshot.SavedVersion}  is not null");
             var fromInitial = await aggregateLoader.AsDefaultStateFromInitialAsync<TAggregatePayload>(aggregateId, toVersion: state.Version) ?? throw new SekibanInvalidArgumentException();
             Assert.Equal(fromInitial.Version, state.Version);
             Assert.Equal(fromInitial.LastEventId, state.LastEventId);
@@ -577,19 +577,19 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         where TAggregatePayload : class, ISingleProjectionPayloadCommon
     {
         typeof(TAggregatePayload).GetAggregatePayloadTypeFromSingleProjectionPayload();
-        _testOutputHelper.WriteLine($"snapshots {typeof(TAggregatePayload).Name} {snapshots.Count} ");
+        TestOutputHelper.WriteLine($"snapshots {typeof(TAggregatePayload).Name} {snapshots.Count} ");
         foreach (var snapshot in snapshots)
         {
-            _testOutputHelper.WriteLine(
+            TestOutputHelper.WriteLine(
                 $"snapshot {snapshot.AggregateType} {snapshot.DocumentTypeName} {snapshot.Id}  {snapshot.SavedVersion} is checking");
             var state = snapshot.GetState();
             if (state is null)
             {
-                _testOutputHelper.WriteLine(
+                TestOutputHelper.WriteLine(
                     $"Snapshot {snapshot.AggregateType} {snapshot.DocumentTypeName} {snapshot.Id} {snapshot.SavedVersion}  is null");
                 throw new SekibanInvalidArgumentException($"Snapshot {snapshot.AggregateType} {snapshot.SavedVersion}  is null");
             }
-            _testOutputHelper.WriteLine(
+            TestOutputHelper.WriteLine(
                 $"Snapshot {snapshot.AggregateType} {snapshot.DocumentTypeName} {snapshot.Id}  {snapshot.SavedVersion}  is not null");
             var fromInitial = await aggregateLoader.AsSingleProjectionStateFromInitialAsync<TAggregatePayload>(aggregateId, toVersion: state.Version) ?? throw new SekibanInvalidArgumentException();
             Assert.Equal(fromInitial.Version, state.Version);
@@ -620,7 +620,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
                                 ReferenceVersion = version
                             });
                         version = recentActivityAddedResult.Version;
-                        _testOutputHelper.WriteLine($"{i} - {recentActivityAddedResult.Version.ToString()}");
+                        TestOutputHelper.WriteLine($"{i} - {recentActivityAddedResult.Version}");
                     }));
         }
         await Task.WhenAll(tasks);
@@ -639,7 +639,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
 
     private async Task ContinuousExecutionTestAsync()
     {
-        _testOutputHelper.WriteLine("481");
+        TestOutputHelper.WriteLine("481");
         var recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
         Assert.Single(recentActivityList);
         var aggregateId = recentActivityList.First().AggregateId;
@@ -657,7 +657,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         //Assert.NotNull(aggregateRecentActivity2);
         //Assert.Equal(aggregateRecentActivity!.Version, aggregateRecentActivity2!.Version);
 
-        _testOutputHelper.WriteLine("498");
+        TestOutputHelper.WriteLine("498");
         var version = recentActivityList.First().Version;
         var tasks = new List<Task>();
         var count = 180;
@@ -676,7 +676,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
         Assert.Single(recentActivityList);
 
-        _testOutputHelper.WriteLine("518");
+        TestOutputHelper.WriteLine("518");
 
         var snapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(aggregateId, typeof(RecentActivity), typeof(RecentActivity));
         await CheckSnapshots<RecentActivity>(snapshots, aggregateId);
@@ -696,15 +696,15 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
 
         var snapshotManager = await aggregateLoader.AsDefaultStateFromInitialAsync<SnapshotManager>(SnapshotManager.SharedId);
-        _testOutputHelper.WriteLine("-requests-");
+        TestOutputHelper.WriteLine("-requests-");
         foreach (var key in snapshotManager!.Payload.Requests)
         {
-            _testOutputHelper.WriteLine(key);
+            TestOutputHelper.WriteLine(key);
         }
-        _testOutputHelper.WriteLine("-request takens-");
+        TestOutputHelper.WriteLine("-request takens-");
         foreach (var key in snapshotManager.Payload.RequestTakens)
         {
-            _testOutputHelper.WriteLine(key);
+            TestOutputHelper.WriteLine(key);
         }
     }
 

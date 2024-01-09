@@ -18,24 +18,28 @@ public class ClientNameHistoryProjectionQuery : ISingleProjectionListQuery<Clien
 
     public IEnumerable<Response> HandleSort(Parameter queryParam, IEnumerable<Response> filteredList)
     {
-        if (queryParam.SortKey == null)
+        return (queryParam.SortKey, queryParam.SortIsAsc) switch
         {
-            return filteredList.OrderBy(m => m.BranchId).ThenBy(m => m.ClientEmail);
-        }
-
-        switch (queryParam.SortKey)
-        {
-            case ClientNameHistoryProjectionQuerySortKeys.BranchId:
-                return queryParam.SortIsAsc ? filteredList.OrderBy(m => m.BranchId) : filteredList.OrderByDescending(m => m.BranchId);
-            case ClientNameHistoryProjectionQuerySortKeys.ClientId:
-                return queryParam.SortIsAsc ? filteredList.OrderBy(m => m.ClientId) : filteredList.OrderByDescending(m => m.ClientId);
-            case ClientNameHistoryProjectionQuerySortKeys.ClientName:
-                return queryParam.SortIsAsc ? filteredList.OrderBy(m => m.ClientName) : filteredList.OrderByDescending(m => m.ClientName);
-            case ClientNameHistoryProjectionQuerySortKeys.ClientEmail:
-                return queryParam.SortIsAsc ? filteredList.OrderBy(m => m.ClientEmail) : filteredList.OrderByDescending(m => m.ClientEmail);
-        }
-
-        return filteredList;
+            (null, _) => filteredList.OrderBy(m => m.BranchId).ThenBy(m => m.ClientEmail)
+            ,
+            (ClientNameHistoryProjectionQuerySortKeys.BranchId, true) => filteredList.OrderBy(m => m.BranchId)
+            ,
+            (ClientNameHistoryProjectionQuerySortKeys.BranchId, false) => filteredList.OrderByDescending(m => m.BranchId)
+            ,
+            (ClientNameHistoryProjectionQuerySortKeys.ClientId, true) => filteredList.OrderBy(m => m.ClientId)
+            ,
+            (ClientNameHistoryProjectionQuerySortKeys.ClientId, false) => filteredList.OrderByDescending(m => m.ClientId)
+            ,
+            (ClientNameHistoryProjectionQuerySortKeys.ClientName, true) => filteredList.OrderBy(m => m.ClientName)
+            ,
+            (ClientNameHistoryProjectionQuerySortKeys.ClientName, false) => filteredList.OrderByDescending(m => m.ClientName)
+            ,
+            (ClientNameHistoryProjectionQuerySortKeys.ClientEmail, true) => filteredList.OrderBy(m => m.ClientEmail)
+            ,
+            (ClientNameHistoryProjectionQuerySortKeys.ClientEmail, false) => filteredList.OrderByDescending(m => m.ClientEmail)
+            ,
+            _ => filteredList
+        };
     }
 
     public record Parameter(

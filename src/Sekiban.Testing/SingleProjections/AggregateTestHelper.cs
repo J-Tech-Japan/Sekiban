@@ -21,12 +21,12 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 {
     private readonly TestCommandExecutor _commandExecutor;
     private readonly IServiceProvider _serviceProvider;
-    private Exception? _latestException { get; set; }
-    private List<IEvent> _latestEvents { get; set; } = new();
-    private ICommandCommon? _latestCommand { get; set; }
-    private List<SekibanValidationParameterError> _latestValidationErrors { get; set; } = new();
+    private readonly DefaultSingleProjector<TAggregatePayload> _projector;
 
-    private DefaultSingleProjector<TAggregatePayload> _projector { get; }
+    private Exception? _latestException;
+    private List<IEvent> _latestEvents = [];
+    private ICommandCommon? _latestCommand;
+    private List<SekibanValidationParameterError> _latestValidationErrors = [];
 
     public AggregateTestHelper(IServiceProvider serviceProvider)
     {
@@ -106,7 +106,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
             throw new SekibanTypeNotFoundException("Failed to get aggregate loader");
         return aggregateLoader.AllEventsAsync<TAggregatePayload>(GetAggregateId(), GetRootPartitionKey(), toVersion).Result?.ToList() ??
-            new List<IEvent>();
+            [];
     }
 
     public void ThrowIfTestHasUnhandledErrors()
@@ -120,7 +120,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         if (_latestValidationErrors.Count != 0)
         {
             var first = _latestValidationErrors.First();
-            _latestValidationErrors = new List<SekibanValidationParameterError>();
+            _latestValidationErrors = [];
             throw new SekibanTypeNotFoundException(
                 $"{_latestCommand?.GetType().Name ?? ""}" + first.PropertyName + " has validation error " + first.ErrorMessages.First());
         }
@@ -365,14 +365,14 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
         Assert.Equal(expectedJson, actualJson);
-        _latestValidationErrors = new List<SekibanValidationParameterError>();
+        _latestValidationErrors = [];
         return this;
     }
 
     public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors()
     {
         Assert.NotEmpty(_latestValidationErrors);
-        _latestValidationErrors = new List<SekibanValidationParameterError>();
+        _latestValidationErrors = [];
         return this;
     }
 
@@ -578,10 +578,11 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
                 var adapter = Activator.CreateInstance(adapterClass) ?? throw new SekibanTypeNotFoundException("Method not found");
                 var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new SekibanTypeNotFoundException("HandleCommandAsync not found");
                 var commandResponse
-                    = (CommandResponse)((dynamic?)method.Invoke(adapter, new object?[] { commandDocument, handler, aggregateId, rootPartitionKey }) ??
+                    = (CommandResponse)((dynamic?)method.Invoke(adapter, [commandDocument, handler, aggregateId, rootPartitionKey]) ??
                         throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
-                _latestEvents = commandResponse.Events.ToList();
-            } else
+                _latestEvents = [.. commandResponse.Events];
+            }
+            else
             {
                 var baseClass = typeof(CommandHandlerAdapter<,>);
                 var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayloadIn), command.GetType());
@@ -591,9 +592,9 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
                 var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new SekibanTypeNotFoundException("HandleCommandAsync not found");
 
                 var commandResponse
-                    = (CommandResponse)((dynamic?)method.Invoke(adapter, new object?[] { commandDocument, handler, aggregateId, rootPartitionKey }) ??
+                    = (CommandResponse)((dynamic?)method.Invoke(adapter, [commandDocument, handler, aggregateId, rootPartitionKey]) ??
                         throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
-                _latestEvents = commandResponse.Events.ToList();
+                _latestEvents = [.. commandResponse.Events];
             }
         }
         catch (Exception ex)
@@ -614,7 +615,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         if (withPublish)
         {
             documentWriter.SaveAndPublishEvents(new List<IEvent> { ev }, typeof(TAggregatePayload)).Wait();
-        } else
+        }
+        else
         {
             documentWriter.SaveAsync(ev, typeof(TAggregatePayload)).Wait();
         }
@@ -665,7 +667,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var type = typeof(AggregateState<>);
         var genericType = type.MakeGenericType(state.Payload.GetType());
         var genericMethod = method?.MakeGenericMethod(genericType);
-        var stateFromJson = genericMethod?.Invoke(typeof(SekibanJsonHelper), new object?[] { json });
+        var stateFromJson = genericMethod?.Invoke(typeof(SekibanJsonHelper), [json]);
 
         var stateFromJsonJson = SekibanJsonHelper.Serialize(stateFromJson);
         Assert.Equal(json, stateFromJsonJson);
@@ -696,8 +698,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     private void ResetBeforeCommand()
     {
         ThrowIfTestHasUnhandledErrors();
-        _latestValidationErrors = new List<SekibanValidationParameterError>();
-        _latestEvents = new List<IEvent>();
+        _latestValidationErrors = [];
+        _latestEvents = [];
         _latestException = null;
     }
 

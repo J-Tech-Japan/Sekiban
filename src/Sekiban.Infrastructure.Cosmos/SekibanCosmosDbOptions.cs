@@ -6,7 +6,7 @@ namespace Sekiban.Infrastructure.Cosmos;
 
 public class SekibanCosmosDbOptions
 {
-    public List<SekibanAzureOption> Contexts { get; init; } = new();
+    public List<SekibanAzureOption> Contexts { get; init; } = [];
     public static SekibanCosmosDbOptions Default => new();
     private static string SekibanContextIdentifier(IServiceProvider serviceProvider)
     {

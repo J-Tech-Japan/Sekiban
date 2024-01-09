@@ -11,8 +11,9 @@ public class TenantQueryTest : UnifiedTest<MultiTenantDependency>
     private const string clientName2 = "Tenant Name 1";
     private const string tenantId1 = "tenant-1";
     private const string tenantId2 = "tenant-2";
+
     [Fact]
-    private void QueryTest1()
+    public void QueryTest1()
     {
         RunCommand(new CreateClient { Name = clientName1, TenantId = tenantId1 });
         RunCommand(new CreateClient { Name = clientName2, TenantId = tenantId2 });

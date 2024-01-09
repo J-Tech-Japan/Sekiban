@@ -25,7 +25,7 @@ public class InMemoryDocumentRepository(
         string rootPartitionKey = IDocument.DefaultRootPartitionKey)
     {
         await Task.CompletedTask;
-        return new List<SnapshotDocument>();
+        return [];
     }
 
     public async Task GetAllEventsForAggregateIdAsync(
@@ -43,7 +43,7 @@ public class InMemoryDocumentRepository(
         await Task.CompletedTask;
         var list = partitionKey is null
             ? inMemoryDocumentStore.GetAllEvents(sekibanIdentifier).Where(m => m.AggregateId == aggregateId).ToList()
-            : inMemoryDocumentStore.GetEventPartition(partitionKey, sekibanIdentifier).OrderBy(m => m.SortableUniqueId).ToList();
+            : [.. inMemoryDocumentStore.GetEventPartition(partitionKey, sekibanIdentifier).OrderBy(m => m.SortableUniqueId)];
         if (string.IsNullOrWhiteSpace(sinceSortableUniqueId))
         {
             resultAction(list.OrderBy(m => m.SortableUniqueId));

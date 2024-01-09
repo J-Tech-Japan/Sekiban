@@ -54,7 +54,7 @@ public abstract class QueryPerformanceTestBase : TestBase<FeatureCheckDependency
         {
             // create list branch
             var branchList = await multiProjectionService.GetAggregateList<Branch>();
-            _testOutputHelper.WriteLine($"create branch {branchList.Count}");
+            TestOutputHelper.WriteLine($"create branch {branchList.Count}");
 
             var firstcount = branchList.Count;
             var branchResult = await commandExecutor.ExecCommandAsync(new CreateBranch($"CreateBranch {i}"));
@@ -67,32 +67,32 @@ public abstract class QueryPerformanceTestBase : TestBase<FeatureCheckDependency
             Assert.NotNull(branchResult);
             Assert.NotNull(branchResult.AggregateId);
             branchList = await multiProjectionService.GetAggregateList<Branch>();
-            _testOutputHelper.WriteLine($"branch created {branchList.Count}");
+            TestOutputHelper.WriteLine($"branch created {branchList.Count}");
             Assert.Equal(firstcount + 1, branchList.Count);
             var branchFromList = branchList.First(m => m.AggregateId == branchId);
             Assert.NotNull(branchFromList);
             for (var j = 0; j < numberOfClient; j++)
             {
                 var clientList = await multiProjectionService.GetAggregateList<Client>();
-                _testOutputHelper.WriteLine($"create client {clientList.Count}");
+                TestOutputHelper.WriteLine($"create client {clientList.Count}");
                 var firstClientCount = clientList.Count;
                 var clientCreateResult = await commandExecutor.ExecCommandAsync(
                     new CreateClient(branchId!.Value, $"clientname {i}-{j}", $"test{i}.{j}.{id}@example.com"));
                 clientList = await multiProjectionService.GetAggregateList<Client>();
-                _testOutputHelper.WriteLine($"client created {clientList.Count}");
+                TestOutputHelper.WriteLine($"client created {clientList.Count}");
                 Assert.Equal(firstClientCount + 1, clientList.Count);
                 for (var k = 0; k < changeNameCount; k++)
                 {
-                    _testOutputHelper.WriteLine($"client change name {k + 1}");
+                    TestOutputHelper.WriteLine($"client change name {k + 1}");
                     var aggregate = await aggregateLoader.AsDefaultStateAsync<Client>(clientCreateResult.AggregateId!.Value);
-                    _testOutputHelper.WriteLine($"aggregate.version = {aggregate?.Version}");
+                    TestOutputHelper.WriteLine($"aggregate.version = {aggregate?.Version}");
                     await commandExecutor.ExecCommandAsync(
                         new ChangeClientName(clientCreateResult.AggregateId!.Value, $"change{i}-{j}-{k}")
                         {
                             ReferenceVersion = aggregate?.Version ?? 0
                         });
                     clientList = await multiProjectionService.GetAggregateList<Client>();
-                    _testOutputHelper.WriteLine($"client name changed {k + 1} - {clientList.Count}");
+                    TestOutputHelper.WriteLine($"client name changed {k + 1} - {clientList.Count}");
                     Assert.Equal(firstClientCount + 1, clientList.Count);
                 }
             }
