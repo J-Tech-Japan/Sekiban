@@ -131,7 +131,7 @@ public class MultiProjectionSnapshotGenerator(
         throw new SekibanMultiProjectionPayloadCreateFailedException(payloadType.FullName ?? "");
     }
 
-    public string FilenameForSnapshot(Type projectionPayload, Guid id, SortableUniqueIdValue sortableUniqueId) =>
+    public static string FilenameForSnapshot(Type projectionPayload, Guid id, SortableUniqueIdValue sortableUniqueId) =>
         $"{MultiProjectionSnapshotGenerator.ProjectionName(projectionPayload)}_{sortableUniqueId.GetTicks().Ticks:00000000000000000000}_{id}.json.gz";
 
     private static string ProjectionName(Type projectionType) =>
