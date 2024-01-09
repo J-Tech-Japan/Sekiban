@@ -16,27 +16,33 @@ public class ClientLoyaltyPointMultiProjectionQuery : IMultiProjectionQuery<Clie
         return param.BranchId is null
             ? new Response(projection.Payload.Branches, projection.Payload.Records)
             : new Response(
-            projection.Payload.Branches.Where(x => x.BranchId == param.BranchId).ToImmutableList(),
-            projection.Payload.Records.Where(m => m.BranchId == param.BranchId).ToImmutableList());
+                projection.Payload.Branches.Where(x => x.BranchId == param.BranchId).ToImmutableList(),
+                projection.Payload.Records.Where(m => m.BranchId == param.BranchId).ToImmutableList());
     }
 
     public static ClientLoyaltyPointMultiProjection HandleSortAndPagingIfNeeded(Parameter param, ClientLoyaltyPointMultiProjection response)
     {
-        return param.SortKey == QuerySortKeys.ClientName
-            ? (response with
+        return param.SortKey switch
+        {
+            QuerySortKeys.ClientName => response with
             {
                 Records = param.SortIsAsc
                     ? response.Records.OrderBy(x => x.ClientName).ToImmutableList()
                     : response.Records.OrderByDescending(x => x.ClientName).ToImmutableList()
-            })
-            : param.SortKey == QuerySortKeys.Points
-            ? (response with
+            }
+            ,
+            QuerySortKeys.Points => response with
             {
                 Records = param.SortIsAsc
                     ? response.Records.OrderBy(x => x.Point).ToImmutableList()
                     : response.Records.OrderByDescending(x => x.Point).ToImmutableList()
-            })
-            : (response with { Records = response.Records.OrderBy(x => x.ClientName).ToImmutableList() });
+            }
+            ,
+            _ => response with
+            {
+                Records = response.Records.OrderBy(x => x.ClientName).ToImmutableList()
+            }
+        };
     }
 
     public record Parameter(Guid? BranchId, QuerySortKeys SortKey, bool SortIsAsc = true) : IQueryParameter<Response>;

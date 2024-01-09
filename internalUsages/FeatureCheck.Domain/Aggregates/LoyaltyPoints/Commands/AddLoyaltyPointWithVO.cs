@@ -20,14 +20,14 @@ public record AddLoyaltyPointWithVO : IVersionValidationCommand<LoyaltyPoint>
 
     public class Handler : IVersionValidationCommandHandler<LoyaltyPoint, AddLoyaltyPointWithVO>
     {
-
         public IEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommand(
             AddLoyaltyPointWithVO command,
             ICommandContext<LoyaltyPoint> context)
         {
-            yield return context.GetState().Payload.LastOccuredTime is not null && context.GetState().Payload.LastOccuredTime > command.HappenedDate
-                ? throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException()
-                : (IEventPayloadApplicableTo<LoyaltyPoint>)new LoyaltyPointAdded(command.HappenedDate, command.Reason, command.LoyaltyPointValue, command.Note);
+            if (context.GetState().Payload.LastOccuredTime is not null && context.GetState().Payload.LastOccuredTime > command.HappenedDate)
+                throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
+
+            yield return (IEventPayloadApplicableTo<LoyaltyPoint>)new LoyaltyPointAdded(command.HappenedDate, command.Reason, command.LoyaltyPointValue, command.Note);
         }
     }
 }

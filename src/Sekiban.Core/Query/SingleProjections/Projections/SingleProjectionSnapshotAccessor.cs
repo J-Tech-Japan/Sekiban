@@ -19,6 +19,7 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
         _sekibanAggregateTypes = sekibanAggregateTypes;
         _blobAccessor = blobAccessor;
     }
+
     public async Task<SnapshotDocument?> SnapshotDocumentFromAggregateStateAsync<TPayload>(AggregateState<TPayload> state)
         where TPayload : IAggregatePayloadCommon
     {
@@ -35,6 +36,7 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
             state.GetPayloadVersionIdentifier(),
             state.RootPartitionKey);
     }
+
     public async Task<SnapshotDocument?> SnapshotDocumentFromSingleProjectionStateAsync<TPayload>(
         SingleProjectionState<TPayload> state,
         Type aggregateType) where TPayload : class, ISingleProjectionPayloadCommon
@@ -52,6 +54,7 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
             state.RootPartitionKey);
         return snapshotDocument;
     }
+
     public async Task<SnapshotDocument?> FillSnapshotDocumentWithBlobAsync(SnapshotDocument document)
     {
         try
@@ -73,7 +76,6 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
                     {
                         return document with { Snapshot = state };
                     }
-
                 }
                     break;
                 case StateType.AggregateSubtype:
@@ -115,12 +117,14 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
         }
         return null;
     }
+
     public async Task<SnapshotDocument?> FillSnapshotDocumentAsync(SnapshotDocument document) =>
         document.Snapshot switch
         {
             null => await FillSnapshotDocumentWithBlobAsync(document),
             _ => await FillSnapshotDocumentWithJObjectAsync(document)
         };
+
     public async Task<SnapshotDocument?> FillSnapshotDocumentWithJObjectAsync(SnapshotDocument document)
     {
         switch (GetStateType(document))
@@ -181,11 +185,13 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
 
     private StateType GetStateType(SnapshotDocument document)
     {
-        return document.AggregateType == document.DocumentTypeName
-            ? StateType.Aggregate
-            : _sekibanAggregateTypes.AggregateTypes.Any(m => m.Aggregate.Name == document.DocumentTypeName)
-            ? StateType.AggregateSubtype
-            : StateType.SingleProjection;
+        if (document.AggregateType == document.DocumentTypeName)
+            return StateType.Aggregate;
+
+        if (_sekibanAggregateTypes.AggregateTypes.Any(m => m.Aggregate.Name == document.DocumentTypeName))
+            return StateType.AggregateSubtype;
+
+        return StateType.SingleProjection;
     }
 
     private enum StateType

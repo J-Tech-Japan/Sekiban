@@ -30,7 +30,9 @@ public class HybridStoreManager
 
     public string? SortableUniqueIdForPartitionKey(string partitionKey)
     {
-        return !Enabled ? null : HybridPartitionKeys.TryGetValue(partitionKey, out var value) ? value.SortableUniqueId : null;
+        return Enabled && HybridPartitionKeys.TryGetValue(partitionKey, out var value)
+            ? value.SortableUniqueId
+            : null;
     }
 
     public bool FromInitialForPartitionKey(string partitionKey)
