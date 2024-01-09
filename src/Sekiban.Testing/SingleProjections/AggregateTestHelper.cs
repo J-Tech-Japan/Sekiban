@@ -21,12 +21,12 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 {
     private readonly TestCommandExecutor _commandExecutor;
     private readonly IServiceProvider _serviceProvider;
-    private Exception? _latestException { get; set; }
-    private List<IEvent> _latestEvents { get; set; } = [];
-    private ICommandCommon? _latestCommand { get; set; }
-    private List<SekibanValidationParameterError> _latestValidationErrors { get; set; } = [];
+    private readonly DefaultSingleProjector<TAggregatePayload> _projector;
 
-    private DefaultSingleProjector<TAggregatePayload> _projector { get; }
+    private Exception? _latestException;
+    private List<IEvent> _latestEvents = [];
+    private ICommandCommon? _latestCommand;
+    private List<SekibanValidationParameterError> _latestValidationErrors = [];
 
     public AggregateTestHelper(IServiceProvider serviceProvider)
     {

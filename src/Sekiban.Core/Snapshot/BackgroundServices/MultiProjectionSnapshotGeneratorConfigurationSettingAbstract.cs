@@ -13,7 +13,7 @@ namespace Sekiban.Core.Snapshot.BackgroundServices;
 /// </summary>
 public abstract class MultiProjectionSnapshotGeneratorConfigurationSettingAbstract : IMultiProjectionsSnapshotGenerateSetting
 {
-    protected IConfiguration? _configuration { get; init; }
+    protected readonly IConfiguration? _configuration;
 
     protected List<Type> MultiProjectionsSnapshotTypes { get; } = [];
     protected List<Type> AggregateListSnapshotTypes { get; } = [];
