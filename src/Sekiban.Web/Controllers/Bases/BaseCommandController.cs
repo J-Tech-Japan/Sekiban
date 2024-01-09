@@ -39,10 +39,8 @@ public class BaseCommandController<TAggregatePayload, TCommand>(
             return Unauthorized();
         }
         var response = await executor.ExecCommandAsync(command);
-        if (response.ValidationResults is null || !response.ValidationResults.Any())
-        {
-            return new ActionResult<CommandExecutorResponse>(response);
-        }
-        throw new SekibanValidationErrorsException(response.ValidationResults!);
+        return response.ValidationResults is null || !response.ValidationResults.Any()
+            ? new ActionResult<CommandExecutorResponse>(response)
+            : throw new SekibanValidationErrorsException(response.ValidationResults!);
     }
 }

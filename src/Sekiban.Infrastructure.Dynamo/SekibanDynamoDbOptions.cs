@@ -6,7 +6,7 @@ namespace Sekiban.Infrastructure.Dynamo;
 
 public class SekibanDynamoDbOptions
 {
-    public List<SekibanAwsOption> Contexts { get; init; } = new();
+    public List<SekibanAwsOption> Contexts { get; init; } = [];
 
     public static SekibanDynamoDbOptions Default => new();
 

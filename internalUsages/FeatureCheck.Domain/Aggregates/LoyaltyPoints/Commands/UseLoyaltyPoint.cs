@@ -13,8 +13,7 @@ public record UseLoyaltyPoint(
     string Note) : IVersionValidationCommand<LoyaltyPoint>
 {
     public UseLoyaltyPoint() : this(Guid.Empty, DateTime.MinValue, LoyaltyPointUsageTypeKeys.FlightDomestic, 0, string.Empty)
-    {
-    }
+    { }
 
     public int ReferenceVersion { get; init; }
 
@@ -25,14 +24,12 @@ public record UseLoyaltyPoint(
         public IEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommand(UseLoyaltyPoint command, ICommandContext<LoyaltyPoint> context)
         {
             if (context.GetState().Payload.LastOccuredTime > command.HappenedDate)
-            {
                 throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
-            }
+
             if (context.GetState().Payload.CurrentPoint - command.PointAmount < 0)
-            {
                 throw new SekibanLoyaltyPointNotEnoughException();
-            }
-            yield return new LoyaltyPointUsed(command.HappenedDate, command.Reason, command.PointAmount, command.Note);
+
+            yield return (IEventPayloadApplicableTo<LoyaltyPoint>)new LoyaltyPointUsed(command.HappenedDate, command.Reason, command.PointAmount, command.Note);
         }
     }
 }

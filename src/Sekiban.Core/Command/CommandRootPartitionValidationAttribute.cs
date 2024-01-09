@@ -8,6 +8,7 @@ namespace Sekiban.Core.Command;
 public class CommandRootPartitionValidationAttribute : ValidationAttribute
 {
     private const string RootPartitionKeyRegexPattern = "^[a-z0-9-_]{1,36}$";
+
     protected override ValidationResult? IsValid(object? value, ValidationContext validationContext)
     {
         if (value is not ICommandCommon command)
@@ -16,29 +17,13 @@ public class CommandRootPartitionValidationAttribute : ValidationAttribute
         }
         var rootPartitionKey = command.GetRootPartitionKey();
 
-        if (string.IsNullOrWhiteSpace(rootPartitionKey))
-        {
-            return new ValidationResult("Root Partition Key only allow a-z, 0-9, -, _ and length 1-36");
-        }
-
-        return Regex.IsMatch(rootPartitionKey, RootPartitionKeyRegexPattern, RegexOptions.None, TimeSpan.FromMilliseconds(250))
+        return !string.IsNullOrWhiteSpace(rootPartitionKey)
+            && Regex.IsMatch(rootPartitionKey, RootPartitionKeyRegexPattern, RegexOptions.None, TimeSpan.FromMilliseconds(250))
             ? ValidationResult.Success
             : new ValidationResult("Root Partition Key only allow a-z, 0-9, -, _ and length 1-36");
-
     }
 
-    public static bool IsValidRootPartitionKey(string rootPartitionKey)
-    {
-        if (string.IsNullOrWhiteSpace(rootPartitionKey))
-        {
-            return false;
-        }
-
-        if (Regex.IsMatch(rootPartitionKey, RootPartitionKeyRegexPattern, RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(250)))
-        {
-            return true;
-        }
-
-        return false;
-    }
+    public static bool IsValidRootPartitionKey(string rootPartitionKey) =>
+        !string.IsNullOrWhiteSpace(rootPartitionKey)
+        && Regex.IsMatch(rootPartitionKey, RootPartitionKeyRegexPattern, RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(250));
 }

@@ -18,12 +18,12 @@ public abstract class AggregateSubtypeTypeR : TestBase<FeatureCheckDependency>
 {
     private readonly Guid cartId = Guid.NewGuid();
     private CommandExecutorResponseWithEvents commandResponse = default!;
+
     public AggregateSubtypeTypeR(
         SekibanTestFixture sekibanTestFixture,
         ITestOutputHelper testOutputHelper,
         ISekibanServiceProviderGenerator providerGenerator) : base(sekibanTestFixture, testOutputHelper, providerGenerator)
-    {
-    }
+    { }
 
     [Fact]
     public async Task CosmosDbStory()
@@ -62,10 +62,8 @@ public abstract class AggregateSubtypeTypeR : TestBase<FeatureCheckDependency>
         // This time, aggregate payload is ShippingCartI, so it will return null
         var aggregateAsPurchasedCartState = await aggregateLoader.AsDefaultStateAsync<PurchasedCartR>(cartId);
         Assert.Null(aggregateAsPurchasedCartState);
-
-
-
     }
+
     [Fact]
     public async Task SecondCommandTest()
     {
@@ -73,7 +71,6 @@ public abstract class AggregateSubtypeTypeR : TestBase<FeatureCheckDependency>
         var purchasedTime = DateTime.Now;
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
             new SubmitOrderR { CartId = cartId, OrderSubmittedLocalTime = purchasedTime, ReferenceVersion = commandResponse.Version });
-
 
         // this time, the aggregate is created as ShoppingCartI
         var aggregateAsCart = await aggregateLoader.AsAggregateAsync<CartAggregateR>(cartId);
@@ -149,7 +146,6 @@ public abstract class AggregateSubtypeTypeR : TestBase<FeatureCheckDependency>
         Assert.Equal(typeof(ShoppingCartR).Name, stateAfter.PayloadTypeName);
     }
 
-
     [Fact]
     public async Task AfterChangePayloadType()
     {
@@ -161,11 +157,10 @@ public abstract class AggregateSubtypeTypeR : TestBase<FeatureCheckDependency>
                 commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
                     new AddItemToShoppingCartR { CartId = cartId, Code = "TEST2", Name = "Name2", Quantity = 2 });
             });
-
     }
 
     [Fact]
-    public async Task multiProjectionsTest()
+    public async Task MultiProjectionsTest()
     {
         RemoveAllFromDefaultAndDissolvable();
 
@@ -180,7 +175,6 @@ public abstract class AggregateSubtypeTypeR : TestBase<FeatureCheckDependency>
                 new AddItemToShoppingCartR { CartId = cartId1, Name = "Name2", Code = "Code2", Quantity = 2 });
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
                 new SubmitOrderR { CartId = cartId1, OrderSubmittedLocalTime = DateTime.Now, ReferenceVersion = commandResponse.Version });
-
 
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
                 new AddItemToShoppingCartR { CartId = cartId2, Name = "Name2", Code = "Code2", Quantity = 1 });
@@ -199,6 +193,5 @@ public abstract class AggregateSubtypeTypeR : TestBase<FeatureCheckDependency>
         Assert.Equal(4, list.Count);
         Assert.Equal(2, list.Count(m => m.Payload is ShoppingCartR));
         Assert.Equal(2, list.Count(m => m.Payload is PurchasedCartR));
-
     }
 }

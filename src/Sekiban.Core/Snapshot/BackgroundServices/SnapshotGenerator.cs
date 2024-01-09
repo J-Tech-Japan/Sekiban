@@ -65,7 +65,7 @@ public class SnapshotGenerator(
                             ?.MakeGenericMethod(aggregateType.Aggregate)
                             .Invoke(
                                 aggregateLoader,
-                                new object?[] { notification.AggregateId, notification.RootPartitionKey, taken.Payload.NextSnapshotVersion, null });
+                                [notification.AggregateId, notification.RootPartitionKey, taken.Payload.NextSnapshotVersion, null]);
                         if (awaitable is null)
                         {
                             continue;
@@ -135,7 +135,7 @@ public class SnapshotGenerator(
                         ?.MakeGenericMethod(projection.SingleProjectionPayloadType)
                         .Invoke(
                             aggregateLoader,
-                            new object?[] { notification.AggregateId, notification.RootPartitionKey, taken.Payload.NextSnapshotVersion, null });
+                            [notification.AggregateId, notification.RootPartitionKey, taken.Payload.NextSnapshotVersion, null]);
                     if (awaitable is null)
                     {
                         continue;

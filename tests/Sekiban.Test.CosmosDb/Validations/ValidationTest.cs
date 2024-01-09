@@ -99,7 +99,7 @@ public class ValidationTest
         };
         var vresults = m.ValidateProperties();
         var validationResults = vresults.ToList();
-        Assert.True(validationResults.Any());
+        Assert.NotEmpty(validationResults);
         Assert.Equal("Partner.Name", validationResults.First().MemberNames.First());
     }
 
@@ -113,7 +113,7 @@ public class ValidationTest
             Tel = "090-1111-2222",
             Email = "hoge@example.com",
             Partner = new Member { Name = "YAMADA Hanako", Age = 25, Tel = "080-1111-2222", Email = "hana@example.com" },
-            Friends = new List<Member> { new() { Name = "SUZUKI Ichiro", Age = 30 }, new() { Name = "Nakata Hidetoshi", Age = 28 } }
+            Friends = [new() { Name = "SUZUKI Ichiro", Age = 30 }, new() { Name = "Nakata Hidetoshi", Age = 28 }]
         };
         var vresults = m.ValidateProperties();
         Assert.False(vresults.Any());
@@ -129,11 +129,11 @@ public class ValidationTest
             Tel = "090-1111-2222",
             Email = "hoge@example.com",
             Partner = new Member { Name = "YAMADA Hanako", Age = 25, Tel = "080-1111-2222", Email = "hana@example.com" },
-            Friends = new List<Member> { new() { Name = "SUZUKI Ichiro", Age = 30 }, new() { Name = "Nakata Hidetoshi", Age = 90 } }
+            Friends = [new() { Name = "SUZUKI Ichiro", Age = 30 }, new() { Name = "Nakata Hidetoshi", Age = 90 }]
         };
         var vresults = m.ValidateProperties();
         var validationResults = vresults.ToList();
-        Assert.True(validationResults.Any());
+        Assert.NotEmpty(validationResults);
         Assert.Equal("Friends[1].Age", validationResults.First().MemberNames.First());
         Debug.Assert(vresults != null, nameof(vresults) + " != null");
         Assert.Single(validationResults);

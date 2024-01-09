@@ -49,7 +49,7 @@ public class BaseGetAggregateController<TAggregatePayload>(
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null)
     {
-        if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+        return webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.Get,
                 this,
                 typeof(TAggregatePayload),
@@ -57,11 +57,9 @@ public class BaseGetAggregateController<TAggregatePayload>(
                 null,
                 HttpContext,
                 serviceProvider) ==
-            AuthorizeResultType.Denied)
-        {
-            return Unauthorized();
-        }
-        return Ok(await aggregateLoader.AsDefaultStateFromInitialAsync<TAggregatePayload>(id, rootPartitionKey, toVersion));
+            AuthorizeResultType.Denied
+            ? (ActionResult<AggregateState<TAggregatePayload>>)Unauthorized()
+            : (ActionResult<AggregateState<TAggregatePayload>>)Ok(await aggregateLoader.AsDefaultStateFromInitialAsync<TAggregatePayload>(id, rootPartitionKey, toVersion));
     }
 
     [HttpGet]

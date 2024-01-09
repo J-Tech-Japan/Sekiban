@@ -25,5 +25,5 @@ public record SnapshotManager
     public static SnapshotManager CreateInitialPayload(SnapshotManager? _) =>
         new(ImmutableList<string>.Empty, ImmutableList<string>.Empty, SekibanDateProducer.GetRegistered().UtcNow);
     internal static string SnapshotKey(string aggregateTypeName, Guid targetAggregateId, int nextSnapshotVersion) =>
-        $"{aggregateTypeName}_{targetAggregateId.ToString()}_{nextSnapshotVersion}";
+        $"{aggregateTypeName}_{targetAggregateId}_{nextSnapshotVersion}";
 }

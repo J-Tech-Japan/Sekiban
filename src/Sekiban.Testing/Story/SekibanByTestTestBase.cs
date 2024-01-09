@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Sekiban.Core.Exceptions;
 using Xunit;
 namespace Sekiban.Testing.Story;
 
@@ -25,11 +26,7 @@ public abstract class SekibanByTestTestBase : IDisposable
     /// <exception cref="Exception"></exception>
     public T GetService<T>()
     {
-        var toreturn = ServiceProvider.GetService<T>();
-        if (toreturn is null)
-        {
-            throw new Exception("The object has not been registered." + typeof(T));
-        }
+        var toreturn = ServiceProvider.GetService<T>() ?? throw new SekibanTypeNotFoundException("The object has not been registered." + typeof(T));
         return toreturn;
     }
 }

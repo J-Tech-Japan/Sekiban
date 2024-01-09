@@ -115,11 +115,9 @@ public class CosmosDbFactory(
     private Result<string> GetConnectionString()
     {
         var dbOption = GetSekibanCosmosDbOption();
-        if (string.IsNullOrWhiteSpace(dbOption.CosmosConnectionString))
-        {
-            return new Result<string>(new InvalidDataException(""));
-        }
-        return dbOption.CosmosConnectionString ?? string.Empty;
+        return string.IsNullOrWhiteSpace(dbOption.CosmosConnectionString)
+            ? new Result<string>(new InvalidDataException(""))
+            : (Result<string>)(dbOption.CosmosConnectionString ?? string.Empty);
     }
     public string GetDatabaseId()
     {
@@ -256,8 +254,8 @@ public class CosmosDbFactory(
         memoryCache.Cache.Remove(GetMemoryCacheContainerKey(documentType, databaseId, containerId, SekibanContextIdentifier()));
     }
 
-    private IReadOnlyList<string> GetPartitionKeyPaths(bool supportsHierarchicalPartitions) =>
+    private static IReadOnlyList<string> GetPartitionKeyPaths(bool supportsHierarchicalPartitions) =>
         supportsHierarchicalPartitions
-            ? new List<string> { "/RootPartitionKey", "/AggregateType", "/PartitionKey" }
-            : new List<string> { "/PartitionKey" };
+            ? ["/RootPartitionKey", "/AggregateType", "/PartitionKey"]
+            : ["/PartitionKey"];
 }

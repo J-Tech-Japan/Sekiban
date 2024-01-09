@@ -95,7 +95,7 @@ public static class ValidationExtensions
     public static void ThrowIfValidationFailed(this object targetClass, string baseKeyPath = "")
     {
         var validationResults = targetClass.ValidateProperties(baseKeyPath).ToList();
-        if (!validationResults.Any())
+        if (validationResults.Count == 0)
         {
             return;
         }

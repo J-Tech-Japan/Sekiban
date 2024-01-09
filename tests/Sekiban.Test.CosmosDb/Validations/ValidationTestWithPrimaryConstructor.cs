@@ -146,7 +146,7 @@ public class ValidationTestWithPrimaryConstructor
             ImmutableList<MemberWithPrimaryConstructor>.Empty);
         var vresults = m.ValidateProperties();
         var validationResults = vresults.ToList();
-        Assert.True(validationResults.Any());
+        Assert.NotEmpty(validationResults);
         Assert.Equal("Partner.Name", validationResults.First().MemberNames.First());
     }
 
@@ -220,7 +220,7 @@ public class ValidationTestWithPrimaryConstructor
             }.ToImmutableList());
         var vresults = m.ValidateProperties();
         var validationResults = vresults.ToList();
-        Assert.True(validationResults.Any());
+        Assert.NotEmpty(validationResults);
         Assert.Equal("Friends[1].Age", validationResults.First().MemberNames.First());
         Debug.Assert(vresults != null, nameof(vresults) + " != null");
         Assert.Single(validationResults);

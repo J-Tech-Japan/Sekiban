@@ -8,12 +8,12 @@ public class SimpleExceptionFilter : ExceptionFilterAttribute
 {
     public override void OnException(ExceptionContext context)
     {
-        context.HttpContext.Response.StatusCode = GetStatusCode(context);
+        context.HttpContext.Response.StatusCode = SimpleExceptionFilter.GetStatusCode(context);
         context.HttpContext.Response.ContentType = "application/json";
-        context.Result = GetJsonResult(context);
+        context.Result = SimpleExceptionFilter.GetJsonResult(context);
         base.OnException(context);
     }
-    public int GetStatusCode(ExceptionContext context) =>
+    public static int GetStatusCode(ExceptionContext context) =>
         context.Exception switch
         {
             SekibanValidationErrorsException => (int)HttpStatusCode.BadRequest,
@@ -21,7 +21,7 @@ public class SimpleExceptionFilter : ExceptionFilterAttribute
             _ => (int)HttpStatusCode.InternalServerError
         };
 
-    public JsonResult GetJsonResult(ExceptionContext context) =>
+    public static JsonResult GetJsonResult(ExceptionContext context) =>
         context.Exception switch
         {
             ISekibanException sekibanException => new JsonResult(

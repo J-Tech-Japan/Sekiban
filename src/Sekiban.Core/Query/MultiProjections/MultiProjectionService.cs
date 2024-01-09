@@ -41,7 +41,7 @@ public class MultiProjectionService : IMultiProjectionService
         var projection = await GetAggregateListObject<TAggregatePayload>(rootPartitionKey, includesSortableUniqueIdValue);
         return queryListType switch
         {
-            QueryListType.ActiveAndDeleted => projection.Payload.List.ToList(),
+            QueryListType.ActiveAndDeleted => [.. projection.Payload.List],
             QueryListType.ActiveOnly => projection.Payload.List.Where(m => m.GetIsDeleted() == false).ToList(),
             QueryListType.DeletedOnly => projection.Payload.List.Where(m => m.GetIsDeleted()).ToList(),
             _ => projection.Payload.List.Where(m => m.GetIsDeleted() == false).ToList()
@@ -66,7 +66,7 @@ public class MultiProjectionService : IMultiProjectionService
         var projection = await GetSingleProjectionListObject<TSingleProjectionPayload>(rootPartitionKey, includesSortableUniqueIdValue);
         return queryListType switch
         {
-            QueryListType.ActiveAndDeleted => projection.Payload.List.ToList(),
+            QueryListType.ActiveAndDeleted => [.. projection.Payload.List],
             QueryListType.ActiveOnly => projection.Payload.List.Where(m => m.GetIsDeleted() == false).ToList(),
             QueryListType.DeletedOnly => projection.Payload.List.Where(m => m.GetIsDeleted()).ToList(),
             _ => projection.Payload.List.Where(m => m.GetIsDeleted() == false).ToList()

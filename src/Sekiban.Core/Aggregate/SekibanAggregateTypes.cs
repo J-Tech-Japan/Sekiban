@@ -8,8 +8,8 @@ namespace Sekiban.Core.Aggregate;
 /// </summary>
 public class SekibanAggregateTypes
 {
-    private readonly List<SingleProjectionAggregateType> _registeredCustomProjectorTypes = new();
-    private readonly List<DefaultAggregateType> _registeredTypes = new();
+    private readonly List<SingleProjectionAggregateType> _registeredCustomProjectorTypes = [];
+    private readonly List<DefaultAggregateType> _registeredTypes = [];
 
     public IReadOnlyCollection<DefaultAggregateType> AggregateTypes { get; }
     public IReadOnlyCollection<SingleProjectionAggregateType> SingleProjectionTypes { get; }

@@ -49,7 +49,7 @@ public record SnapshotDocument : Document
 
     public IAggregateStateCommon? GetState() => Snapshot as IAggregateStateCommon;
 
-    public TProjection? ToProjection<TProjection>(SekibanAggregateTypes sekibanAggregateTypes) where TProjection : IAggregateCommon
+    public static TProjection? ToProjection<TProjection>(SekibanAggregateTypes sekibanAggregateTypes) where TProjection : IAggregateCommon
     {
         var projectionType = typeof(TProjection);
         if (!projectionType.IsGenericType) { return default; }

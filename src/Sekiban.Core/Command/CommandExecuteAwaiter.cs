@@ -10,7 +10,7 @@ public class CommandExecuteAwaiter : ICommandExecuteAwaiter
     private static readonly ConcurrentDictionary<string, TaskCompletionSource<bool>> _taskCompletionSources = new();
     public async Task WaitUntilOtherThreadFinished<TAggregatePayload>(Guid aggregateId)
     {
-        if (_taskCompletionSources.TryGetValue(GetKey<TAggregatePayload>(aggregateId), out var tcs))
+        if (_taskCompletionSources.TryGetValue(CommandExecuteAwaiter.GetKey<TAggregatePayload>(aggregateId), out var tcs))
         {
             await tcs.Task;
         }
@@ -18,16 +18,16 @@ public class CommandExecuteAwaiter : ICommandExecuteAwaiter
     public async Task StartTaskAsync<TAggregatePayload>(Guid aggregateId)
     {
         await Task.CompletedTask;
-        _taskCompletionSources.AddOrUpdate(GetKey<TAggregatePayload>(aggregateId), new TaskCompletionSource<bool>(), (_, oldValue) => oldValue);
+        _taskCompletionSources.AddOrUpdate(CommandExecuteAwaiter.GetKey<TAggregatePayload>(aggregateId), new TaskCompletionSource<bool>(), (_, oldValue) => oldValue);
     }
     public async Task EndTaskAsync<TAggregatePayload>(Guid aggregateId)
     {
-        if (_taskCompletionSources.TryRemove(GetKey<TAggregatePayload>(aggregateId), out var tcs))
+        if (_taskCompletionSources.TryRemove(CommandExecuteAwaiter.GetKey<TAggregatePayload>(aggregateId), out var tcs))
         {
             tcs.SetResult(true);
         }
         await Task.CompletedTask;
     }
 
-    private string GetKey<TAggregatePayload>(Guid aggregateId) => $"{typeof(TAggregatePayload).Name}_{aggregateId}";
+    private static string GetKey<TAggregatePayload>(Guid aggregateId) => $"{typeof(TAggregatePayload).Name}_{aggregateId}";
 }

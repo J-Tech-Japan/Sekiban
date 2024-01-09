@@ -84,14 +84,14 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon, ISingleProje
         if (!aggregatePayloadIn.IsInstanceOfType(Payload)) { return null; }
 
         var aggregatePayloadOut = eventPayload.GetAggregatePayloadOutType();
-        var methods = GetType().GetMethods(BindingFlags.Static | BindingFlags.NonPublic).Where(m => m.Name == nameof(ApplyEventToAggregatePayload));
+        var methods = GetType().GetMethods(BindingFlags.Static | BindingFlags.Public).Where(m => m.Name == nameof(ApplyEventToAggregatePayload));
         var method = methods.First(m => m.IsGenericMethodDefinition && m.GetGenericArguments().Length == 3);
         var genericMethod = method.MakeGenericMethod(aggregatePayloadIn, aggregatePayloadOut, eventType);
         return (IAggregatePayloadCommon?)genericMethod.Invoke(this, new object[] { Payload, ev });
     }
 
     // ReSharper disable once ReturnTypeCanBeNotNullable
-    private static TAggregatePayloadOut? ApplyEventToAggregatePayload<TAggregatePayloadIn, TAggregatePayloadOut, TEventPayload>(
+    public static TAggregatePayloadOut? ApplyEventToAggregatePayload<TAggregatePayloadIn, TAggregatePayloadOut, TEventPayload>(
         TAggregatePayloadIn aggregatePayload,
         Event<TEventPayload> ev) where TAggregatePayloadIn : IAggregatePayloadGeneratable<TAggregatePayloadIn>
         where TAggregatePayloadOut : IAggregatePayloadGeneratable<TAggregatePayloadOut>
@@ -101,13 +101,9 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon, ISingleProje
     internal IEvent AddAndApplyEvent<TEventPayload>(TEventPayload eventPayload, string rootPartitionKey) where TEventPayload : IEventPayloadCommon
     {
         var aggregatePayloadBase = Payload.GetBaseAggregatePayloadType();
-        // var aggregatePayloadBase = typeof(TEventPayload);
         var ev = Event<TEventPayload>.GenerateEvent(AggregateId, aggregatePayloadBase, eventPayload, rootPartitionKey);
-        var result = GetAggregatePayloadWithAppliedEvent(Payload, ev);
-        if (result is null)
-        {
+        _ = GetAggregatePayloadWithAppliedEvent(Payload, ev) ??
             throw new SekibanEventNotImplementedException($"{eventPayload.GetType().Name} Event not implemented on {GetType().Name} Aggregate");
-        }
         ev = ev with { Version = Version };
         ApplyEvent(ev);
         ev = ev with { Version = Version };

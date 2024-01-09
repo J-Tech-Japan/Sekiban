@@ -14,7 +14,7 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> : IComman
 {
     private readonly IAggregateLoader _aggregateLoader;
     private readonly bool _checkVersion;
-    private readonly List<IEvent> _events = new();
+    private readonly List<IEvent> _events = [];
     private Aggregate<TAggregatePayload>? _aggregate;
 
     public CommandHandlerAdapter(IAggregateLoader aggregateLoader, bool checkVersion = true)

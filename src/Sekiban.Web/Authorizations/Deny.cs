@@ -16,10 +16,8 @@ public class Deny<TDefinitionType> : IAuthorizeDefinition where TDefinitionType 
         HttpContext httpContext,
         IServiceProvider serviceProvider)
     {
-        if (new TDefinitionType().IsMatches(authorizeMethodType, aggregateType, commandType))
-        {
-            return AuthorizeResultType.Denied;
-        }
-        return AuthorizeResultType.Passed;
+        return new TDefinitionType().IsMatches(authorizeMethodType, aggregateType, commandType)
+            ? AuthorizeResultType.Denied
+            : AuthorizeResultType.Passed;
     }
 }

@@ -29,7 +29,7 @@ public static class EventHelper
         var methodName = nameof(Aggregate<TAggregatePayload>.AddAndApplyEvent);
         var aggregateMethodBase = aggregateType.GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Instance);
         var aggregateMethod = aggregateMethodBase?.MakeGenericMethod(eventPayload.GetType());
-        return aggregateMethod?.Invoke(aggregate, new object?[] { eventPayload, rootPartitionKey }) as IEvent ??
+        return aggregateMethod?.Invoke(aggregate, [eventPayload, rootPartitionKey]) as IEvent ??
             throw new SekibanEventFailedToActivateException();
     }
     /// <summary>

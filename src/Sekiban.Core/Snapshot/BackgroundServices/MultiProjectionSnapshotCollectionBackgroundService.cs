@@ -15,13 +15,12 @@ namespace Sekiban.Core.Snapshot.BackgroundServices;
 public class MultiProjectionSnapshotCollectionBackgroundService<TSettings> : BackgroundService
     where TSettings : IMultiProjectionsSnapshotGenerateSetting
 {
-    private IServiceProvider _services { get; }
-    public MultiProjectionSnapshotCollectionBackgroundService(IServiceProvider services) => _services = services;
+    private readonly IServiceProvider _services;
 
+    public MultiProjectionSnapshotCollectionBackgroundService(IServiceProvider services) => _services = services;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-
         using var scope = _services.CreateScope();
         var logger = scope.ServiceProvider.GetService<ILogger<MultiProjectionSnapshotCollectionBackgroundService<TSettings>>>();
         var dateUtil = scope.ServiceProvider.GetService<ISekibanDateProducer>();
@@ -29,13 +28,10 @@ public class MultiProjectionSnapshotCollectionBackgroundService<TSettings> : Bac
         if (configuration is null) { return; }
         logger?.LogInformation("Starting Background Task - MultiProjectionSnapshotCollectionBackgroundService");
 
-
         var multiProjectionCollectionGenerator = scope.ServiceProvider.GetService<MultiProjectionCollectionGenerator>();
         if (multiProjectionCollectionGenerator is null) { return; }
 
-
         await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken); // 10秒待機
-
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -57,9 +53,7 @@ public class MultiProjectionSnapshotCollectionBackgroundService<TSettings> : Bac
             }
         }
         logger?.LogInformation("Ending Background Task - MultiProjectionSnapshotCollectionBackgroundService");
-
     }
-
 
     public static IMultiProjectionsSnapshotGenerateSetting? GetSetting(IConfiguration configuration)
     {

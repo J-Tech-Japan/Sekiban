@@ -8,6 +8,7 @@ using Sekiban.Core.Cache;
 using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Documents;
+using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
@@ -39,7 +40,9 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
     protected readonly IQueryExecutor queryExecutor;
     protected readonly SekibanTestFixture sekibanTestFixture;
     protected readonly IServiceProvider serviceProvider;
-    protected ITestOutputHelper _testOutputHelper => sekibanTestFixture.TestOutputHelper!;
+
+    protected ITestOutputHelper TestOutputHelper => sekibanTestFixture.TestOutputHelper!;
+
     public TestBase(SekibanTestFixture sekibanTestFixture, ITestOutputHelper output, ISekibanServiceProviderGenerator providerGenerator)
     {
         sekibanTestFixture.TestOutputHelper = output;
@@ -80,11 +83,7 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
 
     public T GetService<T>()
     {
-        var toReturn = serviceProvider.GetService<T>();
-        if (toReturn is null)
-        {
-            throw new Exception("The object has not been registered." + typeof(T));
-        }
+        var toReturn = serviceProvider.GetService<T>() ?? throw new SekibanTypeNotFoundException("The object has not been registered." + typeof(T));
         return toReturn;
     }
 
@@ -94,6 +93,7 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
         documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Default).Wait();
         documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Default).Wait();
     }
+
     protected void RemoveAllFromDefaultAndDissolvable()
     {
         ResetInMemoryDocumentStoreAndCache();
