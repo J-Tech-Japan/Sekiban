@@ -24,11 +24,11 @@ public class InMemoryDocumentStore
         }
         var eventContainer = _containerDictionary[sekibanContextIdentifier];
         eventContainer.All.Add(document);
-        if (eventContainer.Partitions.ContainsKey(partition))
+        if (eventContainer.Partitions.TryGetValue(partition, out var value))
         {
-            if (eventContainer.Partitions[partition].All(m => m.Id != document.Id))
+            if (value.All(m => m.Id != document.Id))
             {
-                eventContainer.Partitions[partition].Add(document);
+                value.Add(document);
             }
         } else
         {
@@ -50,7 +50,7 @@ public class InMemoryDocumentStore
             _containerDictionary[sekibanContextIdentifier] = new InMemoryDocumentContainer<IEvent>();
         }
         var eventContainer = _containerDictionary[sekibanContextIdentifier];
-        return eventContainer.All.ToArray();
+        return [.. eventContainer.All];
     }
 
     public IEvent[] GetEventPartition(string partition, string sekibanContextIdentifier)
@@ -60,16 +60,12 @@ public class InMemoryDocumentStore
             _containerDictionary[sekibanContextIdentifier] = new InMemoryDocumentContainer<IEvent>();
         }
         var eventContainer = _containerDictionary[sekibanContextIdentifier];
-        if (eventContainer.Partitions.TryGetValue(partition, out var containerPartition))
-        {
-            return containerPartition.ToArray();
-        }
-        return new IEvent[] { };
+        return eventContainer.Partitions.TryGetValue(partition, out var containerPartition) ? [.. containerPartition] : ([]);
     }
 
     private class InMemoryDocumentContainer<T>
     {
-        public readonly BlockingCollection<T> All = new();
+        public readonly BlockingCollection<T> All = [];
         public readonly ConcurrentDictionary<string, BlockingCollection<T>> Partitions = new();
     }
 }

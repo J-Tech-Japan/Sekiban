@@ -58,7 +58,7 @@ public class SekibanApiListController<T>(
                     Method = "GET",
                     SampleResponseObject = Activator.CreateInstance(stateResponseType)!
                 },
-                new List<SekibanCommandInfo>());
+                []);
             list.Add(aggregateInfo);
             foreach (var (_, implementationType) in webDependencyDefinition.GetCommandDependencies())
             {
@@ -70,7 +70,7 @@ public class SekibanApiListController<T>(
                     }
                     var commandType = implementationType.GetCommandTypeFromCommandHandlerType();
                     var responseType = typeof(CommandExecutorResponse);
-                    aggregateInfo.commands.Add(
+                    aggregateInfo.Commands.Add(
                         new SekibanCommandInfo
                         {
                             Url = $"/{webDependencyDefinition.Options.CreateCommandPrefix}/{aggregateType.Name}/{commandType.Name}",

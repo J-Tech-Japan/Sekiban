@@ -11,11 +11,11 @@ namespace Sekiban.Core.Snapshot.BackgroundServices;
 /// </summary>
 public abstract class MultiProjectionSnapshotGenerateSettingAbstract : IMultiProjectionsSnapshotGenerateSetting
 {
-    protected List<Type> MultiProjectionsSnapshotTypes { get; } = new();
-    protected List<Type> AggregateListSnapshotTypes { get; } = new();
-    protected List<Type> SingleProjectionListSnapshotTypes { get; } = new();
+    protected List<Type> MultiProjectionsSnapshotTypes { get; } = [];
+    protected List<Type> AggregateListSnapshotTypes { get; } = [];
+    protected List<Type> SingleProjectionListSnapshotTypes { get; } = [];
     protected int MinimumNumberOfEventsToGenerateSnapshot { get; set; } = 3000;
-    protected List<string> RootPartitionKeys { get; } = new();
+    protected List<string> RootPartitionKeys { get; } = [];
     public int ExecuteIntervalSeconds { get; set; } = 3600;
     protected MultiProjectionSnapshotGenerateSettingAbstract()
     {

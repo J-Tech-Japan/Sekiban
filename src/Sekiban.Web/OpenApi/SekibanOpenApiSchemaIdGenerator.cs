@@ -1,4 +1,6 @@
-﻿namespace Sekiban.Web.OpenApi;
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace Sekiban.Web.OpenApi;
 
 public static class SekibanOpenApiSchemaIdGenerator
 {
@@ -6,13 +8,17 @@ public static class SekibanOpenApiSchemaIdGenerator
 
     private static string GenerateSchemaId(Type type, string prefix = "")
     {
-        var regular = GetRegularNameWithReplacedSymbol(type);
-        if (type.IsGenericType)
+        return (type.IsGenericType, string.IsNullOrEmpty(prefix), GetRegularNameWithReplacedSymbol(type)) switch
         {
-            return type.GenericTypeArguments.ToList()
-                .Aggregate(string.IsNullOrEmpty(prefix) ? regular : $"{prefix}_{regular}", (s, type1) => GenerateSchemaId(type1, s));
-        }
-        return string.IsNullOrEmpty(prefix) ? regular : $"{prefix}_{regular}";
+            (false, true, var r) => r
+            ,
+            (false, false, var r) => $"{prefix}_{r}"
+            ,
+            (true, true, var r) => type.GenericTypeArguments.ToList().Aggregate(r, (s, type1) => GenerateSchemaId(type1, s))
+            ,
+            (true, false, var r) => type.GenericTypeArguments.ToList().Aggregate($"{prefix}_{r}", (s, type1) => GenerateSchemaId(type1, s))
+            ,
+        };
     }
 
     private static string GetRegularNameWithReplacedSymbol(Type type) =>
@@ -28,10 +34,14 @@ public static class SekibanOpenApiSchemaIdGenerator
 
     private static string GetRegularName(Type type)
     {
-        if (type.IsGenericType)
+        return type switch
         {
-            return type.GetGenericTypeDefinition().Name.Split("`").FirstOrDefault() ?? string.Empty;
-        }
-        return type.FullName!.Contains('+') ? type.FullName.Split(".").LastOrDefault() ?? string.Empty : type.Name;
+            { IsGenericType: true } t => t.GetGenericTypeDefinition().Name.Split("`").FirstOrDefault()
+            ,
+            var t when t.FullName!.Contains('+') => t.FullName.Split(".").LastOrDefault()
+            ,
+            _ => type.Name
+            ,
+        } ?? string.Empty;
     }
 }

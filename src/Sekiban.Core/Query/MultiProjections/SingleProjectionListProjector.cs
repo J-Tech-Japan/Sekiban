@@ -15,11 +15,11 @@ public class SingleProjectionListProjector<TProjection, TState, TProjector> : IM
     where TState : IAggregateStateCommon
     where TProjector : ISingleProjector<TProjection>, new()
 {
-    private TProjector _projector = new();
+    private readonly TProjector _projector = new();
 
     private SingleProjectionListState<TState> State { get; set; }
 
-    public List<TProjection> List { get; private set; } = new();
+    public List<TProjection> List { get; private set; } = [];
 
     public SingleProjectionListProjector()
     {

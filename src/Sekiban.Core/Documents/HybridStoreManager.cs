@@ -11,7 +11,7 @@ public class HybridStoreManager
     public bool Enabled { get; set; }
     public HybridStoreManager(bool enabled) => Enabled = enabled;
 
-    public bool HasPartition(string partitionKey) => Enabled && HybridPartitionKeys.Keys.Contains(partitionKey);
+    public bool HasPartition(string partitionKey) => Enabled && HybridPartitionKeys.ContainsKey(partitionKey);
 
     public void ClearHybridPartitions()
     {
@@ -30,27 +30,14 @@ public class HybridStoreManager
 
     public string? SortableUniqueIdForPartitionKey(string partitionKey)
     {
-        if (!Enabled)
-        {
-            return null;
-        }
-        if (HybridPartitionKeys.Keys.Contains(partitionKey))
-        {
-            return HybridPartitionKeys[partitionKey].SortableUniqueId;
-        }
-        return null;
+        return Enabled && HybridPartitionKeys.TryGetValue(partitionKey, out var value)
+            ? value.SortableUniqueId
+            : null;
     }
+
     public bool FromInitialForPartitionKey(string partitionKey)
     {
-        if (!Enabled)
-        {
-            return false;
-        }
-        if (HybridPartitionKeys.Keys.Contains(partitionKey))
-        {
-            return HybridPartitionKeys[partitionKey].FromInitial;
-        }
-        return false;
+        return Enabled && HybridPartitionKeys.TryGetValue(partitionKey, out var value) && value.FromInitial;
     }
 
     private record HybridStatus(bool FromInitial, string SortableUniqueId);

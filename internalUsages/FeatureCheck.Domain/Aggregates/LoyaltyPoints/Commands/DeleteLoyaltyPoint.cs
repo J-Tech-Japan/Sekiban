@@ -5,11 +5,10 @@ namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
 
 public record DeleteLoyaltyPoint(Guid ClientId) : ICommand<LoyaltyPoint>
 {
-
     public int ReferenceVersion { get; init; }
+
     public DeleteLoyaltyPoint() : this(Guid.Empty)
-    {
-    }
+    { }
 
     public Guid GetAggregateId() => ClientId;
 

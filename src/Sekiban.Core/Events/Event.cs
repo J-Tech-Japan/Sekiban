@@ -35,7 +35,7 @@ public record Event<TEventPayload> : Document, IEvent where TEventPayload : IEve
     /// <summary>
     ///     Event Call histories
     /// </summary>
-    public List<CallHistory> CallHistories { get; init; } = new();
+    public List<CallHistory> CallHistories { get; init; } = [];
     /// <summary>
     ///     Get Payload object
     /// </summary>
@@ -59,13 +59,13 @@ public record Event<TEventPayload> : Document, IEvent where TEventPayload : IEve
         if (payload.GetType().IsEventConvertingPayloadType())
         {
             var method = payload.GetType().GetMethod("ConvertTo");
-            var convertedPayload = (dynamic?)method?.Invoke(payload, new object?[] { });
+            var convertedPayload = (dynamic?)method?.Invoke(payload, []);
             if (convertedPayload is not null)
             {
                 var convertedType = payload.GetType().GetEventConvertingPayloadConvertingType();
                 var changeEventMethod = GetType().GetMethod("ChangePayload");
                 var genericMethod = changeEventMethod?.MakeGenericMethod(convertedType);
-                var convertedEvent = (dynamic?)genericMethod?.Invoke(this, new object?[] { convertedPayload });
+                var convertedEvent = (dynamic?)genericMethod?.Invoke(this, [convertedPayload]);
                 if (convertedEvent is not null)
                 {
                     return (convertedEvent, convertedPayload);

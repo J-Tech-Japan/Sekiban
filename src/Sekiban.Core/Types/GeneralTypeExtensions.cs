@@ -15,27 +15,16 @@ public static class GeneralTypeExtensions
     /// <exception cref="ArgumentException"></exception>
     public static bool DoesInheritFromGenericType(this Type type, Type genericType)
     {
-        if (type == null)
-        {
-            throw new ArgumentNullException(nameof(type));
-        }
-        if (genericType == null)
-        {
-            throw new ArgumentNullException(nameof(genericType));
-        }
+        ArgumentNullException.ThrowIfNull(type);
+        ArgumentNullException.ThrowIfNull(genericType);
 
         if (!genericType.IsGenericTypeDefinition)
-        {
             throw new ArgumentException("The genericType must be a generic type definition.", nameof(genericType));
-        }
 
-        if (type.IsGenericType && type.GetGenericTypeDefinition() == genericType)
-        {
-            return true;
-        }
-
-        return type.BaseType != null && DoesInheritFromGenericType(type.BaseType, genericType);
+        return (type.IsGenericType && type.GetGenericTypeDefinition() == genericType)
+            || (type.BaseType != null && DoesInheritFromGenericType(type.BaseType, genericType));
     }
+
     /// <summary>
     ///     Get the type that inherits from the generic type.
     /// </summary>
@@ -46,29 +35,21 @@ public static class GeneralTypeExtensions
     /// <exception cref="ArgumentException"></exception>
     public static Type GetInheritFromGenericType(this Type type, Type genericType)
     {
-        if (type == null)
-        {
-            throw new ArgumentNullException(nameof(type));
-        }
-        if (genericType == null)
-        {
-            throw new ArgumentNullException(nameof(genericType));
-        }
+        ArgumentNullException.ThrowIfNull(type);
+        ArgumentNullException.ThrowIfNull(genericType);
 
-        if (!genericType.IsGenericTypeDefinition)
+        return (type, genericType) switch
         {
-            throw new ArgumentException("The genericType must be a generic type definition.", nameof(genericType));
-        }
-
-        if (type.IsGenericType && type.GetGenericTypeDefinition() == genericType)
-        {
-            return type;
-        }
-
-        return type.BaseType != null
-            ? GetInheritFromGenericType(type.BaseType, genericType)
-            : throw new ArgumentException("The type does not implement the generic interface.", nameof(type));
+            (_, { IsGenericTypeDefinition: false }) => throw new ArgumentException("The genericType must be a generic type definition.", nameof(genericType))
+            ,
+            ({ IsGenericType: true } t, var g) when g == t.GetGenericTypeDefinition() => t
+            ,
+            ({ BaseType: not null } t, var g) => GetInheritFromGenericType(t.BaseType, g)
+            ,
+            _ => throw new ArgumentException("The type does not implement the generic interface.", nameof(type))
+        };
     }
+
     /// <summary>
     ///     Check given type is implementing generic interface or not.
     /// </summary>
@@ -77,8 +58,9 @@ public static class GeneralTypeExtensions
     /// <returns></returns>
     public static bool DoesImplementingFromGenericInterfaceType(this Type type, Type genericInterface)
     {
-        return type.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == genericInterface);
+        return type.GetInterfaces().Exists(i => i.IsGenericType && i.GetGenericTypeDefinition() == genericInterface);
     }
+
     /// <summary>
     ///     Get the type that implements the generic interface.
     /// </summary>
@@ -88,10 +70,9 @@ public static class GeneralTypeExtensions
     /// <exception cref="ArgumentException"></exception>
     public static Type GetImplementingFromGenericInterfaceType(this Type type, Type genericInterface)
     {
-        return type.GetInterfaces().FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == genericInterface) ??
-            throw new ArgumentException("The type does not implement the generic interface.", nameof(type));
+        return type.GetInterfaces().FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == genericInterface)
+            ?? throw new ArgumentException("The type does not implement the generic interface.", nameof(type));
     }
-
 
     /// <summary>
     ///     Create Default Instance
@@ -152,7 +133,7 @@ public static class GeneralTypeExtensions
 
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IEnumerable<>))
         {
-            Type genericType = type.GetGenericArguments()[0];
+            var genericType = type.GetGenericArguments()[0];
             var constructedListType = typeof(List<>).MakeGenericType(genericType);
             var genericTypeList = (dynamic?)Activator.CreateInstance(constructedListType) ?? throw new InvalidCastException();
             genericTypeList.Add(genericType.CreateDefaultInstance());

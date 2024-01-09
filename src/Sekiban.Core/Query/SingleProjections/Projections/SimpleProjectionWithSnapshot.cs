@@ -12,6 +12,7 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
 {
     private readonly IDocumentRepository _documentRepository;
     private readonly ISingleProjectionFromInitial singleProjectionFromInitial;
+
     public SimpleProjectionWithSnapshot(IDocumentRepository documentRepository, ISingleProjectionFromInitial singleProjectionFromInitial)
     {
         _documentRepository = documentRepository;
@@ -81,14 +82,14 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
                     }
                 }
             });
-        if (aggregate.Version == 0)
+
+        return (aggregate?.Version, toVersion) switch
         {
-            return default;
-        }
-        if (toVersion.HasValue && aggregate.Version < toVersion.Value)
-        {
-            throw new SekibanVersionNotReachToSpecificVersion();
-        }
-        return aggregate;
+            (0, _) => default
+            ,
+            (int a, int t) when a < t => throw new SekibanVersionNotReachToSpecificVersion()
+            ,
+            _ => aggregate
+        };
     }
 }

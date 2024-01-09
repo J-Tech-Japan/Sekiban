@@ -18,6 +18,7 @@ public class MultiProjectionSnapshotGenerator(
     IDocumentWriter documentWriter,
     ILogger<MultiProjectionSnapshotGenerator> logger) : IMultiProjectionSnapshotGenerator
 {
+    private static readonly JsonSerializerOptions _jsonSerializerOptions = new();
 
     public async Task<MultiProjectionState<TProjectionPayload>> GenerateMultiProjectionSnapshotAsync<TProjection, TProjectionPayload>(
         int minimumNumberOfEventsToGenerateSnapshot,
@@ -25,12 +26,14 @@ public class MultiProjectionSnapshotGenerator(
         where TProjectionPayload : IMultiProjectionPayloadCommon
     {
         var projector = new TProjection();
+
         // if there is snapshot, load it, if not make a new one
         var state = await GetCurrentStateAsync<TProjectionPayload>(rootPartitionKey);
         if (state.Version > 0)
         {
             projector.ApplySnapshot(state);
         }
+
         // get events from after snapshot or the initial and project them
         await documentRepository.GetAllEventsAsync(
             typeof(TProjection),
@@ -49,13 +52,13 @@ public class MultiProjectionSnapshotGenerator(
                     }
                 }
             });
-        // save snapshot
 
+        // save snapshot
         var usedVersion = projector.Version - state.Version;
         if (usedVersion > minimumNumberOfEventsToGenerateSnapshot)
         {
             state = projector.ToState();
-            var json = JsonSerializer.Serialize(state, new JsonSerializerOptions());
+            var json = JsonSerializer.Serialize(state, _jsonSerializerOptions);
             var memoryStream = new MemoryStream(Encoding.UTF8.GetBytes(json));
             var blobId = Guid.NewGuid();
             await blobAccessor.SetBlobWithGZipAsync(
@@ -66,20 +69,21 @@ public class MultiProjectionSnapshotGenerator(
             await documentWriter.SaveAsync(snapshotDocument, typeof(TProjectionPayload));
             logger.LogInformation(
                 "Generate multi snapshot for {ProjectionName} and rootPartitionKey {RootPartitionKey} because used version is {UsedVersion}",
-                ProjectionName(typeof(TProjectionPayload)),
+                MultiProjectionSnapshotGenerator.ProjectionName(typeof(TProjectionPayload)),
                 rootPartitionKey,
                 usedVersion);
         } else
         {
             logger.LogInformation(
                 "skip making snapshot for {ProjectionName} and rootPartitionKey {RootPartitionKey} because used version is {UsedVersion} and minimum is {MinimumNumberOfEventsToGenerateSnapshot}",
-                ProjectionName(typeof(TProjectionPayload)),
+                MultiProjectionSnapshotGenerator.ProjectionName(typeof(TProjectionPayload)),
                 rootPartitionKey,
                 usedVersion,
                 minimumNumberOfEventsToGenerateSnapshot);
         }
         return projector.ToState();
     }
+
     public async Task<MultiProjectionState<TProjectionPayload>> GetCurrentStateAsync<TProjectionPayload>(string rootPartitionKey)
         where TProjectionPayload : IMultiProjectionPayloadCommon
     {
@@ -115,6 +119,7 @@ public class MultiProjectionSnapshotGenerator(
         }
         return new MultiProjectionState<TProjectionPayload>();
     }
+
     private static TProjectionPayload GeneratePayload<TProjectionPayload>() where TProjectionPayload : IMultiProjectionPayloadCommon
     {
         var payloadType = typeof(TProjectionPayload);
@@ -123,7 +128,7 @@ public class MultiProjectionSnapshotGenerator(
             var method = payloadType.GetMethod(
                 nameof(IMultiProjectionPayloadGeneratePayload<TProjectionPayload>.CreateInitialPayload),
                 BindingFlags.Static | BindingFlags.Public);
-            var created = method?.Invoke(payloadType, new object?[] { });
+            var created = method?.Invoke(payloadType, []);
             return created is TProjectionPayload projectionPayload
                 ? projectionPayload
                 : throw new SekibanMultiProjectionPayloadCreateFailedException(payloadType.FullName ?? "");
@@ -131,10 +136,10 @@ public class MultiProjectionSnapshotGenerator(
         throw new SekibanMultiProjectionPayloadCreateFailedException(payloadType.FullName ?? "");
     }
 
-    public string FilenameForSnapshot(Type projectionPayload, Guid id, SortableUniqueIdValue sortableUniqueId) =>
-        $"{ProjectionName(projectionPayload)}_{sortableUniqueId.GetTicks().Ticks:00000000000000000000}_{id}.json.gz";
+    public static string FilenameForSnapshot(Type projectionPayload, Guid id, SortableUniqueIdValue sortableUniqueId) =>
+        $"{MultiProjectionSnapshotGenerator.ProjectionName(projectionPayload)}_{sortableUniqueId.GetTicks().Ticks:00000000000000000000}_{id}.json.gz";
 
-    private string ProjectionName(Type projectionType) =>
+    private static string ProjectionName(Type projectionType) =>
         projectionType.IsSingleProjectionListStateType()
             ? $"list_{projectionType.GetAggregatePayloadOrSingleProjectionPayloadTypeFromSingleProjectionListStateType().Name}"
             : projectionType.Name;

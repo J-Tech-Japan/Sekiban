@@ -16,10 +16,8 @@ public class Allow<TDefinitionType> : IAuthorizeDefinition where TDefinitionType
         HttpContext httpContext,
         IServiceProvider serviceProvider)
     {
-        if (new TDefinitionType().IsMatches(authorizeMethodType, aggregateType, commandType))
-        {
-            return AuthorizeResultType.Allowed;
-        }
-        return AuthorizeResultType.Passed;
+        return new TDefinitionType().IsMatches(authorizeMethodType, aggregateType, commandType)
+            ? AuthorizeResultType.Allowed
+            : AuthorizeResultType.Passed;
     }
 }

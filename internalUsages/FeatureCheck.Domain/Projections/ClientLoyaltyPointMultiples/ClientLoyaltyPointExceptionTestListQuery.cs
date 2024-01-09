@@ -14,8 +14,8 @@ public class ClientLoyaltyPointExceptionTestListQuery : IMultiProjectionListQuer
         MultiProjectionState<ClientLoyaltyPointMultiProjection> projection) =>
         queryParam.Param switch
         {
-            0 => new List<Response> { new(true) },
-            1 => new List<Response> { new(false) },
+            0 => [new(true)],
+            1 => [new(false)],
             2 => throw new InvalidDataException("Invalid query parameter"),
             _ => throw new NotImplementedException()
         };

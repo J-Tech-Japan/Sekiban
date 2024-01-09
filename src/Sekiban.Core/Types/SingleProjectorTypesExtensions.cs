@@ -1,3 +1,4 @@
+using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.MultiProjections;
 using System.Reflection;
 namespace Sekiban.Core.Types;
@@ -31,6 +32,6 @@ public static class SingleProjectorTypesExtensions
         var baseType = type.GetInheritFromGenericType(typeof(SingleProjectionListProjector<,,>));
         var projector = baseType.GenericTypeArguments[2];
         var instance = Activator.CreateInstance(projector) as dynamic;
-        return instance?.GetOriginalAggregatePayloadType() ?? throw new Exception("Could not get original aggregate type");
+        return instance?.GetOriginalAggregatePayloadType() ?? throw new SekibanTypeNotFoundException("Could not get original aggregate type");
     }
 }

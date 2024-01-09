@@ -14,7 +14,7 @@ public record MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>
     /// <summary>
     ///     Unsafe (could be changed order) events.
     /// </summary>
-    public List<IEvent> UnsafeEvents { get; init; } = new();
+    public List<IEvent> UnsafeEvents { get; init; } = [];
 
     /// <summary>
     ///     State for current. Could retrieve updated events with unsafe events.

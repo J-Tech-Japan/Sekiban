@@ -1,6 +1,7 @@
 using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
+using Sekiban.Core.Exceptions;
 using Sekiban.Core.Shared;
 namespace Sekiban.Core.Query.MultiProjections.Projections;
 
@@ -44,7 +45,7 @@ public class SimpleMultiProjection : IMultiProjection
         where TProjectionPayload : IMultiProjectionPayloadCommon
     {
         await Task.CompletedTask;
-        var list = JsonSerializer.Deserialize<List<JsonElement>>(stream) ?? throw new Exception("Could not deserialize file");
+        var list = JsonSerializer.Deserialize<List<JsonElement>>(stream) ?? throw new SekibanSerializerException("Could not deserialize file");
         var events = (IList<IEvent>)list.Select(m => SekibanJsonHelper.DeserializeToEvent(m, _registeredEventTypes.RegisteredTypes))
             .Where(m => m is not null)
             .ToList();
@@ -61,7 +62,8 @@ public class SimpleMultiProjection : IMultiProjection
 
         while (eventStream != null)
         {
-            var list = JsonSerializer.Deserialize<List<JsonElement>>(eventStream) ?? throw new Exception("Could not deserialize file");
+            var list = JsonSerializer.Deserialize<List<JsonElement>>(eventStream) ??
+                throw new SekibanSerializerException("Could not deserialize file");
             var events = (IList<IEvent>)list.Select(m => SekibanJsonHelper.DeserializeToEvent(m, _registeredEventTypes.RegisteredTypes))
                 .Where(m => m is not null)
                 .ToList();

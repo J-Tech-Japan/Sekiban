@@ -6,7 +6,7 @@ namespace Sekiban.Core.Events;
 /// </summary>
 public class RegisteredEventTypes
 {
-    private readonly List<Type> _registeredTypes = new();
+    private readonly List<Type> _registeredTypes = [];
     /// <summary>
     ///     Readonly Event Types
     /// </summary>

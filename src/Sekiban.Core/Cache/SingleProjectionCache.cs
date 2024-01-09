@@ -25,7 +25,7 @@ public class SingleProjectionCache : ISingleProjectionCache
         where TAggregate : IAggregateCommon, ISingleProjection where TState : IAggregateStateCommon
     {
         _memoryCache.Cache.Set(
-            GetCacheKeyForSingleProjectionContainer<TAggregate>(aggregateId),
+            SingleProjectionCache.GetCacheKeyForSingleProjectionContainer<TAggregate>(aggregateId),
             container,
             GetMemoryCacheOptionsForSingleProjectionContainer());
     }
@@ -33,7 +33,7 @@ public class SingleProjectionCache : ISingleProjectionCache
     public SingleMemoryCacheProjectionContainer<TAggregate, TState>? GetContainer<TAggregate, TState>(Guid aggregateId)
         where TAggregate : IAggregateCommon, ISingleProjection where TState : IAggregateStateCommon =>
         _memoryCache.Cache.Get<SingleMemoryCacheProjectionContainer<TAggregate, TState>>(
-            GetCacheKeyForSingleProjectionContainer<TAggregate>(aggregateId));
+            SingleProjectionCache.GetCacheKeyForSingleProjectionContainer<TAggregate>(aggregateId));
 
     private MemoryCacheEntryOptions GetMemoryCacheOptionsForSingleProjectionContainer() =>
         new()
@@ -44,13 +44,10 @@ public class SingleProjectionCache : ISingleProjectionCache
             // eleted after two hours
         };
 
-    public string GetCacheKeyForSingleProjectionContainer<TSingleProjectionOrAggregate>(Guid aggregateId)
+    public static string GetCacheKeyForSingleProjectionContainer<TSingleProjectionOrAggregate>(Guid aggregateId)
     {
-        if (typeof(TSingleProjectionOrAggregate).IsSingleProjectionType())
-        {
-            return
-                $"{typeof(TSingleProjectionOrAggregate).GetSingleProjectionPayloadFromSingleProjectionType().GetAggregatePayloadTypeFromSingleProjectionPayload().Name}_{aggregateId}";
-        }
-        return "Aggregate" + typeof(TSingleProjectionOrAggregate).GetAggregatePayloadTypeFromAggregate().Name + aggregateId;
+        return typeof(TSingleProjectionOrAggregate).IsSingleProjectionType()
+            ? $"{typeof(TSingleProjectionOrAggregate).GetSingleProjectionPayloadFromSingleProjectionType().GetAggregatePayloadTypeFromSingleProjectionPayload().Name}_{aggregateId}"
+            : "Aggregate" + typeof(TSingleProjectionOrAggregate).GetAggregatePayloadTypeFromAggregate().Name + aggregateId;
     }
 }

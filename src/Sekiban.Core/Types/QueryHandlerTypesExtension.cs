@@ -1,3 +1,4 @@
+using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.QueryModel;
 namespace Sekiban.Core.Types;
 
@@ -49,7 +50,7 @@ public static class QueryHandlerTypesExtension
     public static dynamic? GetQueryObjectFromListQueryInputType(this IServiceProvider serviceProvider, Type inputType, Type outputType)
     {
         var baseType = typeof(IListQueryHandlerCommon<,>);
-        var handlerType = baseType.MakeGenericType(inputType, outputType) ?? throw new Exception("Can not create handler type");
+        var handlerType = baseType.MakeGenericType(inputType, outputType) ?? throw new SekibanTypeNotFoundException("Can not create handler type");
         return serviceProvider.GetService(handlerType);
     }
     /// <summary>
@@ -63,7 +64,7 @@ public static class QueryHandlerTypesExtension
     public static dynamic? GetQueryObjectFromQueryInputType(this IServiceProvider serviceProvider, Type inputType, Type outputType)
     {
         var baseType = typeof(IQueryHandlerCommon<,>);
-        var handlerType = baseType.MakeGenericType(inputType, outputType) ?? throw new Exception("Can not create handler type");
+        var handlerType = baseType.MakeGenericType(inputType, outputType) ?? throw new SekibanTypeNotFoundException("Can not create handler type");
         return serviceProvider.GetService(handlerType);
     }
 }

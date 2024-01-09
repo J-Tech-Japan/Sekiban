@@ -1,4 +1,5 @@
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.SingleProjections;
 using System.Reflection;
 namespace Sekiban.Core.Types;
@@ -27,6 +28,12 @@ public static class AggregateTypesExtensions
         type.ImplementedInterfaces.Contains(typeof(IAggregatePayloadCommon)) &&
         !type.ImplementedInterfaces.Contains(typeof(ISingleProjectionPayloadCommon));
 
+    /// <summary>
+    ///     Check if given type is Aggregate Payload Type.
+    /// </summary>
+    /// <param name="type"></param>
+    /// <returns></returns>
+    public static bool IsAggregatePayloadType(this Type type) => type.GetTypeInfo().IsAggregatePayloadType();
 
     /// <summary>
     ///     Check if given type is Aggregate Payload Parent Type.
@@ -67,11 +74,9 @@ public static class AggregateTypesExtensions
             var baseType = aggregateType.GetImplementingFromGenericInterfaceType(typeof(IParentAggregatePayload<,>));
             return baseType.GenericTypeArguments[0];
         }
-        if (aggregateType.GetInterfaces().Any(m => m == typeof(IAggregatePayloadCommon)))
-        {
-            return aggregateType;
-        }
-        throw new Exception(aggregateType.FullName + " is not an aggregate");
+        return aggregateType.GetInterfaces().Exists(m => m == typeof(IAggregatePayloadCommon))
+            ? aggregateType
+            : throw new SekibanAggregatePayloadNotExistsException(aggregateType.FullName + " is not an aggregate");
     }
     /// <summary>
     ///     Get first Aggregate Payload type from given Aggregate Payload.
@@ -87,18 +92,10 @@ public static class AggregateTypesExtensions
             var baseType = aggregateType.GetImplementingFromGenericInterfaceType(typeof(IParentAggregatePayload<,>));
             return baseType.GenericTypeArguments[1];
         }
-        if (aggregateType.GetInterfaces().Any(m => m == typeof(IAggregatePayloadCommon)))
-        {
-            return aggregateType;
-        }
-        throw new Exception(aggregateType.FullName + " is not an aggregate");
+        return aggregateType.GetInterfaces().Exists(m => m == typeof(IAggregatePayloadCommon))
+            ? aggregateType
+            : throw new SekibanAggregatePayloadNotExistsException(aggregateType.FullName + " is not an aggregate");
     }
-    /// <summary>
-    ///     Check if given type is Aggregate Payload Type.
-    /// </summary>
-    /// <param name="type"></param>
-    /// <returns></returns>
-    public static bool IsAggregatePayloadType(this Type type) => type.GetTypeInfo().IsAggregatePayloadType();
 
     /// <summary>
     ///     Check if given type is Aggregate Type.
@@ -106,6 +103,14 @@ public static class AggregateTypesExtensions
     /// <param name="aggregate"></param>
     /// <returns></returns>
     public static bool IsAggregateType(this IAggregateCommon aggregate) => aggregate.GetType().GetGenericTypeDefinition() == typeof(Aggregate<>);
+    /// <summary>
+    ///     Check if given type is Aggregate State Type.
+    /// </summary>
+    /// <param name="aggregate"></param>
+    /// <returns></returns>
+    public static bool IsAggregateStateType(this IAggregateCommon aggregate) =>
+        aggregate.GetType().GetGenericTypeDefinition() == typeof(AggregateState<>);
+
     /// <summary>
     ///     Get Aggregate Payload Type from given Aggregate.
     /// </summary>
@@ -119,42 +124,26 @@ public static class AggregateTypesExtensions
             var genericArguments = aggregate.GetType().GetGenericArguments();
             return genericArguments[0];
         }
-        throw new Exception("Not an aggregate");
+        throw new SekibanAggregatePayloadNotExistsException("Not an aggregate");
     }
-    /// <summary>
-    ///     Check if given type is Aggregate State Type.
-    /// </summary>
-    /// <param name="aggregate"></param>
-    /// <returns></returns>
-    public static bool IsAggregateStateType(this IAggregateCommon aggregate) =>
-        aggregate.GetType().GetGenericTypeDefinition() == typeof(AggregateState<>);
-
     /// <summary>
     ///     Get Aggregate Payload Type from given Aggregate.
     /// </summary>
     /// <param name="aggregateType"></param>
     /// <returns></returns>
     /// <exception cref="Exception"></exception>
-    public static Type GetAggregatePayloadTypeFromAggregate(this Type aggregateType)
-    {
-        if (aggregateType.IsGenericType && aggregateType.GetGenericTypeDefinition() == typeof(Aggregate<>))
-        {
-            return aggregateType.GenericTypeArguments[0];
-        }
-        throw new Exception(aggregateType.FullName + " is not an aggregate");
-    }
+    public static Type GetAggregatePayloadTypeFromAggregate(this Type aggregateType) =>
+        aggregateType.IsGenericType && aggregateType.GetGenericTypeDefinition() == typeof(Aggregate<>)
+            ? aggregateType.GenericTypeArguments[0]
+            : throw new SekibanAggregatePayloadNotExistsException(aggregateType.FullName + " is not an aggregate");
     /// <summary>
     ///     Get Aggregate Payload Type from given Aggregate State.
     /// </summary>
     /// <param name="aggregateStateType"></param>
     /// <returns></returns>
     /// <exception cref="Exception"></exception>
-    public static Type GetAggregatePayloadTypeFromAggregateState(this Type aggregateStateType)
-    {
-        if (aggregateStateType.IsGenericType && aggregateStateType.GetGenericTypeDefinition() == typeof(AggregateState<>))
-        {
-            return aggregateStateType.GenericTypeArguments[0];
-        }
-        throw new Exception(aggregateStateType.FullName + " is not an aggregate state");
-    }
+    public static Type GetAggregatePayloadTypeFromAggregateState(this Type aggregateStateType) =>
+        aggregateStateType.IsGenericType && aggregateStateType.GetGenericTypeDefinition() == typeof(AggregateState<>)
+            ? aggregateStateType.GenericTypeArguments[0]
+            : throw new SekibanAggregatePayloadNotExistsException(aggregateStateType.FullName + " is not an aggregate state");
 }

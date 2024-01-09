@@ -1,3 +1,4 @@
+using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.MultiProjections;
 using System.Reflection;
 namespace Sekiban.Core.Types;
@@ -43,12 +44,8 @@ public static class MultiProjectionTypesExtensions
     /// <param name="projectionType"></param>
     /// <returns></returns>
     /// <exception cref="Exception"></exception>
-    public static Type GetMultiProjectionPayloadTypeFromMultiProjection(this Type projectionType)
-    {
-        if (projectionType.IsMultiProjectionType())
-        {
-            return projectionType.GenericTypeArguments[0];
-        }
-        throw new Exception(projectionType.FullName + " is not multi projection type");
-    }
+    public static Type GetMultiProjectionPayloadTypeFromMultiProjection(this Type projectionType) =>
+        projectionType.IsMultiProjectionType()
+            ? projectionType.GenericTypeArguments[0]
+            : throw new SekibanMultiProjectionPayloadNotExistsException(projectionType.FullName + " is not multi projection type");
 }

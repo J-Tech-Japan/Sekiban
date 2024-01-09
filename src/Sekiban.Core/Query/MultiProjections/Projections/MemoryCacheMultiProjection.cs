@@ -11,29 +11,14 @@ namespace Sekiban.Core.Query.MultiProjections.Projections;
 /// <summary>
 ///     Multi Projection using Memory Cache
 /// </summary>
-public class MemoryCacheMultiProjection : IMultiProjection
+public class MemoryCacheMultiProjection(
+    IDocumentRepository documentRepository,
+    IUpdateNotice updateNotice,
+    IAggregateSettings aggregateSettings,
+    IMultiProjectionCache multiProjectionCache,
+    RegisteredEventTypes registeredEventTypes,
+    IMultiProjectionSnapshotGenerator multiProjectionSnapshotGenerator) : IMultiProjection
 {
-    private readonly IAggregateSettings _aggregateSettings;
-    private readonly IDocumentRepository _documentRepository;
-    private readonly RegisteredEventTypes _registeredEventTypes;
-    private readonly IUpdateNotice _updateNotice;
-    private readonly IMultiProjectionCache multiProjectionCache;
-    private readonly IMultiProjectionSnapshotGenerator multiProjectionSnapshotGenerator;
-    public MemoryCacheMultiProjection(
-        IDocumentRepository documentRepository,
-        IUpdateNotice updateNotice,
-        IAggregateSettings aggregateSettings,
-        IMultiProjectionCache multiProjectionCache,
-        RegisteredEventTypes registeredEventTypes,
-        IMultiProjectionSnapshotGenerator multiProjectionSnapshotGenerator)
-    {
-        _documentRepository = documentRepository;
-        _updateNotice = updateNotice;
-        _aggregateSettings = aggregateSettings;
-        this.multiProjectionCache = multiProjectionCache;
-        _registeredEventTypes = registeredEventTypes;
-        this.multiProjectionSnapshotGenerator = multiProjectionSnapshotGenerator;
-    }
 
     public async Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjection, TProjectionPayload>(
         string rootPartitionKey,
@@ -44,7 +29,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
         var savedContainerBlob
             = savedContainerCache != null ? null : await GetContainerFromSnapshot<TProjection, TProjectionPayload>(rootPartitionKey);
 
-        if (savedContainerBlob is not null && savedContainerCache is null)
+        if (savedContainerBlob is not null)
         {
             multiProjectionCache.Set(rootPartitionKey, savedContainerBlob);
         }
@@ -77,13 +62,13 @@ public class MemoryCacheMultiProjection : IMultiProjection
                 {
                     continue;
                 }
-                if (!_aggregateSettings.UseUpdateMarkerForType(targetAggregateName))
+                if (!aggregateSettings.UseUpdateMarkerForType(targetAggregateName))
                 {
                     canUseCache = false;
                     continue;
                 }
 
-                var (updated, _) = _updateNotice.HasUpdateAfter(rootPartitionKey, targetAggregateName, savedContainer.SafeSortableUniqueId!);
+                var (updated, _) = updateNotice.HasUpdateAfter(rootPartitionKey, targetAggregateName, savedContainer.SafeSortableUniqueId!);
                 canUseCache = !updated;
             }
 
@@ -98,7 +83,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
 
         try
         {
-            await _documentRepository.GetAllEventsAsync(
+            await documentRepository.GetAllEventsAsync(
                 typeof(TProjection),
                 projector.TargetAggregateNames(),
                 savedContainer.SafeSortableUniqueId?.Value,
@@ -156,11 +141,13 @@ public class MemoryCacheMultiProjection : IMultiProjection
         where TProjectionPayload : IMultiProjectionPayloadCommon
     {
         await Task.CompletedTask;
-        var list = JsonSerializer.Deserialize<List<JsonElement>>(stream) ?? throw new Exception("Could not deserialize file");
-        var events = (IList<IEvent>)list.Select(m => SekibanJsonHelper.DeserializeToEvent(m, _registeredEventTypes.RegisteredTypes))
-            .Where(m => m is not null)
-            .OrderBy(m => m is null ? string.Empty : m.SortableUniqueId)
-            .ToList();
+        var list = JsonSerializer.Deserialize<List<JsonElement>>(stream) ?? throw new SekibanSerializerException("Could not deserialize file");
+        var events = (IList<IEvent>)
+        [
+            .. list.Select(m => SekibanJsonHelper.DeserializeToEvent(m, registeredEventTypes.RegisteredTypes))
+                .Where(m => m is not null)
+                .OrderBy(m => m is null ? string.Empty : m.SortableUniqueId),
+        ];
         var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
         var safeEvents = events.Where(m => m.GetSortableUniqueId().IsEarlierThan(targetSafeId)).ToList();
         var unsafeEvents = events.Where(m => m.GetSortableUniqueId().IsLaterThanOrEqual(targetSafeId)).ToList();
@@ -195,8 +182,9 @@ public class MemoryCacheMultiProjection : IMultiProjection
         var unsafeEvents = new List<IEvent>();
         while (eventStream != null)
         {
-            var list = JsonSerializer.Deserialize<List<JsonElement>>(eventStream) ?? throw new Exception("Could not deserialize file");
-            var events = (IList<IEvent>)list.Select(m => SekibanJsonHelper.DeserializeToEvent(m, _registeredEventTypes.RegisteredTypes))
+            var list = JsonSerializer.Deserialize<List<JsonElement>>(eventStream) ??
+                throw new SekibanSerializerException("Could not deserialize file");
+            var events = (IList<IEvent>)list.Select(m => SekibanJsonHelper.DeserializeToEvent(m, registeredEventTypes.RegisteredTypes))
                 .Where(m => m is not null)
                 .ToList();
             var safeEvents = events.Where(m => m.GetSortableUniqueId().IsEarlierThan(targetSafeId)).ToList();
@@ -250,7 +238,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
     {
         var projector = new TProjection();
         var container = new MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>();
-        await _documentRepository.GetAllEventsAsync(
+        await documentRepository.GetAllEventsAsync(
             typeof(TProjection),
             projector.TargetAggregateNames(),
             null,

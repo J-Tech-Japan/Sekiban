@@ -11,10 +11,9 @@ namespace FeatureCheck.Domain.Shared;
 
 public class FeatureCheckMultiProjectionSnapshotConfigurationSetting : MultiProjectionSnapshotGeneratorConfigurationSettingAbstract
 {
-
     public FeatureCheckMultiProjectionSnapshotConfigurationSetting(IConfiguration configuration) : base(configuration)
-    {
-    }
+    { }
+
     public override void Define() =>
         AddMultiProjectionsSnapshotType<ClientLoyaltyPointListProjection>()
             .AddMultiProjectionsSnapshotType<ClientLoyaltyPointMultiProjection>()

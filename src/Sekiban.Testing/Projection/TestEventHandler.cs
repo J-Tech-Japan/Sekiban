@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Events;
+using Sekiban.Core.Exceptions;
 using Sekiban.Core.PubSub;
 using Sekiban.Core.Types;
 using System.Text.Json;
@@ -39,30 +40,22 @@ public class TestEventHandler(IServiceProvider serviceProvider)
     /// <exception cref="Exception"></exception>
     public void GivenEventsWithPublishAndBlockingSubscription(IEnumerable<IEvent> events)
     {
-        var nonBlockingStatus = serviceProvider.GetService<EventNonBlockingStatus>();
-        if (nonBlockingStatus is null)
-        {
-            throw new Exception("EventNonBlockingStatus could not be found");
-        }
+        var nonBlockingStatus = serviceProvider.GetService<EventNonBlockingStatus>() ??
+            throw new SekibanTypeNotFoundException("EventNonBlockingStatus could not be found");
         nonBlockingStatus.RunBlockingAction(() => GivenEvents(events, true));
     }
 
     private void GivenEvents(IEnumerable<IEvent> events, bool withPublish)
     {
-        var documentWriter = serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter;
-        if (documentWriter is null)
-        {
-            throw new Exception("Failed to get document writer");
-        }
-        var sekibanAggregateTypes = serviceProvider.GetService<SekibanAggregateTypes>() ?? throw new Exception("Failed to get aggregate types");
+        var documentWriter = serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter ??
+            throw new SekibanTypeNotFoundException("Failed to get document writer");
+        var sekibanAggregateTypes = serviceProvider.GetService<SekibanAggregateTypes>() ??
+            throw new SekibanTypeNotFoundException("Failed to get aggregate types");
 
         foreach (var e in events)
         {
-            var aggregateType = sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == e.AggregateType);
-            if (aggregateType is null)
-            {
-                throw new Exception($"Failed to find aggregate type {e.AggregateType}");
-            }
+            var aggregateType = sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == e.AggregateType) ??
+                throw new SekibanTypeNotFoundException($"Failed to find aggregate type {e.AggregateType}");
             if (withPublish)
             {
                 documentWriter.SaveAsync(e, aggregateType.Aggregate).Wait();
@@ -112,11 +105,7 @@ public class TestEventHandler(IServiceProvider serviceProvider)
     /// <exception cref="InvalidDataException"></exception>
     private void GivenEventsFromJson(string jsonEvents, bool withPublish)
     {
-        var list = JsonSerializer.Deserialize<List<JsonElement>>(jsonEvents);
-        if (list is null)
-        {
-            throw new InvalidDataException("Failed to serialize in JSON.");
-        }
+        var list = JsonSerializer.Deserialize<List<JsonElement>>(jsonEvents) ?? throw new InvalidDataException("Failed to serialize in JSON.");
         AddEventsFromList(list, withPublish);
     }
     /// <summary>
@@ -140,11 +129,7 @@ public class TestEventHandler(IServiceProvider serviceProvider)
     private void GivenEventsFromFile(string filename, bool withPublish)
     {
         using var openStream = File.OpenRead(filename);
-        var list = JsonSerializer.Deserialize<List<JsonElement>>(openStream);
-        if (list is null)
-        {
-            throw new InvalidDataException("Failed to serialize in JSON.");
-        }
+        var list = JsonSerializer.Deserialize<List<JsonElement>>(openStream) ?? throw new InvalidDataException("Failed to serialize in JSON.");
         AddEventsFromList(list, withPublish);
     }
     /// <summary>
@@ -171,11 +156,8 @@ public class TestEventHandler(IServiceProvider serviceProvider)
             var type = payload.GetType();
             var eventType = typeof(Event<>);
             var genericType = eventType.MakeGenericType(type);
-            var ev = Activator.CreateInstance(genericType, aggregateId, aggregateType, payload) as IEvent;
-            if (ev == null)
-            {
+            var ev = Activator.CreateInstance(genericType, aggregateId, aggregateType, payload) as IEvent ??
                 throw new InvalidDataException("Failed to generate an event" + payload);
-            }
             GivenEvents(new[] { ev }, withPublish);
         }
     }
@@ -204,11 +186,8 @@ public class TestEventHandler(IServiceProvider serviceProvider)
             var aggregateType = payload.GetAggregatePayloadInType();
             var eventType = typeof(Event<>);
             var genericType = eventType.MakeGenericType(type);
-            var ev = Activator.CreateInstance(genericType, aggregateId, aggregateType, payload, rootPartitionKey) as IEvent;
-            if (ev == null)
-            {
+            var ev = Activator.CreateInstance(genericType, aggregateId, aggregateType, payload, rootPartitionKey) as IEvent ??
                 throw new InvalidDataException("Failed to generate an event" + payload);
-            }
             GivenEvents(new[] { ev }, withPublish);
         }
     }
@@ -217,36 +196,20 @@ public class TestEventHandler(IServiceProvider serviceProvider)
     {
         if (serviceProvider is null)
         {
-            throw new Exception("Service provider is null. Please setup service provider.");
+            throw new SekibanTypeNotFoundException("Service provider is null. Please setup service provider.");
         }
-        var registeredEventTypes = serviceProvider.GetService<RegisteredEventTypes>();
-        if (registeredEventTypes is null)
-        {
+        var registeredEventTypes = serviceProvider.GetService<RegisteredEventTypes>() ??
             throw new InvalidOperationException("RegisteredEventTypes is not registered.");
-        }
         foreach (var json in list)
         {
             var documentTypeName = json.GetProperty("DocumentTypeName").ToString();
-            var eventPayloadType = registeredEventTypes.RegisteredTypes.FirstOrDefault(e => e.Name == documentTypeName);
-            if (eventPayloadType is null)
-            {
+            var eventPayloadType = registeredEventTypes.RegisteredTypes.FirstOrDefault(e => e.Name == documentTypeName) ??
                 throw new InvalidDataException($"Event Type {documentTypeName} Is not registered.");
-            }
-            var eventType = typeof(Event<>).MakeGenericType(eventPayloadType);
-            if (eventType is null)
-            {
+            var eventType = typeof(Event<>).MakeGenericType(eventPayloadType) ??
                 throw new InvalidDataException($"Event {documentTypeName} failed to generate.");
-            }
-            var eventInstance = JsonSerializer.Deserialize(json.ToString(), eventType);
-            if (eventInstance is null)
-            {
+            var eventInstance = JsonSerializer.Deserialize(json.ToString(), eventType) ??
                 throw new InvalidDataException($"Event {documentTypeName} failed to deserialize.");
-            }
-            var ev = eventInstance as IEvent;
-            if (ev is null)
-            {
-                throw new InvalidDataException($"Event {documentTypeName} failed to cast.");
-            }
+            var ev = eventInstance as IEvent ?? throw new InvalidDataException($"Event {documentTypeName} failed to cast.");
             GivenEvents(new List<IEvent> { ev }, withPublish);
         }
     }

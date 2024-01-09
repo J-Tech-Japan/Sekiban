@@ -36,6 +36,6 @@ public interface IMultiProjectionPayload<TProjectionPayload> : IMultiProjectionP
         var payloadType = ev.GetPayload().GetType();
         var method = typeof(TProjectionPayload).GetMethod(nameof(ApplyEvent), BindingFlags.Static | BindingFlags.Public);
         var genericMethod = method?.MakeGenericMethod(payloadType);
-        return (TProjectionPayload?)genericMethod?.Invoke(typeof(TProjectionPayload), new object?[] { this, ev }) ?? (TProjectionPayload)this;
+        return (TProjectionPayload?)genericMethod?.Invoke(typeof(TProjectionPayload), [this, ev]) ?? (TProjectionPayload)this;
     }
 }
