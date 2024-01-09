@@ -33,7 +33,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         _serviceProvider = serviceProvider;
         _projector = new DefaultSingleProjector<TAggregatePayload>();
         _commandExecutor = new TestCommandExecutor(_serviceProvider);
-        var aggregateLoader = _serviceProvider.GetRequiredService<IAggregateLoader>() ?? throw new SekibanTypeNotFoundException("AggregateLoader is not registered");
+        var aggregateLoader = _serviceProvider.GetRequiredService<IAggregateLoader>() ??
+            throw new SekibanTypeNotFoundException("AggregateLoader is not registered");
         AggregateIdHolder = new AggregateIdHolder<TAggregatePayload>(aggregateLoader);
     }
 
@@ -666,7 +667,6 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var genericMethod = method?.MakeGenericMethod(genericType);
         var stateFromJson = genericMethod?.Invoke(typeof(SekibanJsonHelper), new object?[] { json });
 
-        //var stateFromJson = SekibanJsonHelper.Deserialize<AggregateState<TAggregatePayload>>(json);
         var stateFromJsonJson = SekibanJsonHelper.Serialize(stateFromJson);
         Assert.Equal(json, stateFromJsonJson);
         CheckEventJsonCompatibility();
@@ -873,7 +873,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new SekibanTypeNotFoundException("Failed to get Query service");
         try
         {
-            var _ = queryService.ExecuteAsync((dynamic)param).Result;
+            _ = queryService.ExecuteAsync((dynamic)param).Result;
         }
         catch (Exception e)
         {
@@ -903,7 +903,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         ThenNotThrowsAnException();
         var exception = GetQueryException(param);
         Assert.NotNull(exception);
-        checkException(exception ?? throw new SekibanTypeNotFoundException("Failed to cast exception"));
+        checkException(exception);
         return this;
     }
     public IAggregateTestHelper<TAggregatePayload> ThenQueryNotThrowsAnException(IListQueryInputCommon param)
