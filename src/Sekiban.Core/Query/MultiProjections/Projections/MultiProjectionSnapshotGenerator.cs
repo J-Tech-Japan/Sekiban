@@ -22,7 +22,7 @@ public class MultiProjectionSnapshotGenerator(
 
     public async Task<MultiProjectionState<TProjectionPayload>> GenerateMultiProjectionSnapshotAsync<TProjection, TProjectionPayload>(
         int minimumNumberOfEventsToGenerateSnapshot,
-        string rootPartitionKey) where TProjection : IMultiProjector<TProjectionPayload>, new()
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon
     {
         var projector = new TProjection();
@@ -68,16 +68,19 @@ public class MultiProjectionSnapshotGenerator(
             var snapshotDocument = new MultiProjectionSnapshotDocument(typeof(TProjectionPayload), blobId, projector, rootPartitionKey);
             await documentWriter.SaveAsync(snapshotDocument, typeof(TProjectionPayload));
             logger.LogInformation(
-                "Generate multi snapshot for {ProjectionName} and rootPartitionKey {RootPartitionKey} because used version is {UsedVersion}",
-                MultiProjectionSnapshotGenerator.ProjectionName(typeof(TProjectionPayload)),
+                "Generate multi snapshot for {ProjectionName} and rootPartitionKey {RootPartitionKey} because state version is {StateVersion}, and number of events after the state is {UsedVersion}",
+                ProjectionName(typeof(TProjectionPayload)),
                 rootPartitionKey,
+                state.Version,
                 usedVersion);
-        } else
+        }
+        else
         {
             logger.LogInformation(
-                "skip making snapshot for {ProjectionName} and rootPartitionKey {RootPartitionKey} because used version is {UsedVersion} and minimum is {MinimumNumberOfEventsToGenerateSnapshot}",
-                MultiProjectionSnapshotGenerator.ProjectionName(typeof(TProjectionPayload)),
+                "skip making snapshot for {ProjectionName} and rootPartitionKey {RootPartitionKey} because state version is {StateVersion} and events after that is {UsedVersion} and minimum is {MinimumNumberOfEventsToGenerateSnapshot}",
+                ProjectionName(typeof(TProjectionPayload)),
                 rootPartitionKey,
+                state.Version,
                 usedVersion,
                 minimumNumberOfEventsToGenerateSnapshot);
         }
@@ -137,7 +140,7 @@ public class MultiProjectionSnapshotGenerator(
     }
 
     public static string FilenameForSnapshot(Type projectionPayload, Guid id, SortableUniqueIdValue sortableUniqueId) =>
-        $"{MultiProjectionSnapshotGenerator.ProjectionName(projectionPayload)}_{sortableUniqueId.GetTicks().Ticks:00000000000000000000}_{id}.json.gz";
+        $"{ProjectionName(projectionPayload)}_{sortableUniqueId.GetTicks().Ticks:00000000000000000000}_{id}.json.gz";
 
     private static string ProjectionName(Type projectionType) =>
         projectionType.IsSingleProjectionListStateType()
