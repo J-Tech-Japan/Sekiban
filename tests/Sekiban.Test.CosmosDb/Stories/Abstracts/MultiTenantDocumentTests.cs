@@ -29,8 +29,8 @@ public abstract class MultiTenantDocumentTests : TestBase<MultiTenantDependency>
         RemoveAllFromDefaultAndDissolvable();
         var responseTenant1 = await commandExecutor.ExecCommandAsync(new CreateClient { Name = clientName1, TenantId = tenantId1 });
         var responseTenant2 = await commandExecutor.ExecCommandAsync(new CreateClient { Name = clientName2, TenantId = tenantId2 });
-        Assert.True(responseTenant1.Version == 1);
-        Assert.True(responseTenant2.Version == 1);
+        Assert.Equal(1, responseTenant1.Version);
+        Assert.Equal(1, responseTenant2.Version);
 
         var queryResult = await queryExecutor.ExecuteAsync(new ClientListQuery.Parameter(tenantId1));
         Assert.Single(queryResult.Items);
