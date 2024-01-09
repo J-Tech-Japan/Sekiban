@@ -580,7 +580,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
                 var commandResponse
                     = (CommandResponse)((dynamic?)method.Invoke(adapter, [commandDocument, handler, aggregateId, rootPartitionKey]) ??
                         throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
-                _latestEvents = commandResponse.Events.ToList();
+                _latestEvents = [.. commandResponse.Events];
             } else
             {
                 var baseClass = typeof(CommandHandlerAdapter<,>);
@@ -593,7 +593,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
                 var commandResponse
                     = (CommandResponse)((dynamic?)method.Invoke(adapter, [commandDocument, handler, aggregateId, rootPartitionKey]) ??
                         throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
-                _latestEvents = commandResponse.Events.ToList();
+                _latestEvents = [.. commandResponse.Events];
             }
         }
         catch (Exception ex)

@@ -142,10 +142,12 @@ public class MemoryCacheMultiProjection(
     {
         await Task.CompletedTask;
         var list = JsonSerializer.Deserialize<List<JsonElement>>(stream) ?? throw new SekibanSerializerException("Could not deserialize file");
-        var events = (IList<IEvent>)list.Select(m => SekibanJsonHelper.DeserializeToEvent(m, registeredEventTypes.RegisteredTypes))
-            .Where(m => m is not null)
-            .OrderBy(m => m is null ? string.Empty : m.SortableUniqueId)
-            .ToList();
+        var events = (IList<IEvent>)
+        [
+            .. list.Select(m => SekibanJsonHelper.DeserializeToEvent(m, registeredEventTypes.RegisteredTypes))
+                .Where(m => m is not null)
+                .OrderBy(m => m is null ? string.Empty : m.SortableUniqueId),
+        ];
         var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
         var safeEvents = events.Where(m => m.GetSortableUniqueId().IsEarlierThan(targetSafeId)).ToList();
         var unsafeEvents = events.Where(m => m.GetSortableUniqueId().IsLaterThanOrEqual(targetSafeId)).ToList();
