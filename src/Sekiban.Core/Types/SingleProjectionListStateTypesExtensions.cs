@@ -17,27 +17,27 @@ public static class SingleProjectionListStateTypesExtensions
     /// <exception cref="Exception"></exception>
     public static Type GetAggregatePayloadOrSingleProjectionPayloadTypeFromSingleProjectionListStateType(this Type singleProjectionListStateType)
     {
-        if (singleProjectionListStateType.IsGenericType &&
-            singleProjectionListStateType.GetGenericTypeDefinition() == typeof(SingleProjectionListState<>))
+        return (
+            singleProjectionListStateType.IsGenericType
+                && singleProjectionListStateType.GetGenericTypeDefinition() == typeof(SingleProjectionListState<>)
+            , singleProjectionListStateType.GetGenericArguments()[0])
+            switch
         {
-            var aggregateStateType = singleProjectionListStateType.GetGenericArguments()[0];
-            return aggregateStateType.IsGenericType && aggregateStateType.GetGenericTypeDefinition() == typeof(AggregateState<>)
-                ?
-                aggregateStateType.GetGenericArguments()[0]
-                : aggregateStateType.IsGenericType && aggregateStateType.GetGenericTypeDefinition() == typeof(SingleProjectionState<>)
-                    ? aggregateStateType.GetGenericArguments()[0]
-                    : throw new SekibanSingleProjectionPayloadNotExistsException(
-                        singleProjectionListStateType.FullName + " is not an Single Projection List state");
-        }
-        throw new SekibanSingleProjectionPayloadNotExistsException(
-            singleProjectionListStateType.FullName + " is not an Single Projection List state");
+            (true, { IsGenericType: true } t) when t.GetGenericTypeDefinition() == typeof(AggregateState<>) => t.GetGenericArguments()[0]
+            ,
+            (true, { IsGenericType: true } t) when t.GetGenericTypeDefinition() == typeof(SingleProjectionState<>) => t.GetGenericArguments()[0]
+            ,
+            _ => throw new SekibanSingleProjectionPayloadNotExistsException(
+                singleProjectionListStateType.FullName + " is not an Single Projection List state")
+        };
     }
+
     /// <summary>
     ///     Check whether the given type is single projection list state type or not.
     /// </summary>
     /// <param name="singleProjectionListStateType"></param>
     /// <returns></returns>
     public static bool IsSingleProjectionListStateType(this Type singleProjectionListStateType) =>
-        singleProjectionListStateType.IsGenericType &&
-        singleProjectionListStateType.GetGenericTypeDefinition() == typeof(SingleProjectionListState<>);
+        singleProjectionListStateType.IsGenericType
+        && singleProjectionListStateType.GetGenericTypeDefinition() == typeof(SingleProjectionListState<>);
 }

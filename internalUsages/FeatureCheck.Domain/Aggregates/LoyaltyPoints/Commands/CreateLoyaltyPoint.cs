@@ -6,8 +6,7 @@ namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
 public record CreateLoyaltyPoint(Guid ClientId, int InitialPoint) : ICommand<LoyaltyPoint>
 {
     public CreateLoyaltyPoint() : this(Guid.Empty, 0)
-    {
-    }
+    { }
 
     public Guid GetAggregateId() => ClientId;
 

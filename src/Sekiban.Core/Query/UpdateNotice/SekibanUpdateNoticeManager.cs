@@ -32,37 +32,44 @@ public class SekibanUpdateNoticeManager : IUpdateNotice
         Guid aggregateId,
         SortableUniqueIdValue? sortableUniqueId)
     {
-        var current = UpdateDictionary.GetValueOrDefault(GetKeyForAggregate(rootPartitionKey, aggregateName, aggregateId));
-        return current is null || string.IsNullOrEmpty(current.SortableUniqueId)
-            ? (false, null)
-            : string.IsNullOrEmpty(sortableUniqueId?.Value)
-            ? (true, null)
-            : ((bool, UpdatedLocationType?))(sortableUniqueId.IsEarlierThanOrEqual(current.SortableUniqueId), current.LocationType);
+        return SekibanUpdateNoticeManager.HasUpdateAfter(
+            UpdateDictionary.GetValueOrDefault(GetKeyForAggregate(rootPartitionKey, aggregateName, aggregateId)),
+            sortableUniqueId);
     }
 
     public (bool, UpdatedLocationType?) HasUpdateAfter(string rootPartitionKey, string aggregateName, SortableUniqueIdValue? sortableUniqueId)
     {
-        if (rootPartitionKey.Equals(IMultiProjectionService.ProjectionAllRootPartitions))
+        return SekibanUpdateNoticeManager.HasUpdateAfter(
+            rootPartitionKey.Equals(IMultiProjectionService.ProjectionAllRootPartitions)
+                ? UpdateDictionary.GetValueOrDefault(GetKeyForType(aggregateName))
+                : UpdateDictionary.GetValueOrDefault(GetKeyForType(rootPartitionKey, aggregateName)),
+            sortableUniqueId);
+    }
+
+    private static (bool, UpdatedLocationType?) HasUpdateAfter(NoticeRecord? noticeRecord, SortableUniqueIdValue? sortableUniqueId)
+    {
+        return (noticeRecord, sortableUniqueId) switch
         {
-            var currentAll = UpdateDictionary.GetValueOrDefault(GetKeyForType(aggregateName));
-            return currentAll is null || string.IsNullOrEmpty(currentAll.SortableUniqueId)
-                ? (false, null)
-                : sortableUniqueId is null
-                ? (true, null)
-                : ((bool, UpdatedLocationType?))(sortableUniqueId.IsEarlierThanOrEqual(currentAll.SortableUniqueId), currentAll.LocationType);
-        }
-        var current = UpdateDictionary.GetValueOrDefault(GetKeyForType(rootPartitionKey, aggregateName));
-        return current is null || string.IsNullOrEmpty(current.SortableUniqueId)
-            ? (false, null)
-            : sortableUniqueId is null
-            ? (true, null)
-            : ((bool, UpdatedLocationType?))(sortableUniqueId.IsEarlierThanOrEqual(current.SortableUniqueId), current.LocationType);
+            (null, _) => (false, null)
+            ,
+            ({ SortableUniqueId: null }, _) => (false, null)
+            ,
+            ({ SortableUniqueId.Value: "" }, _) => (false, null)
+            ,
+            (_, null) => (true, null)
+            ,
+            (_, { Value: "" }) => (true, null)
+            ,
+            ({ } c, { } s) => ((bool, UpdatedLocationType?))(s.IsEarlierThanOrEqual(c.SortableUniqueId), c.LocationType)
+            ,
+        };
     }
 
     public static string GetKeyForAggregate(string rootPartitionKey, string aggregateName, Guid aggregateId) =>
         "UpdateNotice-" + rootPartitionKey + "-" + aggregateName + "-" + aggregateId;
 
     public static string GetKeyForType(string rootPartitionKey, string aggregateName) => "UpdateNotice-" + rootPartitionKey + "-" + aggregateName;
+
     public static string GetKeyForType(string aggregateName) => "UpdateNotice-" + aggregateName;
 
     private record NoticeRecord(SortableUniqueIdValue SortableUniqueId, UpdatedLocationType LocationType);

@@ -10,8 +10,7 @@ namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
 public record CreateLoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : ICommand<LoyaltyPoint>
 {
     public CreateLoyaltyPointAndAddPoint() : this(Guid.Empty, 0)
-    {
-    }
+    { }
 
     public Guid GetAggregateId() => ClientId;
 
@@ -31,12 +30,14 @@ public record CreateLoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : IC
             ICommandContext<LoyaltyPoint> context)
         {
             yield return new LoyaltyPointCreated(0);
+
             context.GetState(); // to reproduce the issue;
             yield return new LoyaltyPointAdded(
                 _dateProducer.UtcNow,
                 LoyaltyPointReceiveTypeKeys.InitialGift,
                 command.AddingPoint,
                 "Initial User Gift");
+
             // initial gift for gmail user.
             var client = await aggregateLoader.AsDefaultStateAsync<Client>(context.GetState().AggregateId);
             if (client != null && client.Payload.ClientEmail.ToLower().EndsWith("@gmail.com"))
@@ -46,7 +47,6 @@ public record CreateLoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : IC
                     LoyaltyPointReceiveTypeKeys.InitialGmailUserGift,
                     command.AddingPoint,
                     "Gmail users gift");
-
             }
         }
     }
