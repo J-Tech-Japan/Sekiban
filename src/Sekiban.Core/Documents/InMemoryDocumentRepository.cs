@@ -175,7 +175,7 @@ public class InMemoryDocumentRepository(
             return false;
         }
         var list = inMemoryDocumentStore.GetEventPartition(partitionKey, sekibanIdentifier).ToList();
-        return string.IsNullOrWhiteSpace(sortableUniqueId) ? false : list.Any(m => m.SortableUniqueId == sortableUniqueId);
+        return !string.IsNullOrWhiteSpace(sortableUniqueId) && list.Exists(m => m.SortableUniqueId == sortableUniqueId);
     }
 
     public async Task GetAllEventsForAggregateAsync(

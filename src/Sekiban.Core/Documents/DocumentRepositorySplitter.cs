@@ -272,12 +272,12 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 partitionKey,
                 rootPartitionKey)
             : _documentPersistentRepository.GetSnapshotByIdAsync(
-            id,
-            aggregateId,
-            aggregatePayloadType,
-            projectionPayloadType,
-            partitionKey,
-            rootPartitionKey);
+                id,
+                aggregateId,
+                aggregatePayloadType,
+                projectionPayloadType,
+                partitionKey,
+                rootPartitionKey);
     }
 
     public Task GetAllEventsForAggregateAsync(
@@ -288,16 +288,12 @@ public class DocumentRepositorySplitter : IDocumentRepository
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         return aggregateContainerGroup == AggregateContainerGroup.InMemory
-            ? _documentTemporaryRepository.GetAllEventsForAggregateAsync(
+            ? _documentTemporaryRepository.GetAllEventsForAggregateAsync(aggregatePayloadType, sinceSortableUniqueId, rootPartitionKey, resultAction)
+            : _documentPersistentRepository.GetAllEventsForAggregateAsync(
                 aggregatePayloadType,
                 sinceSortableUniqueId,
                 rootPartitionKey,
-                resultAction)
-            : _documentPersistentRepository.GetAllEventsForAggregateAsync(
-            aggregatePayloadType,
-            sinceSortableUniqueId,
-            rootPartitionKey,
-            events => { resultAction(events); });
+                events => { resultAction(events); });
     }
 
     public async Task<bool> ExistsSnapshotForAggregateAsync(
@@ -309,15 +305,14 @@ public class DocumentRepositorySplitter : IDocumentRepository
         string payloadVersionIdentifier)
     {
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-        return aggregateContainerGroup == AggregateContainerGroup.InMemory
-            ? false
-            : await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
-            aggregateId,
-            aggregatePayloadType,
-            projectionPayloadType,
-            version,
-            rootPartitionKey,
-            payloadVersionIdentifier);
+        return aggregateContainerGroup != AggregateContainerGroup.InMemory &&
+            await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
+                aggregateId,
+                aggregatePayloadType,
+                projectionPayloadType,
+                version,
+                rootPartitionKey,
+                payloadVersionIdentifier);
     }
 
     private void SaveEvents(List<IEvent> events, Type originalType, string partitionKey, string sortableUniqueKey, bool fromInitial)
