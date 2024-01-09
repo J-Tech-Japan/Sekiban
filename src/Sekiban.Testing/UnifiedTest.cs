@@ -179,7 +179,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         var exception = GetQueryException(param);
         Assert.NotNull(exception);
         Assert.IsType<T>(exception);
-        checkException(exception as T ?? throw new Exception("Failed to cast exception"));
+        checkException(exception as T ?? throw new SekibanTypeNotFoundException("Failed to cast exception"));
         return this;
     }
     /// <summary>
@@ -196,7 +196,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     {
         var exception = GetQueryException(param);
         Assert.NotNull(exception);
-        checkException(exception ?? throw new Exception("Failed to cast exception"));
+        checkException(exception);
         return this;
     }
     /// <summary>
@@ -316,8 +316,9 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <exception cref="Exception"></exception>
     private TQueryResponse GetQueryResponse<TQueryResponse>(IQueryInput<TQueryResponse> param) where TQueryResponse : IQueryResponse
     {
-        var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new Exception("Failed to get Query service");
-        return queryService.ExecuteAsync(param).Result ?? throw new Exception("Failed to get Aggregate Query Response for " + param.GetType().Name);
+        var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new SekibanTypeNotFoundException("Failed to get Query service");
+        return queryService.ExecuteAsync(param).Result ??
+            throw new SekibanTypeNotFoundException("Failed to get Aggregate Query Response for " + param.GetType().Name);
     }
     /// <summary>
     ///     Get Exception from Query, returns null if no exception is thrown.
@@ -327,7 +328,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <exception cref="Exception"></exception>
     private Exception? GetQueryException(IQueryInputCommon param)
     {
-        var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new Exception("Failed to get Query service");
+        var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new SekibanTypeNotFoundException("Failed to get Query service");
         try
         {
             var _ = queryService.ExecuteAsync((dynamic)param).Result;
@@ -362,7 +363,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         var exception = GetQueryException(param);
         Assert.NotNull(exception);
         Assert.IsType<T>(exception);
-        checkException(exception as T ?? throw new Exception("Failed to cast exception"));
+        checkException(exception as T ?? throw new SekibanTypeNotFoundException("Failed to cast exception"));
         return this;
     }
     /// <summary>
@@ -376,7 +377,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     {
         var exception = GetQueryException(param);
         Assert.NotNull(exception);
-        checkException(exception ?? throw new Exception("Failed to cast exception"));
+        checkException(exception);
         return this;
     }
     /// <summary>
@@ -494,10 +495,11 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     public MultiProjectionState<TMultiProjectionPayload> GetMultiProjectionState<TMultiProjectionPayload>(
         string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TMultiProjectionPayload : IMultiProjectionPayloadCommon
     {
-        var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ?? throw new Exception("Failed to get Query service");
+        var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ??
+            throw new SekibanTypeNotFoundException("Failed to get Query service");
         return multiProjectionService.GetMultiProjectionAsync<TMultiProjectionPayload>(rootPartitionKey, SortableUniqueIdValue.GetSafeIdFromUtc())
                 .Result ??
-            throw new Exception("Failed to get Multi Projection Response for " + typeof(TMultiProjectionPayload).Name);
+            throw new SekibanTypeNotFoundException("Failed to get Multi Projection Response for " + typeof(TMultiProjectionPayload).Name);
     }
     /// <summary>
     ///     Check if Multi Projection Payload is same with file specified.
@@ -630,10 +632,11 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     public MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>> GetAggregateListProjectionState<TAggregatePayload>(
         string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TAggregatePayload : IAggregatePayloadCommon
     {
-        var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ?? throw new Exception("Failed to get Query service");
+        var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ??
+            throw new SekibanTypeNotFoundException("Failed to get Query service");
         return multiProjectionService.GetAggregateListObject<TAggregatePayload>(rootPartitionKey, SortableUniqueIdValue.GetCurrentIdFromUtc())
                 .Result ??
-            throw new Exception("Failed to get Aggregate List Projection Response for " + typeof(TAggregatePayload).Name);
+            throw new SekibanTypeNotFoundException("Failed to get Aggregate List Projection Response for " + typeof(TAggregatePayload).Name);
     }
     /// <summary>
     ///     Check if Aggregate List Projection Payload is same with file specified.
@@ -791,11 +794,13 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         GetSingleProjectionListState<TSingleProjectionPayload>(string rootPartitionKey)
         where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
-        var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ?? throw new Exception("Failed to get Query service");
+        var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ??
+            throw new SekibanTypeNotFoundException("Failed to get Query service");
         return multiProjectionService
                 .GetSingleProjectionListObject<TSingleProjectionPayload>(rootPartitionKey, SortableUniqueIdValue.GetCurrentIdFromUtc())
                 .Result ??
-            throw new Exception("Failed to get Single Projection List Projection Response for " + typeof(TSingleProjectionPayload).Name);
+            throw new SekibanTypeNotFoundException(
+                "Failed to get Single Projection List Projection Response for " + typeof(TSingleProjectionPayload).Name);
     }
     /// <summary>
     ///     Check if Single Projection List Payload is same with file specified. Specify the root partition key.
@@ -947,7 +952,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         string rootPartitionKey = IDocument.DefaultRootPartitionKey) where TEnvironmentAggregatePayload : IAggregatePayloadCommon
     {
         var singleProjectionService = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
-            throw new Exception("Failed to get single aggregate service");
+            throw new SekibanTypeNotFoundException("Failed to get single aggregate service");
         var aggregate = singleProjectionService.AsDefaultStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
         return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name, rootPartitionKey);
     }

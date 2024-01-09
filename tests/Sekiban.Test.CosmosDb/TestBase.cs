@@ -8,6 +8,7 @@ using Sekiban.Core.Cache;
 using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Documents;
+using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
@@ -80,7 +81,7 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
 
     public T GetService<T>()
     {
-        var toReturn = serviceProvider.GetService<T>() ?? throw new Exception("The object has not been registered." + typeof(T));
+        var toReturn = serviceProvider.GetService<T>() ?? throw new SekibanTypeNotFoundException("The object has not been registered." + typeof(T));
         return toReturn;
     }
 
