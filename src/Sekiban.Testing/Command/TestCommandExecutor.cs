@@ -96,7 +96,7 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
                 throw new SekibanTypeNotFoundException("HandleCommandAsync not found");
 
             var commandResponse
-                = (CommandResponse)((dynamic?)method.Invoke(adapter, new[] { commandDocument, handler, aggregateId, rootPartitionKey }) ??
+                = (CommandResponse)((dynamic?)method.Invoke(adapter, [commandDocument, handler, aggregateId, rootPartitionKey]) ??
                     throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
 
             LatestEvents = commandResponse.Events;
@@ -111,7 +111,7 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
             var adapter = Activator.CreateInstance(adapterClass) ?? throw new SekibanTypeNotFoundException("Method not found");
             var method = adapterClass.GetMethod(nameof(ICommandHandlerAdapterCommon.HandleCommandAsync));
             var commandResponse
-                = (CommandResponse)((dynamic?)method?.Invoke(adapter, new[] { commandDocument, handler, aggregateId, rootPartitionKey }) ??
+                = (CommandResponse)((dynamic?)method?.Invoke(adapter, [commandDocument, handler, aggregateId, rootPartitionKey]) ??
                     throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
             LatestEvents = commandResponse.Events;
         }

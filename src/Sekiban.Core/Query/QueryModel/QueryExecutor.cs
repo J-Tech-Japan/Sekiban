@@ -43,7 +43,7 @@ public class QueryExecutor : IQueryExecutor
                 throw new SekibanQueryExecutionException("Can not find method ForAggregateListQueryAsync");
             var method = (MethodInfo?)baseMethod.MakeGenericMethod(aggregateType, handler.GetType(), paramType, outputType) ??
                 throw new SekibanQueryExecutionException("Can not find method ForAggregateListQueryAsync");
-            var result = await (dynamic)(method.Invoke(this, new object?[] { param }) ??
+            var result = await (dynamic)(method.Invoke(this, [param]) ??
                 throw new SekibanQueryExecutionException("Can not find method ForAggregateListQueryAsync"));
             return result;
         }
@@ -54,7 +54,7 @@ public class QueryExecutor : IQueryExecutor
                 throw new SekibanQueryExecutionException("Can not find method ForAggregateListQueryAsync");
             var method = (MethodInfo?)baseMethod.MakeGenericMethod(singleProjectionType, handler.GetType(), paramType, outputType) ??
                 throw new SekibanQueryExecutionException("Can not find method ForAggregateListQueryAsync");
-            var result = await (dynamic)(method.Invoke(this, new object?[] { param }) ??
+            var result = await (dynamic)(method.Invoke(this, [param]) ??
                 throw new SekibanQueryExecutionException("Can not find method ForAggregateListQueryAsync"));
             return result;
         }
@@ -65,7 +65,7 @@ public class QueryExecutor : IQueryExecutor
                 throw new SekibanQueryExecutionException("Can not find method ForAggregateListQueryAsync");
             var method = (MethodInfo?)baseMethod.MakeGenericMethod(multiProjectionType, handler.GetType(), paramType, outputType) ??
                 throw new SekibanQueryExecutionException("Can not find method ForAggregateListQueryAsync");
-            var result = await (dynamic)(method.Invoke(this, new object?[] { param }) ??
+            var result = await (dynamic)(method.Invoke(this, [param]) ??
                 throw new SekibanQueryExecutionException("Can not find method ForAggregateListQueryAsync"));
             return result;
         }
@@ -75,7 +75,7 @@ public class QueryExecutor : IQueryExecutor
                 throw new SekibanQueryExecutionException("Can not find method ForGeneralListQueryAsync");
             var method = (MethodInfo?)baseMethod.MakeGenericMethod(handler.GetType(), paramType, outputType) ??
                 throw new SekibanQueryExecutionException("Can not find method ForGeneralListQueryAsync");
-            var result = await (dynamic)(method.Invoke(this, new object?[] { param }) ??
+            var result = await (dynamic)(method.Invoke(this, [param]) ??
                 throw new SekibanQueryExecutionException("Can not find method ForGeneralListQueryAsync"));
             return result;
         }
@@ -101,7 +101,7 @@ public class QueryExecutor : IQueryExecutor
                 throw new SekibanQueryExecutionException("Can not find method ForAggregateListQueryAsync");
             var method = (MethodInfo?)baseMethod.MakeGenericMethod(aggregateType, handler.GetType(), paramType, outputType) ??
                 throw new SekibanQueryExecutionException("Can not find method ForAggregateListQueryAsync");
-            var result = await (dynamic)(method.Invoke(this, new object?[] { param }) ??
+            var result = await (dynamic)(method.Invoke(this, [param]) ??
                 throw new SekibanQueryExecutionException("Can not find method ForAggregateListQueryAsync"));
             return result;
         }
@@ -112,7 +112,7 @@ public class QueryExecutor : IQueryExecutor
                 throw new SekibanQueryExecutionException("Can not find method ForAggregateListQueryAsync");
             var method = (MethodInfo?)baseMethod.MakeGenericMethod(singleProjectionType, handler.GetType(), paramType, outputType) ??
                 throw new SekibanQueryExecutionException("Can not find method ForAggregateListQueryAsync");
-            var result = await (dynamic)(method.Invoke(this, new object?[] { param }) ??
+            var result = await (dynamic)(method.Invoke(this, [param]) ??
                 throw new SekibanQueryExecutionException("Can not find method ForAggregateListQueryAsync"));
             return result;
         }
@@ -123,7 +123,7 @@ public class QueryExecutor : IQueryExecutor
                 throw new SekibanQueryExecutionException("Can not find method For MultiProjectionQuery");
             var method = (MethodInfo?)baseMethod.MakeGenericMethod(multiProjectionType, handler.GetType(), paramType, outputType) ??
                 throw new SekibanQueryExecutionException("Can not find method For MultiProjectionQuery");
-            var result = await (dynamic)(method.Invoke(this, new object?[] { param }) ??
+            var result = await (dynamic)(method.Invoke(this, [param]) ??
                 throw new SekibanQueryExecutionException("Can not find method For MultiProjectionQuery"));
             return result;
         }
@@ -133,7 +133,7 @@ public class QueryExecutor : IQueryExecutor
                 throw new SekibanQueryExecutionException("Can not find method For GeneralQuery");
             var method = (MethodInfo?)baseMethod.MakeGenericMethod(handler.GetType(), paramType, outputType) ??
                 throw new SekibanQueryExecutionException("Can not find method For GeneralQuery");
-            var result = await (dynamic)(method.Invoke(this, new object?[] { param }) ??
+            var result = await (dynamic)(method.Invoke(this, [param]) ??
                 throw new SekibanQueryExecutionException("Can not find method For GeneralQuery"));
             return result;
         }
