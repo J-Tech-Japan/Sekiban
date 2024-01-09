@@ -87,7 +87,7 @@ public class CosmosDocumentRepository(
                 while (feedIterator.HasMoreResults)
                 {
                     var next = await feedIterator.ReadNextAsync();
-                    if (next.Any())
+                    if (next.Count > 0)
                     {
                         return next.First();
                     }
@@ -278,7 +278,7 @@ public class CosmosDocumentRepository(
                 while (feedIterator.HasMoreResults)
                 {
                     var searched = await feedIterator.ReadNextAsync();
-                    if (searched.Any())
+                    if (searched.Count > 0)
                     {
                         return true;
                     }
