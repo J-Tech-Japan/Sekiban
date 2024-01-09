@@ -185,14 +185,13 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
 
     private StateType GetStateType(SnapshotDocument document)
     {
-        return (document, _sekibanAggregateTypes.AggregateTypes) switch
-        {
-            (var d, _) when d.AggregateType == d.DocumentTypeName => StateType.Aggregate
-            ,
-            (var d, var ts) when ts.Any(m => m.Aggregate.Name == d.DocumentTypeName) => StateType.AggregateSubtype
-            ,
-            _ => StateType.SingleProjection
-        };
+        if (document.AggregateType == document.DocumentTypeName)
+            return StateType.Aggregate;
+
+        if (_sekibanAggregateTypes.AggregateTypes.Any(m => m.Aggregate.Name == document.DocumentTypeName))
+            return StateType.AggregateSubtype;
+
+        return StateType.SingleProjection;
     }
 
     private enum StateType
