@@ -27,7 +27,7 @@ public class SimpleSingleProjectionFromInitial : ISingleProjectionFromInitial
             events =>
             {
                 var enumerable = events.ToList();
-                if (enumerable.Count() != enumerable.Select(m => m.Id).Distinct().Count())
+                if (enumerable.Count != enumerable.Select(m => m.Id).Distinct().Count())
                 {
                     throw new SekibanEventDuplicateException();
                 }
