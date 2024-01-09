@@ -152,10 +152,6 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommand<TAggregatePayload> =>
         WhenCommandWithPublishAndBlockingSubscriber(commandFunc);
 
-    public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(TCommand command) where TCommand : ICommand<TAggregatePayload>
-    {
-        return WhenCommand(_ => command);
-    }
     public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommand<TAggregateSubtype>(ICommand<TAggregateSubtype> command)
         where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload> =>
         WhenSubtypeCommandPrivate(command, false);
@@ -171,15 +167,14 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         nonBlockingStatus.RunBlockingAction(() => WhenSubtypeCommandPrivate(command, true));
         return this;
     }
-
+    public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(TCommand command) where TCommand : ICommand<TAggregatePayload>
+    {
+        return WhenCommand(_ => command);
+    }
     public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
         where TCommand : ICommand<TAggregatePayload> =>
         WhenCommandPrivateFunc<TAggregatePayload, TCommand>(commandFunc, false);
 
-    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(TCommand command) where TCommand : ICommand<TAggregatePayload>
-    {
-        return WhenCommandPrivateFunc<TAggregatePayload, TCommand>(_ => command, true);
-    }
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublishAndBlockingSubscriber<TCommand>(TCommand command)
         where TCommand : ICommand<TAggregatePayload>
     {
@@ -187,6 +182,10 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             throw new SekibanTypeNotFoundException("EventNonBlockingStatus is not registered");
         nonBlockingStatus.RunBlockingAction(() => WhenCommandWithPublish(command));
         return this;
+    }
+    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(TCommand command) where TCommand : ICommand<TAggregatePayload>
+    {
+        return WhenCommandPrivateFunc<TAggregatePayload, TCommand>(_ => command, true);
     }
 
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
@@ -521,7 +520,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var method = GetType().GetMethod(nameof(WhenCommandPrivate), BindingFlags.NonPublic | BindingFlags.Instance);
         var genericMethod = method?.MakeGenericMethod(aggregateIn, commandType) ??
             throw new SekibanTypeNotFoundException("Failed to get WhenCommandPrivate method");
-        return (IAggregateTestHelper<TAggregatePayload>)genericMethod.Invoke(this, new object?[] { command, withPublish })!;
+        return genericMethod.Invoke(this, new object?[] { command, withPublish }) as IAggregateTestHelper<TAggregatePayload> ??
+            throw new SekibanTypeNotFoundException("Failed to get result of WhenCommandPrivate method");
     }
     public AggregateState<TAggregatePayload> GetAggregateStateIfNotNullEmptyAggregate()
     {
