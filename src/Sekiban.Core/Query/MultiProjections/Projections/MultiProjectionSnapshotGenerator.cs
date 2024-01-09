@@ -123,7 +123,7 @@ public class MultiProjectionSnapshotGenerator(
             var method = payloadType.GetMethod(
                 nameof(IMultiProjectionPayloadGeneratePayload<TProjectionPayload>.CreateInitialPayload),
                 BindingFlags.Static | BindingFlags.Public);
-            var created = method?.Invoke(payloadType, new object?[] { });
+            var created = method?.Invoke(payloadType, Array.Empty<object?>());
             return created is TProjectionPayload projectionPayload
                 ? projectionPayload
                 : throw new SekibanMultiProjectionPayloadCreateFailedException(payloadType.FullName ?? "");

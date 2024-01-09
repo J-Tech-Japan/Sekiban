@@ -59,7 +59,7 @@ public record Event<TEventPayload> : Document, IEvent where TEventPayload : IEve
         if (payload.GetType().IsEventConvertingPayloadType())
         {
             var method = payload.GetType().GetMethod("ConvertTo");
-            var convertedPayload = (dynamic?)method?.Invoke(payload, new object?[] { });
+            var convertedPayload = (dynamic?)method?.Invoke(payload, Array.Empty<object?>());
             if (convertedPayload is not null)
             {
                 var convertedType = payload.GetType().GetEventConvertingPayloadConvertingType();

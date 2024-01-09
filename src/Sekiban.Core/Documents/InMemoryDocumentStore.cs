@@ -60,7 +60,7 @@ public class InMemoryDocumentStore
             _containerDictionary[sekibanContextIdentifier] = new InMemoryDocumentContainer<IEvent>();
         }
         var eventContainer = _containerDictionary[sekibanContextIdentifier];
-        return eventContainer.Partitions.TryGetValue(partition, out var containerPartition) ? containerPartition.ToArray() : (new IEvent[] { });
+        return eventContainer.Partitions.TryGetValue(partition, out var containerPartition) ? containerPartition.ToArray() : (Array.Empty<IEvent>());
     }
 
     private class InMemoryDocumentContainer<T>
