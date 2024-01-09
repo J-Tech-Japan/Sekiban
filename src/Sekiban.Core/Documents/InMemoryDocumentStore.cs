@@ -65,7 +65,7 @@ public class InMemoryDocumentStore
 
     private class InMemoryDocumentContainer<T>
     {
-        public readonly BlockingCollection<T> All = new();
+        public readonly BlockingCollection<T> All = [];
         public readonly ConcurrentDictionary<string, BlockingCollection<T>> Partitions = new();
     }
 }

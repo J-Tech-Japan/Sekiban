@@ -11,7 +11,7 @@ namespace Sekiban.Core.Snapshot.BackgroundServices;
 /// </summary>
 public class SnapshotTakingBackgroundService : BackgroundService
 {
-    private readonly BlockingCollection<IEvent> _eventQueue = new();
+    private readonly BlockingCollection<IEvent> _eventQueue = [];
     public IServiceProvider? ServiceProvider { get; set; } = null;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

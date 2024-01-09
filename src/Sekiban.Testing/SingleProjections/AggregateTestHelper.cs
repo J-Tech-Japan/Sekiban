@@ -22,9 +22,9 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     private readonly TestCommandExecutor _commandExecutor;
     private readonly IServiceProvider _serviceProvider;
     private Exception? _latestException { get; set; }
-    private List<IEvent> _latestEvents { get; set; } = new();
+    private List<IEvent> _latestEvents { get; set; } = [];
     private ICommandCommon? _latestCommand { get; set; }
-    private List<SekibanValidationParameterError> _latestValidationErrors { get; set; } = new();
+    private List<SekibanValidationParameterError> _latestValidationErrors { get; set; } = [];
 
     private DefaultSingleProjector<TAggregatePayload> _projector { get; }
 
@@ -106,7 +106,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
             throw new SekibanTypeNotFoundException("Failed to get aggregate loader");
         return aggregateLoader.AllEventsAsync<TAggregatePayload>(GetAggregateId(), GetRootPartitionKey(), toVersion).Result?.ToList() ??
-            new List<IEvent>();
+            [];
     }
 
     public void ThrowIfTestHasUnhandledErrors()
@@ -120,7 +120,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         if (_latestValidationErrors.Count != 0)
         {
             var first = _latestValidationErrors.First();
-            _latestValidationErrors = new List<SekibanValidationParameterError>();
+            _latestValidationErrors = [];
             throw new SekibanTypeNotFoundException(
                 $"{_latestCommand?.GetType().Name ?? ""}" + first.PropertyName + " has validation error " + first.ErrorMessages.First());
         }
@@ -366,14 +366,14 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
         Assert.Equal(expectedJson, actualJson);
-        _latestValidationErrors = new List<SekibanValidationParameterError>();
+        _latestValidationErrors = [];
         return this;
     }
 
     public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors()
     {
         Assert.NotEmpty(_latestValidationErrors);
-        _latestValidationErrors = new List<SekibanValidationParameterError>();
+        _latestValidationErrors = [];
         return this;
     }
 
@@ -696,8 +696,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     private void ResetBeforeCommand()
     {
         ThrowIfTestHasUnhandledErrors();
-        _latestValidationErrors = new List<SekibanValidationParameterError>();
-        _latestEvents = new List<IEvent>();
+        _latestValidationErrors = [];
+        _latestEvents = [];
         _latestException = null;
     }
 

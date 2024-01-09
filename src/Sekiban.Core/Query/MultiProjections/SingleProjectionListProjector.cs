@@ -19,7 +19,7 @@ public class SingleProjectionListProjector<TProjection, TState, TProjector> : IM
 
     private SingleProjectionListState<TState> State { get; set; }
 
-    public List<TProjection> List { get; private set; } = new();
+    public List<TProjection> List { get; private set; } = [];
 
     public SingleProjectionListProjector()
     {

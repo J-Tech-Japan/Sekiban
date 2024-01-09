@@ -231,6 +231,6 @@ public class CosmosDbFactory(
 
     private static IReadOnlyList<string> GetPartitionKeyPaths(bool supportsHierarchicalPartitions) =>
         supportsHierarchicalPartitions
-            ? new List<string> { "/RootPartitionKey", "/AggregateType", "/PartitionKey" }
-            : new List<string> { "/PartitionKey" };
+            ? ["/RootPartitionKey", "/AggregateType", "/PartitionKey"]
+            : ["/PartitionKey"];
 }

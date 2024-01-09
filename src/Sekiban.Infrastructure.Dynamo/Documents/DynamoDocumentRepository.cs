@@ -309,9 +309,9 @@ public class DynamoDocumentRepository(
                                  let json = document.ToJson()
                                  let sortableUniqueId = document[nameof(IDocument.SortableUniqueId)].AsString()
                                  select json).ToList();
-                if (snapshots.Count == 0) { return new List<SnapshotDocument>(); }
+                if (snapshots.Count == 0) { return []; }
                 var snapshotDocuments = snapshots.Select(m => SekibanJsonHelper.Deserialize<SnapshotDocument>(m)).ToList();
-                if (snapshotDocuments.Count == 0) { return new List<SnapshotDocument>(); }
+                if (snapshotDocuments.Count == 0) { return []; }
                 var toReturn = new List<SnapshotDocument>();
                 foreach (var snapshotDocument in snapshotDocuments)
                 {

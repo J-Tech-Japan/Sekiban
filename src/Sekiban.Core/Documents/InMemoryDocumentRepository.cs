@@ -25,7 +25,7 @@ public class InMemoryDocumentRepository(
         string rootPartitionKey = IDocument.DefaultRootPartitionKey)
     {
         await Task.CompletedTask;
-        return new List<SnapshotDocument>();
+        return [];
     }
 
     public async Task GetAllEventsForAggregateIdAsync(

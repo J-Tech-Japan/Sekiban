@@ -58,7 +58,7 @@ public class SekibanApiListController<T>(
                     Method = "GET",
                     SampleResponseObject = Activator.CreateInstance(stateResponseType)!
                 },
-                new List<SekibanCommandInfo>());
+                []);
             list.Add(aggregateInfo);
             foreach (var (_, implementationType) in webDependencyDefinition.GetCommandDependencies())
             {

@@ -35,7 +35,7 @@ public record Event<TEventPayload> : Document, IEvent where TEventPayload : IEve
     /// <summary>
     ///     Event Call histories
     /// </summary>
-    public List<CallHistory> CallHistories { get; init; } = new();
+    public List<CallHistory> CallHistories { get; init; } = [];
     /// <summary>
     ///     Get Payload object
     /// </summary>
