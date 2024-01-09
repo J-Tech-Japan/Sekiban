@@ -207,7 +207,7 @@ public abstract class AggregateSubtypeTest : TestBase<FeatureCheckDependency>
     }
 
     [Fact]
-    public async Task multiProjectionsTest()
+    public async Task MultiProjectionsTest()
     {
         RemoveAllFromDefaultAndDissolvable();
 

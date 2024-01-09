@@ -5,5 +5,5 @@ namespace Sekiban.Web.Common;
 /// </summary>
 /// <param name="AggregateName"></param>
 /// <param name="QueryInfo"></param>
-/// <param name="commands"></param>
-public record SekibanAggregateInfo(string AggregateName, SekibanQueryInfo QueryInfo, List<SekibanCommandInfo> commands);
+/// <param name="Commands"></param>
+public record SekibanAggregateInfo(string AggregateName, SekibanQueryInfo QueryInfo, List<SekibanCommandInfo> Commands);
