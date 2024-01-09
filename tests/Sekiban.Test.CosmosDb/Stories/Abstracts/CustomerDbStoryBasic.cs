@@ -620,7 +620,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
                                 ReferenceVersion = version
                             });
                         version = recentActivityAddedResult.Version;
-                        _testOutputHelper.WriteLine($"{i} - {recentActivityAddedResult.Version.ToString()}");
+                        _testOutputHelper.WriteLine($"{i} - {recentActivityAddedResult.Version}");
                     }));
         }
         await Task.WhenAll(tasks);
