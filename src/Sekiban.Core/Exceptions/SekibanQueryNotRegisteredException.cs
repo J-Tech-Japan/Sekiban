@@ -1,8 +1,3 @@
 namespace Sekiban.Core.Exceptions;
 
-public class SekibanQueryNotRegisteredException : Exception, ISekibanException
-{
-    public SekibanQueryNotRegisteredException(string message) : base(message)
-    {
-    }
-}
+public class SekibanQueryNotRegisteredException(string message) : Exception(message), ISekibanException;

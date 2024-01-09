@@ -1,4 +1,5 @@
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Types;
@@ -21,21 +22,22 @@ public static class SingleProjectionListStateTypesExtensions
         {
             var aggregateStateType = singleProjectionListStateType.GetGenericArguments()[0];
             return aggregateStateType.IsGenericType && aggregateStateType.GetGenericTypeDefinition() == typeof(AggregateState<>)
-                ? aggregateStateType.GetGenericArguments()[0]
+                ?
+                aggregateStateType.GetGenericArguments()[0]
                 : aggregateStateType.IsGenericType && aggregateStateType.GetGenericTypeDefinition() == typeof(SingleProjectionState<>)
-                ? aggregateStateType.GetGenericArguments()[0]
-                : throw new Exception(singleProjectionListStateType.FullName + " is not an Single Projection List state");
+                    ? aggregateStateType.GetGenericArguments()[0]
+                    : throw new SekibanSingleProjectionPayloadNotExistsException(
+                        singleProjectionListStateType.FullName + " is not an Single Projection List state");
         }
-        throw new Exception(singleProjectionListStateType.FullName + " is not an Single Projection List state");
+        throw new SekibanSingleProjectionPayloadNotExistsException(
+            singleProjectionListStateType.FullName + " is not an Single Projection List state");
     }
     /// <summary>
     ///     Check whether the given type is single projection list state type or not.
     /// </summary>
     /// <param name="singleProjectionListStateType"></param>
     /// <returns></returns>
-    public static bool IsSingleProjectionListStateType(this Type singleProjectionListStateType)
-    {
-        return singleProjectionListStateType.IsGenericType &&
-            singleProjectionListStateType.GetGenericTypeDefinition() == typeof(SingleProjectionListState<>);
-    }
+    public static bool IsSingleProjectionListStateType(this Type singleProjectionListStateType) =>
+        singleProjectionListStateType.IsGenericType &&
+        singleProjectionListStateType.GetGenericTypeDefinition() == typeof(SingleProjectionListState<>);
 }

@@ -156,7 +156,7 @@ public class MemoryCacheMultiProjection : IMultiProjection
         where TProjectionPayload : IMultiProjectionPayloadCommon
     {
         await Task.CompletedTask;
-        var list = JsonSerializer.Deserialize<List<JsonElement>>(stream) ?? throw new Exception("Could not deserialize file");
+        var list = JsonSerializer.Deserialize<List<JsonElement>>(stream) ?? throw new SekibanSerializerException("Could not deserialize file");
         var events = (IList<IEvent>)list.Select(m => SekibanJsonHelper.DeserializeToEvent(m, _registeredEventTypes.RegisteredTypes))
             .Where(m => m is not null)
             .OrderBy(m => m is null ? string.Empty : m.SortableUniqueId)
@@ -195,7 +195,8 @@ public class MemoryCacheMultiProjection : IMultiProjection
         var unsafeEvents = new List<IEvent>();
         while (eventStream != null)
         {
-            var list = JsonSerializer.Deserialize<List<JsonElement>>(eventStream) ?? throw new Exception("Could not deserialize file");
+            var list = JsonSerializer.Deserialize<List<JsonElement>>(eventStream) ??
+                throw new SekibanSerializerException("Could not deserialize file");
             var events = (IList<IEvent>)list.Select(m => SekibanJsonHelper.DeserializeToEvent(m, _registeredEventTypes.RegisteredTypes))
                 .Where(m => m is not null)
                 .ToList();
