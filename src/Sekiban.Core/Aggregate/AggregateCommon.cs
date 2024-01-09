@@ -37,7 +37,7 @@ public abstract class AggregateCommon : IAggregate
         {
             throw new InvalidProgramException();
         }
-        var aggregate = c.Invoke(Array.Empty<object>()) as UAggregate ?? throw new InvalidProgramException();
+        var aggregate = c.Invoke([]) as UAggregate ?? throw new InvalidProgramException();
         aggregate._basicInfo = aggregate._basicInfo with { AggregateId = aggregateId };
         return aggregate;
 
@@ -80,7 +80,7 @@ public abstract class AggregateCommon : IAggregate
             var method = typeof(TAggregatePayload).GetMethod(
                 nameof(ISingleProjectionPayloadGeneratable<TAggregatePayload>.CreateInitialPayload),
                 BindingFlags.Static | BindingFlags.Public);
-            return method?.Invoke(typeof(TAggregatePayload), Array.Empty<object?>()) as IAggregatePayloadCommon ??
+            return method?.Invoke(typeof(TAggregatePayload), []) as IAggregatePayloadCommon ??
                 throw new SekibanAggregateCreateFailedException(typeof(TAggregatePayload).FullName ?? string.Empty);
         }
         throw new SekibanAggregateCreateFailedException(typeof(TAggregatePayload).FullName ?? string.Empty);
@@ -101,7 +101,7 @@ public abstract class AggregateCommon : IAggregate
             {
                 return converted;
             }
-            var instantiated = Activator.CreateInstance(typeof(TAggregatePayload), Array.Empty<object?>());
+            var instantiated = Activator.CreateInstance(typeof(TAggregatePayload), []);
             return instantiated is TAggregatePayload payload2
                 ? payload2
                 : throw new SekibanAggregateCreateFailedException(typeof(TAggregatePayload).FullName ?? string.Empty);
@@ -118,7 +118,7 @@ public abstract class AggregateCommon : IAggregate
             {
                 return converted;
             }
-            var instantiated = Activator.CreateInstance(typeof(TAggregatePayload), Array.Empty<object?>());
+            var instantiated = Activator.CreateInstance(typeof(TAggregatePayload), []);
             return instantiated is TAggregatePayload payload2
                 ? payload2
                 : throw new SekibanAggregateCreateFailedException(typeof(TAggregatePayload).FullName ?? string.Empty);
@@ -134,7 +134,7 @@ public abstract class AggregateCommon : IAggregate
             {
                 return converted;
             }
-            var instantiated = Activator.CreateInstance(typeof(TAggregatePayload), Array.Empty<object?>());
+            var instantiated = Activator.CreateInstance(typeof(TAggregatePayload), []);
             return instantiated is TAggregatePayload payload2
                 ? payload2
                 : throw new SekibanAggregateCreateFailedException(typeof(TAggregatePayload).FullName ?? string.Empty);
@@ -144,13 +144,13 @@ public abstract class AggregateCommon : IAggregate
             var method = typeof(TAggregatePayload).GetMethod(
                 nameof(ISingleProjectionPayloadGeneratable<TAggregatePayload>.CreateInitialPayload),
                 BindingFlags.Static | BindingFlags.Public);
-            var created = method?.Invoke(typeof(TAggregatePayload), Array.Empty<object?>());
+            var created = method?.Invoke(typeof(TAggregatePayload), []);
             var converted = created is TAggregatePayload payload ? payload : default;
             if (converted is not null)
             {
                 return converted;
             }
-            var instantiated = Activator.CreateInstance(typeof(TAggregatePayload), Array.Empty<object?>());
+            var instantiated = Activator.CreateInstance(typeof(TAggregatePayload), []);
             return instantiated is TAggregatePayload payload2
                 ? payload2
                 : throw new SekibanAggregateCreateFailedException(typeof(TAggregatePayload).FullName ?? string.Empty);
