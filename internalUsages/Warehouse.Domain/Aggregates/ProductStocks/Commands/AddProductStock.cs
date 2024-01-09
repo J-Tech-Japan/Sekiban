@@ -1,5 +1,6 @@
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
+using Sekiban.Core.Exceptions;
 using Shipping.Port.ProductExistsPorts;
 using WarehouseContext.Aggregates.ProductStocks.Events;
 namespace WarehouseContext.Aggregates.ProductStocks.Commands;
@@ -19,7 +20,7 @@ public record AddProductStock : ICommand<ProductStock>
             ICommandContext<ProductStock> context)
         {
             yield return !await _productExistsPort.ProductExistsAsync(command.ProductId)
-                ? throw new Exception("Product does not exist")
+                ? throw new SekibanTypeNotFoundException("Product does not exist")
                 : (IEventPayloadApplicableTo<ProductStock>)new ProductStockAdded { AddedAmount = command.AddedAmount };
         }
     }

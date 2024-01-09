@@ -57,7 +57,7 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
         ICommand<TAggregatePayload> command,
         Guid? injectingAggregateId = null) where TAggregatePayload : IAggregatePayloadCommon
     {
-        var nonBlockingStatus = serviceProvider.GetService<EventNonBlockingStatus>() ?? throw new Exception("EventNonBlockingStatus could not be found.");
+        var nonBlockingStatus = serviceProvider.GetService<EventNonBlockingStatus>() ?? throw new SekibanTypeNotFoundException("EventNonBlockingStatus could not be found.");
         return nonBlockingStatus.RunBlockingFunc(() => ExecuteCommand(command, injectingAggregateId, true));
     }
 
@@ -87,13 +87,13 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
                 rootPartitionKey,
                 null);
 
-            var aggregateLoader = serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ?? throw new Exception("Failed to get AddAggregate Service");
+            var aggregateLoader = serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ?? throw new SekibanTypeNotFoundException("Failed to get AddAggregate Service");
             var baseClass = typeof(CommandHandlerAdapter<,>);
             var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), command.GetType());
-            var adapter = Activator.CreateInstance(adapterClass, aggregateLoader, false) ?? throw new Exception("Adapter not found");
+            var adapter = Activator.CreateInstance(adapterClass, aggregateLoader, false) ?? throw new SekibanTypeNotFoundException("Adapter not found");
 
             var method = adapterClass.GetMethod(nameof(ICommandHandlerAdapterCommon.HandleCommandAsync)) ??
-                throw new Exception("HandleCommandAsync not found");
+                throw new SekibanTypeNotFoundException("HandleCommandAsync not found");
 
             var commandResponse
                 = (CommandResponse)((dynamic?)method.Invoke(adapter, new[] { commandDocument, handler, aggregateId, rootPartitionKey }) ??
@@ -108,7 +108,7 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
 
             var baseClass = typeof(OnlyPublishingCommandHandlerAdapter<,>);
             var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), command.GetType());
-            var adapter = Activator.CreateInstance(adapterClass) ?? throw new Exception("Method not found");
+            var adapter = Activator.CreateInstance(adapterClass) ?? throw new SekibanTypeNotFoundException("Method not found");
             var method = adapterClass.GetMethod(nameof(ICommandHandlerAdapterCommon.HandleCommandAsync));
             var commandResponse
                 = (CommandResponse)((dynamic?)method?.Invoke(adapter, new[] { commandDocument, handler, aggregateId, rootPartitionKey }) ??
@@ -116,7 +116,7 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
             LatestEvents = commandResponse.Events;
         }
 
-        var documentWriter = serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter ?? throw new Exception("Failed to get document writer");
+        var documentWriter = serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter ?? throw new SekibanTypeNotFoundException("Failed to get document writer");
         foreach (var e in LatestEvents)
         {
             if (withPublish)
@@ -144,7 +144,7 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
     {
         var toReturn = new List<IEvent>();
         var documentRepository = serviceProvider.GetRequiredService(typeof(IDocumentRepository)) as IDocumentRepository ??
-            throw new Exception("Failed to get document repository");
+            throw new SekibanTypeNotFoundException("Failed to get document repository");
         documentRepository.GetAllEventsForAggregateIdAsync(
                 aggregateId,
                 typeof(TAggregatePayload),

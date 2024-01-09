@@ -89,7 +89,7 @@ public class QueryExecutor : IQueryExecutor
             throw new SekibanValidationErrorsException(validationResult);
         }
         var paramType = param.GetType();
-        if (!paramType.IsQueryInputType()) { throw new Exception("Invalid parameter type"); }
+        if (!paramType.IsQueryInputType()) { throw new SekibanQueryExecutionException("Invalid parameter type"); }
         var outputType = paramType.GetOutputClassFromQueryInputType();
         var handler = serviceProvider.GetQueryObjectFromQueryInputType(paramType, outputType) ??
             throw new SekibanQueryExecutionException("Can not find query handler for " + paramType.Name);
@@ -129,10 +129,12 @@ public class QueryExecutor : IQueryExecutor
         }
         if (handlerType.IsGeneralQueryType())
         {
-            var baseMethod = GetType().GetMethod(nameof(ForGeneralQueryAsync)) ?? throw new Exception("Can not find method For GeneralQuery");
+            var baseMethod = GetType().GetMethod(nameof(ForGeneralQueryAsync)) ??
+                throw new SekibanQueryExecutionException("Can not find method For GeneralQuery");
             var method = (MethodInfo?)baseMethod.MakeGenericMethod(handler.GetType(), paramType, outputType) ??
                 throw new SekibanQueryExecutionException("Can not find method For GeneralQuery");
-            var result = await (dynamic)(method.Invoke(this, new object?[] { param }) ?? throw new Exception("Can not find method For GeneralQuery"));
+            var result = await (dynamic)(method.Invoke(this, new object?[] { param }) ??
+                throw new SekibanQueryExecutionException("Can not find method For GeneralQuery"));
             return result;
         }
         throw new SekibanQueryExecutionException("Can not find query handler for" + paramType.Name);
