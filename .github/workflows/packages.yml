@@ -41,3 +41,7 @@ jobs:
     - name: Pack Web
       run: |
         dotnet nuget push "src/Sekiban.Web/bin/Release/Sekiban.Web.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+    - name: Pack Cosmos Aspire
+      run: |
+        dotnet nuget push "src/Sekiban.Aspire.Infrastructure.Cosmos/bin/Release/Sekiban.Aspire.Infrastructure.Cosmos.${{ github.event.release.tag_name }}-preview.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+  

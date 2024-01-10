@@ -1,0 +1,6 @@
+@FeatureCheck.WebApi.AspireTest_HostAddress = http://localhost:5049
+
+GET {{FeatureCheck.WebApi.AspireTest_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
