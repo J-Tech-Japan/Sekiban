@@ -37,6 +37,10 @@ public class SekibanCosmosDbOptions
             from context in contexts
             let path = GetLastPathComponent(context)
             select SekibanAzureOption.FromConfiguration(context, configurationRoot, path));
+        if (contextSettings.Count == 0)
+        {
+            contextSettings.Add(SekibanAzureOption.FromConfiguration(defaultContextSection, configurationRoot));
+        }
         return new SekibanCosmosDbOptions { Contexts = contextSettings };
     }
     private static string GetLastPathComponent(IConfigurationSection section) => section.Path.Split(':').LastOrDefault() ?? section.Path;
