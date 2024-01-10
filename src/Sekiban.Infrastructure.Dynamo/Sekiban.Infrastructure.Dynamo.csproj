@@ -4,13 +4,13 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Infrastructure.Dynamo</PackageId>
-        <Version>0.16.2</Version>
+        <Version>0.16.3</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Dynamo Infrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.16.2</PackageVersion>
-        <Description>Bug fix from 0.16.0 casting to ConfigurationRoot</Description>
+        <PackageVersion>0.16.3</PackageVersion>
+        <Description>Bug fix when appsetting default is empty</Description>
         <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
         <LangVersion>preview</LangVersion>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -23,7 +23,7 @@
         <PackageReference Include="AWSSDK.DynamoDBv2" Version="3.7.300.25"/>
         <PackageReference Include="AWSSDK.S3" Version="3.7.305"/>
         <PackageReference Include="SharpZipLib" Version="1.4.2"/>
-        <PackageReference Include="Sekiban.Core" Version="0.16.2"/>
+        <PackageReference Include="Sekiban.Core" Version="0.16.3"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
         <PackageReference Include="System.Configuration.ConfigurationManager" Version="6.0.0"/>
     </ItemGroup>
