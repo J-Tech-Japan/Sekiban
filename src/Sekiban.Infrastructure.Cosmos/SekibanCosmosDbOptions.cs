@@ -27,7 +27,7 @@ public class SekibanCosmosDbOptions
     public static SekibanCosmosDbOptions FromConfigurationSection(IConfigurationSection section, IConfigurationRoot configurationRoot)
     {
         var defaultContextSection = section.GetSection("Default");
-        var contexts = section.GetSection("Contexts").GetChildren();
+        var contexts = section.GetSection("Contexts").GetChildren().ToList();
         var contextSettings = new List<SekibanAzureOption>();
         if (defaultContextSection.Exists())
         {
@@ -37,6 +37,10 @@ public class SekibanCosmosDbOptions
             from context in contexts
             let path = GetLastPathComponent(context)
             select SekibanAzureOption.FromConfiguration(context, configurationRoot, path));
+        if (!defaultContextSection.Exists() && contexts.Count == 0)
+        {
+            contextSettings.Add(SekibanAzureOption.FromConfiguration(defaultContextSection, configurationRoot));
+        }
         return new SekibanCosmosDbOptions { Contexts = contextSettings };
     }
     private static string GetLastPathComponent(IConfigurationSection section) => section.Path.Split(':').LastOrDefault() ?? section.Path;
