@@ -13,7 +13,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Sekiban.Infrastructure.Cosmos.Aspire\Sekiban.Infrastructure.Cosmos.Aspire.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Aspire.Infrastructure.Cosmos\Sekiban.Aspire.Infrastructure.Cosmos.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Web\Sekiban.Web.csproj"/>
         <ProjectReference Include="..\FeatureCheck.Domain\FeatureCheck.Domain.csproj"/>
     </ItemGroup>
