@@ -4,12 +4,10 @@
         <TargetFramework>net8.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <LangVersion>preview</LangVersion>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Sekiban.Core" Version="0.16.3" />
+      <PackageReference Include="Sekiban.Core" Version="0.16.3" />
     </ItemGroup>
-
 
 </Project>
