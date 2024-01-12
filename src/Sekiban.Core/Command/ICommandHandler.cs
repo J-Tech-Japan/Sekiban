@@ -6,8 +6,7 @@ namespace Sekiban.Core.Command;
 ///     Command Handler Interface for ICommand
 ///     Application developer can implement this interface to define a command handler
 ///     A Command Handler can receive DI objects through constructor.
-///     Handler is not async. If awaiting is required, use
-///     <see cref="IVersionValidationCommandHandlerAsync{TAggregatePayload,TCommand}" />
+///     Handler is not async.
 /// </summary>
 /// <typeparam name="TAggregatePayload">Target Aggregate</typeparam>
 /// <typeparam name="TCommand">Target Command</typeparam>

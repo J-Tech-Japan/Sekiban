@@ -6,6 +6,7 @@ namespace Sekiban.Core.Command;
 ///     This command is used to optimistically validate command version.
 ///     ReferenceVersion is checked with current aggregate version,
 ///     If they are not equal, then command is rejected.
+///     If version validation failed, command execution will throw SekibanCommandInconsistentVersionException
 /// </summary>
 /// <typeparam name="TAggregatePayload">Target Aggregate</typeparam>
 public interface ICommandWithVersionValidation<TAggregatePayload> : ICommand<TAggregatePayload>, IVersionValidationCommandCommon
