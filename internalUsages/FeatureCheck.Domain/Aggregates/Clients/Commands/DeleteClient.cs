@@ -3,7 +3,7 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.Clients.Commands;
 
-public record DeleteClient(Guid ClientId) : IVersionValidationCommand<Client>
+public record DeleteClient(Guid ClientId) : ICommandWithVersionValidation<Client>
 {
     public DeleteClient() : this(Guid.Empty)
     {
@@ -13,7 +13,7 @@ public record DeleteClient(Guid ClientId) : IVersionValidationCommand<Client>
 
     public Guid GetAggregateId() => ClientId;
 
-    public class Handler : IVersionValidationCommandHandler<Client, DeleteClient>
+    public class Handler : ICommandHandler<Client, DeleteClient>
     {
         public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(DeleteClient command, ICommandContext<Client> context)
         {

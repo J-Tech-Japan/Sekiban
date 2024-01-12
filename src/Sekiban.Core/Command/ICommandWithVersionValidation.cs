@@ -8,5 +8,5 @@ namespace Sekiban.Core.Command;
 ///     If they are not equal, then command is rejected.
 /// </summary>
 /// <typeparam name="TAggregatePayload">Target Aggregate</typeparam>
-public interface IVersionValidationCommand<TAggregatePayload> : ICommand<TAggregatePayload>, IVersionValidationCommandCommon
+public interface ICommandWithVersionValidation<TAggregatePayload> : ICommand<TAggregatePayload>, IVersionValidationCommandCommon
     where TAggregatePayload : IAggregatePayloadCommon;

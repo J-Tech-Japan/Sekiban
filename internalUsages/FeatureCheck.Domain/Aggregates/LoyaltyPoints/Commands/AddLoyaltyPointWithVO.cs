@@ -7,7 +7,7 @@ using Sekiban.Core.Events;
 using Sekiban.Core.Shared;
 namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
 
-public record AddLoyaltyPointWithVO : IVersionValidationCommand<LoyaltyPoint>
+public record AddLoyaltyPointWithVO : ICommandWithVersionValidation<LoyaltyPoint>
 {
     public Guid ClientId { get; init; } = Guid.Empty;
     public LoyaltyPointReceiveType Reason { get; init; } = new(LoyaltyPointReceiveTypeKeys.CreditcardUsage);
@@ -18,16 +18,18 @@ public record AddLoyaltyPointWithVO : IVersionValidationCommand<LoyaltyPoint>
 
     public Guid GetAggregateId() => ClientId;
 
-    public class Handler : IVersionValidationCommandHandler<LoyaltyPoint, AddLoyaltyPointWithVO>
+    public class Handler : ICommandHandler<LoyaltyPoint, AddLoyaltyPointWithVO>
     {
         public IEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommand(
             AddLoyaltyPointWithVO command,
             ICommandContext<LoyaltyPoint> context)
         {
             if (context.GetState().Payload.LastOccuredTime is not null && context.GetState().Payload.LastOccuredTime > command.HappenedDate)
+            {
                 throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
+            }
 
-            yield return (IEventPayloadApplicableTo<LoyaltyPoint>)new LoyaltyPointAdded(command.HappenedDate, command.Reason, command.LoyaltyPointValue, command.Note);
+            yield return new LoyaltyPointAdded(command.HappenedDate, command.Reason, command.LoyaltyPointValue, command.Note);
         }
     }
 }

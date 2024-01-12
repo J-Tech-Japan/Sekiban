@@ -3,7 +3,7 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.PurchasedCarts.Commands;
 
-public class ReceivePaymentToPurchasedCartR : IVersionValidationCommand<PurchasedCartR>
+public class ReceivePaymentToPurchasedCartR : ICommandWithVersionValidation<PurchasedCartR>
 {
     public Guid CartId { get; init; }
 
@@ -13,7 +13,7 @@ public class ReceivePaymentToPurchasedCartR : IVersionValidationCommand<Purchase
     public Guid GetAggregateId() => CartId;
     public int ReferenceVersion { get; init; }
 
-    public class Handler : IVersionValidationCommandHandler<PurchasedCartR, ReceivePaymentToPurchasedCartR>
+    public class Handler : ICommandHandler<PurchasedCartR, ReceivePaymentToPurchasedCartR>
     {
         public IEnumerable<IEventPayloadApplicableTo<PurchasedCartR>> HandleCommand(
             ReceivePaymentToPurchasedCartR command,

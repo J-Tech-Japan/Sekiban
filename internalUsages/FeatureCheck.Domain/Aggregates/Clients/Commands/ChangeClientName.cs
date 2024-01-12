@@ -3,7 +3,7 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.Clients.Commands;
 
-public record ChangeClientName(Guid ClientId, string ClientName) : IVersionValidationCommand<Client>, ICleanupNecessaryCommand<ChangeClientName>
+public record ChangeClientName(Guid ClientId, string ClientName) : ICommandWithVersionValidation<Client>, ICleanupNecessaryCommand<ChangeClientName>
 {
     public ChangeClientName() : this(Guid.Empty, string.Empty)
     {
@@ -15,7 +15,7 @@ public record ChangeClientName(Guid ClientId, string ClientName) : IVersionValid
 
     public Guid GetAggregateId() => ClientId;
 
-    public class Handler : IVersionValidationCommandHandler<Client, ChangeClientName>
+    public class Handler : ICommandHandler<Client, ChangeClientName>
     {
         public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(ChangeClientName command, ICommandContext<Client> context)
         {
