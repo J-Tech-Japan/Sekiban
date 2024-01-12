@@ -7,22 +7,12 @@ using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 namespace Sekiban.Web.OpenApi;
 
-public class SekibanOpenApiFilter : ISchemaFilter, IOperationFilter
+public class SekibanOpenApiFilter : ISchemaFilter
 {
-    public void Apply(OpenApiOperation operation, OperationFilterContext context)
-    {
-        if (operation.RequestBody is not null && (operation.RequestBody.Content is null || !operation.RequestBody.Content.Any()))
-        {
-            operation.RequestBody = null;
-        }
-    }
-
     public void Apply(OpenApiSchema schema, SchemaFilterContext context)
     {
         if (context.Type is not null && context.Type.IsEnum)
-        {
             GenerateSchemaForEnum(context.Type, schema);
-        }
 
         (schema.Title, schema.Description) = context switch
         {

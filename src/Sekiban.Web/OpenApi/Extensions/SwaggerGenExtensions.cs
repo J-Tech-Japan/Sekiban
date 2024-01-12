@@ -9,15 +9,12 @@ public static class SwaggerGenExtensions
     {
         options.CustomSchemaIds(SekibanOpenApiSchemaIdGenerator.Generate);
         options.SchemaFilter<SekibanOpenApiFilter>();
-        options.OperationFilter<SekibanOpenApiFilter>();
         return options;
     }
 
     public static void ConfigureForSekiban(this SwaggerGenOptions options, Func<Type, string>? generateSchemaId = null)
     {
         options.CustomSchemaIds(generateSchemaId ?? SekibanOpenApiSchemaIdGenerator.Generate);
-
         options.SchemaFilter<SekibanOpenApiFilter>();
-        options.OperationFilter<SekibanOpenApiFilter>();
     }
 }
