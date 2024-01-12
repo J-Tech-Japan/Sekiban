@@ -571,9 +571,9 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             throw new SekibanTypeNotFoundException("Failed to get AddAggregate Service");
         try
         {
-            if (command is IOnlyPublishingCommandCommon)
+            if (command is ICommandWithoutLoadingAggregateCommon)
             {
-                var baseClass = typeof(OnlyPublishingCommandHandlerAdapter<,>);
+                var baseClass = typeof(CommandWithoutLoadingAggregateHandlerAdapter<,>);
                 var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayloadIn), command.GetType());
                 var adapter = Activator.CreateInstance(adapterClass) ?? throw new SekibanTypeNotFoundException("Method not found");
                 var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new SekibanTypeNotFoundException("HandleCommandAsync not found");

@@ -5,7 +5,7 @@ using Sekiban.Core.Events;
 using Sekiban.Core.Query.SingleProjections;
 namespace FeatureCheck.Domain.Aggregates.Branches.Commands;
 
-public class AddNumberOfClients : ICommand<Branch>
+public class AddNumberOfClients : ICommandForExistingAggregate<Branch>
 {
     public Guid BranchId { get; init; }
     public Guid ClientId { get; init; }

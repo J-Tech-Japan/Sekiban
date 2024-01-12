@@ -4,7 +4,7 @@ using Sekiban.Core.Events;
 using System.ComponentModel.DataAnnotations;
 namespace FeatureCheck.Domain.Aggregates.Clients.Commands;
 
-public record CancelDeleteClient : IVersionValidationCommand<Client>, ICancelDeletedCommand
+public record CancelDeleteClient : ICommandWithVersionValidation<Client>, ICancelDeletedCommand
 {
     public Guid ClientId { get; init; }
 
@@ -15,7 +15,7 @@ public record CancelDeleteClient : IVersionValidationCommand<Client>, ICancelDel
 
     public Guid GetAggregateId() => ClientId;
 
-    public class Handler : IVersionValidationCommandHandler<Client, CancelDeleteClient>
+    public class Handler : ICommandHandler<Client, CancelDeleteClient>
     {
         public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(CancelDeleteClient command, ICommandContext<Client> context)
         {

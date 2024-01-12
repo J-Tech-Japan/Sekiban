@@ -567,7 +567,8 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
                 throw new SekibanInvalidArgumentException($"Snapshot {snapshot.AggregateType} {snapshot.SavedVersion}  is null");
             }
             TestOutputHelper.WriteLine($"Snapshot {snapshot.AggregateType}  {snapshot.Id}  {snapshot.SavedVersion}  is not null");
-            var fromInitial = await aggregateLoader.AsDefaultStateFromInitialAsync<TAggregatePayload>(aggregateId, toVersion: state.Version) ?? throw new SekibanInvalidArgumentException();
+            var fromInitial = await aggregateLoader.AsDefaultStateFromInitialAsync<TAggregatePayload>(aggregateId, toVersion: state.Version) ??
+                throw new SekibanInvalidArgumentException();
             Assert.Equal(fromInitial.Version, state.Version);
             Assert.Equal(fromInitial.LastEventId, state.LastEventId);
         }
@@ -591,7 +592,9 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
             }
             TestOutputHelper.WriteLine(
                 $"Snapshot {snapshot.AggregateType} {snapshot.DocumentTypeName} {snapshot.Id}  {snapshot.SavedVersion}  is not null");
-            var fromInitial = await aggregateLoader.AsSingleProjectionStateFromInitialAsync<TAggregatePayload>(aggregateId, toVersion: state.Version) ?? throw new SekibanInvalidArgumentException();
+            var fromInitial
+                = await aggregateLoader.AsSingleProjectionStateFromInitialAsync<TAggregatePayload>(aggregateId, toVersion: state.Version) ??
+                throw new SekibanInvalidArgumentException();
             Assert.Equal(fromInitial.Version, state.Version);
             Assert.Equal(fromInitial.LastEventId, state.LastEventId);
         }
@@ -776,5 +779,36 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
     {
         var response = await commandExecutor.ExecCommandAsync(new NotAddingAnyEventCommand());
         Assert.NotNull(response.AggregateId);
+    }
+
+    [Fact]
+    public async Task AddNumberOfClientsShouldFailIfAggregateNotExists()
+    {
+        RemoveAllFromDefaultAndDissolvable();
+        await Assert.ThrowsAsync<SekibanAggregateNotExistsException>(
+            async () =>
+            {
+                await commandExecutor.ExecCommandAsync(new AddNumberOfClients { BranchId = Guid.NewGuid(), ClientId = Guid.NewGuid() });
+            });
+    }
+    [Fact]
+    public async Task AddNumberOfClientsSucceed()
+    {
+        RemoveAllFromDefaultAndDissolvable();
+        var branchCreatedResult = await commandExecutor.ExecCommandAsync(new CreateBranch("Japan Tokyo"));
+        Assert.Equal(1, branchCreatedResult?.EventCount);
+        Assert.NotNull(branchCreatedResult?.AggregateId);
+        var clientCreatedResult
+            = await commandExecutor.ExecCommandAsync(new CreateClient(branchCreatedResult.AggregateId.Value, "John", "john@example.com"));
+        Assert.Equal(1, clientCreatedResult?.EventCount);
+        Assert.NotNull(clientCreatedResult?.AggregateId);
+
+        var branchUpdatedResult = await commandExecutor.ExecCommandAsync(
+            new AddNumberOfClients { BranchId = branchCreatedResult.AggregateId.Value, ClientId = clientCreatedResult.AggregateId.Value });
+        Assert.Equal(1, branchUpdatedResult?.EventCount);
+        Assert.NotNull(branchUpdatedResult?.AggregateId);
+
+        var branch = await aggregateLoader.AsDefaultStateAsync<Branch>(branchCreatedResult.AggregateId!.Value);
+        Assert.Equal(1, branch?.Payload.NumberOfMembers);
     }
 }

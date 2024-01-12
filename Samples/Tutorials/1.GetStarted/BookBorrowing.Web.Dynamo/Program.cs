@@ -1,5 +1,4 @@
 using BookBorrowing.Domain;
-using BookBorrowing.Web.Dynamo;
 using Sekiban.Core.Dependency;
 using Sekiban.Infrastructure.Dynamo;
 using Sekiban.Web.Dependency;

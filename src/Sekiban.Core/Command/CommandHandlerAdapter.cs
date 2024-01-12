@@ -45,6 +45,12 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> : IComman
         _aggregate = await _aggregateLoader.AsAggregateAsync<TAggregatePayload>(aggregateId, rootPartitionKey) ??
             new Aggregate<TAggregatePayload> { AggregateId = aggregateId };
 
+        // Check if IAggregateShouldExistCommand and Aggregate does not exist
+        if (command is IAggregateShouldExistCommand && _aggregate.Version == 0)
+        {
+            throw new SekibanAggregateNotExistsException(aggregateId, nameof(TAggregatePayload), rootPartitionKey);
+        }
+
         // Validate AddAggregate Version
         if (_checkVersion && command is IVersionValidationCommandCommon validationCommand && validationCommand.ReferenceVersion != _aggregate.Version)
         {
