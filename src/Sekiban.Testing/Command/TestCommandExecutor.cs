@@ -75,7 +75,7 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
         var genericType = baseType.MakeGenericType(typeof(TAggregatePayload), command.GetType());
         var handler = serviceProvider.GetService(genericType) ?? throw new SekibanCommandNotRegisteredException(command.GetType().Name);
         var aggregateId = injectingAggregateId ?? command.GetAggregateId();
-        if (command is not IOnlyPublishingCommandCommon)
+        if (command is not ICommandWithoutLoadingAggregateCommon)
         {
             var commandDocumentBaseType = typeof(CommandDocument<>);
             var commandDocumentType = commandDocumentBaseType.MakeGenericType(command.GetType());
@@ -106,7 +106,7 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
             var commandDocumentType = commandDocumentBaseType.MakeGenericType(command.GetType());
             var commandDocument = Activator.CreateInstance(commandDocumentType, aggregateId, command, typeof(TAggregatePayload), null);
 
-            var baseClass = typeof(OnlyPublishingCommandHandlerAdapter<,>);
+            var baseClass = typeof(CommandWithoutLoadingAggregateHandlerAdapter<,>);
             var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), command.GetType());
             var adapter = Activator.CreateInstance(adapterClass) ?? throw new SekibanTypeNotFoundException("Method not found");
             var method = adapterClass.GetMethod(nameof(ICommandHandlerAdapterCommon.HandleCommandAsync));

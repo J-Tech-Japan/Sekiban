@@ -6,5 +6,5 @@ namespace Sekiban.Core.Command;
 ///     This command type is used for commands that does not get affected by the current state of the aggregate.
 /// </summary>
 /// <typeparam name="TAggregatePayload"></typeparam>
-public interface IOnlyPublishingCommand<TAggregatePayload> : ICommand<TAggregatePayload>, IOnlyPublishingCommandCommon
+public interface ICommandWithoutLoadingAggregate<TAggregatePayload> : ICommand<TAggregatePayload>, ICommandWithoutLoadingAggregateCommon
     where TAggregatePayload : IAggregatePayloadCommon;

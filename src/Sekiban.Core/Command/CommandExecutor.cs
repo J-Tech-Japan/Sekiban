@@ -125,7 +125,7 @@ public class CommandExecutor(
                 = serviceProvider.GetService(typeof(ICommandHandlerCommon<TAggregatePayload, TCommand>)) as
                     ICommandHandlerCommon<TAggregatePayload, TCommand> ??
                 throw new SekibanCommandNotRegisteredException(typeof(TCommand).Name);
-            if (command is not IOnlyPublishingCommandCommon)
+            if (command is not ICommandWithoutLoadingAggregateCommon)
             {
                 await SemaphoreAwaiter.WaitAsync();
                 await commandExecuteAwaiter.WaitUntilOtherThreadFinished<TAggregatePayload>(aggregateId);
@@ -137,9 +137,9 @@ public class CommandExecutor(
                 {
                     ExecutedUser = userInformationFactory.GetCurrentUserInformation()
                 };
-            if (command is IOnlyPublishingCommandCommon)
+            if (command is ICommandWithoutLoadingAggregateCommon)
             {
-                var baseClass = typeof(OnlyPublishingCommandHandlerAdapter<,>);
+                var baseClass = typeof(CommandWithoutLoadingAggregateHandlerAdapter<,>);
                 var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), typeof(TCommand));
                 var adapter = Activator.CreateInstance(adapterClass) ?? throw new MissingMethodException("Method not found");
                 var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new MissingMethodException("HandleCommandAsync not found");

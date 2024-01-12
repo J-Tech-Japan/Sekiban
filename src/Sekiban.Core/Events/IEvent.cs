@@ -13,7 +13,7 @@ public interface IEvent : INotification, ICallHistories, IAggregateDocument, IEv
     /// <summary>
     ///     Event Version.
     ///     If Event is produced without concurrency backend (two different events or
-    ///     <see cref="IOnlyPublishingCommand{TAggregatePayload}" />
+    ///     <see cref="ICommandWithoutLoadingAggregate{TAggregatePayload}" />
     /// </summary>
     public int Version { get; }
     /// <summary>

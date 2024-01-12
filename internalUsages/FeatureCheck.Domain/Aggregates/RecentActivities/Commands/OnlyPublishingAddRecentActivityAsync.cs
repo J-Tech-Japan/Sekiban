@@ -4,7 +4,7 @@ using Sekiban.Core.Events;
 using Sekiban.Core.Shared;
 namespace FeatureCheck.Domain.Aggregates.RecentActivities.Commands;
 
-public record OnlyPublishingAddRecentActivityAsync(Guid RecentActivityId, string Activity) : IOnlyPublishingCommand<RecentActivity>
+public record OnlyPublishingAddRecentActivityAsync(Guid RecentActivityId, string Activity) : ICommandWithoutLoadingAggregate<RecentActivity>
 {
 
     public OnlyPublishingAddRecentActivityAsync() : this(Guid.Empty, string.Empty)
@@ -13,7 +13,7 @@ public record OnlyPublishingAddRecentActivityAsync(Guid RecentActivityId, string
 
     public Guid GetAggregateId() => RecentActivityId;
 
-    public class Handler : IOnlyPublishingCommandHandlerAsync<RecentActivity, OnlyPublishingAddRecentActivityAsync>
+    public class Handler : ICommandWithoutLoadingAggregateHandlerAsync<RecentActivity, OnlyPublishingAddRecentActivityAsync>
     {
         private readonly ISekibanDateProducer _sekibanDateProducer;
 
