@@ -72,3 +72,7 @@ public class AzureBlobAccessor(IServiceProvider serviceProvider, SekibanCosmosDb
         return client;
     }
 }
+public interface IBlobContainerAccessor
+{
+    Task<BlobContainerClient> GetContainerAsync(string containerName);
+}
