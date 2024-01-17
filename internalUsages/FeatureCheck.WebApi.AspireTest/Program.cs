@@ -14,7 +14,7 @@ builder.AddSekibanWithDependency(new FeatureCheckDependency());
 builder.AddSekibanCosmosDB().AddSekibanCosmosAspire("AspireCosmos");
 
 // Sekiban Web Setting
-builder.Services.AddSekibanWeb<FeatureCheckWebAspireDependency>().AddSwaggerGen(options => options.ConfigureForSekiban());
+builder.Services.AddSekibanWeb<FeatureCheckWebAspireDependency>().AddSwaggerGen(options => options.ConfigureForSekibanWeb());
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
