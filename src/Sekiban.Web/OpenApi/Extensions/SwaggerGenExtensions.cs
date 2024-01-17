@@ -1,4 +1,4 @@
-using Jtechs.OpenApi.AspNetCore.Swashbuckle.Extensions;
+using Jtechs.OpenApi.AspNetCore.Swashbuckle;
 using Microsoft.Extensions.DependencyInjection;
 using Swashbuckle.AspNetCore.SwaggerGen;
 namespace Sekiban.Web.OpenApi.Extensions;

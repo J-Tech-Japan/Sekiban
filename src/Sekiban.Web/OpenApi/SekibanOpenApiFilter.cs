@@ -1,4 +1,4 @@
-﻿using Jtechs.OpenApi.AspNetCore.Extensions;
+﻿using Jtechs.OpenApi.AspNetCore;
 using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerGen;
