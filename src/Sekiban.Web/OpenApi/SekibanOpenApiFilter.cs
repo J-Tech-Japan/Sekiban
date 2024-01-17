@@ -1,28 +1,19 @@
-﻿using Microsoft.OpenApi.Any;
+﻿using Jtechs.OpenApi.AspNetCore;
+using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Models;
-using Sekiban.Web.OpenApi.Extensions;
 using Swashbuckle.AspNetCore.SwaggerGen;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 namespace Sekiban.Web.OpenApi;
 
-public class SekibanOpenApiFilter : ISchemaFilter, IOperationFilter
+[Obsolete($"{nameof(SekibanOpenApiFilter)} is obsolete. Use the {nameof(Jtechs.OpenApi.AspNetCore.Swashbuckle)} package instead.")]
+public class SekibanOpenApiFilter : ISchemaFilter
 {
-    public void Apply(OpenApiOperation operation, OperationFilterContext context)
-    {
-        if (operation.RequestBody is not null && (operation.RequestBody.Content is null || !operation.RequestBody.Content.Any()))
-        {
-            operation.RequestBody = null;
-        }
-    }
-
     public void Apply(OpenApiSchema schema, SchemaFilterContext context)
     {
         if (context.Type is not null && context.Type.IsEnum)
-        {
             GenerateSchemaForEnum(context.Type, schema);
-        }
 
         (schema.Title, schema.Description) = context switch
         {
