@@ -21,8 +21,9 @@ public static class SekibanOpenApiSchemaIdGenerator
         };
     }
 
-    private static string GetRegularNameWithReplacedSymbol(Type type) =>
-        GetRegularName(type)
+    private static string GetRegularNameWithReplacedSymbol(Type type)
+    {
+        return GetRegularName(type)
             .Replace("+", "_")
             .Replace("`", string.Empty)
             .Replace("[", string.Empty)
@@ -31,6 +32,7 @@ public static class SekibanOpenApiSchemaIdGenerator
             .Replace(",", string.Empty)
             .Replace(".", string.Empty)
             .Replace("=", string.Empty);
+    }
 
     private static string GetRegularName(Type type)
     {

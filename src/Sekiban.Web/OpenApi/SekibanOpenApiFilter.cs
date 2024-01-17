@@ -1,12 +1,13 @@
-﻿using Microsoft.OpenApi.Any;
+﻿using Jtechs.OpenApi.AspNetCore.Extensions;
+using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Models;
-using Sekiban.Web.OpenApi.Extensions;
 using Swashbuckle.AspNetCore.SwaggerGen;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 namespace Sekiban.Web.OpenApi;
 
+[Obsolete($"{nameof(SekibanOpenApiFilter)} is obsolete. Use the {nameof(Jtechs.OpenApi.AspNetCore.Swashbuckle)} package instead.")]
 public class SekibanOpenApiFilter : ISchemaFilter
 {
     public void Apply(OpenApiSchema schema, SchemaFilterContext context)

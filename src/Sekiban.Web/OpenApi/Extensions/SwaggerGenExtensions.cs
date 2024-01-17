@@ -1,20 +1,26 @@
+using Jtechs.OpenApi.AspNetCore.Swashbuckle.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Swashbuckle.AspNetCore.SwaggerGen;
 namespace Sekiban.Web.OpenApi.Extensions;
 
 public static class SwaggerGenExtensions
 {
-    [Obsolete($"{nameof(AddSekibanSwaggerGen)} is obsolete. Use the {nameof(ConfigureForSekiban)} method instead.")]
+    [Obsolete($"{nameof(AddSekibanSwaggerGen)} is obsolete. Use the {nameof(ConfigureForSekibanWeb)} method instead.")]
     public static SwaggerGenOptions AddSekibanSwaggerGen(this SwaggerGenOptions options)
     {
-        options.CustomSchemaIds(SekibanOpenApiSchemaIdGenerator.Generate);
+        options.UseSekibanSchemaId();
         options.SchemaFilter<SekibanOpenApiFilter>();
         return options;
     }
 
-    public static void ConfigureForSekiban(this SwaggerGenOptions options, Func<Type, string>? generateSchemaId = null)
+    public static void ConfigureForSekibanWeb(this SwaggerGenOptions options)
     {
-        options.CustomSchemaIds(generateSchemaId ?? SekibanOpenApiSchemaIdGenerator.Generate);
-        options.SchemaFilter<SekibanOpenApiFilter>();
+        options.UseSekibanSchemaId();
+        options.AddJtechsSchemaFilters();
+    }
+
+    public static void UseSekibanSchemaId(this SwaggerGenOptions options)
+    {
+        options.CustomSchemaIds(SekibanOpenApiSchemaIdGenerator.Generate);
     }
 }
