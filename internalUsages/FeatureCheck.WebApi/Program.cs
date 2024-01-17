@@ -29,7 +29,7 @@ builder.AddSekibanCosmosDB(
 
 // Sekiban Web Setting
 builder.Services.AddSekibanWeb<FeatureCheckWebDependency>()
-    .AddSwaggerGen(options => options.ConfigureForSekiban());
+    .AddSwaggerGen(options => options.ConfigureForSekibanWeb());
 
 builder.Services.AddEndpointsApiExplorer();
 
