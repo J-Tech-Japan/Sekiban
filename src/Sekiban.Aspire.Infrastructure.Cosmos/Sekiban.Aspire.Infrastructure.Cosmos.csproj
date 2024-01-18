@@ -6,11 +6,11 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Aspire.Infrastructure.Cosmos</PackageId>
-        <Version>0.17.0-preview</Version>
+        <Version>0.17.1-preview</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Cosmos Aspire Connector</PackageDescription>
-        <PackageVersion>0.17.0-preview</PackageVersion>
+        <PackageVersion>0.17.1-preview</PackageVersion>
         <Description>Bug fix when appsetting default is empty</Description>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <RootNamespace>Sekiban.Aspire.Infrastructure.Cosmos</RootNamespace>
@@ -18,10 +18,12 @@
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <IncludeSymbols>true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        <UserSecretsId>dd033285-cc41-4f0b-a790-5dc058fda775</UserSecretsId>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Sekiban.Infrastructure.Cosmos" Version="0.17.0"/>
+        <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="8.0.0-preview.2.23619.3"/>
+        <PackageReference Include="Sekiban.Infrastructure.Cosmos" Version="0.17.1"/>
         <ProjectReference Include="..\Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
     </ItemGroup>

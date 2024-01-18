@@ -1,4 +1,3 @@
-using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using ICSharpCode.SharpZipLib.GZip;
 using Sekiban.Core.Setting;
@@ -8,17 +7,17 @@ namespace Sekiban.Infrastructure.Cosmos;
 /// <summary>
 ///     Blob accessor implementation for Azure Blob Storage.
 /// </summary>
-public class AzureBlobAccessor(IServiceProvider serviceProvider, SekibanCosmosDbOptions cosmosDbOptions) : IBlobAccessor
+public class AzureBlobAccessor(IBlobContainerAccessor blobContainerAccessor) : IBlobAccessor
 {
     public async Task<Stream?> GetBlobAsync(SekibanBlobContainer container, string blobName)
     {
-        var containerClient = await GetContainerAsync(container.ToString());
+        var containerClient = await blobContainerAccessor.GetContainerAsync(container.ToString());
         var blobClient = containerClient.GetBlobClient(blobName);
         return blobClient is null ? null : await blobClient.OpenReadAsync();
     }
     public async Task<bool> SetBlobAsync(SekibanBlobContainer container, string blobName, Stream blob)
     {
-        var containerClient = await GetContainerAsync(container.ToString());
+        var containerClient = await blobContainerAccessor.GetContainerAsync(container.ToString());
         var blobClient = containerClient.GetBlobClient(blobName);
         if (blobClient is null)
         {
@@ -29,7 +28,7 @@ public class AzureBlobAccessor(IServiceProvider serviceProvider, SekibanCosmosDb
     }
     public async Task<Stream?> GetBlobWithGZipAsync(SekibanBlobContainer container, string blobName)
     {
-        var containerClient = await GetContainerAsync(container.ToString());
+        var containerClient = await blobContainerAccessor.GetContainerAsync(container.ToString());
         var blobClient = containerClient.GetBlobClient(blobName);
         if (blobClient is null)
         {
@@ -43,7 +42,7 @@ public class AzureBlobAccessor(IServiceProvider serviceProvider, SekibanCosmosDb
     }
     public async Task<bool> SetBlobWithGZipAsync(SekibanBlobContainer container, string blobName, Stream blob)
     {
-        var containerClient = await GetContainerAsync(container.ToString());
+        var containerClient = await blobContainerAccessor.GetContainerAsync(container.ToString());
         var blobClient = containerClient.GetBlobClient(blobName);
         if (blobClient is null)
         {
@@ -61,14 +60,5 @@ public class AzureBlobAccessor(IServiceProvider serviceProvider, SekibanCosmosDb
             new BlobUploadOptions { HttpHeaders = new BlobHttpHeaders { ContentType = "application/x-gzip" } });
         return true;
     }
-
-    public string BlobConnectionString() =>
-        cosmosDbOptions.GetContextOption(serviceProvider).BlobConnectionString ?? throw new InvalidDataException("BlobConnectionString not found");
-    private async Task<BlobContainerClient> GetContainerAsync(string containerName)
-    {
-        var connectionString = BlobConnectionString();
-        var client = new BlobContainerClient(connectionString, containerName.ToLower());
-        await client.CreateIfNotExistsAsync();
-        return client;
-    }
+    public string BlobConnectionString() => blobContainerAccessor.BlobConnectionString();
 }

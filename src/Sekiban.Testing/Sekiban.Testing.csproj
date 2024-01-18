@@ -5,12 +5,12 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Testing</PackageId>
-        <Version>0.17.0</Version>
+        <Version>0.17.1</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Testing</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.17.0</PackageVersion>
+        <PackageVersion>0.17.1</PackageVersion>
         <Description>Bug fix when appsetting default is empty</Description>
         <AssemblyName>Sekiban.Testing</AssemblyName>
         <RootNamespace>Sekiban.Testing</RootNamespace>
@@ -24,7 +24,7 @@
         <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="8.0.0"/>
         <PackageReference Include="xunit.assert" Version="2.6.4"/>
         <PackageReference Include="xunit.extensibility.core" Version="2.6.4"/>
-        <PackageReference Include="Sekiban.Core" Version="0.17.0"/>
+        <PackageReference Include="Sekiban.Core" Version="0.17.1"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
         <PackageReference Include="xunit.extensibility.execution" Version="2.6.4"/>
     </ItemGroup>

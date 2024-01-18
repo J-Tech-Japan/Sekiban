@@ -83,6 +83,7 @@ public static class CosmosDbServiceCollectionExtensions
         services.AddTransient<IDocumentPersistentRepository, CosmosDocumentRepository>();
         services.AddTransient<IDocumentRemover, CosmosDbDocumentRemover>();
         services.AddTransient<IBlobAccessor, AzureBlobAccessor>();
+        services.AddTransient<IBlobContainerAccessor, AzureBlobContainerAccessor>();
         return services;
     }
     /// <summary>
