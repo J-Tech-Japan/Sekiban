@@ -18,9 +18,11 @@
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <IncludeSymbols>true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        <UserSecretsId>dd033285-cc41-4f0b-a790-5dc058fda775</UserSecretsId>
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="8.0.0-preview.2.23619.3"/>
         <PackageReference Include="Sekiban.Infrastructure.Cosmos" Version="0.17.0"/>
         <ProjectReference Include="..\Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>

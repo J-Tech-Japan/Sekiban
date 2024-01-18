@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-namespace Sekiban.Infrastructure.Cosmos.Aspire;
+using Sekiban.Infrastructure.Cosmos;
+namespace Sekiban.Aspire.Infrastructure.Cosmos;
 
 public static class SekibanCosmosAspireExtensions
 {

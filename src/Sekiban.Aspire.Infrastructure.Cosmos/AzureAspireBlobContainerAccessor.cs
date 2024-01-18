@@ -1,17 +1,19 @@
 using Azure.Storage.Blobs;
 using Microsoft.Extensions.DependencyInjection;
-namespace Sekiban.Infrastructure.Cosmos.Aspire;
+using Sekiban.Infrastructure.Cosmos;
+namespace Sekiban.Aspire.Infrastructure.Cosmos;
 
 public class AzureAspireBlobContainerAccessor(SekibanBlobAspireOptions sekibanBlobAspireOptions, IServiceProvider serviceProvider)
     : IBlobContainerAccessor
 {
     public async Task<BlobContainerClient> GetContainerAsync(string containerName)
     {
-        var client = serviceProvider.GetKeyedService<BlobContainerClient>(sekibanBlobAspireOptions.ConnectionName);
-        if (client is null)
+        var serviceClient = serviceProvider.GetKeyedService<BlobServiceClient>(sekibanBlobAspireOptions.ConnectionName);
+        if (serviceClient is null)
         {
             throw new InvalidDataException("BlobConnectionString not found");
         }
+        var client = serviceClient.GetBlobContainerClient(containerName.ToLower());
         await client.CreateIfNotExistsAsync();
         return client;
     }

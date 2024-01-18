@@ -1,3 +1,3 @@
-namespace Sekiban.Infrastructure.Cosmos.Aspire;
+namespace Sekiban.Aspire.Infrastructure.Cosmos;
 
 public record SekibanCosmosAspireOptions(string ConnectionName);

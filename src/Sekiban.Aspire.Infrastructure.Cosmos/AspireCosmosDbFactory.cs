@@ -3,7 +3,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Documents;
-namespace Sekiban.Infrastructure.Cosmos.Aspire;
+using Sekiban.Infrastructure.Cosmos;
+namespace Sekiban.Aspire.Infrastructure.Cosmos;
 
 public class AspireCosmosDbFactory(
     SekibanCosmosAspireOptions sekibanCosmosAspireOptions,

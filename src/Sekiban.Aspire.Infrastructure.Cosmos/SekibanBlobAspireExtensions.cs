@@ -1,5 +1,7 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-namespace Sekiban.Infrastructure.Cosmos.Aspire;
+using Sekiban.Infrastructure.Cosmos;
+namespace Sekiban.Aspire.Infrastructure.Cosmos;
 
 public static class SekibanBlobAspireExtensions
 {
@@ -8,6 +10,8 @@ public static class SekibanBlobAspireExtensions
         string connectionName)
     {
         cosmosServiceCollection.ApplicationBuilder.AddKeyedAzureBlobService(connectionName);
+        cosmosServiceCollection.ApplicationBuilder.Services.AddSingleton(new SekibanBlobAspireOptions(connectionName));
+        cosmosServiceCollection.ApplicationBuilder.Services.AddTransient<IBlobContainerAccessor, AzureAspireBlobContainerAccessor>();
         return cosmosServiceCollection;
     }
 }

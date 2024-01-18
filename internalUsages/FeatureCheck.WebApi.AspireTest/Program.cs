@@ -1,8 +1,9 @@
 using FeatureCheck.Domain.Shared;
 using FeatureCheck.WebApi.AspireTest;
+using Microsoft.AspNetCore.Mvc;
+using Sekiban.Aspire.Infrastructure.Cosmos;
 using Sekiban.Core.Dependency;
 using Sekiban.Infrastructure.Cosmos;
-using Sekiban.Infrastructure.Cosmos.Aspire;
 using Sekiban.Web.Dependency;
 using Sekiban.Web.OpenApi.Extensions;
 var builder = WebApplication.CreateBuilder(args);
@@ -11,7 +12,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddSekibanWithDependency(new FeatureCheckDependency());
 
 // Sekiban Cosmos Setting
-builder.AddSekibanCosmosDB().AddSekibanCosmosAspire("AspireCosmos");
+builder.AddSekibanCosmosDB().AddSekibanCosmosAspire("AspireCosmos").AddSekibanBlobAspire("AspireBlob");
 
 // Sekiban Web Setting
 builder.Services.AddSekibanWeb<FeatureCheckWebAspireDependency>().AddSwaggerGen(options => options.ConfigureForSekibanWeb());
@@ -27,6 +28,16 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+app.MapGet(
+    "test",
+    async ([FromServices] IBlobContainerAccessor blobContainerAccessor) =>
+    {
+        var container = await blobContainerAccessor.GetContainerAsync("AspireBlob");
+        var blob = container.GetBlobClient("test.txt");
+        await blob.UploadAsync(new BinaryData("test"));
+        return "test";
+    });
 
 app.MapControllers();
 app.Run();
