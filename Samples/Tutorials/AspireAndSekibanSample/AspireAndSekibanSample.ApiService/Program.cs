@@ -1,8 +1,8 @@
 using AspireAndSekibanSample.ApiService;
 using AspireAndSekibanSample.Domain;
+using Sekiban.Aspire.Infrastructure.Cosmos;
 using Sekiban.Core.Dependency;
 using Sekiban.Infrastructure.Cosmos;
-using Sekiban.Infrastructure.Cosmos.Aspire;
 using Sekiban.Web.Dependency;
 using Sekiban.Web.OpenApi.Extensions;
 var builder = WebApplication.CreateBuilder(args);
@@ -14,11 +14,11 @@ builder.AddServiceDefaults();
 builder.Services.AddProblemDetails();
 
 builder.AddSekibanWithDependency(new AspireAndSekibanSampleDomainDependency());
-builder.AddSekibanCosmosDB().AddSekibanCosmosAspire("SekibanAspireCosmos");
+builder.AddSekibanCosmosDB().AddSekibanCosmosAspire("SekibanAspireCosmos").AddSekibanBlobAspire("SekibanAspireBlob");
 
 // Sekiban Web Setting
 builder.Services.AddSekibanWeb<AspireAndSekibanSampleWebDependency>()
-    .AddSwaggerGen(options => options.ConfigureForSekiban());
+    .AddSwaggerGen(options => options.ConfigureForSekibanWeb());
 
 var app = builder.Build();
 
