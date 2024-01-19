@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\AspireAndSekibanSample.Domain\AspireAndSekibanSample.Domain.csproj" />
     <ProjectReference Include="..\AspireAndSekibanSample.ServiceDefaults\AspireAndSekibanSample.ServiceDefaults.csproj" />
   </ItemGroup>
 

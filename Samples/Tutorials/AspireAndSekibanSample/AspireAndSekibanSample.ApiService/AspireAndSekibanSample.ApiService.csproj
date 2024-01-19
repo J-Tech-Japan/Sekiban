@@ -14,8 +14,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Sekiban.Aspire.Infrastructure.Cosmos" Version="0.16.3-preview" />
-    <PackageReference Include="Sekiban.Web" Version="0.16.3" />
+    <PackageReference Include="Sekiban.Aspire.Infrastructure.Cosmos" Version="0.17.1-preview" />
+    <PackageReference Include="Sekiban.Web" Version="0.17.1" />
   </ItemGroup>
 
 </Project>
