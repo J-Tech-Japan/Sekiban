@@ -31,6 +31,19 @@ public static class SekibanEventSourcingDependency
     ///     Add Sekiban with Dependency
     /// </summary>
     /// <param name="builder"></param>
+    /// <typeparam name="TDependency"></typeparam>
+    /// <returns></returns>
+    public static WebApplicationBuilder AddSekibanWithDependency<TDependency>(this WebApplicationBuilder builder)
+        where TDependency : DomainDependencyDefinitionBase, new()
+    {
+        builder.Services.AddSekibanWithDependency(new TDependency(), builder.Configuration);
+        return builder;
+    }
+
+    /// <summary>
+    ///     Add Sekiban with Dependency
+    /// </summary>
+    /// <param name="builder"></param>
     /// <param name="dependencyDefinition"></param>
     /// <param name="settings"></param>
     /// <returns></returns>
@@ -41,6 +54,19 @@ public static class SekibanEventSourcingDependency
     {
         builder.Services.AddSekibanWithDependency(dependencyDefinition, settings);
         return builder;
+    }
+    /// <summary>
+    ///     Add Sekiban with Dependency
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="configuration"></param>
+    /// <returns></returns>
+    public static IServiceCollection AddSekibanWithDependency<TDependency>(this IServiceCollection services, IConfiguration configuration)
+        where TDependency : DomainDependencyDefinitionBase, new()
+    {
+        var dependencyDefinition = new TDependency();
+        var settings = SekibanSettings.FromConfiguration(configuration);
+        return AddSekibanCoreWithDependency(services, dependencyDefinition, settings);
     }
     /// <summary>
     ///     Add Sekiban with Dependency
@@ -57,6 +83,7 @@ public static class SekibanEventSourcingDependency
         var settings = SekibanSettings.FromConfiguration(configuration);
         return AddSekibanCoreWithDependency(services, dependencyDefinition, settings);
     }
+
     /// <summary>
     ///     Add Sekiban with Dependency
     /// </summary>
@@ -83,7 +110,7 @@ public static class SekibanEventSourcingDependency
         IDependencyDefinition dependencyDefinition,
         SekibanSettings settings,
         ISekibanDateProducer? sekibanDateProducer = null,
-        ServiceCollectionExtensions.MultiProjectionType multiProjectionType = ServiceCollectionExtensions.MultiProjectionType.MemoryCache)
+        SekibanCoreServiceExtensions.MultiProjectionType multiProjectionType = SekibanCoreServiceExtensions.MultiProjectionType.MemoryCache)
     {
         Register(services, dependencyDefinition, settings, sekibanDateProducer, multiProjectionType);
         return services;
@@ -119,7 +146,7 @@ public static class SekibanEventSourcingDependency
         IDependencyDefinition dependencyDefinition,
         SekibanSettings settings,
         ISekibanDateProducer? sekibanDateProducer = null,
-        ServiceCollectionExtensions.MultiProjectionType multiProjectionType = ServiceCollectionExtensions.MultiProjectionType.MemoryCache)
+        SekibanCoreServiceExtensions.MultiProjectionType multiProjectionType = SekibanCoreServiceExtensions.MultiProjectionType.MemoryCache)
     {
         // MediatR
         services.AddMediatR(new MediatRServiceConfiguration().RegisterServicesFromAssemblies(Assembly.GetExecutingAssembly(), GetAssembly()));

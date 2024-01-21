@@ -20,7 +20,7 @@ namespace Sekiban.Core.Dependency;
 /// <summary>
 ///     Extension methods for <see cref="IServiceCollection" />
 /// </summary>
-public static class ServiceCollectionExtensions
+public static class SekibanCoreServiceExtensions
 {
     public enum HttpContextType
     {
