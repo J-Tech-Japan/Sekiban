@@ -36,6 +36,29 @@ public static class WebServiceExtension
         return builder;
     }
 
+
+    /// <summary>
+    ///     Add Sekiban web
+    /// </summary>
+    /// <param name="builder"></param>
+    /// <param name="configureWebDependencyDefinition">configure web dependency definition.</param>
+    /// <param name="configureMvc"></param>
+    /// <typeparam name="T"></typeparam>
+    /// <returns></returns>
+    public static WebApplicationBuilder AddSekibanWebFromDomainDependency<T>(
+        this WebApplicationBuilder builder,
+        Action<GeneralWebDependencyDefinition<T>>? configureWebDependencyDefinition = null,
+        Action<MvcOptions>? configureMvc = null) where T : DomainDependencyDefinitionBase, new()
+    {
+        var definition = new GeneralWebDependencyDefinition<T>();
+        if (configureWebDependencyDefinition != null)
+        {
+            configureWebDependencyDefinition(definition);
+        }
+        builder.Services.AddSekibanWeb(definition, configureMvc);
+        return builder;
+    }
+
     /// <summary>
     ///     Add Sekiban web
     /// </summary>
@@ -85,4 +108,24 @@ public static class WebServiceExtension
     public static IServiceCollection AddSekibanWeb<T>(this IServiceCollection services, Action<MvcOptions>? configureMvcOptions = null)
         where T : IWebDependencyDefinition, new() =>
         services.AddSekibanWeb(new T(), configureMvcOptions);
+    /// <summary>
+    ///     Add Sekiban web
+    /// </summary>
+    /// <typeparam name="T"></typeparam>
+    /// <param name="services"></param>
+    /// <param name="configureWebDependencyDefinition"></param>
+    /// <param name="configureMvcOptions"></param>
+    /// <returns></returns>
+    public static IServiceCollection AddSekibanWebFromDomainDependency<TDomainDependency>(
+        this IServiceCollection services,
+        Action<GeneralWebDependencyDefinition<TDomainDependency>>? configureWebDependencyDefinition = null,
+        Action<MvcOptions>? configureMvcOptions = null) where TDomainDependency : DomainDependencyDefinitionBase, new()
+    {
+        var definition = new GeneralWebDependencyDefinition<TDomainDependency>();
+        if (configureWebDependencyDefinition != null)
+        {
+            configureWebDependencyDefinition(definition);
+        }
+        return services.AddSekibanWeb(definition, configureMvcOptions);
+    }
 }

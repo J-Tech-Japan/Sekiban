@@ -5,12 +5,12 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <OutputType>Library</OutputType>
         <PackageId>Sekiban.Web</PackageId>
-        <Version>0.17.1</Version>
+        <Version>0.17.2</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework WebHelper</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.17.1</PackageVersion>
+        <PackageVersion>0.17.2</PackageVersion>
         <Description>Bug fix when appsetting default is empty</Description>
         <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
         <LangVersion>preview</LangVersion>
@@ -22,13 +22,13 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Jtechs.OpenApi.AspNetCore.Swashbuckle" Version="0.1.3" />
-        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
-        <None Include="..\README.md" Pack="true" PackagePath="\" />
+        <PackageReference Include="Jtechs.OpenApi.AspNetCore.Swashbuckle" Version="0.1.3"/>
+        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0"/>
+        <None Include="..\README.md" Pack="true" PackagePath="\"/>
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj" />
+        <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj"/>
     </ItemGroup>
 
 </Project>
