@@ -16,7 +16,7 @@ public static class SwaggerGenExtensions
     public static void ConfigureForSekibanWeb(this SwaggerGenOptions options)
     {
         options.UseSekibanSchemaId();
-        options.AddJtechsSchemaFilters();
+        options.AddJtechsOpenApiFilters();
     }
 
     public static void UseSekibanSchemaId(this SwaggerGenOptions options)
