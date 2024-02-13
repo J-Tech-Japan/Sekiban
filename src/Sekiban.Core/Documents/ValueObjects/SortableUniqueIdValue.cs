@@ -1,4 +1,3 @@
-using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Shared;
 namespace Sekiban.Core.Documents.ValueObjects;
 
@@ -111,16 +110,5 @@ public record SortableUniqueIdValue(string Value)
     /// <returns></returns>
     public static string GetIdString(Guid id) => (Math.Abs(id.GetHashCode()) % IdModBase).ToString(IdFormatter);
 
-    public static SortableUniqueIdValue? GetSortableUniqueIdValueFromQuery(object target)
-    {
-        return target is IShouldIncludesSortableUniqueId sortableUniqueId
-            && !string.IsNullOrWhiteSpace(sortableUniqueId.IncludesSortableUniqueIdValue)
-            ? new SortableUniqueIdValue(sortableUniqueId.IncludesSortableUniqueIdValue.Trim())
-            : null;
-    }
-
-    public static SortableUniqueIdValue? NullableValue(string? value)
-    {
-        return value != null ? new SortableUniqueIdValue(value) : null;
-    }
+    public static SortableUniqueIdValue? NullableValue(string? value) => value != null ? new SortableUniqueIdValue(value) : null;
 }

@@ -1,4 +1,3 @@
-using Sekiban.Core.Documents.ValueObjects;
 namespace Sekiban.Core.Query.MultiProjections.Projections;
 
 /// <summary>
@@ -11,13 +10,13 @@ public interface IMultiProjection
     ///     In Regular way ( can use cache / snapshots )
     /// </summary>
     /// <param name="rootPartitionKey"></param>
-    /// <param name="includesSortableUniqueIdValue"></param>
+    /// <param name="retrievalOptions"></param>
     /// <typeparam name="TProjection"></typeparam>
     /// <typeparam name="TProjectionPayload"></typeparam>
     /// <returns></returns>
     Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjection, TProjectionPayload>(
         string rootPartitionKey,
-        SortableUniqueIdValue? includesSortableUniqueIdValue) where TProjection : IMultiProjector<TProjectionPayload>, new()
+        MultiProjectionRetrievalOptions? retrievalOptions = null) where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon;
     /// <summary>
     ///     Get Multi Projection from initial events
@@ -25,14 +24,14 @@ public interface IMultiProjection
     /// </summary>
     /// <param name="stream"></param>
     /// <param name="rootPartitionKey"></param>
-    /// <param name="includesSortableUniqueIdValue"></param>
+    /// <param name="retrievalOptions"></param>
     /// <typeparam name="TProjection"></typeparam>
     /// <typeparam name="TProjectionPayload"></typeparam>
     /// <returns></returns>
     Task<MultiProjectionState<TProjectionPayload>> GetInitialMultiProjectionFromStreamAsync<TProjection, TProjectionPayload>(
         Stream stream,
         string rootPartitionKey,
-        SortableUniqueIdValue? includesSortableUniqueIdValue) where TProjection : IMultiProjector<TProjectionPayload>, new()
+        MultiProjectionRetrievalOptions? retrievalOptions = null) where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon;
 
     /// <summary>
@@ -40,13 +39,13 @@ public interface IMultiProjection
     /// </summary>
     /// <param name="stream"></param>
     /// <param name="rootPartitionKey"></param>
-    /// <param name="includesSortableUniqueIdValue"></param>
+    /// <param name="retrievalOptions"></param>
     /// <typeparam name="TProjection"></typeparam>
     /// <typeparam name="TProjectionPayload"></typeparam>
     /// <returns></returns>
     Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionFromMultipleStreamAsync<TProjection, TProjectionPayload>(
         Func<Task<Stream?>> stream,
         string rootPartitionKey,
-        SortableUniqueIdValue? includesSortableUniqueIdValue) where TProjection : IMultiProjector<TProjectionPayload>, new()
+        MultiProjectionRetrievalOptions? retrievalOptions = null) where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon;
 }

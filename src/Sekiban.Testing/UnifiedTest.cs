@@ -8,6 +8,7 @@ using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.MultiProjections;
+using Sekiban.Core.Query.MultiProjections.Projections;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Shared;
@@ -497,7 +498,9 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     {
         var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ??
             throw new SekibanTypeNotFoundException("Failed to get Query service");
-        return multiProjectionService.GetMultiProjectionAsync<TMultiProjectionPayload>(rootPartitionKey, SortableUniqueIdValue.GetSafeIdFromUtc())
+        return multiProjectionService.GetMultiProjectionAsync<TMultiProjectionPayload>(
+                    rootPartitionKey,
+                    new MultiProjectionRetrievalOptions { IncludesSortableUniqueIdValue = SortableUniqueIdValue.GetSafeIdFromUtc() })
                 .Result ??
             throw new SekibanTypeNotFoundException("Failed to get Multi Projection Response for " + typeof(TMultiProjectionPayload).Name);
     }
@@ -634,7 +637,9 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     {
         var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ??
             throw new SekibanTypeNotFoundException("Failed to get Query service");
-        return multiProjectionService.GetAggregateListObject<TAggregatePayload>(rootPartitionKey, SortableUniqueIdValue.GetCurrentIdFromUtc())
+        return multiProjectionService.GetAggregateListObject<TAggregatePayload>(
+                    rootPartitionKey,
+                    new MultiProjectionRetrievalOptions { IncludesSortableUniqueIdValue = SortableUniqueIdValue.GetCurrentIdFromUtc() })
                 .Result ??
             throw new SekibanTypeNotFoundException("Failed to get Aggregate List Projection Response for " + typeof(TAggregatePayload).Name);
     }
@@ -796,8 +801,9 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     {
         var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ??
             throw new SekibanTypeNotFoundException("Failed to get Query service");
-        return multiProjectionService
-                .GetSingleProjectionListObject<TSingleProjectionPayload>(rootPartitionKey, SortableUniqueIdValue.GetCurrentIdFromUtc())
+        return multiProjectionService.GetSingleProjectionListObject<TSingleProjectionPayload>(
+                    rootPartitionKey,
+                    new MultiProjectionRetrievalOptions { IncludesSortableUniqueIdValue = SortableUniqueIdValue.GetCurrentIdFromUtc() })
                 .Result ??
             throw new SekibanTypeNotFoundException(
                 "Failed to get Single Projection List Projection Response for " + typeof(TSingleProjectionPayload).Name);
