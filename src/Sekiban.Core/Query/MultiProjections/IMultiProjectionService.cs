@@ -1,5 +1,5 @@
 using Sekiban.Core.Aggregate;
-using Sekiban.Core.Documents.ValueObjects;
+using Sekiban.Core.Query.MultiProjections.Projections;
 using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Query.MultiProjections;
 
@@ -21,7 +21,7 @@ public interface IMultiProjectionService
     /// <returns></returns>
     public Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjectionPayload>(
         string rootPartitionKey = ProjectionAllRootPartitions,
-        SortableUniqueIdValue? includesSortableUniqueIdValue = null) where TProjectionPayload : IMultiProjectionPayloadCommon;
+        MultiProjectionRetrievalOptions? retrievalOptions = null) where TProjectionPayload : IMultiProjectionPayloadCommon;
     /// <summary>
     ///     Get Aggregate List Projection Object
     ///     Uses all root partitions.
@@ -30,8 +30,8 @@ public interface IMultiProjectionService
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
     public Task<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>> GetAggregateListObject<TAggregatePayload>(
-        SortableUniqueIdValue? includesSortableUniqueIdValue) where TAggregatePayload : IAggregatePayloadCommon =>
-        GetAggregateListObject<TAggregatePayload>(ProjectionAllRootPartitions, includesSortableUniqueIdValue);
+        MultiProjectionRetrievalOptions? retrievalOptions = null) where TAggregatePayload : IAggregatePayloadCommon =>
+        GetAggregateListObject<TAggregatePayload>(ProjectionAllRootPartitions, retrievalOptions);
     /// <summary>
     ///     Get Aggregate List Projection Object
     ///     Specify root partition key.
@@ -42,7 +42,7 @@ public interface IMultiProjectionService
     /// <returns></returns>
     public Task<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>> GetAggregateListObject<TAggregatePayload>(
         string rootPartitionKey,
-        SortableUniqueIdValue? includesSortableUniqueIdValue) where TAggregatePayload : IAggregatePayloadCommon;
+        MultiProjectionRetrievalOptions? retrievalOptions = null) where TAggregatePayload : IAggregatePayloadCommon;
 
     /// <summary>
     ///     Get Aggregate List by Multi Projection
@@ -55,7 +55,7 @@ public interface IMultiProjectionService
     public Task<List<AggregateState<TAggregatePayload>>> GetAggregateList<TAggregatePayload>(
         QueryListType queryListType = QueryListType.ActiveOnly,
         string rootPartitionKey = ProjectionAllRootPartitions,
-        SortableUniqueIdValue? includesSortableUniqueIdValue = null) where TAggregatePayload : IAggregatePayloadCommon;
+        MultiProjectionRetrievalOptions? retrievalOptions = null) where TAggregatePayload : IAggregatePayloadCommon;
     /// <summary>
     ///     Get Single Projection List Object
     ///     Uses all root partitions.
@@ -64,9 +64,9 @@ public interface IMultiProjectionService
     /// <typeparam name="TSingleProjectionPayload"></typeparam>
     /// <returns></returns>
     public Task<MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>
-        GetSingleProjectionListObject<TSingleProjectionPayload>(SortableUniqueIdValue? includesSortableUniqueIdValue)
+        GetSingleProjectionListObject<TSingleProjectionPayload>(MultiProjectionRetrievalOptions? retrievalOptions = null)
         where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon =>
-        GetSingleProjectionListObject<TSingleProjectionPayload>(ProjectionAllRootPartitions, includesSortableUniqueIdValue);
+        GetSingleProjectionListObject<TSingleProjectionPayload>(ProjectionAllRootPartitions, retrievalOptions);
     /// <summary>
     ///     Get Single Projection List Object
     ///     Specified root partition key.
@@ -76,7 +76,7 @@ public interface IMultiProjectionService
     /// <typeparam name="TSingleProjectionPayload"></typeparam>
     /// <returns></returns>
     public Task<MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>
-        GetSingleProjectionListObject<TSingleProjectionPayload>(string rootPartitionKey, SortableUniqueIdValue? includesSortableUniqueIdValue)
+        GetSingleProjectionListObject<TSingleProjectionPayload>(string rootPartitionKey, MultiProjectionRetrievalOptions? retrievalOptions = null)
         where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
 
     /// <summary>
@@ -90,5 +90,5 @@ public interface IMultiProjectionService
     public Task<List<SingleProjectionState<TSingleProjectionPayload>>> GetSingleProjectionList<TSingleProjectionPayload>(
         QueryListType queryListType = QueryListType.ActiveOnly,
         string rootPartitionKey = ProjectionAllRootPartitions,
-        SortableUniqueIdValue? includesSortableUniqueIdValue = null) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
+        MultiProjectionRetrievalOptions? retrievalOptions = null) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
 }

@@ -82,7 +82,8 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
             .AddAggregateQuery<ClientEmailExistsQuery>()
             .AddAggregateListQuery<BasicClientQuery>()
             .AddSingleProjectionQuery<ClientNameHistoryProjectionCountQuery>()
-            .AddCommandHandler<ClientNoEventsCommand, ClientNoEventsCommand.Handler>();
+            .AddCommandHandler<ClientNoEventsCommand, ClientNoEventsCommand.Handler>()
+            .AddAggregateListQuery<GetClientPayloadQuery>();
 
         AddAggregate<LoyaltyPoint>()
             .AddCommandHandler<CreateLoyaltyPoint, CreateLoyaltyPoint.Handler>()

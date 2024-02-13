@@ -5,6 +5,7 @@ using FeatureCheck.Domain.Aggregates.Branches.Commands;
 using FeatureCheck.Domain.Aggregates.Clients;
 using FeatureCheck.Domain.Aggregates.Clients.Commands;
 using FeatureCheck.Domain.Aggregates.Clients.Projections;
+using FeatureCheck.Domain.Aggregates.Clients.Queries;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Consts;
@@ -20,6 +21,7 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query;
+using Sekiban.Core.Query.MultiProjections.Projections;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Query.SingleProjections.Projections;
 using Sekiban.Core.Setting;
@@ -810,5 +812,40 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
 
         var branch = await aggregateLoader.AsDefaultStateAsync<Branch>(branchCreatedResult.AggregateId!.Value);
         Assert.Equal(1, branch?.Payload.NumberOfMembers);
+    }
+
+    [Fact]
+    public async Task QueryWithNoRetrievalCapability()
+    {
+        RemoveAllFromDefaultAndDissolvable();
+        var branchResult = await commandExecutor.ExecCommandAsync(new CreateBranch("Japan Tokyo"));
+        Assert.NotNull(branchResult.AggregateId);
+        var clientResult = await commandExecutor.ExecCommandAsync(new CreateClient(branchResult.AggregateId.Value, "John", "john@example.com"));
+        Assert.NotNull(clientResult.AggregateId);
+
+        // wait for 6 seconds. because the query does not make cache if it is too new.
+        await Task.Delay(10000);
+
+        var query1result = await queryExecutor.ExecuteAsync(
+            new GetClientPayloadQuery.Parameter("J")
+            {
+                MultiProjectionRetrievalOptions = new MultiProjectionRetrievalOptions { RetrieveNewEvents = false }
+            });
+        Assert.Single(query1result.Items);
+        var clientResult2 = await commandExecutor.ExecCommandAsync(
+            new ChangeClientName(clientResult.AggregateId.Value, "John2") { ReferenceVersion = clientResult.Version });
+        Assert.NotNull(clientResult2.AggregateId);
+
+        var query1result2 = await queryExecutor.ExecuteAsync(
+            new GetClientPayloadQuery.Parameter("J")
+            {
+                MultiProjectionRetrievalOptions = new MultiProjectionRetrievalOptions { RetrieveNewEvents = false }
+            });
+        Assert.Single(query1result2.Items);
+        Assert.Equal(1, query1result2.Items.First().Version);
+
+        var query1result3 = await queryExecutor.ExecuteAsync(new GetClientPayloadQuery.Parameter("J"));
+        Assert.Single(query1result3.Items);
+        Assert.Equal(2, query1result3.Items.First().Version);
     }
 }
