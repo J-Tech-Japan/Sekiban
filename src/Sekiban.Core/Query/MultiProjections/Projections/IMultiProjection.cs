@@ -10,7 +10,7 @@ public interface IMultiProjection
     ///     In Regular way ( can use cache / snapshots )
     /// </summary>
     /// <param name="rootPartitionKey"></param>
-    /// <param name="includesSortableUniqueIdValue"></param>
+    /// <param name="retrievalOptions"></param>
     /// <typeparam name="TProjection"></typeparam>
     /// <typeparam name="TProjectionPayload"></typeparam>
     /// <returns></returns>
@@ -24,7 +24,7 @@ public interface IMultiProjection
     /// </summary>
     /// <param name="stream"></param>
     /// <param name="rootPartitionKey"></param>
-    /// <param name="includesSortableUniqueIdValue"></param>
+    /// <param name="retrievalOptions"></param>
     /// <typeparam name="TProjection"></typeparam>
     /// <typeparam name="TProjectionPayload"></typeparam>
     /// <returns></returns>
@@ -39,7 +39,7 @@ public interface IMultiProjection
     /// </summary>
     /// <param name="stream"></param>
     /// <param name="rootPartitionKey"></param>
-    /// <param name="includesSortableUniqueIdValue"></param>
+    /// <param name="retrievalOptions"></param>
     /// <typeparam name="TProjection"></typeparam>
     /// <typeparam name="TProjectionPayload"></typeparam>
     /// <returns></returns>

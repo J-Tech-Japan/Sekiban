@@ -16,7 +16,7 @@ public interface IMultiProjectionService
     ///     Get Multi Projection State
     /// </summary>
     /// <param name="rootPartitionKey"></param>
-    /// <param name="includesSortableUniqueIdValue"></param>
+    /// <param name="retrievalOptions"></param>
     /// <typeparam name="TProjectionPayload"></typeparam>
     /// <returns></returns>
     public Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjectionPayload>(
@@ -26,8 +26,8 @@ public interface IMultiProjectionService
     ///     Get Aggregate List Projection Object
     ///     Uses all root partitions.
     /// </summary>
-    /// <param name="includesSortableUniqueIdValue"></param>
     /// <typeparam name="TAggregatePayload"></typeparam>
+    /// <param name="retrievalOptions"></param>
     /// <returns></returns>
     public Task<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>> GetAggregateListObject<TAggregatePayload>(
         MultiProjectionRetrievalOptions? retrievalOptions = null) where TAggregatePayload : IAggregatePayloadCommon =>
@@ -37,7 +37,7 @@ public interface IMultiProjectionService
     ///     Specify root partition key.
     /// </summary>
     /// <param name="rootPartitionKey"></param>
-    /// <param name="includesSortableUniqueIdValue"></param>
+    /// <param name="retrievalOptions"></param>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
     public Task<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>> GetAggregateListObject<TAggregatePayload>(
@@ -49,7 +49,7 @@ public interface IMultiProjectionService
     /// </summary>
     /// <param name="queryListType"></param>
     /// <param name="rootPartitionKey"></param>
-    /// <param name="includesSortableUniqueIdValue"></param>
+    /// <param name="retrievalOptions"></param>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
     public Task<List<AggregateState<TAggregatePayload>>> GetAggregateList<TAggregatePayload>(
@@ -60,7 +60,6 @@ public interface IMultiProjectionService
     ///     Get Single Projection List Object
     ///     Uses all root partitions.
     /// </summary>
-    /// <param name="includesSortableUniqueIdValue"></param>
     /// <typeparam name="TSingleProjectionPayload"></typeparam>
     /// <returns></returns>
     public Task<MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>
@@ -72,7 +71,7 @@ public interface IMultiProjectionService
     ///     Specified root partition key.
     /// </summary>
     /// <param name="rootPartitionKey"></param>
-    /// <param name="includesSortableUniqueIdValue"></param>
+    /// <param name="retrievalOptions"></param>
     /// <typeparam name="TSingleProjectionPayload"></typeparam>
     /// <returns></returns>
     public Task<MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>
@@ -84,7 +83,7 @@ public interface IMultiProjectionService
     /// </summary>
     /// <param name="queryListType"></param>
     /// <param name="rootPartitionKey"></param>
-    /// <param name="includesSortableUniqueIdValue"></param>
+    /// <param name="retrievalOptions"></param>
     /// <typeparam name="TSingleProjectionPayload"></typeparam>
     /// <returns></returns>
     public Task<List<SingleProjectionState<TSingleProjectionPayload>>> GetSingleProjectionList<TSingleProjectionPayload>(
