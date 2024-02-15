@@ -12,6 +12,10 @@ public record MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>
     where TProjectionPayload : IMultiProjectionPayloadCommon
 {
     /// <summary>
+    ///     Container is generated from snapshot
+    /// </summary>
+    public bool FromSnapshot = false;
+    /// <summary>
     ///     Unsafe (could be changed order) events.
     /// </summary>
     public List<IEvent> UnsafeEvents { get; init; } = [];
