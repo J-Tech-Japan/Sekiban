@@ -128,7 +128,7 @@ public class MemoryCacheMultiProjection(
         {
             return savedContainer.State!;
         }
-        if (retrievalOptions is not null && !retrievalOptions.RetrieveNewEvents)
+        if (retrievalOptions is not null && !retrievalOptions.RetrieveNewEvents && !savedContainer.FromSnapshot)
         {
             return savedContainer.State!;
         }
@@ -203,7 +203,7 @@ public class MemoryCacheMultiProjection(
         {
             return await GetInitialProjection<TProjection, TProjectionPayload>(rootPartitionKey);
         }
-        container = container with { State = projector.ToState() };
+        container = container with { State = projector.ToState(), FromSnapshot = false };
         if (container.LastSortableUniqueId != null && container.SafeSortableUniqueId == null)
         {
             container = container with { SafeState = container.State, SafeSortableUniqueId = container.LastSortableUniqueId };
@@ -232,7 +232,9 @@ public class MemoryCacheMultiProjection(
             State = state,
             SafeSortableUniqueId
             = string.IsNullOrEmpty(state.LastSortableUniqueId) ? null : new SortableUniqueIdValue(state.LastSortableUniqueId),
-            LastSortableUniqueId = string.IsNullOrEmpty(state.LastSortableUniqueId) ? null : new SortableUniqueIdValue(state.LastSortableUniqueId)
+            LastSortableUniqueId
+            = string.IsNullOrEmpty(state.LastSortableUniqueId) ? null : new SortableUniqueIdValue(state.LastSortableUniqueId),
+            FromSnapshot = true
         };
         return container;
     }
@@ -271,7 +273,7 @@ public class MemoryCacheMultiProjection(
                     }
                 }
             });
-        container = container with { State = projector.ToState() };
+        container = container with { State = projector.ToState(), FromSnapshot = false };
         if (container.LastSortableUniqueId != null &&
             container.SafeSortableUniqueId == null &&
             container.LastSortableUniqueId?.IsEarlierThan(SortableUniqueIdValue.GetSafeIdFromUtc()) == true)
