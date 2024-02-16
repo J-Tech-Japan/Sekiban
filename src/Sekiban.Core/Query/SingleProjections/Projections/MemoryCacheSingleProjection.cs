@@ -12,23 +12,12 @@ namespace Sekiban.Core.Query.SingleProjections.Projections;
 /// <summary>
 ///     Single projection implementation with memory cache.
 /// </summary>
-public class MemoryCacheSingleProjection : ISingleProjection
+public class MemoryCacheSingleProjection(
+    IDocumentRepository documentRepository,
+    IUpdateNotice updateNotice,
+    IAggregateSettings aggregateSettings,
+    ISingleProjectionCache singleProjectionCache) : ISingleProjection
 {
-    private readonly IAggregateSettings _aggregateSettings;
-    private readonly IDocumentRepository _documentRepository;
-    private readonly IUpdateNotice _updateNotice;
-    private readonly ISingleProjectionCache singleProjectionCache;
-    public MemoryCacheSingleProjection(
-        IDocumentRepository documentRepository,
-        IUpdateNotice updateNotice,
-        IAggregateSettings aggregateSettings,
-        ISingleProjectionCache singleProjectionCache)
-    {
-        _documentRepository = documentRepository;
-        _updateNotice = updateNotice;
-        _aggregateSettings = aggregateSettings;
-        this.singleProjectionCache = singleProjectionCache;
-    }
 
     public async Task<TProjection?> GetAggregateAsync<TProjection, TState, TProjector>(
         Guid aggregateId,
@@ -61,9 +50,9 @@ public class MemoryCacheSingleProjection : ISingleProjection
             return aggregate;
         }
 
-        if (_aggregateSettings.UseUpdateMarkerForType(projector.GetOriginalAggregatePayloadType().Name))
+        if (aggregateSettings.UseUpdateMarkerForType(projector.GetOriginalAggregatePayloadType().Name))
         {
-            var (updated, _) = _updateNotice.HasUpdateAfter(
+            var (updated, _) = updateNotice.HasUpdateAfter(
                 rootPartitionKey,
                 projector.GetOriginalAggregatePayloadType().Name,
                 aggregateId,
@@ -73,12 +62,16 @@ public class MemoryCacheSingleProjection : ISingleProjection
                 return aggregate;
             }
         }
+        if (retrievalOptions is not null && !retrievalOptions.RetrieveNewEvents)
+        {
+            return aggregate;
+        }
 
         var container = new SingleMemoryCacheProjectionContainer<TProjection, TState> { AggregateId = aggregateId };
 
         try
         {
-            await _documentRepository.GetAllEventsForAggregateIdAsync(
+            await documentRepository.GetAllEventsForAggregateIdAsync(
                 aggregateId,
                 projector.GetOriginalAggregatePayloadType(),
                 PartitionKeyGenerator.ForEvent(aggregateId, projector.GetOriginalAggregatePayloadType(), rootPartitionKey),
@@ -161,7 +154,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
         var aggregate = projector.CreateInitialAggregate(aggregateId);
         var container = new SingleMemoryCacheProjectionContainer<TProjection, TState> { AggregateId = aggregateId };
         var payloadVersion = projector.GetPayloadVersionIdentifier();
-        var snapshotDocument = await _documentRepository.GetLatestSnapshotForAggregateAsync(
+        var snapshotDocument = await documentRepository.GetLatestSnapshotForAggregateAsync(
             aggregateId,
             projector.GetOriginalAggregatePayloadType(),
             projector.GetPayloadType(),
@@ -177,7 +170,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
             return await GetAggregateFromInitialAsync<TProjection, TState, TProjector>(aggregateId, rootPartitionKey, toVersion.Value);
         }
 
-        await _documentRepository.GetAllEventsForAggregateIdAsync(
+        await documentRepository.GetAllEventsForAggregateIdAsync(
             aggregateId,
             projector.GetOriginalAggregatePayloadType(),
             PartitionKeyGenerator.ForEvent(aggregateId, projector.GetOriginalAggregatePayloadType(), rootPartitionKey),
@@ -253,7 +246,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
         var container = new SingleMemoryCacheProjectionContainer<TProjection, TState> { AggregateId = aggregateId };
         var aggregate = projector.CreateInitialAggregate(aggregateId);
         var addFinished = false;
-        await _documentRepository.GetAllEventsForAggregateIdAsync(
+        await documentRepository.GetAllEventsForAggregateIdAsync(
             aggregateId,
             projector.GetOriginalAggregatePayloadType(),
             PartitionKeyGenerator.ForEvent(aggregateId, projector.GetOriginalAggregatePayloadType(), rootPartitionKey),

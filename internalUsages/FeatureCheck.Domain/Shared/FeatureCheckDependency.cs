@@ -74,6 +74,7 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
             .AddCommandHandler<ChangeClientName, ChangeClientName.Handler>()
             .AddCommandHandler<DeleteClient, DeleteClient.Handler>()
             .AddCommandHandler<CancelDeleteClient, CancelDeleteClient.Handler>()
+            .AddCommandHandler<ChangeClientNameWithoutLoading, ChangeClientNameWithoutLoading.Handler>()
             .AddEventSubscriberWithNonBlocking<ClientCreatedWithBranchAdd, ClientCreatedWithBranchAdd.BranchSubscriber>()
             .AddEventSubscriber<ClientCreated, ClientCreatedSubscriber>()
             .AddEventSubscriber<ClientDeleted, ClientDeletedSubscriber>()

@@ -76,7 +76,7 @@ public class AggregateLoader : IAggregateLoader
         int? toVersion = null,
         SingleProjectionRetrievalOptions? retrievalOptions = null) where TAggregatePayload : IAggregatePayloadCommon
     {
-        var aggregate = await AsAggregateAsync<TAggregatePayload>(aggregateId, rootPartitionKey, toVersion);
+        var aggregate = await AsAggregateAsync<TAggregatePayload>(aggregateId, rootPartitionKey, toVersion, retrievalOptions);
         return aggregate?.GetPayloadTypeIs<TAggregatePayload>() == true ? aggregate.ToState() : null;
     }
 
