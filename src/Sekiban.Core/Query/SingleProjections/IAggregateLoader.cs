@@ -1,8 +1,15 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 namespace Sekiban.Core.Query.SingleProjections;
 
+public record SingleProjectionRetrievalOptions
+{
+    public SortableUniqueIdValue? IncludesSortableUniqueIdValue { get; init; }
+    public bool RetrieveNewEvents { get; init; } = true;
+    public static SingleProjectionRetrievalOptions Default => new();
+}
 /// <summary>
 ///     Aggregate Loader Interface.
 ///     Developers can use this interface to load the aggregate.
@@ -17,6 +24,7 @@ public interface IAggregateLoader
     /// <param name="aggregateId"></param>
     /// <param name="rootPartitionKey"></param>
     /// <param name="toVersion"></param>
+    /// <param name="retrievalOptions"></param>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
     public Task<AggregateState<TAggregatePayload>?> AsDefaultStateFromInitialAsync<TAggregatePayload>(
@@ -30,14 +38,14 @@ public interface IAggregateLoader
     /// <param name="aggregateId"></param>
     /// <param name="rootPartitionKey"></param>
     /// <param name="toVersion"></param>
-    /// <param name="includesSortableUniqueId"></param>
+    /// <param name="retrievalOptions"></param>
     /// <typeparam name="TSingleProjectionPayload"></typeparam>
     /// <returns></returns>
     public Task<SingleProjectionState<TSingleProjectionPayload>?> AsSingleProjectionStateAsync<TSingleProjectionPayload>(
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
-        string? includesSortableUniqueId = null) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
+        SingleProjectionRetrievalOptions? retrievalOptions = null) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
     /// <summary>
     ///     Get aggregate from initial events. (without snapshot nor memory cache)
     /// </summary>
@@ -58,14 +66,14 @@ public interface IAggregateLoader
     /// <param name="aggregateId"></param>
     /// <param name="rootPartitionKey"></param>
     /// <param name="toVersion"></param>
-    /// <param name="includesSortableUniqueId"></param>
+    /// <param name="retrievalOptions"></param>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
     public Task<Aggregate<TAggregatePayload>?> AsAggregateAsync<TAggregatePayload>(
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
-        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommon;
+        SingleProjectionRetrievalOptions? retrievalOptions = null) where TAggregatePayload : IAggregatePayloadCommon;
 
     /// <summary>
     ///     The normal version that uses snapshots and memory cache.
@@ -74,14 +82,14 @@ public interface IAggregateLoader
     /// <param name="aggregateId"></param>
     /// <param name="rootPartitionKey"></param>
     /// <param name="toVersion"></param>
-    /// <param name="includesSortableUniqueId"></param>
+    /// <param name="retrievalOptions"></param>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
     public Task<AggregateState<TAggregatePayload>?> AsDefaultStateAsync<TAggregatePayload>(
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
-        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommon;
+        SingleProjectionRetrievalOptions? retrievalOptions = null) where TAggregatePayload : IAggregatePayloadCommon;
 
     /// <summary>
     ///     Get all events for target aggregate.
@@ -89,12 +97,10 @@ public interface IAggregateLoader
     /// <param name="aggregateId"></param>
     /// <param name="rootPartitionKey"></param>
     /// <param name="toVersion"></param>
-    /// <param name="includesSortableUniqueId"></param>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
     public Task<IEnumerable<IEvent>?> AllEventsAsync<TAggregatePayload>(
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
-        int? toVersion = null,
-        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommon;
+        int? toVersion = null) where TAggregatePayload : IAggregatePayloadCommon;
 }

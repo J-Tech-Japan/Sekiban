@@ -25,7 +25,7 @@ public class BaseGetAggregateController<TAggregatePayload>(
         Guid id,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
-        string? includesSortableUniqueId = null)
+        SingleProjectionRetrievalOptions? retrievalOptions = null)
     {
         if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.Get,
@@ -39,7 +39,7 @@ public class BaseGetAggregateController<TAggregatePayload>(
         {
             return Unauthorized();
         }
-        var result = await aggregateLoader.AsDefaultStateAsync<TAggregatePayload>(id, rootPartitionKey, toVersion, includesSortableUniqueId);
+        var result = await aggregateLoader.AsDefaultStateAsync<TAggregatePayload>(id, rootPartitionKey, toVersion, retrievalOptions);
         return result is null ? NotFound() : Ok(result);
     }
     [HttpGet]

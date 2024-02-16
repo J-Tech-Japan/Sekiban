@@ -26,7 +26,7 @@ public class BaseSingleProjectionController<TSingleProjectionPayload>(
         Guid id,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
-        string? includesSortableUniqueId = null)
+        SingleProjectionRetrievalOptions? retrievalOptions = null)
     {
         if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.SingleProjection,
@@ -44,7 +44,7 @@ public class BaseSingleProjectionController<TSingleProjectionPayload>(
             id,
             rootPartitionKey,
             toVersion,
-            includesSortableUniqueId);
+            retrievalOptions);
         return Ok(result);
     }
     [HttpGet]

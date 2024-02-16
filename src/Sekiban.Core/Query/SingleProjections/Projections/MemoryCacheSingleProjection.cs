@@ -34,7 +34,7 @@ public class MemoryCacheSingleProjection : ISingleProjection
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
-        SortableUniqueIdValue? includesSortableUniqueId = null)
+        SingleProjectionRetrievalOptions? retrievalOptions = null)
         where TProjection : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<TState>
         where TState : IAggregateStateCommon
         where TProjector : ISingleProjector<TProjection>, new()
@@ -54,9 +54,9 @@ public class MemoryCacheSingleProjection : ISingleProjection
         {
             aggregate.ApplySnapshot(savedContainer.SafeState);
         }
-        if (includesSortableUniqueId is not null &&
+        if (retrievalOptions?.IncludesSortableUniqueIdValue is not null &&
             savedContainer.SafeSortableUniqueId is not null &&
-            includesSortableUniqueId.IsEarlierThan(savedContainer.SafeSortableUniqueId))
+            retrievalOptions.IncludesSortableUniqueIdValue.IsEarlierThan(savedContainer.SafeSortableUniqueId))
         {
             return aggregate;
         }
