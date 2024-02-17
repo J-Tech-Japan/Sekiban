@@ -856,4 +856,64 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         Assert.Single(query1result3.Items);
         Assert.Equal(3, query1result3.Items.First().Version);
     }
+
+    [Fact]
+    public async Task QueryWithPostponeRetrieval()
+    {
+        RemoveAllFromDefaultAndDissolvable();
+        var branchResult = await commandExecutor.ExecCommandAsync(new CreateBranch("Japan Tokyo"));
+        Assert.NotNull(branchResult.AggregateId);
+        var clientResult = await commandExecutor.ExecCommandAsync(new CreateClient(branchResult.AggregateId.Value, "John", "john@example.com"));
+        Assert.NotNull(clientResult.AggregateId);
+
+
+        // wait for 6 seconds. because the query does not make cache if it is too new.
+        await Task.Delay(10000);
+        var query1result = await queryExecutor.ExecuteAsync(
+            new GetClientPayloadQuery.Parameter("J")
+            {
+                MultiProjectionRetrievalOptions = MultiProjectionRetrievalOptions.WithPostponeFetchSeconds(12)
+            });
+        Assert.Single(query1result.Items);
+        Assert.Equal(1, query1result.Items.First().Version);
+
+        var aggregateResult = await aggregateLoader.AsDefaultStateAsync<Client>(clientResult.AggregateId.Value);
+
+        await Task.Delay(3000);
+
+        var clientResult2 = await commandExecutor.ExecCommandAsync(
+            new ChangeClientName(clientResult.AggregateId.Value, "John2") { ReferenceVersion = clientResult.Version });
+        Assert.NotNull(clientResult2.AggregateId);
+        var clientResult3 = await commandExecutor.ExecCommandAsync(new ChangeClientNameWithoutLoading(clientResult.AggregateId.Value, "John3"));
+        Assert.NotNull(clientResult2.AggregateId);
+
+
+        aggregateResult = await aggregateLoader.AsDefaultStateAsync<Client>(
+            clientResult2.AggregateId.Value,
+            retrievalOptions: SingleProjectionRetrievalOptions.WithPostponeFetchSeconds(20));
+        Assert.NotNull(aggregateResult);
+        Assert.Equal(1, aggregateResult.Version);
+
+        aggregateResult = await aggregateLoader.AsDefaultStateAsync<Client>(
+            clientResult2.AggregateId.Value,
+            retrievalOptions: SingleProjectionRetrievalOptions.WithPostponeFetchSeconds(2));
+        Assert.NotNull(aggregateResult);
+        Assert.Equal(3, aggregateResult.Version);
+
+        var query1result2 = await queryExecutor.ExecuteAsync(
+            new GetClientPayloadQuery.Parameter("J")
+            {
+                MultiProjectionRetrievalOptions = MultiProjectionRetrievalOptions.WithPostponeFetchSeconds(4)
+            });
+        Assert.Single(query1result2.Items);
+        Assert.Equal(1, query1result2.Items.First().Version);
+
+        var query1result3 = await queryExecutor.ExecuteAsync(
+            new GetClientPayloadQuery.Parameter("J") with
+            {
+                MultiProjectionRetrievalOptions = MultiProjectionRetrievalOptions.WithPostponeFetchSeconds(2)
+            });
+        Assert.Single(query1result3.Items);
+        Assert.Equal(3, query1result3.Items.First().Version);
+    }
 }

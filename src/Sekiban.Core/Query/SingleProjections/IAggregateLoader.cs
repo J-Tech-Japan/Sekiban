@@ -1,15 +1,8 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
-using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 namespace Sekiban.Core.Query.SingleProjections;
 
-public record SingleProjectionRetrievalOptions
-{
-    public SortableUniqueIdValue? IncludesSortableUniqueIdValue { get; init; }
-    public bool RetrieveNewEvents { get; init; } = true;
-    public static SingleProjectionRetrievalOptions Default => new();
-}
 /// <summary>
 ///     Aggregate Loader Interface.
 ///     Developers can use this interface to load the aggregate.

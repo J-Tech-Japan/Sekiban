@@ -1,5 +1,6 @@
 using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
+using Sekiban.Core.Shared;
 namespace Sekiban.Core.Query.MultiProjections.Projections;
 
 /// <summary>
@@ -36,4 +37,6 @@ public record MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>
     ///     Last safe sortable unique id. (exclude unsafe events)
     /// </summary>
     public SortableUniqueIdValue? SafeSortableUniqueId { get; init; } = null;
+
+    public DateTime CachedAt { get; init; } = SekibanDateProducer.GetRegistered().UtcNow;
 }

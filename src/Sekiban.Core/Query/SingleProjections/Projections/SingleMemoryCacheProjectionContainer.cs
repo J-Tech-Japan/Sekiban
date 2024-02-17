@@ -1,6 +1,7 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
+using Sekiban.Core.Shared;
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
 /// <summary>
@@ -18,4 +19,5 @@ public record SingleMemoryCacheProjectionContainer<TAggregate, TState> where TAg
     public TState? SafeState { get; init; } = default;
     public SortableUniqueIdValue? LastSortableUniqueId { get; init; } = null;
     public SortableUniqueIdValue? SafeSortableUniqueId { get; init; } = null;
+    public DateTime CachedAt { get; init; } = SekibanDateProducer.GetRegistered().UtcNow;
 }
