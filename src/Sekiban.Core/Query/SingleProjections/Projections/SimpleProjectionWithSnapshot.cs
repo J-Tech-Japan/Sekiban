@@ -1,6 +1,5 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
-using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Partition;
 namespace Sekiban.Core.Query.SingleProjections.Projections;
@@ -34,7 +33,7 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
-        SortableUniqueIdValue? includesSortableUniqueId = null)
+        SingleProjectionRetrievalOptions? retrievalOptions = null)
         where TProjection : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<TState>
         where TState : IAggregateStateCommon
         where TProjector : ISingleProjector<TProjection>, new()
@@ -85,10 +84,8 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
 
         return (aggregate?.Version, toVersion) switch
         {
-            (0, _) => default
-            ,
-            (int a, int t) when a < t => throw new SekibanVersionNotReachToSpecificVersion()
-            ,
+            (0, _) => default,
+            (int a, int t) when a < t => throw new SekibanVersionNotReachToSpecificVersion(),
             _ => aggregate
         };
     }

@@ -835,7 +835,15 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         var clientResult2 = await commandExecutor.ExecCommandAsync(
             new ChangeClientName(clientResult.AggregateId.Value, "John2") { ReferenceVersion = clientResult.Version });
         Assert.NotNull(clientResult2.AggregateId);
+        var clientResult3 = await commandExecutor.ExecCommandAsync(new ChangeClientNameWithoutLoading(clientResult.AggregateId.Value, "John3"));
+        Assert.NotNull(clientResult2.AggregateId);
 
+
+        var aggregateResult = await aggregateLoader.AsDefaultStateAsync<Client>(
+            clientResult2.AggregateId.Value,
+            retrievalOptions: new SingleProjectionRetrievalOptions { RetrieveNewEvents = false });
+        Assert.NotNull(aggregateResult);
+        Assert.Equal(1, aggregateResult.Version);
         var query1result2 = await queryExecutor.ExecuteAsync(
             new GetClientPayloadQuery.Parameter("J")
             {
@@ -846,6 +854,6 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
 
         var query1result3 = await queryExecutor.ExecuteAsync(new GetClientPayloadQuery.Parameter("J"));
         Assert.Single(query1result3.Items);
-        Assert.Equal(2, query1result3.Items.First().Version);
+        Assert.Equal(3, query1result3.Items.First().Version);
     }
 }

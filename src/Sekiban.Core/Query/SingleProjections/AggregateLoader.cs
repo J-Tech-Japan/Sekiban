@@ -1,6 +1,5 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
-using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 using Sekiban.Core.Partition;
 using Sekiban.Core.Query.SingleProjections.Projections;
@@ -30,15 +29,11 @@ public class AggregateLoader : IAggregateLoader
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
-        string? includesSortableUniqueId = null) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
+        SingleProjectionRetrievalOptions? retrievalOptions = null) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
         var aggregate = await _singleProjection
             .GetAggregateAsync<SingleProjection<TSingleProjectionPayload>, SingleProjectionState<TSingleProjectionPayload>,
-                SingleProjection<TSingleProjectionPayload>>(
-                aggregateId,
-                rootPartitionKey,
-                toVersion,
-                SortableUniqueIdValue.NullableValue(includesSortableUniqueId));
+                SingleProjection<TSingleProjectionPayload>>(aggregateId, rootPartitionKey, toVersion, retrievalOptions);
         return aggregate?.ToState();
     }
     public async Task<SingleProjectionState<TSingleProjectionPayload>?> AsSingleProjectionStateFromInitialAsync<TSingleProjectionPayload>(
@@ -67,29 +62,28 @@ public class AggregateLoader : IAggregateLoader
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
-        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommon =>
+        SingleProjectionRetrievalOptions? retrievalOptions = null) where TAggregatePayload : IAggregatePayloadCommon =>
         await _singleProjection
             .GetAggregateAsync<Aggregate<TAggregatePayload>, AggregateState<TAggregatePayload>, DefaultSingleProjector<TAggregatePayload>>(
                 aggregateId,
                 rootPartitionKey,
                 toVersion,
-                SortableUniqueIdValue.NullableValue(includesSortableUniqueId));
+                retrievalOptions);
 
     public async Task<AggregateState<TAggregatePayload>?> AsDefaultStateAsync<TAggregatePayload>(
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
-        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommon
+        SingleProjectionRetrievalOptions? retrievalOptions = null) where TAggregatePayload : IAggregatePayloadCommon
     {
-        var aggregate = await AsAggregateAsync<TAggregatePayload>(aggregateId, rootPartitionKey, toVersion);
+        var aggregate = await AsAggregateAsync<TAggregatePayload>(aggregateId, rootPartitionKey, toVersion, retrievalOptions);
         return aggregate?.GetPayloadTypeIs<TAggregatePayload>() == true ? aggregate.ToState() : null;
     }
 
     public async Task<IEnumerable<IEvent>?> AllEventsAsync<TAggregatePayload>(
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
-        int? toVersion = null,
-        string? includesSortableUniqueId = null) where TAggregatePayload : IAggregatePayloadCommon
+        int? toVersion = null) where TAggregatePayload : IAggregatePayloadCommon
     {
         var toReturn = new List<IEvent>();
         await _documentRepository.GetAllEventsForAggregateIdAsync(

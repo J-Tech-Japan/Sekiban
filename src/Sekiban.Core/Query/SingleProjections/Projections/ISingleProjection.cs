@@ -1,6 +1,5 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
-using Sekiban.Core.Documents.ValueObjects;
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
 /// <summary>
@@ -13,7 +12,7 @@ public interface ISingleProjection
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
-        SortableUniqueIdValue? includesSortableUniqueId = null)
+        SingleProjectionRetrievalOptions? retrievalOptions = null)
         where TProjection : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<TState>
         where TState : IAggregateStateCommon
         where TProjector : ISingleProjector<TProjection>, new();
