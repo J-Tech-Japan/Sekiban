@@ -903,7 +903,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         var query1result2 = await queryExecutor.ExecuteAsync(
             new GetClientPayloadQuery.Parameter("J")
             {
-                MultiProjectionRetrievalOptions = MultiProjectionRetrievalOptions.WithPostponeFetchSeconds(4)
+                MultiProjectionRetrievalOptions = MultiProjectionRetrievalOptions.WithPostponeFetchSeconds(10)
             });
         Assert.Single(query1result2.Items);
         Assert.Equal(1, query1result2.Items.First().Version);
