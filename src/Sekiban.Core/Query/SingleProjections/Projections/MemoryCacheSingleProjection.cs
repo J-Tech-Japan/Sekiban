@@ -6,6 +6,7 @@ using Sekiban.Core.Exceptions;
 using Sekiban.Core.Partition;
 using Sekiban.Core.Query.UpdateNotice;
 using Sekiban.Core.Setting;
+using Sekiban.Core.Shared;
 using Sekiban.Core.Types;
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
@@ -16,7 +17,8 @@ public class MemoryCacheSingleProjection(
     IDocumentRepository documentRepository,
     IUpdateNotice updateNotice,
     IAggregateSettings aggregateSettings,
-    ISingleProjectionCache singleProjectionCache) : ISingleProjection
+    ISingleProjectionCache singleProjectionCache,
+    ISekibanDateProducer dateProducer) : ISingleProjection
 {
 
     public async Task<TProjection?> GetAggregateAsync<TProjection, TState, TProjector>(
@@ -66,7 +68,11 @@ public class MemoryCacheSingleProjection(
         {
             return aggregate;
         }
-
+        if (retrievalOptions?.PostponeEventFetchBySeconds is not null &&
+            retrievalOptions.ShouldPostponeFetch(savedContainer.CachedAt, dateProducer.UtcNow))
+        {
+            return aggregate;
+        }
         var container = new SingleMemoryCacheProjectionContainer<TProjection, TState> { AggregateId = aggregateId };
 
         try
@@ -129,7 +135,7 @@ public class MemoryCacheSingleProjection(
         {
             return aggregate;
         }
-        container = container with { State = aggregate.ToState() };
+        container = container with { State = aggregate.ToState(), CachedAt = dateProducer.UtcNow };
         if (container.LastSortableUniqueId != null &&
             container.SafeSortableUniqueId == null &&
             container.LastSortableUniqueId?.IsEarlierThan(SortableUniqueIdValue.GetSafeIdFromUtc()) == true)

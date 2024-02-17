@@ -1,4 +1,3 @@
-using Sekiban.Core.Query.MultiProjections.Projections;
 namespace Sekiban.Core.Query.QueryModel;
 
 /// <summary>
@@ -7,8 +6,4 @@ namespace Sekiban.Core.Query.QueryModel;
 /// </summary>
 public interface IQueryParameterCommon
 {
-}
-public interface IQueryParameterMultiProjectionOptionSettable
-{
-    public MultiProjectionRetrievalOptions? MultiProjectionRetrievalOptions { get; }
 }

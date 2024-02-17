@@ -17,7 +17,8 @@ public class MemoryCacheMultiProjection(
     IAggregateSettings aggregateSettings,
     IMultiProjectionCache multiProjectionCache,
     RegisteredEventTypes registeredEventTypes,
-    IMultiProjectionSnapshotGenerator multiProjectionSnapshotGenerator) : IMultiProjection
+    IMultiProjectionSnapshotGenerator multiProjectionSnapshotGenerator,
+    ISekibanDateProducer dateProducer) : IMultiProjection
 {
     public async Task<MultiProjectionState<TProjectionPayload>> GetInitialMultiProjectionFromStreamAsync<TProjection, TProjectionPayload>(
         Stream stream,
@@ -124,14 +125,23 @@ public class MemoryCacheMultiProjection(
         }
         if (retrievalOptions?.IncludesSortableUniqueIdValue is not null &&
             savedContainer.SafeSortableUniqueId is not null &&
-            retrievalOptions.IncludesSortableUniqueIdValue.IsEarlierThan(savedContainer.SafeSortableUniqueId))
+            retrievalOptions.IncludesSortableUniqueIdValue.IsEarlierThan(savedContainer.SafeSortableUniqueId) &&
+            savedContainer.State is not null)
         {
-            return savedContainer.State!;
+            return savedContainer.State;
         }
-        if (retrievalOptions is not null && !retrievalOptions.RetrieveNewEvents && !savedContainer.FromSnapshot)
+        if (retrievalOptions is not null && !retrievalOptions.RetrieveNewEvents && !savedContainer.FromSnapshot && savedContainer.State is not null)
         {
-            return savedContainer.State!;
+            return savedContainer.State;
         }
+
+        if (retrievalOptions?.PostponeEventFetchBySeconds is not null &&
+            savedContainer.State is not null &&
+            retrievalOptions.ShouldPostponeFetch(savedContainer.CachedAt, dateProducer.UtcNow))
+        {
+            return savedContainer.State;
+        }
+
         projector.ApplySnapshot(savedContainer.SafeState!);
 
         bool? canUseCache = null;
@@ -203,7 +213,7 @@ public class MemoryCacheMultiProjection(
         {
             return await GetInitialProjection<TProjection, TProjectionPayload>(rootPartitionKey);
         }
-        container = container with { State = projector.ToState(), FromSnapshot = false };
+        container = container with { State = projector.ToState(), FromSnapshot = false, CachedAt = dateProducer.UtcNow };
         if (container.LastSortableUniqueId != null && container.SafeSortableUniqueId == null)
         {
             container = container with { SafeState = container.State, SafeSortableUniqueId = container.LastSortableUniqueId };
