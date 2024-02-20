@@ -34,7 +34,7 @@ public static class SekibanEventSourcingDependency
     /// <typeparam name="TDependency"></typeparam>
     /// <returns></returns>
     public static WebApplicationBuilder AddSekibanWithDependency<TDependency>(this WebApplicationBuilder builder)
-        where TDependency : DomainDependencyDefinitionBase, new()
+        where TDependency : IDependencyDefinition, new()
     {
         builder.Services.AddSekibanWithDependency(new TDependency(), builder.Configuration);
         return builder;
@@ -62,7 +62,7 @@ public static class SekibanEventSourcingDependency
     /// <param name="configuration"></param>
     /// <returns></returns>
     public static IServiceCollection AddSekibanWithDependency<TDependency>(this IServiceCollection services, IConfiguration configuration)
-        where TDependency : DomainDependencyDefinitionBase, new()
+        where TDependency : IDependencyDefinition, new()
     {
         var dependencyDefinition = new TDependency();
         var settings = SekibanSettings.FromConfiguration(configuration);
