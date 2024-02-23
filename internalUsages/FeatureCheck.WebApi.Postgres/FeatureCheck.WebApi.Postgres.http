@@ -1,0 +1,6 @@
+@FeatureCheck.WebApi.Postgres_HostAddress = http://localhost:5120
+
+GET {{FeatureCheck.WebApi.Postgres_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

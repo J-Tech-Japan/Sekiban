@@ -1,13 +1,13 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <PackageId>Sekiban.Infrastructure.Cosmos</PackageId>
+        <PackageId>Sekiban.Infrastructure.Azure.Storage.Blobs</PackageId>
         <Version>0.17.5</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
-        <PackageDescription>Sekiban - Event Sourcing Framework CosmosInfrastructure</PackageDescription>
+        <PackageDescription>Sekiban - Event Sourcing Framework Azure Storage Blob</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <PackageVersion>0.17.5</PackageVersion>
         <Description>Fix Retrieval Option returns snapshot</Description>
@@ -17,22 +17,19 @@
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <IncludeSymbols>true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        <RootNamespace>Sekiban.Infrastructure.Azure.Storage.Blobs</RootNamespace>
     </PropertyGroup>
 
+
     <ItemGroup>
-        <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.38.1"/>
-        <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0"/>
-        <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="8.0.0"/>
-        <PackageReference Include="Sekiban.Core" Version="0.17.5"/>
-        <PackageReference Include="Sekiban.Infrastructure.Azure.Storage.Blobs" Version="0.17.5"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
+        <PackageReference Include="Azure.Storage.Blobs" Version="12.19.1"/>
+        <PackageReference Include="Sekiban.Core" Version="0.17.5"/>
+        <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.0"/>
     </ItemGroup>
+
 
     <ItemGroup>
         <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj"/>
-        <ProjectReference Include="..\Sekiban.Infrastructure.Azure.Storage.Blobs\Sekiban.Infrastructure.Azure.Storage.Blobs.csproj"/>
-        <ProjectReference Include="..\Sekiban.Testing\Sekiban.Testing.csproj"/>
     </ItemGroup>
-
-
 </Project>

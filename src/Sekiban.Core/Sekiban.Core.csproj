@@ -23,7 +23,6 @@
 
     <ItemGroup>
         <FrameworkReference Include="Microsoft.AspNetCore.App"/>
-        <PackageReference Include="Azure.Storage.Blobs" Version="12.19.1"/>
         <PackageReference Include="LanguageExt.Core" Version="4.4.8"/>
         <PackageReference Include="MediatR" Version="12.2.0"/>
         <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="8.0.0"/>

@@ -8,6 +8,7 @@ using Sekiban.Core.Documents;
 using Sekiban.Core.Events;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
+using Sekiban.Infrastructure.Azure.Storage.Blobs;
 namespace Sekiban.Infrastructure.Cosmos;
 
 public class CosmosDbFactory(
@@ -255,7 +256,5 @@ public class CosmosDbFactory(
     }
 
     private static IReadOnlyList<string> GetPartitionKeyPaths(bool supportsHierarchicalPartitions) =>
-        supportsHierarchicalPartitions
-            ? ["/RootPartitionKey", "/AggregateType", "/PartitionKey"]
-            : ["/PartitionKey"];
+        supportsHierarchicalPartitions ? ["/RootPartitionKey", "/AggregateType", "/PartitionKey"] : ["/PartitionKey"];
 }

@@ -1,6 +1,6 @@
 using Azure.Storage.Blobs;
 using Microsoft.Extensions.DependencyInjection;
-using Sekiban.Infrastructure.Cosmos;
+using Sekiban.Infrastructure.Azure.Storage.Blobs;
 namespace Sekiban.Aspire.Infrastructure.Cosmos;
 
 public class AzureAspireBlobContainerAccessor(SekibanBlobAspireOptions sekibanBlobAspireOptions, IServiceProvider serviceProvider)

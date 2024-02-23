@@ -2,6 +2,7 @@ using Sekiban.Core.Documents;
 using Sekiban.Core.History;
 using Sekiban.Core.Partition;
 using Sekiban.Core.Types;
+using System.Reflection;
 namespace Sekiban.Core.Events;
 
 /// <summary>
@@ -117,4 +118,68 @@ public record Event<TEventPayload> : Document, IEvent where TEventPayload : IEve
             Version = Version,
             CallHistories = CallHistories
         };
+}
+public static class Event
+{
+    public static Event<TEventPayload> GenerateEvent<TEventPayload>(
+        Guid id,
+        Guid aggregateId,
+        string partitionKey,
+        DocumentType documentType,
+        string documentTypeName,
+        DateTime timeStamp,
+        string sortableUniqueId,
+        TEventPayload eventPayload,
+        string aggregateType,
+        int version,
+        string rootPartitionKey,
+        List<CallHistory> callHistories) where TEventPayload : IEventPayloadCommon =>
+        new()
+        {
+            Id = id,
+            AggregateId = aggregateId,
+            PartitionKey = partitionKey,
+            DocumentType = documentType,
+            DocumentTypeName = documentTypeName,
+            TimeStamp = timeStamp,
+            SortableUniqueId = sortableUniqueId,
+            Payload = eventPayload,
+            AggregateType = aggregateType,
+            Version = version,
+            RootPartitionKey = rootPartitionKey,
+            CallHistories = callHistories
+        };
+    public static IEvent? GenerateIEvent(
+        Guid id,
+        Guid aggregateId,
+        string partitionKey,
+        DocumentType documentType,
+        string documentTypeName,
+        Type eventPayloadType,
+        DateTime timeStamp,
+        string sortableUniqueId,
+        IEventPayloadCommon eventPayload,
+        string aggregateType,
+        int version,
+        string rootPartitionKey,
+        List<CallHistory> callHistories) =>
+        typeof(Event).GetMethod(nameof(GenerateEvent), BindingFlags.Public | BindingFlags.Static)
+            ?.MakeGenericMethod(eventPayload.GetType())
+            .Invoke(
+                null,
+                new object[]
+                {
+                    id,
+                    aggregateId,
+                    partitionKey,
+                    documentType,
+                    documentTypeName,
+                    timeStamp,
+                    sortableUniqueId,
+                    eventPayload,
+                    aggregateType,
+                    version,
+                    rootPartitionKey,
+                    callHistories
+                }) as IEvent;
 }

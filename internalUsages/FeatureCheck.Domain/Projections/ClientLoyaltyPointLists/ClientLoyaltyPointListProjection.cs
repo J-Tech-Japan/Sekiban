@@ -16,7 +16,7 @@ public record ClientLoyaltyPointListProjection(
 {
     public TargetAggregatePayloadCollection GetTargetAggregatePayloads() =>
         new TargetAggregatePayloadCollection().Add<Branch>().Add<Client>().Add<LoyaltyPoint>();
-
+    public string GetPayloadVersionIdentifier() => "1.0.1 20230101";
     public static ClientLoyaltyPointListProjection? ApplyEvent<TEventPayload>(
         ClientLoyaltyPointListProjection projectionPayload,
         Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon
