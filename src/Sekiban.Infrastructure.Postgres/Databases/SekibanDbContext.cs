@@ -1,11 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 namespace Sekiban.Infrastructure.Postgres.Databases;
 
-public class SekibanDbContext(string connectionString, DbContextOptions<SekibanDbContext> options) : DbContext(options)
+public class SekibanDbContext(DbContextOptions<SekibanDbContext> options) : DbContext(options)
 {
     public DbSet<DbEvent> Events { get; set; } = default!;
     public DbSet<DbDissolvableEvent> DissolvableEvents { get; set; } = default!;
-
+    public string ConnectionString { get; init; } = string.Empty;
 
     public DbSet<DbCommandDocument> Commands { get; set; } = default!;
     public DbSet<DbSingleProjectionSnapshotDocument> SingleProjectionSnapshots { get; set; } = default!;
@@ -13,6 +13,6 @@ public class SekibanDbContext(string connectionString, DbContextOptions<SekibanD
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
-        optionsBuilder.UseNpgsql(connectionString);
+        optionsBuilder.UseNpgsql(ConnectionString);
     }
 }

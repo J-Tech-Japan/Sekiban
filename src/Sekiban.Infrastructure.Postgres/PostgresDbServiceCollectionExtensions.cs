@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Documents;
+using Sekiban.Infrastructure.Azure.Storage.Blobs;
 using Sekiban.Infrastructure.Postgres.Documents;
 namespace Sekiban.Infrastructure.Postgres;
 
@@ -17,6 +18,18 @@ public static class PostgresDbServiceCollectionExtensions
     /// <returns></returns>
     public static SekibanPostgresDbOptionsServiceCollection AddSekibanPostgresDb(this WebApplicationBuilder builder) =>
         AddSekibanPostgresDb(builder.Services, builder.Configuration);
+
+
+    /// <summary>
+    ///     Add PostgresDB services for Sekiban
+    /// </summary>
+    /// <param name="builder"></param>
+    /// <returns></returns>
+    public static SekibanPostgresDbOptionsServiceCollection AddSekibanPostgresDbWithAzureBlobStorage(this WebApplicationBuilder builder)
+    {
+        builder.AddSekibanAzureBlobStorage();
+        return AddSekibanPostgresDb(builder.Services, builder.Configuration);
+    }
 
     /// <summary>
     ///     Add PostgresDB services for Sekiban
@@ -43,6 +56,20 @@ public static class PostgresDbServiceCollectionExtensions
     ///     Add PostgresDB services for Sekiban
     /// </summary>
     /// <param name="services"></param>
+    /// <param name="configuration"></param>
+    /// <returns></returns>
+    public static SekibanPostgresDbOptionsServiceCollection AddSekibanPostgresDbWithAzureBlobStorage(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services.AddSekibanAzureBlobStorage(configuration);
+        var options = SekibanPostgresOptions.FromConfiguration(configuration);
+        return AddSekibanPostgresDb(services, options);
+    }
+    /// <summary>
+    ///     Add PostgresDB services for Sekiban
+    /// </summary>
+    /// <param name="services"></param>
     /// <param name="postgresDbOptions"></param>
     /// <returns></returns>
     public static SekibanPostgresDbOptionsServiceCollection AddSekibanPostgresDb(
@@ -55,13 +82,6 @@ public static class PostgresDbServiceCollectionExtensions
         services.AddTransient<IDocumentPersistentWriter, PostgresDocumentWriter>();
         services.AddTransient<IDocumentPersistentRepository, PostgresDocumentRepository>();
         services.AddTransient<IDocumentRemover, PostgresDbDocumentRemover>();
-
-        // TODO NEED TO ADD BLOB STORE
-        // services.AddTransient<IBlobAccessor, S3BlobAccessor>();
-        if (postgresDbOptions.BlobType == SekibanPostgresOptions.PostgresBlobTypeAzureBlobStorage)
-        {
-
-        }
 
         return new SekibanPostgresDbOptionsServiceCollection(postgresDbOptions, services);
     }

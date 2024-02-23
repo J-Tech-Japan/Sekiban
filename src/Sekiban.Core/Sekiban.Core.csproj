@@ -23,7 +23,6 @@
 
     <ItemGroup>
         <FrameworkReference Include="Microsoft.AspNetCore.App"/>
-        <PackageReference Include="LanguageExt.Core" Version="4.4.8"/>
         <PackageReference Include="MediatR" Version="12.2.0"/>
         <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="8.0.0"/>
         <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0"/>
@@ -33,5 +32,12 @@
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0"/>
         <PackageReference Include="SharpZipLib" Version="1.4.2"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+        <PackageReference Include="DotNext" Version="5.0.2"/>
+    </ItemGroup>
+    <ItemGroup Condition="'$(TargetFramework)' == 'net7.0'">
+        <PackageReference Include="DotNext" Version="4.15.2"/>
     </ItemGroup>
 </Project>

@@ -47,8 +47,8 @@ public class PostgresDbFactory(SekibanPostgresOptions dbOptions, IMemoryCacheAcc
         }
 
         var connectionString = GetConnectionString();
-        var dbContext = new SekibanDbContext(connectionString, new DbContextOptions<SekibanDbContext>());
-
+        var dbContext = new SekibanDbContext(new DbContextOptions<SekibanDbContext>()) { ConnectionString = connectionString };
+        await dbContext.Database.MigrateAsync();
         memoryCache.Cache.Set(GetMemoryCacheDbContextKey(SekibanContextIdentifier()), dbContext, new MemoryCacheEntryOptions());
         await Task.CompletedTask;
         return dbContext;

@@ -24,7 +24,10 @@
         <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj"/>
         <PackageReference Include="Sekiban.Core" Version="0.17.5"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
+        <ProjectReference Include="..\Sekiban.Infrastructure.Azure.Storage.Blobs\Sekiban.Infrastructure.Azure.Storage.Blobs.csproj"/>
+        <PackageReference Include="Sekiban.Infrastructure.Azure.Storage.Blobs" Version="0.17.5"/>
         <ProjectReference Include="..\Sekiban.Testing\Sekiban.Testing.csproj"/>
+        <PackageReference Include="Sekiban.Testing" Version="0.17.5"/>
     </ItemGroup>
 
     <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">

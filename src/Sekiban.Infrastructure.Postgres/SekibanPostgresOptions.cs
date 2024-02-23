@@ -7,10 +7,7 @@ namespace Sekiban.Infrastructure.Postgres;
 public record SekibanPostgresOptions
 {
 
-    public const string PostgresBlobTypeS3 = "s3";
-    public const string PostgresBlobTypeAzureBlobStorage = "azureBlobStorage";
     public List<SekibanPostgresDbOption> Contexts { get; init; } = [];
-    public string BlobType { get; init; } = PostgresBlobTypeAzureBlobStorage;
 
     public static SekibanPostgresOptions Default => new();
 
@@ -32,7 +29,7 @@ public record SekibanPostgresOptions
     public static SekibanPostgresOptions FromConfigurationSection(IConfigurationSection section, IConfigurationRoot configurationRoot)
     {
         var defaultContextSection = section.GetSection("Default");
-        var contexts = section.GetSection("Contexts").GetChildren();
+        var contexts = section.GetSection("Contexts").GetChildren().ToList();
         var contextSettings = new List<SekibanPostgresDbOption>();
         if (defaultContextSection.Exists())
         {
@@ -42,8 +39,11 @@ public record SekibanPostgresOptions
             from context in contexts
             let path = GetLastPathComponent(context)
             select SekibanPostgresDbOption.FromConfiguration(context, configurationRoot, path));
-        var blobType = section.GetValue<string>(nameof(BlobType)) ?? PostgresBlobTypeAzureBlobStorage;
-        return new SekibanPostgresOptions { Contexts = contextSettings, BlobType = blobType };
+        if (!defaultContextSection.Exists() && contexts.Count == 0)
+        {
+            contextSettings.Add(SekibanPostgresDbOption.FromConfiguration(defaultContextSection, configurationRoot));
+        }
+        return new SekibanPostgresOptions { Contexts = contextSettings };
     }
     private static string GetLastPathComponent(IConfigurationSection section) => section.Path.Split(':').LastOrDefault() ?? section.Path;
 }

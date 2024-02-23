@@ -28,7 +28,7 @@ public class SekibanDynamoDbOptions
     public static SekibanDynamoDbOptions FromConfigurationSection(IConfigurationSection section, IConfigurationRoot configurationRoot)
     {
         var defaultContextSection = section.GetSection("Default");
-        var contexts = section.GetSection("Contexts").GetChildren();
+        var contexts = section.GetSection("Contexts").GetChildren().ToList();
         var contextSettings = new List<SekibanAwsOption>();
         if (defaultContextSection.Exists())
         {
@@ -38,6 +38,10 @@ public class SekibanDynamoDbOptions
             from context in contexts
             let path = GetLastPathComponent(context)
             select SekibanAwsOption.FromConfiguration(context, configurationRoot, path));
+        if (!defaultContextSection.Exists() && contexts.Count == 0)
+        {
+            contextSettings.Add(SekibanAwsOption.FromConfiguration(defaultContextSection, configurationRoot));
+        }
         return new SekibanDynamoDbOptions { Contexts = contextSettings };
     }
     private static string GetLastPathComponent(IConfigurationSection section) => section.Path.Split(':').LastOrDefault() ?? section.Path;

@@ -9,10 +9,10 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddSekibanWithDependency<FeatureCheckDependency>();
 
 // Sekiban Postgres Setting
-builder.AddSekibanPostgresDb();
+builder.AddSekibanPostgresDbWithAzureBlobStorage();
 
 // Sekiban Web Setting
-builder.AddSekibanWebFromDomainDependency<FeatureCheckDependency>(web => web.AllowAllIfLoggedIn());
+builder.AddSekibanWebFromDomainDependency<FeatureCheckDependency>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options => options.ConfigureForSekibanWeb());
 

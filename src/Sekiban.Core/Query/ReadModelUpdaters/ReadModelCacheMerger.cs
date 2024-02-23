@@ -1,5 +1,5 @@
-using LanguageExt;
-using LanguageExt.Common;
+using DotNext;
+using MediatR;
 namespace Sekiban.Core.Query.ReadModelUpdaters;
 
 public class ReadModelCacheMerger(IReadModelCache readModelCache) : IReadModelCacheMerger
