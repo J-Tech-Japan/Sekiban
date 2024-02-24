@@ -19,7 +19,6 @@ public record DbSingleProjectionSnapshotDocument
     public int SavedVersion { get; init; }
 
     public string PayloadVersionIdentifier { get; init; } = string.Empty;
-    public string CallHistories { get; init; } = string.Empty;
     public Guid AggregateId { get; init; }
     public string PartitionKey { get; init; } = string.Empty;
     public DocumentType DocumentType { get; init; } = DocumentType.Event;

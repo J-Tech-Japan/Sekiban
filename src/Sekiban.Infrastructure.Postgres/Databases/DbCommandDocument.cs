@@ -16,6 +16,7 @@ public record DbCommandDocument
     public string Payload { get; init; } = string.Empty;
     public string? ExecutedUser { get; init; }
     public string? Exception { get; init; }
+    [Column(TypeName = "jsonb")]
     public string CallHistories { get; init; } = string.Empty;
     public Guid AggregateId { get; init; }
     public string PartitionKey { get; init; } = string.Empty;

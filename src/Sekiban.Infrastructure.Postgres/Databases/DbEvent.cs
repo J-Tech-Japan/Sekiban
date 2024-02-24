@@ -13,6 +13,7 @@ public record DbEvent : IDbEvent
     [Column(TypeName = "jsonb")]
     public string Payload { get; init; } = string.Empty;
     public int Version { get; init; }
+    [Column(TypeName = "jsonb")]
     public string CallHistories { get; init; } = string.Empty;
     public Guid AggregateId { get; init; }
     public string PartitionKey { get; init; } = string.Empty;

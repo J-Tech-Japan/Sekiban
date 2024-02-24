@@ -39,7 +39,7 @@ namespace Sekiban.Infrastructure.Postgres.Migrations
 
                     b.Property<string>("CallHistories")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("jsonb");
 
                     b.Property<int>("DocumentType")
                         .HasColumnType("integer");
@@ -92,7 +92,7 @@ namespace Sekiban.Infrastructure.Postgres.Migrations
 
                     b.Property<string>("CallHistories")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("jsonb");
 
                     b.Property<int>("DocumentType")
                         .HasColumnType("integer");
@@ -142,7 +142,7 @@ namespace Sekiban.Infrastructure.Postgres.Migrations
 
                     b.Property<string>("CallHistories")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("jsonb");
 
                     b.Property<int>("DocumentType")
                         .HasColumnType("integer");
@@ -190,10 +190,6 @@ namespace Sekiban.Infrastructure.Postgres.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<string>("AggregateType")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("CallHistories")
                         .IsRequired()
                         .HasColumnType("text");
 

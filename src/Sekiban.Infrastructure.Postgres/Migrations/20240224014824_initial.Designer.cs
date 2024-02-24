@@ -12,7 +12,7 @@ using Sekiban.Infrastructure.Postgres.Databases;
 namespace Sekiban.Infrastructure.Postgres.Migrations
 {
     [DbContext(typeof(SekibanDbContext))]
-    [Migration("20240223200828_initial")]
+    [Migration("20240224014824_initial")]
     partial class initial
     {
         /// <inheritdoc />
@@ -42,7 +42,7 @@ namespace Sekiban.Infrastructure.Postgres.Migrations
 
                     b.Property<string>("CallHistories")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("jsonb");
 
                     b.Property<int>("DocumentType")
                         .HasColumnType("integer");
@@ -95,7 +95,7 @@ namespace Sekiban.Infrastructure.Postgres.Migrations
 
                     b.Property<string>("CallHistories")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("jsonb");
 
                     b.Property<int>("DocumentType")
                         .HasColumnType("integer");
@@ -145,7 +145,7 @@ namespace Sekiban.Infrastructure.Postgres.Migrations
 
                     b.Property<string>("CallHistories")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("jsonb");
 
                     b.Property<int>("DocumentType")
                         .HasColumnType("integer");
@@ -193,10 +193,6 @@ namespace Sekiban.Infrastructure.Postgres.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<string>("AggregateType")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("CallHistories")
                         .IsRequired()
                         .HasColumnType("text");
 
