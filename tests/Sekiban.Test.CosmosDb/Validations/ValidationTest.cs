@@ -1,6 +1,5 @@
 using Sekiban.Core.Validation;
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using Xunit;
@@ -113,7 +112,7 @@ public class ValidationTest
             Tel = "090-1111-2222",
             Email = "hoge@example.com",
             Partner = new Member { Name = "YAMADA Hanako", Age = 25, Tel = "080-1111-2222", Email = "hana@example.com" },
-            Friends = [new() { Name = "SUZUKI Ichiro", Age = 30 }, new() { Name = "Nakata Hidetoshi", Age = 28 }]
+            Friends = [new Member { Name = "SUZUKI Ichiro", Age = 30 }, new Member { Name = "Nakata Hidetoshi", Age = 28 }]
         };
         var vresults = m.ValidateProperties();
         Assert.False(vresults.Any());
@@ -129,7 +128,7 @@ public class ValidationTest
             Tel = "090-1111-2222",
             Email = "hoge@example.com",
             Partner = new Member { Name = "YAMADA Hanako", Age = 25, Tel = "080-1111-2222", Email = "hana@example.com" },
-            Friends = [new() { Name = "SUZUKI Ichiro", Age = 30 }, new() { Name = "Nakata Hidetoshi", Age = 90 }]
+            Friends = [new Member { Name = "SUZUKI Ichiro", Age = 30 }, new Member { Name = "Nakata Hidetoshi", Age = 90 }]
         };
         var vresults = m.ValidateProperties();
         var validationResults = vresults.ToList();

@@ -1,4 +1,4 @@
-using LanguageExt.Common;
+using DotNext;
 namespace Sekiban.Core.Query.ReadModelUpdaters;
 
 public interface IReadModelRunner

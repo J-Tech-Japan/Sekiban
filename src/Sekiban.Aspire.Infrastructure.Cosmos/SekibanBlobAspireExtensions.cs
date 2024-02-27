@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Sekiban.Infrastructure.Azure.Storage.Blobs;
 using Sekiban.Infrastructure.Cosmos;
 namespace Sekiban.Aspire.Infrastructure.Cosmos;
 

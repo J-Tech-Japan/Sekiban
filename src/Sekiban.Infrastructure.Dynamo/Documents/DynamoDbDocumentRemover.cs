@@ -6,17 +6,15 @@ namespace Sekiban.Infrastructure.Dynamo.Documents;
 ///     Remove all documents from DynamoDB
 ///     Usually use for test.
 /// </summary>
-public class DynamoDbDocumentRemover : IDocumentRemover
+public class DynamoDbDocumentRemover(DynamoDbFactory dynamoDbFactory) : IDocumentRemover
 {
-    private readonly DynamoDbFactory _dynamoDbFactory;
-    public DynamoDbDocumentRemover(DynamoDbFactory dynamoDbFactory) => _dynamoDbFactory = dynamoDbFactory;
 
     public async Task RemoveAllEventsAsync(AggregateContainerGroup aggregateContainerGroup)
     {
-        await _dynamoDbFactory.DeleteAllFromEventContainer(aggregateContainerGroup);
+        await dynamoDbFactory.DeleteAllFromEventContainer(aggregateContainerGroup);
     }
     public async Task RemoveAllItemsAsync(AggregateContainerGroup aggregateContainerGroup)
     {
-        await _dynamoDbFactory.DeleteAllFromItemsContainer(aggregateContainerGroup);
+        await dynamoDbFactory.DeleteAllFromItemsContainer(aggregateContainerGroup);
     }
 }

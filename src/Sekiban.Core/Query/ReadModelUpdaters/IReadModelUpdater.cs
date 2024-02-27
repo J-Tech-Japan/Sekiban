@@ -1,5 +1,5 @@
-using LanguageExt;
-using LanguageExt.Common;
+using DotNext;
+using MediatR;
 using Sekiban.Core.Events;
 using System.Collections.Immutable;
 namespace Sekiban.Core.Query.ReadModelUpdaters;

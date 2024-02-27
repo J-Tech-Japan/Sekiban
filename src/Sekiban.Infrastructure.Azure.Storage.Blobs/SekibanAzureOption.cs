@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Sekiban.Core.Setting;
-namespace Sekiban.Infrastructure.Cosmos;
+namespace Sekiban.Infrastructure.Azure.Storage.Blobs;
 
 public record SekibanAzureOption
 {

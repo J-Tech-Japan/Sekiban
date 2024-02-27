@@ -3,6 +3,7 @@ using FeatureCheck.WebApi.AspireTest;
 using Microsoft.AspNetCore.Mvc;
 using Sekiban.Aspire.Infrastructure.Cosmos;
 using Sekiban.Core.Dependency;
+using Sekiban.Infrastructure.Azure.Storage.Blobs;
 using Sekiban.Infrastructure.Cosmos;
 using Sekiban.Web.Dependency;
 using Sekiban.Web.OpenApi.Extensions;

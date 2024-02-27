@@ -1,0 +1,32 @@
+using Microsoft.Extensions.Configuration;
+using Sekiban.Core.Setting;
+namespace Sekiban.Infrastructure.Postgres;
+
+public record SekibanPostgresDbOption
+{
+    public const string EventsTableId = "events";
+    public const string EventsTableIdDissolvable = "dissolvableevents";
+    public const string PostgresConnectionStringNameDefaultValue = "SekibanPostgres";
+    public const string ItemsTableId = "items";
+    public const string ItemsTableIdDissolvable = "dissolvableitems";
+
+    public string Context { get; init; } = SekibanContext.Default;
+    public string ConnectionStringName { get; init; } = PostgresConnectionStringNameDefaultValue;
+    public string? ConnectionString { get; init; }
+
+    public static SekibanPostgresDbOption FromConfiguration(
+        IConfigurationSection section,
+        IConfigurationRoot configurationRoot,
+        string context = SekibanContext.Default)
+    {
+        var azureSection = section.GetSection("Postgres");
+        var postgresConnectionStringName = azureSection.GetValue<string>(nameof(ConnectionStringName)) ?? PostgresConnectionStringNameDefaultValue;
+        var postgresConnectionString = configurationRoot.GetConnectionString(postgresConnectionStringName) ??
+            section.GetValue<string>(nameof(ConnectionString)) ?? section.GetValue<string>("PostgresConnectionString");
+        return new SekibanPostgresDbOption
+        {
+            Context = context, ConnectionStringName = postgresConnectionStringName, ConnectionString = postgresConnectionString
+        };
+
+    }
+}

@@ -1,4 +1,4 @@
-using LanguageExt.Common;
+using DotNext;
 using Microsoft.Azure.Cosmos.Linq;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,6 +8,7 @@ using Sekiban.Core.Documents;
 using Sekiban.Core.Events;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
+using Sekiban.Infrastructure.Azure.Storage.Blobs;
 namespace Sekiban.Infrastructure.Cosmos;
 
 public class CosmosDbFactory(
@@ -176,16 +177,16 @@ public class CosmosDbFactory(
         var clientOptions = options.ClientOptions;
         var connectionString = GetConnectionString();
         client = await SearchCosmosClientAsync() ??
-            connectionString.Match(
-                v => new CosmosClient(v, clientOptions),
-                _ =>
-                {
-                    var uri = GetUri();
-                    var securityKey = GetSecurityKey();
-                    return new CosmosClient(uri, securityKey, clientOptions);
-                });
+            (connectionString.IsSuccessful ? new CosmosClient(connectionString.Value, clientOptions) : GetCosmosClientFromUriAndKey());
         memoryCache.Cache.Set(GetMemoryCacheClientKey(documentType, SekibanContextIdentifier()), client, new MemoryCacheEntryOptions());
         return client;
+    }
+    private CosmosClient GetCosmosClientFromUriAndKey()
+    {
+        var uri = GetUri();
+        var securityKey = GetSecurityKey();
+        var clientOptions = options.ClientOptions;
+        return new CosmosClient(uri, securityKey, clientOptions);
     }
 
     public async Task<Container> GetContainerAsync(DocumentType documentType, AggregateContainerGroup containerGroup)
@@ -255,7 +256,5 @@ public class CosmosDbFactory(
     }
 
     private static IReadOnlyList<string> GetPartitionKeyPaths(bool supportsHierarchicalPartitions) =>
-        supportsHierarchicalPartitions
-            ? ["/RootPartitionKey", "/AggregateType", "/PartitionKey"]
-            : ["/PartitionKey"];
+        supportsHierarchicalPartitions ? ["/RootPartitionKey", "/AggregateType", "/PartitionKey"] : ["/PartitionKey"];
 }

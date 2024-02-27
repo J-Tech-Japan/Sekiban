@@ -2,7 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Setting;
 using System.Configuration;
-namespace Sekiban.Infrastructure.Cosmos;
+namespace Sekiban.Infrastructure.Azure.Storage.Blobs;
 
 public class SekibanCosmosDbOptions
 {

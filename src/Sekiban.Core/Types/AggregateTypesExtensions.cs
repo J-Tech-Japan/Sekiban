@@ -74,7 +74,7 @@ public static class AggregateTypesExtensions
             var baseType = aggregateType.GetImplementingFromGenericInterfaceType(typeof(IParentAggregatePayload<,>));
             return baseType.GenericTypeArguments[0];
         }
-        return aggregateType.GetInterfaces().Exists(m => m == typeof(IAggregatePayloadCommon))
+        return aggregateType.GetInterfaces().Any(m => m == typeof(IAggregatePayloadCommon))
             ? aggregateType
             : throw new SekibanAggregatePayloadNotExistsException(aggregateType.FullName + " is not an aggregate");
     }
@@ -92,7 +92,7 @@ public static class AggregateTypesExtensions
             var baseType = aggregateType.GetImplementingFromGenericInterfaceType(typeof(IParentAggregatePayload<,>));
             return baseType.GenericTypeArguments[1];
         }
-        return aggregateType.GetInterfaces().Exists(m => m == typeof(IAggregatePayloadCommon))
+        return aggregateType.GetInterfaces().Any(m => m == typeof(IAggregatePayloadCommon))
             ? aggregateType
             : throw new SekibanAggregatePayloadNotExistsException(aggregateType.FullName + " is not an aggregate");
     }

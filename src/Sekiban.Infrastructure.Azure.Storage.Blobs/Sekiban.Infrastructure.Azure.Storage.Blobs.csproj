@@ -1,0 +1,35 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <PackageId>Sekiban.Infrastructure.Azure.Storage.Blobs</PackageId>
+        <Version>0.17.6</Version>
+        <Authors>J-Tech Group</Authors>
+        <Company>J-Tech-Japan</Company>
+        <PackageDescription>Sekiban - Event Sourcing Framework Azure Storage Blob</PackageDescription>
+        <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
+        <PackageVersion>0.17.6</PackageVersion>
+        <Description>Fix Retrieval Option returns snapshot</Description>
+        <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
+        <LangVersion>preview</LangVersion>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        <RootNamespace>Sekiban.Infrastructure.Azure.Storage.Blobs</RootNamespace>
+    </PropertyGroup>
+
+
+    <ItemGroup>
+        <None Include="..\README.md" Pack="true" PackagePath="\"/>
+        <PackageReference Include="Azure.Storage.Blobs" Version="12.19.1"/>
+        <PackageReference Include="Sekiban.Core" Version="0.17.6"/>
+        <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.0"/>
+    </ItemGroup>
+
+
+    <ItemGroup>
+        <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj"/>
+    </ItemGroup>
+</Project>

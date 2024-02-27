@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Builder;
+using Sekiban.Infrastructure.Azure.Storage.Blobs;
 namespace Sekiban.Infrastructure.Cosmos;
 
 public class SekibanCosmosDbOptionsServiceCollection(

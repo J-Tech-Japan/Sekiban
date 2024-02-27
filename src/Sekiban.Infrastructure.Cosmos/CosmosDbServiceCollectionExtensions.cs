@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Setting;
+using Sekiban.Infrastructure.Azure.Storage.Blobs;
 using Sekiban.Infrastructure.Cosmos.Documents;
 using System.Configuration;
 namespace Sekiban.Infrastructure.Cosmos;

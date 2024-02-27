@@ -8,13 +8,13 @@ namespace Sekiban.Core.Command;
 /// <summary>
 ///     Class to persistence commands.
 /// </summary>
-/// <typeparam name="T">Command Type</typeparam>
-public sealed record CommandDocument<T> : Document, ICommandDocumentCommon, ICallHistories where T : ICommandCommon
+/// <typeparam name="TCommand">Command Type</typeparam>
+public sealed record CommandDocument<TCommand> : Document, ICommandDocumentCommon where TCommand : ICommandCommon
 {
     /// <summary>
     ///     Command Payload
     /// </summary>
-    public T Payload { get; init; } = default!;
+    public TCommand Payload { get; init; } = default!;
     /// <summary>
     ///     Executed user can be set by implementing <see cref="IUserInformationFactory" />
     /// </summary>
@@ -34,14 +34,18 @@ public sealed record CommandDocument<T> : Document, ICommandDocumentCommon, ICal
     /// <param name="aggregateType"></param>
     /// <param name="rootPartitionKey"></param>
     /// <param name="callHistories"></param>
-    public CommandDocument(Guid aggregateId, T commandPayload, Type aggregateType, string rootPartitionKey, List<CallHistory>? callHistories = null) :
-        base(
-            aggregateId,
-            PartitionKeyGenerator.ForCommand(aggregateId, aggregateType.GetBaseAggregatePayloadTypeFromAggregate(), rootPartitionKey),
-            DocumentType.Command,
-            typeof(T).Name,
-            aggregateType.GetBaseAggregatePayloadTypeFromAggregate().Name,
-            rootPartitionKey)
+    public CommandDocument(
+        Guid aggregateId,
+        TCommand commandPayload,
+        Type aggregateType,
+        string rootPartitionKey,
+        List<CallHistory>? callHistories = null) : base(
+        aggregateId,
+        PartitionKeyGenerator.ForCommand(aggregateId, aggregateType.GetBaseAggregatePayloadTypeFromAggregate(), rootPartitionKey),
+        DocumentType.Command,
+        typeof(TCommand).Name,
+        aggregateType.GetBaseAggregatePayloadTypeFromAggregate().Name,
+        rootPartitionKey)
     {
         Payload = commandPayload;
         CallHistories = callHistories ?? [];
@@ -50,6 +54,8 @@ public sealed record CommandDocument<T> : Document, ICommandDocumentCommon, ICal
     ///     Command call histories it will be set by <see cref="ICommandExecutor" />
     /// </summary>
     public List<CallHistory> CallHistories { get; init; } = [];
+    public ICommandCommon GetPayload() => Payload;
+    public TCommandPayload? GetPayload<TCommandPayload>() where TCommandPayload : class, ICommandCommon => Payload as TCommandPayload;
     /// <summary>
     ///     Get call histories includes itself.
     ///     This is used to create history next to this command.

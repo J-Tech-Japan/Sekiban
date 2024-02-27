@@ -1,5 +1,5 @@
 using Azure.Storage.Blobs;
-namespace Sekiban.Infrastructure.Cosmos;
+namespace Sekiban.Infrastructure.Azure.Storage.Blobs;
 
 public class AzureBlobContainerAccessor(SekibanCosmosDbOptions cosmosDbOptions, IServiceProvider serviceProvider) : IBlobContainerAccessor
 {
