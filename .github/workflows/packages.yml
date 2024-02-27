@@ -29,6 +29,9 @@ jobs:
     - name: Pack Core
       run: |
         dotnet nuget push "src/Sekiban.Core/bin/Release/Sekiban.Core.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+    - name: Pack Blob
+      run: |
+        dotnet nuget push "src/Sekiban.Infrastructure.Azure.Storage.Blobs/bin/Release/Sekiban.Infrastructure.Azure.Storage.Blobs.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
     - name: Pack Cosmos
       run: |
         dotnet nuget push "src/Sekiban.Infrastructure.Cosmos/bin/Release/Sekiban.Infrastructure.Cosmos.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
