@@ -50,7 +50,7 @@ public class CommandExecutor(
             {
                 if (((dynamic)handler).ConvertCommand((dynamic)converter) is ICommandCommon convertedCommand)
                 {
-                    return await ExecCommandAsync(convertedCommand, callHistories);
+                    return await ExecCommandAsync(convertedCommand, CallHistoriesWithConverter(converter, callHistories));
                 }
             }
         }
@@ -91,7 +91,7 @@ public class CommandExecutor(
             {
                 if (((dynamic)handler).ConvertCommand((dynamic)converter) is ICommandCommon convertedCommand)
                 {
-                    return await ExecCommandWithEventsAsync(convertedCommand, callHistories);
+                    return await ExecCommandWithEventsAsync(convertedCommand, CallHistoriesWithConverter(converter, callHistories));
                 }
             }
         }
@@ -118,7 +118,7 @@ public class CommandExecutor(
             {
                 if (((dynamic)handler).ConvertCommand((dynamic)converter) is ICommandCommon convertedCommand)
                 {
-                    return await ExecCommandWithoutValidationAsync(convertedCommand, callHistories);
+                    return await ExecCommandWithoutValidationAsync(convertedCommand, CallHistoriesWithConverter(converter, callHistories));
                 }
             }
         }
@@ -144,7 +144,7 @@ public class CommandExecutor(
             {
                 if (((dynamic)handler).ConvertCommand((dynamic)converter) is ICommandCommon convertedCommand)
                 {
-                    return await ExecCommandWithoutValidationWithEventsAsync(convertedCommand, callHistories);
+                    return await ExecCommandWithoutValidationWithEventsAsync(convertedCommand, CallHistoriesWithConverter(converter, callHistories));
                 }
             }
         }
@@ -155,6 +155,12 @@ public class CommandExecutor(
             = ((CommandExecutorResponse, List<IEvent>))await (dynamic)(genericMethod.Invoke(this, [command, callHistories]) ??
                 throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
         return new CommandExecutorResponseWithEvents(response, generatedEvents.ToImmutableList());
+    }
+
+    private List<CallHistory> CallHistoriesWithConverter(ICommandConverterCommon converter, List<CallHistory>? callHistories)
+    {
+        var toAdd = new CallHistory(Guid.Empty, converter.GetType().Name, userInformationFactory.GetCurrentUserInformation());
+        return [..callHistories ?? new List<CallHistory>(), toAdd];
     }
 
     public async Task<(CommandExecutorResponse, List<IEvent>)> ExecCommandAsyncTyped<TAggregatePayload, TCommand>(
