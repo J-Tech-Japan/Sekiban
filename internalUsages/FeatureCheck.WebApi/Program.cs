@@ -26,7 +26,7 @@ builder.AddSekibanCosmosDB(
     });
 
 // Sekiban Web Setting
-builder.AddSekibanWebFromDomainDependency<FeatureCheckDependency>(web => web.AllowAllIfLoggedIn());
+builder.AddSekibanWebFromDomainDependency<FeatureCheckDependency>();
 builder.Services.AddSwaggerGen(options => options.ConfigureForSekibanWeb());
 
 builder.Services.AddEndpointsApiExplorer();

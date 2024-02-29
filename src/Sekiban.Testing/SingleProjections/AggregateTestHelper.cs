@@ -20,12 +20,12 @@ namespace Sekiban.Testing.SingleProjections;
 public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggregatePayload> where TAggregatePayload : IAggregatePayloadCommon
 {
     private readonly TestCommandExecutor _commandExecutor;
-    private readonly IServiceProvider _serviceProvider;
     private readonly DefaultSingleProjector<TAggregatePayload> _projector;
+    private readonly IServiceProvider _serviceProvider;
+    private ICommandCommon? _latestCommand;
+    private List<IEvent> _latestEvents = [];
 
     private Exception? _latestException;
-    private List<IEvent> _latestEvents = [];
-    private ICommandCommon? _latestCommand;
     private List<SekibanValidationParameterError> _latestValidationErrors = [];
 
     public AggregateTestHelper(IServiceProvider serviceProvider)
@@ -105,8 +105,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     {
         var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
             throw new SekibanTypeNotFoundException("Failed to get aggregate loader");
-        return aggregateLoader.AllEventsAsync<TAggregatePayload>(GetAggregateId(), GetRootPartitionKey(), toVersion).Result?.ToList() ??
-            [];
+        return aggregateLoader.AllEventsAsync<TAggregatePayload>(GetAggregateId(), GetRootPartitionKey(), toVersion).Result?.ToList() ?? [];
     }
 
     public void ThrowIfTestHasUnhandledErrors()
@@ -559,6 +558,22 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             _latestValidationErrors = SekibanValidationParameterError.CreateFromValidationResults(validationResults).ToList();
             return this;
         }
+
+        if (command is ICommandConverterCommon converter)
+        {
+            if (((dynamic)handler).ConvertCommand((dynamic)converter) is ICommandCommon convertedCommand)
+            {
+                var method = GetType().GetMethod(nameof(WhenCommandPrivate), BindingFlags.NonPublic | BindingFlags.Instance);
+                var param1 = convertedCommand.GetType().GetAggregatePayloadTypeFromCommandType();
+                var param2 = convertedCommand.GetType();
+                var generated = method?.MakeGenericMethod(param1, param2);
+                if (generated is not null)
+                {
+                    return generated.Invoke(this, new object?[] { convertedCommand, withPublish }) as IAggregateTestHelper<TAggregatePayload> ??
+                        throw new SekibanTypeNotFoundException("Failed to get result of WhenCommandPrivate method");
+                }
+            }
+        }
         AggregateIdHolder.AggregateId = command.GetAggregateId();
         AggregateIdHolder.RootPartitionKey = command.GetRootPartitionKey();
 
@@ -577,12 +592,10 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
                 var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayloadIn), command.GetType());
                 var adapter = Activator.CreateInstance(adapterClass) ?? throw new SekibanTypeNotFoundException("Method not found");
                 var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new SekibanTypeNotFoundException("HandleCommandAsync not found");
-                var commandResponse
-                    = (CommandResponse)((dynamic?)method.Invoke(adapter, [commandDocument, handler, aggregateId, rootPartitionKey]) ??
-                        throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
+                var commandResponse = (CommandResponse)((dynamic?)method.Invoke(adapter, [commandDocument, handler, aggregateId, rootPartitionKey]) ??
+                    throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
                 _latestEvents = [.. commandResponse.Events];
-            }
-            else
+            } else
             {
                 var baseClass = typeof(CommandHandlerAdapter<,>);
                 var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayloadIn), command.GetType());
@@ -591,9 +604,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
                 var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new SekibanTypeNotFoundException("HandleCommandAsync not found");
 
-                var commandResponse
-                    = (CommandResponse)((dynamic?)method.Invoke(adapter, [commandDocument, handler, aggregateId, rootPartitionKey]) ??
-                        throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
+                var commandResponse = (CommandResponse)((dynamic?)method.Invoke(adapter, [commandDocument, handler, aggregateId, rootPartitionKey]) ??
+                    throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
                 _latestEvents = [.. commandResponse.Events];
             }
         }
@@ -615,8 +627,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         if (withPublish)
         {
             documentWriter.SaveAndPublishEvents(new List<IEvent> { ev }, typeof(TAggregatePayload)).Wait();
-        }
-        else
+        } else
         {
             documentWriter.SaveAsync(ev, typeof(TAggregatePayload)).Wait();
         }
