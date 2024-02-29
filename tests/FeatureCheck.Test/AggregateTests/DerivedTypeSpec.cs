@@ -14,6 +14,11 @@ public class DerivedTypeSpec : AggregateTest<DerivedTypeAggregate, FeatureCheckD
         WhenCommand(new CreateCar("blue", "outback"));
         ThenPayloadIs(new DerivedTypeAggregate(new Car("blue", "outback")));
     }
+    [Fact]
+    public void CreateCarInEnvironment()
+    {
+        GivenEnvironmentCommand(new CreateCar("blue", "outback"));
+    }
 
     [Fact]
     public void CreateCarValidateError1()
