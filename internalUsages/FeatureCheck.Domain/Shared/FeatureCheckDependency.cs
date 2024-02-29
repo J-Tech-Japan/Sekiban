@@ -154,6 +154,8 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
             .AddCommandHandler<BookingCommands.BookRoom, BookingCommands.BookRoom.Handler>()
             .AddCommandHandler<BookingCommands.PayBookedRoom, BookingCommands.PayBookedRoom.Handler>();
 
-        AddAggregate<DerivedTypeAggregate>().AddCommandHandler<CreateVehicle, CreateVehicle.Handler>();
+        AddAggregate<DerivedTypeAggregate>()
+            .AddCommandHandler<CreateVehicle, CreateVehicle.Handler>()
+            .AddCommandHandler<CreateCar, CreateCar.Handler>();
     }
 }
