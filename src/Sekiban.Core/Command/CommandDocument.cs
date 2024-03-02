@@ -15,14 +15,6 @@ public sealed record CommandDocument<TCommand> : Document, ICommandDocumentCommo
     ///     Command Payload
     /// </summary>
     public TCommand Payload { get; init; } = default!;
-    /// <summary>
-    ///     Executed user can be set by implementing <see cref="IUserInformationFactory" />
-    /// </summary>
-    public string? ExecutedUser { get; init; } = string.Empty;
-    /// <summary>
-    ///     Exception message will be set when an exception occurs during command execution.
-    /// </summary>
-    public string? Exception { get; init; } = null;
     public CommandDocument()
     {
     }
@@ -51,6 +43,14 @@ public sealed record CommandDocument<TCommand> : Document, ICommandDocumentCommo
         CallHistories = callHistories ?? [];
     }
     /// <summary>
+    ///     Executed user can be set by implementing <see cref="IUserInformationFactory" />
+    /// </summary>
+    public string? ExecutedUser { get; init; } = string.Empty;
+    /// <summary>
+    ///     Exception message will be set when an exception occurs during command execution.
+    /// </summary>
+    public string? Exception { get; init; }
+    /// <summary>
     ///     Command call histories it will be set by <see cref="ICommandExecutor" />
     /// </summary>
     public List<CallHistory> CallHistories { get; init; } = [];
@@ -68,4 +68,28 @@ public sealed record CommandDocument<TCommand> : Document, ICommandDocumentCommo
         histories.Add(new CallHistory(Id, Payload.GetType().Name, ExecutedUser));
         return histories;
     }
+}
+public record CommandDocumentForJsonExport
+{
+    [JsonPropertyName("id")]
+    public Guid Id { get; init; }
+
+    public Guid AggregateId { get; init; }
+
+    public string PartitionKey { get; init; } = default!;
+
+    public DocumentType DocumentType { get; init; }
+
+    public string DocumentTypeName { get; init; } = default!;
+
+    public DateTime TimeStamp { get; init; }
+
+    public string SortableUniqueId { get; init; } = default!;
+    public string AggregateType { get; init; } = string.Empty;
+    public string RootPartitionKey { get; init; } = string.Empty;
+
+    public dynamic Payload { get; init; } = default!;
+    public string? ExecutedUser { get; init; } = string.Empty;
+    public string? Exception { get; init; }
+    public List<CallHistory> CallHistories { get; init; } = [];
 }

@@ -1,5 +1,6 @@
 using DotNext.Collections.Generic;
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
@@ -10,6 +11,7 @@ using Sekiban.Core.Query.SingleProjections.Projections;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
 using Sekiban.Infrastructure.Postgres.Databases;
+using System.Text.Json;
 namespace Sekiban.Infrastructure.Postgres.Documents;
 
 public class PostgresDocumentRepository(
@@ -29,8 +31,6 @@ public class PostgresDocumentRepository(
         await dbFactory.DbActionAsync(
             async dbContext =>
             {
-                var partitionKey = PartitionKeyGenerator.ForEvent(aggregateId, aggregatePayloadType, rootPartitionKey);
-
                 switch (aggregateContainerGroup)
                 {
                     case AggregateContainerGroup.Default:
@@ -77,13 +77,24 @@ public class PostgresDocumentRepository(
                 resultAction(events.Select(SekibanJsonHelper.Serialize).Where(m => !string.IsNullOrEmpty(m))!);
             });
     }
-    public Task GetAllCommandStringsForAggregateIdAsync(
+    public async Task GetAllCommandStringsForAggregateIdAsync(
         Guid aggregateId,
         Type aggregatePayloadType,
         string? sinceSortableUniqueId,
         string rootPartitionKey,
-        Action<IEnumerable<string>> resultAction) =>
-        throw new NotImplementedException();
+        Action<IEnumerable<string>> resultAction)
+    {
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+        await dbFactory.DbActionAsync(
+            async dbContext =>
+            {
+                var partition = PartitionKeyGenerator.ForCommand(aggregateId, aggregatePayloadType, rootPartitionKey);
+                var query = dbContext.Commands.Where(m => m.AggregateContainerGroup == aggregateContainerGroup);
+                query = query.Where(m => m.PartitionKey == partition);
+                GetCommandsInBatches(query, sinceSortableUniqueId).ForEach(resultAction);
+                await Task.CompletedTask;
+            });
+    }
     public async Task GetAllEventsForAggregateAsync(
         Type aggregatePayloadType,
         string? sinceSortableUniqueId,
@@ -215,6 +226,58 @@ public class PostgresDocumentRepository(
         Type projectionPayloadType,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey) =>
         throw new NotImplementedException();
+
+    private IEnumerable<IEnumerable<string>> GetCommandsInBatches(IEnumerable<DbCommandDocument> commands, string? sinceSortableUniqueId)
+    {
+        const int batchSize = 1000;
+        List<string> commandBatch = [];
+
+        foreach (var commandItem in commands)
+        {
+            var commandDocument = FromDbCommand(commandItem, sinceSortableUniqueId);
+            if (commandDocument is not null)
+            {
+                commandBatch.Add(JsonSerializer.Serialize(commandDocument));
+            }
+            if (commandBatch.Count >= batchSize)
+            {
+                yield return commandBatch;
+                commandBatch = [];
+            }
+        }
+
+        if (commandBatch.Any())
+        {
+            yield return commandBatch;
+        }
+    }
+    private CommandDocumentForJsonExport? FromDbCommand(DbCommandDocument dbCommand, string? sinceSortableUniqueId)
+    {
+        var payload = SekibanJsonHelper.Deserialize(dbCommand.Payload, typeof(JsonElement));
+        if (payload is null)
+        {
+            return null;
+        }
+        var callHistories = SekibanJsonHelper.Deserialize<List<CallHistory>>(dbCommand.CallHistories) ?? new List<CallHistory>();
+        return new CommandDocumentForJsonExport
+        {
+            Id = dbCommand.Id,
+            AggregateId = dbCommand.AggregateId,
+            PartitionKey = dbCommand.PartitionKey,
+            DocumentType = dbCommand.DocumentType,
+            DocumentTypeName = dbCommand.DocumentTypeName,
+            ExecutedUser = dbCommand.ExecutedUser,
+            Exception = dbCommand.Exception,
+            CallHistories = callHistories,
+            Payload = payload,
+            TimeStamp = dbCommand.TimeStamp,
+            SortableUniqueId = dbCommand.SortableUniqueId,
+            AggregateType = dbCommand.AggregateType,
+            RootPartitionKey = dbCommand.RootPartitionKey
+        };
+    }
+
+
     private IEnumerable<IEnumerable<IEvent>> GetEventsInBatches(IEnumerable<IDbEvent> events, string? sinceSortableUniqueId)
     {
         const int batchSize = 1000;
