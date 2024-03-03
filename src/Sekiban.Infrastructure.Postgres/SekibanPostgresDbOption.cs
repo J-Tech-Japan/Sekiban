@@ -10,6 +10,8 @@ public record SekibanPostgresDbOption
     public const string ItemsTableId = "items";
     public const string ItemsTableIdDissolvable = "dissolvableitems";
 
+    public bool MigrationFinished { get; set; } = false;
+
     public string Context { get; init; } = SekibanContext.Default;
     public string ConnectionStringName { get; init; } = PostgresConnectionStringNameDefaultValue;
     public string? ConnectionString { get; init; }

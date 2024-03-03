@@ -14,13 +14,9 @@ using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Snapshot.BackgroundServices;
 using Sekiban.Testing.Story;
-using System;
 using System.Reflection;
-using System.Threading;
-using System.Threading.Tasks;
-using Xunit;
 using Xunit.Abstractions;
-namespace Sekiban.Test.CosmosDb;
+namespace Sekiban.Test.Abstructs.Abstructs;
 
 [Collection("Sequential")]
 public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.SekibanTestFixture>, IDisposable

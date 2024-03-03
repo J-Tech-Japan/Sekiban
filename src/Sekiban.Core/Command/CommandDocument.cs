@@ -15,14 +15,6 @@ public sealed record CommandDocument<TCommand> : Document, ICommandDocumentCommo
     ///     Command Payload
     /// </summary>
     public TCommand Payload { get; init; } = default!;
-    /// <summary>
-    ///     Executed user can be set by implementing <see cref="IUserInformationFactory" />
-    /// </summary>
-    public string? ExecutedUser { get; init; } = string.Empty;
-    /// <summary>
-    ///     Exception message will be set when an exception occurs during command execution.
-    /// </summary>
-    public string? Exception { get; init; } = null;
     public CommandDocument()
     {
     }
@@ -50,6 +42,14 @@ public sealed record CommandDocument<TCommand> : Document, ICommandDocumentCommo
         Payload = commandPayload;
         CallHistories = callHistories ?? [];
     }
+    /// <summary>
+    ///     Executed user can be set by implementing <see cref="IUserInformationFactory" />
+    /// </summary>
+    public string? ExecutedUser { get; init; } = string.Empty;
+    /// <summary>
+    ///     Exception message will be set when an exception occurs during command execution.
+    /// </summary>
+    public string? Exception { get; init; }
     /// <summary>
     ///     Command call histories it will be set by <see cref="ICommandExecutor" />
     /// </summary>

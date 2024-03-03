@@ -3,11 +3,8 @@ using MultiTenant.Domain.Aggregates.Clients.Commands;
 using MultiTenant.Domain.Aggregates.Clients.Queries;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Testing.Story;
-using System.Linq;
-using System.Threading.Tasks;
-using Xunit;
 using Xunit.Abstractions;
-namespace Sekiban.Test.CosmosDb.Stories.Abstracts;
+namespace Sekiban.Test.Abstructs.Abstructs;
 
 public abstract class MultiTenantDocumentTests : TestBase<MultiTenantDependency>
 {

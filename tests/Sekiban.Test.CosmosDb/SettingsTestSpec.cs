@@ -1,6 +1,7 @@
 using FeatureCheck.Domain.Shared;
 using Microsoft.Extensions.Configuration;
 using Sekiban.Core.Setting;
+using Sekiban.Test.Abstructs.Abstructs;
 using Sekiban.Testing.Shared;
 using Xunit;
 using Xunit.Abstractions;

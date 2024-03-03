@@ -11,12 +11,8 @@ using FeatureCheck.Domain.Shared;
 using Sekiban.Core.Query.MultiProjections.Projections;
 using Sekiban.Core.Snapshot.BackgroundServices;
 using Sekiban.Testing.Story;
-using System;
-using System.Linq;
-using System.Threading.Tasks;
-using Xunit;
 using Xunit.Abstractions;
-namespace Sekiban.Test.CosmosDb.Stories.Abstracts;
+namespace Sekiban.Test.Abstructs.Abstructs;
 
 public abstract class MultiProjectionSnapshotTests : TestBase<FeatureCheckDependency>
 {
@@ -71,7 +67,7 @@ public abstract class MultiProjectionSnapshotTests : TestBase<FeatureCheckDepend
 
         ResetInMemoryDocumentStoreAndCache();
 
-        listProjection = await multiProjectionService.GetAggregateListObject<Client>(null);
+        listProjection = await multiProjectionService.GetAggregateListObject<Client>();
         Assert.True(listProjection.AppliedSnapshotVersion > 0);
 
 
@@ -80,7 +76,7 @@ public abstract class MultiProjectionSnapshotTests : TestBase<FeatureCheckDepend
 
         ResetInMemoryDocumentStoreAndCache();
 
-        listProjection2 = await multiProjectionService.GetSingleProjectionListObject<ClientNameHistoryProjection>(null);
+        listProjection2 = await multiProjectionService.GetSingleProjectionListObject<ClientNameHistoryProjection>();
         Assert.True(listProjection2.AppliedSnapshotVersion > 0);
 
     }
@@ -111,10 +107,10 @@ public abstract class MultiProjectionSnapshotTests : TestBase<FeatureCheckDepend
         var projection2 = await multiProjectionService.GetMultiProjectionAsync<ClientLoyaltyPointMultiProjection>();
         Assert.True(projection2.AppliedSnapshotVersion > 0);
 
-        var listProjection = await multiProjectionService.GetAggregateListObject<Client>(null);
+        var listProjection = await multiProjectionService.GetAggregateListObject<Client>();
         Assert.True(listProjection.AppliedSnapshotVersion > 0);
 
-        var singleProjectionList = await multiProjectionService.GetSingleProjectionListObject<ClientNameHistoryProjection>(null);
+        var singleProjectionList = await multiProjectionService.GetSingleProjectionListObject<ClientNameHistoryProjection>();
         Assert.True(singleProjectionList.AppliedSnapshotVersion > 0);
     }
     [Fact]
@@ -143,10 +139,10 @@ public abstract class MultiProjectionSnapshotTests : TestBase<FeatureCheckDepend
         var projection2 = await multiProjectionService.GetMultiProjectionAsync<ClientLoyaltyPointMultiProjection>();
         Assert.True(projection2.AppliedSnapshotVersion > 0);
 
-        var listProjection = await multiProjectionService.GetAggregateListObject<Client>(null);
+        var listProjection = await multiProjectionService.GetAggregateListObject<Client>();
         Assert.True(listProjection.AppliedSnapshotVersion > 0);
 
-        var singleProjectionList = await multiProjectionService.GetSingleProjectionListObject<ClientNameHistoryProjection>(null);
+        var singleProjectionList = await multiProjectionService.GetSingleProjectionListObject<ClientNameHistoryProjection>();
         Assert.True(singleProjectionList.AppliedSnapshotVersion > 0);
     }
 

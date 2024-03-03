@@ -80,6 +80,29 @@ namespace Sekiban.Infrastructure.Postgres.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "MultiProjectionSnapshots",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    AggregateContainerGroup = table.Column<int>(type: "integer", nullable: false),
+                    PartitionKey = table.Column<string>(type: "text", nullable: false),
+                    DocumentType = table.Column<int>(type: "integer", nullable: false),
+                    DocumentTypeName = table.Column<string>(type: "text", nullable: false),
+                    TimeStamp = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    SortableUniqueId = table.Column<string>(type: "text", nullable: false),
+                    AggregateType = table.Column<string>(type: "text", nullable: false),
+                    RootPartitionKey = table.Column<string>(type: "text", nullable: false),
+                    LastEventId = table.Column<Guid>(type: "uuid", nullable: false),
+                    LastSortableUniqueId = table.Column<string>(type: "text", nullable: false),
+                    SavedVersion = table.Column<int>(type: "integer", nullable: false),
+                    PayloadVersionIdentifier = table.Column<string>(type: "text", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_MultiProjectionSnapshots", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "SingleProjectionSnapshots",
                 columns: table => new
                 {
@@ -116,6 +139,9 @@ namespace Sekiban.Infrastructure.Postgres.Migrations
 
             migrationBuilder.DropTable(
                 name: "Events");
+
+            migrationBuilder.DropTable(
+                name: "MultiProjectionSnapshots");
 
             migrationBuilder.DropTable(
                 name: "SingleProjectionSnapshots");

@@ -1,11 +1,8 @@
 using FeatureCheck.Domain.Aggregates.MultipleEventsInAFiles;
 using FeatureCheck.Domain.Shared;
 using Sekiban.Testing.Story;
-using System;
-using System.Threading.Tasks;
-using Xunit;
 using Xunit.Abstractions;
-namespace Sekiban.Test.CosmosDb.Stories.Abstracts;
+namespace Sekiban.Test.Abstructs.Abstructs;
 
 public abstract class MultipleEventsInOneClassTest : TestBase<FeatureCheckDependency>
 {

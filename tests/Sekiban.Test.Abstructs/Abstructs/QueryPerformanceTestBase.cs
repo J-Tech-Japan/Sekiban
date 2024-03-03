@@ -5,11 +5,8 @@ using FeatureCheck.Domain.Aggregates.Clients.Commands;
 using FeatureCheck.Domain.Shared;
 using Sekiban.Testing.Shared;
 using Sekiban.Testing.Story;
-using System.Linq;
-using System.Threading.Tasks;
-using Xunit;
 using Xunit.Abstractions;
-namespace Sekiban.Test.CosmosDb.Stories.Abstracts;
+namespace Sekiban.Test.Abstructs.Abstructs;
 
 public abstract class QueryPerformanceTestBase : TestBase<FeatureCheckDependency>
 {

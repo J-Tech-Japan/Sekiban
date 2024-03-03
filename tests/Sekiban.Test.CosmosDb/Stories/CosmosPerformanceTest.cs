@@ -1,5 +1,5 @@
 using Sekiban.Infrastructure.Cosmos;
-using Sekiban.Test.CosmosDb.Stories.Abstracts;
+using Sekiban.Test.Abstructs.Abstructs;
 using Xunit.Abstractions;
 namespace Sekiban.Test.CosmosDb.Stories;
 

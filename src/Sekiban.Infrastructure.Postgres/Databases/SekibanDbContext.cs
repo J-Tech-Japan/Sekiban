@@ -9,7 +9,7 @@ public class SekibanDbContext(DbContextOptions<SekibanDbContext> options) : DbCo
 
     public DbSet<DbCommandDocument> Commands { get; set; } = default!;
     public DbSet<DbSingleProjectionSnapshotDocument> SingleProjectionSnapshots { get; set; } = default!;
-    // public DbSet<DbItem> MultiProjectionSnapshots { get; set; } = default!;
+    public DbSet<DbMultiProjectionDocument> MultiProjectionSnapshots { get; set; } = default!;
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {

@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Dependency;
+using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
+using Sekiban.Infrastructure.Azure.Storage.Blobs;
 using Sekiban.Testing.Story;
 namespace Sekiban.Infrastructure.Postgres;
 
@@ -38,6 +40,10 @@ public class PostgresSekibanServiceProviderGenerator : ISekibanServiceProviderGe
         {
             configureServices(services);
         }
+        services.AddSingleton(SekibanCosmosDbOptions.FromConfiguration(fixture.Configuration));
+        services.AddTransient<IBlobAccessor, AzureBlobAccessor>();
+        services.AddTransient<IBlobContainerAccessor, AzureBlobContainerAccessor>();
+
         return services.BuildServiceProvider();
     }
 }

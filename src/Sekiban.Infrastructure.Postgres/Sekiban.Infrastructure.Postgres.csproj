@@ -5,12 +5,12 @@
         <Nullable>enable</Nullable>
         <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
         <PackageId>Sekiban.Infrastructure.Postgres</PackageId>
-        <Version>0.17.9-preview</Version>
+        <Version>0.17.10</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Dynamo Infrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.17.9-preview</PackageVersion>
+        <PackageVersion>0.17.10-preview</PackageVersion>
         <Description>Fix Retrieval Option returns snapshot</Description>
         <LangVersion>preview</LangVersion>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -22,12 +22,12 @@
     <ItemGroup>
         <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.0"/>
         <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj"/>
-        <PackageReference Include="Sekiban.Core" Version="0.17.9"/>
+        <PackageReference Include="Sekiban.Core" Version="0.17.10"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
         <ProjectReference Include="..\Sekiban.Infrastructure.Azure.Storage.Blobs\Sekiban.Infrastructure.Azure.Storage.Blobs.csproj"/>
-        <PackageReference Include="Sekiban.Infrastructure.Azure.Storage.Blobs" Version="0.17.9"/>
+        <PackageReference Include="Sekiban.Infrastructure.Azure.Storage.Blobs" Version="0.17.10"/>
         <ProjectReference Include="..\Sekiban.Testing\Sekiban.Testing.csproj"/>
-        <PackageReference Include="Sekiban.Testing" Version="0.17.9"/>
+        <PackageReference Include="Sekiban.Testing" Version="0.17.10"/>
     </ItemGroup>
 
     <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
