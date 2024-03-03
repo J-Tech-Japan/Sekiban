@@ -344,7 +344,7 @@ jobs:
         dotnet restore Sekiban.sln
     - name: Test dotnet
       run: |
-        dotnet test tests/Sekiban.Test.Dynamo/Sekiban.Test.Postgres.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net7.0
+        dotnet test tests/Sekiban.Test.Postgres/Sekiban.Test.Postgres.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net7.0
       
   performance80postgres:
     strategy:
@@ -373,5 +373,5 @@ jobs:
         dotnet restore Sekiban.sln
     - name: Test dotnet
       run: |
-        dotnet test tests/Sekiban.Test.Dynamo/Sekiban.Test.Postgres.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net8.0
+        dotnet test tests/Sekiban.Test.Postgres/Sekiban.Test.Postgres.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net8.0
       
