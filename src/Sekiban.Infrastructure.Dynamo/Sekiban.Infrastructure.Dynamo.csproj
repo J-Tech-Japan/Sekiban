@@ -20,8 +20,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="AWSSDK.DynamoDBv2" Version="3.7.301.12"/>
-        <PackageReference Include="AWSSDK.S3" Version="3.7.305.27"/>
+        <PackageReference Include="AWSSDK.DynamoDBv2" Version="3.7.301.17" />
+        <PackageReference Include="AWSSDK.S3" Version="3.7.305.30" />
         <PackageReference Include="SharpZipLib" Version="1.4.2"/>
         <PackageReference Include="Sekiban.Core" Version="0.17.10"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>

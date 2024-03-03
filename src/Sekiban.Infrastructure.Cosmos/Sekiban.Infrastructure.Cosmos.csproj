@@ -22,7 +22,7 @@
     <ItemGroup>
         <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.38.1"/>
         <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0"/>
-        <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="8.0.0"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="8.0.1" />
         <PackageReference Include="Sekiban.Core" Version="0.17.10"/>
         <PackageReference Include="Sekiban.Infrastructure.Azure.Storage.Blobs" Version="0.17.10"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
