@@ -12,5 +12,7 @@ public class PostgresDbDocumentRemover(PostgresDbFactory dbFactory) : IDocumentR
     public async Task RemoveAllItemsAsync(AggregateContainerGroup aggregateContainerGroup)
     {
         await dbFactory.DeleteAllFromItemsContainer(aggregateContainerGroup);
+        await dbFactory.DeleteAllFromItemsContainer(aggregateContainerGroup);
+        await dbFactory.DeleteAllFromItemsContainer(aggregateContainerGroup);
     }
 }

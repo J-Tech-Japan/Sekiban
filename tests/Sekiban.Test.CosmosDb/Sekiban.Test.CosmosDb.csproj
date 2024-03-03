@@ -48,6 +48,7 @@
         <ProjectReference Include="..\..\src\Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Infrastructure.Dynamo\Sekiban.Infrastructure.Dynamo.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Testing\Sekiban.Testing.csproj"/>
+        <ProjectReference Include="..\Sekiban.Test.Abstructs\Sekiban.Test.Abstructs.csproj"/>
     </ItemGroup>
 
     <ItemGroup>

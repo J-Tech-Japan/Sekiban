@@ -42,7 +42,7 @@ public class AggregateSettingHelper
     {
         section = section.GetSection(AggregatesSection);
         var useHybridDefault = section.GetValue<bool?>("UseHybridDefault") ?? false;
-        var takeSnapshotDefault = section.GetValue<bool?>("TakeSnapshotDefault") ?? false;
+        var takeSnapshotDefault = section.GetValue<bool?>("TakeSnapshotDefault") ?? true;
         var snapshotFrequencyDefault = section.GetValue<int?>("SnapshotFrequencyDefault") ?? 80;
         var snapshotOffsetDefault = section.GetValue<int?>("SnapshotOffsetDefault") ?? 15;
         var useUpdateMarker = section.GetValue<bool?>("UseUpdateMarker") ?? false;

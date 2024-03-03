@@ -3,6 +3,7 @@ using FeatureCheck.Domain.Aggregates.Branches.Commands;
 using FeatureCheck.Domain.Shared;
 using Sekiban.Core.Setting;
 using Sekiban.Infrastructure.Cosmos;
+using Sekiban.Test.Abstructs.Abstructs;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;

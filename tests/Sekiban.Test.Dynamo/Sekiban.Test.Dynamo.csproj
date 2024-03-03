@@ -25,12 +25,13 @@
 
     <ItemGroup>
         <None Update="appsettings.json">
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Sekiban.Test.CosmosDb\Sekiban.Test.CosmosDb.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Infrastructure.Dynamo\Sekiban.Infrastructure.Dynamo.csproj"/>
+        <ProjectReference Include="..\Sekiban.Test.Abstructs\Sekiban.Test.Abstructs.csproj"/>
     </ItemGroup>
 
 </Project>

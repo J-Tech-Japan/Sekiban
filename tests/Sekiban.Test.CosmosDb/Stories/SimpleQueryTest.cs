@@ -7,6 +7,7 @@ using FeatureCheck.Domain.Shared;
 using Sekiban.Core.Command;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Infrastructure.Cosmos;
+using Sekiban.Test.Abstructs.Abstructs;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;

@@ -31,6 +31,13 @@ public class PostgresDocumentWriter(PostgresDbFactory dbFactory, EventPublisher 
                     case (DocumentType.Command, _, ICommandDocumentCommon cmd):
                         dbContext.Commands.Add(DbCommandDocument.FromCommandDocument(cmd, aggregateContainerGroup));
                         break;
+                    case (DocumentType.AggregateSnapshot, _, SnapshotDocument snapshot):
+                        await SaveSingleSnapshotAsync(snapshot, aggregateType, ShouldUseBlob(snapshot));
+                        break;
+                    case (DocumentType.MultiProjectionSnapshot, _, MultiProjectionSnapshotDocument multiSnapshot):
+                        dbContext.MultiProjectionSnapshots.Add(
+                            DbMultiProjectionDocument.FromMultiProjectionSnapshotDocument(multiSnapshot, aggregateContainerGroup));
+                        break;
                 }
                 await dbContext.SaveChangesAsync();
             });

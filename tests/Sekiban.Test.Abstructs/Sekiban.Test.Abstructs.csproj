@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+
+        <IsPackable>false</IsPackable>
+        <IsTestProject>true</IsTestProject>
+        <UserSecretsId>c9ba1581-3bfb-4193-af2e-f00c722e1956</UserSecretsId>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="coverlet.collector" Version="6.0.0"/>
+        <PackageReference Include="Microsoft.DotNet.PlatformAbstractions" Version="3.1.6"/>
+        <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Using Include="Xunit"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\internalUsages\FeatureCheck.Domain\FeatureCheck.Domain.csproj"/>
+        <ProjectReference Include="..\..\internalUsages\MultiTenant.Domain\MultiTenant.Domain.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Core\Sekiban.Core.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Testing\Sekiban.Testing.csproj"/>
+    </ItemGroup>
+
+</Project>

@@ -45,7 +45,7 @@ public class PostgresDocumentRepository(
                         break;
 
                     case AggregateContainerGroup.Dissolvable:
-                        var queryDissolvable = dbContext.Events.Where(m => m.PartitionKey == partitionKey) ??
+                        var queryDissolvable = dbContext.DissolvableEvents.Where(m => m.PartitionKey == partitionKey) ??
                             throw new SekibanInvalidArgumentException();
                         queryDissolvable = string.IsNullOrEmpty(sinceSortableUniqueId)
                             ? queryDissolvable.OrderBy(m => m.SortableUniqueId)
@@ -193,39 +193,174 @@ public class PostgresDocumentRepository(
         Type aggregatePayloadType,
         Type projectionPayloadType,
         string rootPartitionKey,
-        string payloadVersionIdentifier) =>
-        await Task.FromResult<SnapshotDocument?>(default);
-    // TODO: Need to implement
+        string payloadVersionIdentifier)
+    {
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+        return await dbFactory.DbActionAsync(
+            async dbContext =>
+            {
+                var partitionKey = PartitionKeyGenerator.ForAggregateSnapshot(
+                    aggregateId,
+                    aggregatePayloadType,
+                    projectionPayloadType,
+                    rootPartitionKey);
+                var query = dbContext.SingleProjectionSnapshots.Where(
+                        b => b.AggregateContainerGroup == aggregateContainerGroup &&
+                            b.PartitionKey == partitionKey &&
+                            b.AggregateId == aggregateId &&
+                            b.RootPartitionKey == rootPartitionKey &&
+                            b.AggregateType == aggregatePayloadType.Name &&
+                            b.PayloadVersionIdentifier == payloadVersionIdentifier)
+                    .OrderByDescending(m => m.LastSortableUniqueId);
+                foreach (var obj in query)
+                {
+                    var snapshot = GetSnapshotDocument(obj);
+                    if (snapshot is null) { continue; }
+                    return await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshot);
+                }
+                return null;
+            });
+    }
     public async Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(
         Type multiProjectionPayloadType,
         string payloadVersionIdentifier,
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) =>
-        await Task.FromResult<MultiProjectionSnapshotDocument?>(default);
-    // TODO: Need to implement
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions)
+    {
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionPayloadType);
+        return await dbFactory.DbActionAsync(
+            dbContext =>
+            {
+                var partitionKey = PartitionKeyGenerator.ForMultiProjectionSnapshot(multiProjectionPayloadType, rootPartitionKey);
+                var query = dbContext.MultiProjectionSnapshots.Where(
+                        b => b.AggregateContainerGroup == aggregateContainerGroup &&
+                            b.PartitionKey == partitionKey &&
+                            b.PayloadVersionIdentifier == payloadVersionIdentifier)
+                    .OrderByDescending(m => m.LastSortableUniqueId);
+                return Task.FromResult(
+                    Enumerable.OfType<DbMultiProjectionDocument>(query).Select(obj => obj.ToMultiProjectionSnapshotDocument()).FirstOrDefault());
+            });
+    }
     public async Task<bool> ExistsSnapshotForAggregateAsync(
         Guid aggregateId,
         Type aggregatePayloadType,
         Type projectionPayloadType,
         int version,
         string rootPartitionKey,
-        string payloadVersionIdentifier) =>
-        await Task.FromResult(false);
-    // TODO: Need to implement
+        string payloadVersionIdentifier)
+    {
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+        return await dbFactory.DbActionAsync(
+            dbContext =>
+            {
+                var partitionKey = PartitionKeyGenerator.ForAggregateSnapshot(
+                    aggregateId,
+                    aggregatePayloadType,
+                    projectionPayloadType,
+                    rootPartitionKey);
+                var query = dbContext.SingleProjectionSnapshots.Where(
+                        b => b.AggregateContainerGroup == aggregateContainerGroup &&
+                            b.PartitionKey == partitionKey &&
+                            b.AggregateId == aggregateId &&
+                            b.RootPartitionKey == rootPartitionKey &&
+                            b.AggregateType == aggregatePayloadType.Name &&
+                            b.PayloadVersionIdentifier == payloadVersionIdentifier &&
+                            b.SavedVersion == version)
+                    .OrderByDescending(m => m.LastSortableUniqueId);
+                return Task.FromResult(
+                    Enumerable.OfType<DbSingleProjectionSnapshotDocument>(query)
+                        .Select(obj => GetSnapshotDocument(obj))
+                        .OfType<SnapshotDocument>()
+                        .Any());
+            });
+    }
 
-    public Task<SnapshotDocument?> GetSnapshotByIdAsync(
+    public async Task<SnapshotDocument?> GetSnapshotByIdAsync(
         Guid id,
         Guid aggregateId,
         Type aggregatePayloadType,
         Type projectionPayloadType,
         string partitionKey,
-        string rootPartitionKey) =>
-        throw new NotImplementedException();
-    public Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(
+        string rootPartitionKey)
+    {
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+        return await dbFactory.DbActionAsync(
+            async dbContext =>
+            {
+                var query = dbContext.SingleProjectionSnapshots.Where(
+                        b => b.AggregateContainerGroup == aggregateContainerGroup &&
+                            b.PartitionKey == partitionKey &&
+                            b.AggregateId == aggregateId &&
+                            b.RootPartitionKey == rootPartitionKey &&
+                            b.AggregateType == aggregatePayloadType.Name)
+                    .OrderByDescending(m => m.LastSortableUniqueId);
+                foreach (var obj in query)
+                {
+                    var snapshot = GetSnapshotDocument(obj);
+                    if (snapshot is null) { continue; }
+                    return await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshot);
+                }
+                return null;
+            });
+    }
+    public async Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(
         Guid aggregateId,
         Type aggregatePayloadType,
         Type projectionPayloadType,
-        string rootPartitionKey = IDocument.DefaultRootPartitionKey) =>
-        throw new NotImplementedException();
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey)
+    {
+        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+        return await dbFactory.DbActionAsync(
+            async dbContext =>
+            {
+                var partitionKey = PartitionKeyGenerator.ForAggregateSnapshot(
+                    aggregateId,
+                    aggregatePayloadType,
+                    projectionPayloadType,
+                    rootPartitionKey);
+                var query = dbContext.SingleProjectionSnapshots.Where(
+                        b => b.AggregateContainerGroup == aggregateContainerGroup &&
+                            b.PartitionKey == partitionKey &&
+                            b.AggregateId == aggregateId &&
+                            b.RootPartitionKey == rootPartitionKey &&
+                            b.AggregateType == aggregatePayloadType.Name)
+                    .OrderByDescending(m => m.LastSortableUniqueId);
+                var list = new List<SnapshotDocument>();
+                foreach (var obj in query)
+                {
+                    var snapshot = GetSnapshotDocument(obj);
+                    var filled = snapshot is null ? null : await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshot);
+                    if (filled is not null)
+                    {
+                        list.Add(filled);
+                    }
+                }
+                return list;
+            });
+    }
+
+
+    private SnapshotDocument? GetSnapshotDocument(DbSingleProjectionSnapshotDocument dbSnapshot)
+    {
+        var payload = dbSnapshot.Snapshot is null ? null : SekibanJsonHelper.Deserialize(dbSnapshot.Snapshot, typeof(JsonElement));
+        return new SnapshotDocument
+        {
+            Id = dbSnapshot.Id,
+            AggregateId = dbSnapshot.AggregateId,
+            PartitionKey = dbSnapshot.PartitionKey,
+            DocumentType = dbSnapshot.DocumentType,
+            DocumentTypeName = dbSnapshot.DocumentTypeName,
+            TimeStamp = dbSnapshot.TimeStamp,
+            SortableUniqueId = dbSnapshot.SortableUniqueId,
+            AggregateType = dbSnapshot.AggregateType,
+            RootPartitionKey = dbSnapshot.RootPartitionKey,
+            Snapshot = payload,
+            LastEventId = dbSnapshot.LastEventId,
+            LastSortableUniqueId = dbSnapshot.LastSortableUniqueId,
+            SavedVersion = dbSnapshot.SavedVersion,
+            PayloadVersionIdentifier = dbSnapshot.PayloadVersionIdentifier
+        };
+    }
+
 
     private IEnumerable<IEnumerable<string>> GetCommandsInBatches(IEnumerable<DbCommandDocument> commands, string? sinceSortableUniqueId)
     {

@@ -30,13 +30,8 @@ using Sekiban.Core.Snapshot.Aggregate;
 using Sekiban.Core.Types;
 using Sekiban.Testing.Shared;
 using Sekiban.Testing.Story;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Xunit;
 using Xunit.Abstractions;
-namespace Sekiban.Test.CosmosDb.Stories.Abstracts;
+namespace Sekiban.Test.Abstructs.Abstructs;
 
 public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
 {
@@ -482,17 +477,22 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         Assert.Equal(count + 1, aggregateRecentActivity.Version);
         Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
 
+        await Task.Delay(1000);
         var snapshotManager = await aggregateLoader.AsDefaultStateFromInitialAsync<SnapshotManager>(SnapshotManager.SharedId);
-        TestOutputHelper.WriteLine("-requests-");
-        foreach (var key in snapshotManager!.Payload.Requests)
+        if (snapshotManager is not null)
         {
-            TestOutputHelper.WriteLine(key);
+            TestOutputHelper.WriteLine("-requests-");
+            foreach (var key in snapshotManager!.Payload.Requests)
+            {
+                TestOutputHelper.WriteLine(key);
+            }
+            TestOutputHelper.WriteLine("-request takens-");
+            foreach (var key in snapshotManager.Payload.RequestTakens)
+            {
+                TestOutputHelper.WriteLine(key);
+            }
         }
-        TestOutputHelper.WriteLine("-request takens-");
-        foreach (var key in snapshotManager.Payload.RequestTakens)
-        {
-            TestOutputHelper.WriteLine(key);
-        }
+        await Task.Delay(1000);
 
         var snapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(
             createRecentActivityResult.AggregateId!.Value,
@@ -678,6 +678,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
                     }));
         }
         await Task.WhenAll(tasks);
+        await Task.Delay(1000);
         recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
         Assert.Single(recentActivityList);
 

@@ -1,6 +1,7 @@
 using FeatureCheck.Domain.Shared;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Sekiban.Test.Abstructs.Abstructs;
 using Sekiban.Testing.Story;
 using Xunit.Abstractions;
 namespace Sekiban.Test.CosmosDb;

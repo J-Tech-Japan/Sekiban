@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Cache;
@@ -37,19 +36,33 @@ public class PostgresDbFactory(SekibanPostgresOptions dbOptions, IMemoryCacheAcc
         var dbOption = GetSekibanDbOption();
         return dbOption.ConnectionString ?? string.Empty;
     }
+    private bool GetMigrationFinished()
+    {
+        var dbOption = GetSekibanDbOption();
+        return dbOption.MigrationFinished;
+    }
+    private void SetMigrationFinished()
+    {
+        var dbOption = GetSekibanDbOption();
+        dbOption.MigrationFinished = true;
+    }
     private async Task<SekibanDbContext> GetDbContextAsync()
     {
-        var dbContextFromCache = (SekibanDbContext?)memoryCache.Cache.Get(GetMemoryCacheDbContextKey(SekibanContextIdentifier()));
-
-        if (dbContextFromCache is not null)
-        {
-            return dbContextFromCache;
-        }
-
+        // var dbContextFromCache = (SekibanDbContext?)memoryCache.Cache.Get(GetMemoryCacheDbContextKey(SekibanContextIdentifier()));
+        //
+        // if (dbContextFromCache is not null)
+        // {
+        //     return dbContextFromCache;
+        // }
+        //
         var connectionString = GetConnectionString();
         var dbContext = new SekibanDbContext(new DbContextOptions<SekibanDbContext>()) { ConnectionString = connectionString };
-        await dbContext.Database.MigrateAsync();
-        memoryCache.Cache.Set(GetMemoryCacheDbContextKey(SekibanContextIdentifier()), dbContext, new MemoryCacheEntryOptions());
+        if (!GetMigrationFinished())
+        {
+            await dbContext.Database.MigrateAsync();
+            SetMigrationFinished();
+        }
+        // memoryCache.Cache.Set(GetMemoryCacheDbContextKey(SekibanContextIdentifier()), dbContext, new MemoryCacheEntryOptions());
         await Task.CompletedTask;
         return dbContext;
     }
@@ -69,6 +82,14 @@ public class PostgresDbFactory(SekibanPostgresOptions dbOptions, IMemoryCacheAcc
                     case (DocumentType.Command, _):
                         dbContext.Commands.RemoveRange(dbContext.Commands.Where(m => m.AggregateContainerGroup == containerGroup));
                         break;
+                    case (DocumentType.AggregateSnapshot, _):
+                        dbContext.SingleProjectionSnapshots.RemoveRange(
+                            dbContext.SingleProjectionSnapshots.Where(m => m.AggregateContainerGroup == containerGroup));
+                        break;
+                    case (DocumentType.MultiProjectionSnapshot, _):
+                        dbContext.MultiProjectionSnapshots.RemoveRange(
+                            dbContext.MultiProjectionSnapshots.Where(m => m.AggregateContainerGroup == containerGroup));
+                        break;
                     case (DocumentType.Event, AggregateContainerGroup.Dissolvable):
                         dbContext.DissolvableEvents.RemoveRange(dbContext.DissolvableEvents);
                         break;
@@ -83,6 +104,8 @@ public class PostgresDbFactory(SekibanPostgresOptions dbOptions, IMemoryCacheAcc
     public async Task DeleteAllFromItemsContainer(AggregateContainerGroup containerGroup)
     {
         await DeleteAllFromAggregateFromContainerIncludes(DocumentType.Command, containerGroup);
+        await DeleteAllFromAggregateFromContainerIncludes(DocumentType.AggregateSnapshot, containerGroup);
+        await DeleteAllFromAggregateFromContainerIncludes(DocumentType.MultiProjectionSnapshot, containerGroup);
     }
     private void ResetMemoryCache()
     {
@@ -90,11 +113,12 @@ public class PostgresDbFactory(SekibanPostgresOptions dbOptions, IMemoryCacheAcc
         // This allows reconnection when recovered next time.
         memoryCache.Cache.Remove(GetMemoryCacheDbContextKey(SekibanContextIdentifier()));
     }
-    public async Task<T> DbActionAsync<T>(Func<SekibanDbContext, Task<T>> dynamoAction)
+    public async Task<T> DbActionAsync<T>(Func<SekibanDbContext, Task<T>> dbAction)
     {
         try
         {
-            var result = await dynamoAction(await GetDbContextAsync());
+            await using var dbContext = await GetDbContextAsync();
+            var result = await dbAction(dbContext);
             return result;
         }
         catch
@@ -103,11 +127,12 @@ public class PostgresDbFactory(SekibanPostgresOptions dbOptions, IMemoryCacheAcc
             throw;
         }
     }
-    public async Task DbActionAsync(Func<SekibanDbContext, Task> dynamoAction)
+    public async Task DbActionAsync(Func<SekibanDbContext, Task> dbAction)
     {
         try
         {
-            await dynamoAction(await GetDbContextAsync());
+            await using var dbContext = await GetDbContextAsync();
+            await dbAction(dbContext);
         }
         catch
         {
