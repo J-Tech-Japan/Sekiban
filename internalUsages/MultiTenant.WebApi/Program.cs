@@ -8,11 +8,10 @@ var builder = WebApplication.CreateBuilder(args);
 // Sekiban Core Setting
 builder.AddSekibanWithDependency(new MultiTenantWebDependency());
 // Sekiban Cosmos Setting
-builder.AddSekibanCosmosDB();
+builder.AddSekibanCosmosDb();
 
 // Sekiban Web Setting
-builder.Services.AddSekibanWeb<MultiTenantWebDependency>()
-    .AddSwaggerGen(options => options.ConfigureForSekibanWeb());
+builder.Services.AddSekibanWeb<MultiTenantWebDependency>().AddSwaggerGen(options => options.ConfigureForSekibanWeb());
 
 builder.Services.AddEndpointsApiExplorer();
 

@@ -28,7 +28,7 @@ public class CosmosSekibanServiceProviderGenerator : ISekibanServiceProviderGene
         IServiceCollection services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(fixture.Configuration);
         services.AddSekibanWithDependency(dependencyDefinition, fixture.Configuration);
-        services.AddSekibanCosmosDB(fixture.Configuration);
+        services.AddSekibanCosmosDb(fixture.Configuration);
         services.AddSekibanAzureBlobStorage(fixture.Configuration);
         if (fixture.TestOutputHelper is not null)
         {

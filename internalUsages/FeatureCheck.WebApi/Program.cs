@@ -11,7 +11,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddSekibanWithDependency<FeatureCheckDependency>();
 
 // Sekiban Cosmos Setting
-builder.AddSekibanCosmosDB(
+builder.AddSekibanCosmosDb(
     options => options with
     {
         // this is same as default but for sample, it is explicitly written.
