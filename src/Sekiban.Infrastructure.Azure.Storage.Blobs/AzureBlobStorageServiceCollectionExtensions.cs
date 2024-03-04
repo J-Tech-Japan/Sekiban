@@ -14,21 +14,21 @@ public static class AzureBlobStorageServiceCollectionExtensions
     /// <returns></returns>
     public static AzureBlobStorageOptionsServiceCollection AddSekibanAzureBlobStorage(this WebApplicationBuilder builder)
     {
-        var options = SekibanCosmosDbOptions.FromConfiguration(builder.Configuration);
+        var options = SekibanAzureBlobStorageOptions.FromConfiguration(builder.Configuration);
         return AddSekibanAzureBlobStorage(builder, options);
     }
     /// <summary>
     ///     Add Sekiban for CosmosDB
     /// </summary>
     /// <param name="builder"></param>
-    /// <param name="cosmosDbOptions"></param>
+    /// <param name="azureBlobStorageOptions"></param>
     /// <returns></returns>
     public static AzureBlobStorageOptionsServiceCollection AddSekibanAzureBlobStorage(
         this WebApplicationBuilder builder,
-        SekibanCosmosDbOptions cosmosDbOptions)
+        SekibanAzureBlobStorageOptions azureBlobStorageOptions)
     {
-        AddSekibanAzureBlobStorage(builder.Services, cosmosDbOptions);
-        return new AzureBlobStorageOptionsServiceCollection(cosmosDbOptions, builder);
+        AddSekibanAzureBlobStorage(builder.Services, azureBlobStorageOptions);
+        return new AzureBlobStorageOptionsServiceCollection(azureBlobStorageOptions, builder);
     }
     /// <summary>
     ///     Add Sekiban for CosmosDB
@@ -38,13 +38,15 @@ public static class AzureBlobStorageServiceCollectionExtensions
     /// <returns></returns>
     public static IServiceCollection AddSekibanAzureBlobStorage(this IServiceCollection services, IConfiguration configuration)
     {
-        var dbOptions = SekibanCosmosDbOptions.FromConfiguration(configuration);
+        var dbOptions = SekibanAzureBlobStorageOptions.FromConfiguration(configuration);
         return AddSekibanAzureBlobStorage(services, dbOptions);
     }
 
-    private static IServiceCollection AddSekibanAzureBlobStorage(this IServiceCollection services, SekibanCosmosDbOptions cosmosDbOptions)
+    public static IServiceCollection AddSekibanAzureBlobStorage(
+        this IServiceCollection services,
+        SekibanAzureBlobStorageOptions azureBlobStorageOptions)
     {
-        services.AddSingleton(cosmosDbOptions);
+        services.AddSingleton(azureBlobStorageOptions);
         services.AddTransient<IBlobAccessor, AzureBlobAccessor>();
         services.AddTransient<IBlobContainerAccessor, AzureBlobContainerAccessor>();
         return services;
@@ -62,7 +64,7 @@ public static class AzureBlobStorageServiceCollectionExtensions
         IConfigurationSection section,
         IConfiguration configurationRoot)
     {
-        var options = SekibanCosmosDbOptions.FromConfigurationSection(
+        var options = SekibanAzureBlobStorageOptions.FromConfigurationSection(
             section,
             configurationRoot as IConfigurationRoot ?? throw new ConfigurationErrorsException("Blob Storage failed to configure."));
         return AddSekibanAzureBlobStorage(services, options);

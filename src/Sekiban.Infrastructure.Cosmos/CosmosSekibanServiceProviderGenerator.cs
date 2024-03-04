@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Shared;
+using Sekiban.Infrastructure.Azure.Storage.Blobs;
 using Sekiban.Testing.Story;
 namespace Sekiban.Infrastructure.Cosmos;
 
@@ -28,6 +29,7 @@ public class CosmosSekibanServiceProviderGenerator : ISekibanServiceProviderGene
         services.AddSingleton<IConfiguration>(fixture.Configuration);
         services.AddSekibanWithDependency(dependencyDefinition, fixture.Configuration);
         services.AddSekibanCosmosDB(fixture.Configuration);
+        services.AddSekibanAzureBlobStorage(fixture.Configuration);
         if (fixture.TestOutputHelper is not null)
         {
             services.AddSingleton(fixture.TestOutputHelper);

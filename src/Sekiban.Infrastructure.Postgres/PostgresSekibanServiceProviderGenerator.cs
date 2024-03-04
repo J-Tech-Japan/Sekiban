@@ -40,7 +40,7 @@ public class PostgresSekibanServiceProviderGenerator : ISekibanServiceProviderGe
         {
             configureServices(services);
         }
-        services.AddSingleton(SekibanCosmosDbOptions.FromConfiguration(fixture.Configuration));
+        services.AddSingleton(SekibanAzureBlobStorageOptions.FromConfiguration(fixture.Configuration));
         services.AddTransient<IBlobAccessor, AzureBlobAccessor>();
         services.AddTransient<IBlobContainerAccessor, AzureBlobContainerAccessor>();
 

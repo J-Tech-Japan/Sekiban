@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Configuration;
 using Sekiban.Core.Setting;
-namespace Sekiban.Infrastructure.Azure.Storage.Blobs;
+namespace Sekiban.Infrastructure.Cosmos;
 
-public record SekibanAzureOption
+public record SekibanAzureCosmosDbOption
 {
     public static readonly string CosmosEventsContainerDefaultValue = "events";
     public static readonly string CosmosEventsContainerDissolvableDefaultValue = "dissolvableevents";
@@ -10,7 +10,6 @@ public record SekibanAzureOption
     public static readonly string CosmosItemsContainerDissolvableDefaultValue = "dissolvableitems";
     public static readonly string CosmosConnectionStringNameDefaultValue = "SekibanCosmos";
     public static readonly string CosmosDatabaseDefaultValue = "SekibanDb";
-    public static readonly string BlobConnectionStringNameDefaultValue = "SekibanBlob";
     public static readonly bool LegacyPartitionDefaultValue = false;
 
     public string Context { get; init; } = SekibanContext.Default;
@@ -26,12 +25,9 @@ public record SekibanAzureOption
     public string? CosmosConnectionString { get; init; }
     public string CosmosDatabase { get; init; } = CosmosDatabaseDefaultValue;
 
-    public string BlobConnectionStringName { get; init; } = BlobConnectionStringNameDefaultValue;
-    public string? BlobConnectionString { get; init; }
-
     public bool LegacyPartitions { get; init; }
 
-    public static SekibanAzureOption FromConfiguration(
+    public static SekibanAzureCosmosDbOption FromConfiguration(
         IConfigurationSection section,
         IConfigurationRoot configurationRoot,
         string context = SekibanContext.Default)
@@ -64,13 +60,10 @@ public record SekibanAzureOption
         var cosmosDatabase = azureSection.GetValue<string>(nameof(CosmosDatabase)) ??
             azureSection.GetValue<string>("CosmosDbDatabase") ?? CosmosDatabaseDefaultValue;
 
-        var blobConnectionStringName = azureSection.GetValue<string>(nameof(BlobConnectionStringName)) ?? BlobConnectionStringNameDefaultValue;
-        var blobConnectionString = configurationRoot.GetConnectionString(blobConnectionStringName) ??
-            azureSection.GetValue<string>(nameof(BlobConnectionString));
 
         var legacyPartition = azureSection.GetValue<bool?>(nameof(LegacyPartitions)) ?? LegacyPartitionDefaultValue;
 
-        return new SekibanAzureOption
+        return new SekibanAzureCosmosDbOption
         {
             Context = context,
             CosmosEventsContainer = eventsContainer,
@@ -82,8 +75,6 @@ public record SekibanAzureOption
             CosmosEndPointUrl = cosmosEndPointUrl,
             CosmosAuthorizationKey = cosmosAuthorizationKey,
             CosmosDatabase = cosmosDatabase,
-            BlobConnectionString = blobConnectionString,
-            BlobConnectionStringName = blobConnectionStringName,
             LegacyPartitions = legacyPartition
         };
     }
