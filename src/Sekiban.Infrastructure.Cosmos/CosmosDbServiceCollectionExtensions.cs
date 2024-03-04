@@ -121,15 +121,21 @@ public static class CosmosDbServiceCollectionExtensions
         SekibanAzureBlobStorageOptions azureBlobStorageOptions,
         SekibanCosmosClientOptions? options = null)
     {
-        services.AddSingleton(options ?? new SekibanCosmosClientOptions());
-        services.AddSingleton(cosmosDbOptions);
-        services.AddTransient<ICosmosDbFactory, CosmosDbFactory>();
-        services.AddTransient<IDocumentPersistentWriter, CosmosDocumentWriter>();
-        services.AddTransient<IDocumentPersistentRepository, CosmosDocumentRepository>();
-        services.AddTransient<IDocumentRemover, CosmosDbDocumentRemover>();
+        // CosmosDB
+        services.AddSekibanCosmosDbWithoutBlob(cosmosDbOptions, options);
+        // Azure Blob
         services.AddSekibanAzureBlobStorage(azureBlobStorageOptions);
         return services;
     }
+    /// <summary>
+    ///     Setup Sekiban for CosmosDB without Azure Blob
+    ///     can setup options for CosmosDB.
+    ///     Connection string or setting will be used from appsettings.json
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="cosmosDbOptions"></param>
+    /// <param name="options"></param>
+    /// <returns></returns>
     public static IServiceCollection AddSekibanCosmosDbWithoutBlob(
         this IServiceCollection services,
         SekibanCosmosDbOptions cosmosDbOptions,

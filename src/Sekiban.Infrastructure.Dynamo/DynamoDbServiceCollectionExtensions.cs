@@ -2,8 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Documents;
-using Sekiban.Core.Setting;
-using Sekiban.Infrastructure.Dynamo.Blobs;
+using Sekiban.Infrastructure.Aws.S3;
 using Sekiban.Infrastructure.Dynamo.Documents;
 namespace Sekiban.Infrastructure.Dynamo;
 
@@ -17,37 +16,77 @@ public static class DynamoDbServiceCollectionExtensions
     /// </summary>
     /// <param name="builder"></param>
     /// <returns></returns>
-    public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDB(this WebApplicationBuilder builder) =>
-        AddSekibanDynamoDB(builder.Services, builder.Configuration);
+    public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDb(this WebApplicationBuilder builder) =>
+        AddSekibanDynamoDb(builder.Services, builder.Configuration);
+
+    public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDbWithoutBlob(this WebApplicationBuilder builder) =>
+        AddSekibanDynamoDbWithoutBlob(builder.Services, builder.Configuration);
 
     /// <summary>
     ///     Add DynamoDB services for Sekiban
     /// </summary>
     /// <param name="builder"></param>
     /// <param name="dynamoDbOptions"></param>
+    /// <param name="s3Options"></param>
     /// <returns></returns>
-    public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDB(
+    public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDb(
         this WebApplicationBuilder builder,
-        SekibanDynamoDbOptions dynamoDbOptions) =>
-        AddSekibanDynamoDB(builder.Services, dynamoDbOptions);
+        SekibanDynamoDbOptions dynamoDbOptions,
+        SekibanAwsS3Options s3Options) =>
+        AddSekibanDynamoDb(builder.Services, dynamoDbOptions, s3Options);
     /// <summary>
     ///     Add DynamoDB services for Sekiban
     /// </summary>
     /// <param name="services"></param>
     /// <param name="configuration"></param>
     /// <returns></returns>
-    public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDB(this IServiceCollection services, IConfiguration configuration)
+    public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDb(this IServiceCollection services, IConfiguration configuration)
     {
         var options = SekibanDynamoDbOptions.FromConfiguration(configuration);
-        return AddSekibanDynamoDB(services, options);
+        var s3Options = SekibanAwsS3Options.FromConfiguration(configuration);
+        return AddSekibanDynamoDb(services, options, s3Options);
     }
+    /// <summary>
+    ///     Add DynamoDB services for Sekiban without S3
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="configuration"></param>
+    /// <returns></returns>
+    public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDbWithoutBlob(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        var options = SekibanDynamoDbOptions.FromConfiguration(configuration);
+        return AddSekibanDynamoDbWithoutBlob(services, options);
+    }
+
     /// <summary>
     ///     Add DynamoDB services for Sekiban
     /// </summary>
     /// <param name="services"></param>
     /// <param name="dynamoDbOptions"></param>
+    /// <param name="s3Options"></param>
     /// <returns></returns>
-    public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDB(this IServiceCollection services, SekibanDynamoDbOptions dynamoDbOptions)
+    public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDb(
+        this IServiceCollection services,
+        SekibanDynamoDbOptions dynamoDbOptions,
+        SekibanAwsS3Options s3Options)
+    {
+        // データストア
+        services.AddSekibanDynamoDbWithoutBlob(dynamoDbOptions);
+        // S3
+        services.AddSekibanAwsS3(s3Options);
+        return new SekibanDynamoDbOptionsServiceCollection(dynamoDbOptions, services);
+    }
+    /// <summary>
+    ///     Add DynamoDB services for Sekiban without S3
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="dynamoDbOptions"></param>
+    /// <returns></returns>
+    public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDbWithoutBlob(
+        this IServiceCollection services,
+        SekibanDynamoDbOptions dynamoDbOptions)
     {
         // データストア
         services.AddTransient<DynamoDbFactory>();
@@ -56,9 +95,9 @@ public static class DynamoDbServiceCollectionExtensions
         services.AddTransient<IDocumentPersistentRepository, DynamoDocumentRepository>();
         services.AddTransient<IDocumentRemover, DynamoDbDocumentRemover>();
 
-        services.AddTransient<IBlobAccessor, S3BlobAccessor>();
         return new SekibanDynamoDbOptionsServiceCollection(dynamoDbOptions, services);
     }
+
     /// <summary>
     ///     Add DynamoDB services for Sekiban
     /// </summary>
@@ -72,6 +111,7 @@ public static class DynamoDbServiceCollectionExtensions
         IConfigurationRoot configurationRoot)
     {
         var options = SekibanDynamoDbOptions.FromConfigurationSection(section, configurationRoot);
-        return AddSekibanDynamoDB(services, options);
+        var s3Options = SekibanAwsS3Options.FromConfigurationSection(section, configurationRoot);
+        return AddSekibanDynamoDb(services, options, s3Options);
     }
 }

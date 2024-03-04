@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Shared;
+using Sekiban.Infrastructure.Aws.S3;
 using Sekiban.Testing.Story;
 namespace Sekiban.Infrastructure.Dynamo;
 
@@ -28,7 +29,8 @@ public class DynamoSekibanServiceProviderGenerator : ISekibanServiceProviderGene
         IServiceCollection services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(fixture.Configuration);
         services.AddSekibanWithDependency(dependencyDefinition, fixture.Configuration);
-        services.AddSekibanDynamoDB(fixture.Configuration);
+        services.AddSekibanDynamoDb(fixture.Configuration);
+        services.AddSekibanAwsS3(fixture.Configuration);
         if (fixture.TestOutputHelper is not null)
         {
             services.AddSingleton(fixture.TestOutputHelper);
