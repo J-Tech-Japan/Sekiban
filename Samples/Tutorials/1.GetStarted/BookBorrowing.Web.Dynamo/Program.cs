@@ -3,20 +3,21 @@ using Sekiban.Core.Dependency;
 using Sekiban.Infrastructure.Dynamo;
 using Sekiban.Web.Dependency;
 using Sekiban.Web.OpenApi;
+using Sekiban.Web.OpenApi.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Sekiban Core Setting
 builder.AddSekibanWithDependency(new BookBorrowingDependency());
 // Sekiban Cosmos Setting
-builder.AddSekibanDynamoDB();
+builder.AddSekibanDynamoDb();
 // Sekiban Web Setting
 builder.Services.AddSekibanWeb(new BookBorrowingWebDependency());
 
 // Add services to the container.
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(options => options.AddSekibanSwaggerGen());
+builder.Services.AddSwaggerGen(options => options.ConfigureForSekibanWeb());
 
 var app = builder.Build();
 
