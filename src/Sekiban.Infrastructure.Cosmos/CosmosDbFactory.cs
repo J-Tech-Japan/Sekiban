@@ -8,7 +8,6 @@ using Sekiban.Core.Documents;
 using Sekiban.Core.Events;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
-using Sekiban.Infrastructure.Azure.Storage.Blobs;
 namespace Sekiban.Infrastructure.Cosmos;
 
 public class CosmosDbFactory(
@@ -63,7 +62,7 @@ public class CosmosDbFactory(
             throw;
         }
     }
-    private SekibanAzureOption GetSekibanCosmosDbOption() => cosmosDbOptions.GetContextOption(serviceProvider);
+    private SekibanAzureCosmosDbOption GetSekibanCosmosDbOption() => cosmosDbOptions.GetContextOption(serviceProvider);
     public string GetContainerId(DocumentType documentType, AggregateContainerGroup containerGroup)
     {
         var dbOption = GetSekibanCosmosDbOption();

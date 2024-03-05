@@ -35,6 +35,9 @@ jobs:
     - name: Pack Cosmos
       run: |
         dotnet nuget push "src/Sekiban.Infrastructure.Cosmos/bin/Release/Sekiban.Infrastructure.Cosmos.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+    - name: Pack S3
+      run: |
+        dotnet nuget push "src/Sekiban.Infrastructure.Aws.S3/bin/Release/Sekiban.Infrastructure.Aws.S3.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
     - name: Pack Dynamo
       run: |
         dotnet nuget push "src/Sekiban.Infrastructure.Dynamo/bin/Release/Sekiban.Infrastructure.Dynamo.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json

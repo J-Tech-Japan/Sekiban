@@ -32,10 +32,10 @@ public class DynamoDbFactory(SekibanDynamoDbOptions dbOptions, IMemoryCacheAcces
         var dbOption = GetSekibanDynamoDbOption();
         return (documentType, containerGroup) switch
         {
-            (DocumentType.Event, AggregateContainerGroup.Default) => dbOption.EventsTableId,
-            (DocumentType.Event, AggregateContainerGroup.Dissolvable) => dbOption.EventsTableIdDissolvable,
-            (_, AggregateContainerGroup.Default) => dbOption.ItemsTableId,
-            _ => dbOption.ItemsTableIdDissolvable
+            (DocumentType.Event, AggregateContainerGroup.Default) => dbOption.DynamoEventsTable,
+            (DocumentType.Event, AggregateContainerGroup.Dissolvable) => dbOption.DynamoEventsTableDissolvable,
+            (_, AggregateContainerGroup.Default) => dbOption.DynamoItemsTable,
+            _ => dbOption.DynamoItemsTableDissolvable
         };
     }
 

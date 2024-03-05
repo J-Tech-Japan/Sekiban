@@ -13,7 +13,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddSekibanWithDependency(new FeatureCheckDependency());
 
 // Sekiban Cosmos Setting
-builder.AddSekibanCosmosDB().AddSekibanCosmosAspire("AspireCosmos").AddSekibanBlobAspire("AspireBlob");
+builder.AddSekibanCosmosDb().AddSekibanCosmosAspire("AspireCosmos").AddSekibanBlobAspire("AspireBlob");
 
 // Sekiban Web Setting
 builder.Services.AddSekibanWeb<FeatureCheckWebAspireDependency>().AddSwaggerGen(options => options.ConfigureForSekibanWeb());

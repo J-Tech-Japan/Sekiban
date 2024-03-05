@@ -73,6 +73,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Test.Postgres", "te
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Test.Abstructs", "tests\Sekiban.Test.Abstructs\Sekiban.Test.Abstructs.csproj", "{A19CB8A0-4788-4789-B61E-AF94DA77733D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Infrastructure.Aws.S3", "src\Sekiban.Infrastructure.Aws.S3\Sekiban.Infrastructure.Aws.S3.csproj", "{64FE5CC5-BA25-4926-B45A-B8626E5E7F73}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -203,6 +205,10 @@ Global
 		{A19CB8A0-4788-4789-B61E-AF94DA77733D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A19CB8A0-4788-4789-B61E-AF94DA77733D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A19CB8A0-4788-4789-B61E-AF94DA77733D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{64FE5CC5-BA25-4926-B45A-B8626E5E7F73}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{64FE5CC5-BA25-4926-B45A-B8626E5E7F73}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{64FE5CC5-BA25-4926-B45A-B8626E5E7F73}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{64FE5CC5-BA25-4926-B45A-B8626E5E7F73}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -239,6 +245,7 @@ Global
 		{CF524280-4C14-480D-950E-00A8E82C1149} = {76D7B2DA-2E6B-4078-AC01-B29BCA83411A}
 		{92E22B65-FC6B-43B2-B9D2-6D2DE98B040C} = {4C34F748-F223-44DD-899D-029F9CEF7780}
 		{A19CB8A0-4788-4789-B61E-AF94DA77733D} = {4C34F748-F223-44DD-899D-029F9CEF7780}
+		{64FE5CC5-BA25-4926-B45A-B8626E5E7F73} = {76D7B2DA-2E6B-4078-AC01-B29BCA83411A}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {2DFBE53E-69A7-453A-8D20-72271AE32016}

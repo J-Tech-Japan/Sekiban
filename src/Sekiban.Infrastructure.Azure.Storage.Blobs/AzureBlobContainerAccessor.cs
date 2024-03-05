@@ -1,7 +1,8 @@
 using Azure.Storage.Blobs;
 namespace Sekiban.Infrastructure.Azure.Storage.Blobs;
 
-public class AzureBlobContainerAccessor(SekibanCosmosDbOptions cosmosDbOptions, IServiceProvider serviceProvider) : IBlobContainerAccessor
+public class AzureBlobContainerAccessor(SekibanAzureBlobStorageOptions azureBlobStorageOptions, IServiceProvider serviceProvider)
+    : IBlobContainerAccessor
 {
     public async Task<BlobContainerClient> GetContainerAsync(string containerName)
     {
@@ -11,5 +12,6 @@ public class AzureBlobContainerAccessor(SekibanCosmosDbOptions cosmosDbOptions, 
         return client;
     }
     public string BlobConnectionString() =>
-        cosmosDbOptions.GetContextOption(serviceProvider).BlobConnectionString ?? throw new InvalidDataException("BlobConnectionString not found");
+        azureBlobStorageOptions.GetContextOption(serviceProvider).BlobConnectionString ??
+        throw new InvalidDataException("BlobConnectionString not found");
 }

@@ -16,7 +16,7 @@ var configuration = builder.Build();
 var serviceCollection = new ServiceCollection();
 serviceCollection.AddSingleton<IConfiguration>(configuration);
 SekibanEventSourcingDependency.Register(serviceCollection, new EmptyDependencyDefinition(), SekibanSettings.FromConfiguration(configuration));
-serviceCollection.AddSekibanCosmosDB(configuration);
+serviceCollection.AddSekibanCosmosDb(configuration);
 serviceCollection.AddLogging();
 serviceCollection.AddTransient<EventsConverter>();
 var ServiceProvider = serviceCollection.BuildServiceProvider();

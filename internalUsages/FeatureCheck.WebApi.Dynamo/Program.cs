@@ -4,17 +4,15 @@ using Sekiban.Core.Dependency;
 using Sekiban.Infrastructure.Dynamo;
 using Sekiban.Web.Dependency;
 using Sekiban.Web.OpenApi.Extensions;
-
 var builder = WebApplication.CreateBuilder(args);
 
 // Sekiban Core Setting
 builder.AddSekibanWithDependency(new FeatureCheckDependency());
 // Sekiban Dynamo Setting
-builder.AddSekibanDynamoDB();
+builder.AddSekibanDynamoDb();
 
 // Sekiban Web Setting
-builder.Services.AddSekibanWeb<FeatureCheckWebDependency>()
-    .AddSwaggerGen(options => options.ConfigureForSekibanWeb());
+builder.Services.AddSekibanWeb<FeatureCheckWebDependency>().AddSwaggerGen(options => options.ConfigureForSekibanWeb());
 
 builder.Services.AddEndpointsApiExplorer();
 

@@ -1,8 +1,10 @@
 ﻿using Microsoft.AspNetCore.Builder;
 namespace Sekiban.Infrastructure.Azure.Storage.Blobs;
 
-public class AzureBlobStorageOptionsServiceCollection(SekibanCosmosDbOptions sekibanCosmosDbOptions, WebApplicationBuilder applicationBuilder)
+public class AzureBlobStorageOptionsServiceCollection(
+    SekibanAzureBlobStorageOptions sekibanAzureBlobStorageOptions,
+    WebApplicationBuilder applicationBuilder)
 {
-    public SekibanCosmosDbOptions SekibanCosmosDbOptions { get; init; } = sekibanCosmosDbOptions;
+    public SekibanAzureBlobStorageOptions SekibanAzureBlobStorageOptions { get; init; } = sekibanAzureBlobStorageOptions;
     public WebApplicationBuilder ApplicationBuilder { get; init; } = applicationBuilder;
 }

@@ -5,12 +5,12 @@ using ICSharpCode.SharpZipLib.GZip;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Setting;
 using System.IO.Compression;
-namespace Sekiban.Infrastructure.Dynamo.Blobs;
+namespace Sekiban.Infrastructure.Aws.S3.Blobs;
 
 /// <summary>
 ///     BlobAccessor for AWS S3
 /// </summary>
-public class S3BlobAccessor(SekibanDynamoDbOptions options, IServiceProvider serviceProvider) : IBlobAccessor
+public class S3BlobAccessor(SekibanAwsS3Options options, IServiceProvider serviceProvider) : IBlobAccessor
 {
     private string AwsAccessKeyId =>
         options.GetContextOption(serviceProvider).AwsAccessKeyId ?? throw new SekibanConfigurationException("AwsAccessKeyId");
@@ -21,7 +21,7 @@ public class S3BlobAccessor(SekibanDynamoDbOptions options, IServiceProvider ser
     public async Task<Stream?> GetBlobAsync(SekibanBlobContainer container, string blobName)
     {
         var client = await GetS3ClientAsync();
-        var getRequest = new GetObjectRequest { BucketName = S3BucketName, Key = S3BlobAccessor.GetKey(container, blobName) };
+        var getRequest = new GetObjectRequest { BucketName = S3BucketName, Key = GetKey(container, blobName) };
         using var response = await client.GetObjectAsync(getRequest);
         var stream = new MemoryStream();
         response.ResponseStream.CopyTo(stream);
@@ -31,7 +31,7 @@ public class S3BlobAccessor(SekibanDynamoDbOptions options, IServiceProvider ser
     public async Task<bool> SetBlobAsync(SekibanBlobContainer container, string blobName, Stream blob)
     {
         var client = await GetS3ClientAsync();
-        var putRequest = new PutObjectRequest { BucketName = S3BucketName, Key = S3BlobAccessor.GetKey(container, blobName), InputStream = blob };
+        var putRequest = new PutObjectRequest { BucketName = S3BucketName, Key = GetKey(container, blobName), InputStream = blob };
         var _ = await client.PutObjectAsync(putRequest);
         return true;
     }
@@ -62,7 +62,7 @@ public class S3BlobAccessor(SekibanDynamoDbOptions options, IServiceProvider ser
 
         compressedStream.Seek(0, SeekOrigin.Begin);
 
-        var putRequest = new PutObjectRequest { BucketName = S3BucketName, Key = S3BlobAccessor.GetKey(container, blobName), InputStream = compressedStream };
+        var putRequest = new PutObjectRequest { BucketName = S3BucketName, Key = GetKey(container, blobName), InputStream = compressedStream };
         var _ = await client.PutObjectAsync(putRequest);
         return true;
     }

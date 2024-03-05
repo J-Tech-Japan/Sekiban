@@ -4,46 +4,48 @@ namespace Sekiban.Infrastructure.Dynamo;
 
 public class SekibanAwsOption
 {
+    public const string EventsContainerDefaultValue = "events";
+    public const string EventsContainerDissolvableDefaultValue = "dissolvableevents";
+    public const string ItemsContainerDefaultValue = "items";
+    public const string ItemsContainerDissolvableDefaultValue = "dissolvableitems";
+
     public string Context { get; init; } = SekibanContext.Default;
-    public string EventsTableId { get; init; } = "events";
-    public string EventsTableIdDissolvable { get; init; } = "dissolvableevents";
-    public string ItemsTableId { get; init; } = "items";
-    public string ItemsTableIdDissolvable { get; init; } = "dissolvableitems";
+    public string DynamoEventsTable { get; init; } = EventsContainerDefaultValue;
+    public string DynamoEventsTableDissolvable { get; init; } = EventsContainerDissolvableDefaultValue;
+    public string DynamoItemsTable { get; init; } = ItemsContainerDefaultValue;
+    public string DynamoItemsTableDissolvable { get; init; } = ItemsContainerDissolvableDefaultValue;
     public string? AwsAccessKeyId { get; init; }
     public string? AwsAccessKey { get; init; }
     public string? DynamoDbRegion { get; init; }
-    public string? S3BucketName { get; init; }
-    public string? S3Region { get; init; }
-
     public static SekibanAwsOption FromConfiguration(
         IConfigurationSection section,
         IConfigurationRoot configurationRoot,
         string context = SekibanContext.Default)
     {
         var awsSection = section.GetSection("Aws");
-        var eventsTableId = awsSection.GetValue<string>("DynamoEventsTable") ?? awsSection.GetValue<string>("DynamoDbEventsTable") ?? "events";
-        var eventsTableIdDissolvable = awsSection.GetValue<string>("DynamoEventsTableDissolvable") ??
-            awsSection.GetValue<string>("DynamoDbEventsTableDissolvable") ?? "dissolvableevents";
-        var itemsTableId = awsSection.GetValue<string>("DynamoItemsTable") ?? awsSection.GetValue<string>("DynamoDbItemsTable") ?? "items";
-        var itemsTableIdDissolvable = awsSection.GetValue<string>("DynamoItemsTableDissolvable") ??
-            awsSection.GetValue<string>("DynamoDbItemsTableDissolvable") ?? "dissolvableitems";
-        var awsAccessKeyId = awsSection.GetValue<string>("AccessKeyId") ?? awsSection.GetValue<string>("AwsAccessKeyId");
-        var awsAccessKey = awsSection.GetValue<string>("AccessKey") ?? awsSection.GetValue<string>("AwsAccessKey");
-        var dynamoDbRegion = awsSection.GetValue<string>("DynamoRegion") ?? awsSection.GetValue<string>("DynamoDbRegion");
-        var s3BucketName = awsSection.GetValue<string>("S3BucketName");
-        var s3Region = awsSection.GetValue<string>("S3Region");
+        var eventsTableId = awsSection.GetValue<string>(nameof(DynamoEventsTable)) ??
+            awsSection.GetValue<string>("DynamoDbEventsTable") ?? EventsContainerDefaultValue;
+        var eventsTableIdDissolvable = awsSection.GetValue<string>(nameof(DynamoEventsTableDissolvable)) ??
+            awsSection.GetValue<string>("DynamoDbEventsTableDissolvable") ?? EventsContainerDissolvableDefaultValue;
+        var itemsTableId = awsSection.GetValue<string>(nameof(DynamoItemsTable)) ??
+            awsSection.GetValue<string>("DynamoDbItemsTable") ?? ItemsContainerDefaultValue;
+        var itemsTableIdDissolvable = awsSection.GetValue<string>(nameof(DynamoItemsTableDissolvable)) ??
+            awsSection.GetValue<string>("DynamoDbItemsTableDissolvable") ?? ItemsContainerDissolvableDefaultValue;
+        var awsAccessKeyId = awsSection.GetValue<string>("DynamoAwsAccessKeyId") ??
+            awsSection.GetValue<string>("AccessKeyId") ?? awsSection.GetValue<string>(nameof(AwsAccessKeyId));
+        var awsAccessKey = awsSection.GetValue<string>("DynamoAwsAccessKey") ??
+            awsSection.GetValue<string>("AccessKey") ?? awsSection.GetValue<string>(nameof(AwsAccessKey));
+        var dynamoDbRegion = awsSection.GetValue<string>("DynamoRegion") ?? awsSection.GetValue<string>(nameof(DynamoDbRegion));
         return new SekibanAwsOption
         {
             Context = context,
-            EventsTableId = eventsTableId,
-            EventsTableIdDissolvable = eventsTableIdDissolvable,
-            ItemsTableId = itemsTableId,
-            ItemsTableIdDissolvable = itemsTableIdDissolvable,
+            DynamoEventsTable = eventsTableId,
+            DynamoEventsTableDissolvable = eventsTableIdDissolvable,
+            DynamoItemsTable = itemsTableId,
+            DynamoItemsTableDissolvable = itemsTableIdDissolvable,
             AwsAccessKeyId = awsAccessKeyId,
             AwsAccessKey = awsAccessKey,
-            DynamoDbRegion = dynamoDbRegion,
-            S3Region = s3Region,
-            S3BucketName = s3BucketName
+            DynamoDbRegion = dynamoDbRegion
         };
 
     }
