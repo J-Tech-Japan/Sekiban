@@ -3,6 +3,7 @@ using AspireAndSekibanSample.Domain;
 using Sekiban.Aspire.Infrastructure.Cosmos;
 using Sekiban.Core.Dependency;
 using Sekiban.Infrastructure.Cosmos;
+using Sekiban.Infrastructure.Postgres;
 using Sekiban.Web.Dependency;
 using Sekiban.Web.OpenApi.Extensions;
 var builder = WebApplication.CreateBuilder(args);
@@ -14,7 +15,8 @@ builder.AddServiceDefaults();
 builder.Services.AddProblemDetails();
 
 builder.AddSekibanWithDependency(new AspireAndSekibanSampleDomainDependency());
-builder.AddSekibanCosmosDB().AddSekibanCosmosAspire("SekibanAspireCosmos").AddSekibanBlobAspire("SekibanAspireBlob");
+
+builder.AddSekibanCosmosDb().AddSekibanCosmosAspire("SekibanAspireCosmos").AddSekibanBlobAspire("SekibanAspireBlob");
 
 // Sekiban Web Setting
 builder.Services.AddSekibanWeb<AspireAndSekibanSampleWebDependency>()

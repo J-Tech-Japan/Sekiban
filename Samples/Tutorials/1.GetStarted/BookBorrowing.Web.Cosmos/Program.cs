@@ -11,7 +11,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddSekibanWithDependency(new BookBorrowingDependency());
 
 // Sekiban Cosmos Setting
-builder.AddSekibanCosmosDB();
+builder.AddSekibanCosmosDb();
 // Sekiban Web Setting
 builder.Services.AddSekibanWeb(new BookBorrowingWebDependency());
 
