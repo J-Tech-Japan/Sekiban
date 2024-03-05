@@ -6,12 +6,12 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Aspire.Infrastructure.Cosmos</PackageId>
-        <Version>0.17.10-preview</Version>
+        <Version>0.18.0-preview</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Cosmos Aspire Connector</PackageDescription>
-        <PackageVersion>0.17.10-preview</PackageVersion>
-        <Description>Fix Retrieval Option returns snapshot</Description>
+        <PackageVersion>0.18.0-preview</PackageVersion>
+        <Description>Release Postgres and Refactor Infrastructures</Description>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <RootNamespace>Sekiban.Aspire.Infrastructure.Cosmos</RootNamespace>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -23,8 +23,8 @@
 
     <ItemGroup>
         <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="8.0.0-preview.3.24105.21"/>
-        <PackageReference Include="Sekiban.Infrastructure.Cosmos" Version="0.17.10"/>
-        <PackageReference Include="Sekiban.Web" Version="0.17.10"/>
+        <PackageReference Include="Sekiban.Infrastructure.Cosmos" Version="0.18.0"/>
+        <PackageReference Include="Sekiban.Web" Version="0.18.0"/>
         <ProjectReference Include="..\Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj"/>
         <ProjectReference Include="..\Sekiban.Web\Sekiban.Web.csproj"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>

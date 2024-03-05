@@ -4,13 +4,13 @@ namespace Sekiban.Infrastructure.Cosmos;
 
 public record SekibanAzureCosmosDbOption
 {
-    public static readonly string CosmosEventsContainerDefaultValue = "events";
-    public static readonly string CosmosEventsContainerDissolvableDefaultValue = "dissolvableevents";
-    public static readonly string CosmosItemsContainerDefaultValue = "items";
-    public static readonly string CosmosItemsContainerDissolvableDefaultValue = "dissolvableitems";
-    public static readonly string CosmosConnectionStringNameDefaultValue = "SekibanCosmos";
-    public static readonly string CosmosDatabaseDefaultValue = "SekibanDb";
-    public static readonly bool LegacyPartitionDefaultValue = false;
+    public const string CosmosEventsContainerDefaultValue = "events";
+    public const string CosmosEventsContainerDissolvableDefaultValue = "dissolvableevents";
+    public const string CosmosItemsContainerDefaultValue = "items";
+    public const string CosmosItemsContainerDissolvableDefaultValue = "dissolvableitems";
+    public const string CosmosConnectionStringNameDefaultValue = "SekibanCosmos";
+    public const string CosmosDatabaseDefaultValue = "SekibanDb";
+    public const bool LegacyPartitionDefaultValue = false;
 
     public string Context { get; init; } = SekibanContext.Default;
 

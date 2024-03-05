@@ -30,7 +30,7 @@ public class PostgresSekibanServiceProviderGenerator : ISekibanServiceProviderGe
         IServiceCollection services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(fixture.Configuration);
         services.AddSekibanWithDependency(dependencyDefinition, fixture.Configuration);
-        services.AddSekibanPostgresDb(fixture.Configuration);
+        services.AddSekibanPostgresDbOnly(fixture.Configuration);
         if (fixture.TestOutputHelper is not null)
         {
             services.AddSingleton(fixture.TestOutputHelper);

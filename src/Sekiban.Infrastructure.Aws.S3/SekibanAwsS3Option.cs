@@ -16,8 +16,10 @@ public class SekibanAwsS3Option
         string context = SekibanContext.Default)
     {
         var awsSection = section.GetSection("Aws");
-        var awsAccessKeyId = awsSection.GetValue<string>("AccessKeyId") ?? awsSection.GetValue<string>("AwsAccessKeyId");
-        var awsAccessKey = awsSection.GetValue<string>("AccessKey") ?? awsSection.GetValue<string>("AwsAccessKey");
+        var awsAccessKeyId = awsSection.GetValue<string>("S3AwsAccessKeyId") ??
+            awsSection.GetValue<string>("AccessKeyId") ?? awsSection.GetValue<string>(nameof(AwsAccessKeyId));
+        var awsAccessKey = awsSection.GetValue<string>("S3AwsAccessKey") ??
+            awsSection.GetValue<string>("AccessKey") ?? awsSection.GetValue<string>(nameof(AwsAccessKey));
         var s3BucketName = awsSection.GetValue<string>("S3BucketName");
         var s3Region = awsSection.GetValue<string>("S3Region");
         return new SekibanAwsS3Option
