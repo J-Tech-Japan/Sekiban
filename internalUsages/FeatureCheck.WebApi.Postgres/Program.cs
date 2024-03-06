@@ -11,6 +11,10 @@ builder.AddSekibanWithDependency<FeatureCheckDependency>();
 // Sekiban Postgres Setting
 builder.AddSekibanPostgresDbWithAzureBlobStorage();
 
+// Sekiban Postgres Setting with ConnectionStringName
+// builder.AddSekibanPostgresDbOnlyFromConnectionStringName("FeatureCheckPostgres");
+// builder.AddSekibanAzureBlobStorage();
+
 // Sekiban Web Setting
 builder.AddSekibanWebFromDomainDependency<FeatureCheckDependency>();
 builder.Services.AddEndpointsApiExplorer();

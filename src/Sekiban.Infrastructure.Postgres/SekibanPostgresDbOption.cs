@@ -31,4 +31,16 @@ public record SekibanPostgresDbOption
         };
 
     }
+    public static SekibanPostgresDbOption FromConnectionStringName(
+        string connectionStringName,
+        IConfigurationRoot configurationRoot,
+        string context = SekibanContext.Default)
+    {
+        var postgresConnectionStringName = connectionStringName ?? PostgresConnectionStringNameDefaultValue;
+        var postgresConnectionString = configurationRoot.GetConnectionString(postgresConnectionStringName);
+        return new SekibanPostgresDbOption
+        {
+            Context = context, ConnectionStringName = postgresConnectionStringName, ConnectionString = postgresConnectionString
+        };
+    }
 }
