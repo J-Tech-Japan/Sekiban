@@ -5,6 +5,7 @@ using Sekiban.Core.Documents;
 using Sekiban.Infrastructure.Aws.S3;
 using Sekiban.Infrastructure.Azure.Storage.Blobs;
 using Sekiban.Infrastructure.Postgres.Documents;
+using System.Configuration;
 namespace Sekiban.Infrastructure.Postgres;
 
 /// <summary>
@@ -49,6 +50,31 @@ public static class PostgresDbServiceCollectionExtensions
         this WebApplicationBuilder builder,
         SekibanPostgresOptions postgresDbOptions) =>
         AddSekibanPostgresDbOnly(builder.Services, postgresDbOptions);
+
+    /// <summary>
+    ///     Add PostgresDB services for Sekiban
+    /// </summary>
+    /// <param name="builder"></param>
+    /// <param name="connectionStringName"></param>
+    /// <returns></returns>
+    public static SekibanPostgresDbOptionsServiceCollection AddSekibanPostgresDbOnlyFromConnectionStringName(
+        this WebApplicationBuilder builder,
+        string connectionStringName)
+    {
+        var options = SekibanPostgresOptions.FromConnectionStringName(connectionStringName, builder.Configuration);
+        return AddSekibanPostgresDbOnly(builder.Services, options);
+    }
+    public static SekibanPostgresDbOptionsServiceCollection AddSekibanPostgresDbOnlyFromConnectionStringName(
+        this IServiceCollection services,
+        string connectionStringName,
+        IConfiguration configuration)
+    {
+        var options = SekibanPostgresOptions.FromConnectionStringName(
+            connectionStringName,
+            configuration as IConfigurationRoot ?? throw new ConfigurationErrorsException("postgres configuration failed."));
+        return AddSekibanPostgresDbOnly(services, options);
+    }
+
     /// <summary>
     ///     Add PostgresDB services for Sekiban
     /// </summary>

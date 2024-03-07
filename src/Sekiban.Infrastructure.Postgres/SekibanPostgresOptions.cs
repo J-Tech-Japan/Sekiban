@@ -45,5 +45,13 @@ public record SekibanPostgresOptions
         }
         return new SekibanPostgresOptions { Contexts = contextSettings };
     }
+    public static SekibanPostgresOptions FromConnectionStringName(string connectionStringName, IConfigurationRoot configurationRoot) =>
+        new()
+        {
+            Contexts = new List<SekibanPostgresDbOption>
+            {
+                SekibanPostgresDbOption.FromConnectionStringName(connectionStringName, configurationRoot)
+            }
+        };
     private static string GetLastPathComponent(IConfigurationSection section) => section.Path.Split(':').LastOrDefault() ?? section.Path;
 }
