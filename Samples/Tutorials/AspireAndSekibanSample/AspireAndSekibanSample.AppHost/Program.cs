@@ -9,7 +9,9 @@ var postgres = builder.AddPostgres(
     .WithPgAdmin()
     .AddDatabase("SekibanAspirePostgres");
 
-var apiServiceWithPostgres = builder.AddProject<Projects.AspireAndSekibanSample_ApiService_Postgres>("apiservicepostgres").WithReference(postgres);
+var apiServiceWithPostgres = builder
+    .AddProject<Projects.AspireAndSekibanSample_ApiService_Postgres>("apiservicepostgres")
+    .WithReference(postgres);
 
 var cosmos = builder.AddConnectionString("SekibanAspireCosmos");
 var blob = builder.AddConnectionString("SekibanAspireBlob");

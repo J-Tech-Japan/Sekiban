@@ -15,7 +15,6 @@ builder.Services.AddProblemDetails();
 
 builder.AddSekibanWithDependency(new AspireAndSekibanSampleDomainDependency());
 
-builder.AddSekibanCosmosDb().AddSekibanCosmosAspire("SekibanAspireCosmos").AddSekibanBlobAspire("SekibanAspireBlob");
 
 // Sekiban Web Setting
 builder.AddSekibanWebFromDomainDependency<AspireAndSekibanSampleDomainDependency>();
