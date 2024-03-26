@@ -10,12 +10,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\AspireAndSekibanSample.ApiService.Postgres\AspireAndSekibanSample.ApiService.Postgres.csproj" />
     <ProjectReference Include="..\AspireAndSekibanSample.ApiService\AspireAndSekibanSample.ApiService.csproj" />
     <ProjectReference Include="..\AspireAndSekibanSample.Web\AspireAndSekibanSample.Web.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting" Version="8.0.0-preview.3.24105.21" />
+    <PackageReference Include="Aspire.Hosting" Version="8.0.0-preview.4.24156.9" />
+    <PackageReference Include="Aspire.Hosting.Azure.Provisioning" Version="8.0.0-preview.4.24156.9" />
   </ItemGroup>
 
 </Project>
