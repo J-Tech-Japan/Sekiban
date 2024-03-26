@@ -14,9 +14,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Sekiban.Aspire.Infrastructure.Cosmos" Version="0.18.1-preview" />
-    <PackageReference Include="Sekiban.Infrastructure.Postgres" Version="0.18.1" />
-    <PackageReference Include="Sekiban.Web" Version="0.18.1" />
+    <PackageReference Include="Sekiban.Aspire.Infrastructure.Cosmos" Version="0.18.2-preview" />
+    <PackageReference Include="Sekiban.Infrastructure.Postgres" Version="0.18.2" />
+    <PackageReference Include="Sekiban.Web" Version="0.18.2" />
   </ItemGroup>
 
 </Project>

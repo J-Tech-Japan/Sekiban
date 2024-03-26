@@ -5,13 +5,13 @@
         <Nullable>enable</Nullable>
         <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
         <PackageId>Sekiban.Infrastructure.Postgres</PackageId>
-        <Version>0.18.1</Version>
+        <Version>0.18.2</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Dynamo Infrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.18.1</PackageVersion>
-        <Description>Release Postgres and Refactor Infrastructures</Description>
+        <PackageVersion>0.18.2</PackageVersion>
+        <Description>Update to Aspire 8.0 Preview 4</Description>
         <LangVersion>preview</LangVersion>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -22,14 +22,14 @@
     <ItemGroup>
         <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.0"/>
         <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj"/>
-        <PackageReference Include="Sekiban.Core" Version="0.18.1"/>
+        <PackageReference Include="Sekiban.Core" Version="0.18.2"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
         <ProjectReference Include="..\Sekiban.Infrastructure.Aws.S3\Sekiban.Infrastructure.Aws.S3.csproj"/>
-        <PackageReference Include="Sekiban.Infrastructure.Aws.S3" Version="0.18.1"/>
+        <PackageReference Include="Sekiban.Infrastructure.Aws.S3" Version="0.18.2"/>
         <ProjectReference Include="..\Sekiban.Infrastructure.Azure.Storage.Blobs\Sekiban.Infrastructure.Azure.Storage.Blobs.csproj"/>
-        <PackageReference Include="Sekiban.Infrastructure.Azure.Storage.Blobs" Version="0.18.1"/>
+        <PackageReference Include="Sekiban.Infrastructure.Azure.Storage.Blobs" Version="0.18.2"/>
         <ProjectReference Include="..\Sekiban.Testing\Sekiban.Testing.csproj"/>
-        <PackageReference Include="Sekiban.Testing" Version="0.18.1"/>
+        <PackageReference Include="Sekiban.Testing" Version="0.18.2"/>
     </ItemGroup>
 
     <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
