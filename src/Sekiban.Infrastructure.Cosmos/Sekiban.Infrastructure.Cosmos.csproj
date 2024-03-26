@@ -4,13 +4,13 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Infrastructure.Cosmos</PackageId>
-        <Version>0.18.1</Version>
+        <Version>0.18.2</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework CosmosInfrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.18.1</PackageVersion>
-        <Description>Release Postgres and Refactor Infrastructures</Description>
+        <PackageVersion>0.18.2</PackageVersion>
+        <Description>Update to Aspire 8.0 Preview 4</Description>
         <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
         <LangVersion>preview</LangVersion>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -23,8 +23,8 @@
         <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.38.1"/>
         <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0"/>
         <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="8.0.1" />
-        <PackageReference Include="Sekiban.Core" Version="0.18.1"/>
-        <PackageReference Include="Sekiban.Infrastructure.Azure.Storage.Blobs" Version="0.18.1"/>
+        <PackageReference Include="Sekiban.Core" Version="0.18.2"/>
+        <PackageReference Include="Sekiban.Infrastructure.Azure.Storage.Blobs" Version="0.18.2"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
     </ItemGroup>
 

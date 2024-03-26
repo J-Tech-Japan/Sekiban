@@ -11,8 +11,8 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.2" />
-        <PackageReference Include="Sekiban.Infrastructure.Dynamo" Version="0.18.1" />
-        <PackageReference Include="Sekiban.Web" Version="0.18.1" />
+        <PackageReference Include="Sekiban.Infrastructure.Dynamo" Version="0.18.2" />
+        <PackageReference Include="Sekiban.Web" Version="0.18.2" />
         <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
     </ItemGroup>
 
