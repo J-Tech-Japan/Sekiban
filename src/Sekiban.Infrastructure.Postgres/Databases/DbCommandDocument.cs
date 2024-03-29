@@ -13,11 +13,11 @@ public record DbCommandDocument
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; init; }
     public AggregateContainerGroup AggregateContainerGroup { get; init; } = AggregateContainerGroup.Default;
-    [Column(TypeName = "jsonb")]
+    [Column(TypeName = "json")]
     public string Payload { get; init; } = string.Empty;
     public string? ExecutedUser { get; init; }
     public string? Exception { get; init; }
-    [Column(TypeName = "jsonb")]
+    [Column(TypeName = "json")]
     public string CallHistories { get; init; } = string.Empty;
     public Guid AggregateId { get; init; }
     public string PartitionKey { get; init; } = string.Empty;

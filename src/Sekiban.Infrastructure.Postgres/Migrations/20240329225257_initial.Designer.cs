@@ -12,7 +12,7 @@ using Sekiban.Infrastructure.Postgres.Databases;
 namespace Sekiban.Infrastructure.Postgres.Migrations
 {
     [DbContext(typeof(SekibanDbContext))]
-    [Migration("20240302062356_initial")]
+    [Migration("20240329225257_initial")]
     partial class initial
     {
         /// <inheritdoc />
@@ -42,7 +42,7 @@ namespace Sekiban.Infrastructure.Postgres.Migrations
 
                     b.Property<string>("CallHistories")
                         .IsRequired()
-                        .HasColumnType("jsonb");
+                        .HasColumnType("json");
 
                     b.Property<int>("DocumentType")
                         .HasColumnType("integer");
@@ -63,7 +63,7 @@ namespace Sekiban.Infrastructure.Postgres.Migrations
 
                     b.Property<string>("Payload")
                         .IsRequired()
-                        .HasColumnType("jsonb");
+                        .HasColumnType("json");
 
                     b.Property<string>("RootPartitionKey")
                         .IsRequired()
@@ -95,7 +95,7 @@ namespace Sekiban.Infrastructure.Postgres.Migrations
 
                     b.Property<string>("CallHistories")
                         .IsRequired()
-                        .HasColumnType("jsonb");
+                        .HasColumnType("json");
 
                     b.Property<int>("DocumentType")
                         .HasColumnType("integer");
@@ -110,7 +110,7 @@ namespace Sekiban.Infrastructure.Postgres.Migrations
 
                     b.Property<string>("Payload")
                         .IsRequired()
-                        .HasColumnType("jsonb");
+                        .HasColumnType("json");
 
                     b.Property<string>("RootPartitionKey")
                         .IsRequired()
@@ -145,7 +145,7 @@ namespace Sekiban.Infrastructure.Postgres.Migrations
 
                     b.Property<string>("CallHistories")
                         .IsRequired()
-                        .HasColumnType("jsonb");
+                        .HasColumnType("json");
 
                     b.Property<int>("DocumentType")
                         .HasColumnType("integer");
@@ -160,7 +160,7 @@ namespace Sekiban.Infrastructure.Postgres.Migrations
 
                     b.Property<string>("Payload")
                         .IsRequired()
-                        .HasColumnType("jsonb");
+                        .HasColumnType("json");
 
                     b.Property<string>("RootPartitionKey")
                         .IsRequired()
@@ -279,7 +279,7 @@ namespace Sekiban.Infrastructure.Postgres.Migrations
                         .HasColumnType("integer");
 
                     b.Property<string>("Snapshot")
-                        .HasColumnType("jsonb");
+                        .HasColumnType("json");
 
                     b.Property<string>("SortableUniqueId")
                         .IsRequired()

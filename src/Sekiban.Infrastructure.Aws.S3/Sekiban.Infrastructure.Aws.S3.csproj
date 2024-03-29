@@ -4,13 +4,13 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Infrastructure.Aws.S3</PackageId>
-        <Version>0.18.2</Version>
+        <Version>0.18.3</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework AWS S3 Infrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.18.2</PackageVersion>
-        <Description>Update to Aspire 8.0 Preview 4</Description>
+        <PackageVersion>0.18.3</PackageVersion>
+        <Description>Change Postgres JSONB column to JSON column (need to reset data.)</Description>
         <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
         <LangVersion>preview</LangVersion>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -22,7 +22,7 @@
     <ItemGroup>
         <PackageReference Include="AWSSDK.S3" Version="3.7.305.30"/>
         <PackageReference Include="SharpZipLib" Version="1.4.2"/>
-        <PackageReference Include="Sekiban.Core" Version="0.18.2"/>
+        <PackageReference Include="Sekiban.Core" Version="0.18.3"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
         <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.0"/>
     </ItemGroup>
