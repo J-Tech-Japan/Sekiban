@@ -4,13 +4,13 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Infrastructure.Azure.Storage.Blobs</PackageId>
-        <Version>0.18.2</Version>
+        <Version>0.18.3</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Azure Storage Blob</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.18.2</PackageVersion>
-        <Description>Update to Aspire 8.0 Preview 4</Description>
+        <PackageVersion>0.18.3</PackageVersion>
+        <Description>Change Postgres JSONB column to JSON column (need to reset data.)</Description>
         <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
         <LangVersion>preview</LangVersion>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -24,7 +24,7 @@
     <ItemGroup>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
         <PackageReference Include="Azure.Storage.Blobs" Version="12.19.1"/>
-        <PackageReference Include="Sekiban.Core" Version="0.18.2"/>
+        <PackageReference Include="Sekiban.Core" Version="0.18.3"/>
         <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.0"/>
     </ItemGroup>
 

@@ -10,10 +10,10 @@ public record DbDissolvableEvent : IDbEvent
     [Key]
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; init; }
-    [Column(TypeName = "jsonb")]
+    [Column(TypeName = "json")]
     public string Payload { get; init; } = string.Empty;
     public int Version { get; init; }
-    [Column(TypeName = "jsonb")]
+    [Column(TypeName = "json")]
     public string CallHistories { get; init; } = string.Empty;
     public Guid AggregateId { get; init; }
     public string PartitionKey { get; init; } = string.Empty;

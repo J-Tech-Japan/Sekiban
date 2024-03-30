@@ -17,10 +17,10 @@ namespace Sekiban.Infrastructure.Postgres.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     AggregateContainerGroup = table.Column<int>(type: "integer", nullable: false),
-                    Payload = table.Column<string>(type: "jsonb", nullable: false),
+                    Payload = table.Column<string>(type: "json", nullable: false),
                     ExecutedUser = table.Column<string>(type: "text", nullable: true),
                     Exception = table.Column<string>(type: "text", nullable: true),
-                    CallHistories = table.Column<string>(type: "jsonb", nullable: false),
+                    CallHistories = table.Column<string>(type: "json", nullable: false),
                     AggregateId = table.Column<Guid>(type: "uuid", nullable: false),
                     PartitionKey = table.Column<string>(type: "text", nullable: false),
                     DocumentType = table.Column<int>(type: "integer", nullable: false),
@@ -40,9 +40,9 @@ namespace Sekiban.Infrastructure.Postgres.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    Payload = table.Column<string>(type: "jsonb", nullable: false),
+                    Payload = table.Column<string>(type: "json", nullable: false),
                     Version = table.Column<int>(type: "integer", nullable: false),
-                    CallHistories = table.Column<string>(type: "jsonb", nullable: false),
+                    CallHistories = table.Column<string>(type: "json", nullable: false),
                     AggregateId = table.Column<Guid>(type: "uuid", nullable: false),
                     PartitionKey = table.Column<string>(type: "text", nullable: false),
                     DocumentType = table.Column<int>(type: "integer", nullable: false),
@@ -62,9 +62,9 @@ namespace Sekiban.Infrastructure.Postgres.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    Payload = table.Column<string>(type: "jsonb", nullable: false),
+                    Payload = table.Column<string>(type: "json", nullable: false),
                     Version = table.Column<int>(type: "integer", nullable: false),
-                    CallHistories = table.Column<string>(type: "jsonb", nullable: false),
+                    CallHistories = table.Column<string>(type: "json", nullable: false),
                     AggregateId = table.Column<Guid>(type: "uuid", nullable: false),
                     PartitionKey = table.Column<string>(type: "text", nullable: false),
                     DocumentType = table.Column<int>(type: "integer", nullable: false),
@@ -108,7 +108,7 @@ namespace Sekiban.Infrastructure.Postgres.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     AggregateContainerGroup = table.Column<int>(type: "integer", nullable: false),
-                    Snapshot = table.Column<string>(type: "jsonb", nullable: true),
+                    Snapshot = table.Column<string>(type: "json", nullable: true),
                     LastEventId = table.Column<Guid>(type: "uuid", nullable: false),
                     LastSortableUniqueId = table.Column<string>(type: "text", nullable: false),
                     SavedVersion = table.Column<int>(type: "integer", nullable: false),

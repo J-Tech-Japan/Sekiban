@@ -12,7 +12,7 @@ public record DbSingleProjectionSnapshotDocument
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid Id { get; init; }
     public AggregateContainerGroup AggregateContainerGroup { get; init; } = AggregateContainerGroup.Default;
-    [Column(TypeName = "jsonb")]
+    [Column(TypeName = "json")]
     public string? Snapshot { get; init; }
     public Guid LastEventId { get; init; }
     public string LastSortableUniqueId { get; init; } = string.Empty;
