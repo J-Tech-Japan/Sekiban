@@ -264,16 +264,11 @@ There are few preparation and addition to the `Program.cs`
     Make New Web Project with Web API (Controller), and reference `Domain Project`. And you can add web project and add `Sekiban.Web` Nuget Package and Infrastructure package. You can choose Cosmos DB or Dynamo DB and add Nuget Package `Sekiban.Infrastructure.Cosmos` or `Sekiban.Infrastructure.Dynamo`.
 
 2. Make Web Dependency
-    Web Dependency is setting for the web api in that project, if you make restriction for what command or aggregate or queries can be used in certain web, you can make settings in this file. As a start, all aggregate, command and queries can be use in web project, can be written like this.
+    Web Dependency is setting for the web api in that project, if you make restriction for what command or aggregate or queries can be used in certain web, you can make settings in this file. As a start, all aggregate, command and queries can be use in web project. When you want to control which aggregate is active for some web api or not, you can create specific web dependency but usually, you can make default web dependency using domain dependency with following code.
 
 ```csharp
-public class SekibanWebDependency : DomainDependency, IWebDependencyDefinition
-{
-    public bool ShouldMakeSimpleAggregateListQueries => true;
-    public bool ShouldMakeSimpleSingleProjectionListQueries => true;
-    public AuthorizeDefinitionCollection AuthorizationDefinitions => new();
-    public SekibanControllerOptions Options => new();
-}
+// Sekiban Web Setting
+builder.Services.AddSekibanWebFromDomainDependency<DomainDependency>();
 ```
 
 3. Edit Program.cs
@@ -284,19 +279,19 @@ public class SekibanWebDependency : DomainDependency, IWebDependencyDefinition
 var builder = WebApplication.CreateBuilder(args);
 
 // Sekiban Core Setting
-builder.AddSekibanWithDependency(new DomainDependency());
+builder.AddSekibanWithDependency<DomainDependency>();
 // Sekiban Cosmos Setting
-builder.AddSekibanCosmosDB();
+builder.AddSekibanCosmosDb();
 // Change line above to Dynamo DB if you use Dynamo DB
 //builder.AddSekibanDynamoDB();
 
 // Sekiban Web Setting
-builder.Services.AddSekibanWeb(new SekibanWebDependency());
+builder.Services.AddSekibanWebFromDomainDependency<DomainDependency>();
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 // Add Sekiban CustomSchemaIds etc.
-builder.Services.AddSwaggerGen(options => options.AddSekibanSwaggerGen());
+builder.Services.AddSwaggerGen(options => options.ConfigureForSekibanWeb());
 
 var app = builder.Build();
 
