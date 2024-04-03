@@ -263,16 +263,11 @@ public class UserPointSpec : AggregateTest<UserPoint, DomainDependency>
 1. Webプロジェクトを作る。
    Web API (Controller)を持つ新しいWebプロジェクトを作り、`Domain Project`を参照します。そして、Webプロジェクトを追加し、`Sekiban.Web`のNugetパッケージとInfrastructureパッケージを追加できます。Cosmos DBかDynamo DBを選び、以上のNugetパッケージである`Sekiban.Infrastructure.Cosmos`か`Sekiban.Infrastructure.Dynamo`を追加できます。
 2. Web依存定義を作る
-    Web依存定義はそのプロジェクト内のWeb APIの設定であり、特定のWebでどのコマンドや集約、クエリが使用できるかに制限を設けたい場合、このファイルで設定を行うことができます。初めての場合、全ての集約、コマンド、クエリがWebプロジェクトで使用できるように以下のように書くことができます。
+    Web依存定義はそのプロジェクト内のWeb APIの設定であり、特定のWebでどのコマンドや集約、クエリが使用できるかに制限を設けたい場合、このファイルで設定を行うことができます。初めての場合、全ての集約、コマンド、クエリがWebプロジェクトで使用できるように以下のように書くことができます。ウェブAPIがアクティブに集約種類などを制御したい場合は、特定のWebDependencyを作成できますが、通常は次のコードを使用してDomainDependencyを使用してデフォルトのWebDependencyを作成できます。
 
 ```csharp
-public class SekibanWebDependency : DomainDependency, IWebDependencyDefinition
-{
-    public bool ShouldMakeSimpleAggregateListQueries => true;
-    public bool ShouldMakeSimpleSingleProjectionListQueries => true;
-    public AuthorizeDefinitionCollection AuthorizationDefinitions => new();
-    public SekibanControllerOptions Options => new();
-}
+// Sekiban Web Setting
+builder.Services.AddSekibanWebFromDomainDependency<DomainDependency>();
 ```
 
 3. Program.csを編集しましょう
@@ -283,19 +278,19 @@ public class SekibanWebDependency : DomainDependency, IWebDependencyDefinition
 var builder = WebApplication.CreateBuilder(args);
 
 // Sekiban Core Setting
-builder.AddSekibanWithDependency(new DomainDependency());
+builder.AddSekibanWithDependency<DomainDependency>();
 // Sekiban Cosmos Setting
-builder.AddSekibanCosmosDB();
+builder.AddSekibanCosmosDb();
 // Change line above to Dynamo DB if you use Dynamo DB
 //builder.AddSekibanDynamoDB();
 
 // Sekiban Web Setting
-builder.Services.AddSekibanWeb(new SekibanWebDependency());
+builder.Services.AddSekibanWebFromDomainDependency<DomainDependency>();
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 // Add Sekiban CustomSchemaIds etc.
-builder.Services.AddSwaggerGen(options => options.AddSekibanSwaggerGen());
+builder.Services.AddSwaggerGen(options => options.ConfigureForSekibanWeb());
 
 var app = builder.Build();
 

@@ -8,11 +8,11 @@ using SekibanEventSourcingBasics.Domain;
 var builder = WebApplication.CreateBuilder(args);
 
 // Sekiban Core Setting
-builder.AddSekibanWithDependency(new DomainDependency());
+builder.AddSekibanWithDependency<DomainDependency>();
 // Sekiban Cosmos Setting
 builder.AddSekibanCosmosDb();
 // Sekiban Web Setting
-builder.Services.AddSekibanWeb(new SekibanWebDependency());
+builder.Services.AddSekibanWebFromDomainDependency<DomainDependency>();
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
