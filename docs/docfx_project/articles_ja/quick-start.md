@@ -8,11 +8,11 @@
 
 ### GetStarted Solutionを開く。
 
-Get Started .NET 7で作成されています。試す方法は複数あります。
+Get Started .NET 8で作成されています。試す方法は複数あります。
 
 1. Cosmos DBを使用  [Cosmos DBを使って試す](./test-out-cosmos.md)
 2. Dynamo DBを使用  [Dynamo DBを使って試す](./test-out-dynamo.md)
-
+3. PostgreSQLを使用 [PostgreSQLを使って試す](./test-out-postgres.md)
 
 ### 自身のSekiban Projectを作成する。
 
