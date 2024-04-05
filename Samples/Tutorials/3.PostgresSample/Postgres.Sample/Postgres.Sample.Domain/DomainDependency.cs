@@ -11,7 +11,8 @@ public class DomainDependency : DomainDependencyDefinitionBase
     public override void Define()
     {
         AddAggregate<Team>()
-            .AddCommandHandler<RegisterTeam, RegisterTeam.Handler>();
+            .AddCommandHandler<RegisterTeam, RegisterTeam.Handler>()
+            .AddCommandHandler<ChangeTeamName,ChangeTeamName.Handler>();
 
         AddAggregate<Player>()
             .AddCommandHandler<RegisterPlayer, RegisterPlayer.Handler>();
