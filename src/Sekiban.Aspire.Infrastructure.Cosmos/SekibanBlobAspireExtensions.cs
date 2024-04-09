@@ -10,7 +10,7 @@ public static class SekibanBlobAspireExtensions
         this SekibanCosmosDbOptionsServiceCollection cosmosServiceCollection,
         string connectionName)
     {
-        cosmosServiceCollection.ApplicationBuilder.AddKeyedAzureBlobService(connectionName);
+        cosmosServiceCollection.ApplicationBuilder.AddKeyedAzureBlobClient(connectionName);
         cosmosServiceCollection.ApplicationBuilder.Services.AddSingleton(new SekibanBlobAspireOptions(connectionName));
         cosmosServiceCollection.ApplicationBuilder.Services.AddTransient<IBlobContainerAccessor, AzureAspireBlobContainerAccessor>();
         return cosmosServiceCollection;
