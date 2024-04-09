@@ -22,7 +22,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="8.0.0-preview.4.24156.9" />
+        <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="8.0.0-preview.5.24201.12" />
         <PackageReference Include="Sekiban.Infrastructure.Cosmos" Version="0.18.3"/>
         <PackageReference Include="Sekiban.Web" Version="0.18.3"/>
         <ProjectReference Include="..\Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj"/>
@@ -31,7 +31,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Aspire.Microsoft.Azure.Cosmos" Version="8.0.0-preview.4.24156.9" />
+        <PackageReference Include="Aspire.Microsoft.Azure.Cosmos" Version="8.0.0-preview.5.24201.12" />
     </ItemGroup>
 
 </Project>
