@@ -6,12 +6,12 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Aspire.Infrastructure.Cosmos</PackageId>
-        <Version>0.18.3-preview</Version>
+        <Version>0.18.4-preview</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Cosmos Aspire Connector</PackageDescription>
-        <PackageVersion>0.18.3-preview</PackageVersion>
-        <Description>Change Postgres JSONB column to JSON column (need to reset data.)</Description>
+        <PackageVersion>0.18.4-preview</PackageVersion>
+        <Description>Change Postgres Migration Class Name - Postgres Tables needs to be reset. Aspire Preview 5 Support</Description>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <RootNamespace>Sekiban.Aspire.Infrastructure.Cosmos</RootNamespace>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -23,8 +23,8 @@
 
     <ItemGroup>
         <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="8.0.0-preview.5.24201.12" />
-        <PackageReference Include="Sekiban.Infrastructure.Cosmos" Version="0.18.3"/>
-        <PackageReference Include="Sekiban.Web" Version="0.18.3"/>
+        <PackageReference Include="Sekiban.Infrastructure.Cosmos" Version="0.18.4"/>
+        <PackageReference Include="Sekiban.Web" Version="0.18.4"/>
         <ProjectReference Include="..\Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj"/>
         <ProjectReference Include="..\Sekiban.Web\Sekiban.Web.csproj"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
