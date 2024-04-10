@@ -12,8 +12,8 @@ using Sekiban.Infrastructure.Postgres.Databases;
 namespace Sekiban.Infrastructure.Postgres.Migrations
 {
     [DbContext(typeof(SekibanDbContext))]
-    [Migration("20240329225257_initial")]
-    partial class initial
+    [Migration("20240409233332_PostgresInitial")]
+    partial class PostgresInitial
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
