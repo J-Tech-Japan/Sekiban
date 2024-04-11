@@ -1,4 +1,5 @@
 using AspireAndSekibanSample.Domain;
+using Microsoft.Azure.Cosmos;
 using Sekiban.Aspire.Infrastructure.Cosmos;
 using Sekiban.Core.Dependency;
 using Sekiban.Infrastructure.Cosmos;
@@ -15,6 +16,27 @@ builder.Services.AddProblemDetails();
 
 builder.AddSekibanWithDependency(new AspireAndSekibanSampleDomainDependency());
 
+builder.AddSekibanCosmosDb(
+//    optionsFunc: options => {
+//    var o = new SekibanCosmosClientOptions()
+//    {
+//        ClientOptions = new Microsoft.Azure.Cosmos.CosmosClientOptions()
+//        {
+//            HttpClientFactory = () =>
+//            {
+//                HttpMessageHandler httpMessageHandler = new HttpClientHandler()
+//                {
+//                    ServerCertificateCustomValidationCallback = (req, cert, chain, errors) => true
+//                };
+//                return new HttpClient(httpMessageHandler);
+//            },
+//            ConnectionMode = ConnectionMode.Gateway,
+//            LimitToEndpoint = true
+//        }
+//    };
+//    return options;
+//}
+).AddSekibanCosmosAspire("SekibanAspireCosmos").AddSekibanBlobAspire("SekibanAspireBlob");
 
 // Sekiban Web Setting
 builder.AddSekibanWebFromDomainDependency<AspireAndSekibanSampleDomainDependency>();
