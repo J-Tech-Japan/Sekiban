@@ -1,5 +1,4 @@
 using AspireAndSekibanSample.Domain.Aggregates.AccountUsers;
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query;
 using Sekiban.Core.Query.QueryModel;
 namespace AspireAndSekibanSample.Web;
