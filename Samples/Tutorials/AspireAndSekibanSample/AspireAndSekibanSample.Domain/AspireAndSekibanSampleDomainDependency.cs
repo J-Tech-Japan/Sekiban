@@ -10,6 +10,7 @@ public class AspireAndSekibanSampleDomainDependency : DomainDependencyDefinition
     public override void Define()
     {
         AddAggregate<AccountUser>()
-            .AddCommandHandler<CreateAccountUser, CreateAccountUser.Handler>();
+            .AddCommandHandler<CreateAccountUser, CreateAccountUser.Handler>()
+            .AddCommandHandler<ChangeAccountUserName, ChangeAccountUserName.Handler>();
     }
 }

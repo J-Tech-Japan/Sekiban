@@ -1,5 +1,3 @@
-using Aspire.Hosting;
-
 var builder = DistributedApplication.CreateBuilder(args);
 
 // var postgres = builder.AddPostgresContainer("aspirePostgres").WithPgAdmin().AddDatabase("SekibanAspirePostgres");
