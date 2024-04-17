@@ -3,7 +3,6 @@ using Sekiban.Infrastructure.Cosmos;
 using Sekiban.Web.Dependency;
 using Sekiban.Web.OpenApi;
 using Sekiban.Web.OpenApi.Extensions;
-using SekibanEventSourcingBasics.Cosmos.Web;
 using SekibanEventSourcingBasics.Domain;
 var builder = WebApplication.CreateBuilder(args);
 
