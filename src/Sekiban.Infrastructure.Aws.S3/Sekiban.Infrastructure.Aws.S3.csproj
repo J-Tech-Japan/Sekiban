@@ -4,12 +4,12 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Infrastructure.Aws.S3</PackageId>
-        <Version>0.18.4</Version>
+        <Version>0.18.5</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework AWS S3 Infrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.18.4</PackageVersion>
+        <PackageVersion>0.18.5</PackageVersion>
         <Description>Change Postgres Migration Class Name - Postgres Tables needs to be reset. Aspire Preview 5 Support</Description>
         <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
         <LangVersion>preview</LangVersion>
@@ -20,9 +20,9 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="AWSSDK.S3" Version="3.7.305.30"/>
+        <PackageReference Include="AWSSDK.S3" Version="3.7.307.21"/>
         <PackageReference Include="SharpZipLib" Version="1.4.2"/>
-        <PackageReference Include="Sekiban.Core" Version="0.18.4"/>
+        <PackageReference Include="Sekiban.Core" Version="0.18.5"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
         <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.0"/>
     </ItemGroup>
