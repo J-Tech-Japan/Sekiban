@@ -6,11 +6,11 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Aspire.Infrastructure.Cosmos</PackageId>
-        <Version>0.18.5-preview</Version>
+        <Version>0.19.0-preview</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Cosmos Aspire Connector</PackageDescription>
-        <PackageVersion>0.18.5-preview</PackageVersion>
+        <PackageVersion>0.19.0-preview</PackageVersion>
         <Description>Change Postgres Migration Class Name - Postgres Tables needs to be reset. Aspire Preview 5 Support</Description>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <RootNamespace>Sekiban.Aspire.Infrastructure.Cosmos</RootNamespace>
@@ -23,8 +23,8 @@
 
     <ItemGroup>
         <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="8.0.0-preview.6.24214.1"/>
-        <PackageReference Include="Sekiban.Infrastructure.Cosmos" Version="0.18.5"/>
-        <PackageReference Include="Sekiban.Web" Version="0.18.5"/>
+        <PackageReference Include="Sekiban.Infrastructure.Cosmos" Version="0.19.0"/>
+        <PackageReference Include="Sekiban.Web" Version="0.19.0"/>
         <ProjectReference Include="..\Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj"/>
         <ProjectReference Include="..\Sekiban.Web\Sekiban.Web.csproj"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>

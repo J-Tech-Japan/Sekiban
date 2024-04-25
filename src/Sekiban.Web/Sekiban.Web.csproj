@@ -5,14 +5,14 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <OutputType>Library</OutputType>
         <PackageId>Sekiban.Web</PackageId>
-        <Version>0.18.5</Version>
+        <Version>0.19.0</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework WebHelper</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.18.5</PackageVersion>
+        <PackageVersion>0.19.0</PackageVersion>
         <Description>Change Postgres Migration Class Name - Postgres Tables needs to be reset. Aspire Preview 5 Support</Description>
-        <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
+        <TargetFramework>net8.0</TargetFramework>
         <LangVersion>preview</LangVersion>
         <OpenApiGenerateDocuments>false</OpenApiGenerateDocuments>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
