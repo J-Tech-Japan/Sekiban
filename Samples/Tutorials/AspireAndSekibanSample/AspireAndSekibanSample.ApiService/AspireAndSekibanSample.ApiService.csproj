@@ -15,9 +15,9 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.4" />
-    <PackageReference Include="Sekiban.Aspire.Infrastructure.Cosmos" Version="0.18.4-preview" />
-    <PackageReference Include="Sekiban.Infrastructure.Postgres" Version="0.18.4" />
-    <PackageReference Include="Sekiban.Web" Version="0.18.4" />
+    <PackageReference Include="Sekiban.Aspire.Infrastructure.Cosmos" Version="0.18.5-preview" />
+    <PackageReference Include="Sekiban.Infrastructure.Postgres" Version="0.18.5" />
+    <PackageReference Include="Sekiban.Web" Version="0.18.5" />
   </ItemGroup>
 
 </Project>
