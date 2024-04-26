@@ -3,8 +3,8 @@
     <PropertyGroup>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
-        <LangVersion>11</LangVersion>
-        <TargetFramework>net7.0</TargetFramework>
+        <LangVersion>preview</LangVersion>
+        <TargetFramework>net8.0</TargetFramework>
         <UserSecretsId>a871e401-5d10-4932-9bdf-0d5f641558da</UserSecretsId>
         <RootNamespace>FeatureCheck.WebApi</RootNamespace>
     </PropertyGroup>
