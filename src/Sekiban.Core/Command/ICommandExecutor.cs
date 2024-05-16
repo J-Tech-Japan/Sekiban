@@ -1,3 +1,4 @@
+using ResultBoxes;
 using Sekiban.Core.History;
 namespace Sekiban.Core.Command;
 
@@ -18,6 +19,21 @@ public interface ICommandExecutor
     /// <returns>Executed command response.</returns>
     Task<CommandExecutorResponse> ExecCommandAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null)
         where TCommand : ICommandCommon;
+
+    /// <summary>
+    ///     Execute a command (basic)
+    ///     This method will validate the command and execute it
+    ///     CommandExecutorResponse does not contains produced events
+    ///     This method will return ResultBox
+    /// </summary>
+    /// <param name="command"></param>
+    /// <param name="callHistories"></param>
+    /// <typeparam name="TCommand"></typeparam>
+    /// <returns></returns>
+    Task<ResultBox<CommandExecutorResponse>> ExecCommandWithResultAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null)
+        where TCommand : ICommandCommon =>
+        ResultBox<CommandExecutorResponse>.WrapTry(async () => await ExecCommandAsync(command, callHistories));
+
 
     /// <summary>
     ///     Execute a command (basic)

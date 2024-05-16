@@ -52,7 +52,10 @@ public class PostgresDocumentRepository(
                             : queryDissolvable.Where(m => string.Compare(m.SortableUniqueId, sinceSortableUniqueId) > 0)
                                 .OrderByDescending(m => m.SortableUniqueId);
                         // take 1000 events each and run resultAction
-                        GetEventsInBatches(queryDissolvable, sinceSortableUniqueId).ForEach(resultAction);
+                        foreach (var ev in GetEventsInBatches(queryDissolvable, sinceSortableUniqueId))
+                        {
+                            resultAction(ev);
+                        }
                         break;
                 }
                 await Task.CompletedTask;

@@ -20,6 +20,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="DotNext" Version="5.3.1"/>
         <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.0"/>
         <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj"/>
         <PackageReference Include="Sekiban.Core" Version="0.19.0"/>

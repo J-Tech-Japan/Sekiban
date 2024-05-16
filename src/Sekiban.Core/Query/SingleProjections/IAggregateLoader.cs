@@ -1,6 +1,8 @@
+using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Events;
+using Sekiban.Core.Exceptions;
 namespace Sekiban.Core.Query.SingleProjections;
 
 /// <summary>
@@ -83,6 +85,18 @@ public interface IAggregateLoader
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
         SingleProjectionRetrievalOptions? retrievalOptions = null) where TAggregatePayload : IAggregatePayloadCommon;
+
+    public async Task<ResultBox<AggregateState<TAggregatePayload>>> AsDefaultStateWithResultAsync<TAggregatePayload>(
+        Guid aggregateId,
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
+        int? toVersion = null,
+        SingleProjectionRetrievalOptions? retrievalOptions = null) where TAggregatePayload : IAggregatePayloadCommon =>
+        await ResultBox<AggregateState<TAggregatePayload>>.WrapTry(
+            async () => await AsDefaultStateAsync<TAggregatePayload>(aggregateId, rootPartitionKey, toVersion, retrievalOptions) switch
+            {
+                { } state => state,
+                null => throw new SekibanAggregateNotExistsException(aggregateId, typeof(TAggregatePayload).Name, rootPartitionKey)
+            });
 
     /// <summary>
     ///     Get all events for target aggregate.

@@ -1,7 +1,7 @@
-using DotNext;
 using Microsoft.Azure.Cosmos.Linq;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
+using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Documents;
@@ -111,14 +111,14 @@ public class CosmosDbFactory(
         return dbOption.CosmosAuthorizationKey ?? string.Empty;
     }
 
-
-    private Result<string> GetConnectionString()
-    {
-        var dbOption = GetSekibanCosmosDbOption();
-        return string.IsNullOrWhiteSpace(dbOption.CosmosConnectionString)
-            ? new Result<string>(new InvalidDataException(""))
-            : (Result<string>)(dbOption.CosmosConnectionString ?? string.Empty);
-    }
+    private ResultBox<string> GetConnectionString() =>
+        ResultBox<SekibanAzureCosmosDbOption>.FromValue(GetSekibanCosmosDbOption())
+            .Railway(
+                azureOptions => azureOptions.CosmosConnectionString switch
+                {
+                    { } v when !string.IsNullOrWhiteSpace(v) => ResultBox<string>.FromValue(v),
+                    _ => new ArgumentOutOfRangeException()
+                });
     public string GetDatabaseId()
     {
         var dbOption = GetSekibanCosmosDbOption();
@@ -174,9 +174,12 @@ public class CosmosDbFactory(
             return client;
         }
         var clientOptions = options.ClientOptions;
-        var connectionString = GetConnectionString();
         client = await SearchCosmosClientAsync() ??
-            (connectionString.IsSuccessful ? new CosmosClient(connectionString.Value, clientOptions) : GetCosmosClientFromUriAndKey());
+            GetConnectionString() switch
+            {
+                { Value: { } value } => new CosmosClient(value, clientOptions),
+                _ => GetCosmosClientFromUriAndKey()
+            };
         memoryCache.Cache.Set(GetMemoryCacheClientKey(documentType, SekibanContextIdentifier()), client, new MemoryCacheEntryOptions());
         return client;
     }
