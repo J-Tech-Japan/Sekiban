@@ -6,6 +6,7 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Events;
+using Sekiban.Core.Exceptions;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 namespace Sekiban.Infrastructure.Cosmos;
@@ -117,7 +118,7 @@ public class CosmosDbFactory(
                 azureOptions => azureOptions.CosmosConnectionString switch
                 {
                     { } v when !string.IsNullOrWhiteSpace(v) => ResultBox<string>.FromValue(v),
-                    _ => new ArgumentOutOfRangeException()
+                    _ => new SekibanConfigurationException("CosmosConnectionString is not set.")
                 });
     public string GetDatabaseId()
     {

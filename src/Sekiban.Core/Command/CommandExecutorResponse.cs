@@ -25,7 +25,7 @@ public record CommandExecutorResponse(
         {
             _ when AggregateId == Guid.Empty => ResultBox<CommandExecutorResponse>.FromException(
                 new SekibanCommandInvalidAggregateException(CommandId)),
-            { } id => ResultBox.FromValue(this),
+            not null => ResultBox.FromValue(this),
             _ => ResultBox<CommandExecutorResponse>.FromException(new SekibanCommandInvalidAggregateException(CommandId))
         };
     public ResultBox<Guid> GetAggregateId() =>
