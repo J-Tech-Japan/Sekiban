@@ -9,7 +9,7 @@ public static class SekibanCosmosAspireExtensions
         this SekibanCosmosDbOptionsServiceCollection cosmosServiceCollection,
         string connectionName)
     {
-        cosmosServiceCollection.ApplicationBuilder.AddKeyedAzureCosmosDbClient(
+        cosmosServiceCollection.ApplicationBuilder.AddKeyedAzureCosmosClient(
             connectionName,
             configureClientOptions: options =>
             {
