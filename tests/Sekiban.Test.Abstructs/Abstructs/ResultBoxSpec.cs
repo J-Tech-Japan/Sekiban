@@ -9,7 +9,7 @@ using Sekiban.Testing.Story;
 using Xunit.Abstractions;
 namespace Sekiban.Test.Abstructs.Abstructs;
 
-public class ResultBoxSpec : TestBase<FeatureCheckDependency>
+public abstract class ResultBoxSpec : TestBase<FeatureCheckDependency>
 {
     public ResultBoxSpec(
         SekibanTestFixture sekibanTestFixture,
