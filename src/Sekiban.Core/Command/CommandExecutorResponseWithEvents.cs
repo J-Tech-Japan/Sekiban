@@ -1,4 +1,6 @@
-﻿using Sekiban.Core.Events;
+﻿using ResultBoxes;
+using Sekiban.Core.Events;
+using Sekiban.Core.Exceptions;
 using System.Collections.Immutable;
 using System.ComponentModel.DataAnnotations;
 namespace Sekiban.Core.Command;
@@ -20,14 +22,7 @@ public record CommandExecutorResponseWithEvents(
     ImmutableList<IEvent> Events,
     string? LastSortableUniqueId,
     string AggregatePayloadOutTypeName,
-    int EventCount) : CommandExecutorResponse(
-    AggregateId,
-    CommandId,
-    Version,
-    ValidationResults,
-    LastSortableUniqueId,
-    AggregatePayloadOutTypeName,
-    EventCount)
+    int EventCount)
 {
     public CommandExecutorResponseWithEvents(CommandExecutorResponse response, ImmutableList<IEvent> events) : this(
         response.AggregateId,
@@ -40,4 +35,24 @@ public record CommandExecutorResponseWithEvents(
         events.Count)
     {
     }
+
+    public ResultBox<CommandExecutorResponseWithEvents> ValidateAggregateId() =>
+        AggregateId switch
+        {
+            _ when AggregateId == Guid.Empty => ResultBox<CommandExecutorResponseWithEvents>.FromException(
+                new SekibanCommandInvalidAggregateException(CommandId)),
+            not null => ResultBox.FromValue(this),
+            _ => ResultBox<CommandExecutorResponseWithEvents>.FromException(new SekibanCommandInvalidAggregateException(CommandId))
+        };
+    public ResultBox<Guid> GetAggregateId() =>
+        AggregateId switch
+        {
+            _ when AggregateId == Guid.Empty => ResultBox<Guid>.FromException(new SekibanCommandInvalidAggregateException(CommandId)),
+            { } id => ResultBox.FromValue(id),
+            _ => ResultBox<Guid>.FromException(new SekibanCommandInvalidAggregateException(CommandId))
+        };
+    public ResultBox<CommandExecutorResponseWithEvents> ValidateEventCreated() =>
+        EventCount == 0
+            ? ResultBox<CommandExecutorResponseWithEvents>.FromException(new SekibanCommandNoEventCreatedException(AggregateId, CommandId))
+            : ResultBox.FromValue(this);
 }

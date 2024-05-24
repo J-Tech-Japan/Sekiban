@@ -1,6 +1,8 @@
+using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Events;
+using Sekiban.Core.Exceptions;
 namespace Sekiban.Core.Query.SingleProjections;
 
 /// <summary>
@@ -24,6 +26,27 @@ public interface IAggregateLoader
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null) where TAggregatePayload : IAggregatePayloadCommon;
+    /// <summary>
+    ///     Creates an Aggregate from the initial event without using the memory cache.
+    ///     If aggregate does not exist, it returns SekibanAggregateNotExistsException.
+    /// </summary>
+    /// <param name="aggregateId"></param>
+    /// <param name="rootPartitionKey"></param>
+    /// <param name="toVersion"></param>
+    /// <typeparam name="TAggregatePayload"></typeparam>
+    /// <returns></returns>
+    /// <exception cref="SekibanAggregateNotExistsException"></exception>
+    public async Task<ResultBox<AggregateState<TAggregatePayload>>> AsDefaultStateFromInitialWithResultAsync<TAggregatePayload>(
+        Guid aggregateId,
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
+        int? toVersion = null) where TAggregatePayload : IAggregatePayloadCommon =>
+        await ResultBox<AggregateState<TAggregatePayload>>.WrapTry(
+            async () => await AsDefaultStateFromInitialAsync<TAggregatePayload>(aggregateId, rootPartitionKey, toVersion) switch
+            {
+                { } state => state,
+                null => throw new SekibanAggregateNotExistsException(aggregateId, typeof(TAggregatePayload).Name, rootPartitionKey)
+            });
+
 
     /// <summary>
     ///     Get the custom projection.
@@ -83,6 +106,18 @@ public interface IAggregateLoader
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
         SingleProjectionRetrievalOptions? retrievalOptions = null) where TAggregatePayload : IAggregatePayloadCommon;
+
+    public async Task<ResultBox<AggregateState<TAggregatePayload>>> AsDefaultStateWithResultAsync<TAggregatePayload>(
+        Guid aggregateId,
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
+        int? toVersion = null,
+        SingleProjectionRetrievalOptions? retrievalOptions = null) where TAggregatePayload : IAggregatePayloadCommon =>
+        await ResultBox<AggregateState<TAggregatePayload>>.WrapTry(
+            async () => await AsDefaultStateAsync<TAggregatePayload>(aggregateId, rootPartitionKey, toVersion, retrievalOptions) switch
+            {
+                { } state => state,
+                null => throw new SekibanAggregateNotExistsException(aggregateId, typeof(TAggregatePayload).Name, rootPartitionKey)
+            });
 
     /// <summary>
     ///     Get all events for target aggregate.

@@ -1,11 +1,10 @@
-using DotNext;
-using MediatR;
+using ResultBoxes;
 namespace Sekiban.Core.Query.ReadModelUpdaters;
 
-public class ReadModelCacheMerger(IReadModelCache readModelCache) : IReadModelCacheMerger
+public class ReadModelCacheMerger : IReadModelCacheMerger
 {
-    public Result<Unit> PersistWithCache<TReadModel, TId>(ReadModelChanges<TReadModel, TId> changes) where TReadModel : IReadModel<TId> =>
+    public ResultBox<UnitValue> PersistWithCache<TReadModel, TId>(ReadModelChanges<TReadModel, TId> changes) where TReadModel : IReadModel<TId> =>
         throw new NotImplementedException();
-    public Result<IReadModelRecords<TReadModel, TId>> ReadUnsafeModel<TReadModel, TId>() where TReadModel : IReadModel<TId> =>
+    public ResultBox<IReadModelRecords<TReadModel, TId>> ReadUnsafeModel<TReadModel, TId>() where TReadModel : IReadModel<TId> =>
         throw new NotImplementedException();
 }

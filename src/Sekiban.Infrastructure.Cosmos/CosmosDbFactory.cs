@@ -1,11 +1,12 @@
-using DotNext;
 using Microsoft.Azure.Cosmos.Linq;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
+using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Events;
+using Sekiban.Core.Exceptions;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 namespace Sekiban.Infrastructure.Cosmos;
@@ -111,14 +112,14 @@ public class CosmosDbFactory(
         return dbOption.CosmosAuthorizationKey ?? string.Empty;
     }
 
-
-    private Result<string> GetConnectionString()
-    {
-        var dbOption = GetSekibanCosmosDbOption();
-        return string.IsNullOrWhiteSpace(dbOption.CosmosConnectionString)
-            ? new Result<string>(new InvalidDataException(""))
-            : (Result<string>)(dbOption.CosmosConnectionString ?? string.Empty);
-    }
+    private ResultBox<string> GetConnectionString() =>
+        ResultBox<SekibanAzureCosmosDbOption>.FromValue(GetSekibanCosmosDbOption())
+            .Conveyor(
+                azureOptions => azureOptions.CosmosConnectionString switch
+                {
+                    { } v when !string.IsNullOrWhiteSpace(v) => ResultBox<string>.FromValue(v),
+                    _ => new SekibanConfigurationException("CosmosConnectionString is not set.")
+                });
     public string GetDatabaseId()
     {
         var dbOption = GetSekibanCosmosDbOption();
@@ -174,9 +175,12 @@ public class CosmosDbFactory(
             return client;
         }
         var clientOptions = options.ClientOptions;
-        var connectionString = GetConnectionString();
         client = await SearchCosmosClientAsync() ??
-            (connectionString.IsSuccessful ? new CosmosClient(connectionString.Value, clientOptions) : GetCosmosClientFromUriAndKey());
+            GetConnectionString() switch
+            {
+                { IsSuccess: true } value => new CosmosClient(value.GetValue(), clientOptions),
+                _ => GetCosmosClientFromUriAndKey()
+            };
         memoryCache.Cache.Set(GetMemoryCacheClientKey(documentType, SekibanContextIdentifier()), client, new MemoryCacheEntryOptions());
         return client;
     }
