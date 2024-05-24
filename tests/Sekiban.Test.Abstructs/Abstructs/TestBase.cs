@@ -3,6 +3,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Command;
@@ -98,6 +99,8 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
         documentRemover.RemoveAllEventsAsync(AggregateContainerGroup.Dissolvable).Wait();
         documentRemover.RemoveAllItemsAsync(AggregateContainerGroup.Dissolvable).Wait();
     }
+    protected ResultBox<UnitValue> RemoveAllFromDefaultAndDissolvableWithResultBox() =>
+        ResultBox<UnitValue>.WrapTry(RemoveAllFromDefaultAndDissolvable);
 
     protected void ResetInMemoryDocumentStoreAndCache()
     {
@@ -106,6 +109,9 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
         hybridStoreManager.ClearHybridPartitions();
         (memoryCache.Cache as MemoryCache)?.Compact(1);
     }
+
+    protected ResultBox<UnitValue> ResetInMemoryDocumentStoreAndCacheWithResultBox() =>
+        ResultBox<UnitValue>.WrapTry(ResetInMemoryDocumentStoreAndCache);
 
     public class SekibanTestFixture : ISekibanTestFixture
     {

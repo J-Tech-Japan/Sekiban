@@ -47,6 +47,16 @@ public interface ICommandExecutor
     Task<CommandExecutorResponseWithEvents> ExecCommandWithEventsAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null)
         where TCommand : ICommandCommon;
 
+    /// <summary>
+    ///     Execute a command (basic)
+    ///     This method will validate the command and execute it
+    ///     CommandExecutorResponse contains produced events
+    ///     This method will return ResultBox
+    /// </summary>
+    /// <param name="command"></param>
+    /// <param name="callHistories"></param>
+    /// <typeparam name="TCommand"></typeparam>
+    /// <returns></returns>
     Task<ResultBox<CommandExecutorResponseWithEvents>>
         ExecCommandWithEventsWithResultAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null) where TCommand : ICommandCommon =>
         ResultBox<CommandExecutorResponseWithEvents>.WrapTry(async () => await ExecCommandWithEventsAsync(command, callHistories));
@@ -63,6 +73,16 @@ public interface ICommandExecutor
     Task<CommandExecutorResponse> ExecCommandWithoutValidationAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null)
         where TCommand : ICommandCommon;
 
+    /// <summary>
+    ///     Execute a command (basic)
+    ///     This method will NOT validate the command and execute it
+    ///     CommandExecutorResponse does not contains produced events
+    ///     This method will return ResultBox
+    /// </summary>
+    /// <param name="command"></param>
+    /// <param name="callHistories"></param>
+    /// <typeparam name="TCommand"></typeparam>
+    /// <returns></returns>
     Task<ResultBox<CommandExecutorResponse>>
         ExecCommandWithoutValidationWithResultAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null)
         where TCommand : ICommandCommon =>
@@ -82,6 +102,16 @@ public interface ICommandExecutor
         TCommand command,
         List<CallHistory>? callHistories = null) where TCommand : ICommandCommon;
 
+    /// <summary>
+    ///     Execute a command (basic)
+    ///     This method will NOT validate the command and execute it
+    ///     CommandExecutorResponse contains produced events
+    ///     This method will return ResultBox
+    /// </summary>
+    /// <param name="command"></param>
+    /// <param name="callHistories"></param>
+    /// <typeparam name="TCommand"></typeparam>
+    /// <returns></returns>
     Task<ResultBox<CommandExecutorResponseWithEvents>> ExecCommandWithoutValidationWithEventsWithResultAsync<TCommand>(
         TCommand command,
         List<CallHistory>? callHistories = null) where TCommand : ICommandCommon =>
