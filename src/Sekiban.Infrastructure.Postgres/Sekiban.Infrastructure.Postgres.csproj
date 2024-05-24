@@ -5,12 +5,12 @@
         <Nullable>enable</Nullable>
         <TargetFramework>net8.0</TargetFramework>
         <PackageId>Sekiban.Infrastructure.Postgres</PackageId>
-        <Version>0.19.0</Version>
+        <Version>0.19.1</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Dynamo Infrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.19.0</PackageVersion>
+        <PackageVersion>0.19.1</PackageVersion>
         <Description>Change Postgres Migration Class Name - Postgres Tables needs to be reset. Aspire Preview 5 Support</Description>
         <LangVersion>preview</LangVersion>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -23,21 +23,21 @@
         <PackageReference Include="DotNext" Version="5.3.1"/>
         <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.0"/>
         <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj"/>
-        <PackageReference Include="Sekiban.Core" Version="0.19.0"/>
+        <PackageReference Include="Sekiban.Core" Version="0.19.1"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
         <ProjectReference Include="..\Sekiban.Infrastructure.Aws.S3\Sekiban.Infrastructure.Aws.S3.csproj"/>
-        <PackageReference Include="Sekiban.Infrastructure.Aws.S3" Version="0.19.0"/>
+        <PackageReference Include="Sekiban.Infrastructure.Aws.S3" Version="0.19.1"/>
         <ProjectReference Include="..\Sekiban.Infrastructure.Azure.Storage.Blobs\Sekiban.Infrastructure.Azure.Storage.Blobs.csproj"/>
-        <PackageReference Include="Sekiban.Infrastructure.Azure.Storage.Blobs" Version="0.19.0"/>
+        <PackageReference Include="Sekiban.Infrastructure.Azure.Storage.Blobs" Version="0.19.1"/>
         <ProjectReference Include="..\Sekiban.Testing\Sekiban.Testing.csproj"/>
-        <PackageReference Include="Sekiban.Testing" Version="0.19.0"/>
+        <PackageReference Include="Sekiban.Testing" Version="0.19.1"/>
     </ItemGroup>
 
     <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
-        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.2"/>
+        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.4" />
     </ItemGroup>
     <ItemGroup Condition="'$(TargetFramework)' == 'net7.0'">
-        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="7.0.11"/>
+        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.4" />
     </ItemGroup>
 
 </Project>
