@@ -114,7 +114,7 @@ public class CosmosDbFactory(
 
     private ResultBox<string> GetConnectionString() =>
         ResultBox<SekibanAzureCosmosDbOption>.FromValue(GetSekibanCosmosDbOption())
-            .Railway(
+            .Conveyor(
                 azureOptions => azureOptions.CosmosConnectionString switch
                 {
                     { } v when !string.IsNullOrWhiteSpace(v) => ResultBox<string>.FromValue(v),
@@ -178,7 +178,7 @@ public class CosmosDbFactory(
         client = await SearchCosmosClientAsync() ??
             GetConnectionString() switch
             {
-                { Value: { } value } => new CosmosClient(value, clientOptions),
+                { IsSuccess: true } value => new CosmosClient(value.GetValue(), clientOptions),
                 _ => GetCosmosClientFromUriAndKey()
             };
         memoryCache.Cache.Set(GetMemoryCacheClientKey(documentType, SekibanContextIdentifier()), client, new MemoryCacheEntryOptions());

@@ -46,6 +46,11 @@ public interface ICommandExecutor
     /// <returns>Executed command response.</returns>
     Task<CommandExecutorResponseWithEvents> ExecCommandWithEventsAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null)
         where TCommand : ICommandCommon;
+
+    Task<ResultBox<CommandExecutorResponseWithEvents>>
+        ExecCommandWithEventsWithResultAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null) where TCommand : ICommandCommon =>
+        ResultBox<CommandExecutorResponseWithEvents>.WrapTry(async () => await ExecCommandWithEventsAsync(command, callHistories));
+
     /// <summary>
     ///     Execute a command (basic)
     ///     This method will NOT validate the command and execute it
@@ -57,6 +62,12 @@ public interface ICommandExecutor
     /// <returns>Executed command response.</returns>
     Task<CommandExecutorResponse> ExecCommandWithoutValidationAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null)
         where TCommand : ICommandCommon;
+
+    Task<ResultBox<CommandExecutorResponse>>
+        ExecCommandWithoutValidationWithResultAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null)
+        where TCommand : ICommandCommon =>
+        ResultBox<CommandExecutorResponse>.WrapTry(async () => await ExecCommandWithoutValidationAsync(command, callHistories));
+
 
     /// <summary>
     ///     Execute a command (basic)
@@ -70,4 +81,9 @@ public interface ICommandExecutor
     Task<CommandExecutorResponseWithEvents> ExecCommandWithoutValidationWithEventsAsync<TCommand>(
         TCommand command,
         List<CallHistory>? callHistories = null) where TCommand : ICommandCommon;
+
+    Task<ResultBox<CommandExecutorResponseWithEvents>> ExecCommandWithoutValidationWithEventsWithResultAsync<TCommand>(
+        TCommand command,
+        List<CallHistory>? callHistories = null) where TCommand : ICommandCommon =>
+        ResultBox<CommandExecutorResponseWithEvents>.WrapTry(async () => await ExecCommandWithoutValidationWithEventsAsync(command, callHistories));
 }

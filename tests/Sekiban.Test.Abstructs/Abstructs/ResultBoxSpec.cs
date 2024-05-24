@@ -38,20 +38,58 @@ public class ResultBoxSpec : TestBase<FeatureCheckDependency>
     public async Task UseAndReturnWithResultBoxTest()
     {
         var branch = await commandExecutor.ExecCommandWithResultAsync(new CreateBranch { Name = "Branch1" })
-            .Railway(result => result.ValidateEventCreated())
-            .Railway(result => result.GetAggregateId())
-            .Railway(async branchId => await aggregateLoader.AsDefaultStateWithResultAsync<Branch>(branchId));
+            .Conveyor(result => result.ValidateEventCreated())
+            .Conveyor(result => result.GetAggregateId())
+            .Conveyor(async branchId => await aggregateLoader.AsDefaultStateWithResultAsync<Branch>(branchId));
 
         Assert.True(branch.IsSuccess);
         Assert.Equal("Branch1", branch.GetValue().Payload.Name);
     }
+
+    [Fact]
+    public async Task UseAndReturnEventsWithResultBoxTest()
+    {
+        var branch = await commandExecutor.ExecCommandWithEventsWithResultAsync(new CreateBranch { Name = "Branch1" })
+            .Conveyor(result => result.ValidateEventCreated())
+            .Conveyor(result => result.GetAggregateId())
+            .Conveyor(async branchId => await aggregateLoader.AsDefaultStateWithResultAsync<Branch>(branchId));
+
+        Assert.True(branch.IsSuccess);
+        Assert.Equal("Branch1", branch.GetValue().Payload.Name);
+    }
+
     [Fact]
     public async Task UseReturnBoxAndUnwrapBoxTest()
     {
         var branch = await commandExecutor.ExecCommandWithResultAsync(new CreateBranch { Name = "Branch1" })
-            .Railway(result => result.ValidateEventCreated())
-            .Railway(result => result.GetAggregateId())
-            .Railway(async branchId => await aggregateLoader.AsDefaultStateWithResultAsync<Branch>(branchId))
+            .Conveyor(result => result.ValidateEventCreated())
+            .Conveyor(result => result.GetAggregateId())
+            .Conveyor(async branchId => await aggregateLoader.AsDefaultStateWithResultAsync<Branch>(branchId))
+            .UnwrapBox();
+
+        Assert.NotNull(branch);
+        Assert.Equal("Branch1", branch.Payload.Name);
+    }
+
+    [Fact]
+    public async Task UseReturnBoxAndUnwrapWithoutValidationBoxTest()
+    {
+        var branch = await commandExecutor.ExecCommandWithoutValidationWithResultAsync(new CreateBranch { Name = "Branch1" })
+            .Conveyor(result => result.ValidateEventCreated())
+            .Conveyor(result => result.GetAggregateId())
+            .Conveyor(async branchId => await aggregateLoader.AsDefaultStateWithResultAsync<Branch>(branchId))
+            .UnwrapBox();
+
+        Assert.NotNull(branch);
+        Assert.Equal("Branch1", branch.Payload.Name);
+    }
+    [Fact]
+    public async Task UseReturnBoxAndUnwrapWithoutValidationWithEventsBoxTest()
+    {
+        var branch = await commandExecutor.ExecCommandWithoutValidationWithEventsWithResultAsync(new CreateBranch { Name = "Branch1" })
+            .Conveyor(result => result.ValidateEventCreated())
+            .Conveyor(result => result.GetAggregateId())
+            .Conveyor(async branchId => await aggregateLoader.AsDefaultStateWithResultAsync<Branch>(branchId))
             .UnwrapBox();
 
         Assert.NotNull(branch);

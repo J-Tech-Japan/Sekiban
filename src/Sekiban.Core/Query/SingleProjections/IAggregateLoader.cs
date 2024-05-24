@@ -26,6 +26,27 @@ public interface IAggregateLoader
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null) where TAggregatePayload : IAggregatePayloadCommon;
+    /// <summary>
+    ///     Creates an Aggregate from the initial event without using the memory cache.
+    ///     If aggregate does not exist, it returns SekibanAggregateNotExistsException.
+    /// </summary>
+    /// <param name="aggregateId"></param>
+    /// <param name="rootPartitionKey"></param>
+    /// <param name="toVersion"></param>
+    /// <typeparam name="TAggregatePayload"></typeparam>
+    /// <returns></returns>
+    /// <exception cref="SekibanAggregateNotExistsException"></exception>
+    public async Task<ResultBox<AggregateState<TAggregatePayload>>> AsDefaultStateFromInitialWithResultAsync<TAggregatePayload>(
+        Guid aggregateId,
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
+        int? toVersion = null) where TAggregatePayload : IAggregatePayloadCommon =>
+        await ResultBox<AggregateState<TAggregatePayload>>.WrapTry(
+            async () => await AsDefaultStateFromInitialAsync<TAggregatePayload>(aggregateId, rootPartitionKey, toVersion) switch
+            {
+                { } state => state,
+                null => throw new SekibanAggregateNotExistsException(aggregateId, typeof(TAggregatePayload).Name, rootPartitionKey)
+            });
+
 
     /// <summary>
     ///     Get the custom projection.
