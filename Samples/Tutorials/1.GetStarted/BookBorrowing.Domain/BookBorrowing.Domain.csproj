@@ -8,7 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Sekiban.Core" Version="0.18.4" />
+        <PackageReference Include="Sekiban.Core" Version="0.19.1" />
     </ItemGroup>
 
 
