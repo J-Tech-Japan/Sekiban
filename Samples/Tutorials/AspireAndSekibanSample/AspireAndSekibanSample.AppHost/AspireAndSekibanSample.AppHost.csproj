@@ -16,9 +16,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.AppHost" Version="8.0.0-preview.6.24214.1" />
-    <PackageReference Include="Aspire.Hosting.Azure.CosmosDB" Version="8.0.0-preview.6.24214.1" />
-    <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="8.0.0-preview.6.24214.1" />
+    <PackageReference Include="Aspire.Hosting.AppHost" Version="8.0.1" />
+    <PackageReference Include="Aspire.Hosting.Azure.CosmosDB" Version="8.0.1" />
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="8.0.1" />
   </ItemGroup>
 
 </Project>
