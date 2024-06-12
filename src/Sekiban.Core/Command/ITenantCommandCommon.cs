@@ -2,5 +2,5 @@ namespace Sekiban.Core.Command;
 
 public interface ITenantCommandCommon
 {
-    public string TenantId { get; init; }
+    public string TenantId { get; }
 }
