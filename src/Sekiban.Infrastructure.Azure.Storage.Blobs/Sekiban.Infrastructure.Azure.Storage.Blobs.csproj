@@ -4,13 +4,13 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Infrastructure.Azure.Storage.Blobs</PackageId>
-        <Version>0.19.1</Version>
+        <Version>0.19.2</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Azure Storage Blob</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.19.1</PackageVersion>
-        <Description>Change Postgres Migration Class Name - Postgres Tables needs to be reset. Aspire Preview 5 Support</Description>
+        <PackageVersion>0.19.2</PackageVersion>
+        <Description>Removed init from ITenantCommandCommon</Description>
         <TargetFramework>net8.0</TargetFramework>
         <LangVersion>preview</LangVersion>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -24,7 +24,7 @@
     <ItemGroup>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
         <PackageReference Include="Azure.Storage.Blobs" Version="12.20.0" />
-        <PackageReference Include="Sekiban.Core" Version="0.19.1"/>
+        <PackageReference Include="Sekiban.Core" Version="0.19.2"/>
         <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.0"/>
     </ItemGroup>
 
