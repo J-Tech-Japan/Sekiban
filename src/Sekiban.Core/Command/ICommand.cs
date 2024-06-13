@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Core.Aggregate;
 namespace Sekiban.Core.Command;
 
@@ -21,18 +20,5 @@ public interface ICommand<TAggregatePayload> : ICommandCommon where TAggregatePa
     /// <returns></returns>
     public Guid GetAggregateId();
 }
-public interface ICommandWithStaticHandlerCommon;
 public interface ICommandWithStaticHandlerCommon<TAggregatePayload, in TCommand> : ICommand<TAggregatePayload>, ICommandWithStaticHandlerCommon
     where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayload>;
-public interface ICommandWithStaticHandler<TAggregatePayload, in TCommand> : ICommandWithStaticHandlerCommon<TAggregatePayload, TCommand>
-    where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayload>
-{
-
-    public static abstract ResultBox<UnitValue> HandleCommand(TCommand command, ICommandContext<TAggregatePayload> context);
-}
-public interface ICommandWithStaticHandlerAsync<TAggregatePayload, in TCommand> : ICommandWithStaticHandlerCommon<TAggregatePayload, TCommand>
-    where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayload>
-{
-
-    public static abstract Task<ResultBox<UnitValue>> HandleCommandAsync(TCommand command, ICommandContext<TAggregatePayload> context);
-}
