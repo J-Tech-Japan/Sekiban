@@ -32,7 +32,7 @@ public interface ICommandExecutor
     /// <returns></returns>
     Task<ResultBox<CommandExecutorResponse>> ExecCommandWithResultAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null)
         where TCommand : ICommandCommon =>
-        ResultBox<CommandExecutorResponse>.WrapTry(async () => await ExecCommandAsync(command, callHistories));
+        ResultBox.WrapTry(async () => await ExecCommandAsync(command, callHistories));
 
 
     /// <summary>
@@ -57,9 +57,10 @@ public interface ICommandExecutor
     /// <param name="callHistories"></param>
     /// <typeparam name="TCommand"></typeparam>
     /// <returns></returns>
-    Task<ResultBox<CommandExecutorResponseWithEvents>>
-        ExecCommandWithEventsWithResultAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null) where TCommand : ICommandCommon =>
-        ResultBox<CommandExecutorResponseWithEvents>.WrapTry(async () => await ExecCommandWithEventsAsync(command, callHistories));
+    Task<ResultBox<CommandExecutorResponseWithEvents>> ExecCommandWithEventsWithResultAsync<TCommand>(
+        TCommand command,
+        List<CallHistory>? callHistories = null) where TCommand : ICommandCommon =>
+        ResultBox.WrapTry(async () => await ExecCommandWithEventsAsync(command, callHistories));
 
     /// <summary>
     ///     Execute a command (basic)
@@ -83,10 +84,10 @@ public interface ICommandExecutor
     /// <param name="callHistories"></param>
     /// <typeparam name="TCommand"></typeparam>
     /// <returns></returns>
-    Task<ResultBox<CommandExecutorResponse>>
-        ExecCommandWithoutValidationWithResultAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null)
-        where TCommand : ICommandCommon =>
-        ResultBox<CommandExecutorResponse>.WrapTry(async () => await ExecCommandWithoutValidationAsync(command, callHistories));
+    Task<ResultBox<CommandExecutorResponse>> ExecCommandWithoutValidationWithResultAsync<TCommand>(
+        TCommand command,
+        List<CallHistory>? callHistories = null) where TCommand : ICommandCommon =>
+        ResultBox.WrapTry(async () => await ExecCommandWithoutValidationAsync(command, callHistories));
 
 
     /// <summary>
@@ -115,5 +116,5 @@ public interface ICommandExecutor
     Task<ResultBox<CommandExecutorResponseWithEvents>> ExecCommandWithoutValidationWithEventsWithResultAsync<TCommand>(
         TCommand command,
         List<CallHistory>? callHistories = null) where TCommand : ICommandCommon =>
-        ResultBox<CommandExecutorResponseWithEvents>.WrapTry(async () => await ExecCommandWithoutValidationWithEventsAsync(command, callHistories));
+        ResultBox.WrapTry(async () => await ExecCommandWithoutValidationWithEventsAsync(command, callHistories));
 }

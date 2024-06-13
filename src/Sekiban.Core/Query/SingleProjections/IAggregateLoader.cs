@@ -40,7 +40,7 @@ public interface IAggregateLoader
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null) where TAggregatePayload : IAggregatePayloadCommon =>
-        await ResultBox<AggregateState<TAggregatePayload>>.WrapTry(
+        await ResultBox.WrapTry(
             async () => await AsDefaultStateFromInitialAsync<TAggregatePayload>(aggregateId, rootPartitionKey, toVersion) switch
             {
                 { } state => state,
@@ -112,7 +112,7 @@ public interface IAggregateLoader
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
         SingleProjectionRetrievalOptions? retrievalOptions = null) where TAggregatePayload : IAggregatePayloadCommon =>
-        await ResultBox<AggregateState<TAggregatePayload>>.WrapTry(
+        await ResultBox.WrapTry(
             async () => await AsDefaultStateAsync<TAggregatePayload>(aggregateId, rootPartitionKey, toVersion, retrievalOptions) switch
             {
                 { } state => state,

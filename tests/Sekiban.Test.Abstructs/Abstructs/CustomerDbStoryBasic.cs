@@ -17,6 +17,7 @@ using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Commands;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
 using FeatureCheck.Domain.Shared;
 using FeatureCheck.Domain.Shared.Exceptions;
+using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
@@ -424,6 +425,28 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         var clientProjectionFromSnapshot2 = projectionSnapshots.First(m => m.Id == projectionSnapshot2.Id).GetState();
         Assert.NotNull(clientProjectionFromSnapshot2);
 
+    }
+
+    [Fact]
+    public async Task ResultExecutionTest1()
+    {
+        RemoveAllFromDefaultAndDissolvable();
+        var clientId = await commandExecutor.ExecCommandWithResultAsync(new CreateBranch("Test1"))
+            .Conveyor(
+                response => response.AggregateId is not null
+                    ? ResultBox.FromValue(response.AggregateId.Value)
+                    : new SekibanAggregateCreateFailedException(nameof(Branch)))
+            .Conveyor(branchId => commandExecutor.ExecCommandWithResultAsync(new CreateClientWithResult(branchId, "John Doe", "john@example.com")))
+            .Conveyor(
+                response => response.AggregateId is not null
+                    ? ResultBox.FromValue(response.AggregateId.Value)
+                    : new SekibanAggregateCreateFailedException(nameof(Client)));
+
+        var clientList = await multiProjectionService.GetAggregateList<Client>();
+        Assert.Single(clientList);
+        var client = clientList.First();
+        Assert.True(clientId.IsSuccess);
+        Assert.Equal(clientId.GetValue(), client.AggregateId);
     }
 
 
