@@ -34,7 +34,10 @@ public class StaticCommandWithoutLoadingAggregateHandlerAdapter<TAggregatePayloa
                         _rootPartitionKey,
                         eventPayload)))
             .Remap(_ => UnitValue.None);
-    public async Task<CommandResponse> HandleCommandAsync(CommandDocument<TCommand> commandDocument, Guid aggregateId, string rootPartitionKey)
+    public async Task<ResultBox<CommandResponse>> HandleCommandAsync(
+        CommandDocument<TCommand> commandDocument,
+        Guid aggregateId,
+        string rootPartitionKey)
     {
         _rootPartitionKey = rootPartitionKey;
         _aggregateId = aggregateId;
@@ -46,14 +49,16 @@ public class StaticCommandWithoutLoadingAggregateHandlerAdapter<TAggregatePayloa
                 var method = commandType.GetMethod("HandleCommand");
                 if (method is null)
                 {
-                    throw new SekibanCommandHandlerNotMatchException(
-                        commandType.Name + "handler should inherit " + typeof(ICommandWithHandler<,>).Name);
+                    return ResultBox<CommandResponse>.FromException(
+                        new SekibanCommandHandlerNotMatchException(
+                            commandType.Name + "handler should inherit " + typeof(ICommandWithHandler<,>).Name));
                 }
                 var result = method.Invoke(null, new object[] { syncCommand, this }) as ResultBox<UnitValue>;
                 if (result is null)
                 {
-                    throw new SekibanCommandHandlerNotMatchException(
-                        commandType.Name + "handler should inherit " + typeof(ICommandWithHandler<,>).Name);
+                    return ResultBox<CommandResponse>.FromException(
+                        new SekibanCommandHandlerNotMatchException(
+                            commandType.Name + "handler should inherit " + typeof(ICommandWithHandler<,>).Name));
                 }
                 result.UnwrapBox();
                 return new CommandResponse(aggregateId, _events.ToImmutableList(), 0, _events.Max(m => m.SortableUniqueId));
@@ -64,22 +69,25 @@ public class StaticCommandWithoutLoadingAggregateHandlerAdapter<TAggregatePayloa
                 var method = commandType.GetMethod("HandleCommandAsync");
                 if (method is null)
                 {
-                    throw new SekibanCommandHandlerNotMatchException(
-                        commandType.Name + "handler should inherit " + typeof(ICommandWithHandler<,>).Name);
+                    return ResultBox<CommandResponse>.FromException(
+                        new SekibanCommandHandlerNotMatchException(
+                            commandType.Name + "handler should inherit " + typeof(ICommandWithHandler<,>).Name));
                 }
                 var resultTask = method.Invoke(null, new object[] { asyncCommand, this }) as Task<ResultBox<UnitValue>>;
                 if (resultTask is null)
                 {
-                    throw new SekibanCommandHandlerNotMatchException(
-                        commandType.Name + "handler should inherit " + typeof(ICommandWithHandler<,>).Name);
+                    return ResultBox<CommandResponse>.FromException(
+                        new SekibanCommandHandlerNotMatchException(
+                            commandType.Name + "handler should inherit " + typeof(ICommandWithHandler<,>).Name));
                 }
                 var result = await resultTask;
                 result.UnwrapBox();
                 return new CommandResponse(aggregateId, _events.ToImmutableList(), 0, _events.Max(m => m.SortableUniqueId));
             }
             default:
-                throw new SekibanCommandHandlerNotMatchException(
-                    commandDocument.Payload.GetType().Name + "handler should inherit " + typeof(ICommandWithoutLoadingAggregateHandler<,>).Name);
+                return ResultBox<CommandResponse>.FromException(
+                    new SekibanCommandHandlerNotMatchException(
+                        commandDocument.Payload.GetType().Name + "handler should inherit " + typeof(ICommandWithoutLoadingAggregateHandler<,>).Name));
         }
     }
 }

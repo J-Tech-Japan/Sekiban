@@ -47,7 +47,10 @@ public sealed class StaticCommandHandlerAdapter<TAggregatePayload, TCommand>(
     /// <exception cref="SekibanCommandHandlerNotMatchException">When command is called with wrong context.</exception>
     /// <exception cref="SekibanAggregateAlreadyDeletedException">When Command is called for deleted aggregate</exception>
     /// <exception cref="SekibanCommandInconsistentVersionException">When optimistic version check failed.</exception>
-    public async Task<CommandResponse> HandleCommandAsync(CommandDocument<TCommand> commandDocument, Guid aggregateId, string rootPartitionKey)
+    public async Task<ResultBox<CommandResponse>> HandleCommandAsync(
+        CommandDocument<TCommand> commandDocument,
+        Guid aggregateId,
+        string rootPartitionKey)
     {
         var command = commandDocument.Payload;
         _aggregate = await aggregateLoader.AsAggregateAsync<TAggregatePayload>(aggregateId, rootPartitionKey) ??
@@ -56,80 +59,87 @@ public sealed class StaticCommandHandlerAdapter<TAggregatePayload, TCommand>(
         // Check if IAggregateShouldExistCommand and Aggregate does not exist
         if (command is IAggregateShouldExistCommand && _aggregate.Version == 0)
         {
-            throw new SekibanAggregateNotExistsException(aggregateId, nameof(TAggregatePayload), rootPartitionKey);
+            return ResultBox<CommandResponse>.FromException(
+                new SekibanAggregateNotExistsException(aggregateId, nameof(TAggregatePayload), rootPartitionKey));
         }
 
         // Validate AddAggregate Version
         if (checkVersion && command is IVersionValidationCommandCommon validationCommand && validationCommand.ReferenceVersion != _aggregate.Version)
         {
-            throw new SekibanCommandInconsistentVersionException(
-                _aggregate.AggregateId,
-                validationCommand.ReferenceVersion,
-                _aggregate.Version,
-                rootPartitionKey);
+            return ResultBox<CommandResponse>.FromException(
+                new SekibanCommandInconsistentVersionException(
+                    _aggregate.AggregateId,
+                    validationCommand.ReferenceVersion,
+                    _aggregate.Version,
+                    rootPartitionKey));
         }
         var state = _aggregate.ToState();
 
         // Validate AddAggregate is deleted
         if (state.GetIsDeleted() && command is not ICancelDeletedCommand)
         {
-            throw new SekibanAggregateAlreadyDeletedException();
+            return ResultBox<CommandResponse>.FromException(new SekibanAggregateAlreadyDeletedException());
         }
 
         switch (command)
         {
-            case ICommandWithHandler<TAggregatePayload, TCommand> regularHandler:
+            case ICommandWithHandler<TAggregatePayload, TCommand>:
             {
                 // execute static HandleCommand of typeof(command) using reflection
                 var commandType = command.GetType();
                 var method = commandType.GetMethod("HandleCommand");
                 if (method is null)
                 {
-                    throw new SekibanCommandHandlerNotMatchException(
-                        commandType.Name + "handler should inherit " + typeof(ICommandWithHandler<,>).Name);
+                    return ResultBox<CommandResponse>.FromException(
+                        new SekibanCommandHandlerNotMatchException(
+                            commandType.Name + "handler should inherit " + typeof(ICommandWithHandler<,>).Name));
                 }
                 var result = method.Invoke(null, new object[] { command, this }) as ResultBox<UnitValue>;
                 if (result is null)
                 {
-                    throw new SekibanCommandHandlerNotMatchException(
-                        commandType.Name + "handler should inherit " + typeof(ICommandWithHandler<,>).Name);
+                    return ResultBox<CommandResponse>.FromException(
+                        new SekibanCommandHandlerNotMatchException(
+                            commandType.Name + "handler should inherit " + typeof(ICommandWithHandler<,>).Name));
                 }
                 result.UnwrapBox();
 
-                return new CommandResponse(
-                    _aggregate.AggregateId,
-                    _events.ToImmutableList(),
-                    _aggregate.Version,
-                    _events.Max(m => m.SortableUniqueId));
+                return result.Remap(
+                    _ => new CommandResponse(
+                        _aggregate.AggregateId,
+                        _events.ToImmutableList(),
+                        _aggregate.Version,
+                        _events.Max(m => m.SortableUniqueId)));
             }
-            case ICommandWithHandlerAsync<TAggregatePayload, TCommand> asyncHandler:
+            case ICommandWithHandlerAsync<TAggregatePayload, TCommand>:
             {
                 // execute static HandleCommandAsync of typeof(command) using reflection
                 var commandType = command.GetType();
                 var method = commandType.GetMethod("HandleCommandAsync");
                 if (method is null)
                 {
-                    throw new SekibanCommandHandlerNotMatchException(
-                        commandType.Name + "handler should inherit " + typeof(ICommandWithHandlerAsync<,>).Name);
+                    return ResultBox<CommandResponse>.FromException(
+                        new SekibanCommandHandlerNotMatchException(
+                            commandType.Name + "handler should inherit " + typeof(ICommandWithHandlerAsync<,>).Name));
                 }
                 var resultAsync = method.Invoke(null, new object[] { command, this }) as Task<ResultBox<UnitValue>>;
                 if (resultAsync is null)
                 {
-                    throw new SekibanCommandHandlerNotMatchException(
-                        commandType.Name + "handler should inherit " + typeof(ICommandWithHandlerAsync<,>).Name);
+                    return ResultBox<CommandResponse>.FromException(
+                        new SekibanCommandHandlerNotMatchException(
+                            commandType.Name + "handler should inherit " + typeof(ICommandWithHandlerAsync<,>).Name));
                 }
                 var result = await resultAsync;
-                result.UnwrapBox();
 
-                return new CommandResponse(
-                    _aggregate.AggregateId,
-                    _events.ToImmutableList(),
-                    _aggregate.Version,
-                    _events.Max(m => m.SortableUniqueId));
+                return result.Remap(
+                    _ => new CommandResponse(
+                        _aggregate.AggregateId,
+                        _events.ToImmutableList(),
+                        _aggregate.Version,
+                        _events.Max(m => m.SortableUniqueId)));
             }
             default:
-                throw new SekibanCommandHandlerNotMatchException(
-                    command.GetType().Name + "handler should inherit " + typeof(ICommandHandler<,>).Name);
+                return ResultBox<CommandResponse>.FromException(
+                    new SekibanCommandHandlerNotMatchException(command.GetType().Name + "handler should inherit " + typeof(ICommandHandler<,>).Name));
         }
 
     }

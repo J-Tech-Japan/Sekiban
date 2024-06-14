@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
@@ -608,10 +609,11 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
                 var adapter = Activator.CreateInstance(adapterClass, _serviceProvider) ?? throw new SekibanTypeNotFoundException("Method not found");
                 var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new SekibanTypeNotFoundException("HandleCommandAsync not found");
                 var commandResponseTask
-                    = (Task<CommandResponse>)((dynamic?)method.Invoke(adapter, [commandDocument, aggregateId, rootPartitionKey]) ??
+                    = (Task<ResultBox<CommandResponse>>)((dynamic?)method.Invoke(adapter, [commandDocument, aggregateId, rootPartitionKey]) ??
                         throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
                 var commandResponse = commandResponseTask.Result;
-                _latestEvents = [.. commandResponse.Events];
+                commandResponse.Scan(value => _latestEvents = [.. value.Events]);
+                commandResponse.UnwrapBox();
             } else if (command is ICommandWithHandlerCommon<TAggregatePayloadIn, TCommand>)
             {
                 var baseClass = typeof(StaticCommandHandlerAdapter<,>);
@@ -619,9 +621,10 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
                 var adapter = Activator.CreateInstance(adapterClass, aggregateLoader, _serviceProvider, false) ??
                     throw new SekibanTypeNotFoundException("Method not found");
                 var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new SekibanTypeNotFoundException("HandleCommandAsync not found");
-                var commandResponse = (CommandResponse)((dynamic?)method.Invoke(adapter, [commandDocument, aggregateId, rootPartitionKey]) ??
+                var commandResponse = (ResultBox<CommandResponse>)((dynamic?)method.Invoke(adapter, [commandDocument, aggregateId, rootPartitionKey]) ??
                     throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
-                _latestEvents = [.. commandResponse.Events];
+                commandResponse.Scan(value => _latestEvents = [.. value.Events]);
+                commandResponse.UnwrapBox();
             } else
             {
                 var handler

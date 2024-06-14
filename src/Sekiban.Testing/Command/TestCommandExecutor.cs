@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
@@ -129,9 +130,9 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
             var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), command.GetType());
             var adapter = Activator.CreateInstance(adapterClass, serviceProvider) ?? throw new SekibanTypeNotFoundException("Method not found");
             var method = adapterClass.GetMethod(nameof(ICommandHandlerAdapterCommon.HandleCommandAsync));
-            var commandResponse = (CommandResponse)((dynamic?)method?.Invoke(adapter, [commandDocument, aggregateId, rootPartitionKey]) ??
+            var commandResponse = (ResultBox<CommandResponse>)((dynamic?)method?.Invoke(adapter, [commandDocument, aggregateId, rootPartitionKey]) ??
                 throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
-            LatestEvents = commandResponse.Events;
+            commandResponse.Scan(value => LatestEvents = value.Events);
         } else if (command is ICommandWithHandlerCommon)
         {
             var commandDocumentBaseType = typeof(CommandDocument<>);
@@ -151,9 +152,9 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
             var adapter = Activator.CreateInstance(adapterClass, aggregateLoader, serviceProvider, false) ??
                 throw new SekibanTypeNotFoundException("Method not found");
             var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new SekibanTypeNotFoundException("HandleCommandAsync not found");
-            var commandResponse = (CommandResponse)((dynamic?)method.Invoke(adapter, [commandDocument, aggregateId, rootPartitionKey]) ??
+            var commandResponse = (ResultBox<CommandResponse>)((dynamic?)method.Invoke(adapter, [commandDocument, aggregateId, rootPartitionKey]) ??
                 throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
-            LatestEvents = commandResponse.Events;
+            commandResponse.Scan(success => LatestEvents = success.Events);
         } else if (command is not ICommandWithoutLoadingAggregateCommon)
         {
             var handler = serviceProvider.GetService(genericType) ?? throw new SekibanCommandNotRegisteredException(command.GetType().Name);

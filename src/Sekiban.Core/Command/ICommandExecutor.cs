@@ -31,8 +31,7 @@ public interface ICommandExecutor
     /// <typeparam name="TCommand"></typeparam>
     /// <returns></returns>
     Task<ResultBox<CommandExecutorResponse>> ExecCommandWithResultAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null)
-        where TCommand : ICommandCommon =>
-        ResultBox.WrapTry(async () => await ExecCommandAsync(command, callHistories));
+        where TCommand : ICommandCommon;
 
 
     /// <summary>
@@ -59,8 +58,7 @@ public interface ICommandExecutor
     /// <returns></returns>
     Task<ResultBox<CommandExecutorResponseWithEvents>> ExecCommandWithEventsWithResultAsync<TCommand>(
         TCommand command,
-        List<CallHistory>? callHistories = null) where TCommand : ICommandCommon =>
-        ResultBox.WrapTry(async () => await ExecCommandWithEventsAsync(command, callHistories));
+        List<CallHistory>? callHistories = null) where TCommand : ICommandCommon;
 
     /// <summary>
     ///     Execute a command (basic)
@@ -86,9 +84,7 @@ public interface ICommandExecutor
     /// <returns></returns>
     Task<ResultBox<CommandExecutorResponse>> ExecCommandWithoutValidationWithResultAsync<TCommand>(
         TCommand command,
-        List<CallHistory>? callHistories = null) where TCommand : ICommandCommon =>
-        ResultBox.WrapTry(async () => await ExecCommandWithoutValidationAsync(command, callHistories));
-
+        List<CallHistory>? callHistories = null) where TCommand : ICommandCommon;
 
     /// <summary>
     ///     Execute a command (basic)
@@ -115,6 +111,5 @@ public interface ICommandExecutor
     /// <returns></returns>
     Task<ResultBox<CommandExecutorResponseWithEvents>> ExecCommandWithoutValidationWithEventsWithResultAsync<TCommand>(
         TCommand command,
-        List<CallHistory>? callHistories = null) where TCommand : ICommandCommon =>
-        ResultBox.WrapTry(async () => await ExecCommandWithoutValidationWithEventsAsync(command, callHistories));
+        List<CallHistory>? callHistories = null) where TCommand : ICommandCommon;
 }
