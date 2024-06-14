@@ -14,6 +14,7 @@ using FeatureCheck.Domain.Aggregates.RecentActivities.Commands;
 using FeatureCheck.Domain.Aggregates.RecentActivities.Projections;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Commands;
+using FeatureCheck.Domain.Aggregates.TenantUsers;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
 using FeatureCheck.Domain.Shared;
 using FeatureCheck.Domain.Shared.Exceptions;
@@ -459,8 +460,20 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
                     Assert.Equal("John Doe 2", result.Payload.ClientName);
                 });
     }
-
-
+    [Fact]
+    public async Task ResultExecutionTest2()
+    {
+        RemoveAllFromDefaultAndDissolvable();
+        await commandExecutor.ExecCommandWithResultAsync(new CreateTenantUser("Test1", "test1@example.com", "tenant1"));
+        await commandExecutor.ExecCommandWithResultAsync(new CreateTenantUser("Test1", "test1@example.com", "tenant2"));
+        await commandExecutor.ExecCommandWithResultAsync(new CreateTenantUser("Test1", "test2@example.com", "tenant2"));
+        var list1 = await multiProjectionService.GetAggregateList<TenantUser>(QueryListType.ActiveOnly, "tenant1");
+        var list2 = await multiProjectionService.GetAggregateList<TenantUser>(QueryListType.ActiveOnly, "tenant2");
+        var listAll = await multiProjectionService.GetAggregateList<TenantUser>();
+        Assert.Single(list1);
+        Assert.Equal(2, list2.Count);
+        Assert.Equal(3, listAll.Count);
+    }
     [Fact]
     public void DeleteOnlyTest() => RemoveAllFromDefaultAndDissolvable();
 

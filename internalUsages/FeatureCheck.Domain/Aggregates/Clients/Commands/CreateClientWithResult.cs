@@ -21,12 +21,12 @@ public record CreateClientWithResult(
     public Guid GetAggregateId() => Guid.NewGuid();
     public static async Task<ResultBox<UnitValue>> HandleCommandAsync(CreateClientWithResult command, ICommandContext<Client> context) =>
         await context.GetRequiredService<IQueryExecutor>()
-            .Combine(queryExecutor => queryExecutor.ExecuteWithResultAsync(new BranchExistsQuery.Parameter(command.BranchId)))
+            .Conveyor(queryExecutor => queryExecutor.ExecuteWithResultAsync(new BranchExistsQuery.Parameter(command.BranchId)))
             .Verify(
-                values => values.Value2.Exists
+                value => value.Exists
                     ? ExceptionOrNone.None
                     : new SekibanAggregateNotExistsException(command.BranchId, nameof(Branch), (command as ICommandCommon).GetRootPartitionKey()))
-            .Remap(values => values.Value1)
+            .Conveyor(_ => context.GetRequiredService<IQueryExecutor>())
             .Conveyor(
                 queryExecutor => queryExecutor.ExecuteWithResultAsync(
                     new ClientEmailExistsQuery.Parameter(command.ClientEmail)

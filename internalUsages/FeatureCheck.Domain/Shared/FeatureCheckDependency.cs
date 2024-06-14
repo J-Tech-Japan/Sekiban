@@ -36,6 +36,7 @@ using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.Purchased
 using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.ShippingCarts;
 using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.ShoppingCarts;
 using FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.ShoppingCarts.Commands;
+using FeatureCheck.Domain.Aggregates.TenantUsers;
 using FeatureCheck.Domain.Aggregates.VersionCheckAggregates;
 using FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Commands;
 using FeatureCheck.Domain.Common;
@@ -157,5 +158,7 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
         AddAggregate<DerivedTypeAggregate>()
             .AddCommandHandler<CreateVehicle, CreateVehicle.Handler>()
             .AddCommandHandler<CreateCar, CreateCar.Handler>();
+
+        AddAggregate<TenantUser>().AddAggregateQuery<TenantUserDuplicateEmailQuery>();
     }
 }

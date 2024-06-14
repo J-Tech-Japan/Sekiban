@@ -4,12 +4,12 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Infrastructure.Cosmos</PackageId>
-        <Version>0.19.2</Version>
+        <Version>0.19.3</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework CosmosInfrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.19.2</PackageVersion>
+        <PackageVersion>0.19.3</PackageVersion>
         <Description>Removed init from ITenantCommandCommon</Description>
         <TargetFramework>net8.0</TargetFramework>
         <LangVersion>preview</LangVersion>
@@ -24,8 +24,8 @@
         <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.40.0" />
         <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0"/>
         <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="8.0.1"/>
-        <PackageReference Include="Sekiban.Core" Version="0.19.2"/>
-        <PackageReference Include="Sekiban.Infrastructure.Azure.Storage.Blobs" Version="0.19.2"/>
+        <PackageReference Include="Sekiban.Core" Version="0.19.3"/>
+        <PackageReference Include="Sekiban.Infrastructure.Azure.Storage.Blobs" Version="0.19.3"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
     </ItemGroup>
 
