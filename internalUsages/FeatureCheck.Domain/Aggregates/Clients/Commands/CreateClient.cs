@@ -23,7 +23,8 @@ public record CreateClient : ICommand<Client>
     public string ClientEmail { get; init; }
 
     public CreateClient() : this(Guid.Empty, string.Empty, string.Empty)
-    { }
+    {
+    }
 
     public CreateClient(Guid branchId, string clientName, string clientEmail)
     {
@@ -47,15 +48,19 @@ public record CreateClient : ICommand<Client>
             // Check if branch exists
             var branchExistsOutput = await queryExecutor.ExecuteAsync(new BranchExistsQuery.Parameter(command.BranchId));
             if (!branchExistsOutput.Exists)
+            {
                 throw new SekibanAggregateNotExistsException(command.BranchId, nameof(Branch), (command as ICommandCommon).GetRootPartitionKey());
+            }
 
             // Check no email duplicates
             var emailExistsOutput = await queryExecutor.ExecuteAsync(
                 new ClientEmailExistsQuery.Parameter(command.ClientEmail) { RootPartitionKey = (command as ICommandCommon).GetRootPartitionKey() });
             if (emailExistsOutput.Exists)
+            {
                 throw new SekibanEmailAlreadyRegistered();
+            }
 
-            yield return (IEventPayloadApplicableTo<Client>)new ClientCreated(command.BranchId, command.ClientName, command.ClientEmail);
+            yield return new ClientCreated(command.BranchId, command.ClientName, command.ClientEmail);
         }
     }
 }

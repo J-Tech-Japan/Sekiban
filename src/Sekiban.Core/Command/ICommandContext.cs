@@ -4,8 +4,9 @@ namespace Sekiban.Core.Command;
 /// <summary>
 ///     Command Context has feature to Get Current Aggregate State
 /// </summary>
-/// <typeparam name="TAggregate"></typeparam>
-public interface ICommandContext<TAggregate> where TAggregate : IAggregatePayloadCommon
+/// <typeparam name="TAggregatePayload"></typeparam>
+public interface ICommandContext<TAggregatePayload> : ICommandContextWithoutGetState<TAggregatePayload>
+    where TAggregatePayload : IAggregatePayloadCommon
 {
     /// <summary>
     ///     Get current Aggregate State
@@ -13,5 +14,5 @@ public interface ICommandContext<TAggregate> where TAggregate : IAggregatePayloa
     ///     returned events.
     /// </summary>
     /// <returns>Current Aggregate State</returns>
-    public AggregateState<TAggregate> GetState();
+    public AggregateState<TAggregatePayload> GetState();
 }

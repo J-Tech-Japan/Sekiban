@@ -199,10 +199,10 @@ public class CommandExecutor(
             {
                 ExecutedUser = userInformationFactory.GetCurrentUserInformation()
             };
-        List<IEvent> events;
+        var events = new List<IEvent>();
         var commandToSave = command is ICleanupNecessaryCommand<TCommand> cleanupCommand ? cleanupCommand.CleanupCommand(command) : command;
-        int version;
-        string? lastSortableUniqueId;
+        var version = 0;
+        string? lastSortableUniqueId = null;
         var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(typeof(TAggregatePayload));
         if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
@@ -212,10 +212,6 @@ public class CommandExecutor(
         try
         {
 
-            var handler
-                = serviceProvider.GetService(typeof(ICommandHandlerCommon<TAggregatePayload, TCommand>)) as
-                    ICommandHandlerCommon<TAggregatePayload, TCommand> ??
-                throw new SekibanCommandNotRegisteredException(typeof(TCommand).Name);
             if (command is not ICommandWithoutLoadingAggregateCommon)
             {
                 await SemaphoreAwaiter.WaitAsync();
@@ -228,25 +224,68 @@ public class CommandExecutor(
                 {
                     ExecutedUser = userInformationFactory.GetCurrentUserInformation()
                 };
-            if (command is ICommandWithoutLoadingAggregateCommon)
+            switch (command)
             {
-                var baseClass = typeof(CommandWithoutLoadingAggregateHandlerAdapter<,>);
-                var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), typeof(TCommand));
-                var adapter = Activator.CreateInstance(adapterClass) ?? throw new MissingMethodException("Method not found");
-                var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new MissingMethodException("HandleCommandAsync not found");
-                var commandResponse
-                    = (CommandResponse)await ((dynamic?)method.Invoke(adapter, [commandDocument, handler, aggregateId, rootPartitionKey]) ??
-                        throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
-                events = await HandleEventsAsync<TAggregatePayload, TCommand>(commandResponse.Events, commandDocument);
-                version = commandResponse.Version;
-                lastSortableUniqueId = commandResponse.LastSortableUniqueId;
-            } else
-            {
-                var adapter = new CommandHandlerAdapter<TAggregatePayload, TCommand>(aggregateLoader);
-                var commandResponse = await adapter.HandleCommandAsync(commandDocument, handler, aggregateId, rootPartitionKey);
-                events = await HandleEventsAsync<TAggregatePayload, TCommand>(commandResponse.Events, commandDocument);
-                version = commandResponse.Version;
-                lastSortableUniqueId = commandResponse.LastSortableUniqueId;
+                case ICommandWithoutLoadingAggregateCommon when command is not ICommandWithHandlerCommon<TAggregatePayload, TCommand>:
+                {
+                    var handler
+                        = serviceProvider.GetService(typeof(ICommandHandlerCommon<TAggregatePayload, TCommand>)) as
+                            ICommandHandlerCommon<TAggregatePayload, TCommand> ??
+                        throw new SekibanCommandNotRegisteredException(typeof(TCommand).Name);
+                    var baseClass = typeof(CommandWithoutLoadingAggregateHandlerAdapter<,>);
+                    var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), typeof(TCommand));
+                    var adapter = Activator.CreateInstance(adapterClass) ?? throw new MissingMethodException("Method not found");
+                    var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new MissingMethodException("HandleCommandAsync not found");
+                    var commandResponse
+                        = (CommandResponse)await ((dynamic?)method.Invoke(adapter, [commandDocument, handler, aggregateId, rootPartitionKey]) ??
+                            throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
+                    events = await HandleEventsAsync<TAggregatePayload, TCommand>(commandResponse.Events, commandDocument);
+                    version = commandResponse.Version;
+                    lastSortableUniqueId = commandResponse.LastSortableUniqueId;
+                    break;
+                }
+                case ICommandWithoutLoadingAggregateCommon and ICommandWithHandlerCommon<TAggregatePayload, TCommand>:
+                {
+                    var baseClass = typeof(StaticCommandWithoutLoadingAggregateHandlerAdapter<,>);
+                    var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), typeof(TCommand));
+                    var adapter = Activator.CreateInstance(adapterClass, serviceProvider) ?? throw new MissingMethodException("Method not found");
+                    var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new MissingMethodException("HandleCommandAsync not found");
+                    var commandResponse
+                        = (CommandResponse)await ((dynamic?)method.Invoke(adapter, [commandDocument, aggregateId, rootPartitionKey]) ??
+                            throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
+                    events = await HandleEventsAsync<TAggregatePayload, TCommand>(commandResponse.Events, commandDocument);
+                    version = commandResponse.Version;
+                    lastSortableUniqueId = commandResponse.LastSortableUniqueId;
+                    break;
+                }
+                case ICommandWithHandlerCommon<TAggregatePayload, TCommand>:
+                {
+                    var baseClass = typeof(StaticCommandHandlerAdapter<,>);
+                    var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), typeof(TCommand));
+                    var adapter = Activator.CreateInstance(adapterClass, aggregateLoader, serviceProvider, true) ??
+                        throw new MissingMethodException("Method not found");
+                    var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new MissingMethodException("HandleCommandAsync not found");
+                    var commandResponse
+                        = (CommandResponse)await ((dynamic?)method.Invoke(adapter, [commandDocument, aggregateId, rootPartitionKey]) ??
+                            throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
+                    events = await HandleEventsAsync<TAggregatePayload, TCommand>(commandResponse.Events, commandDocument);
+                    version = commandResponse.Version;
+                    lastSortableUniqueId = commandResponse.LastSortableUniqueId;
+                    break;
+                }
+                default:
+                {
+                    var handler
+                        = serviceProvider.GetService(typeof(ICommandHandlerCommon<TAggregatePayload, TCommand>)) as
+                            ICommandHandlerCommon<TAggregatePayload, TCommand> ??
+                        throw new SekibanCommandNotRegisteredException(typeof(TCommand).Name);
+                    var adapter = new CommandHandlerAdapter<TAggregatePayload, TCommand>(aggregateLoader, serviceProvider);
+                    var commandResponse = await adapter.HandleCommandAsync(commandDocument, handler, aggregateId, rootPartitionKey);
+                    events = await HandleEventsAsync<TAggregatePayload, TCommand>(commandResponse.Events, commandDocument);
+                    version = commandResponse.Version;
+                    lastSortableUniqueId = commandResponse.LastSortableUniqueId;
+                    break;
+                }
             }
         }
         catch (Exception e)

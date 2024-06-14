@@ -14,9 +14,11 @@ using FeatureCheck.Domain.Aggregates.RecentActivities.Commands;
 using FeatureCheck.Domain.Aggregates.RecentActivities.Projections;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities;
 using FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Commands;
+using FeatureCheck.Domain.Aggregates.TenantUsers;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
 using FeatureCheck.Domain.Shared;
 using FeatureCheck.Domain.Shared.Exceptions;
+using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
@@ -426,7 +428,52 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
 
     }
 
+    [Fact]
+    public async Task ResultExecutionTest1()
+    {
+        RemoveAllFromDefaultAndDissolvable();
+        var clientId = await commandExecutor.ExecCommandWithResultAsync(new CreateBranchWithResult("Test1"))
+            .Conveyor(
+                response => response.AggregateId is not null
+                    ? ResultBox.FromValue(response.AggregateId.Value)
+                    : new SekibanAggregateCreateFailedException(nameof(Branch)))
+            .Conveyor(branchId => commandExecutor.ExecCommandWithResultAsync(new CreateClientWithResult(branchId, "John Doe", "john@example.com")))
+            .Conveyor(
+                response => response.AggregateId is not null
+                    ? ResultBox.FromValue(response.AggregateId.Value)
+                    : new SekibanAggregateCreateFailedException(nameof(Client)));
 
+        var clientList = await multiProjectionService.GetAggregateList<Client>();
+        Assert.Single(clientList);
+        var client = clientList.First();
+        Assert.True(clientId.IsSuccess);
+        Assert.Equal(clientId.GetValue(), client.AggregateId);
+        await commandExecutor.ExecCommandWithResultAsync(new ChangeClientNameWithoutLoadingWithResult(clientId.GetValue(), "John Doe 2"))
+            .Conveyor(
+                result => result.AggregateId is not null
+                    ? result.AggregateId.Value
+                    : ResultBox.FromException<Guid>(new ApplicationException("Aggregate Id is null")))
+            .Conveyor(aggregateId => aggregateLoader.AsDefaultStateWithResultAsync<Client>(aggregateId))
+            .Scan(
+                result =>
+                {
+                    Assert.Equal("John Doe 2", result.Payload.ClientName);
+                });
+    }
+    [Fact]
+    public async Task ResultExecutionTest2()
+    {
+        RemoveAllFromDefaultAndDissolvable();
+        await commandExecutor.ExecCommandWithResultAsync(new CreateTenantUser("Test1", "test1@example.com", "tenant1"));
+        await commandExecutor.ExecCommandWithResultAsync(new CreateTenantUser("Test1", "test1@example.com", "tenant2"));
+        await commandExecutor.ExecCommandWithResultAsync(new CreateTenantUser("Test1", "test2@example.com", "tenant2"));
+        var list1 = await multiProjectionService.GetAggregateList<TenantUser>(QueryListType.ActiveOnly, "tenant1");
+        var list2 = await multiProjectionService.GetAggregateList<TenantUser>(QueryListType.ActiveOnly, "tenant2");
+        var listAll = await multiProjectionService.GetAggregateList<TenantUser>();
+        Assert.Single(list1);
+        Assert.Equal(2, list2.Count);
+        Assert.Equal(3, listAll.Count);
+    }
     [Fact]
     public void DeleteOnlyTest() => RemoveAllFromDefaultAndDissolvable();
 

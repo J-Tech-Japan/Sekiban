@@ -7,38 +7,28 @@ using Sekiban.Core.Query.SingleProjections;
 using System.Collections.Immutable;
 namespace Sekiban.Core.Command;
 
-/// <summary>
-///     System use command handler adapter.
-///     Application Developer does not need to implement this interface
-/// </summary>
-public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> : ICommandContext<TAggregatePayload>
-    where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload> where TCommand : ICommand<TAggregatePayload>
+public sealed class StaticCommandHandlerAdapter<TAggregatePayload, TCommand>(
+    IAggregateLoader aggregateLoader,
+    IServiceProvider serviceProvider,
+    bool checkVersion = true) : ICommandContext<TAggregatePayload> where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>
+    where TCommand : ICommandWithHandlerCommon<TAggregatePayload, TCommand>
 {
-    private readonly IAggregateLoader _aggregateLoader;
-    private readonly bool _checkVersion;
     private readonly List<IEvent> _events = [];
-    private readonly IServiceProvider _serviceProvider;
     private Aggregate<TAggregatePayload>? _aggregate;
     private string _rootPartitionKey = string.Empty;
 
-    public CommandHandlerAdapter(IAggregateLoader aggregateLoader, IServiceProvider serviceProvider, bool checkVersion = true)
-    {
-        _aggregateLoader = aggregateLoader;
-        _serviceProvider = serviceProvider;
-        _checkVersion = checkVersion;
-    }
     public AggregateState<TAggregatePayload> GetState() => GetAggregateState();
-    public ResultBox<T1> GetRequiredService<T1>() where T1 : class => ResultBox.WrapTry(() => _serviceProvider.GetRequiredService<T1>());
+    public ResultBox<T1> GetRequiredService<T1>() where T1 : class => ResultBox.WrapTry(() => serviceProvider.GetRequiredService<T1>());
 
     public ResultBox<TwoValues<T1, T2>> GetRequiredService<T1, T2>() where T1 : class where T2 : class =>
-        GetRequiredService<T1>().Combine(ResultBox.WrapTry(() => _serviceProvider.GetRequiredService<T2>()));
+        GetRequiredService<T1>().Combine(ResultBox.WrapTry(() => serviceProvider.GetRequiredService<T2>()));
 
     public ResultBox<ThreeValues<T1, T2, T3>> GetRequiredService<T1, T2, T3>() where T1 : class where T2 : class where T3 : class =>
-        GetRequiredService<T1, T2>().Combine(ResultBox.WrapTry(() => _serviceProvider.GetRequiredService<T3>()));
+        GetRequiredService<T1, T2>().Combine(ResultBox.WrapTry(() => serviceProvider.GetRequiredService<T3>()));
 
     public ResultBox<FourValues<T1, T2, T3, T4>> GetRequiredService<T1, T2, T3, T4>()
         where T1 : class where T2 : class where T3 : class where T4 : class =>
-        GetRequiredService<T1, T2, T3>().Combine(ResultBox.WrapTry(() => _serviceProvider.GetRequiredService<T4>()));
+        GetRequiredService<T1, T2, T3>().Combine(ResultBox.WrapTry(() => serviceProvider.GetRequiredService<T4>()));
 
     public ResultBox<UnitValue> AppendEvent(IEventPayloadApplicableTo<TAggregatePayload> eventPayload) =>
         ResultBox.Start.Conveyor(_ => _aggregate is not null ? ResultBox.FromValue(_aggregate) : new SekibanCommandHandlerAggregateNullException())
@@ -57,14 +47,10 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> : IComman
     /// <exception cref="SekibanCommandHandlerNotMatchException">When command is called with wrong context.</exception>
     /// <exception cref="SekibanAggregateAlreadyDeletedException">When Command is called for deleted aggregate</exception>
     /// <exception cref="SekibanCommandInconsistentVersionException">When optimistic version check failed.</exception>
-    public async Task<CommandResponse> HandleCommandAsync(
-        CommandDocument<TCommand> commandDocument,
-        ICommandHandlerCommon<TAggregatePayload, TCommand> handler,
-        Guid aggregateId,
-        string rootPartitionKey)
+    public async Task<CommandResponse> HandleCommandAsync(CommandDocument<TCommand> commandDocument, Guid aggregateId, string rootPartitionKey)
     {
         var command = commandDocument.Payload;
-        _aggregate = await _aggregateLoader.AsAggregateAsync<TAggregatePayload>(aggregateId, rootPartitionKey) ??
+        _aggregate = await aggregateLoader.AsAggregateAsync<TAggregatePayload>(aggregateId, rootPartitionKey) ??
             new Aggregate<TAggregatePayload> { AggregateId = aggregateId };
         _rootPartitionKey = rootPartitionKey;
         // Check if IAggregateShouldExistCommand and Aggregate does not exist
@@ -74,7 +60,7 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> : IComman
         }
 
         // Validate AddAggregate Version
-        if (_checkVersion && command is IVersionValidationCommandCommon validationCommand && validationCommand.ReferenceVersion != _aggregate.Version)
+        if (checkVersion && command is IVersionValidationCommandCommon validationCommand && validationCommand.ReferenceVersion != _aggregate.Version)
         {
             throw new SekibanCommandInconsistentVersionException(
                 _aggregate.AggregateId,
@@ -90,26 +76,51 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> : IComman
             throw new SekibanAggregateAlreadyDeletedException();
         }
 
-        switch (handler)
+        switch (command)
         {
-            case ICommandHandler<TAggregatePayload, TCommand> regularHandler:
+            case ICommandWithHandler<TAggregatePayload, TCommand> regularHandler:
             {
-                foreach (var eventPayload in regularHandler.HandleCommand(command, this))
+                // execute static HandleCommand of typeof(command) using reflection
+                var commandType = command.GetType();
+                var method = commandType.GetMethod("HandleCommand");
+                if (method is null)
                 {
-                    _events.Add(EventHelper.HandleEvent(_aggregate, eventPayload, rootPartitionKey));
+                    throw new SekibanCommandHandlerNotMatchException(
+                        commandType.Name + "handler should inherit " + typeof(ICommandWithHandler<,>).Name);
                 }
+                var result = method.Invoke(null, new object[] { command, this }) as ResultBox<UnitValue>;
+                if (result is null)
+                {
+                    throw new SekibanCommandHandlerNotMatchException(
+                        commandType.Name + "handler should inherit " + typeof(ICommandWithHandler<,>).Name);
+                }
+                result.UnwrapBox();
+
                 return new CommandResponse(
                     _aggregate.AggregateId,
                     _events.ToImmutableList(),
                     _aggregate.Version,
                     _events.Max(m => m.SortableUniqueId));
             }
-            case ICommandHandlerAsync<TAggregatePayload, TCommand> asyncHandler:
+            case ICommandWithHandlerAsync<TAggregatePayload, TCommand> asyncHandler:
             {
-                await foreach (var eventPayload in asyncHandler.HandleCommandAsync(command, this))
+                // execute static HandleCommandAsync of typeof(command) using reflection
+                var commandType = command.GetType();
+                var method = commandType.GetMethod("HandleCommandAsync");
+                if (method is null)
                 {
-                    _events.Add(EventHelper.HandleEvent(_aggregate, eventPayload, rootPartitionKey));
+                    throw new SekibanCommandHandlerNotMatchException(
+                        commandType.Name + "handler should inherit " + typeof(ICommandWithHandlerAsync<,>).Name);
                 }
+                var resultAsync = method.Invoke(null, new object[] { command, this }) as Task<ResultBox<UnitValue>>;
+                if (resultAsync is null)
+                {
+                    throw new SekibanCommandHandlerNotMatchException(
+                        commandType.Name + "handler should inherit " + typeof(ICommandWithHandlerAsync<,>).Name);
+                }
+                var result = await resultAsync;
+                result.UnwrapBox();
+
                 return new CommandResponse(
                     _aggregate.AggregateId,
                     _events.ToImmutableList(),
@@ -118,8 +129,9 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> : IComman
             }
             default:
                 throw new SekibanCommandHandlerNotMatchException(
-                    handler.GetType().Name + "handler should inherit " + typeof(ICommandHandler<,>).Name);
+                    command.GetType().Name + "handler should inherit " + typeof(ICommandHandler<,>).Name);
         }
+
     }
 
     private AggregateState<TAggregatePayload> GetAggregateState()

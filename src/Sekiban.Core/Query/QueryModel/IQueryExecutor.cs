@@ -26,7 +26,7 @@ public interface IQueryExecutor
     /// <returns></returns>
     public async Task<ResultBox<ListQueryResult<TOutput>>> ExecuteWithResultAsync<TOutput>(IListQueryInput<TOutput> param)
         where TOutput : IQueryResponse =>
-        await ResultBox<ListQueryResult<TOutput>>.WrapTry(async () => await ExecuteAsync(param));
+        await ResultBox.WrapTry(async () => await ExecuteAsync(param));
 
     /// <summary>
     ///     Execute Query.
@@ -46,5 +46,5 @@ public interface IQueryExecutor
     /// <typeparam name="TOutput"></typeparam>
     /// <returns></returns>
     public async Task<ResultBox<TOutput>> ExecuteWithResultAsync<TOutput>(IQueryInput<TOutput> param) where TOutput : IQueryResponse =>
-        await ResultBox<TOutput>.WrapTry(async () => await ExecuteAsync(param));
+        await ResultBox.WrapTry(async () => await ExecuteAsync(param));
 }
