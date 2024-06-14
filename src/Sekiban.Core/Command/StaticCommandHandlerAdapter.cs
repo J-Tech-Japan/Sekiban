@@ -11,7 +11,7 @@ public sealed class StaticCommandHandlerAdapter<TAggregatePayload, TCommand>(
     IAggregateLoader aggregateLoader,
     IServiceProvider serviceProvider,
     bool checkVersion = true) : ICommandContext<TAggregatePayload> where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>
-    where TCommand : ICommandWithStaticHandlerCommon<TAggregatePayload, TCommand>
+    where TCommand : ICommandWithHandlerCommon<TAggregatePayload, TCommand>
 {
     private readonly List<IEvent> _events = [];
     private Aggregate<TAggregatePayload>? _aggregate;
@@ -78,7 +78,7 @@ public sealed class StaticCommandHandlerAdapter<TAggregatePayload, TCommand>(
 
         switch (command)
         {
-            case ICommandWithStaticHandler<TAggregatePayload, TCommand> regularHandler:
+            case ICommandWithHandler<TAggregatePayload, TCommand> regularHandler:
             {
                 // execute static HandleCommand of typeof(command) using reflection
                 var commandType = command.GetType();
@@ -86,13 +86,13 @@ public sealed class StaticCommandHandlerAdapter<TAggregatePayload, TCommand>(
                 if (method is null)
                 {
                     throw new SekibanCommandHandlerNotMatchException(
-                        commandType.Name + "handler should inherit " + typeof(ICommandWithStaticHandler<,>).Name);
+                        commandType.Name + "handler should inherit " + typeof(ICommandWithHandler<,>).Name);
                 }
                 var result = method.Invoke(null, new object[] { command, this }) as ResultBox<UnitValue>;
                 if (result is null)
                 {
                     throw new SekibanCommandHandlerNotMatchException(
-                        commandType.Name + "handler should inherit " + typeof(ICommandWithStaticHandler<,>).Name);
+                        commandType.Name + "handler should inherit " + typeof(ICommandWithHandler<,>).Name);
                 }
                 result.UnwrapBox();
 
@@ -102,7 +102,7 @@ public sealed class StaticCommandHandlerAdapter<TAggregatePayload, TCommand>(
                     _aggregate.Version,
                     _events.Max(m => m.SortableUniqueId));
             }
-            case ICommandWithStaticHandlerAsync<TAggregatePayload, TCommand> asyncHandler:
+            case ICommandWithHandlerAsync<TAggregatePayload, TCommand> asyncHandler:
             {
                 // execute static HandleCommandAsync of typeof(command) using reflection
                 var commandType = command.GetType();
@@ -110,13 +110,13 @@ public sealed class StaticCommandHandlerAdapter<TAggregatePayload, TCommand>(
                 if (method is null)
                 {
                     throw new SekibanCommandHandlerNotMatchException(
-                        commandType.Name + "handler should inherit " + typeof(ICommandWithStaticHandlerAsync<,>).Name);
+                        commandType.Name + "handler should inherit " + typeof(ICommandWithHandlerAsync<,>).Name);
                 }
                 var resultAsync = method.Invoke(null, new object[] { command, this }) as Task<ResultBox<UnitValue>>;
                 if (resultAsync is null)
                 {
                     throw new SekibanCommandHandlerNotMatchException(
-                        commandType.Name + "handler should inherit " + typeof(ICommandWithStaticHandlerAsync<,>).Name);
+                        commandType.Name + "handler should inherit " + typeof(ICommandWithHandlerAsync<,>).Name);
                 }
                 var result = await resultAsync;
                 result.UnwrapBox();

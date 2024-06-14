@@ -20,5 +20,3 @@ public interface ICommand<TAggregatePayload> : ICommandCommon where TAggregatePa
     /// <returns></returns>
     public Guid GetAggregateId();
 }
-public interface ICommandWithStaticHandlerCommon<TAggregatePayload, in TCommand> : ICommand<TAggregatePayload>, ICommandWithStaticHandlerCommon
-    where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayload>;

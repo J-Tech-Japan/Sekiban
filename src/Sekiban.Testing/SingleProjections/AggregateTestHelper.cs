@@ -587,7 +587,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             throw new SekibanTypeNotFoundException("Failed to get AddAggregate Service");
         try
         {
-            if (command is ICommandWithoutLoadingAggregateCommon)
+            if (command is ICommandWithoutLoadingAggregateCommon && command is not ICommandWithHandlerCommon<TAggregatePayloadIn, TCommand>)
             {
                 var handler
                     = _serviceProvider.GetService(typeof(ICommandHandlerCommon<TAggregatePayloadIn, TCommand>)) as
@@ -601,7 +601,18 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
                 var commandResponse = (CommandResponse)((dynamic?)method.Invoke(adapter, [commandDocument, handler, aggregateId, rootPartitionKey]) ??
                     throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
                 _latestEvents = [.. commandResponse.Events];
-            } else if (command is ICommandWithStaticHandlerCommon<TAggregatePayloadIn, TCommand>)
+            } else if (command is ICommandWithoutLoadingAggregateCommon && command is ICommandWithHandlerCommon<TAggregatePayloadIn, TCommand>)
+            {
+                var baseClass = typeof(StaticCommandWithoutLoadingAggregateHandlerAdapter<,>);
+                var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayloadIn), command.GetType());
+                var adapter = Activator.CreateInstance(adapterClass, _serviceProvider) ?? throw new SekibanTypeNotFoundException("Method not found");
+                var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new SekibanTypeNotFoundException("HandleCommandAsync not found");
+                var commandResponseTask
+                    = (Task<CommandResponse>)((dynamic?)method.Invoke(adapter, [commandDocument, aggregateId, rootPartitionKey]) ??
+                        throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name));
+                var commandResponse = commandResponseTask.Result;
+                _latestEvents = [.. commandResponse.Events];
+            } else if (command is ICommandWithHandlerCommon<TAggregatePayloadIn, TCommand>)
             {
                 var baseClass = typeof(StaticCommandHandlerAdapter<,>);
                 var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayloadIn), command.GetType());
@@ -620,7 +631,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
                 var baseClass = typeof(CommandHandlerAdapter<,>);
                 var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayloadIn), command.GetType());
-                var adapter = Activator.CreateInstance(adapterClass, aggregateLoader,_serviceProvider, false) ??
+                var adapter = Activator.CreateInstance(adapterClass, aggregateLoader, _serviceProvider, false) ??
                     throw new SekibanTypeNotFoundException("Adapter not found");
 
                 var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new SekibanTypeNotFoundException("HandleCommandAsync not found");

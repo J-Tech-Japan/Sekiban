@@ -447,6 +447,17 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         var client = clientList.First();
         Assert.True(clientId.IsSuccess);
         Assert.Equal(clientId.GetValue(), client.AggregateId);
+        await commandExecutor.ExecCommandWithResultAsync(new ChangeClientNameWithoutLoadingWithResult(clientId.GetValue(), "John Doe 2"))
+            .Conveyor(
+                result => result.AggregateId is not null
+                    ? result.AggregateId.Value
+                    : ResultBox.FromException<Guid>(new ApplicationException("Aggregate Id is null")))
+            .Conveyor(aggregateId => aggregateLoader.AsDefaultStateWithResultAsync<Client>(aggregateId))
+            .Scan(
+                result =>
+                {
+                    Assert.Equal("John Doe 2", result.Payload.ClientName);
+                });
     }
 
 

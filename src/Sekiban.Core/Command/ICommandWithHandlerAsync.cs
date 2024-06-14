@@ -2,7 +2,7 @@ using ResultBoxes;
 using Sekiban.Core.Aggregate;
 namespace Sekiban.Core.Command;
 
-public interface ICommandWithStaticHandlerAsync<TAggregatePayload, in TCommand> : ICommandWithStaticHandlerCommon<TAggregatePayload, TCommand>
+public interface ICommandWithHandlerAsync<TAggregatePayload, in TCommand> : ICommandWithHandlerCommon<TAggregatePayload, TCommand>
     where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayload>
 {
 

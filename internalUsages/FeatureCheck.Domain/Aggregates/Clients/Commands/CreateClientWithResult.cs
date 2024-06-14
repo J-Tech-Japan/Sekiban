@@ -16,7 +16,7 @@ public record CreateClientWithResult(
     [property: Required]
     string ClientName,
     [property: Required]
-    string ClientEmail) : ICommandWithStaticHandlerAsync<Client, CreateClientWithResult>
+    string ClientEmail) : ICommandWithHandlerAsync<Client, CreateClientWithResult>
 {
     public Guid GetAggregateId() => Guid.NewGuid();
     public static async Task<ResultBox<UnitValue>> HandleCommandAsync(CreateClientWithResult command, ICommandContext<Client> context) =>
