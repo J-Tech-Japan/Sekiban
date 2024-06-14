@@ -1,4 +1,5 @@
 using FeatureCheck.Domain.Aggregates.Branches.Events;
+using ResultBoxes;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 using System.ComponentModel.DataAnnotations;
@@ -27,4 +28,11 @@ public record CreateBranch : ICommand<Branch>, ICleanupNecessaryCommand<CreateBr
             yield return new BranchCreated(command.Name);
         }
     }
+}
+
+public record CreateBranchWithResult([property:Required, MaxLength(20)]string Name) : ICommandWithStaticHandler<Branch, CreateBranchWithResult>
+{
+        public Guid GetAggregateId() => Guid.NewGuid();
+        public static ResultBox<UnitValue> HandleCommand(CreateBranchWithResult command, ICommandContext<Branch> context) =>
+            context.AppendEvent(new BranchCreated(command.Name));
 }

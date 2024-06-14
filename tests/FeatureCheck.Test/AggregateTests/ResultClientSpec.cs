@@ -12,7 +12,7 @@ public class ResultClientSpec : AggregateTest<Client, FeatureCheckDependency>
     [Fact]
     public void ShouldCreateClient()
     {
-        var branchId = RunEnvironmentCommand(new CreateBranch("branch1"));
+        var branchId = RunEnvironmentCommand(new CreateBranchWithResult("branch1"));
         WhenCommand(new CreateClientWithResult(branchId, "client1", "client1@example.com"));
         ThenPayloadIs(new Client(branchId, "client1", "client1@example.com"));
     }
@@ -27,7 +27,7 @@ public class ResultClientSpec : AggregateTest<Client, FeatureCheckDependency>
     [Fact]
     public void CreateClientErrorIfEmailAlreadyExists()
     {
-        var branchId = RunEnvironmentCommand(new CreateBranch("branch1"));
+        var branchId = RunEnvironmentCommand(new CreateBranchWithResult("branch1"));
         RunEnvironmentCommand(new CreateClientWithResult(branchId, "client0", "client1@example.com"));
         WhenCommand(new CreateClientWithResult(branchId, "client1", "client1@example.com"));
         ThenThrowsAnException();

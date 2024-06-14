@@ -620,7 +620,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
                 var baseClass = typeof(CommandHandlerAdapter<,>);
                 var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayloadIn), command.GetType());
-                var adapter = Activator.CreateInstance(adapterClass, aggregateLoader, false) ??
+                var adapter = Activator.CreateInstance(adapterClass, aggregateLoader,_serviceProvider, false) ??
                     throw new SekibanTypeNotFoundException("Adapter not found");
 
                 var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new SekibanTypeNotFoundException("HandleCommandAsync not found");

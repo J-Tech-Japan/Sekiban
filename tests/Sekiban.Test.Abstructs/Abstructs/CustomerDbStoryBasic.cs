@@ -431,7 +431,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
     public async Task ResultExecutionTest1()
     {
         RemoveAllFromDefaultAndDissolvable();
-        var clientId = await commandExecutor.ExecCommandWithResultAsync(new CreateBranch("Test1"))
+        var clientId = await commandExecutor.ExecCommandWithResultAsync(new CreateBranchWithResult("Test1"))
             .Conveyor(
                 response => response.AggregateId is not null
                     ? ResultBox.FromValue(response.AggregateId.Value)
