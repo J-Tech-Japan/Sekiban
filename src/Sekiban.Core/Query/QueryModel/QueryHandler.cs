@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.MultiProjections;
@@ -8,7 +9,7 @@ namespace Sekiban.Core.Query.QueryModel;
 /// <summary>
 ///     Query Handler. Internal use only.
 /// </summary>
-public class QueryHandler
+public class QueryHandler : IQueryContext
 {
     private readonly IServiceProvider _serviceProvider;
 
@@ -105,6 +106,26 @@ public class QueryHandler
         var filtered = query.HandleFilter(param, list);
         return filtered;
     }
+
+    public ResultBox<TQueryResponse> GetAggregateQueryNext<TAggregatePayload, TQuery, TQueryResponse>(
+        TQuery query,
+        IEnumerable<AggregateState<TAggregatePayload>> list) where TAggregatePayload : IAggregatePayloadCommon
+        where TQuery : INextAggregateQuery<TAggregatePayload, TQueryResponse>
+        where TQueryResponse : notnull
+    {
+        var filtered = query.HandleFilter(list, this);
+        return filtered;
+    }
+    public async Task<ResultBox<TQueryResponse>> GetAggregateQueryNextAsync<TAggregatePayload, TQuery, TQueryResponse>(
+        TQuery query,
+        IEnumerable<AggregateState<TAggregatePayload>> list) where TAggregatePayload : IAggregatePayloadCommon
+        where TQuery : INextAggregateQueryAsync<TAggregatePayload, TQueryResponse>
+        where TQueryResponse : notnull
+    {
+        var filtered = await query.HandleFilterAsync(list, this);
+        return filtered;
+    }
+
 
     public ListQueryResult<TQueryResponse> GetSingleProjectionListQuery<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
         TQueryParameter param,

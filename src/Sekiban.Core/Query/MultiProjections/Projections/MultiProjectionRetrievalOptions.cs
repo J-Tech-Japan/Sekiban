@@ -34,4 +34,6 @@ public record MultiProjectionRetrievalOptions
 
     public static MultiProjectionRetrievalOptions? GetFromQuery(IQueryParameterCommon query) =>
         query is IQueryParameterMultiProjectionOptionSettable settable ? settable.MultiProjectionRetrievalOptions : null;
+    public static MultiProjectionRetrievalOptions? GetFromQuery(INextQueryGeneral query) =>
+        query is IQueryParameterMultiProjectionOptionSettable settable ? settable.MultiProjectionRetrievalOptions : null;
 }
