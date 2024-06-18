@@ -46,6 +46,35 @@ public class QueryHandler : IQueryContext
             : new ListQueryResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
     }
 
+    public Task<ResultBox<ListQueryResult<TQueryResponse>>>
+        GetMultiProjectionListQueryNextAsync<TProjectionPayload, TQuery, TQueryResponse>(
+            TQuery query,
+            MultiProjectionState<TProjectionPayload> projection)
+        where TProjectionPayload : IMultiProjectionPayloadCommon
+        where TQuery : INextMultiProjectionListQueryAsync<TProjectionPayload, TQueryResponse>
+        where TQueryResponse : notnull =>
+        query.HandleFilterAsync(projection, this)
+            .Conveyor(sorted => query.HandleSortAsync(sorted, this))
+            .Remap(sorted => sorted.ToList())
+            .Remap(
+                sorted => query is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam
+                    ? MakeQueryListResult(pagingParam, sorted)
+                    : new ListQueryResult<TQueryResponse>(sorted.Count, null, null, null, sorted));
+
+    public ResultBox<ListQueryResult<TQueryResponse>>
+        GetMultiProjectionListQueryNext<TProjectionPayload, TQuery, TQueryResponse>(TQuery query, MultiProjectionState<TProjectionPayload> projection)
+        where TProjectionPayload : IMultiProjectionPayloadCommon
+        where TQuery : INextMultiProjectionListQuery<TProjectionPayload, TQueryResponse>
+        where TQueryResponse : notnull =>
+        query.HandleFilter(projection, this)
+            .Conveyor(sorted => query.HandleSort(sorted, this))
+            .Remap(sorted => sorted.ToList())
+            .Remap(
+                sorted => query is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam
+                    ? MakeQueryListResult(pagingParam, sorted)
+                    : new ListQueryResult<TQueryResponse>(sorted.Count, null, null, null, sorted));
+
+
     public TQueryResponse GetMultiProjectionQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
         TQueryParameter param,
         MultiProjectionState<TProjectionPayload> projection) where TProjectionPayload : IMultiProjectionPayloadCommon
@@ -58,6 +87,22 @@ public class QueryHandler : IQueryContext
         var filtered = query.HandleFilter(param, projection);
         return filtered;
     }
+
+
+    public ResultBox<TQueryResponse> GetMultiProjectionQueryNext<TProjectionPayload, TQuery, TQueryResponse>(
+        TQuery query,
+        MultiProjectionState<TProjectionPayload> projection) where TProjectionPayload : IMultiProjectionPayloadCommon
+        where TQuery : INextMultiProjectionQuery<TProjectionPayload, TQueryResponse>
+        where TQueryResponse : notnull =>
+        query.HandleFilter(projection, this);
+    public Task<ResultBox<TQueryResponse>> GetMultiProjectionQueryNextAsync<TProjectionPayload, TQuery, TQueryResponse>(
+        TQuery query,
+        MultiProjectionState<TProjectionPayload> projection) where TProjectionPayload : IMultiProjectionPayloadCommon
+        where TQuery : INextMultiProjectionQueryAsync<TProjectionPayload, TQueryResponse>
+        where TQueryResponse : notnull =>
+        query.HandleFilterAsync(projection, this);
+
+
 
 
     public async Task<ListQueryResult<TQueryResponse>> GetGeneralListQueryAsync<TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)

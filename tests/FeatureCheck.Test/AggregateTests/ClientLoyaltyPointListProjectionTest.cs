@@ -2,6 +2,7 @@ using FeatureCheck.Domain.Aggregates.Branches.Commands;
 using FeatureCheck.Domain.Aggregates.Clients.Commands;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointLists;
 using FeatureCheck.Domain.Shared;
+using ResultBoxes;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Testing;
 using System;
@@ -71,12 +72,12 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<FeatureCheckDepe
                 null,
                 null,
                 null),
-            new ListQueryResult<ClientLoyaltyPointQuery.Response>(
+            new ListQueryResult<ClientLoyaltyPointQuery_Response>(
                 5,
                 null,
                 null,
                 null,
-                new List<ClientLoyaltyPointQuery.Response>
+                new List<ClientLoyaltyPointQuery_Response>
                 {
                     new(_branchId, _branchName, _clientId1, _clientNameBase + "1", 0),
                     new(_branchId, _branchName, _clientId2, _clientNameBase + "2", 0),
@@ -84,6 +85,31 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<FeatureCheckDepe
                     new(_branchId, _branchName, _clientId4, _clientNameBase + "4", 0),
                     new(_branchId, _branchName, _clientId5, _clientNameBase + "5", 0)
                 }));
+        ResultBox.FromValue(
+                GetQueryResponse(
+                    new ClientLoyaltyPointQuery.Parameter(
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null)))
+            .Combine(
+                _ => ResultBox.FromValue(
+                    GetQueryResponse(
+                        new ClientLoyaltyPointQueryNext(
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            null))))
+            .Scan(Assert.Equal)
+            .UnwrapBox();
     }
 
     [Fact]
@@ -100,17 +126,44 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<FeatureCheckDepe
                 null,
                 null,
                 null),
-            new ListQueryResult<ClientLoyaltyPointQuery.Response>(
+            new ListQueryResult<ClientLoyaltyPointQuery_Response>(
                 5,
                 2,
                 1,
                 3,
-                new List<ClientLoyaltyPointQuery.Response>
+                new List<ClientLoyaltyPointQuery_Response>
                 {
                     new(_branchId, _branchName, _clientId1, _clientNameBase + "1", 0),
                     new(_branchId, _branchName, _clientId2, _clientNameBase + "2", 0),
                     new(_branchId, _branchName, _clientId3, _clientNameBase + "3", 0)
                 }));
+
+        ResultBox.FromValue(
+                GetQueryResponse(
+                    new ClientLoyaltyPointQuery.Parameter(
+                        null,
+                        null,
+                        3,
+                        1,
+                        null,
+                        null,
+                        null,
+                        null)))
+            .Combine(
+                _ => ResultBox.FromValue(
+                    GetQueryResponse(
+                        new ClientLoyaltyPointQueryNext(
+                            null,
+                            null,
+                            3,
+                            1,
+                            null,
+                            null,
+                            null,
+                            null))))
+            .Scan(Assert.Equal)
+            .UnwrapBox();
+
     }
 
     [Fact]
@@ -127,12 +180,12 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<FeatureCheckDepe
                 null,
                 null,
                 null),
-            new ListQueryResult<ClientLoyaltyPointQuery.Response>(
+            new ListQueryResult<ClientLoyaltyPointQuery_Response>(
                 5,
                 1,
                 1,
                 5,
-                new List<ClientLoyaltyPointQuery.Response>
+                new List<ClientLoyaltyPointQuery_Response>
                 {
                     new(_branchId, _branchName, _clientId1, _clientNameBase + "1", 0),
                     new(_branchId, _branchName, _clientId2, _clientNameBase + "2", 0),
@@ -156,12 +209,12 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<FeatureCheckDepe
                 null,
                 null,
                 null),
-            new ListQueryResult<ClientLoyaltyPointQuery.Response>(
+            new ListQueryResult<ClientLoyaltyPointQuery_Response>(
                 5,
                 2,
                 2,
                 3,
-                new List<ClientLoyaltyPointQuery.Response>
+                new List<ClientLoyaltyPointQuery_Response>
                 {
                     new(_branchId, _branchName, _clientId4, _clientNameBase + "4", 0),
                     new(_branchId, _branchName, _clientId5, _clientNameBase + "5", 0)
@@ -182,7 +235,7 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<FeatureCheckDepe
                 null,
                 null,
                 null),
-            new ListQueryResult<ClientLoyaltyPointQuery.Response>(5, 2, 3, 3, new List<ClientLoyaltyPointQuery.Response>()));
+            new ListQueryResult<ClientLoyaltyPointQuery_Response>(5, 2, 3, 3, new List<ClientLoyaltyPointQuery_Response>()));
     }
 
     [Fact]
@@ -199,6 +252,6 @@ public class ClientLoyaltyPointListProjectionTest : UnifiedTest<FeatureCheckDepe
                 null,
                 null,
                 null),
-            new ListQueryResult<ClientLoyaltyPointQuery.Response>(5, 2, 0, 3, new List<ClientLoyaltyPointQuery.Response>()));
+            new ListQueryResult<ClientLoyaltyPointQuery_Response>(5, 2, 0, 3, new List<ClientLoyaltyPointQuery_Response>()));
     }
 }

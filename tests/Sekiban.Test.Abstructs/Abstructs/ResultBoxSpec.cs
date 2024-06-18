@@ -3,6 +3,7 @@ using FeatureCheck.Domain.Aggregates.Branches.Commands;
 using FeatureCheck.Domain.Aggregates.Branches.Queries;
 using FeatureCheck.Domain.Aggregates.Clients.Commands;
 using FeatureCheck.Domain.Aggregates.Clients.Queries;
+using FeatureCheck.Domain.Projections.ClientLoyaltyPointLists;
 using FeatureCheck.Domain.Shared;
 using ResultBoxes;
 using Sekiban.Testing.Story;
@@ -11,6 +12,15 @@ namespace Sekiban.Test.Abstructs.Abstructs;
 
 public abstract class ResultBoxSpec : TestBase<FeatureCheckDependency>
 {
+
+    public string _branchName = "TESTBRANCH";
+
+    public Guid _clientId1 = Guid.NewGuid();
+    public Guid _clientId2 = Guid.NewGuid();
+    public Guid _clientId3 = Guid.NewGuid();
+    public Guid _clientId4 = Guid.NewGuid();
+    public Guid _clientId5 = Guid.NewGuid();
+    public string _clientNameBase = "CreateClient TEST ";
     public ResultBoxSpec(
         SekibanTestFixture sekibanTestFixture,
         ITestOutputHelper testOutputHelper,
@@ -159,9 +169,9 @@ public abstract class ResultBoxSpec : TestBase<FeatureCheckDependency>
             .Scan(Assert.Equal)
             .ScanResult(result => Assert.True(result.IsSuccess));
     [Fact]
-    public async Task NextQueryTest2() =>
-        await ResultBox.WrapTry(RemoveAllFromDefaultAndDissolvableWithResultBox)
-            .Conveyor(async _ => await commandExecutor.ExecCommandNextAsync(new CreateBranch { Name = "Branch 24" }))
+    public Task NextQueryTest2() =>
+        ResultBox.WrapTry(RemoveAllFromDefaultAndDissolvableWithResultBox)
+            .Conveyor(_ => commandExecutor.ExecCommandNextAsync(new CreateBranch { Name = "Branch 24" }))
             .Conveyor(response => response.GetAggregateId().Remap(BranchId.FromValue))
             .Conveyor(branchId => commandExecutor.ExecCommandNextAsync(new CreateClient(branchId.Value, "Client1", "test@example.com")))
             .Conveyor(_ => queryExecutor.ExecuteNextAsync(new GetClientPayloadQueryNext("Client1")))
@@ -176,5 +186,41 @@ public abstract class ResultBoxSpec : TestBase<FeatureCheckDependency>
             .Scan(Assert.Equal)
             .Conveyor(_ => queryExecutor.ExecuteNextAsync(new GetClientPayloadQueryNextAsync("Cli---ent1")))
             .Combine(_ => ResultBox.FromValue(queryExecutor.ExecuteAsync(new GetClientPayloadQuery.Parameter("Cli---ent1"))))
+            .Scan(Assert.Equal);
+
+
+    [Fact]
+    public Task NextQueryTestWithProjection() =>
+        ResultBox.WrapTry(RemoveAllFromDefaultAndDissolvableWithResultBox)
+            .Conveyor(_ => commandExecutor.ExecCommandNextAsync(new CreateBranch(_branchName)))
+            .Conveyor(response => response.GetAggregateId().Remap(BranchId.FromValue))
+            .Do(branchId => commandExecutor.ExecCommandNextAsync(new CreateClient(branchId.Value, _clientNameBase + 1, "test" + 1 + "@example.com")))
+            .Do(branchId => commandExecutor.ExecCommandNextAsync(new CreateClient(branchId.Value, _clientNameBase + 2, "test" + 2 + "@example.com")))
+            .Do(branchId => commandExecutor.ExecCommandNextAsync(new CreateClient(branchId.Value, _clientNameBase + 3, "test" + 3 + "@example.com")))
+            .Do(branchId => commandExecutor.ExecCommandNextAsync(new CreateClient(branchId.Value, _clientNameBase + 4, "test" + 4 + "@example.com")))
+            .Do(branchId => commandExecutor.ExecCommandNextAsync(new CreateClient(branchId.Value, _clientNameBase + 5, "test" + 5 + "@example.com")))
+            .Conveyor(
+                _ => queryExecutor.ExecuteNextAsync(
+                    new ClientLoyaltyPointQueryNext(
+                        null,
+                        null,
+                        3,
+                        1,
+                        null,
+                        null,
+                        null,
+                        null)))
+            .Combine(
+                _ => ResultBox.WrapTry(
+                    () => queryExecutor.ExecuteAsync(
+                        new ClientLoyaltyPointQuery.Parameter(
+                            null,
+                            null,
+                            3,
+                            1,
+                            null,
+                            null,
+                            null,
+                            null))))
             .Scan(Assert.Equal);
 }

@@ -621,8 +621,9 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
                 var adapter = Activator.CreateInstance(adapterClass, aggregateLoader, _serviceProvider, false) ??
                     throw new SekibanTypeNotFoundException("Method not found");
                 var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new SekibanTypeNotFoundException("HandleCommandAsync not found");
-                var commandResponse = (ResultBox<CommandResponse>)((dynamic?)method.Invoke(adapter, [commandDocument, aggregateId, rootPartitionKey]) ??
-                    throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
+                var commandResponse
+                    = (ResultBox<CommandResponse>)((dynamic?)method.Invoke(adapter, [commandDocument, aggregateId, rootPartitionKey]) ??
+                        throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
                 commandResponse.Scan(value => _latestEvents = [.. value.Events]);
                 commandResponse.UnwrapBox();
             } else
@@ -850,7 +851,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
 
     #region General List Query Test
-    private ListQueryResult<TQueryResponse> GetListQueryResponse<TQueryResponse>(IListQueryInput<TQueryResponse> param)
+    public ListQueryResult<TQueryResponse> GetQueryResponse<TQueryResponse>(IListQueryInput<TQueryResponse> param)
         where TQueryResponse : IQueryResponse
     {
         ThenNotThrowsAnException();
@@ -859,23 +860,47 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             throw new SekibanTypeNotFoundException("Failed to get Aggregate Query Response for " + param.GetType().Name);
     }
 
+    public ListQueryResult<TQueryResponse> GetQueryResponse<TQueryResponse>(INextListQueryCommon<TQueryResponse> param)
+        where TQueryResponse : notnull
+    {
+        ThenNotThrowsAnException();
+        var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new SekibanTypeNotFoundException("Failed to get Query service");
+        return queryService.ExecuteNextAsync(param).Result.UnwrapBox() ??
+            throw new SekibanTypeNotFoundException("Failed to get Aggregate Query Response for " + param.GetType().Name);
+    }
+
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIs<TQueryResponse>(
         IListQueryInput<TQueryResponse> param,
         ListQueryResult<TQueryResponse> expectedResponse) where TQueryResponse : IQueryResponse
     {
         ThenNotThrowsAnException();
-        var actual = GetListQueryResponse(param);
+        var actual = GetQueryResponse(param);
         var expected = expectedResponse;
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
+
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIs<TQueryResponse>(
+        INextListQueryCommon<TQueryResponse> param,
+        ListQueryResult<TQueryResponse> expectedResponse) where TQueryResponse : notnull
+    {
+        ThenNotThrowsAnException();
+        var actual = GetQueryResponse(param);
+        var expected = expectedResponse;
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(expectedJson, actualJson);
+        return this;
+    }
+
+
     public IAggregateTestHelper<TAggregatePayload> WriteQueryResponseToFile<TQueryResponse>(IListQueryInput<TQueryResponse> param, string filename)
         where TQueryResponse : IQueryResponse
     {
         ThenNotThrowsAnException();
-        var json = SekibanJsonHelper.Serialize(GetListQueryResponse(param));
+        var json = SekibanJsonHelper.Serialize(GetQueryResponse(param));
         if (string.IsNullOrEmpty(json))
         {
             throw new InvalidDataException("Json is null or empty");
@@ -888,7 +913,15 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         Action<ListQueryResult<TQueryResponse>> responseAction) where TQueryResponse : IQueryResponse
     {
         ThenNotThrowsAnException();
-        responseAction(GetListQueryResponse(param));
+        responseAction(GetQueryResponse(param));
+        return this;
+    }
+    public IAggregateTestHelper<TAggregatePayload> ThenGetQueryResponse<TQueryResponse>(
+        INextListQueryCommon<TQueryResponse> param,
+        Action<ListQueryResult<TQueryResponse>> responseAction) where TQueryResponse : notnull
+    {
+        ThenNotThrowsAnException();
+        responseAction(GetQueryResponse(param));
         return this;
     }
 
@@ -969,17 +1002,36 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     #endregion
 
     #region Query Test (not list)
-    private TQueryResponse GetQueryResponse<TQueryResponse>(IQueryInput<TQueryResponse> param) where TQueryResponse : IQueryResponse
+    public TQueryResponse GetQueryResponse<TQueryResponse>(IQueryInput<TQueryResponse> param) where TQueryResponse : IQueryResponse
     {
         ThenNotThrowsAnException();
         var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new SekibanTypeNotFoundException("Failed to get Query service");
         return queryService.ExecuteAsync(param).Result ??
             throw new SekibanTypeNotFoundException("Failed to get Aggregate Query Response for " + param.GetType().Name);
     }
+    public TQueryResponse GetQueryResponse<TQueryResponse>(INextQueryCommon<TQueryResponse> param) where TQueryResponse : notnull
+    {
+        ThenNotThrowsAnException();
+        var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new SekibanTypeNotFoundException("Failed to get Query service");
+        return queryService.ExecuteNextAsync(param).Result.UnwrapBox() ??
+            throw new SekibanTypeNotFoundException("Failed to get Aggregate Query Response for " + param.GetType().Name);
+    }
 
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIs<TQueryResponse>(
         IQueryInput<TQueryResponse> param,
         TQueryResponse expectedResponse) where TQueryResponse : IQueryResponse
+    {
+        ThenNotThrowsAnException();
+        var actual = GetQueryResponse(param);
+        var expected = expectedResponse;
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(expectedJson, actualJson);
+        return this;
+    }
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIs<TQueryResponse>(
+        INextQueryCommon<TQueryResponse> param,
+        TQueryResponse expectedResponse) where TQueryResponse : notnull
     {
         ThenNotThrowsAnException();
         var actual = GetQueryResponse(param);
@@ -1004,6 +1056,14 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     public IAggregateTestHelper<TAggregatePayload> ThenGetQueryResponse<TQueryResponse>(
         IQueryInput<TQueryResponse> param,
         Action<TQueryResponse> responseAction) where TQueryResponse : IQueryResponse
+    {
+        ThenNotThrowsAnException();
+        responseAction(GetQueryResponse(param));
+        return this;
+    }
+    public IAggregateTestHelper<TAggregatePayload> ThenGetQueryResponse<TQueryResponse>(
+        INextQueryCommon<TQueryResponse> param,
+        Action<TQueryResponse> responseAction) where TQueryResponse : notnull
     {
         ThenNotThrowsAnException();
         responseAction(GetQueryResponse(param));

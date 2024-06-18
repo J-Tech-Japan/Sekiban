@@ -299,12 +299,20 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         IListQueryInput<TQueryResponse> param,
         ListQueryResult<TQueryResponse> expectedResponse) where TQueryResponse : IQueryResponse =>
         _helper.ThenQueryResponseIs(param, expectedResponse);
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIs<TQueryResponse>(
+        INextListQueryCommon<TQueryResponse> param,
+        ListQueryResult<TQueryResponse> expectedResponse) where TQueryResponse : notnull =>
+        _helper.ThenQueryResponseIs(param, expectedResponse);
     public IAggregateTestHelper<TAggregatePayload> WriteQueryResponseToFile<TQueryResponse>(IListQueryInput<TQueryResponse> param, string filename)
         where TQueryResponse : IQueryResponse =>
         _helper.WriteQueryResponseToFile(param, filename);
     public IAggregateTestHelper<TAggregatePayload> ThenGetQueryResponse<TQueryResponse>(
         IListQueryInput<TQueryResponse> param,
         Action<ListQueryResult<TQueryResponse>> responseAction) where TQueryResponse : IQueryResponse =>
+        _helper.ThenGetQueryResponse(param, responseAction);
+    public IAggregateTestHelper<TAggregatePayload> ThenGetQueryResponse<TQueryResponse>(
+        INextListQueryCommon<TQueryResponse> param,
+        Action<ListQueryResult<TQueryResponse>> responseAction) where TQueryResponse : notnull =>
         _helper.ThenGetQueryResponse(param, responseAction);
 
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(
@@ -329,6 +337,16 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         _helper.ThenQueryNotThrowsAnException(param);
     public IAggregateTestHelper<TAggregatePayload> ThenQueryThrowsAnException(IListQueryInputCommon param) =>
         _helper.ThenQueryThrowsAnException(param);
+    public TQueryResponse GetQueryResponse<TQueryResponse>(IQueryInput<TQueryResponse> param) where TQueryResponse : IQueryResponse =>
+        _helper.GetQueryResponse(param);
+    public TQueryResponse GetQueryResponse<TQueryResponse>(INextQueryCommon<TQueryResponse> param) where TQueryResponse : notnull =>
+        _helper.GetQueryResponse(param);
+    public ListQueryResult<TQueryResponse> GetQueryResponse<TQueryResponse>(IListQueryInput<TQueryResponse> param)
+        where TQueryResponse : IQueryResponse =>
+        _helper.GetQueryResponse(param);
+    public ListQueryResult<TQueryResponse> GetQueryResponse<TQueryResponse>(INextListQueryCommon<TQueryResponse> param)
+        where TQueryResponse : notnull =>
+        _helper.GetQueryResponse(param);
     #endregion
 
     #region Query Test (not list)
@@ -336,12 +354,20 @@ public class AggregateTest<TAggregatePayload, TDependencyDefinition> : IDisposab
         IQueryInput<TQueryResponse> param,
         TQueryResponse expectedResponse) where TQueryResponse : IQueryResponse =>
         _helper.ThenQueryResponseIs(param, expectedResponse);
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIs<TQueryResponse>(
+        INextQueryCommon<TQueryResponse> param,
+        TQueryResponse expectedResponse) where TQueryResponse : notnull =>
+        _helper.ThenQueryResponseIs(param, expectedResponse);
     public IAggregateTestHelper<TAggregatePayload> WriteQueryResponseToFile<TQueryResponse>(IQueryInput<TQueryResponse> param, string filename)
         where TQueryResponse : IQueryResponse =>
         _helper.WriteQueryResponseToFile(param, filename);
     public IAggregateTestHelper<TAggregatePayload> ThenGetQueryResponse<TQueryResponse>(
         IQueryInput<TQueryResponse> param,
         Action<TQueryResponse> responseAction) where TQueryResponse : IQueryResponse =>
+        _helper.ThenGetQueryResponse(param, responseAction);
+    public IAggregateTestHelper<TAggregatePayload> ThenGetQueryResponse<TQueryResponse>(
+        INextQueryCommon<TQueryResponse> param,
+        Action<TQueryResponse> responseAction) where TQueryResponse : notnull =>
         _helper.ThenGetQueryResponse(param, responseAction);
 
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(IQueryInput<TQueryResponse> param, string responseJson)
