@@ -159,13 +159,13 @@ public abstract class ResultBoxSpec : TestBase<FeatureCheckDependency>
             .Conveyor(_ => commandExecutor.ExecCommandNextAsync(new CreateBranch { Name = "Branch 24" }))
             .Conveyor(response => response.GetAggregateId().Remap(BranchId.FromValue))
             .Conveyor(branchId => commandExecutor.ExecCommandNextAsync(new CreateClient(branchId.Value, "Client1", "test@example.com")))
-            .Conveyor(_ => queryExecutor.ExecuteNextAsync(new ClientEmailExistQueryNext("test@example.com")))
+            .Conveyor(_ => queryExecutor.ExecuteAsync(new ClientEmailExistQueryNext("test@example.com")))
             .Scan(Assert.True)
-            .Combine(_ => queryExecutor.ExecuteNextAsync(new ClientEmailExistQueryNextAsync("test@example.com")))
+            .Combine(_ => queryExecutor.ExecuteAsync(new ClientEmailExistQueryNextAsync("test@example.com")))
             .Scan(Assert.Equal)
-            .Conveyor(_ => queryExecutor.ExecuteNextAsync(new ClientEmailExistQueryNext("test@examplesssss.com")))
+            .Conveyor(_ => queryExecutor.ExecuteAsync(new ClientEmailExistQueryNext("test@examplesssss.com")))
             .Scan(Assert.False)
-            .Combine(_ => queryExecutor.ExecuteNextAsync(new ClientEmailExistQueryNextAsync("test@examplesssss.com")))
+            .Combine(_ => queryExecutor.ExecuteAsync(new ClientEmailExistQueryNextAsync("test@examplesssss.com")))
             .Scan(Assert.Equal)
             .ScanResult(result => Assert.True(result.IsSuccess));
     [Fact]
@@ -174,17 +174,17 @@ public abstract class ResultBoxSpec : TestBase<FeatureCheckDependency>
             .Conveyor(_ => commandExecutor.ExecCommandNextAsync(new CreateBranch { Name = "Branch 24" }))
             .Conveyor(response => response.GetAggregateId().Remap(BranchId.FromValue))
             .Conveyor(branchId => commandExecutor.ExecCommandNextAsync(new CreateClient(branchId.Value, "Client1", "test@example.com")))
-            .Conveyor(_ => queryExecutor.ExecuteNextAsync(new GetClientPayloadQueryNext("Client1")))
+            .Conveyor(_ => queryExecutor.ExecuteAsync(new GetClientPayloadQueryNext("Client1")))
             .Combine(_ => ResultBox.FromValue(queryExecutor.ExecuteAsync(new GetClientPayloadQuery.Parameter("Client1"))))
             .Scan(Assert.Equal)
-            .Conveyor(_ => queryExecutor.ExecuteNextAsync(new GetClientPayloadQueryNextAsync("Client1")))
+            .Conveyor(_ => queryExecutor.ExecuteAsync(new GetClientPayloadQueryNextAsync("Client1")))
             .Combine(_ => ResultBox.FromValue(queryExecutor.ExecuteAsync(new GetClientPayloadQuery.Parameter("Client1"))))
             .Scan(Assert.Equal)
-            .Conveyor(_ => queryExecutor.ExecuteNextAsync(new GetClientPayloadQueryNext("Cli---ent1")))
+            .Conveyor(_ => queryExecutor.ExecuteAsync(new GetClientPayloadQueryNext("Cli---ent1")))
             .Combine(_ => ResultBox.FromValue(queryExecutor.ExecuteAsync(new GetClientPayloadQuery.Parameter("Cli---ent1"))))
             .Scan(Assert.Equal)
             .Scan(Assert.Equal)
-            .Conveyor(_ => queryExecutor.ExecuteNextAsync(new GetClientPayloadQueryNextAsync("Cli---ent1")))
+            .Conveyor(_ => queryExecutor.ExecuteAsync(new GetClientPayloadQueryNextAsync("Cli---ent1")))
             .Combine(_ => ResultBox.FromValue(queryExecutor.ExecuteAsync(new GetClientPayloadQuery.Parameter("Cli---ent1"))))
             .Scan(Assert.Equal);
 
@@ -200,7 +200,7 @@ public abstract class ResultBoxSpec : TestBase<FeatureCheckDependency>
             .Do(branchId => commandExecutor.ExecCommandNextAsync(new CreateClient(branchId.Value, _clientNameBase + 4, "test" + 4 + "@example.com")))
             .Do(branchId => commandExecutor.ExecCommandNextAsync(new CreateClient(branchId.Value, _clientNameBase + 5, "test" + 5 + "@example.com")))
             .Conveyor(
-                _ => queryExecutor.ExecuteNextAsync(
+                _ => queryExecutor.ExecuteAsync(
                     new ClientLoyaltyPointQueryNext(
                         null,
                         null,

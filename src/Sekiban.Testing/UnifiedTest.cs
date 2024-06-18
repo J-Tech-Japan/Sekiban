@@ -140,7 +140,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         where TQueryResponse : notnull
     {
         var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new SekibanTypeNotFoundException("Failed to get Query service");
-        return queryService.ExecuteNextAsync(param).Result.UnwrapBox() ??
+        return queryService.ExecuteAsync(param).Result.UnwrapBox() ??
             throw new SekibanTypeNotFoundException("Failed to get Aggregate Query Response for " + param.GetType().Name);
     }
     /// <summary>
@@ -356,7 +356,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     public TQueryResponse GetQueryResponse<TQueryResponse>(INextQueryCommon<TQueryResponse> param) where TQueryResponse : notnull
     {
         var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new SekibanTypeNotFoundException("Failed to get Query service");
-        return queryService.ExecuteNextAsync(param).Result.UnwrapBox() ??
+        return queryService.ExecuteAsync(param).Result.UnwrapBox() ??
             throw new SekibanTypeNotFoundException("Failed to get Aggregate Query Response for " + param.GetType().Name);
     }
     /// <summary>

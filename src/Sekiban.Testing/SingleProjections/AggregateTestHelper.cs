@@ -860,12 +860,11 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             throw new SekibanTypeNotFoundException("Failed to get Aggregate Query Response for " + param.GetType().Name);
     }
 
-    public ListQueryResult<TQueryResponse> GetQueryResponse<TQueryResponse>(INextListQueryCommon<TQueryResponse> param)
-        where TQueryResponse : notnull
+    public ListQueryResult<TQueryResponse> GetQueryResponse<TQueryResponse>(INextListQueryCommon<TQueryResponse> param) where TQueryResponse : notnull
     {
         ThenNotThrowsAnException();
         var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new SekibanTypeNotFoundException("Failed to get Query service");
-        return queryService.ExecuteNextAsync(param).Result.UnwrapBox() ??
+        return queryService.ExecuteAsync(param).Result.UnwrapBox() ??
             throw new SekibanTypeNotFoundException("Failed to get Aggregate Query Response for " + param.GetType().Name);
     }
 
@@ -1013,7 +1012,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     {
         ThenNotThrowsAnException();
         var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new SekibanTypeNotFoundException("Failed to get Query service");
-        return queryService.ExecuteNextAsync(param).Result.UnwrapBox() ??
+        return queryService.ExecuteAsync(param).Result.UnwrapBox() ??
             throw new SekibanTypeNotFoundException("Failed to get Aggregate Query Response for " + param.GetType().Name);
     }
 

@@ -24,7 +24,7 @@ public class QueryExecutor : IQueryExecutor
         this.queryHandler = queryHandler;
         this.serviceProvider = serviceProvider;
     }
-    public async Task<ResultBox<TOutput>> ExecuteNextAsync<TOutput>(INextQueryCommon<TOutput> query) where TOutput : notnull
+    public async Task<ResultBox<TOutput>> ExecuteAsync<TOutput>(INextQueryCommon<TOutput> query) where TOutput : notnull
     {
         var validationResult = query.ValidateProperties().ToList();
         if (validationResult.Count != 0)
@@ -84,7 +84,7 @@ public class QueryExecutor : IQueryExecutor
         }
         throw new SekibanQueryExecutionException("Can not find query handler for" + paramType.Name);
     }
-    public async Task<ResultBox<ListQueryResult<TOutput>>> ExecuteNextAsync<TOutput>(INextListQueryCommon<TOutput> query) where TOutput : notnull
+    public async Task<ResultBox<ListQueryResult<TOutput>>> ExecuteAsync<TOutput>(INextListQueryCommon<TOutput> query) where TOutput : notnull
     {
         var validationResult = query.ValidateProperties().ToList();
         if (validationResult.Count != 0)

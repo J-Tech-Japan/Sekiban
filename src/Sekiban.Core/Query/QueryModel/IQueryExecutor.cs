@@ -7,8 +7,8 @@ namespace Sekiban.Core.Query.QueryModel;
 /// </summary>
 public interface IQueryExecutor
 {
-    public Task<ResultBox<TOutput>> ExecuteNextAsync<TOutput>(INextQueryCommon<TOutput> query) where TOutput : notnull;
-    public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteNextAsync<TOutput>(INextListQueryCommon<TOutput> query) where TOutput : notnull;
+    public Task<ResultBox<TOutput>> ExecuteAsync<TOutput>(INextQueryCommon<TOutput> query) where TOutput : notnull;
+    public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteAsync<TOutput>(INextListQueryCommon<TOutput> query) where TOutput : notnull;
 
     /// <summary>
     ///     Execute Query (List Query).
