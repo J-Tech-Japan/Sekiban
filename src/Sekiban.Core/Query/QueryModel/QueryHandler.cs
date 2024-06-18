@@ -15,6 +15,20 @@ public class QueryHandler : IQueryContext
 
     public QueryHandler(IServiceProvider serviceProvider) => _serviceProvider = serviceProvider;
 
+
+    public ResultBox<T1> GetRequiredService<T1>() where T1 : class => ResultBox.WrapTry(() => _serviceProvider.GetRequiredService<T1>());
+
+    public ResultBox<TwoValues<T1, T2>> GetRequiredService<T1, T2>() where T1 : class where T2 : class =>
+        GetRequiredService<T1>().Combine(ResultBox.WrapTry(() => _serviceProvider.GetRequiredService<T2>()));
+
+    public ResultBox<ThreeValues<T1, T2, T3>> GetRequiredService<T1, T2, T3>() where T1 : class where T2 : class where T3 : class =>
+        GetRequiredService<T1, T2>().Combine(ResultBox.WrapTry(() => _serviceProvider.GetRequiredService<T3>()));
+
+    public ResultBox<FourValues<T1, T2, T3, T4>> GetRequiredService<T1, T2, T3, T4>()
+        where T1 : class where T2 : class where T3 : class where T4 : class =>
+        GetRequiredService<T1, T2, T3>().Combine(ResultBox.WrapTry(() => _serviceProvider.GetRequiredService<T4>()));
+    public ResultBox<IMultiProjectionService> GetMultiProjectionService() => GetRequiredService<IMultiProjectionService>();
+
     public ListQueryResult<TQueryResponse> GetMultiProjectionListQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
         TQueryParameter param,
         MultiProjectionState<TProjectionPayload> projection) where TProjectionPayload : IMultiProjectionPayloadCommon
@@ -176,6 +190,41 @@ public class QueryHandler : IQueryContext
             : new ListQueryResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
     }
 
+
+    public ResultBox<ListQueryResult<TQueryResponse>> GetSingleProjectionListNextQuery<TSingleProjectionPayload, TQuery, TQueryResponse>(
+        TQuery query,
+        IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections) where TSingleProjectionPayload : ISingleProjectionPayloadCommon
+        where TQuery : INextSingleProjectionListQuery<TSingleProjectionPayload, TQueryResponse>
+        where TQueryResponse : IQueryResponse
+    {
+        return query.HandleFilter(projections, this)
+            .Conveyor(sorted => query.HandleSort(sorted, this))
+            .Remap(sorted => sorted.ToList())
+            .Remap(
+                sorted => query is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam
+                    ? MakeQueryListResult(pagingParam, sorted)
+                    : new ListQueryResult<TQueryResponse>(sorted.Count, null, null, null, sorted));
+    }
+    public Task<ResultBox<ListQueryResult<TQueryResponse>>> GetSingleProjectionListNextQueryAsync<TSingleProjectionPayload, TQuery, TQueryResponse>(
+        TQuery query,
+        IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections) where TSingleProjectionPayload : ISingleProjectionPayloadCommon
+        where TQuery : INextSingleProjectionListQueryAsync<TSingleProjectionPayload, TQueryResponse>
+        where TQueryResponse : IQueryResponse
+    {
+        return query.HandleFilterAsync(projections, this)
+            .Conveyor(sorted => query.HandleSortAsync(sorted, this))
+            .Remap(sorted => sorted.ToList())
+            .Remap(
+                sorted => query is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam
+                    ? MakeQueryListResult(pagingParam, sorted)
+                    : new ListQueryResult<TQueryResponse>(sorted.Count, null, null, null, sorted));
+    }
+
+
+
+
+
+
     private static ListQueryResult<TQueryResponse> MakeQueryListResult<TQueryResponse>(
         IQueryPagingParameterCommon pagingParam,
         List<TQueryResponse> queryResponses)
@@ -210,4 +259,16 @@ public class QueryHandler : IQueryContext
         var filtered = query.HandleFilter(param, projections);
         return filtered;
     }
+    public Task<ResultBox<TQueryResponse>> GetSingleProjectionQueryNextAsync<TSingleProjectionPayload, TQuery, TQueryResponse>(
+        TQuery query,
+        IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections) where TSingleProjectionPayload : ISingleProjectionPayloadCommon
+        where TQuery : INextSingleProjectionQueryAsync<TSingleProjectionPayload, TQueryResponse>
+        where TQueryResponse : notnull =>
+        query.HandleFilterAsync(projections, this);
+    public ResultBox<TQueryResponse> GetSingleProjectionQueryNext<TSingleProjectionPayload, TQuery, TQueryResponse>(
+        TQuery query,
+        IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections) where TSingleProjectionPayload : ISingleProjectionPayloadCommon
+        where TQuery : INextSingleProjectionQuery<TSingleProjectionPayload, TQueryResponse>
+        where TQueryResponse : notnull =>
+        query.HandleFilter(projections, this);
 }

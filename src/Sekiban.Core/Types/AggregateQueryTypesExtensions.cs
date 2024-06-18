@@ -37,6 +37,11 @@ public static class AggregateQueryTypesExtensions
         var baseType = query.GetImplementingFromGenericInterfaceType(typeof(INextAggregateQueryCommon<,>));
         return baseType.GenericTypeArguments[0];
     }
+    public static Type GetSingleProjectionTypeFromNextSingleProjectionQueryType(this Type query)
+    {
+        var baseType = query.GetImplementingFromGenericInterfaceType(typeof(INextSingleProjectionQueryCommon<,>));
+        return baseType.GenericTypeArguments[0];
+    }
     /// <summary>
     ///     Gets the Parameter Type from the given Aggregate Query Type.
     /// </summary>

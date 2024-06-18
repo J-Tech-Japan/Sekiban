@@ -51,6 +51,21 @@ public class QueryExecutor : IQueryExecutor
                     throw new SekibanQueryExecutionException("Can not find method ForAggregateQueryNextAsync"));
                 return result;
             }
+            case not null when paramType.IsSingleProjectionNextQueryType():
+            {
+                var singleProjectionType = paramType.GetSingleProjectionTypeFromNextSingleProjectionQueryType();
+                var baseMethod = paramType switch
+                {
+                    not null when paramType.IsNextQueryAsync() => GetType().GetMethod(nameof(ForSingleProjectionNextQueryAsync)),
+                    not null when !paramType.IsNextQueryAsync() => GetType().GetMethod(nameof(ForSingleProjectionNextQuery)),
+                    _ => throw new SekibanQueryExecutionException("Can not find method ForSingleProjectionNextQuery")
+                };
+                var method = baseMethod?.MakeGenericMethod(singleProjectionType, paramType, outputType) ??
+                    throw new SekibanQueryExecutionException("Can not find method ForSingleProjectionNextQuery");
+                var result = await (dynamic)(method.Invoke(this, [query]) ??
+                    throw new SekibanQueryExecutionException("Can not find method ForSingleProjectionNextQuery"));
+                return result;
+            }
         }
         throw new SekibanQueryExecutionException("Can not find query handler for" + paramType.Name);
     }
@@ -84,6 +99,22 @@ public class QueryExecutor : IQueryExecutor
                     throw new SekibanQueryExecutionException("Can not find method ForAggregateQueryNextAsync"));
                 return result;
             }
+            case not null when paramType.IsSingleProjectionNextQueryType():
+            {
+                var singleProjectionType = paramType.GetSingleProjectionTypeFromNextSingleProjectionQueryType();
+                var baseMethod = paramType switch
+                {
+                    not null when paramType.IsNextQueryAsync() => GetType().GetMethod(nameof(ForSingleProjectionListQueryAsync)),
+                    not null when !paramType.IsNextQueryAsync() => GetType().GetMethod(nameof(ForSingleProjectionListQuery)),
+                    _ => throw new SekibanQueryExecutionException("Can not find method ForSingleProjectionNextQuery")
+                };
+                var method = baseMethod?.MakeGenericMethod(singleProjectionType, paramType, outputType) ??
+                    throw new SekibanQueryExecutionException("Can not find method ForSingleProjectionNextQuery");
+                var result = await (dynamic)(method.Invoke(this, [query]) ??
+                    throw new SekibanQueryExecutionException("Can not find method ForSingleProjectionNextQuery"));
+                return result;
+            }
+
         }
         throw new SekibanQueryExecutionException("Can not find query handler for" + paramType.Name);
     }
@@ -331,6 +362,35 @@ public class QueryExecutor : IQueryExecutor
         return queryHandler.GetSingleProjectionListQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param, allProjection);
     }
 
+
+    public Task<ResultBox<ListQueryResult<TQueryResponse>>>
+        ForSingleProjectionListQueryAsync<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(TQuery query)
+        where TProjectionPayload : class, ISingleProjectionPayloadCommon
+        where TQuery : INextSingleProjectionListQueryAsync<TProjectionPayload, TQueryResponse>
+        where TQueryResponse : IQueryResponse =>
+        ResultBox
+            .FromValue(
+                multiProjectionService.GetSingleProjectionList<TProjectionPayload>(
+                    query.QueryListType,
+                    query.GetRootPartitionKey(),
+                    MultiProjectionRetrievalOptions.GetFromQuery(query)))
+            .Conveyor(
+                allProjection =>
+                    queryHandler.GetSingleProjectionListNextQueryAsync<TProjectionPayload, TQuery, TQueryResponse>(query, allProjection));
+    public Task<ResultBox<ListQueryResult<TQueryResponse>>>
+        ForSingleProjectionListQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(TQuery query)
+        where TProjectionPayload : class, ISingleProjectionPayloadCommon
+        where TQuery : INextSingleProjectionListQuery<TProjectionPayload, TQueryResponse>
+        where TQueryResponse : IQueryResponse =>
+        ResultBox
+            .FromValue(
+                multiProjectionService.GetSingleProjectionList<TProjectionPayload>(
+                    query.QueryListType,
+                    query.GetRootPartitionKey(),
+                    MultiProjectionRetrievalOptions.GetFromQuery(query)))
+            .Conveyor(
+                allProjection => queryHandler.GetSingleProjectionListNextQuery<TProjectionPayload, TQuery, TQueryResponse>(query, allProjection));
+
     public async Task<TQueryResponse>
         ForSingleProjectionQueryAsync<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
@@ -343,5 +403,29 @@ public class QueryExecutor : IQueryExecutor
             param.GetRootPartitionKey(),
             MultiProjectionRetrievalOptions.GetFromQuery(param));
         return queryHandler.GetSingleProjectionQuery<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(param, allProjection);
+    }
+
+
+    public async Task<ResultBox<TQueryResponse>> ForSingleProjectionNextQueryAsync<TSingleProjectionPayload, TQuery, TQueryResponse>(TQuery query)
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
+        where TQuery : INextSingleProjectionQueryAsync<TSingleProjectionPayload, TQueryResponse>
+        where TQueryResponse : notnull
+    {
+        var allProjection = await multiProjectionService.GetSingleProjectionList<TSingleProjectionPayload>(
+            query.QueryListType,
+            query.GetRootPartitionKey(),
+            MultiProjectionRetrievalOptions.GetFromQuery(query));
+        return await queryHandler.GetSingleProjectionQueryNextAsync<TSingleProjectionPayload, TQuery, TQueryResponse>(query, allProjection);
+    }
+    public async Task<ResultBox<TQueryResponse>> ForSingleProjectionNextQuery<TSingleProjectionPayload, TQuery, TQueryResponse>(TQuery query)
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
+        where TQuery : INextSingleProjectionQuery<TSingleProjectionPayload, TQueryResponse>
+        where TQueryResponse : notnull
+    {
+        var allProjection = await multiProjectionService.GetSingleProjectionList<TSingleProjectionPayload>(
+            query.QueryListType,
+            query.GetRootPartitionKey(),
+            MultiProjectionRetrievalOptions.GetFromQuery(query));
+        return queryHandler.GetSingleProjectionQueryNext<TSingleProjectionPayload, TQuery, TQueryResponse>(query, allProjection);
     }
 }

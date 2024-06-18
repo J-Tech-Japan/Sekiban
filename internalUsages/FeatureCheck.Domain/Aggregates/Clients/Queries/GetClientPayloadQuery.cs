@@ -16,10 +16,3 @@ public class GetClientPayloadQuery : IAggregateListQuery<Client, GetClientPayloa
         public MultiProjectionRetrievalOptions? MultiProjectionRetrievalOptions { get; init; } = null;
     }
 }
-// public class TestingQueryOld(IQueryExecutor queryExecutor)
-// {
-//     public async Task TestHandle()
-//     {
-//         var result2 = await queryExecutor.ExecuteAsync(new GetClientPayloadQuery.Parameter("test@me.com"));
-//     }
-// }

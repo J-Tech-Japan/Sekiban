@@ -19,4 +19,16 @@ public record ListQueryResult<T>(int? TotalCount, int? TotalPages, int? CurrentP
         CurrentPage == other.CurrentPage &&
         PageSize == other.PageSize &&
         Items.SequenceEqual(other.Items);
+    public override int GetHashCode()
+    {
+        unchecked
+        {
+            var hashCode = TotalCount.GetHashCode();
+            hashCode = (hashCode * 397) ^ TotalPages.GetHashCode();
+            hashCode = (hashCode * 397) ^ CurrentPage.GetHashCode();
+            hashCode = (hashCode * 397) ^ PageSize.GetHashCode();
+            hashCode = (hashCode * 397) ^ Items.GetHashCode();
+            return hashCode;
+        }
+    }
 }

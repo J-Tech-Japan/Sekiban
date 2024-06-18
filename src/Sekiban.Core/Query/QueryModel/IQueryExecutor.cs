@@ -1,7 +1,6 @@
 using ResultBoxes;
 namespace Sekiban.Core.Query.QueryModel;
 
-public interface INextQueryGeneral<TOutput> : INextQueryGeneral where TOutput : notnull;
 /// <summary>
 ///     Query Executor Interface.
 ///     Query user can use this interface to execute Query.
