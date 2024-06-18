@@ -94,6 +94,38 @@ public class QueryHandler : IQueryContext
             : new ListQueryResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
     }
 
+
+
+
+    public async Task<ResultBox<ListQueryResult<TQueryResponse>>>
+        GetAggregateListQueryNextAsync<TAggregatePayload, TQuery, TQueryResponse>(TQuery query, IEnumerable<AggregateState<TAggregatePayload>> list)
+        where TAggregatePayload : IAggregatePayloadCommon
+        where TQuery : INextAggregateListQueryAsync<TAggregatePayload, TQueryResponse>
+        where TQueryResponse : notnull =>
+        await query.HandleFilterAsync(list, this)
+            .Conveyor(filtered => query.HandleSortAsync(filtered, this))
+            .Remap(sorted => sorted.ToList())
+            .Remap(
+                sorted => query is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam
+                    ? MakeQueryListResult(pagingParam, sorted)
+                    : new ListQueryResult<TQueryResponse>(sorted.Count, null, null, null, sorted));
+
+
+    public ResultBox<ListQueryResult<TQueryResponse>>
+        GetAggregateListQueryNext<TAggregatePayload, TQuery, TQueryResponse>(TQuery query, IEnumerable<AggregateState<TAggregatePayload>> list)
+        where TAggregatePayload : IAggregatePayloadCommon
+        where TQuery : INextAggregateListQuery<TAggregatePayload, TQueryResponse>
+        where TQueryResponse : notnull =>
+        query.HandleFilter(list, this)
+            .Conveyor(filtered => query.HandleSort(filtered, this))
+            .Remap(sorted => sorted.ToList())
+            .Remap(
+                sorted => query is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam
+                    ? MakeQueryListResult(pagingParam, sorted)
+                    : new ListQueryResult<TQueryResponse>(sorted.Count, null, null, null, sorted));
+
+
+
     public TQueryResponse GetAggregateQuery<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
         TQueryParameter param,
         IEnumerable<AggregateState<TAggregatePayload>> list) where TAggregatePayload : IAggregatePayloadCommon

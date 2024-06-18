@@ -143,4 +143,38 @@ public abstract class ResultBoxSpec : TestBase<FeatureCheckDependency>
         Assert.Single(result.Items);
         Assert.Equal("Client1", result.Items.First().Client.ClientName);
     }
+    [Fact]
+    public async Task NextQueryTest() =>
+        await ResultBox.WrapTry(RemoveAllFromDefaultAndDissolvableWithResultBox)
+            .Conveyor(_ => commandExecutor.ExecCommandNextAsync(new CreateBranch { Name = "Branch 24" }))
+            .Conveyor(response => response.GetAggregateId().Remap(BranchId.FromValue))
+            .Conveyor(branchId => commandExecutor.ExecCommandNextAsync(new CreateClient(branchId.Value, "Client1", "test@example.com")))
+            .Conveyor(_ => queryExecutor.ExecuteNextAsync(new ClientEmailExistQueryNext("test@example.com")))
+            .Scan(Assert.True)
+            .Combine(_ => queryExecutor.ExecuteNextAsync(new ClientEmailExistQueryNextAsync("test@example.com")))
+            .Scan(Assert.Equal)
+            .Conveyor(_ => queryExecutor.ExecuteNextAsync(new ClientEmailExistQueryNext("test@examplesssss.com")))
+            .Scan(Assert.False)
+            .Combine(_ => queryExecutor.ExecuteNextAsync(new ClientEmailExistQueryNextAsync("test@examplesssss.com")))
+            .Scan(Assert.Equal)
+            .ScanResult(result => Assert.True(result.IsSuccess));
+    [Fact]
+    public async Task NextQueryTest2() =>
+        await ResultBox.WrapTry(RemoveAllFromDefaultAndDissolvableWithResultBox)
+            .Conveyor(async _ => await commandExecutor.ExecCommandNextAsync(new CreateBranch { Name = "Branch 24" }))
+            .Conveyor(response => response.GetAggregateId().Remap(BranchId.FromValue))
+            .Conveyor(branchId => commandExecutor.ExecCommandNextAsync(new CreateClient(branchId.Value, "Client1", "test@example.com")))
+            .Conveyor(_ => queryExecutor.ExecuteNextAsync(new GetClientPayloadQueryNext("Client1")))
+            .Combine(_ => ResultBox.FromValue(queryExecutor.ExecuteAsync(new GetClientPayloadQuery.Parameter("Client1"))))
+            .Scan(Assert.Equal)
+            .Conveyor(_ => queryExecutor.ExecuteNextAsync(new GetClientPayloadQueryNextAsync("Client1")))
+            .Combine(_ => ResultBox.FromValue(queryExecutor.ExecuteAsync(new GetClientPayloadQuery.Parameter("Client1"))))
+            .Scan(Assert.Equal)
+            .Conveyor(_ => queryExecutor.ExecuteNextAsync(new GetClientPayloadQueryNext("Cli---ent1")))
+            .Combine(_ => ResultBox.FromValue(queryExecutor.ExecuteAsync(new GetClientPayloadQuery.Parameter("Cli---ent1"))))
+            .Scan(Assert.Equal)
+            .Scan(Assert.Equal)
+            .Conveyor(_ => queryExecutor.ExecuteNextAsync(new GetClientPayloadQueryNextAsync("Cli---ent1")))
+            .Combine(_ => ResultBox.FromValue(queryExecutor.ExecuteAsync(new GetClientPayloadQuery.Parameter("Cli---ent1"))))
+            .Scan(Assert.Equal);
 }

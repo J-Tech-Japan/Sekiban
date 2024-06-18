@@ -32,18 +32,20 @@ public class QueryExecutor : IQueryExecutor
             return new SekibanValidationErrorsException(validationResult);
         }
         var paramType = query.GetType();
-        if (!paramType.IsQueryNextInputType()) { throw new SekibanQueryExecutionException("Invalid parameter type"); }
-        var outputType = paramType.GetOutputClassFromQueryNextInputType();
+        if (!paramType.IsQueryNextType()) { throw new SekibanQueryExecutionException("Invalid parameter type"); }
+        var outputType = paramType.GetOutputClassFromNextQueryType();
         switch (query)
         {
             case not null when paramType.IsAggregateQueryNextType():
             {
                 var aggregateType = paramType.GetAggregateTypeFromNextAggregateQueryType();
-                var baseMethod = (paramType.IsNextQueryAsync()
-                        ? GetType().GetMethod(nameof(ForAggregateQueryNextAsync))
-                        : GetType().GetMethod(nameof(ForAggregateQueryNext))) ??
-                    throw new SekibanQueryExecutionException("Can not find method ForAggregateQueryNextAsync");
-                var method = (MethodInfo?)baseMethod.MakeGenericMethod(aggregateType, paramType, outputType) ??
+                var baseMethod = paramType switch
+                {
+                    not null when paramType.IsNextQueryAsync() => GetType().GetMethod(nameof(ForAggregateQueryNextAsync)),
+                    not null when !paramType.IsNextQueryAsync() => GetType().GetMethod(nameof(ForAggregateQueryNext)),
+                    _ => throw new SekibanQueryExecutionException("Can not find method ForAggregateQueryNextAsync")
+                };
+                var method = baseMethod?.MakeGenericMethod(aggregateType, paramType, outputType) ??
                     throw new SekibanQueryExecutionException("Can not find method ForAggregateQueryNextAsync");
                 var result = await (dynamic)(method.Invoke(this, [query]) ??
                     throw new SekibanQueryExecutionException("Can not find method ForAggregateQueryNextAsync"));
@@ -52,8 +54,39 @@ public class QueryExecutor : IQueryExecutor
         }
         throw new SekibanQueryExecutionException("Can not find query handler for" + paramType.Name);
     }
-    public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteNextAsync<TOutput>(INextListQueryCommon<TOutput> query) where TOutput : notnull =>
-        throw new NotImplementedException();
+    public async Task<ResultBox<ListQueryResult<TOutput>>> ExecuteNextAsync<TOutput>(INextListQueryCommon<TOutput> query) where TOutput : notnull
+    {
+        var validationResult = query.ValidateProperties().ToList();
+        if (validationResult.Count != 0)
+        {
+            return new SekibanValidationErrorsException(validationResult);
+        }
+        var paramType = query.GetType();
+        if (!paramType.IsQueryNextType())
+        {
+            throw new SekibanQueryExecutionException("Invalid parameter type");
+        }
+        var outputType = paramType.GetOutputClassFromNextQueryType();
+        switch (query)
+        {
+            case not null when paramType.IsAggregateQueryNextType():
+            {
+                var aggregateType = paramType.GetAggregateTypeFromNextAggregateQueryType();
+                var baseMethod = paramType switch
+                {
+                    not null when paramType.IsNextQueryAsync() => GetType().GetMethod(nameof(ForAggregateListQueryNextAsync)),
+                    not null when !paramType.IsNextQueryAsync() => GetType().GetMethod(nameof(ForAggregateListQueryNext)),
+                    _ => throw new SekibanQueryExecutionException("Can not find method ForAggregateQueryNextAsync")
+                };
+                var method = baseMethod?.MakeGenericMethod(aggregateType, paramType, outputType) ??
+                    throw new SekibanQueryExecutionException("Can not find method ForAggregateQueryNextAsync");
+                var result = await (dynamic)(method.Invoke(this, [query]) ??
+                    throw new SekibanQueryExecutionException("Can not find method ForAggregateQueryNextAsync"));
+                return result;
+            }
+        }
+        throw new SekibanQueryExecutionException("Can not find query handler for" + paramType.Name);
+    }
     public async Task<ListQueryResult<TOutput>> ExecuteAsync<TOutput>(IListQueryInput<TOutput> param) where TOutput : IQueryResponse
     {
         var validationResult = param.ValidateProperties().ToList();
@@ -258,6 +291,28 @@ public class QueryExecutor : IQueryExecutor
             param.GetRootPartitionKey(),
             MultiProjectionRetrievalOptions.GetFromQuery(param));
         return queryHandler.GetAggregateQueryNext<TAggregatePayload, TQuery, TQueryResponse>(param, allProjection);
+    }
+    public async Task<ResultBox<ListQueryResult<TQueryResponse>>>
+        ForAggregateListQueryNextAsync<TAggregatePayload, TQuery, TQueryResponse>(TQuery param) where TAggregatePayload : IAggregatePayloadCommon
+        where TQuery : INextAggregateListQueryAsync<TAggregatePayload, TQueryResponse>
+        where TQueryResponse : notnull
+    {
+        var allProjection = await multiProjectionService.GetAggregateList<TAggregatePayload>(
+            param.QueryListType,
+            param.GetRootPartitionKey(),
+            MultiProjectionRetrievalOptions.GetFromQuery(param));
+        return await queryHandler.GetAggregateListQueryNextAsync<TAggregatePayload, TQuery, TQueryResponse>(param, allProjection);
+    }
+    public async Task<ResultBox<ListQueryResult<TQueryResponse>>> ForAggregateListQueryNext<TAggregatePayload, TQuery, TQueryResponse>(TQuery param)
+        where TAggregatePayload : IAggregatePayloadCommon
+        where TQuery : INextAggregateListQuery<TAggregatePayload, TQueryResponse>
+        where TQueryResponse : notnull
+    {
+        var allProjection = await multiProjectionService.GetAggregateList<TAggregatePayload>(
+            param.QueryListType,
+            param.GetRootPartitionKey(),
+            MultiProjectionRetrievalOptions.GetFromQuery(param));
+        return queryHandler.GetAggregateListQueryNext<TAggregatePayload, TQuery, TQueryResponse>(param, allProjection);
     }
 
 

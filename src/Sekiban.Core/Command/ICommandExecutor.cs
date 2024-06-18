@@ -32,6 +32,9 @@ public interface ICommandExecutor
     /// <returns></returns>
     Task<ResultBox<CommandExecutorResponse>> ExecCommandWithResultAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null)
         where TCommand : ICommandCommon;
+    Task<ResultBox<CommandExecutorResponse>> ExecCommandNextAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null)
+        where TCommand : ICommandCommon =>
+        ExecCommandWithResultAsync(command, callHistories);
 
 
     /// <summary>
@@ -59,6 +62,10 @@ public interface ICommandExecutor
     Task<ResultBox<CommandExecutorResponseWithEvents>> ExecCommandWithEventsWithResultAsync<TCommand>(
         TCommand command,
         List<CallHistory>? callHistories = null) where TCommand : ICommandCommon;
+    Task<ResultBox<CommandExecutorResponseWithEvents>> ExecCommandWithEventsNextAsync<TCommand>(
+        TCommand command,
+        List<CallHistory>? callHistories = null) where TCommand : ICommandCommon =>
+        ExecCommandWithEventsWithResultAsync(command, callHistories);
 
     /// <summary>
     ///     Execute a command (basic)

@@ -1,46 +1,7 @@
 using ResultBoxes;
-using Sekiban.Core.Aggregate;
 namespace Sekiban.Core.Query.QueryModel;
 
-public interface IQueryContext;
-public interface INextQueryGeneral : IQueryPartitionKeyCommon
-{
-}
-public interface INextQueryAsyncGeneral;
-public interface INextQueryCommon : INextQueryGeneral
-{
-}
-public interface INextQueryCommon<TOutput> : INextQueryCommon where TOutput : notnull;
-public interface INextListQueryCommon : INextQueryGeneral
-{
-}
-public interface INextListQueryCommon<TOutput> : INextListQueryCommon where TOutput : notnull;
-public interface INextAggregateQueryCommon<TAggregatePayload, TOutput> : INextQueryCommon<TOutput>
-    where TOutput : notnull where TAggregatePayload : IAggregatePayloadCommon;
-public interface INextAggregateQuery<TAggregatePayload, TOutput> : INextAggregateQueryCommon<TAggregatePayload, TOutput>
-    where TOutput : notnull where TAggregatePayload : IAggregatePayloadCommon
-{
-    public QueryListType QueryListType => QueryListType.ActiveOnly;
-    public ResultBox<TOutput> HandleFilter(IEnumerable<AggregateState<TAggregatePayload>> list, IQueryContext context);
-}
-public interface INextAggregateQueryAsync<TAggregatePayload, TOutput> : INextAggregateQueryCommon<TAggregatePayload, TOutput>, INextQueryAsyncGeneral
-    where TOutput : notnull where TAggregatePayload : IAggregatePayloadCommon
-{
-    public QueryListType QueryListType => QueryListType.ActiveOnly;
-    public Task<ResultBox<TOutput>> HandleFilterAsync(IEnumerable<AggregateState<TAggregatePayload>> list, IQueryContext context);
-}
-public interface INextAggregateListQuery<TAggregatePayload, TOutput> : INextListQueryCommon<TOutput> where TOutput : notnull
-    where TAggregatePayload : IAggregatePayloadCommon
-{
-    public ResultBox<IEnumerable<TOutput>> HandleFilter(IEnumerable<AggregateState<TAggregatePayload>> list, IQueryContext context);
-    public ResultBox<IEnumerable<TOutput>> HandleSort(IEnumerable<TOutput> filteredList, IQueryContext context);
-}
-public interface INextAggregateListQueryAsync<TAggregatePayload, TOutput> : INextListQueryCommon<TOutput> where TOutput : notnull
-    where TAggregatePayload : IAggregatePayloadCommon
-{
-    public Task<ResultBox<IEnumerable<TOutput>>> HandleFilterAsync(IEnumerable<AggregateState<TAggregatePayload>> list, IQueryContext context);
-    public Task<ResultBox<IEnumerable<TOutput>>> HandleSortAsync(IEnumerable<TOutput> filteredList, IQueryContext context);
-}
+public interface INextQueryGeneral<TOutput> : INextQueryGeneral where TOutput : notnull;
 /// <summary>
 ///     Query Executor Interface.
 ///     Query user can use this interface to execute Query.
