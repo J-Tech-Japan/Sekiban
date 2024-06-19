@@ -9,3 +9,9 @@ public interface INextAggregateListQueryAsync<TAggregatePayload, TOutput> : INex
     public Task<ResultBox<IEnumerable<TOutput>>> HandleFilterAsync(IEnumerable<AggregateState<TAggregatePayload>> list, IQueryContext context);
     public Task<ResultBox<IEnumerable<TOutput>>> HandleSortAsync(IEnumerable<TOutput> filteredList, IQueryContext context);
 }
+public interface INextGeneralListQueryAsync<TOutput> : INextGeneralQueryCommon<TOutput>, INextListQueryCommon<TOutput>, INextQueryAsyncGeneral
+    where TOutput : notnull
+{
+    public Task<ResultBox<IEnumerable<TOutput>>> HandleFilterAsync(IQueryContext context);
+    public Task<ResultBox<IEnumerable<TOutput>>> HandleSortAsync(IEnumerable<TOutput> filteredList, IQueryContext context);
+}

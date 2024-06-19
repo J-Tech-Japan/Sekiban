@@ -81,6 +81,20 @@ public class QueryExecutor : IQueryExecutor
                     throw new SekibanQueryExecutionException("Can not find method ForMultiProjectionQueryNext"));
                 return result;
             }
+            case not null when paramType.IsGeneralNextQueryType():
+            {
+                var baseMethod = paramType switch
+                {
+                    not null when paramType.IsNextQueryAsync() => typeof(QueryHandler).GetMethod(nameof(QueryHandler.GetGeneralQueryNextAsync)),
+                    not null when !paramType.IsNextQueryAsync() => typeof(QueryHandler).GetMethod(nameof(QueryHandler.GetGeneralQueryNext)),
+                    _ => throw new SekibanQueryExecutionException("Can not find method GetGeneralQueryNext")
+                };
+                var method = baseMethod?.MakeGenericMethod(paramType, outputType) ??
+                    throw new SekibanQueryExecutionException("Can not find method GetGeneralQueryNext");
+                var result = await (dynamic)(method.Invoke(queryHandler, [query]) ??
+                    throw new SekibanQueryExecutionException("Can not find method GetGeneralQueryNext"));
+                return result;
+            }
         }
         throw new SekibanQueryExecutionException("Can not find query handler for" + paramType.Name);
     }
@@ -144,7 +158,20 @@ public class QueryExecutor : IQueryExecutor
                     throw new SekibanQueryExecutionException("Can not find method ForSingleProjectionNextQuery"));
                 return result;
             }
-
+            case not null when paramType.IsGeneralNextQueryType():
+            {
+                var baseMethod = paramType switch
+                {
+                    not null when paramType.IsNextQueryAsync() => typeof(QueryHandler).GetMethod(nameof(QueryHandler.GetGeneralListQueryNextAsync)),
+                    not null when !paramType.IsNextQueryAsync() => typeof(QueryHandler).GetMethod(nameof(QueryHandler.GetGeneralListQueryNext)),
+                    _ => throw new SekibanQueryExecutionException("Can not find method GetGeneralListQueryNext")
+                };
+                var method = baseMethod?.MakeGenericMethod(paramType, outputType) ??
+                    throw new SekibanQueryExecutionException("Can not find method GetGeneralListQueryNext");
+                var result = await (dynamic)(method.Invoke(queryHandler, [query]) ??
+                    throw new SekibanQueryExecutionException("Can not find method GetGeneralListQueryNext"));
+                return result;
+            }
         }
         throw new SekibanQueryExecutionException("Can not find query handler for" + paramType.Name);
     }

@@ -120,6 +120,26 @@ public class QueryHandler : IQueryContext
             : new ListQueryResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
     }
 
+    public Task<ResultBox<ListQueryResult<TQueryResponse>>> GetGeneralListQueryNextAsync<TQuery, TQueryResponse>(TQuery query)
+        where TQuery : INextGeneralListQueryAsync<TQueryResponse> where TQueryResponse : notnull =>
+        query.HandleFilterAsync(this)
+            .Conveyor(sorted => query.HandleSortAsync(sorted, this))
+            .Remap(sorted => sorted.ToList())
+            .Remap(
+                sorted => query is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam
+                    ? MakeQueryListResult(pagingParam, sorted)
+                    : new ListQueryResult<TQueryResponse>(sorted.Count, null, null, null, sorted));
+    public ResultBox<ListQueryResult<TQueryResponse>> GetGeneralListQueryNext<TQuery, TQueryResponse>(TQuery query)
+        where TQuery : INextGeneralListQuery<TQueryResponse> where TQueryResponse : notnull =>
+        query.HandleFilter(this)
+            .Conveyor(sorted => query.HandleSort(sorted, this))
+            .Remap(sorted => sorted.ToList())
+            .Remap(
+                sorted => query is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam
+                    ? MakeQueryListResult(pagingParam, sorted)
+                    : new ListQueryResult<TQueryResponse>(sorted.Count, null, null, null, sorted));
+
+
     public async Task<TQueryResponse> GetGeneralQueryAsync<TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TQuery : IGeneralQuery<TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter<TQueryResponse>
@@ -130,6 +150,14 @@ public class QueryHandler : IQueryContext
         var filtered = await query.HandleFilterAsync(param);
         return filtered;
     }
+
+    public Task<ResultBox<TQueryResponse>> GetGeneralQueryNextAsync<TQuery, TQueryResponse>(TQuery query)
+        where TQuery : INextGeneralQueryAsync<TQueryResponse> where TQueryResponse : notnull =>
+        query.HandleFilterAsync(this);
+    public Task<ResultBox<TQueryResponse>> GetGeneralQueryNext<TQuery, TQueryResponse>(TQuery query)
+        where TQuery : INextGeneralQuery<TQueryResponse> where TQueryResponse : notnull =>
+        query.HandleFilter(this).ToTask();
+
 
 
     public ListQueryResult<TQueryResponse> GetAggregateListQuery<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
