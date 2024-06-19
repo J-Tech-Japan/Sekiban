@@ -1,6 +1,5 @@
 using FeatureCheck.Domain.Aggregates.Clients;
 using FeatureCheck.Domain.Projections.ClientLoyaltyPointLists;
-using ResultBoxes;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.QueryModel;
 namespace FeatureCheck.Domain.Projections;
@@ -16,20 +15,10 @@ public class GeneralQuerySample : IGeneralQuery<GeneralQuerySample.Parameter, Ge
         var clients = await _multiProjectionService.GetAggregateList<Client>();
 
         return new Response(
-            projectionA.Payload.Records.Join(clients, x => x.ClientId, x => x.AggregateId, (x, y) => new { x, y })
+            projectionA.Payload.Records.Join(clients, x => 
+                    x.ClientId, x => x.AggregateId, (x, y) => new { x, y })
                 .Count(x => x.y.Payload.ClientEmail.Contains(queryParam.EmailContains)));
     }
     public record Parameter(string EmailContains) : IQueryParameter<Response>;
     public record Response(int Count) : IQueryResponse;
-}
-public class GeneralQuerySampleNext(string EmailContains) : INextGeneralQueryAsync<int>
-{
-    public Task<ResultBox<int>> HandleFilterAsync(IQueryContext context) =>
-        context.GetMultiProjectionService()
-            .Conveyor(
-                service => service.GetMultiProjectionWithResultAsync<ClientLoyaltyPointListProjection>()
-                    .Combine(_ => service.GetAggregateListWithResult<Client>()))
-            .Remap(
-                (projectionA, clients) => projectionA.Payload.Records.Join(clients, x => x.ClientId, x => x.AggregateId, (x, y) => new { x, y })
-                    .Count(x => x.y.Payload.ClientEmail.Contains(EmailContains)));
 }
