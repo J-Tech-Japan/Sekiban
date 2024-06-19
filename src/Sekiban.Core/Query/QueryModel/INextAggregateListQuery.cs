@@ -9,3 +9,5 @@ public interface INextAggregateListQuery<TAggregatePayload, TOutput> : INextAggr
     public ResultBox<IEnumerable<TOutput>> HandleFilter(IEnumerable<AggregateState<TAggregatePayload>> list, IQueryContext context);
     public ResultBox<IEnumerable<TOutput>> HandleSort(IEnumerable<TOutput> filteredList, IQueryContext context);
 }
+public interface ITenantNextAggregateListQuery<TAggregatePayload, TOutput> : INextAggregateQueryCommon<TAggregatePayload, TOutput>,
+    INextListQueryCommon<TOutput>, ITenantQueryCommon where TOutput : notnull where TAggregatePayload : IAggregatePayloadCommon;

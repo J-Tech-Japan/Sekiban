@@ -13,3 +13,8 @@ public interface
         IQueryContext context);
     public Task<ResultBox<IEnumerable<TOutput>>> HandleSortAsync(IEnumerable<TOutput> filteredList, IQueryContext context);
 }
+
+public interface
+    ITenantNextSingleProjectionListQueryAsync<TSingleProjectionPayloadCommon, TOutput> :
+    INextSingleProjectionQueryCommon<TSingleProjectionPayloadCommon, TOutput>,
+    INextListQueryCommon<TOutput>, ITenantQueryCommon where TOutput : notnull where TSingleProjectionPayloadCommon : ISingleProjectionPayloadCommon;

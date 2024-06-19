@@ -8,3 +8,7 @@ public interface
 {
     public Task<ResultBox<TOutput>> HandleFilterAsync(MultiProjectionState<TMultiProjectionPayloadCommon> projection, IQueryContext context);
 }
+public interface
+    ITenantNextMultiProjectionQueryAsync<TMultiProjectionPayloadCommon, TOutput> :
+    INextMultiProjectionQueryCommon<TMultiProjectionPayloadCommon, TOutput>, INextQueryCommon<TOutput>,
+    ITenantQueryCommon where TOutput : notnull where TMultiProjectionPayloadCommon : IMultiProjectionPayloadCommon;

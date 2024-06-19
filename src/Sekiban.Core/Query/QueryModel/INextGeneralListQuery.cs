@@ -6,3 +6,5 @@ public interface INextGeneralListQuery<TOutput> : INextGeneralQueryCommon<TOutpu
     public ResultBox<IEnumerable<TOutput>> HandleFilter(IQueryContext context);
     public ResultBox<IEnumerable<TOutput>> HandleSort(IEnumerable<TOutput> filteredList, IQueryContext context);
 }
+public interface ITenantNextGeneralListQuery<TOutput> : INextGeneralQueryCommon<TOutput>, INextListQueryCommon<TOutput>, ITenantQueryCommon
+    where TOutput : notnull;
