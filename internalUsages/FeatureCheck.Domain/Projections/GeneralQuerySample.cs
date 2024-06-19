@@ -15,7 +15,8 @@ public class GeneralQuerySample : IGeneralQuery<GeneralQuerySample.Parameter, Ge
         var clients = await _multiProjectionService.GetAggregateList<Client>();
 
         return new Response(
-            projectionA.Payload.Records.Join(clients, x => x.ClientId, x => x.AggregateId, (x, y) => new { x, y })
+            projectionA.Payload.Records.Join(clients, x => 
+                    x.ClientId, x => x.AggregateId, (x, y) => new { x, y })
                 .Count(x => x.y.Payload.ClientEmail.Contains(queryParam.EmailContains)));
     }
     public record Parameter(string EmailContains) : IQueryParameter<Response>;
