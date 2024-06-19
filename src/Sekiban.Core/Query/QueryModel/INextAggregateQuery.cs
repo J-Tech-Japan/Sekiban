@@ -8,7 +8,3 @@ public interface INextAggregateQuery<TAggregatePayload, TOutput> : INextAggregat
     public QueryListType QueryListType => QueryListType.ActiveOnly;
     public ResultBox<TOutput> HandleFilter(IEnumerable<AggregateState<TAggregatePayload>> list, IQueryContext context);
 }
-public interface INextGeneralQuery<TOutput> : INextGeneralQueryCommon<TOutput>, INextQueryCommon<TOutput> where TOutput : notnull
-{
-    public ResultBox<TOutput> HandleFilter(IQueryContext context);
-}

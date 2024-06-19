@@ -8,9 +8,3 @@ public interface INextAggregateQueryAsync<TAggregatePayload, TOutput> : INextAgg
     public QueryListType QueryListType => QueryListType.ActiveOnly;
     public Task<ResultBox<TOutput>> HandleFilterAsync(IEnumerable<AggregateState<TAggregatePayload>> list, IQueryContext context);
 }
-
-public interface INextGeneralQueryAsync< TOutput> : INextGeneralQueryCommon< TOutput>,
-    INextQueryCommon<TOutput>, INextQueryAsyncGeneral where TOutput : notnull
-{
-    public Task<ResultBox<TOutput>> HandleFilterAsync( IQueryContext context);
-}
