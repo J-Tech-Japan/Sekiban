@@ -12,7 +12,3 @@ public interface
         IQueryContext context);
     public Task<ResultBox<IEnumerable<TOutput>>> HandleSortAsync(IEnumerable<TOutput> filteredList, IQueryContext context);
 }
-public interface
-    ITenantNextMultiProjectionListQueryAsync<TMultiProjectionPayloadCommon, TOutput> :
-    INextMultiProjectionQueryCommon<TMultiProjectionPayloadCommon, TOutput>, INextListQueryCommon<TOutput>,
-    ITenantQueryCommon where TOutput : notnull where TMultiProjectionPayloadCommon : IMultiProjectionPayloadCommon;

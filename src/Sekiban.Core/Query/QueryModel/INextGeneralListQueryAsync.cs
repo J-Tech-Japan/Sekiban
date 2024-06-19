@@ -7,5 +7,3 @@ public interface INextGeneralListQueryAsync<TOutput> : INextGeneralQueryCommon<T
     public Task<ResultBox<IEnumerable<TOutput>>> HandleFilterAsync(IQueryContext context);
     public Task<ResultBox<IEnumerable<TOutput>>> HandleSortAsync(IEnumerable<TOutput> filteredList, IQueryContext context);
 }
-public interface ITenantNextGeneralListQueryAsync<TOutput> : INextGeneralQueryCommon<TOutput>, INextListQueryCommon<TOutput>, INextQueryAsyncGeneral,
-    ITenantQueryCommon where TOutput : notnull;

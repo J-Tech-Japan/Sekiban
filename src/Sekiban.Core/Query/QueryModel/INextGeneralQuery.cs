@@ -5,5 +5,3 @@ public interface INextGeneralQuery<TOutput> : INextGeneralQueryCommon<TOutput>, 
 {
     public ResultBox<TOutput> HandleFilter(IQueryContext context);
 }
-public interface ITenantNextGeneralQuery<TOutput> : INextGeneralQueryCommon<TOutput>, INextQueryCommon<TOutput>, ITenantQueryCommon
-    where TOutput : notnull;

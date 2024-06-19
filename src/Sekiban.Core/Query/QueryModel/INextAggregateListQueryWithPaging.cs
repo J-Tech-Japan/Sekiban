@@ -3,5 +3,3 @@ namespace Sekiban.Core.Query.QueryModel;
 
 public interface INextAggregateListQueryWithPaging<TAggregatePayload, TOutput> : INextAggregateListQuery<TAggregatePayload, TOutput>,
     IQueryPagingParameterCommon where TOutput : notnull where TAggregatePayload : IAggregatePayloadCommon;
-public interface ITenantNextAggregateListQueryWithPaging<TAggregatePayload, TOutput> : INextAggregateListQuery<TAggregatePayload, TOutput>,
-    IQueryPagingParameterCommon, ITenantQueryCommon where TOutput : notnull where TAggregatePayload : IAggregatePayloadCommon;

@@ -13,7 +13,3 @@ public interface
         IQueryContext context);
     public ResultBox<IEnumerable<TOutput>> HandleSort(IEnumerable<TOutput> filteredList, IQueryContext context);
 }
-public interface
-    ITenantNextSingleProjectionListQuery<TSingleProjectionPayloadCommon, TOutput> :
-    INextSingleProjectionQueryCommon<TSingleProjectionPayloadCommon, TOutput>, INextListQueryCommon<TOutput>,
-    ITenantQueryCommon where TOutput : notnull where TSingleProjectionPayloadCommon : ISingleProjectionPayloadCommon;

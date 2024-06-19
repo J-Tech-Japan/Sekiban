@@ -9,7 +9,3 @@ public interface
     public ResultBox<IEnumerable<TOutput>> HandleFilter(MultiProjectionState<TMultiProjectionPayloadCommon> projection, IQueryContext context);
     public ResultBox<IEnumerable<TOutput>> HandleSort(IEnumerable<TOutput> filteredList, IQueryContext context);
 }
-public interface
-    ITenantNextMultiProjectionListQuery<TMultiProjectionPayloadCommon, TOutput> :
-    INextMultiProjectionQueryCommon<TMultiProjectionPayloadCommon, TOutput>, INextListQueryCommon<TOutput>,
-    ITenantQueryCommon where TOutput : notnull where TMultiProjectionPayloadCommon : IMultiProjectionPayloadCommon;

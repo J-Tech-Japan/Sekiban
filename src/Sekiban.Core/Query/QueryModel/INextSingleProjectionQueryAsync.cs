@@ -10,7 +10,3 @@ public interface
     public QueryListType QueryListType => QueryListType.ActiveOnly;
     public Task<ResultBox<TOutput>> HandleFilterAsync(IEnumerable<SingleProjectionState<TSingleProjectionPayloadCommon>> list, IQueryContext context);
 }
-public interface
-    ITenantNextSingleProjectionQueryAsync<TSingleProjectionPayloadCommon, TOutput> :
-    INextSingleProjectionQueryCommon<TSingleProjectionPayloadCommon, TOutput>, INextQueryCommon<TOutput>,
-    ITenantQueryCommon where TOutput : notnull where TSingleProjectionPayloadCommon : ISingleProjectionPayloadCommon;

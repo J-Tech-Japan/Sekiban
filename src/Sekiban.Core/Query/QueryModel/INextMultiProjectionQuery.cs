@@ -8,6 +8,3 @@ public interface
 {
     public ResultBox<TOutput> HandleFilter(MultiProjectionState<TMultiProjectionPayloadCommon> projection, IQueryContext context);
 }
-public interface
-    ITenantNextMultiProjectionQuery<TMultiProjectionPayloadCommon, TOutput> : INextMultiProjectionQueryCommon<TMultiProjectionPayloadCommon, TOutput>,
-    INextQueryCommon<TOutput>, ITenantQueryCommon where TOutput : notnull where TMultiProjectionPayloadCommon : IMultiProjectionPayloadCommon;
