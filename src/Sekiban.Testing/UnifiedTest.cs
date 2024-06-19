@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
@@ -135,6 +136,13 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         return queryService.ExecuteAsync(param).Result ??
             throw new SekibanTypeNotFoundException("Failed to get Aggregate Query Response for " + param.GetType().Name);
     }
+    private ListQueryResult<TQueryResponse> GetListQueryResponse<TQueryResponse>(INextListQueryCommon<TQueryResponse> param)
+        where TQueryResponse : notnull
+    {
+        var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new SekibanTypeNotFoundException("Failed to get Query service");
+        return queryService.ExecuteAsync(param).Result.UnwrapBox() ??
+            throw new SekibanTypeNotFoundException("Failed to get Aggregate Query Response for " + param.GetType().Name);
+    }
     /// <summary>
     ///     Get Exception from Query
     ///     If query does not throw an exception, return null.
@@ -238,6 +246,30 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
+    public ListQueryResult<TQueryResponse> GetQueryResponse<TQueryResponse>(IListQueryInput<TQueryResponse> param)
+        where TQueryResponse : IQueryResponse =>
+        GetListQueryResponse(param);
+    /// <summary>
+    ///     Run query and check the response.
+    /// </summary>
+    /// <param name="param"></param>
+    /// <param name="expectedResponse"></param>
+    /// <typeparam name="TQueryResponse"></typeparam>
+    /// <returns></returns>
+    public UnifiedTest<TDependencyDefinition> ThenQueryResponseIs<TQueryResponse>(
+        INextListQueryCommon<TQueryResponse> param,
+        ListQueryResult<TQueryResponse> expectedResponse) where TQueryResponse : notnull
+    {
+        var actual = GetListQueryResponse(param);
+        var expected = expectedResponse;
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(expectedJson, actualJson);
+        return this;
+    }
+    public ListQueryResult<TQueryResponse> GetQueryResponse<TQueryResponse>(INextListQueryCommon<TQueryResponse> param)
+        where TQueryResponse : notnull =>
+        GetListQueryResponse(param);
     /// <summary>
     ///     Run query and write query response to file.
     /// </summary>
@@ -315,10 +347,16 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <typeparam name="TQueryResponse"></typeparam>
     /// <returns></returns>
     /// <exception cref="Exception"></exception>
-    private TQueryResponse GetQueryResponse<TQueryResponse>(IQueryInput<TQueryResponse> param) where TQueryResponse : IQueryResponse
+    public TQueryResponse GetQueryResponse<TQueryResponse>(IQueryInput<TQueryResponse> param) where TQueryResponse : IQueryResponse
     {
         var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new SekibanTypeNotFoundException("Failed to get Query service");
         return queryService.ExecuteAsync(param).Result ??
+            throw new SekibanTypeNotFoundException("Failed to get Aggregate Query Response for " + param.GetType().Name);
+    }
+    public TQueryResponse GetQueryResponse<TQueryResponse>(INextQueryCommon<TQueryResponse> param) where TQueryResponse : notnull
+    {
+        var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new SekibanTypeNotFoundException("Failed to get Query service");
+        return queryService.ExecuteAsync(param).Result.UnwrapBox() ??
             throw new SekibanTypeNotFoundException("Failed to get Aggregate Query Response for " + param.GetType().Name);
     }
     /// <summary>
@@ -411,6 +449,17 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <returns></returns>
     public UnifiedTest<TDependencyDefinition> ThenQueryResponseIs<TQueryResponse>(IQueryInput<TQueryResponse> param, TQueryResponse expectedResponse)
         where TQueryResponse : IQueryResponse
+    {
+        var actual = GetQueryResponse(param);
+        var expected = expectedResponse;
+        var actualJson = SekibanJsonHelper.Serialize(actual);
+        var expectedJson = SekibanJsonHelper.Serialize(expected);
+        Assert.Equal(expectedJson, actualJson);
+        return this;
+    }
+    public UnifiedTest<TDependencyDefinition> ThenQueryResponseIs<TQueryResponse>(
+        INextQueryCommon<TQueryResponse> param,
+        TQueryResponse expectedResponse) where TQueryResponse : notnull
     {
         var actual = GetQueryResponse(param);
         var expected = expectedResponse;

@@ -1,3 +1,4 @@
+using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Query.MultiProjections.Projections;
 using Sekiban.Core.Query.SingleProjections;
@@ -22,6 +23,10 @@ public interface IMultiProjectionService
     public Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjectionPayload>(
         string rootPartitionKey = ProjectionAllRootPartitions,
         MultiProjectionRetrievalOptions? retrievalOptions = null) where TProjectionPayload : IMultiProjectionPayloadCommon;
+    public Task<ResultBox<MultiProjectionState<TProjectionPayload>>> GetMultiProjectionWithResultAsync<TProjectionPayload>(
+        string rootPartitionKey = ProjectionAllRootPartitions,
+        MultiProjectionRetrievalOptions? retrievalOptions = null) where TProjectionPayload : IMultiProjectionPayloadCommon =>
+        ResultBox.WrapTry(() => GetMultiProjectionAsync<TProjectionPayload>(rootPartitionKey, retrievalOptions));
     /// <summary>
     ///     Get Aggregate List Projection Object
     ///     Uses all root partitions.
@@ -56,6 +61,12 @@ public interface IMultiProjectionService
         QueryListType queryListType = QueryListType.ActiveOnly,
         string rootPartitionKey = ProjectionAllRootPartitions,
         MultiProjectionRetrievalOptions? retrievalOptions = null) where TAggregatePayload : IAggregatePayloadCommon;
+    public Task<ResultBox<List<AggregateState<TAggregatePayload>>>> GetAggregateListWithResult<TAggregatePayload>(
+        QueryListType queryListType = QueryListType.ActiveOnly,
+        string rootPartitionKey = ProjectionAllRootPartitions,
+        MultiProjectionRetrievalOptions? retrievalOptions = null) where TAggregatePayload : IAggregatePayloadCommon =>
+        ResultBox.WrapTry(() => GetAggregateList<TAggregatePayload>(queryListType, rootPartitionKey, retrievalOptions));
+
     /// <summary>
     ///     Get Single Projection List Object
     ///     Uses all root partitions.
@@ -90,4 +101,10 @@ public interface IMultiProjectionService
         QueryListType queryListType = QueryListType.ActiveOnly,
         string rootPartitionKey = ProjectionAllRootPartitions,
         MultiProjectionRetrievalOptions? retrievalOptions = null) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
+
+    public Task<ResultBox<List<SingleProjectionState<TSingleProjectionPayload>>>> GetSingleProjectionListWithResult<TSingleProjectionPayload>(
+        QueryListType queryListType = QueryListType.ActiveOnly,
+        string rootPartitionKey = ProjectionAllRootPartitions,
+        MultiProjectionRetrievalOptions? retrievalOptions = null) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon =>
+        ResultBox.WrapTry(() => GetSingleProjectionList<TSingleProjectionPayload>(queryListType, rootPartitionKey, retrievalOptions));
 }

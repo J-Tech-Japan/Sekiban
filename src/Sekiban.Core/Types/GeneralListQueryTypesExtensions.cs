@@ -12,6 +12,7 @@ public static class GeneralListQueryTypesExtensions
     /// <param name="query"></param>
     /// <returns></returns>
     public static bool IsGeneralListQueryType(this Type query) => query.DoesImplementingFromGenericInterfaceType(typeof(IGeneralListQuery<,>));
+    public static bool IsGeneralNextQueryType(this Type query) => query.DoesImplementingFromGenericInterfaceType(typeof(INextGeneralQueryCommon<>));
 
     /// <summary>
     ///     Get the parameter type from the given general list query type.

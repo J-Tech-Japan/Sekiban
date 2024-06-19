@@ -7,6 +7,9 @@ namespace Sekiban.Core.Query.QueryModel;
 /// </summary>
 public interface IQueryExecutor
 {
+    public Task<ResultBox<TOutput>> ExecuteAsync<TOutput>(INextQueryCommon<TOutput> query) where TOutput : notnull;
+    public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteAsync<TOutput>(INextListQueryCommon<TOutput> query) where TOutput : notnull;
+
     /// <summary>
     ///     Execute Query (List Query).
     ///     It could be Aggregate Query or Multi Projection Query or General Query

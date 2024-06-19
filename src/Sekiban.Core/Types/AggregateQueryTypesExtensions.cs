@@ -14,6 +14,15 @@ public static class AggregateQueryTypesExtensions
     public static bool IsAggregateQueryType(this Type query) => query.DoesImplementingFromGenericInterfaceType(typeof(IAggregateQuery<,,>));
 
     /// <summary>
+    ///     Checks if the given type is an Aggregate Query Type.
+    /// </summary>
+    /// <param name="query"></param>
+    /// <returns></returns>
+    public static bool IsAggregateQueryNextType(this Type query) =>
+        query.DoesImplementingFromGenericInterfaceType(typeof(INextAggregateQueryCommon<,>));
+    public static bool IsNextQueryAsync(this Type query) => query.GetInterfaces().Contains(typeof(INextQueryAsyncGeneral));
+
+    /// <summary>
     ///     Gets the Aggregate Type from the given Aggregate Query Type.
     /// </summary>
     /// <param name="query"></param>
@@ -21,6 +30,16 @@ public static class AggregateQueryTypesExtensions
     public static Type GetAggregateTypeFromAggregateQueryType(this Type query)
     {
         var baseType = query.GetImplementingFromGenericInterfaceType(typeof(IAggregateQuery<,,>));
+        return baseType.GenericTypeArguments[0];
+    }
+    public static Type GetAggregateTypeFromNextAggregateQueryType(this Type query)
+    {
+        var baseType = query.GetImplementingFromGenericInterfaceType(typeof(INextAggregateQueryCommon<,>));
+        return baseType.GenericTypeArguments[0];
+    }
+    public static Type GetSingleProjectionTypeFromNextSingleProjectionQueryType(this Type query)
+    {
+        var baseType = query.GetImplementingFromGenericInterfaceType(typeof(INextSingleProjectionQueryCommon<,>));
         return baseType.GenericTypeArguments[0];
     }
     /// <summary>

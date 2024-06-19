@@ -658,6 +658,9 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIs<TQueryResponse>(
         IListQueryInput<TQueryResponse> param,
         ListQueryResult<TQueryResponse> expectedResponse) where TQueryResponse : IQueryResponse;
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIs<TQueryResponse>(
+        INextListQueryCommon<TQueryResponse> param,
+        ListQueryResult<TQueryResponse> expectedResponse) where TQueryResponse : notnull;
     /// <summary>
     ///     Write Query Response to Json file
     /// </summary>
@@ -677,6 +680,9 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public IAggregateTestHelper<TAggregatePayload> ThenGetQueryResponse<TQueryResponse>(
         IListQueryInput<TQueryResponse> param,
         Action<ListQueryResult<TQueryResponse>> responseAction) where TQueryResponse : IQueryResponse;
+    public IAggregateTestHelper<TAggregatePayload> ThenGetQueryResponse<TQueryResponse>(
+        INextListQueryCommon<TQueryResponse> param,
+        Action<ListQueryResult<TQueryResponse>> responseAction) where TQueryResponse : notnull;
     /// <summary>
     ///     Check if Query Response is expected value from Json
     /// </summary>
@@ -735,6 +741,14 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="param"></param>
     /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenQueryThrowsAnException(IListQueryInputCommon param);
+
+    public TQueryResponse GetQueryResponse<TQueryResponse>(IQueryInput<TQueryResponse> param) where TQueryResponse : IQueryResponse;
+    public TQueryResponse GetQueryResponse<TQueryResponse>(INextQueryCommon<TQueryResponse> param) where TQueryResponse : notnull;
+    public ListQueryResult<TQueryResponse> GetQueryResponse<TQueryResponse>(IListQueryInput<TQueryResponse> param)
+        where TQueryResponse : IQueryResponse;
+    public ListQueryResult<TQueryResponse> GetQueryResponse<TQueryResponse>(INextListQueryCommon<TQueryResponse> param)
+        where TQueryResponse : notnull;
+
     #endregion
 
     #region Query Test (not list)
@@ -748,6 +762,12 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIs<TQueryResponse>(
         IQueryInput<TQueryResponse> param,
         TQueryResponse expectedResponse) where TQueryResponse : IQueryResponse;
+
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIs<TQueryResponse>(
+        INextQueryCommon<TQueryResponse> param,
+        TQueryResponse expectedResponse) where TQueryResponse : notnull;
+
+
     /// <summary>
     ///     Write Query Response to Json file
     /// </summary>
@@ -767,6 +787,9 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public IAggregateTestHelper<TAggregatePayload> ThenGetQueryResponse<TQueryResponse>(
         IQueryInput<TQueryResponse> param,
         Action<TQueryResponse> responseAction) where TQueryResponse : IQueryResponse;
+    public IAggregateTestHelper<TAggregatePayload> ThenGetQueryResponse<TQueryResponse>(
+        INextQueryCommon<TQueryResponse> param,
+        Action<TQueryResponse> responseAction) where TQueryResponse : notnull;
     /// <summary>
     ///     Check if Query Response is expected value from Json
     /// </summary>

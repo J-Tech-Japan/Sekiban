@@ -13,6 +13,10 @@ public static class SingleProjectionListQueryTypesExtensions
     /// <returns></returns>
     public static bool IsSingleProjectionListQueryType(this Type singleProjectionQuery) =>
         singleProjectionQuery.DoesImplementingFromGenericInterfaceType(typeof(ISingleProjectionListQuery<,,>));
+
+    public static bool IsSingleProjectionNextQueryType(this Type singleProjectionQuery) =>
+        singleProjectionQuery.DoesImplementingFromGenericInterfaceType(typeof(INextSingleProjectionQueryCommon<,>));
+
     /// <summary>
     ///     Get Single projection type from the given single projection list query type.
     /// </summary>

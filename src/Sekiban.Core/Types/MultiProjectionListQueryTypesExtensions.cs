@@ -13,6 +13,8 @@ public static class MultiProjectionListQueryTypesExtensions
     /// <returns></returns>
     public static bool IsMultiProjectionListQueryType(this Type query) =>
         query.DoesImplementingFromGenericInterfaceType(typeof(IMultiProjectionListQuery<,,>));
+    public static bool IsMultiProjectionNextQueryType(this Type query) =>
+        query.DoesImplementingFromGenericInterfaceType(typeof(INextMultiProjectionQueryCommon<,>));
     /// <summary>
     ///     Get the Multi Projection Type from the given Multi Projection List Query Type.
     /// </summary>
@@ -21,6 +23,11 @@ public static class MultiProjectionListQueryTypesExtensions
     public static Type GetMultiProjectionTypeFromMultiProjectionListQueryType(this Type queryType)
     {
         var baseType = queryType.GetImplementingFromGenericInterfaceType(typeof(IMultiProjectionListQuery<,,>));
+        return baseType.GenericTypeArguments[0];
+    }
+    public static Type GetMultiProjectionTypeFromMultiProjectionNextQueryType(this Type queryType)
+    {
+        var baseType = queryType.GetImplementingFromGenericInterfaceType(typeof(INextMultiProjectionQueryCommon<,>));
         return baseType.GenericTypeArguments[0];
     }
     /// <summary>

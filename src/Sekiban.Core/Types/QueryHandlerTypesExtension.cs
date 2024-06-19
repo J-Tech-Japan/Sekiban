@@ -14,6 +14,12 @@ public static class QueryHandlerTypesExtension
     /// <returns></returns>
     public static bool IsQueryInputType(this Type queryType) => queryType.DoesImplementingFromGenericInterfaceType(typeof(IQueryInput<>));
     /// <summary>
+    ///     Check if the given type is query input type or not.
+    /// </summary>
+    /// <param name="queryType"></param>
+    /// <returns></returns>
+    public static bool IsQueryNextType(this Type queryType) => queryType.GetInterfaces().Contains(typeof(INextQueryGeneral));
+    /// <summary>
     ///     Get the query output types from given query input type.
     /// </summary>
     /// <param name="queryType"></param>
@@ -24,11 +30,28 @@ public static class QueryHandlerTypesExtension
         return baseType.GenericTypeArguments[0];
     }
     /// <summary>
+    ///     Get the query output types from given query input type.
+    /// </summary>
+    /// <param name="queryType"></param>
+    /// <returns></returns>
+    public static Type GetOutputClassFromNextQueryType(this Type queryType)
+    {
+        var baseType = queryType.GetImplementingFromGenericInterfaceType(typeof(INextQueryGeneral<>));
+        return baseType.GenericTypeArguments[0];
+    }
+
+    /// <summary>
     ///     Check whether the given type is list query input type or not.
     /// </summary>
     /// <param name="queryType"></param>
     /// <returns></returns>
     public static bool IsListQueryInputType(this Type queryType) => queryType.DoesImplementingFromGenericInterfaceType(typeof(IListQueryInput<>));
+    /// <summary>
+    ///     Check whether the given type is list query input type or not.
+    /// </summary>
+    /// <param name="queryType"></param>
+    /// <returns></returns>
+    public static bool IsListQueryNextType(this Type queryType) => queryType.DoesImplementingFromGenericInterfaceType(typeof(INextListQueryCommon<>));
     /// <summary>
     ///     Get the query output types from given list query input type.
     /// </summary>

@@ -133,7 +133,10 @@ public class ClientAndProjectionSpec : AggregateTest<Client, FeatureCheckDepende
             .ThenGetLatestSingleEvent<ClientNameChanged>(ev => ChangedEventDatetime = ev.TimeStamp)
             .ThenQueryResponseIs(
                 new ClientNameHistoryProjectionCountQuery.Parameter(branchId, GetAggregateId()),
-                new ClientNameHistoryProjectionCountQuery.Response(2));
+                new ClientNameHistoryProjectionCountQuery_Response(2))
+            .ThenQueryResponseIs(
+                new ClientNameHistoryProjectionCountQueryNext(branchId, GetAggregateId()),
+                new ClientNameHistoryProjectionCountQuery_Response(2));
     }
 
     [Fact]
