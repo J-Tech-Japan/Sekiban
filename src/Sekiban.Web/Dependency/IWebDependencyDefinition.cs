@@ -31,7 +31,7 @@ public interface IWebDependencyDefinition : IQueryDefinition
     //)
     // Pattern 3: OK even if not logged in.
     //new AuthorizeDefinitionCollection(new Allow<AllMethod>())
-    AuthorizeDefinitionCollection AuthorizationDefinitions { get; }
+    IAuthorizeDefinitionCollection AuthorizationDefinitions { get; }
     public SekibanControllerOptions Options { get; }
 
     /// <summary>
@@ -51,7 +51,8 @@ public interface IWebDependencyDefinition : IQueryDefinition
         if (ShouldMakeSimpleAggregateListQueries)
         {
             var baseSimpleAggregateListQueryType = typeof(SimpleAggregateListQuery<>);
-            return GetAggregatePayloadTypes().Select(m => baseSimpleAggregateListQueryType.MakeGenericType(m));
+            return GetAggregatePayloadTypes()
+                .Select(m => baseSimpleAggregateListQueryType.MakeGenericType(m));
         }
 
         return Enumerable.Empty<Type>();
@@ -62,7 +63,8 @@ public interface IWebDependencyDefinition : IQueryDefinition
         if (ShouldMakeSimpleSingleProjectionListQueries)
         {
             var baseSimpleAggregateListQueryType = typeof(SimpleSingleProjectionListQuery<>);
-            return GetSingleProjectionTypes().Select(m => baseSimpleAggregateListQueryType.MakeGenericType(m));
+            return GetSingleProjectionTypes()
+                .Select(m => baseSimpleAggregateListQueryType.MakeGenericType(m));
         }
 
         return Enumerable.Empty<Type>();

@@ -18,10 +18,12 @@ namespace Sekiban.Web.Controllers.Bases;
 [ApiController]
 [Produces("application/json")]
 // ReSharper disable once UnusedTypeParameter
-public class BaseAggregateListQueryController<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
+public class BaseAggregateListQueryController<TAggregatePayload, TQuery, TQueryParameter,
+    TQueryResponse>(
     IQueryExecutor queryExecutor,
     IServiceProvider serviceProvider,
-    IWebDependencyDefinition webDependencyDefinition) : ControllerBase where TAggregatePayload : IAggregatePayloadCommon
+    IWebDependencyDefinition webDependencyDefinition)
+    : ControllerBase where TAggregatePayload : IAggregatePayloadCommon
     where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
     where TQueryParameter : IListQueryParameter<TQueryResponse>
     where TQueryResponse : IQueryResponse
@@ -30,9 +32,10 @@ public class BaseAggregateListQueryController<TAggregatePayload, TQuery, TQueryP
 
     [HttpGet]
     [Route("")]
-    public async Task<ActionResult<ListQueryResult<TQueryResponse>>> GetQueryResult([FromQuery] TQueryParameter queryParam)
+    public async Task<ActionResult<ListQueryResult<TQueryResponse>>> GetQueryResult(
+        [FromQuery] TQueryParameter queryParam)
     {
-        if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+        if (await webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.Get,
                 this,
                 typeof(TAggregatePayload),

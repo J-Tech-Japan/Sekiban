@@ -6,16 +6,18 @@ namespace Sekiban.Web.Authorizations;
 ///     Allow specific authorize group when logged in
 /// </summary>
 /// <typeparam name="TDefinitionType"></typeparam>
-public class AllowIfLoggedIn<TDefinitionType> : IAuthorizeDefinition where TDefinitionType : IAuthorizationDefinitionType, new()
+public class AllowIfLoggedIn<TDefinitionType> : IAuthorizeDefinition
+    where TDefinitionType : IAuthorizationDefinitionType, new()
 {
-    public AuthorizeResultType Check(
+    public async Task<AuthorizeResultType> Check(
         AuthorizeMethodType authorizeMethodType,
         Type aggregateType,
         Type? commandType,
-        Func<IEnumerable<string>, bool> checkRoles,
+        Func<IEnumerable<string>, Task<bool>> checkRoles,
         HttpContext httpContext,
         IServiceProvider serviceProvider)
     {
+        await Task.CompletedTask;
         if (!new TDefinitionType().IsMatches(authorizeMethodType, aggregateType, commandType))
         {
             return AuthorizeResultType.Passed;
@@ -23,10 +25,8 @@ public class AllowIfLoggedIn<TDefinitionType> : IAuthorizeDefinition where TDefi
 
         return httpContext.User.Identity?.IsAuthenticated switch
         {
-            true => AuthorizeResultType.Allowed
-            ,
-            false => AuthorizeResultType.Denied
-            ,
+            true => AuthorizeResultType.Allowed,
+            false => AuthorizeResultType.Denied,
             _ => AuthorizeResultType.Passed
         };
     }

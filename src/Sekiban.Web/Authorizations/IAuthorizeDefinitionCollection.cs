@@ -10,7 +10,7 @@ public interface IAuthorizeDefinitionCollection
 {
     IEnumerable<IAuthorizeDefinition> Collection { get; }
 
-    public AuthorizeResultType CheckAuthorization(
+    public Task<AuthorizeResultType> CheckAuthorization(
         AuthorizeMethodType authorizeMethodType,
         ControllerBase controller,
         Type aggregateType,

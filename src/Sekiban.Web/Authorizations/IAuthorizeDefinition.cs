@@ -6,11 +6,11 @@ namespace Sekiban.Web.Authorizations;
 /// </summary>
 public interface IAuthorizeDefinition
 {
-    public AuthorizeResultType Check(
+    public Task<AuthorizeResultType> Check(
         AuthorizeMethodType authorizeMethodType,
         Type aggregateType,
         Type? commandType,
-        Func<IEnumerable<string>, bool> checkRoles,
+        Func<IEnumerable<string>, Task<bool>> checkRoles,
         HttpContext httpContext,
         IServiceProvider serviceProvider);
 }

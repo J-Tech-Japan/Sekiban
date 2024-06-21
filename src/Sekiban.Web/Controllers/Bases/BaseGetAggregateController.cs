@@ -17,7 +17,8 @@ namespace Sekiban.Web.Controllers.Bases;
 public class BaseGetAggregateController<TAggregatePayload>(
     IAggregateLoader aggregateLoader,
     IWebDependencyDefinition webDependencyDefinition,
-    IServiceProvider serviceProvider) : ControllerBase where TAggregatePayload : IAggregatePayloadCommon
+    IServiceProvider serviceProvider)
+    : ControllerBase where TAggregatePayload : IAggregatePayloadCommon
 {
 
     [HttpGet]
@@ -30,7 +31,7 @@ public class BaseGetAggregateController<TAggregatePayload>(
         string? includesSortableUniqueIdValue = null,
         bool retrieveNewEvents = true)
     {
-        if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+        if (await webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.Get,
                 this,
                 typeof(TAggregatePayload),
@@ -49,18 +50,20 @@ public class BaseGetAggregateController<TAggregatePayload>(
             new SingleProjectionRetrievalOptions
             {
                 PostponeEventFetchBySeconds = postponeEventFetchBySeconds,
-                IncludesSortableUniqueIdValue = SortableUniqueIdValue.NullableValue(includesSortableUniqueIdValue),
+                IncludesSortableUniqueIdValue =
+                    SortableUniqueIdValue.NullableValue(includesSortableUniqueIdValue),
                 RetrieveNewEvents = retrieveNewEvents
             });
         return result is null ? NotFound() : Ok(result);
     }
     [HttpGet]
     [Route("getWithoutSnapshot/{id}")]
-    public virtual async Task<ActionResult<AggregateState<TAggregatePayload>>> GetWithoutSnapshotAsync(
-        Guid id,
-        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
-        int? toVersion = null) =>
-        webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+    public virtual async Task<ActionResult<AggregateState<TAggregatePayload>>>
+        GetWithoutSnapshotAsync(
+            Guid id,
+            string rootPartitionKey = IDocument.DefaultRootPartitionKey,
+            int? toVersion = null) =>
+        await webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
             AuthorizeMethodType.Get,
             this,
             typeof(TAggregatePayload),
@@ -70,14 +73,19 @@ public class BaseGetAggregateController<TAggregatePayload>(
             serviceProvider) ==
         AuthorizeResultType.Denied
             ? Unauthorized()
-            : Ok(await aggregateLoader.AsDefaultStateFromInitialAsync<TAggregatePayload>(id, rootPartitionKey, toVersion));
+            : Ok(
+                await aggregateLoader.AsDefaultStateFromInitialAsync<TAggregatePayload>(
+                    id,
+                    rootPartitionKey,
+                    toVersion));
 
     [HttpGet]
     [Route("getids")]
-    public virtual async Task<ActionResult<IEnumerable<AggregateState<TAggregatePayload>>>> GetIdsAsync([FromQuery] IEnumerable<Guid> ids)
+    public virtual async Task<ActionResult<IEnumerable<AggregateState<TAggregatePayload>>>>
+        GetIdsAsync([FromQuery] IEnumerable<Guid> ids)
     {
         await Task.CompletedTask;
-        if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+        if (await webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.Get,
                 this,
                 typeof(TAggregatePayload),

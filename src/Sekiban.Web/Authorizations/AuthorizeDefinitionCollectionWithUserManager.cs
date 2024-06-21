@@ -1,19 +1,21 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Command;
 using Sekiban.Web.Authorizations.Definitions;
+using System.Security.Claims;
 namespace Sekiban.Web.Authorizations;
 
-/// <summary>
-///     Authorize definition collection to group authorize definitions
-/// </summary>
-public class AuthorizeDefinitionCollection : IAuthorizeDefinitionCollection
+public class
+    AuthorizeDefinitionCollectionWithUserManager<TIdentity> : IAuthorizeDefinitionCollection
+    where TIdentity : class
 {
-    public AuthorizeDefinitionCollection(IEnumerable<IAuthorizeDefinition> collection) =>
-        Collection = collection;
+    public AuthorizeDefinitionCollectionWithUserManager(
+        IEnumerable<IAuthorizeDefinition> collection) => Collection = collection;
 
-    public AuthorizeDefinitionCollection(params IAuthorizeDefinition[] definitions) =>
-        Collection = definitions;
+    public AuthorizeDefinitionCollectionWithUserManager(
+        params IAuthorizeDefinition[] definitions) => Collection = definitions;
 
     public static AuthorizeDefinitionCollection AllowAllIfLoggedIn =>
         new(new AllowIfLoggedIn<AllMethod>());
@@ -30,7 +32,7 @@ public class AuthorizeDefinitionCollection : IAuthorizeDefinitionCollection
         HttpContext httpContext,
         IServiceProvider serviceProvider)
     {
-        await Task.CompletedTask;
+
         foreach (var definition in Collection)
         {
             var result = await definition.Check(
@@ -39,11 +41,27 @@ public class AuthorizeDefinitionCollection : IAuthorizeDefinitionCollection
                 commandType,
                 async roles =>
                 {
-                    await Task.CompletedTask;
                     var isInRole = false;
+
+                    var userIdClaim =
+                        httpContext.User.Claims.FirstOrDefault(
+                            c => c.Type == ClaimTypes.NameIdentifier);
+                    if (userIdClaim == null)
+                    {
+                        return isInRole;
+                    }
+                    var userManager = serviceProvider.GetRequiredService<UserManager<TIdentity>>();
+
+                    var user = await userManager.FindByIdAsync(userIdClaim.Value);
+                    if (user == null)
+                    {
+                        return isInRole;
+                    }
+
+
                     foreach (var role in roles)
                     {
-                        if (httpContext.User.IsInRole(role))
+                        if (await userManager.IsInRoleAsync(user, role))
                         {
                             isInRole = true;
                         }

@@ -18,11 +18,14 @@ namespace Sekiban.Web.Controllers.Bases;
 [ApiController]
 [Produces("application/json")]
 // ReSharper disable once UnusedTypeParameter
-public class BaseSingleProjectionListQueryController<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
+public class BaseSingleProjectionListQueryController<TSingleProjectionPayload, TQuery,
+    TQueryParameter, TQueryResponse>(
     IQueryExecutor queryExecutor,
     IWebDependencyDefinition webDependencyDefinition,
-    IServiceProvider serviceProvider) : ControllerBase where TSingleProjectionPayload : ISingleProjectionPayloadCommon
-    where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
+    IServiceProvider serviceProvider)
+    : ControllerBase where TSingleProjectionPayload : ISingleProjectionPayloadCommon
+    where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter,
+        TQueryResponse>
     where TQueryParameter : IListQueryParameter<TQueryResponse>
     where TQueryResponse : IQueryResponse
 {
@@ -30,9 +33,10 @@ public class BaseSingleProjectionListQueryController<TSingleProjectionPayload, T
 
     [HttpGet]
     [Route("")]
-    public async Task<ActionResult<ListQueryResult<TQueryResponse>>> GetQueryResult([FromQuery] TQueryParameter queryParam)
+    public async Task<ActionResult<ListQueryResult<TQueryResponse>>> GetQueryResult(
+        [FromQuery] TQueryParameter queryParam)
     {
-        if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+        if (await webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.SingleProjection,
                 this,
                 typeof(TSingleProjectionPayload),
