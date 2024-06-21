@@ -83,9 +83,9 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
                     var aggregateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.AggregateType);
                     if (aggregateType is null) { return null; }
                     var subAggregateStateType
-                        = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.DocumentTypeName);
+                        = _sekibanAggregateTypes.AggregateSubTypes.FirstOrDefault(m => m.SubType.Name == document.DocumentTypeName);
                     if (subAggregateStateType is null) { return null; }
-                    var aggregateStateType = typeof(AggregateState<>).MakeGenericType(subAggregateStateType.Aggregate);
+                    var aggregateStateType = typeof(AggregateState<>).MakeGenericType(subAggregateStateType.SubType);
                     var state = JsonSerializer.Deserialize(snapshotString, aggregateStateType);
                     if (state != null)
                     {
@@ -146,9 +146,9 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
             {
                 var aggregateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.AggregateType);
                 if (aggregateType is null) { return null; }
-                var subAggregateStateType = _sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == document.DocumentTypeName);
+                var subAggregateStateType = _sekibanAggregateTypes.AggregateSubTypes.FirstOrDefault(m => m.SubType.Name == document.DocumentTypeName);
                 if (subAggregateStateType is null) { return null; }
-                var aggregateStateType = typeof(AggregateState<>).MakeGenericType(subAggregateStateType.Aggregate);
+                var aggregateStateType = typeof(AggregateState<>).MakeGenericType(subAggregateStateType.SubType);
                 var state = SekibanJsonHelper.ConvertTo(document.Snapshot, aggregateStateType);
                 if (state is not null)
                 {
@@ -186,12 +186,12 @@ public class SingleProjectionSnapshotAccessor : ISingleProjectionSnapshotAccesso
     private StateType GetStateType(SnapshotDocument document)
     {
         if (document.AggregateType == document.DocumentTypeName)
+        {
             return StateType.Aggregate;
-
-        if (_sekibanAggregateTypes.AggregateTypes.Any(m => m.Aggregate.Name == document.DocumentTypeName))
-            return StateType.AggregateSubtype;
-
-        return StateType.SingleProjection;
+        }
+        return _sekibanAggregateTypes.AggregateSubTypes.Any(m => m.SubType.Name == document.DocumentTypeName)
+            ? StateType.AggregateSubtype
+            : StateType.SingleProjection;
     }
 
     private enum StateType

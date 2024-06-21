@@ -16,6 +16,8 @@ public record GeneralWebDependencyDefinition<TDomainDependencyDefinition> : IWeb
     public IEnumerable<Type> MultiProjectionListQueryTypes { get; set; }
     public IEnumerable<Type> GeneralQueryTypes { get; set; }
     public IEnumerable<Type> GeneralListQueryTypes { get; set; }
+    public IEnumerable<Type> NextQueryTypes { get; set; }
+    public IEnumerable<Type> NextListQueryTypes { get; set; }
     public IEnumerable<Type> AggregatePayloadTypes { get; set; }
     public IEnumerable<Type> AggregatePayloadSubtypes { get; set; }
     public IEnumerable<Type> SingleProjectionTypes { get; set; }
@@ -36,7 +38,10 @@ public record GeneralWebDependencyDefinition<TDomainDependencyDefinition> : IWeb
         AggregatePayloadTypes = DomainDependencyDefinition.GetAggregatePayloadTypes();
         AggregatePayloadSubtypes = DomainDependencyDefinition.GetAggregatePayloadSubtypes();
         SingleProjectionTypes = DomainDependencyDefinition.GetSingleProjectionTypes();
-        CommandDependencies = DomainDependencyDefinition.GetCommandDependencies();
+        var commandWithHandler = DomainDependencyDefinition.GetCommandWithHandlerTypes().Select(m => (m, (Type?)m));
+        CommandDependencies = DomainDependencyDefinition.GetCommandDependencies().Concat(commandWithHandler);
+        NextQueryTypes = DomainDependencyDefinition.GetNextQueryTypes();
+        NextListQueryTypes = DomainDependencyDefinition.GetNextListQueryTypes();
     }
     public IEnumerable<Type> GetAggregateListQueryTypes() => AggregateListQueryTypes;
     public IEnumerable<Type> GetAggregateQueryTypes() => AggregateQueryTypes;
@@ -46,6 +51,8 @@ public record GeneralWebDependencyDefinition<TDomainDependencyDefinition> : IWeb
     public IEnumerable<Type> GetMultiProjectionListQueryTypes() => MultiProjectionListQueryTypes;
     public IEnumerable<Type> GetGeneralQueryTypes() => GeneralQueryTypes;
     public IEnumerable<Type> GetGeneralListQueryTypes() => GeneralListQueryTypes;
+    public IEnumerable<Type> GetNextQueryTypes() => NextQueryTypes;
+    public IEnumerable<Type> GetNextListQueryTypes() => NextListQueryTypes;
     public bool ShouldMakeSimpleAggregateListQueries { get; set; } = true;
     public bool ShouldMakeSimpleSingleProjectionListQueries { get; set; } = true;
     public bool ShouldAddExceptionFilter { get; set; } = true;

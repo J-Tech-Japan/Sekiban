@@ -9,16 +9,18 @@ namespace Sekiban.Core.Aggregate;
 public class SekibanAggregateTypes
 {
     private readonly List<SingleProjectionAggregateType> _registeredCustomProjectorTypes = [];
+    private readonly List<AggregateSubType> _registeredSubTypes = [];
     private readonly List<DefaultAggregateType> _registeredTypes = [];
 
     public IReadOnlyCollection<DefaultAggregateType> AggregateTypes { get; }
+    public IReadOnlyCollection<AggregateSubType> AggregateSubTypes { get; }
     public IReadOnlyCollection<SingleProjectionAggregateType> SingleProjectionTypes { get; }
 
     public SekibanAggregateTypes(params Assembly[] assemblies)
     {
         foreach (var assembly in assemblies)
         {
-            var aggregates = assembly.DefinedTypes.GetAggregatePayloadTypes();
+            var aggregates = assembly.DefinedTypes.GetAggregatePayloadWithoutSubtypeTypes();
 
             foreach (var type in aggregates)
             {
@@ -28,6 +30,16 @@ public class SekibanAggregateTypes
                     continue;
                 }
                 _registeredTypes.Add(aggregateType);
+            }
+            var subtypes = assembly.DefinedTypes.Where(m => m.IsAggregatePayloadType() && m.IsAggregateSubtypePayload());
+            foreach (var type in subtypes)
+            {
+                var aggregateSubType = new AggregateSubType(type);
+                if (_registeredSubTypes.Contains(aggregateSubType))
+                {
+                    continue;
+                }
+                _registeredSubTypes.Add(aggregateSubType);
             }
 
             var customProjectors = assembly.DefinedTypes.GetSingleProjectorTypes();
@@ -43,10 +55,12 @@ public class SekibanAggregateTypes
         }
 
         AggregateTypes = _registeredTypes.AsReadOnly();
+        AggregateSubTypes = _registeredSubTypes.AsReadOnly();
         SingleProjectionTypes = _registeredCustomProjectorTypes.AsReadOnly();
     }
 
     public record DefaultAggregateType(Type Aggregate);
+    public record AggregateSubType(Type SubType);
 
     public record SingleProjectionAggregateType(Type OriginalAggregate, Type SingleProjectionPayloadType);
 }

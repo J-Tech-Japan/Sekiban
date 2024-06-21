@@ -18,7 +18,35 @@ public static class QueryHandlerTypesExtension
     /// </summary>
     /// <param name="queryType"></param>
     /// <returns></returns>
-    public static bool IsQueryNextType(this Type queryType) => queryType.GetInterfaces().Contains(typeof(INextQueryGeneral));
+    public static bool IsQueryNextType(this Type queryType) => queryType.DoesImplementingFromGenericInterfaceType(typeof(INextQueryCommon<>));
+
+    public static Type GetAggregateProjectionOrQueryFromQueryNextType(this Type queryType) =>
+        queryType.GetAggregatePayloadFromQueryNext() ?? queryType.GetMultiProjectionPayloadFromQueryNext() ?? queryType;
+
+    public static Type? GetAggregatePayloadFromQueryNext(this Type queryType)
+    {
+        if (!queryType.IsQueryNextType()) { return null; }
+        if (queryType.IsAggregateQueryNextType())
+        {
+            return queryType.GetAggregateTypeFromNextAggregateQueryType();
+        }
+        if (queryType.IsSingleProjectionNextQueryType())
+        {
+            var singleProjection = queryType.GetSingleProjectionTypeFromNextSingleProjectionQueryType();
+            return singleProjection.GetAggregatePayloadTypeFromSingleProjectionPayload();
+        }
+        return null;
+    }
+    public static Type? GetMultiProjectionPayloadFromQueryNext(this Type queryType)
+    {
+        if (!queryType.IsQueryNextType()) { return null; }
+        if (queryType.IsMultiProjectionNextQueryType())
+        {
+            return queryType.GetMultiProjectionPayloadFromQueryNext();
+        }
+        return null;
+    }
+
     /// <summary>
     ///     Get the query output types from given query input type.
     /// </summary>

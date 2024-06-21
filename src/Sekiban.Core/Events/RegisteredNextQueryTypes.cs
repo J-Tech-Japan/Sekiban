@@ -1,10 +1,8 @@
+using Sekiban.Core.Types;
 using System.Reflection;
 namespace Sekiban.Core.Events;
 
-/// <summary>
-///     Generate Event Types from Assemblies
-/// </summary>
-public class RegisteredEventTypes
+public class RegisteredNextQueryTypes
 {
     private readonly List<Type> _registeredTypes = [];
     /// <summary>
@@ -15,12 +13,12 @@ public class RegisteredEventTypes
     ///     Generate Event Types from Assemblies
     /// </summary>
     /// <param name="assemblies"></param>
-    public RegisteredEventTypes(params Assembly[] assemblies)
+    public RegisteredNextQueryTypes(params Assembly[] assemblies)
     {
         foreach (var assembly in assemblies)
         {
             var types = assembly.DefinedTypes;
-            var decoratedTypes = types.Where(x => x.IsClass && x.ImplementedInterfaces.Contains(typeof(IEventPayloadCommon)));
+            var decoratedTypes = types.Where(x => x.IsClass && x.AsType().IsQueryNextType());
             foreach (var type in decoratedTypes)
             {
                 if (_registeredTypes.Contains(type))

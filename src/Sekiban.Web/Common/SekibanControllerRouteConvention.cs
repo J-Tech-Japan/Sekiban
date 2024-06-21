@@ -218,6 +218,40 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                 });
         }
 
+        if (controller.ControllerType.IsGenericType &&
+            new List<string> { _webDependencyDefinition.Options.BaseNextQueryControllerType.Name }.Contains(controller.ControllerType.Name))
+        {
+            var queryType = controller.ControllerType.GenericTypeArguments[0];
+            controller.ControllerName = queryType.GetAggregateProjectionOrQueryFromQueryNextType().Name;
+            controller.Selectors.Add(
+                new SelectorModel
+                {
+                    AttributeRouteModel = new AttributeRouteModel(
+                        new RouteAttribute(
+                            $"{queryType.GetAggregateProjectionOrQueryFromQueryNextType().Name.ToLower()}/{queryType.Name.Replace("`", "").ToLower()}"))
+                    {
+                        Name = queryType.GetAggregateProjectionOrQueryFromQueryNextType().Name + queryType.Name
+                    }
+                });
+        }
+        if (controller.ControllerType.IsGenericType &&
+            new List<string> { _webDependencyDefinition.Options.BaseNextListQueryControllerType.Name }.Contains(controller.ControllerType.Name))
+        {
+            var queryType = controller.ControllerType.GenericTypeArguments[0];
+            controller.ControllerName = queryType.GetAggregateProjectionOrQueryFromQueryNextType().Name;
+            controller.Selectors.Add(
+                new SelectorModel
+                {
+                    AttributeRouteModel = new AttributeRouteModel(
+                        new RouteAttribute(
+                            $"{queryType.GetAggregateProjectionOrQueryFromQueryNextType().Name.ToLower()}/{queryType.Name.Replace("`", "").ToLower()}"))
+                    {
+                        Name = queryType.GetAggregateProjectionOrQueryFromQueryNextType().Name + queryType.Name
+                    }
+                });
+        }
+
+
         if (controller.ControllerType.Name == _webDependencyDefinition.Options.BaseIndexControllerType.Name)
         {
             controller.ControllerName = "SekibanInfo";
