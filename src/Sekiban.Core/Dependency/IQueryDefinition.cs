@@ -14,4 +14,7 @@ public interface IQueryDefinition
     public IEnumerable<Type> GetMultiProjectionListQueryTypes();
     public IEnumerable<Type> GetGeneralQueryTypes();
     public IEnumerable<Type> GetGeneralListQueryTypes();
+
+    public IEnumerable<Type> GetNextQueryTypes();
+    public IEnumerable<Type> GetNextListQueryTypes();
 }

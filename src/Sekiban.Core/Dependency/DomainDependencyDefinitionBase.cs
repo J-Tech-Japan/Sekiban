@@ -28,6 +28,12 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
         return AggregateDefinitions.SelectMany(s => s.CommandTypes);
     }
 
+    public IEnumerable<Type> GetCommandWithHandlerTypes()
+    {
+        var commands = new RegisteredCommandWithHandlerTypes(GetAssembliesForOptions());
+        return commands.RegisteredTypes;
+    }
+
     public IEnumerable<Action<IServiceCollection>> GetServiceActions() => ServiceActions;
     public IEnumerable<IAggregateDependencyDefinition> GetAggregateDefinitions() => AggregateDefinitions;
 
@@ -61,6 +67,16 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
     public IEnumerable<Type> GetMultiProjectionListQueryTypes() => MultiProjectionListQueryTypes;
     public IEnumerable<Type> GetGeneralQueryTypes() => GeneralQueryTypes;
     public IEnumerable<Type> GetGeneralListQueryTypes() => GeneralListQueryTypes;
+    public IEnumerable<Type> GetNextQueryTypes()
+    {
+        var commands = new RegisteredNextQueryTypes(GetAssembliesForOptions());
+        return commands.RegisteredTypes;
+    }
+    public IEnumerable<Type> GetNextListQueryTypes()
+    {
+        var commands = new RegisteredNextListQueryTypes(GetAssembliesForOptions());
+        return commands.RegisteredTypes;
+    }
 
     public virtual SekibanDependencyOptions GetSekibanDependencyOptions() =>
         new(
@@ -94,7 +110,8 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
 
     public IEnumerable<Type> GetAggregatePayloadTypes()
     {
-        return AggregateDefinitions.Select(s => s.AggregateType);
+        var aggregates = new SekibanAggregateTypes(GetAssembliesForOptions());
+        return aggregates.AggregateTypes.Select(m => m.Aggregate);
     }
     public IEnumerable<Type> GetAggregatePayloadSubtypes()
     {

@@ -34,4 +34,9 @@ public static class GeneralListQueryTypesExtensions
         var baseType = queryType.GetImplementingFromGenericInterfaceType(typeof(IGeneralListQuery<,>));
         return baseType.GenericTypeArguments[1];
     }
+    public static Type GetResponseTypeFromQueryNextType(this Type queryType)
+    {
+        var baseType = queryType.GetImplementingFromGenericInterfaceType(typeof(INextQueryGeneral<>));
+        return baseType.GenericTypeArguments[0];
+    }
 }

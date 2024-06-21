@@ -26,6 +26,14 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
                             implementationType.GetCommandTypeFromCommandHandlerType())
                         .GetTypeInfo());
             }
+            if (implementationType != null && implementationType.IsCommandWithHandlerType())
+            {
+                feature.Controllers.Add(
+                    _webDependencyDefinition.Options.BaseControllerType.MakeGenericType(
+                            implementationType.GetAggregatePayloadTypeFromCommandWithHandlerType(),
+                            implementationType)
+                        .GetTypeInfo());
+            }
         }
         foreach (var aggregateType in _webDependencyDefinition.GetAggregatePayloadTypes())
         {
@@ -159,6 +167,29 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
                         queryType,
                         queryType.GetParamTypeFromGeneralQueryType(),
                         queryType.GetResponseTypeFromGeneralQueryType())
+                    .GetTypeInfo());
+        }
+
+        foreach (var queryType in _webDependencyDefinition.GetNextQueryTypes())
+        {
+            if (!queryType.IsQueryNextType())
+            {
+                continue;
+            }
+            feature.Controllers.Add(
+                _webDependencyDefinition.Options.BaseNextQueryControllerType.MakeGenericType(queryType, queryType.GetResponseTypeFromQueryNextType())
+                    .GetTypeInfo());
+        }
+
+        foreach (var queryType in _webDependencyDefinition.GetNextListQueryTypes())
+        {
+            if (!queryType.IsListQueryNextType())
+            {
+                continue;
+            }
+            feature.Controllers.Add(
+                _webDependencyDefinition.Options.BaseNextListQueryControllerType
+                    .MakeGenericType(queryType, queryType.GetResponseTypeFromQueryNextType())
                     .GetTypeInfo());
         }
 

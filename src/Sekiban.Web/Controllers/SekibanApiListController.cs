@@ -80,6 +80,24 @@ public class SekibanApiListController<T>(
                             SampleResponseObject = responseType.CreateDefaultInstance()
                         });
                 }
+                if (implementationType != null && implementationType.IsCommandWithHandlerType())
+                {
+                    if (aggregateType != implementationType.GetAggregatePayloadTypeFromCommandWithHandlerType())
+                    {
+                        continue;
+                    }
+                    var commandType = implementationType;
+                    var responseType = typeof(CommandExecutorResponse);
+                    aggregateInfo.Commands.Add(
+                        new SekibanCommandInfo
+                        {
+                            Url = $"/{webDependencyDefinition.Options.CreateCommandPrefix}/{aggregateType.Name}/{commandType.Name}",
+                            JsonBodyType = commandType.Name,
+                            Method = "POST",
+                            SampleBodyObject = commandType.CreateDefaultInstance(),
+                            SampleResponseObject = responseType.CreateDefaultInstance()
+                        });
+                }
             }
         }
 

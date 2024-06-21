@@ -26,6 +26,8 @@ public class SekibanControllerOptions
 
     public Type BaseGeneralListQueryControllerType { get; set; } = typeof(BaseGeneralListQueryController<,,>);
 
+    public Type BaseNextListQueryControllerType { get; set; } = typeof(BaseNextListQueryController<,>);
+    public Type BaseNextQueryControllerType { get; set; } = typeof(BaseNextQueryController<,>);
     public string CreateCommandPrefix { get; set; } = "api/command";
     public string ChangeCommandPrefix { get; set; } = "api/command";
     public string QueryPrefix { get; set; } = "api/query";
