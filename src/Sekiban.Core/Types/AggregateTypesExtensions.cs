@@ -26,7 +26,8 @@ public static class AggregateTypesExtensions
     /// <returns></returns>
     public static bool IsAggregatePayloadTypeWithoutSubtype(this TypeInfo type) =>
         type.ImplementedInterfaces.Contains(typeof(IAggregatePayloadCommon)) &&
-        (type.IsClass || type.DoesImplementingFromGenericInterfaceType(typeof(IParentAggregatePayload<>))) &&
+        (type.IsClass || type.DoesImplementingFromGenericInterfaceType(typeof(IParentAggregatePayload<,>))) &&
+        type != typeof(IParentAggregatePayload<>) &&
         !type.IsAggregateSubtypePayload() &&
         !type.ImplementedInterfaces.Contains(typeof(ISingleProjectionPayloadCommon));
     public static bool IsAggregatePayloadTypeWithoutSubtype(this Type type) => type.GetTypeInfo().IsAggregatePayloadTypeWithoutSubtype();
