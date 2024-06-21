@@ -7,7 +7,7 @@ namespace MultiTenant.WebApi;
 
 public class MultiTenantWebDependency : MultiTenantDependency, IWebDependencyDefinition
 {
-    public AuthorizeDefinitionCollection AuthorizationDefinitions => new(new Allow<AllMethod>());
+    public IAuthorizeDefinitionCollection AuthorizationDefinitions => new AuthorizeDefinitionCollection(new Allow<AllMethod>());
 
     public bool ShouldMakeSimpleAggregateListQueries => true;
     public bool ShouldMakeSimpleSingleProjectionListQueries => true;

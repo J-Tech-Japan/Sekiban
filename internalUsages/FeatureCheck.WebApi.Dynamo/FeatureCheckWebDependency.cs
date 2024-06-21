@@ -7,7 +7,7 @@ namespace FeatureCheck.WebApi.Dynamo;
 
 public class FeatureCheckWebDependency : FeatureCheckDependency, IWebDependencyDefinition
 {
-    public AuthorizeDefinitionCollection AuthorizationDefinitions => new(new Allow<AllMethod>());
+    public IAuthorizeDefinitionCollection AuthorizationDefinitions => new AuthorizeDefinitionCollection(new Allow<AllMethod>());
     public SekibanControllerOptions Options => new();
     public bool ShouldMakeSimpleAggregateListQueries => true;
     public bool ShouldMakeSimpleSingleProjectionListQueries => true;
