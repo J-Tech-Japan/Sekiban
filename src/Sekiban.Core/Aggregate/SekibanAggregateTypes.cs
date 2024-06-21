@@ -18,7 +18,7 @@ public class SekibanAggregateTypes
     {
         foreach (var assembly in assemblies)
         {
-            var aggregates = assembly.DefinedTypes.GetAggregatePayloadTypes();
+            var aggregates = assembly.DefinedTypes.GetAggregatePayloadWithoutSubtypeTypes();
 
             foreach (var type in aggregates)
             {
