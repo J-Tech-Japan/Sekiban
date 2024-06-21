@@ -3,5 +3,5 @@ namespace Sekiban.Core.Query.QueryModel;
 
 public interface
     ITenantNextSingleProjectionListQueryWithPagingAsync<TSingleProjectionPayloadCommon, TOutput> :
-    INextSingleProjectionListQueryAsync<TSingleProjectionPayloadCommon, TOutput>, IQueryPagingParameterCommon,
+    INextSingleProjectionListQueryWithPagingAsync<TSingleProjectionPayloadCommon, TOutput>,
     ITenantQueryCommon where TOutput : notnull where TSingleProjectionPayloadCommon : ISingleProjectionPayloadCommon;
