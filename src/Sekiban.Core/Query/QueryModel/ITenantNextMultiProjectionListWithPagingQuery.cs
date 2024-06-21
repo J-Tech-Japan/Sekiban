@@ -3,5 +3,5 @@ namespace Sekiban.Core.Query.QueryModel;
 
 public interface
     ITenantNextMultiProjectionListWithPagingQuery<TMultiProjectionPayloadCommon, TOutput> :
-    INextMultiProjectionListQuery<TMultiProjectionPayloadCommon, TOutput>, IQueryPagingParameterCommon,
+    INextMultiProjectionListWithPagingQuery<TMultiProjectionPayloadCommon, TOutput>,
     ITenantQueryCommon where TOutput : notnull where TMultiProjectionPayloadCommon : IMultiProjectionPayloadCommon;
