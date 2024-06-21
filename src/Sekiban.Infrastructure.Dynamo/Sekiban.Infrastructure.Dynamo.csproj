@@ -4,13 +4,13 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Infrastructure.Dynamo</PackageId>
-        <Version>0.19.4</Version>
+        <Version>0.19.5</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Dynamo Infrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.19.4</PackageVersion>
-        <Description>Removed init from ITenantCommandCommon</Description>
+        <PackageVersion>0.19.5</PackageVersion>
+        <Description>Next Command and Query and Web.</Description>
         <TargetFramework>net8.0</TargetFramework>
         <LangVersion>preview</LangVersion>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -21,8 +21,8 @@
 
     <ItemGroup>
         <PackageReference Include="AWSSDK.DynamoDBv2" Version="3.7.303.11" />
-        <PackageReference Include="Sekiban.Core" Version="0.19.4"/>
-        <PackageReference Include="Sekiban.Infrastructure.Aws.S3" Version="0.19.4"/>
+        <PackageReference Include="Sekiban.Core" Version="0.19.5"/>
+        <PackageReference Include="Sekiban.Infrastructure.Aws.S3" Version="0.19.5"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
         <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.0"/>
     </ItemGroup>
