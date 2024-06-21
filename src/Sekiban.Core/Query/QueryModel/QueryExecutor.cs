@@ -106,7 +106,7 @@ public class QueryExecutor : IQueryExecutor
             return new SekibanValidationErrorsException(validationResult);
         }
         var paramType = query.GetType();
-        if (!paramType.IsQueryNextType())
+        if (!paramType.IsListQueryNextType())
         {
             throw new SekibanQueryExecutionException("Invalid parameter type");
         }
