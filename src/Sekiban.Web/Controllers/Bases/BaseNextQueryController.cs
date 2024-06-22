@@ -12,16 +12,19 @@ namespace Sekiban.Web.Controllers.Bases;
 public class BaseNextQueryController<TQuery, TQueryResponse>(
     IQueryExecutor queryExecutor,
     IServiceProvider serviceProvider,
-    IWebDependencyDefinition webDependencyDefinition) : ControllerBase where TQuery : INextQueryCommon<TQueryResponse> where TQueryResponse : notnull
+    IWebDependencyDefinition webDependencyDefinition)
+    : ControllerBase where TQuery : INextQueryCommon<TQueryResponse> where TQueryResponse : notnull
 {
     [HttpGet]
     [Route("")]
-    public async Task<ActionResult<ListQueryResult<TQueryResponse>>> GetQueryResult([FromQuery] TQuery query)
+    public async Task<ActionResult<ListQueryResult<TQueryResponse>>> GetQueryResult(
+        [FromQuery] TQuery query)
     {
-        if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+        if (await webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.Get,
                 this,
-                typeof(TQuery).GetAggregatePayloadFromQueryNext() ?? typeof(TQuery).GetMultiProjectionPayloadFromQueryNext() ?? typeof(TQuery),
+                typeof(TQuery).GetAggregatePayloadFromQueryNext() ??
+                typeof(TQuery).GetMultiProjectionPayloadFromQueryNext() ?? typeof(TQuery),
                 null,
                 null,
                 HttpContext,

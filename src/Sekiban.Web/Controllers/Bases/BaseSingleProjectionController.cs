@@ -17,18 +17,20 @@ namespace Sekiban.Web.Controllers.Bases;
 public class BaseSingleProjectionController<TSingleProjectionPayload>(
     IAggregateLoader aggregateLoader,
     IWebDependencyDefinition webDependencyDefinition,
-    IServiceProvider serviceProvider) : ControllerBase where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
+    IServiceProvider serviceProvider)
+    : ControllerBase where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
 {
 
     [HttpGet]
     [Route("get/{id}")]
-    public virtual async Task<ActionResult<SingleProjectionState<TSingleProjectionPayload>?>> GetAsync(
-        Guid id,
-        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
-        int? toVersion = null,
-        SingleProjectionRetrievalOptions? retrievalOptions = null)
+    public virtual async Task<ActionResult<SingleProjectionState<TSingleProjectionPayload>?>>
+        GetAsync(
+            Guid id,
+            string rootPartitionKey = IDocument.DefaultRootPartitionKey,
+            int? toVersion = null,
+            SingleProjectionRetrievalOptions? retrievalOptions = null)
     {
-        if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+        if (await webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.SingleProjection,
                 this,
                 typeof(TSingleProjectionPayload),
@@ -49,12 +51,13 @@ public class BaseSingleProjectionController<TSingleProjectionPayload>(
     }
     [HttpGet]
     [Route("getWithoutSnapshot/{id}")]
-    public virtual async Task<ActionResult<SingleProjectionState<TSingleProjectionPayload>?>> GetWithoutSnapshotAsync(
-        Guid id,
-        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
-        int? toVersion = null)
+    public virtual async Task<ActionResult<SingleProjectionState<TSingleProjectionPayload>?>>
+        GetWithoutSnapshotAsync(
+            Guid id,
+            string rootPartitionKey = IDocument.DefaultRootPartitionKey,
+            int? toVersion = null)
     {
-        if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+        if (await webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.SingleProjection,
                 this,
                 typeof(TSingleProjectionPayload),
@@ -66,7 +69,11 @@ public class BaseSingleProjectionController<TSingleProjectionPayload>(
         {
             return Unauthorized();
         }
-        var result = await aggregateLoader.AsSingleProjectionStateFromInitialAsync<TSingleProjectionPayload>(id, rootPartitionKey, toVersion);
+        var result =
+            await aggregateLoader.AsSingleProjectionStateFromInitialAsync<TSingleProjectionPayload>(
+                id,
+                rootPartitionKey,
+                toVersion);
         return Ok(result);
     }
 }

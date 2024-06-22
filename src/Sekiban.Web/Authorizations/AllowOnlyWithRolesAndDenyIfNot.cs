@@ -22,15 +22,15 @@ public class AllowOnlyWithRolesAndDenyIfNot<TDefinitionType, TRoleEnum> : IAutho
         Roles = roles.Select(m => Enum.GetName(m)!.ToLower());
     }
 
-    public AuthorizeResultType Check(
+    public async Task<AuthorizeResultType> Check(
         AuthorizeMethodType authorizeMethodType,
         Type aggregateType,
         Type? commandType,
-        Func<IEnumerable<string>, bool> checkRoles,
+        Func<IEnumerable<string>, Task<bool>> checkRoles,
         HttpContext httpContext,
         IServiceProvider serviceProvider)
     {
-        return (new TDefinitionType().IsMatches(authorizeMethodType, aggregateType, commandType), checkRoles(Roles)) switch
+        return (new TDefinitionType().IsMatches(authorizeMethodType, aggregateType, commandType), await checkRoles(Roles)) switch
         {
             (false, _) => AuthorizeResultType.Passed
             ,

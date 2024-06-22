@@ -33,9 +33,10 @@ public class BaseGeneralQueryController<TQuery, TQueryParameter, TQueryResponse>
 
     [HttpGet]
     [Route("")]
-    public async Task<ActionResult<TQueryResponse>> GetQueryResult([FromQuery] TQueryParameter queryParam)
+    public async Task<ActionResult<TQueryResponse>> GetQueryResult(
+        [FromQuery] TQueryParameter queryParam)
     {
-        if (_webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+        if (await _webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.MultiProjection,
                 this,
                 typeof(TQuery),

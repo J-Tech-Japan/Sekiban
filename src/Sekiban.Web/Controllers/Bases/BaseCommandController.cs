@@ -19,14 +19,17 @@ namespace Sekiban.Web.Controllers.Bases;
 public class BaseCommandController<TAggregatePayload, TCommand>(
     ICommandExecutor executor,
     IWebDependencyDefinition webDependencyDefinition,
-    IServiceProvider serviceProvider) : ControllerBase where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayload>
+    IServiceProvider serviceProvider)
+    : ControllerBase where TAggregatePayload : IAggregatePayloadCommon
+    where TCommand : ICommand<TAggregatePayload>
 {
 
     [HttpPost]
     [Route("")]
-    public virtual async Task<ActionResult<CommandExecutorResponse>> Execute([FromBody] TCommand command)
+    public virtual async Task<ActionResult<CommandExecutorResponse>> Execute(
+        [FromBody] TCommand command)
     {
-        if (webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+        if (await webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.Command,
                 this,
                 typeof(TAggregatePayload),

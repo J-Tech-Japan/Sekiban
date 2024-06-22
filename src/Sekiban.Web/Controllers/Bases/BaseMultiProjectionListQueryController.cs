@@ -15,7 +15,8 @@ namespace Sekiban.Web.Controllers.Bases;
 [ApiController]
 [Produces("application/json")]
 // ReSharper disable once UnusedTypeParameter
-public class BaseMultiProjectionListQueryController<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse> : ControllerBase
+public class BaseMultiProjectionListQueryController<TProjectionPayload, TQuery, TQueryParameter,
+    TQueryResponse> : ControllerBase
     where TProjectionPayload : IMultiProjectionPayloadCommon
     where TQuery : IMultiProjectionListQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
     where TQueryParameter : IListQueryParameter<TQueryResponse>
@@ -37,9 +38,10 @@ public class BaseMultiProjectionListQueryController<TProjectionPayload, TQuery, 
 
     [HttpGet]
     [Route("")]
-    public async Task<ActionResult<ListQueryResult<TQueryResponse>>> GetQueryResult([FromQuery] TQueryParameter queryParam)
+    public async Task<ActionResult<ListQueryResult<TQueryResponse>>> GetQueryResult(
+        [FromQuery] TQueryParameter queryParam)
     {
-        if (_webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
+        if (await _webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.MultiProjection,
                 this,
                 typeof(TProjectionPayload),
