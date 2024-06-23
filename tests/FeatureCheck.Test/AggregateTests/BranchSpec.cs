@@ -40,4 +40,11 @@ public class BranchSpec : AggregateTest<Branch, FeatureCheckDependency>
         ThenNotThrowsAnException();
         ThenPayloadIs(new Branch("Japan Tokyo", 1));
     }
+    [Fact]
+    public void ChangeBranchNameNextTest()
+    {
+        GivenCommand(new CreateBranchWithResult("Japan Tokyo"));
+        WhenCommand(new ChangeBranchNameNext(GetAggregateId(), "Japan Osaka"));
+        ThenPayloadIs(new Branch("Japan Osaka", 0));
+    }
 }
