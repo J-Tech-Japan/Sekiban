@@ -70,6 +70,7 @@ public static class SekibanCoreServiceExtensions
         services.AddSingleton(new HybridStoreManager(true));
         services.AddScoped<ISekibanContext, SekibanContext>();
         services.AddTransient<IQueryExecutor, QueryExecutor>();
+        services.AddTransient<ISekibanExecutor, SekibanExecutor>();
         services.AddTransient<QueryHandler>();
         services.AddSingleton(settings.MemoryCache);
         services.AddTransient<ISingleProjectionCache, SingleProjectionCache>();
@@ -122,6 +123,7 @@ public static class SekibanCoreServiceExtensions
         services.AddTransient<IDocumentPersistentWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentRemover, InMemoryDocumentRemover>();
         services.AddTransient<IQueryExecutor, QueryExecutor>();
+        services.AddTransient<ISekibanExecutor, SekibanExecutor>();
         services.AddTransient<QueryHandler>();
         services.AddScoped<MemoryCacheSetting>();
         services.AddTransient<ISingleProjectionCache, SingleProjectionCache>();
@@ -175,6 +177,7 @@ public static class SekibanCoreServiceExtensions
         services.AddTransient<IDocumentTemporaryWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentPersistentWriter, InMemoryDocumentWriter>();
         services.AddTransient<IQueryExecutor, QueryExecutor>();
+        services.AddTransient<ISekibanExecutor, SekibanExecutor>();
         services.AddTransient<QueryHandler>();
         services.AddScoped<MemoryCacheSetting>();
         services.AddTransient<ISingleProjectionCache, SingleProjectionCache>();

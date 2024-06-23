@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ResultBoxes;
+using Sekiban.Core;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Command;
@@ -35,6 +36,7 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
     protected readonly IMemoryCacheAccessor memoryCache;
     protected readonly IMultiProjectionService multiProjectionService;
     protected readonly IQueryExecutor queryExecutor;
+    protected readonly ISekibanExecutor sekibanExecutor;
     protected readonly SekibanTestFixture sekibanTestFixture;
     protected readonly IServiceProvider serviceProvider;
 
@@ -54,7 +56,7 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
         documentRemover = GetService<IDocumentRemover>();
         commandExecutor = GetService<ICommandExecutor>();
         aggregateLoader = GetService<IAggregateLoader>();
-
+        sekibanExecutor = GetService<ISekibanExecutor>();
         hybridStoreManager = GetService<HybridStoreManager>();
         inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
         memoryCache = GetService<IMemoryCacheAccessor>();
