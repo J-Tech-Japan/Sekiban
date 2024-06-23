@@ -25,7 +25,7 @@ public static class QueryHandlerTypesExtension
 
     public static Type? GetAggregatePayloadFromQueryNext(this Type queryType)
     {
-        if (!queryType.IsQueryNextType()) { return null; }
+        if (!queryType.IsQueryNextType() && !queryType.IsListQueryNextType()) { return null; }
         if (queryType.IsAggregateQueryNextType())
         {
             return queryType.GetAggregateTypeFromNextAggregateQueryType();
