@@ -41,20 +41,20 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> : IComman
     public ResultBox<FourValues<T1, T2, T3, T4>> GetRequiredService<T1, T2, T3, T4>()
         where T1 : class where T2 : class where T3 : class where T4 : class =>
         GetRequiredService<T1, T2, T3>().Combine(ResultBox.WrapTry(() => _serviceProvider.GetRequiredService<T4>()));
-    public Task<ResultBox<AggregateState<TAnotherAggregatePayload>>> AsDefaultState<TAnotherAggregatePayload>(
+    public Task<ResultBox<AggregateState<TAnotherAggregatePayload>>> GetAggregateState<TAnotherAggregatePayload>(
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
         SingleProjectionRetrievalOptions? retrievalOptions = null) where TAnotherAggregatePayload : IAggregatePayloadCommon =>
         GetRequiredService<IAggregateLoader>()
             .Conveyor(executor => executor.AsDefaultStateWithResultAsync<TAnotherAggregatePayload>(aggregateId, rootPartitionKey, toVersion));
-    public Task<ResultBox<AggregateState<TAnotherAggregatePayload>>> AsDefaultStateFromInitial<TAnotherAggregatePayload>(
+    public Task<ResultBox<AggregateState<TAnotherAggregatePayload>>> GetAggregateStateFromInitial<TAnotherAggregatePayload>(
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null) where TAnotherAggregatePayload : IAggregatePayloadCommon =>
         GetRequiredService<IAggregateLoader>()
             .Conveyor(loader => loader.AsDefaultStateFromInitialWithResultAsync<TAnotherAggregatePayload>(aggregateId, rootPartitionKey, toVersion));
-    public Task<ResultBox<SingleProjectionState<TSingleProjectionPayload>>> AsSingleProjectionStateFromInitialAsync<TSingleProjectionPayload>(
+    public Task<ResultBox<SingleProjectionState<TSingleProjectionPayload>>> GetSingleProjectionStateFromInitialAsync<TSingleProjectionPayload>(
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon =>
@@ -62,7 +62,7 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> : IComman
             .Conveyor(
                 loader => ResultBox.CheckNullWrapTry(
                     () => loader.AsSingleProjectionStateFromInitialAsync<TSingleProjectionPayload>(aggregateId, rootPartitionKey, toVersion)));
-    public Task<ResultBox<SingleProjectionState<TSingleProjectionPayload>>> AsSingleProjectionStateAsync<TSingleProjectionPayload>(
+    public Task<ResultBox<SingleProjectionState<TSingleProjectionPayload>>> GetSingleProjectionStateAsync<TSingleProjectionPayload>(
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
