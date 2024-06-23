@@ -20,7 +20,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="AWSSDK.S3" Version="3.7.308.4" />
+        <PackageReference Include="AWSSDK.S3" Version="3.7.309.7"/>
         <PackageReference Include="SharpZipLib" Version="1.4.2"/>
         <PackageReference Include="Sekiban.Core" Version="0.20.0"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>

@@ -6,7 +6,6 @@ using FeatureCheck.Domain.Shared.Exceptions;
 using ResultBoxes;
 using Sekiban.Core.Command;
 using Sekiban.Core.Exceptions;
-using Sekiban.Core.Query.QueryModel;
 using System.ComponentModel.DataAnnotations;
 namespace FeatureCheck.Domain.Aggregates.Clients.Commands;
 
@@ -19,20 +18,14 @@ public record CreateClientWithResult(
     string ClientEmail) : ICommandWithHandlerAsync<Client, CreateClientWithResult>
 {
     public Guid GetAggregateId() => Guid.NewGuid();
-    public static async Task<ResultBox<UnitValue>> HandleCommandAsync(
-        CreateClientWithResult command, 
-        ICommandContext<Client> context) =>
-        await context.GetRequiredService<IQueryExecutor>()
-            .Conveyor(queryExecutor => queryExecutor.ExecuteWithResultAsync(new BranchExistsQuery.Parameter(command.BranchId)))
+    public static async Task<ResultBox<UnitValue>> HandleCommandAsync(CreateClientWithResult command, ICommandContext<Client> context) =>
+        await context.ExecuteQueryAsync(new BranchExistsQuery.Parameter(command.BranchId))
             .Verify(
                 value => value.Exists
                     ? ExceptionOrNone.None
-                    : new SekibanAggregateNotExistsException(
-                        command.BranchId, nameof(Branch), 
-                        (command as ICommandCommon).GetRootPartitionKey()))
-            .Conveyor(_ => context.GetRequiredService<IQueryExecutor>())
+                    : new SekibanAggregateNotExistsException(command.BranchId, nameof(Branch), (command as ICommandCommon).GetRootPartitionKey()))
             .Conveyor(
-                queryExecutor => queryExecutor.ExecuteWithResultAsync(
+                _ => context.ExecuteQueryAsync(
                     new ClientEmailExistsQuery.Parameter(command.ClientEmail)
                     {
                         RootPartitionKey = (command as ICommandCommon).GetRootPartitionKey()

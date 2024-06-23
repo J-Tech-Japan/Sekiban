@@ -7,10 +7,8 @@ namespace FeatureCheck.Domain.Projections;
 public class GeneralListQuerySampleNext(string EmailContains) : INextGeneralListQueryAsync<GeneralListQuerySample_Response>
 {
     public Task<ResultBox<IEnumerable<GeneralListQuerySample_Response>>> HandleFilterAsync(IQueryContext context) =>
-        context.GetMultiProjectionService()
-            .Conveyor(
-                service => service.GetMultiProjectionWithResultAsync<ClientLoyaltyPointListProjection>()
-                    .Combine(_ => service.GetAggregateListWithResult<Client>()))
+        context.GetMultiProjectionAsync<ClientLoyaltyPointListProjection>()
+            .Combine(_ => context.GetAggregateList<Client>())
             .Remap(
                 (projectionA, clients) => projectionA.Payload.Records.Join(clients, x => x.ClientId, x => x.AggregateId, (x, y) => new { x, y })
                     .Where(x => x.y.Payload.ClientEmail.Contains(EmailContains))
