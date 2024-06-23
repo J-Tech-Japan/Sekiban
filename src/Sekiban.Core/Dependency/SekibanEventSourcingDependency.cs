@@ -251,7 +251,11 @@ public static class SekibanEventSourcingDependency
         ISekibanDateProducer? sekibanDateProducer = null)
     {
         // MediatR
-        services.AddMediatR(new MediatRServiceConfiguration().RegisterServicesFromAssemblies(Assembly.GetExecutingAssembly(), GetAssembly()));
+        services.AddMediatR(
+            config =>
+            {
+                config.RegisterServicesFromAssemblies(Assembly.GetExecutingAssembly(), GetAssembly());
+            });
 
         // Sekiban Event Sourcing
         services.AddSekibanCoreAggregateTest(sekibanDateProducer);

@@ -20,13 +20,13 @@
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="MartinCostello.Logging.XUnit" Version="0.3.0"/>
+        <PackageReference Include="MartinCostello.Logging.XUnit" Version="0.4.0"/>
         <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="8.0.0"/>
-        <PackageReference Include="xunit.assert" Version="2.8.0" />
-        <PackageReference Include="xunit.extensibility.core" Version="2.8.0" />
+        <PackageReference Include="xunit.assert" Version="2.8.1"/>
+        <PackageReference Include="xunit.extensibility.core" Version="2.8.1"/>
         <PackageReference Include="Sekiban.Core" Version="0.20.0"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
-        <PackageReference Include="xunit.extensibility.execution" Version="2.8.0" />
+        <PackageReference Include="xunit.extensibility.execution" Version="2.8.1"/>
     </ItemGroup>
     <ItemGroup>
         <None Update="host.json">
