@@ -13,14 +13,3 @@ public record CreateBranchWithResult(
     public static ResultBox<UnitValue> HandleCommand(CreateBranchWithResult command, ICommandContext<Branch> context) =>
         context.AppendEvent(new BranchCreated(command.Name));
 }
-public record ChangeBranchNameNext(
-    Guid BranchId,
-    [property: Required]
-    [property: MaxLength(20)]
-    string Name) : ICommandWithHandlerForExistingAggregate<Branch, ChangeBranchNameNext>
-{
-
-    public Guid GetAggregateId() => BranchId;
-    public static ResultBox<UnitValue> HandleCommand(ChangeBranchNameNext command, ICommandContext<Branch> context) =>
-        context.AppendEvent(new BranchNameChanged(command.Name));
-}

@@ -1,19 +1,11 @@
+using ResultBoxes;
 using Sekiban.Core.Command;
-using Sekiban.Core.Events;
 namespace Postgres.Sample.Domain.Aggregates.Teams;
 
-public record RegisterTeam(string Name) : ICommand<Team>
+public record RegisterTeam(string Name) : ICommandWithHandler<Team, RegisterTeam>
 {
-
     public Guid GetAggregateId() => Guid.NewGuid();
-
-    public class Handler : ICommandHandler<Team, RegisterTeam>
-    {
-        public IEnumerable<IEventPayloadApplicableTo<Team>> HandleCommand(
-            RegisterTeam command,
-            ICommandContext<Team> context)
-        {
-            yield return new TeamRegistered(command.Name);
-        }
-    }
+    public static ResultBox<UnitValue> HandleCommand(
+        RegisterTeam command,
+        ICommandContext<Team> context) => context.AppendEvent(new TeamRegistered(command.Name));
 }

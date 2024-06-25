@@ -10,14 +10,14 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.5" />
-        <PackageReference Include="Sekiban.Infrastructure.Dynamo" Version="0.19.1" />
-        <PackageReference Include="Sekiban.Web" Version="0.19.1" />
-        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.6"/>
+        <PackageReference Include="Sekiban.Infrastructure.Dynamo" Version="0.20.1"/>
+        <PackageReference Include="Sekiban.Web" Version="0.20.1"/>
+        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2"/>
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\BookBorrowing.Domain\BookBorrowing.Domain.csproj" />
+        <ProjectReference Include="..\BookBorrowing.Domain\BookBorrowing.Domain.csproj"/>
     </ItemGroup>
 
 </Project>
