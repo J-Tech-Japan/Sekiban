@@ -10,10 +10,18 @@ public class BorrowerSpec : AggregateTest<Borrower, BookBorrowingDependency>
     public void CreateTest()
     {
         WhenCommand(
-            new CreateBorrower(new BorrowerCardNo(100001), new Name("John", "Doe"), new PhoneNumber("1234567890"), new Email("test@example.com")));
+            new CreateBorrower(
+                new BorrowerCardNo(100001),
+                new Name("John", "Doe"),
+                new PhoneNumber("1234567890"),
+                new Email("test@example.com")));
         ThenNotThrowsAnException();
         ThenPayloadIs(
-            new Borrower(new BorrowerCardNo(100001), new Name("John", "Doe"), new PhoneNumber("1234567890"), new Email("test@example.com")));
+            new Borrower(
+                new BorrowerCardNo(100001),
+                new Name("John", "Doe"),
+                new PhoneNumber("1234567890"),
+                new Email("test@example.com")));
     }
 
     [Theory]
@@ -39,7 +47,10 @@ public class BorrowerSpec : AggregateTest<Borrower, BookBorrowingDependency>
     [InlineData("123456789012345678901234567890123456789012345678901", "test", null)]
     [InlineData("test", "123456789012345678901234567890123456789012345678901", null)]
     [InlineData("test", "name", "123456789012345678901234567890123456789012345678901")]
-    public void CreateTestValidationFailedName(string firstName, string lastName, string? middleName)
+    public void CreateTestValidationFailedName(
+        string firstName,
+        string lastName,
+        string? middleName)
     {
         WhenCommand(
             new CreateBorrower(
@@ -70,13 +81,24 @@ public class BorrowerSpec : AggregateTest<Borrower, BookBorrowingDependency>
     public void UpdateNameSpec()
     {
         GivenCommand(
-            new CreateBorrower(new BorrowerCardNo(100001), new Name("John", "Doe"), new PhoneNumber("1234567890"), new Email("test@example.com")));
+            new CreateBorrower(
+                new BorrowerCardNo(100001),
+                new Name("John", "Doe"),
+                new PhoneNumber("1234567890"),
+                new Email("test@example.com")));
 
         WhenCommand(
-            new ChangeBorrowerName(GetAggregateId(), new Name("John", "Green"), "Changed name with married name"));
+            new ChangeBorrowerName(
+                GetAggregateId(),
+                new Name("John", "Green"),
+                "Changed name with married name"));
 
         ThenNotThrowsAnException();
         ThenPayloadIs(
-            new Borrower(new BorrowerCardNo(100001), new Name("John", "Green"), new PhoneNumber("1234567890"), new Email("test@example.com")));
+            new Borrower(
+                new BorrowerCardNo(100001),
+                new Name("John", "Green"),
+                new PhoneNumber("1234567890"),
+                new Email("test@example.com")));
     }
 }
