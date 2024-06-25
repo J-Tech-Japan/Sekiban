@@ -228,7 +228,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                 {
                     AttributeRouteModel = new AttributeRouteModel(
                         new RouteAttribute(
-                            $"{queryType.GetAggregateProjectionOrQueryFromQueryNextType().Name.ToLower()}/{queryType.Name.Replace("`", "").ToLower()}"))
+                            $"{_webDependencyDefinition.Options.QueryPrefix}/{queryType.GetAggregateProjectionOrQueryFromQueryNextType().Name.ToLower()}/{queryType.Name.Replace("`", "").ToLower()}"))
                     {
                         Name = queryType.GetAggregateProjectionOrQueryFromQueryNextType().Name + queryType.Name
                     }
@@ -244,7 +244,7 @@ public class SekibanControllerRouteConvention : IControllerModelConvention
                 {
                     AttributeRouteModel = new AttributeRouteModel(
                         new RouteAttribute(
-                            $"{queryType.GetAggregateProjectionOrQueryFromQueryNextType().Name.ToLower()}/{queryType.Name.Replace("`", "").ToLower()}"))
+                            $"{_webDependencyDefinition.Options.QueryPrefix}/{queryType.GetAggregateProjectionOrQueryFromQueryNextType().Name.ToLower()}/{queryType.Name.Replace("`", "").ToLower()}"))
                     {
                         Name = queryType.GetAggregateProjectionOrQueryFromQueryNextType().Name + queryType.Name
                     }
