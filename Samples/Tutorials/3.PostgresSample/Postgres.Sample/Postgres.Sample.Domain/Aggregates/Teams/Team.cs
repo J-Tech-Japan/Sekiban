@@ -1,3 +1,4 @@
+using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
@@ -10,20 +11,13 @@ public record Team(string Name) : IAggregatePayload<Team>
 }
 public record TeamNameChanged(string Name) : IEventPayload<Team, TeamNameChanged>
 {
-    public static Team OnEvent(Team aggregatePayload, Event<TeamNameChanged> ev) => aggregatePayload with { Name = ev.Payload.Name };
+    public static Team OnEvent(Team aggregatePayload, Event<TeamNameChanged> ev) =>
+        aggregatePayload with { Name = ev.Payload.Name };
 }
-
-public record ChangeTeamName(Guid TeamId, string Name) : ICommand<Team>
+public record ChangeTeamName(Guid TeamId, string Name) : ICommandWithHandler<Team, ChangeTeamName>
 {
     public Guid GetAggregateId() => TeamId;
-
-    public class Handler : ICommandHandler<Team, ChangeTeamName>
-    {
-        public IEnumerable<IEventPayloadApplicableTo<Team>> HandleCommand(
-            ChangeTeamName command,
-            ICommandContext<Team> context)
-        {
-            yield return new TeamNameChanged(command.Name);
-        }
-    }
+    public static ResultBox<UnitValue> HandleCommand(
+        ChangeTeamName command,
+        ICommandContext<Team> context) => context.AppendEvent(new TeamNameChanged(command.Name));
 }
