@@ -36,6 +36,8 @@ public sealed class StaticCommandHandlerAdapter<TAggregatePayload, TCommand>(
         ResultBox.Start.Conveyor(_ => _aggregate is not null ? ResultBox.FromValue(_aggregate) : new SekibanCommandHandlerAggregateNullException())
             .Scan(aggregate => _events.Add(EventHelper.HandleEvent(aggregate, eventPayload, _rootPartitionKey)))
             .Remap(_ => UnitValue.None);
+    public ResultBox<UnitValue> AppendEvents(params IEventPayloadApplicableTo<TAggregatePayload>[] eventPayloads) =>
+        ResultBox.FromValue(eventPayloads.ToList()).ReduceEach(UnitValue.Unit, (nextEventPayload, _) => AppendEvent(nextEventPayload));
     public Task<ResultBox<AggregateState<TAnotherAggregatePayload>>> GetAggregateState<TAnotherAggregatePayload>(
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
