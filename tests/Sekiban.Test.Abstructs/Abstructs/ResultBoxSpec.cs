@@ -148,14 +148,36 @@ public abstract class ResultBoxSpec(
             .Conveyor(response => response.GetAggregateId().Remap(BranchId.FromValue))
             .Conveyor(branchId => sekibanExecutor.ExecuteCommand(new CreateClient(branchId.Value, "Client1", "test@example.com")))
             .Conveyor(_ => sekibanExecutor.ExecuteQuery(new ClientEmailExistQueryNext("test@example.com")))
-            .Scan(Assert.True)
+            .Do(Assert.True)
             .Combine(_ => sekibanExecutor.ExecuteQuery(new ClientEmailExistQueryNextAsync("test@example.com")))
-            .Scan(Assert.Equal)
+            .Do(Assert.Equal)
             .Conveyor(_ => sekibanExecutor.ExecuteQuery(new ClientEmailExistQueryNext("test@examplesssss.com")))
-            .Scan(Assert.False)
+            .Do(Assert.False)
             .Combine(_ => sekibanExecutor.ExecuteQuery(new ClientEmailExistQueryNextAsync("test@examplesssss.com")))
             .Scan(Assert.Equal)
             .ScanResult(result => Assert.True(result.IsSuccess));
+    [Fact]
+    public async Task CheckValidationError() =>
+        await sekibanExecutor.ExecuteCommand(new CreateBranch { Name = string.Empty })
+            .DoResult(
+                result =>
+                {
+                    Assert.True(result.IsSuccess);
+                    Assert.NotNull(result.GetValue().ValidationResults);
+                });
+
+    [Fact]
+    public async Task CheckValidationErrorWithHandler() =>
+        await sekibanExecutor.ExecuteCommand(new CreateBranchWithResult(string.Empty))
+            .DoResult(
+                result =>
+                {
+                    Assert.True(result.IsSuccess);
+                    Assert.NotNull(result.GetValue().ValidationResults);
+                });
+
+
+
     [Fact]
     public Task NextQueryTest2() =>
         ResultBox.WrapTry(RemoveAllFromDefaultAndDissolvableWithResultBox)
@@ -208,5 +230,5 @@ public abstract class ResultBoxSpec(
                         null,
                         null,
                         null)))
-            .Scan(Assert.Equal);
+            .Do(Assert.Equal);
 }
