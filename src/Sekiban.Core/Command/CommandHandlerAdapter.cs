@@ -84,6 +84,8 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> : IComman
         ResultBox.Start.Conveyor(_ => _aggregate is not null ? ResultBox.FromValue(_aggregate) : new SekibanCommandHandlerAggregateNullException())
             .Scan(aggregate => _events.Add(EventHelper.HandleEvent(aggregate, eventPayload, _rootPartitionKey)))
             .Remap(_ => UnitValue.None);
+    public ResultBox<UnitValue> AppendEvents(params IEventPayloadApplicableTo<TAggregatePayload>[] eventPayloads) =>
+        ResultBox.FromValue(eventPayloads.ToList()).ReduceEach(UnitValue.Unit, (nextEventPayload, _) => AppendEvent(nextEventPayload));
 
     /// <summary>
     ///     Common Command handler, it is used for test and production code.

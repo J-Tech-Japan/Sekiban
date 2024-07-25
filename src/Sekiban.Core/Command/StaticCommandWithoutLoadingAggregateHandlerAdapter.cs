@@ -77,6 +77,8 @@ public class StaticCommandWithoutLoadingAggregateHandlerAdapter<TAggregatePayloa
                         _rootPartitionKey,
                         eventPayload)))
             .Remap(_ => UnitValue.None);
+    public ResultBox<UnitValue> AppendEvents(params IEventPayloadApplicableTo<TAggregatePayload>[] eventPayloads) =>
+        ResultBox.FromValue(eventPayloads.ToList()).ReduceEach(UnitValue.Unit, (nextEventPayload, _) => AppendEvent(nextEventPayload));
     public async Task<ResultBox<CommandResponse>> HandleCommandAsync(
         CommandDocument<TCommand> commandDocument,
         Guid aggregateId,
