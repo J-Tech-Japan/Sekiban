@@ -1,4 +1,3 @@
-using DotNext.Collections.Generic;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
@@ -12,6 +11,8 @@ using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
 using Sekiban.Infrastructure.Postgres.Databases;
 using System.Text.Json;
+using DotNext.Collections.Generic;
+
 namespace Sekiban.Infrastructure.Postgres.Documents;
 
 public class PostgresDocumentRepository(
