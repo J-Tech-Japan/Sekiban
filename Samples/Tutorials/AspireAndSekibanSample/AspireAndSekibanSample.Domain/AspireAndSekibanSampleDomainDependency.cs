@@ -5,12 +5,8 @@ namespace AspireAndSekibanSample.Domain;
 
 public class AspireAndSekibanSampleDomainDependency : DomainDependencyDefinitionBase
 {
-
     public override Assembly GetExecutingAssembly() => Assembly.GetExecutingAssembly();
     public override void Define()
     {
-        AddAggregate<AccountUser>()
-            .AddCommandHandler<CreateAccountUser, CreateAccountUser.Handler>()
-            .AddCommandHandler<ChangeAccountUserName, ChangeAccountUserName.Handler>();
     }
 }

@@ -7,12 +7,12 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.1" />
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.5" />
-        <PackageReference Include="Sekiban.Aspire.Infrastructure.Cosmos" Version="0.19.1" />
-        <PackageReference Include="Sekiban.Core" Version="0.19.1" />
-        <PackageReference Include="Sekiban.Infrastructure.Postgres" Version="0.19.1" />
-        <PackageReference Include="Sekiban.Web" Version="0.19.1" />
+        <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.1.0" />
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.7" />
+        <PackageReference Include="Sekiban.Aspire.Infrastructure.Cosmos" Version="0.20.3" />
+        <PackageReference Include="Sekiban.Core" Version="0.20.3" />
+        <PackageReference Include="Sekiban.Infrastructure.Postgres" Version="0.20.3" />
+        <PackageReference Include="Sekiban.Web" Version="0.20.3" />
         <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
     </ItemGroup>
 

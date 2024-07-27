@@ -14,10 +14,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.5" />
-    <PackageReference Include="Sekiban.Aspire.Infrastructure.Cosmos" Version="0.19.1" />
-    <PackageReference Include="Sekiban.Infrastructure.Postgres" Version="0.19.1" />
-    <PackageReference Include="Sekiban.Web" Version="0.19.1" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.7" />
+    <PackageReference Include="Sekiban.Aspire.Infrastructure.Cosmos" Version="0.20.3" />
+    <PackageReference Include="Sekiban.Infrastructure.Postgres" Version="0.20.3" />
+    <PackageReference Include="Sekiban.Web" Version="0.20.3" />
   </ItemGroup>
 
 </Project>
