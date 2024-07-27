@@ -7,8 +7,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Sekiban.Infrastructure.Postgres" Version="0.20.1"/>
-        <PackageReference Include="Sekiban.Web" Version="0.20.1"/>
+        <PackageReference Include="Sekiban.Infrastructure.Postgres" Version="0.20.3" />
+        <PackageReference Include="Sekiban.Web" Version="0.20.3" />
         <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2"/>
     </ItemGroup>
 
