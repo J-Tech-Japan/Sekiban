@@ -74,7 +74,10 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon,
     }
     public AggregateState<TAggregatePayloadOut> ToState<TAggregatePayloadOut>()
         where TAggregatePayloadOut : IAggregatePayloadCommon =>
-        Payload is TAggregatePayloadOut payloadOut && Payload.GetType().Name == typeof(TAggregatePayloadOut).Name
+        Payload is TAggregatePayloadOut payloadOut &&
+        (Payload.GetType().Name == typeof(TAggregatePayloadOut).Name ||
+            typeof(TAggregatePayload).GetBaseAggregatePayloadTypeFromAggregate().Name ==
+            typeof(TAggregatePayloadOut).Name)
             ? new AggregateState<TAggregatePayloadOut>(this, payloadOut)
             : throw new AggregateTypeNotMatchException(typeof(TAggregatePayloadOut), Payload.GetType());
     public override string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();
