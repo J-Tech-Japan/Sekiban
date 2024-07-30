@@ -31,8 +31,9 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
     /// <param name="injectingAggregateId">If you want use certain aggregate Id, you can inject here, otherwise, pass null</param>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Guid ExecuteCommand<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
-        where TAggregatePayload : IAggregatePayloadCommon =>
+    public Guid ExecuteCommand<TAggregatePayload>(
+        ICommand<TAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TAggregatePayload : IAggregatePayloadCommon =>
         ExecuteCommandPrivate(command, injectingAggregateId, false);
     /// <summary>
     ///     Execute command and returns aggregate id
@@ -42,8 +43,9 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
     /// <param name="injectingAggregateId">If you want use certain aggregate Id, you can inject here, otherwise, pass null</param>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Guid ExecuteCommandWithPublish<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
-        where TAggregatePayload : IAggregatePayloadCommon =>
+    public Guid ExecuteCommandWithPublish<TAggregatePayload>(
+        ICommand<TAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TAggregatePayload : IAggregatePayloadCommon =>
         ExecuteCommandPrivate(command, injectingAggregateId, true);
     /// <summary>
     ///     Execute command and returns aggregate id
@@ -65,8 +67,10 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
         return nonBlockingStatus.RunBlockingFunc(() => ExecuteCommandPrivate(command, injectingAggregateId, true));
     }
 
-    private Guid ExecuteCommandPrivate<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId, bool withPublish)
-        where TAggregatePayload : IAggregatePayloadCommon
+    private Guid ExecuteCommandPrivate<TAggregatePayload>(
+        ICommand<TAggregatePayload> command,
+        Guid? injectingAggregateId,
+        bool withPublish) where TAggregatePayload : IAggregatePayloadCommon
     {
         var rootPartitionKey = command.GetRootPartitionKey();
         var validationResults = command.ValidateProperties().ToList();
@@ -80,15 +84,19 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
 
         if (command is ICommandConverterCommon converter)
         {
-            var handler = serviceProvider.GetService(genericType) ?? throw new SekibanCommandNotRegisteredException(command.GetType().Name);
+            var handler = serviceProvider.GetService(genericType) ??
+                throw new SekibanCommandNotRegisteredException(command.GetType().Name);
             if (((dynamic)handler).ConvertCommand((dynamic)converter) is ICommandCommon convertedCommand)
             {
-                var method = GetType().GetMethod(nameof(ExecuteCommandPrivate), BindingFlags.NonPublic | BindingFlags.Instance);
+                var method = GetType()
+                    .GetMethod(nameof(ExecuteCommandPrivate), BindingFlags.NonPublic | BindingFlags.Instance);
                 var param1 = convertedCommand.GetType().GetAggregatePayloadTypeFromCommandType();
                 var generated = method?.MakeGenericMethod(param1);
                 if (generated is not null)
                 {
-                    return generated.Invoke(this, new object?[] { convertedCommand, injectingAggregateId, withPublish }) as Guid? ??
+                    return generated.Invoke(
+                            this,
+                            new object?[] { convertedCommand, injectingAggregateId, withPublish }) as Guid? ??
                         throw new SekibanTypeNotFoundException("Failed to get result of WhenCommandPrivate method");
                 }
             }
@@ -96,7 +104,8 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
         var aggregateId = injectingAggregateId ?? command.GetAggregateId();
         if (command is ICommandWithoutLoadingAggregateCommon && command is not ICommandWithHandlerCommon)
         {
-            var handler = serviceProvider.GetService(genericType) ?? throw new SekibanCommandNotRegisteredException(command.GetType().Name);
+            var handler = serviceProvider.GetService(genericType) ??
+                throw new SekibanCommandNotRegisteredException(command.GetType().Name);
             var commandDocumentBaseType = typeof(CommandDocument<>);
             var commandDocumentType = commandDocumentBaseType.MakeGenericType(command.GetType());
             var commandDocument = Activator.CreateInstance(
@@ -109,10 +118,16 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
 
             var baseClass = typeof(CommandWithoutLoadingAggregateHandlerAdapter<,>);
             var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), command.GetType());
-            var adapter = Activator.CreateInstance(adapterClass) ?? throw new SekibanTypeNotFoundException("Method not found");
+            var adapter = Activator.CreateInstance(adapterClass) ??
+                throw new SekibanTypeNotFoundException("Method not found");
             var method = adapterClass.GetMethod(nameof(ICommandHandlerAdapterCommon.HandleCommandAsync));
-            var commandResponse = (CommandResponse)((dynamic?)method?.Invoke(adapter, [commandDocument, handler, aggregateId, rootPartitionKey]) ??
-                throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
+            var commandResponse
+                = (CommandResponse)((dynamic?)method?.Invoke(
+                        adapter,
+                        [commandDocument, handler, aggregateId, rootPartitionKey]) ??
+                    throw new SekibanCommandHandlerNotMatchException(
+                        "Command failed to execute " + command.GetType().Name))
+                .Result;
             LatestEvents = commandResponse.Events;
         } else if (command is ICommandWithoutLoadingAggregateCommon && command is ICommandWithHandlerCommon)
         {
@@ -128,10 +143,16 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
 
             var baseClass = typeof(StaticCommandWithoutLoadingAggregateHandlerAdapter<,>);
             var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), command.GetType());
-            var adapter = Activator.CreateInstance(adapterClass, serviceProvider) ?? throw new SekibanTypeNotFoundException("Method not found");
+            var adapter = Activator.CreateInstance(adapterClass, serviceProvider) ??
+                throw new SekibanTypeNotFoundException("Method not found");
             var method = adapterClass.GetMethod(nameof(ICommandHandlerAdapterCommon.HandleCommandAsync));
-            var commandResponse = (ResultBox<CommandResponse>)((dynamic?)method?.Invoke(adapter, [commandDocument, aggregateId, rootPartitionKey]) ??
-                throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
+            var commandResponse
+                = (ResultBox<CommandResponse>)((dynamic?)method?.Invoke(
+                        adapter,
+                        [commandDocument, aggregateId, rootPartitionKey]) ??
+                    throw new SekibanCommandHandlerNotMatchException(
+                        "Command failed to execute " + command.GetType().Name))
+                .Result;
             commandResponse.Scan(value => LatestEvents = value.Events);
         } else if (command is ICommandWithHandlerCommon)
         {
@@ -147,17 +168,25 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
 
             var aggregateLoader = serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
                 throw new SekibanTypeNotFoundException("Failed to get AddAggregate Service");
-            var baseClass = typeof(StaticCommandHandlerAdapter<,>);
-            var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), command.GetType());
+            var baseClass = typeof(StaticCommandHandlerAdapter<,,>);
+            var parent = typeof(TAggregatePayload).GetBaseAggregatePayloadTypeFromAggregate();
+            var adapterClass = baseClass.MakeGenericType(parent, typeof(TAggregatePayload), command.GetType());
             var adapter = Activator.CreateInstance(adapterClass, aggregateLoader, serviceProvider, false) ??
                 throw new SekibanTypeNotFoundException("Method not found");
-            var method = adapterClass.GetMethod("HandleCommandAsync") ?? throw new SekibanTypeNotFoundException("HandleCommandAsync not found");
-            var commandResponse = (ResultBox<CommandResponse>)((dynamic?)method.Invoke(adapter, [commandDocument, aggregateId, rootPartitionKey]) ??
-                throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
+            var method = adapterClass.GetMethod("HandleCommandAsync") ??
+                throw new SekibanTypeNotFoundException("HandleCommandAsync not found");
+            var commandResponse
+                = (ResultBox<CommandResponse>)((dynamic?)method.Invoke(
+                        adapter,
+                        [commandDocument, aggregateId, rootPartitionKey]) ??
+                    throw new SekibanCommandHandlerNotMatchException(
+                        "Command failed to execute " + command.GetType().Name))
+                .Result;
             commandResponse.Scan(success => LatestEvents = success.Events);
         } else if (command is not ICommandWithoutLoadingAggregateCommon)
         {
-            var handler = serviceProvider.GetService(genericType) ?? throw new SekibanCommandNotRegisteredException(command.GetType().Name);
+            var handler = serviceProvider.GetService(genericType) ??
+                throw new SekibanCommandNotRegisteredException(command.GetType().Name);
             var commandDocumentBaseType = typeof(CommandDocument<>);
             var commandDocumentType = commandDocumentBaseType.MakeGenericType(command.GetType());
             var commandDocument = Activator.CreateInstance(
@@ -178,8 +207,13 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
             var method = adapterClass.GetMethod(nameof(ICommandHandlerAdapterCommon.HandleCommandAsync)) ??
                 throw new SekibanTypeNotFoundException("HandleCommandAsync not found");
 
-            var commandResponse = (CommandResponse)((dynamic?)method.Invoke(adapter, [commandDocument, handler, aggregateId, rootPartitionKey]) ??
-                throw new SekibanCommandHandlerNotMatchException("Command failed to execute " + command.GetType().Name)).Result;
+            var commandResponse
+                = (CommandResponse)((dynamic?)method.Invoke(
+                        adapter,
+                        [commandDocument, handler, aggregateId, rootPartitionKey]) ??
+                    throw new SekibanCommandHandlerNotMatchException(
+                        "Command failed to execute " + command.GetType().Name))
+                .Result;
 
             LatestEvents = commandResponse.Events;
         }
@@ -212,9 +246,11 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
         string rootPartitionKey = IDocument.DefaultRootPartitionKey) where TAggregatePayload : IAggregatePayloadCommon
     {
         var toReturn = new List<IEvent>();
-        var documentRepository = serviceProvider.GetRequiredService(typeof(IDocumentRepository)) as IDocumentRepository ??
+        var documentRepository
+            = serviceProvider.GetRequiredService(typeof(IDocumentRepository)) as IDocumentRepository ??
             throw new SekibanTypeNotFoundException("Failed to get document repository");
-        documentRepository.GetAllEventsForAggregateIdAsync(
+        documentRepository
+            .GetAllEventsForAggregateIdAsync(
                 aggregateId,
                 typeof(TAggregatePayload),
                 PartitionKeyGenerator.ForEvent(aggregateId, typeof(TAggregatePayload), rootPartitionKey),

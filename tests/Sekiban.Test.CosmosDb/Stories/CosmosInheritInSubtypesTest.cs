@@ -4,9 +4,11 @@ using Sekiban.Test.Abstructs.Abstructs;
 using Xunit.Abstractions;
 namespace Sekiban.Test.CosmosDb.Stories;
 
-public class CosmosAggregateSubtypeTest(
+public class CosmosInheritInSubtypesTest(
     TestBase<FeatureCheckDependency>.SekibanTestFixture sekibanTestFixture,
-    ITestOutputHelper testOutputHelper) : AggregateSubtypeTest(
+    ITestOutputHelper output) : InheritInSubtypesTest(
     sekibanTestFixture,
-    testOutputHelper,
-    new CosmosSekibanServiceProviderGenerator());
+    output,
+    new CosmosSekibanServiceProviderGenerator())
+{
+}

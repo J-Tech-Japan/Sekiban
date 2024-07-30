@@ -23,6 +23,8 @@ using FeatureCheck.Domain.Aggregates.SubTypes.BaseIsFirstSubtypes;
 using FeatureCheck.Domain.Aggregates.SubTypes.BaseIsFirstSubtypes.Commands;
 using FeatureCheck.Domain.Aggregates.SubTypes.InheritedSubtypes;
 using FeatureCheck.Domain.Aggregates.SubTypes.InheritedSubtypes.Commands;
+using FeatureCheck.Domain.Aggregates.SubTypes.InheritInSubtypesTypes;
+using FeatureCheck.Domain.Aggregates.SubTypes.InheritInSubtypesTypes.Commands;
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes;
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.PurchasedCarts;
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.PurchasedCarts.Commands;
@@ -76,7 +78,8 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
             .AddCommandHandler<DeleteClient, DeleteClient.Handler>()
             .AddCommandHandler<CancelDeleteClient, CancelDeleteClient.Handler>()
             .AddCommandHandler<ChangeClientNameWithoutLoading, ChangeClientNameWithoutLoading.Handler>()
-            .AddEventSubscriberWithNonBlocking<ClientCreatedWithBranchAdd, ClientCreatedWithBranchAdd.BranchSubscriber>()
+            .AddEventSubscriberWithNonBlocking<ClientCreatedWithBranchAdd,
+                ClientCreatedWithBranchAdd.BranchSubscriber>()
             .AddEventSubscriber<ClientCreated, ClientCreatedSubscriber>()
             .AddEventSubscriber<ClientDeleted, ClientDeletedSubscriber>()
             .AddSingleProjection<ClientNameHistoryProjection>()
@@ -114,19 +117,23 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
 
         AddAggregate<ICartAggregate>()
             .AddSubtype<ShoppingCartI>(
-                subType => subType.AddCommandHandler<AddItemToShoppingCartI, AddItemToShoppingCartI.Handler>()
+                subType => subType
+                    .AddCommandHandler<AddItemToShoppingCartI, AddItemToShoppingCartI.Handler>()
                     .AddCommandHandler<SubmitOrderI, SubmitOrderI.Handler>()
                     .AddEventSubscriber<OrderSubmittedI, OrderSubmittedI.Subscriber>())
             .AddSubtype<PurchasedCartI>(
-                subType => subType.AddCommandHandler<ReceivePaymentToPurchasedCartI, ReceivePaymentToPurchasedCartI.Handler>())
+                subType => subType
+                    .AddCommandHandler<ReceivePaymentToPurchasedCartI, ReceivePaymentToPurchasedCartI.Handler>())
             .AddSubtype<ShippingCartI>(_ => { });
 
         AddAggregate<CartAggregateR>()
             .AddSubtype<ShoppingCartR>(
-                subType => subType.AddCommandHandler<AddItemToShoppingCartR, AddItemToShoppingCartR.Handler>()
+                subType => subType
+                    .AddCommandHandler<AddItemToShoppingCartR, AddItemToShoppingCartR.Handler>()
                     .AddCommandHandler<SubmitOrderR, SubmitOrderR.Handler>())
             .AddSubtype<PurchasedCartR>(
-                subType => subType.AddCommandHandler<ReceivePaymentToPurchasedCartR, ReceivePaymentToPurchasedCartR.Handler>())
+                subType => subType
+                    .AddCommandHandler<ReceivePaymentToPurchasedCartR, ReceivePaymentToPurchasedCartR.Handler>())
             .AddSubtype<ShippingCartR>(_ => { });
 
         AddMultiProjectionQuery<ClientLoyaltyPointMultiProjectionQuery>();
@@ -139,17 +146,22 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
 
         AddAggregate<IInheritedAggregate>()
             .AddSubtype<ProcessingSubAggregate>(
-                subType => subType.AddCommandHandler<OpenInheritedAggregate, OpenInheritedAggregate.Handler>()
+                subType => subType
+                    .AddCommandHandler<OpenInheritedAggregate, OpenInheritedAggregate.Handler>()
                     .AddCommandHandler<CloseInheritedAggregate, CloseInheritedAggregate.Handler>())
-            .AddSubtype<ClosedSubAggregate>(subType => subType.AddCommandHandler<ReopenInheritedAggregate, ReopenInheritedAggregate.Handler>());
+            .AddSubtype<ClosedSubAggregate>(
+                subType => subType.AddCommandHandler<ReopenInheritedAggregate, ReopenInheritedAggregate.Handler>());
 
-        AddAggregate<ALotOfEventsAggregate>().AddCommandHandler<ALotOfEventsCreateCommand, ALotOfEventsCreateCommand.Handler>();
+        AddAggregate<ALotOfEventsAggregate>()
+            .AddCommandHandler<ALotOfEventsCreateCommand, ALotOfEventsCreateCommand.Handler>();
 
         AddAggregate<BaseFirstAggregate>()
             .AddCommandHandler<BFAggregateCreateAccount, BFAggregateCreateAccount.Handler>()
             .AddCommandHandler<ActivateBFAggregate, ActivateBFAggregate.Handler>()
-            .AddSubtype<ActiveBFAggregate>(subType => subType.AddCommandHandler<CloseBFAggregate, CloseBFAggregate.Handler>())
-            .AddSubtype<ClosedBFAggregate>(subType => subType.AddCommandHandler<ReopenBFAggregate, ReopenBFAggregate.Handler>());
+            .AddSubtype<ActiveBFAggregate>(
+                subType => subType.AddCommandHandler<CloseBFAggregate, CloseBFAggregate.Handler>())
+            .AddSubtype<ClosedBFAggregate>(
+                subType => subType.AddCommandHandler<ReopenBFAggregate, ReopenBFAggregate.Handler>());
 
         AddAggregate<Booking>()
             .AddCommandHandler<BookingCommands.BookRoom, BookingCommands.BookRoom.Handler>()
@@ -160,5 +172,10 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
             .AddCommandHandler<CreateCar, CreateCar.Handler>();
 
         AddAggregate<TenantUser>().AddAggregateQuery<TenantUserDuplicateEmailQuery>();
+
+        AddAggregate<IInheritInSubtypesType>()
+            .AddSubtype<FirstStage>(sub => sub.AddCommandHandler<ChangeToSecondYield, ChangeToSecondYield.Handler>())
+            .AddSubtype<SecondStage>(
+                sub => sub.AddCommandHandler<MoveBackToFirstYield, MoveBackToFirstYield.Handler>());
     }
 }
