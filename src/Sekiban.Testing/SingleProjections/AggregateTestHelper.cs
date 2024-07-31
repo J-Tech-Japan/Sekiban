@@ -1127,7 +1127,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             throw new SekibanTypeNotFoundException("Failed to get Query service");
         try
         {
-            _ = queryService.ExecuteAsync((dynamic)param).Result.UnwrapBox();
+            _ = queryService.ExecuteAsync((dynamic)param).Result;
         }
         catch (Exception e)
         {
@@ -1142,7 +1142,11 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             throw new SekibanTypeNotFoundException("Failed to get Query service");
         try
         {
-            _ = queryService.ExecuteAsync((dynamic)param).Result;
+            var result = queryService.ExecuteAsync((dynamic)param).Result;
+            if (!result.IsSuccess)
+            {
+                return result.GetException();
+            }
         }
         catch (Exception e)
         {
@@ -1371,7 +1375,11 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             throw new SekibanTypeNotFoundException("Failed to get Query service");
         try
         {
-            var _ = queryService.ExecuteAsync((dynamic)param).Result.UnwrapBox();
+            var result = queryService.ExecuteAsync((dynamic)param).Result;
+            if (!result.IsSuccess)
+            {
+                return result.GetException();
+            }
         }
         catch (Exception e)
         {
