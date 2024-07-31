@@ -442,24 +442,44 @@ public class
         IQueryInput<TQueryResponse> param,
         string responseJson) where TQueryResponse : IQueryResponse =>
         _helper.ThenQueryResponseIsFromJson(param, responseJson);
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(
+        INextQueryCommon<TQueryResponse> param,
+        string responseJson) where TQueryResponse : IQueryResponse =>
+        _helper.ThenQueryResponseIsFromJson(param, responseJson);
 
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromFile<TQueryResponse>(
         IQueryInput<TQueryResponse> param,
         string responseFilename) where TQueryResponse : IQueryResponse =>
         _helper.ThenQueryResponseIsFromFile(param, responseFilename);
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromFile<TQueryResponse>(
+        INextQueryCommon<TQueryResponse> param,
+        string responseFilename) where TQueryResponse : IQueryResponse =>
+        _helper.ThenQueryResponseIsFromFile(param, responseFilename);
     public IAggregateTestHelper<TAggregatePayload> ThenQueryThrows<T>(IQueryInputCommon param) where T : Exception =>
+        _helper.ThenQueryThrows<T>(param);
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryThrows<T>(INextQueryCommon param) where T : Exception =>
         _helper.ThenQueryThrows<T>(param);
     public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<T>(
         IQueryInputCommon param,
         Action<T> checkException) where T : Exception =>
         _helper.ThenQueryGetException(param, checkException);
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<T>(
+        INextQueryCommon param,
+        Action<T> checkException) where T : Exception => _helper.ThenQueryGetException(param, checkException);
     public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException(
         IQueryInputCommon param,
         Action<Exception> checkException) =>
         _helper.ThenQueryGetException(param, checkException);
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException(
+        INextQueryCommon param,
+        Action<Exception> checkException) => _helper.ThenQueryGetException(param, checkException);
     public IAggregateTestHelper<TAggregatePayload> ThenQueryNotThrowsAnException(IQueryInputCommon param) =>
         _helper.ThenQueryNotThrowsAnException(param);
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryNotThrowsAnException(INextQueryCommon param) =>
+        _helper.ThenQueryNotThrowsAnException(param);
     public IAggregateTestHelper<TAggregatePayload> ThenQueryThrowsAnException(IQueryInputCommon param) =>
+        _helper.ThenQueryThrowsAnException(param);
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryThrowsAnException(INextQueryCommon param) =>
         _helper.ThenQueryThrowsAnException(param);
     #endregion
 }

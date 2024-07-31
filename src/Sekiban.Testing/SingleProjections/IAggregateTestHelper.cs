@@ -844,6 +844,9 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(
         IQueryInput<TQueryResponse> param,
         string responseJson) where TQueryResponse : IQueryResponse;
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(
+        INextQueryCommon<TQueryResponse> param,
+        string responseJson) where TQueryResponse : IQueryResponse;
     /// <summary>
     ///     Check if Query Response is expected value from Json file
     /// </summary>
@@ -854,6 +857,9 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromFile<TQueryResponse>(
         IQueryInput<TQueryResponse> param,
         string responseFilename) where TQueryResponse : IQueryResponse;
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromFile<TQueryResponse>(
+        INextQueryCommon<TQueryResponse> param,
+        string responseFilename) where TQueryResponse : IQueryResponse;
     /// <summary>
     ///     Check if query throws an exception with specified type
     /// </summary>
@@ -861,6 +867,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <typeparam name="T"></typeparam>
     /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenQueryThrows<T>(IQueryInputCommon param) where T : Exception;
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryThrows<T>(INextQueryCommon param) where T : Exception;
     /// <summary>
     ///     Get Query's exception with specific type
     /// </summary>
@@ -871,6 +878,9 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<T>(
         IQueryInputCommon param,
         Action<T> checkException) where T : Exception;
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<T>(
+        INextQueryCommon param,
+        Action<T> checkException) where T : Exception;
     /// <summary>
     ///     Get Query's exception
     /// </summary>
@@ -880,17 +890,22 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException(
         IQueryInputCommon param,
         Action<Exception> checkException);
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException(
+        INextQueryCommon param,
+        Action<Exception> checkException);
     /// <summary>
     ///     Check if query not throws an exception
     /// </summary>
     /// <param name="param"></param>
     /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenQueryNotThrowsAnException(IQueryInputCommon param);
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryNotThrowsAnException(INextQueryCommon param);
     /// <summary>
     ///     Check if query throws exception
     /// </summary>
     /// <param name="param"></param>
     /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenQueryThrowsAnException(IQueryInputCommon param);
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryThrowsAnException(INextQueryCommon param);
     #endregion
 }
