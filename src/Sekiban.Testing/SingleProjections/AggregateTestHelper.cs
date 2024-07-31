@@ -559,6 +559,60 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         checkEventAction((Event<T>)_latestEvents.First());
         return this;
     }
+    private IAggregateCommon GetAggregateStateCommon()
+    {
+        ThenNotThrowsAnException();
+        var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
+            throw new SekibanTypeNotFoundException("Failed to get aggregate loader");
+        var aggregateId = GetAggregateId();
+        var rootPartitionKey = GetRootPartitionKey();
+        var parent = typeof(TAggregatePayload).GetBaseAggregatePayloadTypeFromAggregate();
+        var method = typeof(AggregateLoader).GetMethod(nameof(AggregateLoader.AsAggregateAsync));
+        var genericMethod = method?.MakeGenericMethod(parent);
+        var aggregate
+            = ((dynamic)(genericMethod?.Invoke(aggregateLoader, [aggregateId, rootPartitionKey, null, null]) ??
+                new SekibanAggregateNotExistsException(
+                    GetAggregateId(),
+                    typeof(TAggregatePayload).Name,
+                    GetRootPartitionKey()))).Result;
+        var currentType = (Type)aggregate.ToState().GetPayload().GetType();
+        var genericMethod2 = method?.MakeGenericMethod(currentType);
+        var aggregate2
+            = ((dynamic)(genericMethod2?.Invoke(aggregateLoader, [aggregateId, rootPartitionKey, null, null]) ??
+                new SekibanAggregateNotExistsException(
+                    GetAggregateId(),
+                    typeof(TAggregatePayload).Name,
+                    GetRootPartitionKey()))).Result;
+        return aggregate2.ToState() ??
+            throw new SekibanAggregateNotExistsException(
+                GetAggregateId(),
+                typeof(TAggregatePayload).Name,
+                GetRootPartitionKey());
+
+    }
+    private dynamic GetAggregateInitialDynamic()
+    {
+        ThenNotThrowsAnException();
+        var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
+            throw new SekibanTypeNotFoundException("Failed to get aggregate loader");
+        var aggregateId = GetAggregateId();
+        var rootPartitionKey = GetRootPartitionKey();
+        var method = typeof(AggregateLoader).GetMethod(nameof(AggregateLoader.AsAggregateAsync));
+        var parent = typeof(TAggregatePayload).GetBaseAggregatePayloadTypeFromAggregate();
+        var genericMethod = method?.MakeGenericMethod(parent);
+        var aggregate
+            = ((dynamic)(genericMethod?.Invoke(aggregateLoader, [aggregateId, rootPartitionKey, null, null]) ??
+                new SekibanAggregateNotExistsException(
+                    GetAggregateId(),
+                    typeof(TAggregatePayload).Name,
+                    GetRootPartitionKey()))).Result;
+        var currentType = (Type)aggregate.ToState().GetPayload().GetType();
+
+        var baseClass = typeof(Aggregate<>).MakeGenericType(currentType);
+        var instance = Activator.CreateInstance(baseClass);
+        return instance ?? throw new SekibanTypeNotFoundException("Failed to get result of WhenCommandPrivate method");
+        ;
+    }
     public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommandPrivate<TAggregateSubtype>(
         ICommand<TAggregateSubtype> command,
         bool withPublish) where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload>
@@ -783,22 +837,23 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     {
         // when aggregate payload type changed, skip this test
         if (!AggregateIdHolder.IsAggregateType<TAggregatePayload>()) { return; }
-        var state = GetAggregateState();
-        var fromState = _projector.CreateInitialAggregate(state.AggregateId);
+        var state = GetAggregateStateCommon() as IAggregateStateCommon ??
+            throw new InvalidDataException("Aggregate state is invalid.");
+        var fromState = GetAggregateInitialDynamic();
         fromState.ApplySnapshot(state);
         var stateFromSnapshot = fromState.ToState().GetComparableObject(state);
         var actualJson = SekibanJsonHelper.Serialize(state);
         var expectedJson = SekibanJsonHelper.Serialize(stateFromSnapshot);
         Assert.Equal(expectedJson, actualJson);
-        var json = SekibanJsonHelper.Serialize(state.AsDynamicTypedState());
+        var json = SekibanJsonHelper.Serialize(state);
 
         var method = typeof(SekibanJsonHelper)
             .GetMethods(BindingFlags.Static | BindingFlags.Public)
             .FirstOrDefault(m => m.Name == "Deserialize" && m.GetParameters().Length == 1);
         var type = typeof(AggregateState<>);
-        var genericType = type.MakeGenericType(state.Payload.GetType());
+        var genericType = type.MakeGenericType(state.GetPayload().GetType());
         var genericMethod = method?.MakeGenericMethod(genericType);
-        var stateFromJson = genericMethod?.Invoke(typeof(SekibanJsonHelper), [json]);
+        var stateFromJson = genericMethod?.Invoke(typeof(SekibanJsonHelper), (object?[]) [json]);
 
         var stateFromJsonJson = SekibanJsonHelper.Serialize(stateFromJson);
         Assert.Equal(json, stateFromJsonJson);

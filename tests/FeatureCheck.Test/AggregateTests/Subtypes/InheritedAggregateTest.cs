@@ -13,7 +13,9 @@ public class InheritedAggregateTest : AggregateTest<IInheritedAggregate, Feature
         Subtype<ProcessingSubAggregate>().WhenCommand(new OpenInheritedAggregate { YearMonth = 202201 });
         ThenPayloadTypeShouldBe<ProcessingSubAggregate>()
             .WhenCommand(new CloseInheritedAggregate { Reason = "test", AggregateId = GetAggregateId() });
-        ThenPayloadTypeShouldBe<ClosedSubAggregate>().WhenCommand(new ReopenInheritedAggregate { Reason = "test", AggregateId = GetAggregateId() });
+        ThenPayloadTypeShouldBe<ClosedSubAggregate>()
+            .WhenCommand(new ReopenInheritedAggregate { Reason = "test", AggregateId = GetAggregateId() });
+        var events = GetAllAggregateEvents();
         ThenPayloadTypeShouldBe<ProcessingSubAggregate>()
             .WhenCommand(new CloseInheritedAggregate { Reason = "test", AggregateId = GetAggregateId() });
     }
