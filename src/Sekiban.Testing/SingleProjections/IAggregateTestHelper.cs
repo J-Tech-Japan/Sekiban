@@ -76,8 +76,9 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="injectingAggregateId"></param>
     /// <typeparam name="TEnvironmentAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Guid RunEnvironmentCommand<TEnvironmentAggregatePayload>(ICommand<TEnvironmentAggregatePayload> command, Guid? injectingAggregateId = null)
-        where TEnvironmentAggregatePayload : IAggregatePayloadCommon;
+    public Guid RunEnvironmentCommand<TEnvironmentAggregatePayload>(
+        ICommand<TEnvironmentAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon;
     /// <summary>
     ///     Run a command in environment as given condition (but not for the aggregate that will be tested)
     /// </summary>
@@ -123,7 +124,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// </summary>
     /// <param name="events"></param>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsWithPublishAndBlockingEvents(IEnumerable<IEvent> events);
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsWithPublishAndBlockingEvents(
+        IEnumerable<IEvent> events);
     /// <summary>
     ///     Given event that already put in the system and publish to the system from file.
     ///     events should be <see cref="Event{TEventPayload}" /> type
@@ -141,7 +143,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// </summary>
     /// <param name="filename"></param>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFileWithPublishAndBlockingEvents(string filename);
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentEventsFileWithPublishAndBlockingEvents(
+        string filename);
     /// <summary>
     ///     Run command in environment (but not for the aggregate that will be tested) and publish to the system.
     /// </summary>
@@ -193,7 +196,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// </summary>
     /// <param name="action"></param>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentCommandExecutorAction(Action<TestCommandExecutor> action);
+    public IAggregateTestHelper<TAggregatePayload> GivenEnvironmentCommandExecutorAction(
+        Action<TestCommandExecutor> action);
     /// <summary>
     ///     Aggregate Id Holder
     ///     This object keeps aggregate id and root partition key
@@ -214,7 +218,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="command"></param>
     /// <typeparam name="TCommand"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> GivenCommand<TCommand>(TCommand command) where TCommand : ICommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> GivenCommand<TCommand>(TCommand command)
+        where TCommand : ICommand<TAggregatePayload>;
     /// <summary>
     ///     Run a command with Subtype, event will not be published
     ///     Use this method to prepare for the sut (system under test)
@@ -223,7 +228,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="command"></param>
     /// <typeparam name="TAggregateSubtype"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> GivenSubtypeCommand<TAggregateSubtype>(ICommand<TAggregateSubtype> command)
+    public IAggregateTestHelper<TAggregatePayload> GivenSubtypeCommand<TAggregateSubtype>(
+        ICommand<TAggregateSubtype> command)
         where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload>;
     /// <summary>
     ///     Run a command with Subtype, event will be published
@@ -233,7 +239,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="command"></param>
     /// <typeparam name="TAggregateSubtype"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> GivenSubtypeCommandWithPublish<TAggregateSubtype>(ICommand<TAggregateSubtype> command)
+    public IAggregateTestHelper<TAggregatePayload> GivenSubtypeCommandWithPublish<TAggregateSubtype>(
+        ICommand<TAggregateSubtype> command)
         where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload>;
     /// <summary>
     ///     Run a command with Subtype, event will be published
@@ -245,8 +252,9 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="command"></param>
     /// <typeparam name="TAggregateSubtype"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> GivenSubtypeCommandWithPublishAndBlockingSubscriber<TAggregateSubtype>(
-        ICommand<TAggregateSubtype> command) where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload>
+        GivenSubtypeCommandWithPublishAndBlockingSubscriber<TAggregateSubtype>(ICommand<TAggregateSubtype> command)
+        where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload>;
     /// <summary>
     ///     Run a command.
     ///     Use this method to prepare for the sut (system under test)
@@ -255,8 +263,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="commandFunc"></param>
     /// <typeparam name="TCommand"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> GivenCommand<TCommand>(Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
-        where TCommand : ICommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> GivenCommand<TCommand>(
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommand<TAggregatePayload>;
     /// <summary>
     ///     Run a Command and publish events.
     ///     When events are published, local subscriber will be executed.
@@ -266,7 +274,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="command"></param>
     /// <typeparam name="TCommand"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublish<TCommand>(TCommand command) where TCommand : ICommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublish<TCommand>(TCommand command)
+        where TCommand : ICommand<TAggregatePayload>;
     /// <summary>
     ///     Run a Command and publish events.
     ///     When events are published, local subscriber will be executed.
@@ -278,8 +287,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="command"></param>
     /// <typeparam name="TCommand"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublishAndBlockingSubscriber<TCommand>(TCommand command)
-        where TCommand : ICommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublishAndBlockingSubscriber<TCommand>(
+        TCommand command) where TCommand : ICommand<TAggregatePayload>;
     /// <summary>
     ///     Run a Command and publish events.
     ///     When events are published, local subscriber will be executed.
@@ -289,8 +298,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="commandFunc"></param>
     /// <typeparam name="TCommand"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublish<TCommand>(Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
-        where TCommand : ICommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublish<TCommand>(
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommand<TAggregatePayload>;
     /// <summary>
     ///     Run a Command and publish events.
     ///     When events are published, local subscriber will be executed.
@@ -313,14 +322,16 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="command"></param>
     /// <typeparam name="TCommand"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(TCommand command) where TCommand : ICommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(TCommand command)
+        where TCommand : ICommand<TAggregatePayload>;
     /// <summary>
     ///     Run a command with Subtype, event will not be published
     /// </summary>
     /// <param name="command"></param>
     /// <typeparam name="TAggregateSubtype"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommand<TAggregateSubtype>(ICommand<TAggregateSubtype> command)
+    public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommand<TAggregateSubtype>(
+        ICommand<TAggregateSubtype> command)
         where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload>;
     /// <summary>
     ///     Run a command with Subtype, event will be published
@@ -328,7 +339,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="command"></param>
     /// <typeparam name="TAggregateSubtype"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommandWithPublish<TAggregateSubtype>(ICommand<TAggregateSubtype> command)
+    public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommandWithPublish<TAggregateSubtype>(
+        ICommand<TAggregateSubtype> command)
         where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload>;
     /// <summary>
     ///     Run a command with Subtype, event will be published
@@ -338,16 +350,17 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="command"></param>
     /// <typeparam name="TAggregateSubtype"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommandWithPublishAndBlockingSubscriber<TAggregateSubtype>(
-        ICommand<TAggregateSubtype> command) where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload>
+        WhenSubtypeCommandWithPublishAndBlockingSubscriber<TAggregateSubtype>(ICommand<TAggregateSubtype> command)
+        where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload>;
     /// <summary>
     ///     Run a command.
     /// </summary>
     /// <param name="commandFunc"></param>
     /// <typeparam name="TCommand"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
-        where TCommand : ICommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommand<TAggregatePayload>;
     /// <summary>
     ///     Run a Command and publish events.
     ///     When events are published, local subscriber will be executed.
@@ -355,7 +368,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="command"></param>
     /// <typeparam name="TCommand"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(TCommand command) where TCommand : ICommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(TCommand command)
+        where TCommand : ICommand<TAggregatePayload>;
     /// <summary>
     ///     Run a Command and publish events.
     ///     When events are published, local subscriber will be executed.
@@ -365,8 +379,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="command"></param>
     /// <typeparam name="TCommand"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublishAndBlockingSubscriber<TCommand>(TCommand command)
-        where TCommand : ICommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublishAndBlockingSubscriber<TCommand>(
+        TCommand command) where TCommand : ICommand<TAggregatePayload>;
     /// <summary>
     ///     Run a Command and publish events.
     ///     When events are published, local subscriber will be executed.
@@ -374,8 +388,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="commandFunc"></param>
     /// <typeparam name="TCommand"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
-        where TCommand : ICommand<TAggregatePayload>;
+    public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommand<TAggregatePayload>;
     /// <summary>
     ///     Run a Command and publish events.
     ///     When events are published, local subscriber will be executed.
@@ -407,7 +421,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="checkEventAction"></param>
     /// <typeparam name="T"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> ThenGetLatestSingleEvent<T>(Action<Event<T>> checkEventAction) where T : IEventPayloadCommon;
+    public IAggregateTestHelper<TAggregatePayload> ThenGetLatestSingleEvent<T>(Action<Event<T>> checkEventAction)
+        where T : IEventPayloadCommon;
     /// <summary>
     ///     Get Latest event to validate.
     ///     Specify event type, if event was wrong type, it will throw exception.
@@ -415,7 +430,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="event"></param>
     /// <typeparam name="T"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> ThenLastSingleEventIs<T>(Event<T> @event) where T : IEventPayloadCommon;
+    public IAggregateTestHelper<TAggregatePayload> ThenLastSingleEventIs<T>(Event<T> @event)
+        where T : IEventPayloadCommon;
     /// <summary>
     ///     Check latest event payload.
     ///     Specify type and compare payload.
@@ -423,7 +439,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="payload"></param>
     /// <typeparam name="T"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> ThenLastSingleEventPayloadIs<T>(T payload) where T : IEventPayloadCommon;
+    public IAggregateTestHelper<TAggregatePayload> ThenLastSingleEventPayloadIs<T>(T payload)
+        where T : IEventPayloadCommon;
     /// <summary>
     ///     Get latest event payload to validate.
     ///     Specify type and compare payload.
@@ -438,7 +455,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// </summary>
     /// <param name="checkStateAction"></param>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> ThenGetState(Action<AggregateState<TAggregatePayload>> checkStateAction);
+    public IAggregateTestHelper<TAggregatePayload> ThenGetState(
+        Action<AggregateState<TAggregatePayload>> checkStateAction);
     /// <summary>
     ///     Compare state with expected state
     /// </summary>
@@ -527,7 +545,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// </summary>
     /// <param name="validationParameterErrors"></param>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors(IEnumerable<SekibanValidationParameterError> validationParameterErrors);
+    public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors(
+        IEnumerable<SekibanValidationParameterError> validationParameterErrors);
     /// <summary>
     ///     Check if validation errors exists, this method expects some validation errors
     /// </summary>
@@ -569,7 +588,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <returns></returns>
     public AggregateState<TEnvironmentAggregatePayload> GetEnvironmentAggregateState<TEnvironmentAggregatePayload>(
         Guid aggregateId,
-        string rootPartitionKey = IDocument.DefaultRootPartitionKey) where TEnvironmentAggregatePayload : IAggregatePayloadCommon;
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey)
+        where TEnvironmentAggregatePayload : IAggregatePayloadCommon;
     /// <summary>
     ///     Get last event in general
     /// </summary>
@@ -596,15 +616,16 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <typeparam name="TSingleProjectionPayload"></typeparam>
     /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionStateIs<TSingleProjectionPayload>(
-        SingleProjectionState<TSingleProjectionPayload> state) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
+        SingleProjectionState<TSingleProjectionPayload> state)
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
     /// <summary>
     ///     Check Single Projection Payload for the current Aggregate
     /// </summary>
     /// <param name="payload"></param>
     /// <typeparam name="TSingleProjectionPayload"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIs<TSingleProjectionPayload>(TSingleProjectionPayload payload)
-        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIs<TSingleProjectionPayload>(
+        TSingleProjectionPayload payload) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
     /// <summary>
     ///     Get Single Projection Payload for the current Aggregate
     /// </summary>
@@ -612,7 +633,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <typeparam name="TSingleProjectionPayload"></typeparam>
     /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionPayload<TSingleProjectionPayload>(
-        Action<TSingleProjectionPayload> payloadAction) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
+        Action<TSingleProjectionPayload> payloadAction)
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
     /// <summary>
     ///     Get Single Projection State for the current Aggregate
     /// </summary>
@@ -620,14 +642,16 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <typeparam name="TSingleProjectionPayload"></typeparam>
     /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenGetSingleProjectionState<TSingleProjectionPayload>(
-        Action<SingleProjectionState<TSingleProjectionPayload>> stateAction) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
+        Action<SingleProjectionState<TSingleProjectionPayload>> stateAction)
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
     /// <summary>
     ///     Check if Single Projection Payload is expected value from Json
     /// </summary>
     /// <param name="payloadJson"></param>
     /// <typeparam name="TSingleProjectionPayload"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIsFromJson<TSingleProjectionPayload>(string payloadJson)
+    public IAggregateTestHelper<TAggregatePayload>
+        ThenSingleProjectionPayloadIsFromJson<TSingleProjectionPayload>(string payloadJson)
         where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
     /// <summary>
     ///     Check if Single Projection Payload is expected value from Json file
@@ -635,15 +659,16 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="payloadFilename"></param>
     /// <typeparam name="TSingleProjectionPayload"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIsFromFile<TSingleProjectionPayload>(string payloadFilename)
-        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
+    public IAggregateTestHelper<TAggregatePayload> ThenSingleProjectionPayloadIsFromFile<TSingleProjectionPayload>(
+        string payloadFilename) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
     /// <summary>
     ///     Write Single Projection State to Json file
     /// </summary>
     /// <param name="filename"></param>
     /// <typeparam name="TSingleProjectionPayload"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> WriteSingleProjectionStateToFile<TSingleProjectionPayload>(string filename)
+    public IAggregateTestHelper<TAggregatePayload>
+        WriteSingleProjectionStateToFile<TSingleProjectionPayload>(string filename)
         where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
     #endregion
 
@@ -668,8 +693,9 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="filename"></param>
     /// <typeparam name="TQueryResponse"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> WriteQueryResponseToFile<TQueryResponse>(IListQueryInput<TQueryResponse> param, string filename)
-        where TQueryResponse : IQueryResponse;
+    public IAggregateTestHelper<TAggregatePayload> WriteQueryResponseToFile<TQueryResponse>(
+        IListQueryInput<TQueryResponse> param,
+        string filename) where TQueryResponse : IQueryResponse;
     /// <summary>
     ///     Get Query Response to validate
     /// </summary>
@@ -693,6 +719,9 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(
         IListQueryInput<TQueryResponse> param,
         string responseJson) where TQueryResponse : IQueryResponse;
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(
+        INextListQueryCommon<TQueryResponse> param,
+        string responseJson) where TQueryResponse : IQueryResponse;
     /// <summary>
     ///     Check if Query Response is expected value from Json file
     /// </summary>
@@ -703,6 +732,9 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromFile<TQueryResponse>(
         IListQueryInput<TQueryResponse> param,
         string responseFilename) where TQueryResponse : IQueryResponse;
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromFile<TQueryResponse>(
+        INextListQueryCommon<TQueryResponse> param,
+        string responseFilename) where TQueryResponse : IQueryResponse;
     /// <summary>
     ///     Check if query throws an exception with specified type
     /// </summary>
@@ -710,6 +742,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <typeparam name="T"></typeparam>
     /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenQueryThrows<T>(IListQueryInputCommon param) where T : Exception;
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryThrows<T>(INextListQueryCommon param) where T : Exception;
     /// <summary>
     ///     Get Query's exception with specific type
     /// </summary>
@@ -717,8 +750,12 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="checkException"></param>
     /// <typeparam name="T"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<T>(IListQueryInputCommon param, Action<T> checkException)
-        where T : Exception;
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<T>(
+        IListQueryInputCommon param,
+        Action<T> checkException) where T : Exception;
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<T>(
+        INextListQueryCommon param,
+        Action<T> checkException) where T : Exception;
     /// <summary>
     ///     Get Query's exception
     /// </summary>
@@ -729,26 +766,32 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<TQueryResponse>(
         IListQueryInput<TQueryResponse> param,
         Action<Exception> checkException) where TQueryResponse : IQueryResponse;
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<TQueryResponse>(
+        INextListQueryCommon<TQueryResponse> param,
+        Action<Exception> checkException) where TQueryResponse : IQueryResponse;
     /// <summary>
     ///     Check if query not throws an exception
     /// </summary>
     /// <param name="param"></param>
     /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenQueryNotThrowsAnException(IListQueryInputCommon param);
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryNotThrowsAnException(INextListQueryCommon param);
     /// <summary>
     ///     Check if query throws exception
     /// </summary>
     /// <param name="param"></param>
     /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> ThenQueryThrowsAnException(IListQueryInputCommon param);
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryThrowsAnException(INextListQueryCommon param);
 
-    public TQueryResponse GetQueryResponse<TQueryResponse>(IQueryInput<TQueryResponse> param) where TQueryResponse : IQueryResponse;
-    public TQueryResponse GetQueryResponse<TQueryResponse>(INextQueryCommon<TQueryResponse> param) where TQueryResponse : notnull;
+    public TQueryResponse GetQueryResponse<TQueryResponse>(IQueryInput<TQueryResponse> param)
+        where TQueryResponse : IQueryResponse;
+    public TQueryResponse GetQueryResponse<TQueryResponse>(INextQueryCommon<TQueryResponse> param)
+        where TQueryResponse : notnull;
     public ListQueryResult<TQueryResponse> GetQueryResponse<TQueryResponse>(IListQueryInput<TQueryResponse> param)
         where TQueryResponse : IQueryResponse;
     public ListQueryResult<TQueryResponse> GetQueryResponse<TQueryResponse>(INextListQueryCommon<TQueryResponse> param)
         where TQueryResponse : notnull;
-
     #endregion
 
     #region Query Test (not list)
@@ -775,8 +818,9 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="filename"></param>
     /// <typeparam name="TQueryResponse"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> WriteQueryResponseToFile<TQueryResponse>(IQueryInput<TQueryResponse> param, string filename)
-        where TQueryResponse : IQueryResponse;
+    public IAggregateTestHelper<TAggregatePayload> WriteQueryResponseToFile<TQueryResponse>(
+        IQueryInput<TQueryResponse> param,
+        string filename) where TQueryResponse : IQueryResponse;
     /// <summary>
     ///     Get Query Response to validate
     /// </summary>
@@ -797,8 +841,9 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="responseJson"></param>
     /// <typeparam name="TQueryResponse"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(IQueryInput<TQueryResponse> param, string responseJson)
-        where TQueryResponse : IQueryResponse;
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(
+        IQueryInput<TQueryResponse> param,
+        string responseJson) where TQueryResponse : IQueryResponse;
     /// <summary>
     ///     Check if Query Response is expected value from Json file
     /// </summary>
@@ -823,14 +868,18 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <param name="checkException"></param>
     /// <typeparam name="T"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<T>(IQueryInputCommon param, Action<T> checkException) where T : Exception;
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<T>(
+        IQueryInputCommon param,
+        Action<T> checkException) where T : Exception;
     /// <summary>
     ///     Get Query's exception
     /// </summary>
     /// <param name="param"></param>
     /// <param name="checkException"></param>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException(IQueryInputCommon param, Action<Exception> checkException);
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException(
+        IQueryInputCommon param,
+        Action<Exception> checkException);
     /// <summary>
     ///     Check if query not throws an exception
     /// </summary>

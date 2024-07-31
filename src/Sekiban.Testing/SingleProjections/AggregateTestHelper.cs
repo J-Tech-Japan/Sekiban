@@ -1086,9 +1086,30 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         ThenQueryResponseIs(param, response);
         return this;
     }
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(
+        INextListQueryCommon<TQueryResponse> param,
+        string responseJson) where TQueryResponse : IQueryResponse
+    {
+        ThenNotThrowsAnException();
+        var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(responseJson) ??
+            throw new InvalidDataException("Failed to serialize in JSON.");
+        ThenQueryResponseIs(param, response);
+        return this;
+    }
 
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromFile<TQueryResponse>(
         IListQueryInput<TQueryResponse> param,
+        string responseFilename) where TQueryResponse : IQueryResponse
+    {
+        ThenNotThrowsAnException();
+        using var openStream = File.OpenRead(responseFilename);
+        var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(openStream) ??
+            throw new InvalidDataException("Failed to serialize in JSON.");
+        ThenQueryResponseIs(param, response);
+        return this;
+    }
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromFile<TQueryResponse>(
+        INextListQueryCommon<TQueryResponse> param,
         string responseFilename) where TQueryResponse : IQueryResponse
     {
         ThenNotThrowsAnException();
@@ -1114,15 +1135,46 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         }
         return null;
     }
+    private Exception? GetQueryException(INextListQueryCommon param)
+    {
+        ThenNotThrowsAnException();
+        var queryService = _serviceProvider.GetService<IQueryExecutor>() ??
+            throw new SekibanTypeNotFoundException("Failed to get Query service");
+        try
+        {
+            _ = queryService.ExecuteAsync((dynamic)param).Result;
+        }
+        catch (Exception e)
+        {
+            return e is AggregateException ae ? ae.InnerExceptions.First() : e;
+        }
+        return null;
+    }
     public IAggregateTestHelper<TAggregatePayload> ThenQueryThrows<T>(IListQueryInputCommon param) where T : Exception
     {
         ThenNotThrowsAnException();
         Assert.IsType<T>(GetQueryException(param));
         return this;
     }
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryThrows<T>(INextListQueryCommon param) where T : Exception 
+    {
+        ThenNotThrowsAnException();
+        Assert.IsType<T>(GetQueryException(param));
+        return this;
+    }
+
     public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<T>(
         IListQueryInputCommon param,
         Action<T> checkException) where T : Exception
+    {
+        ThenNotThrowsAnException();
+        var exception = GetQueryException(param);
+        Assert.NotNull(exception);
+        Assert.IsType<T>(exception);
+        checkException(exception as T ?? throw new SekibanTypeNotFoundException("Failed to cast exception"));
+        return this;
+    }
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<T>(INextListQueryCommon param, Action<T> checkException) where T : Exception 
     {
         ThenNotThrowsAnException();
         var exception = GetQueryException(param);
@@ -1141,13 +1193,33 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         checkException(exception);
         return this;
     }
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<TQueryResponse>(INextListQueryCommon<TQueryResponse> param, Action<Exception> checkException) where TQueryResponse : IQueryResponse 
+    {
+        ThenNotThrowsAnException();
+        var exception = GetQueryException(param);
+        Assert.NotNull(exception);
+        checkException(exception);
+        return this;
+    }
     public IAggregateTestHelper<TAggregatePayload> ThenQueryNotThrowsAnException(IListQueryInputCommon param)
     {
         ThenNotThrowsAnException();
         Assert.Null(GetQueryException(param));
         return this;
     }
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryNotThrowsAnException(INextListQueryCommon param) 
+    {
+        ThenNotThrowsAnException();
+        Assert.Null(GetQueryException(param));
+        return this;
+    }
     public IAggregateTestHelper<TAggregatePayload> ThenQueryThrowsAnException(IListQueryInputCommon param)
+    {
+        ThenNotThrowsAnException();
+        Assert.NotNull(GetQueryException(param));
+        return this;
+    }
+    public IAggregateTestHelper<TAggregatePayload> ThenQueryThrowsAnException(INextListQueryCommon param)
     {
         ThenNotThrowsAnException();
         Assert.NotNull(GetQueryException(param));
