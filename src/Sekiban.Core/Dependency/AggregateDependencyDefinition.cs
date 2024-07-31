@@ -14,7 +14,8 @@ namespace Sekiban.Core.Dependency;
 ///     AddAggregate
 /// </summary>
 /// <typeparam name="TAggregatePayload"></typeparam>
-public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDependencyDefinition where TAggregatePayload : IAggregatePayloadCommon
+public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDependencyDefinition
+    where TAggregatePayload : IAggregatePayloadCommon
 {
     /// <summary>
     ///     Subtypes of this aggregate, edit only from method AddSubType
@@ -23,14 +24,16 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         = ImmutableList<IAggregateSubTypeDependencyDefinition<TAggregatePayload>>.Empty;
 
     protected ImmutableList<(Type, Type?)> SelfCommandTypes { get; private set; } = ImmutableList<(Type, Type?)>.Empty;
-    protected ImmutableList<(Type, Type?)> SelfSubscriberTypes { get; private set; } = ImmutableList<(Type, Type?)>.Empty;
+    protected ImmutableList<(Type, Type?)> SelfSubscriberTypes { get; private set; }
+        = ImmutableList<(Type, Type?)>.Empty;
 
     /// <summary>
     ///     Get Only Aggregate Type
     /// </summary>
     public AggregateDependencyDefinition() => AggregateType = typeof(TAggregatePayload);
 
-    public ImmutableList<Type> AggregateSubtypes => SubAggregates.Select(m => m.GetType().GetGenericArguments().Last()).ToImmutableList();
+    public ImmutableList<Type> AggregateSubtypes =>
+        SubAggregates.Select(m => m.GetType().GetGenericArguments().Last()).ToImmutableList();
     /// <summary>
     ///     Get Aggregate commands
     /// </summary>
@@ -92,9 +95,11 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
     /// <typeparam name="TCommandHandler">Command Handler for Target Command</typeparam>
     /// <returns>Self for method chain</returns>
     public AggregateDependencyDefinition<TAggregatePayload> AddCommandHandler<TCommand, TCommandHandler>()
-        where TCommand : ICommand<TAggregatePayload> where TCommandHandler : ICommandHandlerCommon<TAggregatePayload, TCommand>
+        where TCommand : ICommand<TAggregatePayload>
+        where TCommandHandler : ICommandHandlerCommon<TAggregatePayload, TCommand>
     {
-        SelfCommandTypes = SelfCommandTypes.Add((typeof(ICommandHandlerCommon<TAggregatePayload, TCommand>), typeof(TCommandHandler)));
+        SelfCommandTypes = SelfCommandTypes.Add(
+            (typeof(ICommandHandlerCommon<TAggregatePayload, TCommand>), typeof(TCommandHandler)));
         return this;
     }
     /// <summary>
@@ -110,11 +115,13 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
     ///     Self for method chain
     /// </returns>
     public AggregateDependencyDefinition<TAggregatePayload> AddEventSubscriber<TEvent, TEventSubscriber>()
-        where TEvent : IEventPayloadApplicableTo<TAggregatePayload> where TEventSubscriber : IEventSubscriber<TEvent, TEventSubscriber>
+        where TEvent : IEventPayloadApplicableTo<TAggregatePayload>
+        where TEventSubscriber : IEventSubscriber<TEvent, TEventSubscriber>
     {
-        SelfSubscriberTypes
-            = SelfSubscriberTypes.Add((typeof(INotificationHandler<Event<TEvent>>), typeof(EventSubscriber<TEvent, TEventSubscriber>)));
-        SelfSubscriberTypes = SelfSubscriberTypes.Add((typeof(IEventSubscriber<TEvent, TEventSubscriber>), typeof(TEventSubscriber)));
+        SelfSubscriberTypes = SelfSubscriberTypes.Add(
+            (typeof(INotificationHandler<Event<TEvent>>), typeof(EventSubscriber<TEvent, TEventSubscriber>)));
+        SelfSubscriberTypes = SelfSubscriberTypes.Add(
+            (typeof(IEventSubscriber<TEvent, TEventSubscriber>), typeof(TEventSubscriber)));
         return this;
     }
     /// <summary>
@@ -129,12 +136,16 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
     /// <returns>
     ///     Self for method chain
     /// </returns>
-    public AggregateDependencyDefinition<TAggregatePayload> AddEventSubscriberWithNonBlocking<TEvent, TEventSubscriber>()
-        where TEvent : IEventPayloadApplicableTo<TAggregatePayload> where TEventSubscriber : IEventSubscriber<TEvent, TEventSubscriber>
+    public AggregateDependencyDefinition<TAggregatePayload>
+        AddEventSubscriberWithNonBlocking<TEvent, TEventSubscriber>()
+        where TEvent : IEventPayloadApplicableTo<TAggregatePayload>
+        where TEventSubscriber : IEventSubscriber<TEvent, TEventSubscriber>
     {
         SelfSubscriberTypes = SelfSubscriberTypes.Add(
-            (typeof(INotificationHandler<Event<TEvent>>), typeof(NonBlockingEventSubscriber<TEvent, TEventSubscriber>)));
-        SelfSubscriberTypes = SelfSubscriberTypes.Add((typeof(IEventSubscriber<TEvent, TEventSubscriber>), typeof(TEventSubscriber)));
+            (typeof(INotificationHandler<Event<TEvent>>),
+                typeof(NonBlockingEventSubscriber<TEvent, TEventSubscriber>)));
+        SelfSubscriberTypes = SelfSubscriberTypes.Add(
+            (typeof(IEventSubscriber<TEvent, TEventSubscriber>), typeof(TEventSubscriber)));
         return this;
     }
 
@@ -148,7 +159,8 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
         }
         if (singleProjectionType.GetAggregatePayloadTypeFromSingleProjectionPayload() != AggregateType)
         {
-            throw new ArgumentException($"Single projection {singleProjectionType.Name} must be for aggregate {AggregateType.Name}");
+            throw new ArgumentException(
+                $"Single projection {singleProjectionType.Name} must be for aggregate {AggregateType.Name}");
         }
         SingleProjectionTypes = SingleProjectionTypes.Add(typeof(TSingleProjection));
         return this;
@@ -203,8 +215,9 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
     }
 
     public AggregateDependencyDefinition<TAggregatePayload> AddSubtype<TSubAggregatePayload>(
-        Action<AggregateSubtypeDependencyDefinition<TAggregatePayload, TSubAggregatePayload>> subAggregateDefinitionAction)
-        where TSubAggregatePayload : IAggregateSubtypePayloadParentApplicable<TAggregatePayload>, new()
+        Action<AggregateSubtypeDependencyDefinition<TAggregatePayload, TSubAggregatePayload>>
+            subAggregateDefinitionAction)
+        where TSubAggregatePayload : IAggregateSubtypePayloadParentApplicable<TAggregatePayload>
     {
         var subAggregate = new AggregateSubtypeDependencyDefinition<TAggregatePayload, TSubAggregatePayload>(this);
         SubAggregates = SubAggregates.Add(subAggregate);

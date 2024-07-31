@@ -28,7 +28,8 @@ public sealed record AggregateState<TPayload> : IAggregateStateCommon where TPay
         RootPartitionKey = aggregateCommon.RootPartitionKey;
     }
 
-    public AggregateState(IAggregateCommon aggregateCommon, TPayload payload) : this(aggregateCommon) => Payload = payload;
+    public AggregateState(IAggregateCommon aggregateCommon, TPayload payload) : this(aggregateCommon) =>
+        Payload = payload;
 
     [Required]
     [Description("AggregateId")]
@@ -62,13 +63,14 @@ public sealed record AggregateState<TPayload> : IAggregateStateCommon where TPay
         var genericAggregateStateType = aggregateStateType.MakeGenericType(payloadType);
         return Activator.CreateInstance(genericAggregateStateType, this, Payload) ?? this;
     }
-    public bool IsAggregatePayloadType<TAggregatePayloadExpected>() where TAggregatePayloadExpected : IAggregatePayloadCommon =>
+    public bool IsAggregatePayloadType<TAggregatePayloadExpected>()
+        where TAggregatePayloadExpected : IAggregatePayloadCommon =>
         Payload is TAggregatePayloadExpected;
 
     public string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();
 
     public bool GetIsDeleted() => Payload is IDeletable { IsDeleted: true };
-    public dynamic GetComparableObject(AggregateState<TPayload> original, bool copyVersion = true) =>
+    public dynamic GetComparableObject(IAggregateStateCommon original, bool copyVersion = true) =>
         this with
         {
             AggregateId = original.AggregateId,

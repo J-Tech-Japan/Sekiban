@@ -16,7 +16,11 @@ public abstract class AggregateCommon : IAggregate
     protected AggregateBasicInfo _basicInfo = new();
 
 
-    public Guid AggregateId { get => _basicInfo.AggregateId; init => _basicInfo = _basicInfo with { AggregateId = value }; }
+    public Guid AggregateId
+    {
+        get => _basicInfo.AggregateId;
+        init => _basicInfo = _basicInfo with { AggregateId = value };
+    }
 
     public Guid LastEventId => _basicInfo.LastEventId;
     public string LastSortableUniqueId => _basicInfo.LastSortableUniqueId;
@@ -27,7 +31,8 @@ public abstract class AggregateCommon : IAggregate
     public abstract void ApplyEvent(IEvent ev);
 
     public abstract string GetPayloadVersionIdentifier();
-    public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().IsLaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
+    public bool EventShouldBeApplied(IEvent ev) =>
+        ev.GetSortableUniqueId().IsLaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
 
     public static bool CanApplyEvent(IEvent ev) => true;
 
@@ -46,7 +51,8 @@ public abstract class AggregateCommon : IAggregate
 
     protected abstract object? GetAggregatePayloadWithAppliedEvent(object aggregatePayload, IEvent ev);
 
-    public static IAggregatePayloadCommon CreatePayloadCommon<TAggregatePayload>() where TAggregatePayload : IAggregatePayloadCommon
+    public static IAggregatePayloadCommon CreatePayloadCommon<TAggregatePayload>()
+        where TAggregatePayload : IAggregatePayloadCommon
     {
         if (typeof(TAggregatePayload).IsAggregateSubtypePayload())
         {
@@ -101,10 +107,13 @@ public abstract class AggregateCommon : IAggregate
             {
                 return converted;
             }
-            var instantiated = Activator.CreateInstance(typeof(TAggregatePayload), []);
-            return instantiated is TAggregatePayload payload2
-                ? payload2
-                : throw new SekibanAggregateCreateFailedException(typeof(TAggregatePayload).FullName ?? string.Empty);
+            var methodState = typeof(TAggregatePayload).GetMethod(
+                nameof(IAggregatePayloadGeneratable<TAggregatePayload>.CreateInitialPayload),
+                BindingFlags.Static | BindingFlags.Public);
+            var createdState = methodState?.Invoke(typeof(TAggregatePayload), [null]);
+            var convertedState = createdState is TAggregatePayload payloadState ? payloadState : default;
+            return convertedState ??
+                throw new SekibanAggregateCreateFailedException(typeof(TAggregatePayload).FullName ?? string.Empty);
         }
         if (typeof(TAggregatePayload).IsParentAggregatePayload())
         {
