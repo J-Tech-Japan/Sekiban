@@ -11,13 +11,7 @@ type FsCustomerDependency() =
     override this.Define() =
         do
             this
-                .AddAggregate<Branch>()
-                .AddCommandHandler<CreateBranch, CreateBranchHandler>()
-            |> ignore
-
-            this
                 .AddAggregate<Client>()
-                .AddCommandHandler<CreateClient, CreateClientHandler>()
                 .AddAggregateQuery<ClientEmailExistsQuery>()
             |> ignore
 
