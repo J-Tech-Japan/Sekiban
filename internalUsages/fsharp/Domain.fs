@@ -31,6 +31,15 @@ type CreateBranch(name: string) =
         static member HandleCommand(command, context) =
             context.AppendEvent({ Name = command.Name })
 
+type BranchExistsQuery =
+    { BranchId: Guid }
+
+    interface INextAggregateQuery<Branch, bool> with
+        member this.HandleFilter(list, context) =
+            list
+            |> Seq.exists (fun branch -> branch.AggregateId = this.BranchId)
+            |> ResultBox.FromValue
+
 type Client(name: string, email: string, branchId: Guid) =
     member this.Name = name
     member this.Email = email
@@ -65,7 +74,16 @@ type ClientEmailExistsQuery =
     interface IAggregateQuery<Client, ClientEmailExistsQueryParam, ClientEmailExistsQueryResponse> with
         member this.HandleFilter(queryParam, list) =
             { Exists = list |> Seq.exists (fun client -> client.Payload.Email = queryParam.Email) }
-
+         
+type ClientEmailExistsNextQuery =
+ { Email: string }
+ 
+ interface INextAggregateQuery<Client, bool> with
+     member this.HandleFilter(list, context) =
+         list
+         |> Seq.exists (fun client -> client.Payload.Email = this.Email)
+         |> ResultBox.FromValue
+           
 type CreateClient =
     { Name: string
       Email: string
@@ -75,26 +93,26 @@ type CreateClient =
         member this.GetAggregateId() = Guid.NewGuid()
 
         static member HandleCommandAsync(command, context) =
-            async {
-                let queueExecutor = context.GetRequiredService<IQueryExecutor>()
+            task {
+                let! handler =
+                    let branchExistsQuery : BranchExistsQuery = { BranchId = command.BranchId }
+                    let query : ClientEmailExistsQueryParam = { Email = command.Email }
+                    context
+                        .ExecuteQueryAsync(branchExistsQuery)
+                        .Verify(fun x -> if not x then ExceptionOrNone.FromException(InvalidDataException("Branch not exists")) else ExceptionOrNone.None)
+                        .Conveyor(fun () -> context.ExecuteQueryAsync(query))
+                        .Verify(fun (x: ClientEmailExistsQueryResponse) ->
+                            if x.Exists then
+                                ExceptionOrNone.FromException(InvalidDataException("Email not exists"))
+                            else
+                                ExceptionOrNone.None)
+                        .Conveyor(fun (x: ClientEmailExistsQueryResponse) ->
+                            let event: ClientCreated =
+                                { Name = command.Name
+                                  Email = command.Email
+                                  BranchId = command.BranchId }
 
-                let! emailExistsQueryResponse =
-                    queueExecutor.Conveyor(fun (x: IQueryExecutor) ->
-                        x.ExecuteWithResultAsync({ Email = command.Email }))
-                    |> Async.AwaitTask
+                            context.AppendEvent(event))
 
-                let exists =
-                    (emailExistsQueryResponse.Verify(fun (x: ClientEmailExistsQueryResponse) ->
-                        if x.Exists then
-                            ExceptionOrNone.FromException(InvalidDataException("Email not exists"))
-                        else
-                            ExceptionOrNone.None))
-
-                let event: ClientCreated =
-                    { Name = command.Name
-                      Email = command.Email
-                      BranchId = command.BranchId }
-
-                return exists.Conveyor(fun (x: ClientEmailExistsQueryResponse) -> context.AppendEvent(event))
+                return handler
             }
-            |> Async.StartAsTask

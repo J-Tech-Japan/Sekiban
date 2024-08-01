@@ -10,9 +10,7 @@ type FsCustomerDependency() =
 
     override this.Define() =
         do
-            this
-                .AddAggregate<Client>()
-                .AddAggregateQuery<ClientEmailExistsQuery>()
+            this.AddAggregate<Client>().AddAggregateQuery<ClientEmailExistsQuery>()
             |> ignore
 
     override this.GetExecutingAssembly() = Assembly.GetExecutingAssembly()
