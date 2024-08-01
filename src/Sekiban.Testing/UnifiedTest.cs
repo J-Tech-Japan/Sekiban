@@ -163,6 +163,23 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         }
         return null;
     }
+    private Exception? GetQueryException(INextListQueryCommon param)
+    {
+        var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new SekibanTypeNotFoundException("Failed to get Query service");
+        try
+        {
+            var result = queryService.ExecuteAsync((dynamic)param).Result;
+            if (!result.IsSuccess)
+            {
+                return result.GetException();
+            }
+        }
+        catch (Exception e)
+        {
+            return e is AggregateException ae ? ae.InnerExceptions.First() : e;
+        }
+        return null;
+    }
     /// <summary>
     ///     Check if query throws an exception of the specified type.
     /// </summary>
@@ -170,6 +187,11 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <typeparam name="T"></typeparam>
     /// <returns></returns>
     public UnifiedTest<TDependencyDefinition> ThenQueryThrows<T>(IListQueryInputCommon param) where T : Exception
+    {
+        Assert.IsType<T>(GetQueryException(param));
+        return this;
+    }
+    public UnifiedTest<TDependencyDefinition> ThenQueryThrows<T>(INextListQueryCommon param) where T : Exception
     {
         Assert.IsType<T>(GetQueryException(param));
         return this;
@@ -184,6 +206,14 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <returns></returns>
     /// <exception cref="Exception"></exception>
     public UnifiedTest<TDependencyDefinition> ThenQueryGetException<T>(IListQueryInputCommon param, Action<T> checkException) where T : Exception
+    {
+        var exception = GetQueryException(param);
+        Assert.NotNull(exception);
+        Assert.IsType<T>(exception);
+        checkException(exception as T ?? throw new SekibanTypeNotFoundException("Failed to cast exception"));
+        return this;
+    }
+    public UnifiedTest<TDependencyDefinition> ThenQueryGetException<T>(INextListQueryCommon param, Action<T> checkException) where T : Exception
     {
         var exception = GetQueryException(param);
         Assert.NotNull(exception);
@@ -208,6 +238,15 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         checkException(exception);
         return this;
     }
+    public UnifiedTest<TDependencyDefinition> ThenQueryGetException<TQueryResponse>(
+        INextListQueryCommon<TQueryResponse> param,
+        Action<Exception> checkException) where TQueryResponse : notnull
+    {
+        var exception = GetQueryException(param);
+        Assert.NotNull(exception);
+        checkException(exception);
+        return this;
+    }
     /// <summary>
     ///     Run query and assume that no exception is thrown.
     /// </summary>
@@ -218,12 +257,22 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         Assert.Null(GetQueryException(param));
         return this;
     }
+    public UnifiedTest<TDependencyDefinition> ThenQueryNotThrowsAnException(INextListQueryCommon param)
+    {
+        Assert.Null(GetQueryException(param));
+        return this;
+    }
     /// <summary>
     ///     Run query and assume that an exception is thrown.
     /// </summary>
     /// <param name="param"></param>
     /// <returns></returns>
     public UnifiedTest<TDependencyDefinition> ThenQueryThrowsAnException(IListQueryInputCommon param)
+    {
+        Assert.NotNull(GetQueryException(param));
+        return this;
+    }
+    public UnifiedTest<TDependencyDefinition> ThenQueryThrowsAnException(INextListQueryCommon param)
     {
         Assert.NotNull(GetQueryException(param));
         return this;
@@ -378,6 +427,23 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         }
         return null;
     }
+    private Exception? GetQueryException(INextQueryCommon param)
+    {
+        var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new SekibanTypeNotFoundException("Failed to get Query service");
+        try
+        {
+            var result = queryService.ExecuteAsync((dynamic)param).Result;
+            if (!result.IsSuccess)
+            {
+                return result.GetException();
+            }
+        }
+        catch (Exception e)
+        {
+            return e is AggregateException ae ? ae.InnerExceptions.First() : e;
+        }
+        return null;
+    }
     /// <summary>
     ///     Check if query throws an exception of the specified type.
     /// </summary>
@@ -385,6 +451,11 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <typeparam name="T"></typeparam>
     /// <returns></returns>
     public UnifiedTest<TDependencyDefinition> ThenQueryThrows<T>(IQueryInputCommon param) where T : Exception
+    {
+        Assert.IsType<T>(GetQueryException(param));
+        return this;
+    }
+    public UnifiedTest<TDependencyDefinition> ThenQueryThrows<T>(INextQueryCommon param) where T : Exception
     {
         Assert.IsType<T>(GetQueryException(param));
         return this;
@@ -398,6 +469,14 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <returns></returns>
     /// <exception cref="Exception"></exception>
     public UnifiedTest<TDependencyDefinition> ThenQueryGetException<T>(IQueryInputCommon param, Action<T> checkException) where T : Exception
+    {
+        var exception = GetQueryException(param);
+        Assert.NotNull(exception);
+        Assert.IsType<T>(exception);
+        checkException(exception as T ?? throw new SekibanTypeNotFoundException("Failed to cast exception"));
+        return this;
+    }
+    public UnifiedTest<TDependencyDefinition> ThenQueryGetException<T>(INextQueryCommon param, Action<T> checkException) where T : Exception
     {
         var exception = GetQueryException(param);
         Assert.NotNull(exception);
@@ -419,6 +498,13 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         checkException(exception);
         return this;
     }
+    public UnifiedTest<TDependencyDefinition> ThenQueryGetException(INextQueryCommon param, Action<Exception> checkException)
+    {
+        var exception = GetQueryException(param);
+        Assert.NotNull(exception);
+        checkException(exception);
+        return this;
+    }
     /// <summary>
     ///     Check if query and assume that no exception is thrown.
     /// </summary>
@@ -429,12 +515,22 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         Assert.Null(GetQueryException(param));
         return this;
     }
+    public UnifiedTest<TDependencyDefinition> ThenQueryNotThrowsAnException(INextQueryCommon param)
+    {
+        Assert.Null(GetQueryException(param));
+        return this;
+    }
     /// <summary>
     ///     Runs query and assume that an exception is thrown.
     /// </summary>
     /// <param name="param"></param>
     /// <returns></returns>
     public UnifiedTest<TDependencyDefinition> ThenQueryThrowsAnException(IQueryInputCommon param)
+    {
+        Assert.NotNull(GetQueryException(param));
+        return this;
+    }
+    public UnifiedTest<TDependencyDefinition> ThenQueryThrowsAnException(INextQueryCommon param)
     {
         Assert.NotNull(GetQueryException(param));
         return this;
@@ -487,6 +583,17 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         File.WriteAllTextAsync(filename, json);
         return this;
     }
+    public UnifiedTest<TDependencyDefinition> WriteQueryResponseToFile<TQueryResponse>(INextQueryCommon<TQueryResponse> param, string filename)
+        where TQueryResponse : IQueryResponse
+    {
+        var json = SekibanJsonHelper.Serialize(GetQueryResponse(param));
+        if (string.IsNullOrEmpty(json))
+        {
+            throw new InvalidDataException("Json is null or empty");
+        }
+        File.WriteAllTextAsync(filename, json);
+        return this;
+    }
     /// <summary>
     ///     Runs query and get query response in action
     /// </summary>
@@ -496,6 +603,13 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <returns></returns>
     public UnifiedTest<TDependencyDefinition> ThenGetQueryResponse<TQueryResponse>(
         IQueryInput<TQueryResponse> param,
+        Action<TQueryResponse> responseAction) where TQueryResponse : IQueryResponse
+    {
+        responseAction(GetQueryResponse(param));
+        return this;
+    }
+    public UnifiedTest<TDependencyDefinition> ThenGetQueryResponse<TQueryResponse>(
+        INextQueryCommon<TQueryResponse> param,
         Action<TQueryResponse> responseAction) where TQueryResponse : IQueryResponse
     {
         responseAction(GetQueryResponse(param));
@@ -516,6 +630,13 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         ThenQueryResponseIs(param, response);
         return this;
     }
+    public UnifiedTest<TDependencyDefinition> ThenQueryResponseIsFromJson<TQueryResponse>(INextQueryCommon<TQueryResponse> param, string responseJson)
+        where TQueryResponse : IQueryResponse
+    {
+        var response = JsonSerializer.Deserialize<TQueryResponse>(responseJson) ?? throw new InvalidDataException("Failed to serialize in JSON.");
+        ThenQueryResponseIs(param, response);
+        return this;
+    }
     /// <summary>
     ///     Runs query and check the response from file.
     /// </summary>
@@ -525,6 +646,14 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <returns></returns>
     /// <exception cref="InvalidDataException"></exception>
     public UnifiedTest<TDependencyDefinition> ThenQueryResponseIsFromFile<TQueryResponse>(IQueryInput<TQueryResponse> param, string responseFilename)
+        where TQueryResponse : IQueryResponse
+    {
+        using var openStream = File.OpenRead(responseFilename);
+        var response = JsonSerializer.Deserialize<TQueryResponse>(openStream) ?? throw new InvalidDataException("Failed to serialize in JSON.");
+        ThenQueryResponseIs(param, response);
+        return this;
+    }
+    public UnifiedTest<TDependencyDefinition> ThenQueryResponseIsFromFile<TQueryResponse>(INextQueryCommon<TQueryResponse> param, string responseFilename)
         where TQueryResponse : IQueryResponse
     {
         using var openStream = File.OpenRead(responseFilename);
