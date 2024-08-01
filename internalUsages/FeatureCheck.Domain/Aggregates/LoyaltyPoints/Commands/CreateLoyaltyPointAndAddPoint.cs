@@ -10,7 +10,8 @@ namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
 public record CreateLoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : ICommand<LoyaltyPoint>
 {
     public CreateLoyaltyPointAndAddPoint() : this(Guid.Empty, 0)
-    { }
+    {
+    }
 
     public Guid GetAggregateId() => ClientId;
 
@@ -41,13 +42,11 @@ public record CreateLoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : IC
             // initial gift for gmail user.
             var client = await aggregateLoader.AsDefaultStateAsync<Client>(context.GetState().AggregateId);
             if (client != null && client.Payload.ClientEmail.ToLower().EndsWith("@gmail.com"))
-            {
                 yield return new LoyaltyPointAdded(
                     _dateProducer.UtcNow,
                     LoyaltyPointReceiveTypeKeys.InitialGmailUserGift,
                     command.AddingPoint,
                     "Gmail users gift");
-            }
         }
     }
 }

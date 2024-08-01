@@ -15,5 +15,6 @@ public class ClientNameHistoryProjectionCountQuery : ISingleProjectionQuery<Clie
                 .Sum(m => m.Payload.ClientNames.Count));
     }
 
-    public record Parameter(Guid? BranchId, Guid? ClientId) : IQueryParameter<ClientNameHistoryProjectionCountQuery_Response>;
+    public record Parameter(Guid? BranchId, Guid? ClientId)
+        : IQueryParameter<ClientNameHistoryProjectionCountQuery_Response>;
 }

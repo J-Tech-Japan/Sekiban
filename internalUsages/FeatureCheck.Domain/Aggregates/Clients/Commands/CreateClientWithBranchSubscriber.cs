@@ -13,17 +13,9 @@ namespace FeatureCheck.Domain.Aggregates.Clients.Commands;
 
 public record CreateClientWithBranchSubscriber : ICommand<Client>
 {
-    [Required]
-    public Guid BranchId { get; init; }
-
-    [Required]
-    public string ClientName { get; init; }
-
-    [Required]
-    public string ClientEmail { get; init; }
-
     public CreateClientWithBranchSubscriber() : this(Guid.Empty, string.Empty, string.Empty)
-    { }
+    {
+    }
 
     public CreateClientWithBranchSubscriber(Guid branchId, string clientName, string clientEmail)
     {
@@ -31,6 +23,12 @@ public record CreateClientWithBranchSubscriber : ICommand<Client>
         ClientName = clientName;
         ClientEmail = clientEmail;
     }
+
+    [Required] public Guid BranchId { get; init; }
+
+    [Required] public string ClientName { get; init; }
+
+    [Required] public string ClientEmail { get; init; }
 
     public Guid GetAggregateId() => Guid.NewGuid();
 
@@ -50,19 +48,22 @@ public record CreateClientWithBranchSubscriber : ICommand<Client>
             ICommandContext<Client> context)
         {
             // Check if branch exists
-            var branchExistsOutput = await queryExecutor.ExecuteAsync(new BranchExistsQuery.Parameter(command.BranchId));
+            var branchExistsOutput =
+                await queryExecutor.ExecuteAsync(new BranchExistsQuery.Parameter(command.BranchId));
             if (!branchExistsOutput.Exists)
-                throw new SekibanAggregateNotExistsException(command.BranchId, nameof(Branch), (command as ICommandCommon).GetRootPartitionKey());
+                throw new SekibanAggregateNotExistsException(command.BranchId, nameof(Branch),
+                    (command as ICommandCommon).GetRootPartitionKey());
 
             // Check no email duplicates
-            var emailExistsOutput = await queryExecutor.ExecuteAsync(new ClientEmailExistsQuery.Parameter(command.ClientEmail));
+            var emailExistsOutput =
+                await queryExecutor.ExecuteAsync(new ClientEmailExistsQuery.Parameter(command.ClientEmail));
             if (emailExistsOutput.Exists)
                 throw new SekibanEmailAlreadyRegistered();
             var emailExistsOutput2 = await dependencyInjectionSampleService.ExistsClientEmail(command.ClientEmail);
             if (emailExistsOutput2)
                 throw new SekibanEmailAlreadyRegistered();
 
-            yield return (IEventPayloadApplicableTo<Client>)new ClientCreatedWithBranchAdd(command.BranchId, command.ClientName, command.ClientEmail);
+            yield return new ClientCreatedWithBranchAdd(command.BranchId, command.ClientName, command.ClientEmail);
         }
     }
 }

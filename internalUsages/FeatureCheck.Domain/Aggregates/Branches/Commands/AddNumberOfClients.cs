@@ -9,10 +9,13 @@ public class AddNumberOfClients : ICommandForExistingAggregate<Branch>
 {
     public Guid BranchId { get; init; }
     public Guid ClientId { get; init; }
+
     public Guid GetAggregateId() => BranchId;
+
     public class Handler : ICommandHandlerAsync<Branch, AddNumberOfClients>
     {
         private readonly IAggregateLoader aggregateLoader;
+
         public Handler(IAggregateLoader aggregateLoader) => this.aggregateLoader = aggregateLoader;
 
         public async IAsyncEnumerable<IEventPayloadApplicableTo<Branch>> HandleCommandAsync(
@@ -20,10 +23,7 @@ public class AddNumberOfClients : ICommandForExistingAggregate<Branch>
             ICommandContext<Branch> context)
         {
             var result = await aggregateLoader.AsDefaultStateAsync<Client>(command.ClientId);
-            if (result is not null)
-            {
-                yield return new BranchMemberAdded(command.ClientId);
-            }
+            if (result is not null) yield return new BranchMemberAdded(command.ClientId);
         }
     }
 }

@@ -12,6 +12,9 @@ public record ItemAddedToShoppingCartR : IEventPayload<ShoppingCartR, ItemAddedT
         {
             Items = aggregatePayload.Items.Add(
                 aggregatePayload.Items.Count,
-                new CartItemRecordR { Code = ev.Payload.Code, Name = ev.Payload.Name, Quantity = ev.Payload.Quantity })
+                new CartItemRecordR
+                {
+                    Code = ev.Payload.Code, Name = ev.Payload.Name, Quantity = ev.Payload.Quantity
+                })
         };
 }

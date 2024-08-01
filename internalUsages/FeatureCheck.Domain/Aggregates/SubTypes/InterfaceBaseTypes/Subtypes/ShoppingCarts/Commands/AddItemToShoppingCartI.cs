@@ -7,12 +7,13 @@ namespace FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.Sh
 public class AddItemToShoppingCartI : ICommand<ShoppingCartI>
 {
     public Guid CartId { get; init; } = Guid.Empty;
-    [Required]
-    public string Code { get; init; } = string.Empty;
-    [Required]
-    public string Name { get; init; } = string.Empty;
-    [Range(1, 1000)]
-    public int Quantity { get; init; } = 0;
+
+    [Required] public string Code { get; init; } = string.Empty;
+
+    [Required] public string Name { get; init; } = string.Empty;
+
+    [Range(1, 1000)] public int Quantity { get; init; } = 0;
+
     public Guid GetAggregateId() => CartId;
 
     public class Handler : ICommandHandler<ShoppingCartI, AddItemToShoppingCartI>
@@ -21,7 +22,10 @@ public class AddItemToShoppingCartI : ICommand<ShoppingCartI>
             AddItemToShoppingCartI command,
             ICommandContext<ShoppingCartI> context)
         {
-            yield return new ItemAddedToShoppingCartI { Code = command.Code, Name = command.Name, Quantity = command.Quantity };
+            yield return new ItemAddedToShoppingCartI
+            {
+                Code = command.Code, Name = command.Name, Quantity = command.Quantity
+            };
         }
     }
 }

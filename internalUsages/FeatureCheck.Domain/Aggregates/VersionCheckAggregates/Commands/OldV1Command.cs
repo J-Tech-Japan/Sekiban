@@ -7,6 +7,7 @@ public record OldV1Command : ICommand<VersionCheckAggregate>
 {
     public Guid AggregateId { get; init; }
     public int Amount { get; init; }
+
     public Guid GetAggregateId() => AggregateId;
 
     public class Handler : ICommandHandler<VersionCheckAggregate, OldV1Command>

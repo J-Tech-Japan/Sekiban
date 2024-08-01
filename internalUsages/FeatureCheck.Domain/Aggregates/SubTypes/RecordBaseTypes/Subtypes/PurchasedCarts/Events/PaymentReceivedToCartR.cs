@@ -6,10 +6,14 @@ public record PaymentReceivedToCartR : IEventPayload<PurchasedCartR, PaymentRece
     public string PaymentMethod { get; init; } = "Cash";
     public decimal Amount { get; init; } = 0;
     public string Currency { get; init; } = "JPY";
+
     public static PurchasedCartR OnEvent(PurchasedCartR aggregatePayload, Event<PaymentReceivedToCartR> ev) =>
         aggregatePayload with
         {
             Payments = aggregatePayload.Payments.Add(
-                new PaymentRecordR { PaymentMethod = ev.Payload.PaymentMethod, Amount = ev.Payload.Amount, Currency = ev.Payload.Currency })
+                new PaymentRecordR
+                {
+                    PaymentMethod = ev.Payload.PaymentMethod, Amount = ev.Payload.Amount, Currency = ev.Payload.Currency
+                })
         };
 }

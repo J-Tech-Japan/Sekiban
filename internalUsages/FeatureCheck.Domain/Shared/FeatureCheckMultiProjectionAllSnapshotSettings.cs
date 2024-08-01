@@ -3,5 +3,8 @@ namespace FeatureCheck.Domain.Shared;
 
 public class FeatureCheckMultiProjectionAllSnapshotSettings : MultiProjectionSnapshotGenerateSettingAbstract
 {
-    public override void Define() => AddAllFromDependency<FeatureCheckDependency>().SetMinimumNumberOfEventsToGenerateSnapshot(40);
+    public override void Define()
+    {
+        AddAllFromDependency<FeatureCheckDependency>().SetMinimumNumberOfEventsToGenerateSnapshot(40);
+    }
 }

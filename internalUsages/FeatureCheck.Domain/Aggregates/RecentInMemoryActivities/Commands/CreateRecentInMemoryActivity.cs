@@ -18,7 +18,8 @@ public record CreateRecentInMemoryActivity : ICommand<RecentInMemoryActivity>
             CreateRecentInMemoryActivity command,
             ICommandContext<RecentInMemoryActivity> context)
         {
-            yield return new RecentInMemoryActivityCreated(new RecentInMemoryActivityRecord("First Event Created", _sekibanDateProducer.UtcNow));
+            yield return new RecentInMemoryActivityCreated(
+                new RecentInMemoryActivityRecord("First Event Created", _sekibanDateProducer.UtcNow));
         }
     }
 }

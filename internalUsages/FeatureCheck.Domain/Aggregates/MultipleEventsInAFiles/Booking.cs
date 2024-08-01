@@ -21,5 +21,6 @@ public record Booking(
             BookingValueObjects.Money.ZeroMoney);
 
     public bool IsFullyPaid() => TotalReceived.IsEqualOrGreaterThan(TotalAmount);
+
     public bool IsOverPaid() => TotalReceived.IsGreaterThan(TotalAmount);
 }

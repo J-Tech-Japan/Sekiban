@@ -2,9 +2,11 @@ using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
 namespace FeatureCheck.Domain.Aggregates.RecentActivities.Projections;
 
-public record TenRecentQuery : ISingleProjectionListQuery<TenRecentProjection, TenRecentQuery.Parameter, TenRecentQuery.Responsse>
+public record TenRecentQuery : ISingleProjectionListQuery<TenRecentProjection, TenRecentQuery.Parameter,
+    TenRecentQuery.Responsse>
 {
-    public IEnumerable<Responsse> HandleFilter(Parameter queryParam, IEnumerable<SingleProjectionState<TenRecentProjection>> list)
+    public IEnumerable<Responsse> HandleFilter(Parameter queryParam,
+        IEnumerable<SingleProjectionState<TenRecentProjection>> list)
     {
         return list.Select(
             m => new Responsse(
@@ -16,9 +18,14 @@ public record TenRecentQuery : ISingleProjectionListQuery<TenRecentProjection, T
                 m.Version,
                 m.RootPartitionKey));
     }
-    public IEnumerable<Responsse> HandleSort(Parameter queryParam, IEnumerable<Responsse> filteredList) =>
-        filteredList.OrderByDescending(m => m.LastSortableUniqueId);
+
+    public IEnumerable<Responsse> HandleSort(Parameter queryParam, IEnumerable<Responsse> filteredList)
+    {
+        return filteredList.OrderByDescending(m => m.LastSortableUniqueId);
+    }
+
     public record Parameter(int? PageSize, int? PageNumber) : IListQueryPagingParameter<Responsse>;
+
     public record Responsse(
         TenRecentProjection Payload,
         Guid AggregateId,

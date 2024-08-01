@@ -13,6 +13,7 @@ public class ClientCreatedSubscriber : IEventSubscriber<ClientCreated, ClientCre
 
     public async Task HandleEventAsync(Event<ClientCreated> ev)
     {
-        await commandExecutor.ExecCommandAsync(new CreateLoyaltyPoint(ev.AggregateId, 0), ev.GetCallHistoriesIncludesItself());
+        await commandExecutor.ExecCommandAsync(new CreateLoyaltyPoint(ev.AggregateId, 0),
+            ev.GetCallHistoriesIncludesItself());
     }
 }

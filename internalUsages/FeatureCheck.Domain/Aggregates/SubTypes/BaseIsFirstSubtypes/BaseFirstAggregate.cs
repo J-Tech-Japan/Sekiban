@@ -5,5 +5,6 @@ public record BaseFirstAggregate : IParentAggregatePayload<BaseFirstAggregate>
 {
     public string Name { get; init; } = string.Empty;
     public long Price { get; init; } = 0;
+
     public static BaseFirstAggregate CreateInitialPayload(BaseFirstAggregate? _) => new();
 }

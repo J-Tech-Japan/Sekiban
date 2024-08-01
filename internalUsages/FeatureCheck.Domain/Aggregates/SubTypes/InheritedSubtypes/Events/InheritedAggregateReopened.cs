@@ -6,5 +6,9 @@ public record InheritedAggregateReopened(string Reason)
 {
     public static ProcessingSubAggregate OnEvent(
         ClosedSubAggregate aggregatePayload,
-        Event<InheritedAggregateReopened> ev) => new() { YearMonth = aggregatePayload.YearMonth };
+        Event<InheritedAggregateReopened> ev) =>
+        new()
+        {
+            YearMonth = aggregatePayload.YearMonth
+        };
 }

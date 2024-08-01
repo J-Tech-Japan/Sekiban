@@ -3,34 +3,26 @@ using Sekiban.Core.Query.QueryModel;
 using System.Collections.Immutable;
 namespace FeatureCheck.Domain.Projections.ClientLoyaltyPointLists;
 
-public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery.Parameter,
+public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPointListProjection,
+    ClientLoyaltyPointQuery.Parameter,
     ClientLoyaltyPointQuery_Response>
 {
     public enum FilterSortKey
     {
-        BranchName, ClientName
+        BranchName,
+        ClientName
     }
 
-    public IEnumerable<ClientLoyaltyPointQuery_Response> HandleSort(Parameter param, IEnumerable<ClientLoyaltyPointQuery_Response> filteredList)
+    public IEnumerable<ClientLoyaltyPointQuery_Response> HandleSort(Parameter param,
+        IEnumerable<ClientLoyaltyPointQuery_Response> filteredList)
     {
         var sort = new Dictionary<FilterSortKey, bool>();
-        if (param.SortKey1 != null)
-        {
-            sort.Add(param.SortKey1.Value, param.SortKey1Asc ?? true);
-        }
-        if (param.SortKey2 != null)
-        {
-            sort.Add(param.SortKey2.Value, param.SortKey2Asc ?? true);
-        }
-        if (sort.Count == 0)
-        {
-            return filteredList.OrderBy(m => m.BranchName).ThenBy(m => m.ClientName);
-        }
+        if (param.SortKey1 != null) sort.Add(param.SortKey1.Value, param.SortKey1Asc ?? true);
+        if (param.SortKey2 != null) sort.Add(param.SortKey2.Value, param.SortKey2Asc ?? true);
+        if (sort.Count == 0) return filteredList.OrderBy(m => m.BranchName).ThenBy(m => m.ClientName);
         var result = filteredList;
         foreach (var (sortKey, index) in sort.Select((item, index) => (item, index)))
-        {
             if (index == 0)
-            {
                 result = sortKey.Value
                     ? result.OrderBy(
                         m => sortKey.Key switch
@@ -46,25 +38,24 @@ public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPo
                             FilterSortKey.ClientName => m.ClientName,
                             _ => throw new ArgumentOutOfRangeException()
                         });
-            } else
-            {
+            else
                 result = sortKey.Value
-                    ? (result as IOrderedEnumerable<ClientLoyaltyPointQuery_Response> ?? throw new InvalidCastException()).ThenBy(
+                    ? (result as IOrderedEnumerable<ClientLoyaltyPointQuery_Response> ??
+                        throw new InvalidCastException()).ThenBy(
                         m => sortKey.Key switch
                         {
                             FilterSortKey.BranchName => m.BranchName,
                             FilterSortKey.ClientName => m.ClientName,
                             _ => throw new ArgumentOutOfRangeException()
                         })
-                    : (result as IOrderedEnumerable<ClientLoyaltyPointQuery_Response> ?? throw new InvalidCastException()).ThenByDescending(
+                    : (result as IOrderedEnumerable<ClientLoyaltyPointQuery_Response> ??
+                        throw new InvalidCastException()).ThenByDescending(
                         m => sortKey.Key switch
                         {
                             FilterSortKey.BranchName => m.BranchName,
                             FilterSortKey.ClientName => m.ClientName,
                             _ => throw new ArgumentOutOfRangeException()
                         });
-            }
-        }
         return result;
     }
 
@@ -74,14 +65,8 @@ public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPo
     {
         var result = projection.Payload.Records.Select(
             m => new ClientLoyaltyPointQuery_Response(m.BranchId, m.BranchName, m.ClientId, m.ClientName, m.Point));
-        if (param.BranchId.HasValue)
-        {
-            result = result.Where(x => x.BranchId == param.BranchId.Value).ToImmutableList();
-        }
-        if (param.ClientId.HasValue)
-        {
-            result = result.Where(x => x.ClientId == param.ClientId.Value).ToImmutableList();
-        }
+        if (param.BranchId.HasValue) result = result.Where(x => x.BranchId == param.BranchId.Value).ToImmutableList();
+        if (param.ClientId.HasValue) result = result.Where(x => x.ClientId == param.ClientId.Value).ToImmutableList();
         return result;
     }
 

@@ -5,5 +5,7 @@ namespace FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.Sh
 public record ShoppingCartI : ICartAggregate, IAggregateSubtypePayload<ICartAggregate, ShoppingCartI>
 {
     public static ShoppingCartI CreateInitialPayload(ShoppingCartI? _) => new();
-    public ImmutableSortedDictionary<int, CartItemRecordI> Items { get; init; } = ImmutableSortedDictionary<int, CartItemRecordI>.Empty;
+
+    public ImmutableSortedDictionary<int, CartItemRecordI> Items { get; init; } =
+        ImmutableSortedDictionary<int, CartItemRecordI>.Empty;
 }

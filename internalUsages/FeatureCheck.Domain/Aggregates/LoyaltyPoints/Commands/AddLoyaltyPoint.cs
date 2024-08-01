@@ -5,10 +5,16 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
 
-public record AddLoyaltyPoint(Guid ClientId, DateTime HappenedDate, LoyaltyPointReceiveTypeKeys Reason, int PointAmount, string Note)
+public record AddLoyaltyPoint(
+    Guid ClientId,
+    DateTime HappenedDate,
+    LoyaltyPointReceiveTypeKeys Reason,
+    int PointAmount,
+    string Note)
     : ICommandWithVersionValidation<LoyaltyPoint>
 {
-    public AddLoyaltyPoint() : this(Guid.Empty, DateTime.MinValue, LoyaltyPointReceiveTypeKeys.CreditcardUsage, 0, string.Empty)
+    public AddLoyaltyPoint() : this(Guid.Empty, DateTime.MinValue, LoyaltyPointReceiveTypeKeys.CreditcardUsage, 0,
+        string.Empty)
     {
     }
 
@@ -18,12 +24,12 @@ public record AddLoyaltyPoint(Guid ClientId, DateTime HappenedDate, LoyaltyPoint
 
     public class Handler : ICommandHandler<LoyaltyPoint, AddLoyaltyPoint>
     {
-        public IEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommand(AddLoyaltyPoint command, ICommandContext<LoyaltyPoint> context)
+        public IEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommand(AddLoyaltyPoint command,
+            ICommandContext<LoyaltyPoint> context)
         {
-            if (context.GetState().Payload.LastOccuredTime is not null && context.GetState().Payload.LastOccuredTime > command.HappenedDate)
-            {
+            if (context.GetState().Payload.LastOccuredTime is not null &&
+                context.GetState().Payload.LastOccuredTime > command.HappenedDate)
                 throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
-            }
 
             yield return new LoyaltyPointAdded(command.HappenedDate, command.Reason, command.PointAmount, command.Note);
         }

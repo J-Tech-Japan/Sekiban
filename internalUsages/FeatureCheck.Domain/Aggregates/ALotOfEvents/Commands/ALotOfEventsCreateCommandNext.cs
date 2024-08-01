@@ -8,10 +8,15 @@ public record ALotOfEventsCreateCommandNext(Guid AggregateId, int NumberOfEvents
     : ICommandWithHandler<ALotOfEventsAggregate, ALotOfEventsCreateCommandNext>
 {
     public Guid GetAggregateId() => AggregateId;
-    public static ResultBox<UnitValue> HandleCommand(ALotOfEventsCreateCommandNext command, ICommandContext<ALotOfEventsAggregate> context) =>
-        ResultBox.FromValue(
+
+    public static ResultBox<UnitValue> HandleCommand(ALotOfEventsCreateCommandNext command,
+        ICommandContext<ALotOfEventsAggregate> context)
+    {
+        return ResultBox.FromValue(
                 Enumerable.Range(1, command.NumberOfEvents)
-                    .Select(i => (IEventPayloadApplicableTo<ALotOfEventsAggregate>)new ALotOfEventsSingleEvent(i.ToString()))
+                    .Select(i =>
+                        (IEventPayloadApplicableTo<ALotOfEventsAggregate>)new ALotOfEventsSingleEvent(i.ToString()))
                     .ToArray())
             .Conveyor(context.AppendEvents);
+    }
 }

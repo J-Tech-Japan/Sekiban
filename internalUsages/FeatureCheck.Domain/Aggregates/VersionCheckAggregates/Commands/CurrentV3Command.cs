@@ -10,6 +10,7 @@ public record CurrentV3Command : ICommand<VersionCheckAggregate>
     public int Amount { get; init; }
     public PaymentKind PaymentKind { get; init; }
     public string Description { get; init; } = string.Empty;
+
     public Guid GetAggregateId() => AggregateId;
 
     public class Handler : ICommandHandler<VersionCheckAggregate, CurrentV3Command>

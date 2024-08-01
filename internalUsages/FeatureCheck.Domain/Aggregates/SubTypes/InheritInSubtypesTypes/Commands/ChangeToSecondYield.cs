@@ -9,7 +9,6 @@ public record ChangeToSecondYield(Guid AggregateId, int SecondProperty) : IComma
 
     public class Handler : ICommandHandler<FirstStage, ChangeToSecondYield>
     {
-
         public IEnumerable<IEventPayloadApplicableTo<FirstStage>> HandleCommand(
             ChangeToSecondYield command,
             ICommandContext<FirstStage> context)

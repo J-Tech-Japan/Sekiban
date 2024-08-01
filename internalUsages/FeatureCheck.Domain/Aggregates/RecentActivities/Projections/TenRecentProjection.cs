@@ -7,9 +7,12 @@ namespace FeatureCheck.Domain.Aggregates.RecentActivities.Projections;
 public record TenRecentProjection : ISingleProjectionPayload<RecentActivity, TenRecentProjection>
 {
     public ImmutableList<RecentActivityRecord> List { get; init; } = ImmutableList<RecentActivityRecord>.Empty;
-    public static TenRecentProjection? ApplyEvent<TEventPayload>(TenRecentProjection projectionPayload, Event<TEventPayload> ev)
-        where TEventPayload : IEventPayloadCommon =>
-        ev.Payload switch
+
+    public static TenRecentProjection? ApplyEvent<TEventPayload>(TenRecentProjection projectionPayload,
+        Event<TEventPayload> ev)
+        where TEventPayload : IEventPayloadCommon
+    {
+        return ev.Payload switch
         {
             RecentActivityAdded recentActivityAdded => projectionPayload with
             {
@@ -21,5 +24,7 @@ public record TenRecentProjection : ISingleProjectionPayload<RecentActivity, Ten
             },
             _ => null
         };
+    }
+
     public static TenRecentProjection CreateInitialPayload() => new();
 }
