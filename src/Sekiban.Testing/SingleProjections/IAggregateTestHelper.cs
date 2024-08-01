@@ -721,7 +721,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         string responseJson) where TQueryResponse : IQueryResponse;
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(
         INextListQueryCommon<TQueryResponse> param,
-        string responseJson) where TQueryResponse : IQueryResponse;
+        string responseJson) where TQueryResponse : notnull;
     /// <summary>
     ///     Check if Query Response is expected value from Json file
     /// </summary>
@@ -734,7 +734,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         string responseFilename) where TQueryResponse : IQueryResponse;
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromFile<TQueryResponse>(
         INextListQueryCommon<TQueryResponse> param,
-        string responseFilename) where TQueryResponse : IQueryResponse;
+        string responseFilename) where TQueryResponse : notnull;
     /// <summary>
     ///     Check if query throws an exception with specified type
     /// </summary>
@@ -768,7 +768,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         Action<Exception> checkException) where TQueryResponse : IQueryResponse;
     public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<TQueryResponse>(
         INextListQueryCommon<TQueryResponse> param,
-        Action<Exception> checkException) where TQueryResponse : IQueryResponse;
+        Action<Exception> checkException) where TQueryResponse : notnull;
     /// <summary>
     ///     Check if query not throws an exception
     /// </summary>
@@ -846,7 +846,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         string responseJson) where TQueryResponse : IQueryResponse;
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(
         INextQueryCommon<TQueryResponse> param,
-        string responseJson) where TQueryResponse : IQueryResponse;
+        string responseJson) where TQueryResponse : notnull;
     /// <summary>
     ///     Check if Query Response is expected value from Json file
     /// </summary>
@@ -859,7 +859,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         string responseFilename) where TQueryResponse : IQueryResponse;
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromFile<TQueryResponse>(
         INextQueryCommon<TQueryResponse> param,
-        string responseFilename) where TQueryResponse : IQueryResponse;
+        string responseFilename) where TQueryResponse : notnull;
     /// <summary>
     ///     Check if query throws an exception with specified type
     /// </summary>

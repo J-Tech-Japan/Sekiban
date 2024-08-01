@@ -363,7 +363,7 @@ public class
         _helper.ThenQueryResponseIsFromJson(param, responseJson);
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(
         INextListQueryCommon<TQueryResponse> param,
-        string responseJson) where TQueryResponse : IQueryResponse =>
+        string responseJson) where TQueryResponse : notnull =>
         _helper.ThenQueryResponseIsFromJson(param, responseJson);
 
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromFile<TQueryResponse>(
@@ -372,7 +372,7 @@ public class
         _helper.ThenQueryResponseIsFromFile(param, responseFilename);
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromFile<TQueryResponse>(
         INextListQueryCommon<TQueryResponse> param,
-        string responseFilename) where TQueryResponse : IQueryResponse =>
+        string responseFilename) where TQueryResponse : notnull =>
         _helper.ThenQueryResponseIsFromFile(param, responseFilename);
     public IAggregateTestHelper<TAggregatePayload> ThenQueryThrows<T>(IListQueryInputCommon param)
         where T : Exception =>
@@ -392,7 +392,7 @@ public class
         _helper.ThenQueryGetException(param, checkException);
     public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<TQueryResponse>(
         INextListQueryCommon<TQueryResponse> param,
-        Action<Exception> checkException) where TQueryResponse : IQueryResponse =>
+        Action<Exception> checkException) where TQueryResponse : notnull =>
         _helper.ThenQueryGetException(param, checkException);
     public IAggregateTestHelper<TAggregatePayload> ThenQueryNotThrowsAnException(IListQueryInputCommon param) =>
         _helper.ThenQueryNotThrowsAnException(param);
@@ -444,7 +444,7 @@ public class
         _helper.ThenQueryResponseIsFromJson(param, responseJson);
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(
         INextQueryCommon<TQueryResponse> param,
-        string responseJson) where TQueryResponse : IQueryResponse =>
+        string responseJson) where TQueryResponse : notnull =>
         _helper.ThenQueryResponseIsFromJson(param, responseJson);
 
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromFile<TQueryResponse>(
@@ -453,7 +453,7 @@ public class
         _helper.ThenQueryResponseIsFromFile(param, responseFilename);
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromFile<TQueryResponse>(
         INextQueryCommon<TQueryResponse> param,
-        string responseFilename) where TQueryResponse : IQueryResponse =>
+        string responseFilename) where TQueryResponse : notnull =>
         _helper.ThenQueryResponseIsFromFile(param, responseFilename);
     public IAggregateTestHelper<TAggregatePayload> ThenQueryThrows<T>(IQueryInputCommon param) where T : Exception =>
         _helper.ThenQueryThrows<T>(param);
