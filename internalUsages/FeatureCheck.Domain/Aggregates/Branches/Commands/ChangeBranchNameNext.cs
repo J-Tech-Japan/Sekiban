@@ -12,5 +12,6 @@ public record ChangeBranchNameNext(
 {
     public Guid GetAggregateId() => BranchId;
 
-    public static ResultBox<UnitValue> HandleCommand(ChangeBranchNameNext command, ICommandContext<Branch> context) => context.AppendEvent(new BranchNameChanged(command.Name));
+    public static ResultBox<UnitValue> HandleCommand(ChangeBranchNameNext command, ICommandContext<Branch> context) =>
+        context.AppendEvent(new BranchNameChanged(command.Name));
 }

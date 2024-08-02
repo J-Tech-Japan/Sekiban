@@ -8,6 +8,7 @@ public record PaymentAdded_V3(int Amount, PaymentKind PaymentKind, string Descri
     public static VersionCheckAggregate OnEvent(VersionCheckAggregate aggregatePayload, Event<PaymentAdded_V3> ev) =>
         aggregatePayload with
         {
-            Amount = aggregatePayload.Amount + ev.Payload.Amount, PaymentKind = ev.Payload.PaymentKind, Description = ev.Payload.Description
+            Amount = aggregatePayload.Amount + ev.Payload.Amount, PaymentKind = ev.Payload.PaymentKind,
+            Description = ev.Payload.Description
         };
 }

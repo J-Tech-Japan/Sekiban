@@ -14,7 +14,8 @@ public record SubmitOrderR : ICommandWithVersionValidation<ShoppingCartR>
 
     public class Handler : ICommandHandler<ShoppingCartR, SubmitOrderR>
     {
-        public IEnumerable<IEventPayloadApplicableTo<ShoppingCartR>> HandleCommand(SubmitOrderR command,
+        public IEnumerable<IEventPayloadApplicableTo<ShoppingCartR>> HandleCommand(
+            SubmitOrderR command,
             ICommandContext<ShoppingCartR> context)
         {
             yield return new OrderSubmittedR

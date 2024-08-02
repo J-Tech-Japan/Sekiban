@@ -8,7 +8,8 @@ public record TwoEventsCreateCommand(Guid AggregateId)
 {
     public Guid GetAggregateId() => AggregateId;
 
-    public static ResultBox<UnitValue> HandleCommand(TwoEventsCreateCommand command,
+    public static ResultBox<UnitValue> HandleCommand(
+        TwoEventsCreateCommand command,
         ICommandContext<ALotOfEventsAggregate> context) =>
         context.AppendEvents(new ALotOfEventsSingleEvent("0"), new ALotOfEventsSingleEvent("1"));
 }

@@ -8,7 +8,8 @@ public class GeneralQuerySample : IGeneralQuery<GeneralQuerySample.Parameter, Ge
 {
     private readonly IMultiProjectionService _multiProjectionService;
 
-    public GeneralQuerySample(IMultiProjectionService multiProjectionService) => _multiProjectionService = multiProjectionService;
+    public GeneralQuerySample(IMultiProjectionService multiProjectionService) =>
+        _multiProjectionService = multiProjectionService;
 
     public async Task<Response> HandleFilterAsync(Parameter queryParam)
     {
@@ -16,11 +17,17 @@ public class GeneralQuerySample : IGeneralQuery<GeneralQuerySample.Parameter, Ge
         var clients = await _multiProjectionService.GetAggregateList<Client>();
 
         return new Response(
-            projectionA.Payload.Records.Join(clients, x =>
-                    x.ClientId, x => x.AggregateId, (x, y) => new
-                {
-                    x, y
-                })
+            projectionA
+                .Payload
+                .Records
+                .Join(
+                    clients,
+                    x => x.ClientId,
+                    x => x.AggregateId,
+                    (x, y) => new
+                    {
+                        x, y
+                    })
                 .Count(x => x.y.Payload.ClientEmail.Contains(queryParam.EmailContains)));
     }
 

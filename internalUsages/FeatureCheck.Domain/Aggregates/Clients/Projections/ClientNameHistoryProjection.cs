@@ -15,19 +15,18 @@ public record ClientNameHistoryProjection(
 {
     public bool IsDeleted { get; init; }
 
-    public static ClientNameHistoryProjection? ApplyEvent<TEventPayload>(ClientNameHistoryProjection projectionPayload,
-        Event<TEventPayload> ev)
-        where TEventPayload : IEventPayloadCommon
+    public static ClientNameHistoryProjection? ApplyEvent<TEventPayload>(
+        ClientNameHistoryProjection projectionPayload,
+        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon
     {
         Func<ClientNameHistoryProjection>? func = ev.Payload switch
         {
             ClientCreated clientCreated => () => new ClientNameHistoryProjection(
                 clientCreated.BranchId,
                 new List<ClientNameHistoryProjectionRecord>
-                    {
-                        new(clientCreated.ClientName, ev.TimeStamp)
-                    }
-                    .ToImmutableList(),
+                {
+                    new(clientCreated.ClientName, ev.TimeStamp)
+                }.ToImmutableList(),
                 clientCreated.ClientEmail),
 
             ClientNameChanged clientNameChanged => () =>
@@ -48,8 +47,7 @@ public record ClientNameHistoryProjection(
     }
 
     public static ClientNameHistoryProjection CreateInitialPayload() =>
-        new(Guid.Empty, ImmutableList<ClientNameHistoryProjectionRecord>.Empty,
-            string.Empty);
+        new(Guid.Empty, ImmutableList<ClientNameHistoryProjectionRecord>.Empty, string.Empty);
 
     public record ClientNameHistoryProjectionRecord(string Name, DateTime DateChanged);
 }

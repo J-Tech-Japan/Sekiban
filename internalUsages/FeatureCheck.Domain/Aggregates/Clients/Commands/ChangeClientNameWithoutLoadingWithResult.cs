@@ -8,7 +8,8 @@ public record ChangeClientNameWithoutLoadingWithResult(Guid ClientId, string Cli
 {
     public Guid GetAggregateId() => ClientId;
 
-    public static ResultBox<UnitValue> HandleCommand(ChangeClientNameWithoutLoadingWithResult command,
+    public static ResultBox<UnitValue> HandleCommand(
+        ChangeClientNameWithoutLoadingWithResult command,
         ICommandContextWithoutGetState<Client> context) =>
         context.AppendEvent(new ClientNameChanged(command.ClientName));
 }

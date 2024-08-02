@@ -7,5 +7,6 @@ public record MoveBackToFirst(Guid AggregateId) : ICommandWithHandler<SecondStag
 {
     public Guid GetAggregateId() => AggregateId;
 
-    public static ResultBox<UnitValue> HandleCommand(MoveBackToFirst command, ICommandContext<SecondStage> context) => context.AppendEvent(new InheritInSubtypesMovedSecondToFirst());
+    public static ResultBox<UnitValue> HandleCommand(MoveBackToFirst command, ICommandContext<SecondStage> context) =>
+        context.AppendEvent(new InheritInSubtypesMovedSecondToFirst());
 }

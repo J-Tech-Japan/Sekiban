@@ -28,7 +28,10 @@ public record AddLoyaltyPointWithVO : ICommandWithVersionValidation<LoyaltyPoint
                 context.GetState().Payload.LastOccuredTime > command.HappenedDate)
                 throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
 
-            yield return new LoyaltyPointAdded(command.HappenedDate, command.Reason, command.LoyaltyPointValue,
+            yield return new LoyaltyPointAdded(
+                command.HappenedDate,
+                command.Reason,
+                command.LoyaltyPointValue,
                 command.Note);
         }
     }

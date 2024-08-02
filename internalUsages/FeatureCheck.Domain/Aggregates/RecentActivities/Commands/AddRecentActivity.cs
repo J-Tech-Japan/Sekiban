@@ -6,11 +6,11 @@ namespace FeatureCheck.Domain.Aggregates.RecentActivities.Commands;
 
 public record AddRecentActivity(Guid RecentActivityId, string Activity) : ICommand<RecentActivity>
 {
+
+    public int ReferenceVersion { get; init; }
     public AddRecentActivity() : this(Guid.Empty, string.Empty)
     {
     }
-
-    public int ReferenceVersion { get; init; }
 
     public Guid GetAggregateId() => RecentActivityId;
 

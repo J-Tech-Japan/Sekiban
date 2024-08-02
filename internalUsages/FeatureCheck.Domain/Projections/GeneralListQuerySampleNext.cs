@@ -9,10 +9,17 @@ public class GeneralListQuerySampleNext(string EmailContains)
 {
     public Task<ResultBox<IEnumerable<GeneralListQuerySample_Response>>> HandleFilterAsync(IQueryContext context)
     {
-        return context.GetMultiProjectionAsync<ClientLoyaltyPointListProjection>()
+        return context
+            .GetMultiProjectionAsync<ClientLoyaltyPointListProjection>()
             .Combine(_ => context.GetAggregateList<Client>())
             .Remap(
-                (projectionA, clients) => projectionA.Payload.Records.Join(clients, x => x.ClientId, x => x.AggregateId,
+                (projectionA, clients) => projectionA
+                    .Payload
+                    .Records
+                    .Join(
+                        clients,
+                        x => x.ClientId,
+                        x => x.AggregateId,
                         (x, y) => new
                         {
                             x, y

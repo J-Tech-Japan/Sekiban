@@ -6,6 +6,6 @@ public record ShoppingCartI : ICartAggregate, IAggregateSubtypePayload<ICartAggr
 {
     public static ShoppingCartI CreateInitialPayload(ShoppingCartI? _) => new();
 
-    public ImmutableSortedDictionary<int, CartItemRecordI> Items { get; init; } =
-        ImmutableSortedDictionary<int, CartItemRecordI>.Empty;
+    public ImmutableSortedDictionary<int, CartItemRecordI> Items { get; init; }
+        = ImmutableSortedDictionary<int, CartItemRecordI>.Empty;
 }

@@ -21,7 +21,8 @@ public record ChangeClientName(Guid ClientId, string ClientName)
 
     public class Handler : ICommandHandler<Client, ChangeClientName>
     {
-        public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(ChangeClientName command,
+        public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(
+            ChangeClientName command,
             ICommandContext<Client> context)
         {
             yield return new ClientNameChanged(command.ClientName);

@@ -9,12 +9,12 @@ namespace FeatureCheck.Domain.Projections.DissolvableProjection;
 [AggregateContainerGroup(AggregateContainerGroup.Dissolvable)]
 public record DissolvableEventsProjection : IMultiProjectionPayload<DissolvableEventsProjection>
 {
-    public ImmutableList<RecentActivityRecord> RecentActivities { get; init; } =
-        ImmutableList<RecentActivityRecord>.Empty;
+    public ImmutableList<RecentActivityRecord> RecentActivities { get; init; }
+        = ImmutableList<RecentActivityRecord>.Empty;
 
-    public static DissolvableEventsProjection? ApplyEvent<TEventPayload>(DissolvableEventsProjection projectionPayload,
-        Event<TEventPayload> ev)
-        where TEventPayload : IEventPayloadCommon
+    public static DissolvableEventsProjection? ApplyEvent<TEventPayload>(
+        DissolvableEventsProjection projectionPayload,
+        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon
     {
         return ev.Payload switch
         {

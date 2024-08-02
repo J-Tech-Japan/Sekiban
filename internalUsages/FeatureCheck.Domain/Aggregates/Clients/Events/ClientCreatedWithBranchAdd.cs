@@ -7,7 +7,10 @@ namespace FeatureCheck.Domain.Aggregates.Clients.Events;
 public record ClientCreatedWithBranchAdd(Guid BranchId, string ClientName, string ClientEmail)
     : IEventPayload<Client, ClientCreatedWithBranchAdd>
 {
-    public static Client OnEvent(Client aggregatePayload, Event<ClientCreatedWithBranchAdd> ev) => new(ev.Payload.BranchId, ev.Payload.ClientName, ev.Payload.ClientEmail);
+    public static Client OnEvent(Client aggregatePayload, Event<ClientCreatedWithBranchAdd> ev) => new(
+        ev.Payload.BranchId,
+        ev.Payload.ClientName,
+        ev.Payload.ClientEmail);
 
     public class BranchSubscriber : IEventSubscriber<ClientCreatedWithBranchAdd, BranchSubscriber>
     {
@@ -18,10 +21,11 @@ public record ClientCreatedWithBranchAdd(Guid BranchId, string ClientName, strin
         public async Task HandleEventAsync(Event<ClientCreatedWithBranchAdd> ev)
         {
             await Task.Delay(1000);
-            await _commandExecutor.ExecCommandAsync(new AddNumberOfClients
-            {
-                BranchId = ev.Payload.BranchId, ClientId = ev.AggregateId
-            });
+            await _commandExecutor.ExecCommandAsync(
+                new AddNumberOfClients
+                {
+                    BranchId = ev.Payload.BranchId, ClientId = ev.AggregateId
+                });
         }
     }
 }

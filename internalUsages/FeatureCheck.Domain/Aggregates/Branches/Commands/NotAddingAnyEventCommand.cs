@@ -8,7 +8,8 @@ public record NotAddingAnyEventCommand : ICommand<Branch>
 
     public class Handler : ICommandHandler<Branch, NotAddingAnyEventCommand>
     {
-        public IEnumerable<IEventPayloadApplicableTo<Branch>> HandleCommand(NotAddingAnyEventCommand command,
+        public IEnumerable<IEventPayloadApplicableTo<Branch>> HandleCommand(
+            NotAddingAnyEventCommand command,
             ICommandContext<Branch> context)
         {
             yield break;

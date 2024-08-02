@@ -11,5 +11,6 @@ public record CreateBranchWithResult(
 {
     public Guid GetAggregateId() => Guid.NewGuid();
 
-    public static ResultBox<UnitValue> HandleCommand(CreateBranchWithResult command, ICommandContext<Branch> context) => context.AppendEvent(new BranchCreated(command.Name));
+    public static ResultBox<UnitValue> HandleCommand(CreateBranchWithResult command, ICommandContext<Branch> context) =>
+        context.AppendEvent(new BranchCreated(command.Name));
 }

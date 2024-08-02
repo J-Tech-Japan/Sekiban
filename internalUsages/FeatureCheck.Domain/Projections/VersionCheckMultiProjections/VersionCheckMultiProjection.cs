@@ -8,15 +8,15 @@ namespace FeatureCheck.Domain.Projections.VersionCheckMultiProjections;
 public record VersionCheckMultiProjection(ImmutableList<VersionCheckMultiProjection.Record> History)
     : IMultiProjectionPayload<VersionCheckMultiProjection>
 {
-    public static VersionCheckMultiProjection? ApplyEvent<TEventPayload>(VersionCheckMultiProjection projectionPayload,
-        Event<TEventPayload> ev)
-        where TEventPayload : IEventPayloadCommon
+    public static VersionCheckMultiProjection? ApplyEvent<TEventPayload>(
+        VersionCheckMultiProjection projectionPayload,
+        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon
     {
         return ev.Payload switch
         {
             PaymentAdded_V3 paymentAddedV3 => new VersionCheckMultiProjection(
-                projectionPayload.History.Add(new Record(paymentAddedV3.Amount, paymentAddedV3.PaymentKind,
-                    paymentAddedV3.Description))),
+                projectionPayload.History.Add(
+                    new Record(paymentAddedV3.Amount, paymentAddedV3.PaymentKind, paymentAddedV3.Description))),
             _ => null
         };
     }

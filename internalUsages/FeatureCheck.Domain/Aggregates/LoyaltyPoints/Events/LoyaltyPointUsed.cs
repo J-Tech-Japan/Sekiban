@@ -8,6 +8,7 @@ public record LoyaltyPointUsed(DateTime HappenedDate, LoyaltyPointUsageTypeKeys 
     public static LoyaltyPoint OnEvent(LoyaltyPoint aggregatePayload, Event<LoyaltyPointUsed> ev) =>
         aggregatePayload with
         {
-            CurrentPoint = aggregatePayload.CurrentPoint - ev.Payload.PointAmount, LastOccuredTime = ev.Payload.HappenedDate
+            CurrentPoint = aggregatePayload.CurrentPoint - ev.Payload.PointAmount,
+            LastOccuredTime = ev.Payload.HappenedDate
         };
 }

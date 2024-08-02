@@ -8,11 +8,14 @@ public record AddItemToShoppingCartR : ICommand<ShoppingCartR>
 {
     public Guid CartId { get; init; } = Guid.Empty;
 
-    [Required] public string Code { get; init; } = string.Empty;
+    [Required]
+    public string Code { get; init; } = string.Empty;
 
-    [Required] public string Name { get; init; } = string.Empty;
+    [Required]
+    public string Name { get; init; } = string.Empty;
 
-    [Range(1, 1000)] public int Quantity { get; init; } = 0;
+    [Range(1, 1000)]
+    public int Quantity { get; init; } = 0;
 
     public Guid GetAggregateId() => CartId;
 

@@ -7,11 +7,11 @@ namespace FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Commands;
 public record AddRecentInMemoryActivity(Guid RecentInMemoryActivityId, string Activity)
     : ICommand<RecentInMemoryActivity>
 {
+
+    public int ReferenceVersion { get; init; }
     public AddRecentInMemoryActivity() : this(Guid.Empty, string.Empty)
     {
     }
-
-    public int ReferenceVersion { get; init; }
 
     public Guid GetAggregateId() => RecentInMemoryActivityId;
 

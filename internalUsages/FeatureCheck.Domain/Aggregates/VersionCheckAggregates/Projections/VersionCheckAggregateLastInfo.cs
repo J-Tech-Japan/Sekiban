@@ -5,12 +5,11 @@ using Sekiban.Core.Query.SingleProjections;
 namespace FeatureCheck.Domain.Aggregates.VersionCheckAggregates.Projections;
 
 public record VersionCheckAggregateLastInfo(int LastAmount, PaymentKind LastPaymentKind, string LastDescription)
-    : ISingleProjectionPayload<VersionCheckAggregate,
-        VersionCheckAggregateLastInfo>
+    : ISingleProjectionPayload<VersionCheckAggregate, VersionCheckAggregateLastInfo>
 {
     public static VersionCheckAggregateLastInfo? ApplyEvent<TEventPayload>(
-        VersionCheckAggregateLastInfo projectionPayload, Event<TEventPayload> ev)
-        where TEventPayload : IEventPayloadCommon
+        VersionCheckAggregateLastInfo projectionPayload,
+        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon
     {
         return ev.Payload switch
         {

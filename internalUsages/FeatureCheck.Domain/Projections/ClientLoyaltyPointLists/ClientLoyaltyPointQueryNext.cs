@@ -29,8 +29,8 @@ public record ClientLoyaltyPointQueryNext(
         if (SortKey1 != null) sort.Add(SortKey1.Value, SortKey1Asc ?? true);
         if (SortKey2 != null) sort.Add(SortKey2.Value, SortKey2Asc ?? true);
         if (sort.Count == 0)
-            return ResultBox.FromValue(filteredList.OrderBy(m => m.BranchName).ThenBy(m => m.ClientName)
-                .AsEnumerable());
+            return ResultBox.FromValue(
+                filteredList.OrderBy(m => m.BranchName).ThenBy(m => m.ClientName).AsEnumerable());
         var result = filteredList;
         foreach (var (sortKey, index) in sort.Select((item, index) => (item, index)))
             if (index == 0)

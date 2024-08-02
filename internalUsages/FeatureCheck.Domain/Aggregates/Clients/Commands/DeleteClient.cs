@@ -15,7 +15,8 @@ public record DeleteClient(Guid ClientId) : ICommandWithVersionValidation<Client
 
     public class Handler : ICommandHandler<Client, DeleteClient>
     {
-        public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(DeleteClient command,
+        public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(
+            DeleteClient command,
             ICommandContext<Client> context)
         {
             yield return new ClientDeleted();

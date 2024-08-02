@@ -15,7 +15,8 @@ public static class BookingCommands
 
         public class Handler : ICommandHandler<Booking, BookRoom>
         {
-            public IEnumerable<IEventPayloadApplicableTo<Booking>> HandleCommand(BookRoom command,
+            public IEnumerable<IEventPayloadApplicableTo<Booking>> HandleCommand(
+                BookRoom command,
                 ICommandContext<Booking> context)
             {
                 yield return new BookingEvents.RoomBooked(
@@ -34,7 +35,8 @@ public static class BookingCommands
 
         public class Handler : ICommandHandler<Booking, PayBookedRoom>
         {
-            public IEnumerable<IEventPayloadApplicableTo<Booking>> HandleCommand(PayBookedRoom command,
+            public IEnumerable<IEventPayloadApplicableTo<Booking>> HandleCommand(
+                PayBookedRoom command,
                 ICommandContext<Booking> context)
             {
                 if (!context.GetState().Payload.IsFullyPaid() &&

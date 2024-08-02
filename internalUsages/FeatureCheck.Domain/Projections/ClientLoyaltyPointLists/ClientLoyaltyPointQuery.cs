@@ -4,8 +4,7 @@ using System.Collections.Immutable;
 namespace FeatureCheck.Domain.Projections.ClientLoyaltyPointLists;
 
 public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPointListProjection,
-    ClientLoyaltyPointQuery.Parameter,
-    ClientLoyaltyPointQuery_Response>
+    ClientLoyaltyPointQuery.Parameter, ClientLoyaltyPointQuery_Response>
 {
     public enum FilterSortKey
     {
@@ -13,7 +12,8 @@ public class ClientLoyaltyPointQuery : IMultiProjectionListQuery<ClientLoyaltyPo
         ClientName
     }
 
-    public IEnumerable<ClientLoyaltyPointQuery_Response> HandleSort(Parameter param,
+    public IEnumerable<ClientLoyaltyPointQuery_Response> HandleSort(
+        Parameter param,
         IEnumerable<ClientLoyaltyPointQuery_Response> filteredList)
     {
         var sort = new Dictionary<FilterSortKey, bool>();

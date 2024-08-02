@@ -7,7 +7,11 @@ public record RecentActivityAdded(RecentActivityRecord Record) : IEventPayload<R
     public static RecentActivity OnEvent(RecentActivity aggregatePayload, Event<RecentActivityAdded> ev)
     {
         return new RecentActivity(
-            aggregatePayload.LatestActivities.Add(ev.Payload.Record).OrderByDescending(m => m.OccuredAt).Take(5)
+            aggregatePayload
+                .LatestActivities
+                .Add(ev.Payload.Record)
+                .OrderByDescending(m => m.OccuredAt)
+                .Take(5)
                 .ToImmutableList());
     }
 }

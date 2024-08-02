@@ -13,6 +13,15 @@ namespace FeatureCheck.Domain.Aggregates.Clients.Commands;
 
 public record CreateClient : ICommand<Client>
 {
+
+    [Required]
+    public Guid BranchId { get; init; }
+
+    [Required]
+    public string ClientName { get; init; }
+
+    [Required]
+    public string ClientEmail { get; init; }
     public CreateClient() : this(Guid.Empty, string.Empty, string.Empty)
     {
     }
@@ -24,12 +33,6 @@ public record CreateClient : ICommand<Client>
         ClientEmail = clientEmail;
     }
 
-    [Required] public Guid BranchId { get; init; }
-
-    [Required] public string ClientName { get; init; }
-
-    [Required] public string ClientEmail { get; init; }
-
     public string GetRootPartitionKey() => IDocument.DefaultRootPartitionKey;
 
     public Guid GetAggregateId() => Guid.NewGuid();
@@ -40,14 +43,17 @@ public record CreateClient : ICommand<Client>
 
         public Handler(IQueryExecutor queryExecutor) => this.queryExecutor = queryExecutor;
 
-        public async IAsyncEnumerable<IEventPayloadApplicableTo<Client>> HandleCommandAsync(CreateClient command,
+        public async IAsyncEnumerable<IEventPayloadApplicableTo<Client>> HandleCommandAsync(
+            CreateClient command,
             ICommandContext<Client> context)
         {
             // Check if branch exists
-            var branchExistsOutput =
-                await queryExecutor.ExecuteAsync(new BranchExistsQuery.Parameter(command.BranchId));
+            var branchExistsOutput
+                = await queryExecutor.ExecuteAsync(new BranchExistsQuery.Parameter(command.BranchId));
             if (!branchExistsOutput.Exists)
-                throw new SekibanAggregateNotExistsException(command.BranchId, nameof(Branch),
+                throw new SekibanAggregateNotExistsException(
+                    command.BranchId,
+                    nameof(Branch),
                     (command as ICommandCommon).GetRootPartitionKey());
 
             // Check no email duplicates

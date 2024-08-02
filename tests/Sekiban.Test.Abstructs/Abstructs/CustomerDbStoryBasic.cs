@@ -437,7 +437,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
                 response => response.AggregateId is not null
                     ? ResultBox.FromValue(response.AggregateId.Value)
                     : new SekibanAggregateCreateFailedException(nameof(Branch)))
-            .Conveyor(branchId => commandExecutor.ExecCommandWithResultAsync(new CreateClientWithResult(branchId, "John Doe", "john@example.com")))
+            .Conveyor(branchId => commandExecutor.ExecCommandWithResultAsync(new CreateClientR(branchId, "John Doe", "john@example.com")))
             .Conveyor(
                 response => response.AggregateId is not null
                     ? ResultBox.FromValue(response.AggregateId.Value)

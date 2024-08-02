@@ -10,10 +10,13 @@ public record UseLoyaltyPoint(
     DateTime HappenedDate,
     LoyaltyPointUsageTypeKeys Reason,
     int PointAmount,
-    string Note)
-    : ICommandWithVersionValidation<LoyaltyPoint>
+    string Note) : ICommandWithVersionValidation<LoyaltyPoint>
 {
-    public UseLoyaltyPoint() : this(Guid.Empty, DateTime.MinValue, LoyaltyPointUsageTypeKeys.FlightDomestic, 0,
+    public UseLoyaltyPoint() : this(
+        Guid.Empty,
+        DateTime.MinValue,
+        LoyaltyPointUsageTypeKeys.FlightDomestic,
+        0,
         string.Empty)
     {
     }
@@ -24,7 +27,8 @@ public record UseLoyaltyPoint(
 
     public class Handler : ICommandHandler<LoyaltyPoint, UseLoyaltyPoint>
     {
-        public IEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommand(UseLoyaltyPoint command,
+        public IEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommand(
+            UseLoyaltyPoint command,
             ICommandContext<LoyaltyPoint> context)
         {
             if (context.GetState().Payload.LastOccuredTime > command.HappenedDate)

@@ -5,7 +5,8 @@ namespace FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
 public class ClientLoyaltyPointExceptionTestQuery : IMultiProjectionQuery<ClientLoyaltyPointMultiProjection,
     ClientLoyaltyPointExceptionTestQuery.Parameter, ClientLoyaltyPointExceptionTestQuery.Response>
 {
-    public Response HandleFilter(Parameter queryParam,
+    public Response HandleFilter(
+        Parameter queryParam,
         MultiProjectionState<ClientLoyaltyPointMultiProjection> projection)
     {
         return queryParam.Param switch

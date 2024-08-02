@@ -8,9 +8,9 @@ public record TenRecentProjection : ISingleProjectionPayload<RecentActivity, Ten
 {
     public ImmutableList<RecentActivityRecord> List { get; init; } = ImmutableList<RecentActivityRecord>.Empty;
 
-    public static TenRecentProjection? ApplyEvent<TEventPayload>(TenRecentProjection projectionPayload,
-        Event<TEventPayload> ev)
-        where TEventPayload : IEventPayloadCommon
+    public static TenRecentProjection? ApplyEvent<TEventPayload>(
+        TenRecentProjection projectionPayload,
+        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon
     {
         return ev.Payload switch
         {

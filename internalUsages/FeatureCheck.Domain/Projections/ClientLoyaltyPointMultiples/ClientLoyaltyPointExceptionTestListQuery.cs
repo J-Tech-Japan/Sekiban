@@ -11,9 +11,7 @@ public class ClientLoyaltyPointExceptionTestListQuery : IMultiProjectionListQuer
     }
 
     IEnumerable<Response> IMultiProjectionListQuery<ClientLoyaltyPointMultiProjection, Parameter, Response>.
-        HandleFilter(
-            Parameter queryParam,
-            MultiProjectionState<ClientLoyaltyPointMultiProjection> projection)
+        HandleFilter(Parameter queryParam, MultiProjectionState<ClientLoyaltyPointMultiProjection> projection)
     {
         return queryParam.Param switch
         {

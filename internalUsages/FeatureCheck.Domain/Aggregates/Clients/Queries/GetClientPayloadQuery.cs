@@ -6,14 +6,17 @@ namespace FeatureCheck.Domain.Aggregates.Clients.Queries;
 public class
     GetClientPayloadQuery : IAggregateListQuery<Client, GetClientPayloadQuery.Parameter, GetClientPayloadQuery_Response>
 {
-    public IEnumerable<GetClientPayloadQuery_Response> HandleFilter(Parameter queryParam,
+    public IEnumerable<GetClientPayloadQuery_Response> HandleFilter(
+        Parameter queryParam,
         IEnumerable<AggregateState<Client>> list)
     {
-        return list.Where(m => m.Payload.ClientName.Contains(queryParam.NameFilter))
+        return list
+            .Where(m => m.Payload.ClientName.Contains(queryParam.NameFilter))
             .Select(m => new GetClientPayloadQuery_Response(m.Payload, m.AggregateId, m.Version));
     }
 
-    public IEnumerable<GetClientPayloadQuery_Response> HandleSort(Parameter queryParam,
+    public IEnumerable<GetClientPayloadQuery_Response> HandleSort(
+        Parameter queryParam,
         IEnumerable<GetClientPayloadQuery_Response> filteredList)
     {
         return filteredList.OrderBy(m => m.Client.ClientName);

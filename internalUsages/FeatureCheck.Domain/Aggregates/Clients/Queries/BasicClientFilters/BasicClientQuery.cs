@@ -5,14 +5,17 @@ namespace FeatureCheck.Domain.Aggregates.Clients.Queries.BasicClientFilters;
 // ReSharper disable once ClassNeverInstantiated.Global
 public class BasicClientQuery : IAggregateListQuery<Client, BasicClientQueryParameter, BasicClientQueryModel>
 {
-    public IEnumerable<BasicClientQueryModel> HandleFilter(BasicClientQueryParameter queryParam,
+    public IEnumerable<BasicClientQueryModel> HandleFilter(
+        BasicClientQueryParameter queryParam,
         IEnumerable<AggregateState<Client>> list)
     {
-        return list.Where(m => queryParam.BranchId is null || m.Payload.BranchId == queryParam.BranchId)
+        return list
+            .Where(m => queryParam.BranchId is null || m.Payload.BranchId == queryParam.BranchId)
             .Select(m => new BasicClientQueryModel(m.Payload.BranchId, m.Payload.ClientName, m.Payload.ClientEmail));
     }
 
-    public IEnumerable<BasicClientQueryModel> HandleSort(BasicClientQueryParameter queryParam,
+    public IEnumerable<BasicClientQueryModel> HandleSort(
+        BasicClientQueryParameter queryParam,
         IEnumerable<BasicClientQueryModel> filteredList)
     {
         var sort = new Dictionary<BasicClientQuerySortKey, bool>();

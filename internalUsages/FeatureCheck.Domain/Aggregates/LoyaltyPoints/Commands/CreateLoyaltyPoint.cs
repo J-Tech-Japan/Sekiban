@@ -13,7 +13,8 @@ public record CreateLoyaltyPoint(Guid ClientId, int InitialPoint) : ICommand<Loy
 
     public class Handler : ICommandHandler<LoyaltyPoint, CreateLoyaltyPoint>
     {
-        public IEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommand(CreateLoyaltyPoint command,
+        public IEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommand(
+            CreateLoyaltyPoint command,
             ICommandContext<LoyaltyPoint> context)
         {
             yield return new LoyaltyPointCreated(command.InitialPoint);

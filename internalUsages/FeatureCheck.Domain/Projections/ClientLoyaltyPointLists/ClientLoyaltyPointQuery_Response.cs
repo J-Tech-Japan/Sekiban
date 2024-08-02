@@ -6,6 +6,10 @@ public record ClientLoyaltyPointQuery_Response(
     string BranchName,
     Guid ClientId,
     string ClientName,
-    int Point)
-    : ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord(BranchId, BranchName, ClientId, ClientName, Point),
-        IQueryResponse;
+    int Point) : ClientLoyaltyPointListProjection.ClientLoyaltyPointListRecord(
+        BranchId,
+        BranchName,
+        ClientId,
+        ClientName,
+        Point),
+    IQueryResponse;

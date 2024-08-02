@@ -21,7 +21,8 @@ public class ClientLoyaltyPointMultiProjectionQuery : IMultiProjectionQuery<Clie
                 projection.Payload.Records.Where(m => m.BranchId == param.BranchId).ToImmutableList());
     }
 
-    public static ClientLoyaltyPointMultiProjection HandleSortAndPagingIfNeeded(Parameter param,
+    public static ClientLoyaltyPointMultiProjection HandleSortAndPagingIfNeeded(
+        Parameter param,
         ClientLoyaltyPointMultiProjection response)
     {
         return param.SortKey switch
@@ -50,6 +51,5 @@ public class ClientLoyaltyPointMultiProjectionQuery : IMultiProjectionQuery<Clie
     public record Response(
         ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch> Branches,
         ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord> Records)
-        : ClientLoyaltyPointMultiProjection(Branches, Records),
-            IQueryResponse;
+        : ClientLoyaltyPointMultiProjection(Branches, Records), IQueryResponse;
 }

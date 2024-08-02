@@ -5,6 +5,6 @@ namespace FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes;
 
 public record CartAggregateR : IParentAggregatePayload<CartAggregateR, ShoppingCartR>
 {
-    public ImmutableSortedDictionary<int, CartItemRecordR> Items { get; init; } =
-        ImmutableSortedDictionary<int, CartItemRecordR>.Empty;
+    public ImmutableSortedDictionary<int, CartItemRecordR> Items { get; init; }
+        = ImmutableSortedDictionary<int, CartItemRecordR>.Empty;
 }

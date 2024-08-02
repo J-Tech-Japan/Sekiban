@@ -18,8 +18,8 @@ public record CreateRecentActivity : ICommand<RecentActivity>
             CreateRecentActivity command,
             ICommandContext<RecentActivity> context)
         {
-            yield return new RecentActivityCreated(new RecentActivityRecord("First Event Created",
-                _sekibanDateProducer.UtcNow));
+            yield return new RecentActivityCreated(
+                new RecentActivityRecord("First Event Created", _sekibanDateProducer.UtcNow));
         }
     }
 }

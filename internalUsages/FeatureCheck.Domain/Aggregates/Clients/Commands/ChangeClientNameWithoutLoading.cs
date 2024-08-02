@@ -9,7 +9,8 @@ public record ChangeClientNameWithoutLoading(Guid ClientId, string ClientName) :
 
     public class Handler : ICommandWithoutLoadingAggregateHandler<Client, ChangeClientNameWithoutLoading>
     {
-        public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(Guid aggregateId,
+        public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(
+            Guid aggregateId,
             ChangeClientNameWithoutLoading command)
         {
             yield return new ClientNameChanged(command.ClientName);

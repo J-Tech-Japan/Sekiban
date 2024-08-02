@@ -15,7 +15,8 @@ public record ClientLoyaltyPointListProjection(
     ImmutableList<ClientLoyaltyPointListProjection.ProjectedBranchInternal> Branches)
     : IMultiProjectionPayload<ClientLoyaltyPointListProjection>
 {
-    public TargetAggregatePayloadCollection GetTargetAggregatePayloads() => new TargetAggregatePayloadCollection().Add<Branch>().Add<Client>().Add<LoyaltyPoint>();
+    public TargetAggregatePayloadCollection GetTargetAggregatePayloads() =>
+        new TargetAggregatePayloadCollection().Add<Branch>().Add<Client>().Add<LoyaltyPoint>();
 
     public string GetPayloadVersionIdentifier() => "1.0.1 20230101";
 
@@ -45,7 +46,9 @@ public record ClientLoyaltyPointListProjection(
             },
             ClientNameChanged clientNameChanged => projectionPayload with
             {
-                Records = projectionPayload.Records.Select(
+                Records = projectionPayload
+                    .Records
+                    .Select(
                         m => m.ClientId == ev.AggregateId
                             ? m with
                             {
@@ -60,7 +63,9 @@ public record ClientLoyaltyPointListProjection(
             },
             LoyaltyPointCreated loyaltyPointCreated => projectionPayload with
             {
-                Records = projectionPayload.Records.Select(
+                Records = projectionPayload
+                    .Records
+                    .Select(
                         m => m.ClientId == ev.AggregateId
                             ? m with
                             {
@@ -71,7 +76,9 @@ public record ClientLoyaltyPointListProjection(
             },
             LoyaltyPointAdded loyaltyPointAdded => projectionPayload with
             {
-                Records = projectionPayload.Records.Select(
+                Records = projectionPayload
+                    .Records
+                    .Select(
                         m => m.ClientId == ev.AggregateId
                             ? m with
                             {
@@ -82,7 +89,9 @@ public record ClientLoyaltyPointListProjection(
             },
             LoyaltyPointUsed loyaltyPointUsed => projectionPayload with
             {
-                Records = projectionPayload.Records.Select(
+                Records = projectionPayload
+                    .Records
+                    .Select(
                         m => m.ClientId == ev.AggregateId
                             ? m with
                             {
@@ -96,8 +105,7 @@ public record ClientLoyaltyPointListProjection(
     }
 
     public static ClientLoyaltyPointListProjection CreateInitialPayload() =>
-        new(ImmutableList<ClientLoyaltyPointListRecord>.Empty,
-            ImmutableList<ProjectedBranchInternal>.Empty);
+        new(ImmutableList<ClientLoyaltyPointListRecord>.Empty, ImmutableList<ProjectedBranchInternal>.Empty);
 
     public record ClientLoyaltyPointListRecord(
         Guid BranchId,

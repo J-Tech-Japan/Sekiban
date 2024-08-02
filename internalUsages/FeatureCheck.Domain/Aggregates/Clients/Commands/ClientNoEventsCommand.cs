@@ -10,7 +10,8 @@ public record ClientNoEventsCommand : ICommand<Client>
 
     public class Handler : ICommandHandler<Client, ClientNoEventsCommand>
     {
-        public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(ClientNoEventsCommand command,
+        public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(
+            ClientNoEventsCommand command,
             ICommandContext<Client> context)
         {
             yield break;

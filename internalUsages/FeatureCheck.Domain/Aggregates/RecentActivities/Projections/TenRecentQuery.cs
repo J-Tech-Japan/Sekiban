@@ -5,7 +5,8 @@ namespace FeatureCheck.Domain.Aggregates.RecentActivities.Projections;
 public record TenRecentQuery : ISingleProjectionListQuery<TenRecentProjection, TenRecentQuery.Parameter,
     TenRecentQuery.Responsse>
 {
-    public IEnumerable<Responsse> HandleFilter(Parameter queryParam,
+    public IEnumerable<Responsse> HandleFilter(
+        Parameter queryParam,
         IEnumerable<SingleProjectionState<TenRecentProjection>> list)
     {
         return list.Select(
@@ -34,11 +35,12 @@ public record TenRecentQuery : ISingleProjectionListQuery<TenRecentProjection, T
         int AppliedSnapshotVersion,
         int Version,
         string RootPartitionKey) : SingleProjectionState<TenRecentProjection>(
-        Payload,
-        AggregateId,
-        LastEventId,
-        LastSortableUniqueId,
-        AppliedSnapshotVersion,
-        Version,
-        RootPartitionKey), IQueryResponse;
+            Payload,
+            AggregateId,
+            LastEventId,
+            LastSortableUniqueId,
+            AppliedSnapshotVersion,
+            Version,
+            RootPartitionKey),
+        IQueryResponse;
 }

@@ -4,19 +4,22 @@ namespace FeatureCheck.Domain.Aggregates.Clients.Projections;
 
 // ReSharper disable once ClassNeverInstantiated.Global
 public class ClientNameHistoryProjectionQuery : ISingleProjectionListQuery<ClientNameHistoryProjection,
-    ClientNameHistoryProjectionQuery.Parameter,
-    ClientNameHistoryProjectionQuery.Response>
+    ClientNameHistoryProjectionQuery.Parameter, ClientNameHistoryProjectionQuery.Response>
 {
-    public IEnumerable<Response> HandleFilter(Parameter queryParam,
+    public IEnumerable<Response> HandleFilter(
+        Parameter queryParam,
         IEnumerable<SingleProjectionState<ClientNameHistoryProjection>> list)
     {
         return (from projection in list
                 from name in projection.Payload.ClientNames
-                select new Response(projection.Payload.BranchId, projection.AggregateId, name.Name,
-                    projection.Payload.ClientEmail, name.DateChanged))
-            .Where(
-                m => (queryParam.BranchId == null || m.BranchId == queryParam.BranchId) &&
-                    (queryParam.ClientId == null || m.ClientId == queryParam.ClientId));
+                select new Response(
+                    projection.Payload.BranchId,
+                    projection.AggregateId,
+                    name.Name,
+                    projection.Payload.ClientEmail,
+                    name.DateChanged)).Where(
+            m => (queryParam.BranchId == null || m.BranchId == queryParam.BranchId) &&
+                (queryParam.ClientId == null || m.ClientId == queryParam.ClientId));
     }
 
     public IEnumerable<Response> HandleSort(Parameter queryParam, IEnumerable<Response> filteredList)
@@ -31,11 +34,11 @@ public class ClientNameHistoryProjectionQuery : ISingleProjectionListQuery<Clien
             (ClientNameHistoryProjectionQuerySortKeys.ClientId, false) => filteredList.OrderByDescending(
                 m => m.ClientId),
             (ClientNameHistoryProjectionQuerySortKeys.ClientName, true) => filteredList.OrderBy(m => m.ClientName),
-            (ClientNameHistoryProjectionQuerySortKeys.ClientName, false) => filteredList.OrderByDescending(m =>
-                m.ClientName),
+            (ClientNameHistoryProjectionQuerySortKeys.ClientName, false) => filteredList.OrderByDescending(
+                m => m.ClientName),
             (ClientNameHistoryProjectionQuerySortKeys.ClientEmail, true) => filteredList.OrderBy(m => m.ClientEmail),
-            (ClientNameHistoryProjectionQuerySortKeys.ClientEmail, false) => filteredList.OrderByDescending(m =>
-                m.ClientEmail),
+            (ClientNameHistoryProjectionQuerySortKeys.ClientEmail, false) => filteredList.OrderByDescending(
+                m => m.ClientEmail),
             _ => filteredList
         };
     }

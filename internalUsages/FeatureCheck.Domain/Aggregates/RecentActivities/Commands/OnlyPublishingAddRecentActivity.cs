@@ -7,11 +7,11 @@ namespace FeatureCheck.Domain.Aggregates.RecentActivities.Commands;
 public record OnlyPublishingAddRecentActivity(Guid RecentActivityId, string Activity)
     : ICommandWithoutLoadingAggregate<RecentActivity>
 {
+
+    public int ReferenceVersion { get; init; }
     public OnlyPublishingAddRecentActivity() : this(Guid.Empty, string.Empty)
     {
     }
-
-    public int ReferenceVersion { get; init; }
 
     public Guid GetAggregateId() => RecentActivityId;
 
@@ -21,7 +21,8 @@ public record OnlyPublishingAddRecentActivity(Guid RecentActivityId, string Acti
 
         public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
 
-        public IEnumerable<IEventPayloadApplicableTo<RecentActivity>> HandleCommand(Guid aggregateId,
+        public IEnumerable<IEventPayloadApplicableTo<RecentActivity>> HandleCommand(
+            Guid aggregateId,
             OnlyPublishingAddRecentActivity command)
         {
             yield return new RecentActivityAdded(

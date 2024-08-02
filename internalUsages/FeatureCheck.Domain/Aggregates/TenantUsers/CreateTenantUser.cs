@@ -7,13 +7,16 @@ public record CreateTenantUser(string Name, string Email, string TenantId)
 {
     public Guid GetAggregateId() => Guid.NewGuid();
 
-    public static async Task<ResultBox<UnitValue>> HandleCommandAsync(CreateTenantUser command,
+    public static async Task<ResultBox<UnitValue>> HandleCommandAsync(
+        CreateTenantUser command,
         ICommandContext<TenantUser> context)
     {
         return await context
             .ExecuteQueryAsync(new TenantUserDuplicateEmailQuery.Parameter(command.TenantId, command.Email))
-            .Verify(response =>
-                response.IsDuplicate ? new ApplicationException("Duplicate email in Tenant") : ExceptionOrNone.None)
+            .Verify(
+                response => response.IsDuplicate
+                    ? new ApplicationException("Duplicate email in Tenant")
+                    : ExceptionOrNone.None)
             .Conveyor(_ => context.AppendEvent(new TenantUserCreated(command.Name, command.Email)));
     }
 }

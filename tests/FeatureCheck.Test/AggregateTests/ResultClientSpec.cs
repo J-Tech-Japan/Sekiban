@@ -50,7 +50,7 @@ public class ResultClientSpec : AggregateTest<Client, FeatureCheckDependency>
         var branchId = RunEnvironmentCommand(new CreateBranchWithResult("branch1"));
         GivenCommand(new CreateClientR(branchId, "client0", "client1@example.com"));
         ThenQueryThrows<NoNullAllowedException>(new GetClientPayloadQueryNext(" "));
-        ThenQueryThrows<NoNullAllowedException>(new ClientEmailExistQueryN(" "));
+        ThenQueryThrows<NoNullAllowedException>(new ClientEmailExistQueryNext(" "));
     }
 
     [Fact]
