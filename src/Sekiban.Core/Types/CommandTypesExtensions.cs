@@ -1,4 +1,7 @@
 using Sekiban.Core.Command;
+using Sekiban.Core.Snapshot.Aggregate;
+using Sekiban.Core.Snapshot.Aggregate.Commands;
+using System.Reflection;
 namespace Sekiban.Core.Types;
 
 /// <summary>
@@ -11,7 +14,8 @@ public static class CommandTypesExtensions
     /// </summary>
     /// <param name="commandType"></param>
     /// <returns></returns>
-    public static bool IsCommandType(this Type commandType) => commandType.DoesImplementingFromGenericInterfaceType(typeof(ICommand<>));
+    public static bool IsCommandType(this Type commandType) =>
+        commandType.DoesImplementingFromGenericInterfaceType(typeof(ICommand<>));
 
     /// <summary>
     ///     Check whether the type is a command handler type.
@@ -35,15 +39,35 @@ public static class CommandTypesExtensions
             var baseType = commandHandlerType.GetImplementingFromGenericInterfaceType(typeof(ICommandHandlerCommon<,>));
             return baseType.GetGenericArguments()[0];
         }
-
         throw new ArgumentException("Command type is not a command type", commandHandlerType.Name);
+    }
+
+    public static MethodInfo? GetHandleCommandOrAsyncMethod(this Type commandHandlerType)
+    {
+        if (commandHandlerType.IsCommandHandlerType() || commandHandlerType.IsCommandWithHandlerType())
+        {
+            if (commandHandlerType.DoesImplementingFromGenericInterfaceType(typeof(ICommandWithHandlerAsync<,>)) ||
+                commandHandlerType.DoesImplementingFromGenericInterfaceType(typeof(ICommandHandlerAsync<,>)) ||
+                commandHandlerType.DoesImplementingFromGenericInterfaceType(
+                    typeof(ICommandWithoutLoadingAggregateHandlerAsync<,>)) ||
+                commandHandlerType.DoesImplementingFromGenericInterfaceType(
+                    typeof(ICommandWithHandlerWithoutLoadingAggregateAsync<,>)))
+            {
+                return commandHandlerType.GetMethodFlex(
+                    nameof(ICommandWithHandlerAsync<SnapshotManager, CreateSnapshotManagerAsync>.HandleCommandAsync));
+            }
+            return commandHandlerType.GetMethodFlex(
+                nameof(ICommandWithHandler<SnapshotManager, CreateSnapshotManager>.HandleCommand));
+        }
+        return null;
     }
 
     public static Type GetAggregatePayloadTypeFromCommandWithHandlerType(this Type commandHandlerType)
     {
         if (commandHandlerType.IsCommandWithHandlerType())
         {
-            var baseType = commandHandlerType.GetImplementingFromGenericInterfaceType(typeof(ICommandWithHandlerCommon<,>));
+            var baseType
+                = commandHandlerType.GetImplementingFromGenericInterfaceType(typeof(ICommandWithHandlerCommon<,>));
             return baseType.GetGenericArguments()[0];
         }
 

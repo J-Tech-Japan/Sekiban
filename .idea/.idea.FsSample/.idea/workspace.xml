@@ -24,21 +24,8 @@
   <component name="ChangeListManager">
     <list default="true" id="20f8dbcd-4e45-483f-80cb-315c03ad723f" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/.idea.FsSample/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.FsSample/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/FsSample.sln.DotSettings" beforeDir="false" afterPath="$PROJECT_DIR$/FsSample.sln.DotSettings" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/Sekiban.Core/Aggregate/AggregateCommon.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Sekiban.Core/Aggregate/AggregateCommon.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Sekiban.Core/Command/CommandExecutor.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Sekiban.Core/Command/CommandExecutor.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Sekiban.Core/Command/CommandHandlerAdapter.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Sekiban.Core/Command/CommandHandlerAdapter.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Sekiban.Core/Command/CommandWithoutLoadingAggregateHandlerAdapter.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Sekiban.Core/Command/CommandWithoutLoadingAggregateHandlerAdapter.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Sekiban.Core/Command/StaticCommandHandlerAdapter.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Sekiban.Core/Command/StaticCommandHandlerAdapter.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Sekiban.Core/Command/StaticCommandWithoutLoadingAggregateHandlerAdapter.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Sekiban.Core/Command/StaticCommandWithoutLoadingAggregateHandlerAdapter.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Sekiban.Core/Events/Event.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Sekiban.Core/Events/Event.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Sekiban.Core/Snapshot/Aggregate/Commands/CreateSnapshotManager.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Sekiban.Core/Snapshot/Aggregate/Commands/CreateSnapshotManager.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Sekiban.Core/Types/AggregateTypesExtensions.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Sekiban.Core/Types/AggregateTypesExtensions.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Sekiban.Core/Types/CommandTypesExtensions.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Sekiban.Core/Types/CommandTypesExtensions.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Sekiban.Core/Types/EventTypesExtensions.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Sekiban.Core/Types/EventTypesExtensions.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Sekiban.Core/Types/GeneralTypeExtensions.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Sekiban.Core/Types/GeneralTypeExtensions.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Sekiban.Testing/Command/TestCommandExecutor.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Sekiban.Testing/Command/TestCommandExecutor.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Sekiban.Testing/SingleProjections/AggregateTestHelper.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Sekiban.Testing/SingleProjections/AggregateTestHelper.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Sekiban.Core/Types/SingleProjectionTypesExtensions.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Sekiban.Core/Types/SingleProjectionTypesExtensions.cs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -51,23 +38,12 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GitHubPullRequestSearchHistory">{
-  &quot;lastFilter&quot;: {
-    &quot;state&quot;: &quot;OPEN&quot;,
-    &quot;assignee&quot;: &quot;tomohisa&quot;
-  }
-}</component>
-  <component name="GithubPullRequestsUISettings">{
-  &quot;selectedUrlAndAccountId&quot;: {
-    &quot;url&quot;: &quot;https://github.com/J-Tech-Japan/Sekiban.git&quot;,
-    &quot;accountId&quot;: &quot;d60effd1-34b4-4028-8d49-a43fec1f8f63&quot;
-  }
-}</component>
   <component name="HighlightingSettingsPerFile">
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/DecompilerCache/decompiler/94f4e853710fec8cd8d71031ab57518d31ef18/76/565e2b2d/FSharpAsync`1.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/8a6dfde5e18b7a71117cd9d386974e422f34adfbe1ee1f1bbc343e9fc8814b9/async.fs" root0="SKIP_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/9cd554875b9ca2d459b3245af8a4eaa7e0d115b89d7d35ea942184b628efcb/Type.cs" root0="SKIP_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/bfbb69530744259abfca2eb19dcc6dccc7a91b52ba4b82dc5879138342e2fd/ConveyorExtensions.cs" root0="SKIP_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/tests/Sekiban.Test.Abstructs/Abstructs/CustomerDbStoryBasic.cs" root0="SKIP_HIGHLIGHTING" />
   </component>
   <component name="MarkdownSettingsMigration">
     <option name="stateVersion" value="1" />
@@ -80,22 +56,28 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;83721777-555f-4628-97b1-f6b198a4c995.executor&quot;: &quot;Debug&quot;,
-    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;WebServerToolWindowFactoryState&quot;: &quot;false&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;#345 on 344-working-on-fsharp-improvement&quot;,
-    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
-    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
-    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
-    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.sourceCode.C#&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "RunOnceActivity.OpenProjectViewOnStart": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "WebServerToolWindowFactoryState": "false",
+    "git-widget-placeholder": "346-needs-flexible-get-method",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "project.propVCSSupport.Mappings",
+    "vue.rearranger.settings.migration": "true"
+  },
+  "keyToStringList": {
+    "rider.external.source.directories": [
+      "/Users/tomohisa/Library/Application Support/JetBrains/Rider2023.2/resharper-host/DecompilerCache",
+      "/Users/tomohisa/Library/Application Support/JetBrains/Rider2023.2/resharper-host/SourcesCache",
+      "/Users/tomohisa/.local/share/Symbols/src"
+    ]
   }
-}</component>
+}]]></component>
   <component name="RunManager" selected=".NET Launch Settings Profile.FeatureCheck.WebApi.Dynamo: http">
     <configuration name="Sekiban.Testing" type="AzureFunctionsHost" factoryName="Azure Functions host">
       <option name="EXE_PATH" value="" />
@@ -400,62 +382,6 @@
     <option name="CLEAR_INITIAL_COMMIT_MESSAGE" value="true" />
   </component>
   <component name="XDebuggerManager">
-    <breakpoint-manager>
-      <breakpoints>
-        <line-breakpoint enabled="true" type="DotNet Breakpoints">
-          <url>file://$PROJECT_DIR$/src/Sekiban.Testing/SingleProjections/AggregateTestHelper.cs</url>
-          <line>129</line>
-          <properties documentPath="$PROJECT_DIR$/src/Sekiban.Testing/SingleProjections/AggregateTestHelper.cs" containingFunctionPresentation="Method 'ThrowIfTestHasUnhandledErrors'">
-            <startOffsets>
-              <option value="5461" />
-            </startOffsets>
-            <endOffsets>
-              <option value="5473" />
-            </endOffsets>
-          </properties>
-          <option name="timeStamp" value="5" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="DotNet Breakpoints">
-          <url>file://$PROJECT_DIR$/src/Sekiban.Core/Command/StaticCommandHandlerAdapter.cs</url>
-          <line>174</line>
-          <properties documentPath="$PROJECT_DIR$/src/Sekiban.Core/Command/StaticCommandHandlerAdapter.cs" containingFunctionPresentation="Method 'HandleCommandAsync'">
-            <startOffsets>
-              <option value="9362" />
-            </startOffsets>
-            <endOffsets>
-              <option value="9593" />
-            </endOffsets>
-          </properties>
-          <option name="timeStamp" value="7" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="DotNet Breakpoints">
-          <url>file://$PROJECT_DIR$/src/Sekiban.Core/Command/StaticCommandHandlerAdapter.cs</url>
-          <line>181</line>
-          <properties documentPath="$PROJECT_DIR$/src/Sekiban.Core/Command/StaticCommandHandlerAdapter.cs" containingFunctionPresentation="Method 'HandleCommandAsync'">
-            <startOffsets>
-              <option value="9792" />
-            </startOffsets>
-            <endOffsets>
-              <option value="10023" />
-            </endOffsets>
-          </properties>
-          <option name="timeStamp" value="8" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="DotNet Breakpoints">
-          <url>file://$PROJECT_DIR$/src/Sekiban.Core/Command/StaticCommandHandlerAdapter.cs</url>
-          <line>172</line>
-          <properties documentPath="$PROJECT_DIR$/src/Sekiban.Core/Command/StaticCommandHandlerAdapter.cs" containingFunctionPresentation="Method 'HandleCommandAsync'">
-            <startOffsets>
-              <option value="9304" />
-            </startOffsets>
-            <endOffsets>
-              <option value="9323" />
-            </endOffsets>
-          </properties>
-          <option name="timeStamp" value="9" />
-        </line-breakpoint>
-      </breakpoints>
-    </breakpoint-manager>
     <pin-to-top-manager>
       <pinned-members>
         <PinnedItemInfo parentTag="Type#System.Reflection.TypeInfo" memberName="DeclaredMethods" />

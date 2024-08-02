@@ -713,7 +713,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
                 var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayloadIn), command.GetType());
                 var adapter = Activator.CreateInstance(adapterClass) ??
                     throw new SekibanTypeNotFoundException("Method not found");
-                var method = adapterClass.GetMethod("HandleCommandAsync") ??
+                var method = adapterClass.GetMethod(nameof(ICommandHandlerAdapterCommon.HandleCommandAsync)) ??
                     throw new SekibanTypeNotFoundException("HandleCommandAsync not found");
                 var commandResponse
                     = (CommandResponse)((dynamic?)method.Invoke(
@@ -729,7 +729,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
                 var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayloadIn), command.GetType());
                 var adapter = Activator.CreateInstance(adapterClass, _serviceProvider) ??
                     throw new SekibanTypeNotFoundException("Method not found");
-                var method = adapterClass.GetMethod("HandleCommandAsync") ??
+                var method = adapterClass.GetMethod(nameof(ICommandHandlerAdapterCommon.HandleCommandAsync)) ??
                     throw new SekibanTypeNotFoundException("HandleCommandAsync not found");
                 var commandResponseTask
                     = (Task<ResultBox<CommandResponse>>)((dynamic?)method.Invoke(
@@ -747,7 +747,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
                 var adapterClass = baseClass.MakeGenericType(parent, typeof(TAggregatePayloadIn), command.GetType());
                 var adapter = Activator.CreateInstance(adapterClass, aggregateLoader, _serviceProvider, false) ??
                     throw new SekibanTypeNotFoundException("Method not found");
-                var method = adapterClass.GetMethod("HandleCommandAsync") ??
+                var method = adapterClass.GetMethod(nameof(ICommandHandlerAdapterCommon.HandleCommandAsync)) ??
                     throw new SekibanTypeNotFoundException("HandleCommandAsync not found");
                 var commandResponse
                     = (ResultBox<CommandResponse>)((dynamic?)method.Invoke(
@@ -769,7 +769,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
                 var adapter = Activator.CreateInstance(adapterClass, aggregateLoader, _serviceProvider, false) ??
                     throw new SekibanTypeNotFoundException("Adapter not found");
 
-                var method = adapterClass.GetMethod("HandleCommandAsync") ??
+                var method = adapterClass.GetMethod(nameof(ICommandHandlerAdapterCommon.HandleCommandAsync)) ??
                     throw new SekibanTypeNotFoundException("HandleCommandAsync not found");
 
                 var commandResponse
@@ -1088,7 +1088,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     }
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(
         INextListQueryCommon<TQueryResponse> param,
-        string responseJson) where TQueryResponse : IQueryResponse
+        string responseJson) where TQueryResponse : notnull
     {
         ThenNotThrowsAnException();
         var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(responseJson) ??
@@ -1110,7 +1110,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     }
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromFile<TQueryResponse>(
         INextListQueryCommon<TQueryResponse> param,
-        string responseFilename) where TQueryResponse : IQueryResponse
+        string responseFilename) where TQueryResponse : notnull
     {
         ThenNotThrowsAnException();
         using var openStream = File.OpenRead(responseFilename);
@@ -1201,7 +1201,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     }
     public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<TQueryResponse>(
         INextListQueryCommon<TQueryResponse> param,
-        Action<Exception> checkException) where TQueryResponse : IQueryResponse
+        Action<Exception> checkException) where TQueryResponse : notnull
     {
         ThenNotThrowsAnException();
         var exception = GetQueryException(param);
@@ -1323,7 +1323,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     }
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(
         INextQueryCommon<TQueryResponse> param,
-        string responseJson) where TQueryResponse : IQueryResponse
+        string responseJson) where TQueryResponse : notnull
     {
         ThenNotThrowsAnException();
         var response = JsonSerializer.Deserialize<TQueryResponse>(responseJson) ??
@@ -1344,7 +1344,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     }
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromFile<TQueryResponse>(
         INextQueryCommon<TQueryResponse> param,
-        string responseFilename) where TQueryResponse : IQueryResponse
+        string responseFilename) where TQueryResponse : notnull
     {
         ThenNotThrowsAnException();
         using var openStream = File.OpenRead(responseFilename);

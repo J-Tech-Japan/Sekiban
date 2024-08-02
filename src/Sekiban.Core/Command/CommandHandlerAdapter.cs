@@ -160,7 +160,7 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> : IComman
             }
             default:
                 throw new SekibanCommandHandlerNotMatchException(
-                    handler.GetType().Name + "handler should inherit " + typeof(ICommandHandler<,>).Name);
+                    handler.GetType().Name + " handler should inherit " + typeof(ICommandHandler<,>).Name);
         }
     }
 
