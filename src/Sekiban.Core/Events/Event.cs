@@ -59,12 +59,12 @@ public record Event<TEventPayload> : Document, IEvent where TEventPayload : IEve
         var payload = GetPayload();
         if (payload.GetType().IsEventConvertingPayloadType())
         {
-            var method = payload.GetType().GetMethod("ConvertTo");
+            var method = payload.GetType().GetConvertToMethod();
             var convertedPayload = (dynamic?)method?.Invoke(payload, []);
             if (convertedPayload is not null)
             {
                 var convertedType = payload.GetType().GetEventConvertingPayloadConvertingType();
-                var changeEventMethod = GetType().GetMethod("ChangePayload");
+                var changeEventMethod = GetType().GetMethod(nameof(Event<IEventPayloadCommon>.ChangePayload));
                 var genericMethod = changeEventMethod?.MakeGenericMethod(convertedType);
                 var convertedEvent = (dynamic?)genericMethod?.Invoke(this, [convertedPayload]);
                 if (convertedEvent is not null)

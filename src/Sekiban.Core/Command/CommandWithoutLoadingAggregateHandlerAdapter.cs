@@ -50,7 +50,7 @@ public class CommandWithoutLoadingAggregateHandlerAdapter<TAggregatePayload, TCo
             }
             default:
                 throw new SekibanCommandHandlerNotMatchException(
-                    handler.GetType().Name + "handler should inherit " + typeof(ICommandWithoutLoadingAggregateHandler<,>).Name);
+                    handler.GetType().Name + " handler should inherit " + typeof(ICommandWithoutLoadingAggregateHandler<,>).Name);
         }
     }
 }

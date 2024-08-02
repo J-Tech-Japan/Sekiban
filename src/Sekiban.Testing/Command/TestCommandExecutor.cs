@@ -173,7 +173,7 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
             var adapterClass = baseClass.MakeGenericType(parent, typeof(TAggregatePayload), command.GetType());
             var adapter = Activator.CreateInstance(adapterClass, aggregateLoader, serviceProvider, false) ??
                 throw new SekibanTypeNotFoundException("Method not found");
-            var method = adapterClass.GetMethod("HandleCommandAsync") ??
+            var method = adapterClass.GetMethod(nameof(ICommandHandlerAdapterCommon.HandleCommandAsync)) ??
                 throw new SekibanTypeNotFoundException("HandleCommandAsync not found");
             var commandResponse
                 = (ResultBox<CommandResponse>)((dynamic?)method.Invoke(

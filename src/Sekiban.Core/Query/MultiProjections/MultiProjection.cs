@@ -53,7 +53,7 @@ public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPa
         var payloadType = typeof(TProjectionPayload);
         if (payloadType.IsMultiProjectionPayloadType())
         {
-            var method = payloadType.GetMethod(
+            var method = payloadType.GetMethodFlex(
                 nameof(IMultiProjectionPayloadGeneratePayload<TProjectionPayload>.CreateInitialPayload),
                 BindingFlags.Static | BindingFlags.Public);
             var created = method?.Invoke(payloadType, []);
