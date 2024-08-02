@@ -19,7 +19,10 @@ public abstract class AggregateCommon : IAggregate
     public Guid AggregateId
     {
         get => _basicInfo.AggregateId;
-        init => _basicInfo = _basicInfo with { AggregateId = value };
+        init => _basicInfo = _basicInfo with
+        {
+            AggregateId = value
+        };
     }
 
     public Guid LastEventId => _basicInfo.LastEventId;
@@ -43,7 +46,10 @@ public abstract class AggregateCommon : IAggregate
             throw new InvalidProgramException();
         }
         var aggregate = c.Invoke([]) as UAggregate ?? throw new InvalidProgramException();
-        aggregate._basicInfo = aggregate._basicInfo with { AggregateId = aggregateId };
+        aggregate._basicInfo = aggregate._basicInfo with
+        {
+            AggregateId = aggregateId
+        };
         return aggregate;
 
         // After C# 11, possibly use static interface methods. [Future idea]
@@ -58,34 +64,26 @@ public abstract class AggregateCommon : IAggregate
         {
             var parentType = typeof(TAggregatePayload).GetBaseAggregatePayloadTypeFromAggregate();
             var firstAggregateType = parentType.GetFirstAggregatePayloadTypeFromAggregate();
-            var method = firstAggregateType.GetMethod(
-                nameof(IAggregatePayloadGeneratable<TAggregatePayload>.CreateInitialPayload),
-                BindingFlags.Static | BindingFlags.Public);
+            var method = firstAggregateType.GetMethodInfoForCreateInstanceFromAggregatePayload();
             return method?.Invoke(firstAggregateType, [null]) as IAggregatePayloadCommon ??
                 throw new SekibanAggregateCreateFailedException(firstAggregateType.Name);
         }
         if (typeof(TAggregatePayload).DoesImplementingFromGenericInterfaceType(typeof(IParentAggregatePayload<,>)))
         {
             var firstAggregateType = typeof(TAggregatePayload).GetFirstAggregatePayloadTypeFromAggregate();
-            var method = firstAggregateType.GetMethod(
-                nameof(IAggregatePayloadGeneratable<TAggregatePayload>.CreateInitialPayload),
-                BindingFlags.Static | BindingFlags.Public);
+            var method = firstAggregateType.GetMethodInfoForCreateInstanceFromAggregatePayload();
             return method?.Invoke(firstAggregateType, [null]) as IAggregatePayloadCommon ??
                 throw new SekibanAggregateCreateFailedException(firstAggregateType.FullName ?? string.Empty);
         }
         if (typeof(TAggregatePayload).IsAggregatePayloadType())
         {
-            var method = typeof(TAggregatePayload).GetMethod(
-                nameof(IAggregatePayloadGeneratable<TAggregatePayload>.CreateInitialPayload),
-                BindingFlags.Static | BindingFlags.Public);
+            var method = typeof(TAggregatePayload).GetMethodInfoForCreateInstanceFromAggregatePayload();
             return method?.Invoke(typeof(TAggregatePayload), [null]) as IAggregatePayloadCommon ??
                 throw new SekibanAggregateCreateFailedException(typeof(TAggregatePayload).FullName ?? string.Empty);
         }
         if (typeof(TAggregatePayload).IsSingleProjectionPayloadType())
         {
-            var method = typeof(TAggregatePayload).GetMethod(
-                nameof(ISingleProjectionPayloadGeneratable<TAggregatePayload>.CreateInitialPayload),
-                BindingFlags.Static | BindingFlags.Public);
+            var method = typeof(TAggregatePayload).GetMethodInfoForCreateInstanceFromAggregatePayload();
             return method?.Invoke(typeof(TAggregatePayload), []) as IAggregatePayloadCommon ??
                 throw new SekibanAggregateCreateFailedException(typeof(TAggregatePayload).FullName ?? string.Empty);
         }
@@ -98,18 +96,14 @@ public abstract class AggregateCommon : IAggregate
         {
             var parentType = typeof(TAggregatePayload).GetBaseAggregatePayloadTypeFromAggregate();
             var firstAggregateType = parentType.GetFirstAggregatePayloadTypeFromAggregate();
-            var method = firstAggregateType.GetMethod(
-                nameof(IAggregatePayloadGeneratable<TAggregatePayload>.CreateInitialPayload),
-                BindingFlags.Static | BindingFlags.Public);
+            var method = firstAggregateType.GetMethodInfoForCreateInstanceFromAggregatePayload();
             var created = method?.Invoke(firstAggregateType, [null]);
             var converted = created is TAggregatePayload payload ? payload : default;
             if (converted is not null)
             {
                 return converted;
             }
-            var methodState = typeof(TAggregatePayload).GetMethod(
-                nameof(IAggregatePayloadGeneratable<TAggregatePayload>.CreateInitialPayload),
-                BindingFlags.Static | BindingFlags.Public);
+            var methodState = typeof(TAggregatePayload).GetMethodInfoForCreateInstanceFromAggregatePayload();
             var createdState = methodState?.Invoke(typeof(TAggregatePayload), [null]);
             var convertedState = createdState is TAggregatePayload payloadState ? payloadState : default;
             return convertedState ??
@@ -118,9 +112,7 @@ public abstract class AggregateCommon : IAggregate
         if (typeof(TAggregatePayload).IsParentAggregatePayload())
         {
             var firstAggregateType = typeof(TAggregatePayload).GetFirstAggregatePayloadTypeFromAggregate();
-            var method = firstAggregateType.GetMethod(
-                nameof(IAggregatePayloadGeneratable<SnapshotManager>.CreateInitialPayload),
-                BindingFlags.Static | BindingFlags.Public);
+            var method = firstAggregateType.GetMethodInfoForCreateInstanceFromAggregatePayload();
             var created = method?.Invoke(firstAggregateType, [null]);
             var converted = created is TAggregatePayload payload ? payload : default;
             if (converted is not null)
@@ -134,9 +126,11 @@ public abstract class AggregateCommon : IAggregate
         }
         if (typeof(TAggregatePayload).IsAggregatePayloadType())
         {
-            var method = typeof(TAggregatePayload).GetMethod(
-                nameof(IAggregatePayloadGeneratable<SnapshotManager>.CreateInitialPayload),
-                BindingFlags.Static | BindingFlags.Public);
+            var method = typeof(TAggregatePayload).GetMethodInfoForCreateInstanceFromAggregatePayload()
+                ?? typeof(TAggregatePayload).GetMethods()
+                    .FirstOrDefault(m =>
+                        m.Name.EndsWith(
+                            $".{nameof(IAggregatePayloadGeneratable<TAggregatePayload>.CreateInitialPayload)}"));
             var created = method?.Invoke(typeof(TAggregatePayload), [null]);
             var converted = created is TAggregatePayload payload ? payload : default;
             if (converted is not null)
@@ -150,9 +144,7 @@ public abstract class AggregateCommon : IAggregate
         }
         if (typeof(TAggregatePayload).IsSingleProjectionPayloadType())
         {
-            var method = typeof(TAggregatePayload).GetMethod(
-                nameof(ISingleProjectionPayloadGeneratable<TAggregatePayload>.CreateInitialPayload),
-                BindingFlags.Static | BindingFlags.Public);
+            var method = typeof(TAggregatePayload).GetMethodInfoForCreateInstanceFromSingleProjectionPayload();
             var created = method?.Invoke(typeof(TAggregatePayload), []);
             var converted = created is TAggregatePayload payload ? payload : default;
             if (converted is not null)

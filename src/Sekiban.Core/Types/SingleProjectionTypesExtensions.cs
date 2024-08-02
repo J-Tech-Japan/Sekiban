@@ -1,3 +1,4 @@
+using Sekiban.Core.Aggregate;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.SingleProjections;
 using System.Reflection;
@@ -75,4 +76,15 @@ public static class SingleProjectionTypesExtensions
         }
         throw new SekibanTypeNotFoundException("Can not find original type of " + singleProjectionTypeInfo.Name);
     }
+    
+    public static MethodInfo? GetMethodInfoForCreateInstanceFromSingleProjectionPayload(this Type singleProjectionPayloadType)
+    {
+        if (singleProjectionPayloadType.IsSingleProjectionPayloadType())
+        {
+            return singleProjectionPayloadType.GetMethodFlex( nameof(ISingleProjectionPayloadGeneratable<IAggregatePayloadCommon>.CreateInitialPayload),
+                BindingFlags.Static | BindingFlags.Public);
+        }
+        return null;
+    }
+
 }

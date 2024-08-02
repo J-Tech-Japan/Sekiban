@@ -713,7 +713,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
                 var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayloadIn), command.GetType());
                 var adapter = Activator.CreateInstance(adapterClass) ??
                     throw new SekibanTypeNotFoundException("Method not found");
-                var method = adapterClass.GetMethod("HandleCommandAsync") ??
+                var method = adapterClass.GetMethod(nameof(ICommandHandlerAdapterCommon.HandleCommandAsync)) ??
                     throw new SekibanTypeNotFoundException("HandleCommandAsync not found");
                 var commandResponse
                     = (CommandResponse)((dynamic?)method.Invoke(
@@ -729,7 +729,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
                 var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayloadIn), command.GetType());
                 var adapter = Activator.CreateInstance(adapterClass, _serviceProvider) ??
                     throw new SekibanTypeNotFoundException("Method not found");
-                var method = adapterClass.GetMethod("HandleCommandAsync") ??
+                var method = adapterClass.GetMethod(nameof(ICommandHandlerAdapterCommon.HandleCommandAsync)) ??
                     throw new SekibanTypeNotFoundException("HandleCommandAsync not found");
                 var commandResponseTask
                     = (Task<ResultBox<CommandResponse>>)((dynamic?)method.Invoke(
@@ -747,7 +747,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
                 var adapterClass = baseClass.MakeGenericType(parent, typeof(TAggregatePayloadIn), command.GetType());
                 var adapter = Activator.CreateInstance(adapterClass, aggregateLoader, _serviceProvider, false) ??
                     throw new SekibanTypeNotFoundException("Method not found");
-                var method = adapterClass.GetMethod("HandleCommandAsync") ??
+                var method = adapterClass.GetMethod(nameof(ICommandHandlerAdapterCommon.HandleCommandAsync)) ??
                     throw new SekibanTypeNotFoundException("HandleCommandAsync not found");
                 var commandResponse
                     = (ResultBox<CommandResponse>)((dynamic?)method.Invoke(
@@ -769,7 +769,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
                 var adapter = Activator.CreateInstance(adapterClass, aggregateLoader, _serviceProvider, false) ??
                     throw new SekibanTypeNotFoundException("Adapter not found");
 
-                var method = adapterClass.GetMethod("HandleCommandAsync") ??
+                var method = adapterClass.GetMethod(nameof(ICommandHandlerAdapterCommon.HandleCommandAsync)) ??
                     throw new SekibanTypeNotFoundException("HandleCommandAsync not found");
 
                 var commandResponse

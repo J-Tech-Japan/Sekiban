@@ -35,6 +35,17 @@ public static class AggregateTypesExtensions
         type.ImplementedInterfaces.Contains(typeof(IAggregatePayloadCommon)) &&
         !type.ImplementedInterfaces.Contains(typeof(ISingleProjectionPayloadCommon));
 
+    
+    public static MethodInfo? GetMethodInfoForCreateInstanceFromAggregatePayload(this Type aggregatePayloadType)
+    {
+        if (aggregatePayloadType.DoesImplementingFromGenericInterfaceType(typeof(IAggregatePayloadGeneratable<>)))
+        {
+            return aggregatePayloadType.GetMethodFlex( nameof(IAggregatePayloadGeneratable<IAggregatePayloadCommon>.CreateInitialPayload),
+                BindingFlags.Static | BindingFlags.Public);
+        }
+        return null;
+    }
+    
     /// <summary>
     ///     Check if given type is Aggregate Payload Type.
     /// </summary>

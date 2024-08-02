@@ -6,6 +6,7 @@ using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
+using Sekiban.Core.Types;
 using System.Collections.Immutable;
 namespace Sekiban.Core.Command;
 
@@ -91,19 +92,19 @@ public class StaticCommandWithoutLoadingAggregateHandlerAdapter<TAggregatePayloa
             case ICommandWithHandlerWithoutLoadingAggregate<TAggregatePayload, TCommand> syncCommand:
             {
                 var commandType = syncCommand.GetType();
-                var method = commandType.GetMethod("HandleCommand");
+                var method = commandType.GetHandleCommandOrAsyncMethod();
                 if (method is null)
                 {
                     return ResultBox<CommandResponse>.FromException(
                         new SekibanCommandHandlerNotMatchException(
-                            commandType.Name + "handler should inherit " + typeof(ICommandWithHandler<,>).Name));
+                            commandType.Name + " handler should inherit " + typeof(ICommandWithHandler<,>).Name));
                 }
                 var result = method.Invoke(null, new object[] { syncCommand, this }) as ResultBox<UnitValue>;
                 if (result is null)
                 {
                     return ResultBox<CommandResponse>.FromException(
                         new SekibanCommandHandlerNotMatchException(
-                            commandType.Name + "handler should inherit " + typeof(ICommandWithHandler<,>).Name));
+                            commandType.Name + " handler should inherit " + typeof(ICommandWithHandler<,>).Name));
                 }
                 result.UnwrapBox();
                 return new CommandResponse(aggregateId, _events.ToImmutableList(), 0, _events.Max(m => m.SortableUniqueId));
@@ -111,19 +112,19 @@ public class StaticCommandWithoutLoadingAggregateHandlerAdapter<TAggregatePayloa
             case ICommandWithHandlerWithoutLoadingAggregateAsync<TAggregatePayload, TCommand> asyncCommand:
             {
                 var commandType = asyncCommand.GetType();
-                var method = commandType.GetMethod("HandleCommandAsync");
+                var method = commandType.GetHandleCommandOrAsyncMethod();
                 if (method is null)
                 {
                     return ResultBox<CommandResponse>.FromException(
                         new SekibanCommandHandlerNotMatchException(
-                            commandType.Name + "handler should inherit " + typeof(ICommandWithHandler<,>).Name));
+                            commandType.Name + " handler should inherit " + typeof(ICommandWithHandler<,>).Name));
                 }
                 var resultTask = method.Invoke(null, new object[] { asyncCommand, this }) as Task<ResultBox<UnitValue>>;
                 if (resultTask is null)
                 {
                     return ResultBox<CommandResponse>.FromException(
                         new SekibanCommandHandlerNotMatchException(
-                            commandType.Name + "handler should inherit " + typeof(ICommandWithHandler<,>).Name));
+                            commandType.Name + " handler should inherit " + typeof(ICommandWithHandler<,>).Name));
                 }
                 var result = await resultTask;
                 result.UnwrapBox();
@@ -132,7 +133,7 @@ public class StaticCommandWithoutLoadingAggregateHandlerAdapter<TAggregatePayloa
             default:
                 return ResultBox<CommandResponse>.FromException(
                     new SekibanCommandHandlerNotMatchException(
-                        commandDocument.Payload.GetType().Name + "handler should inherit " + typeof(ICommandWithoutLoadingAggregateHandler<,>).Name));
+                        commandDocument.Payload.GetType().Name + " handler should inherit " + typeof(ICommandWithoutLoadingAggregateHandler<,>).Name));
         }
     }
 }

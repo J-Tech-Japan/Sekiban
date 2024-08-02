@@ -333,7 +333,9 @@ public class CommandExecutor(
                     var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), typeof(TCommand));
                     var adapter = Activator.CreateInstance(adapterClass) ??
                         throw new MissingMethodException("Method not found");
-                    var method = adapterClass.GetMethod("HandleCommandAsync") ??
+                    var method = adapterClass.GetMethod(
+                            nameof(CommandWithoutLoadingAggregateHandlerAdapter<TAggregatePayload,
+                                ICommandWithoutLoadingAggregate<TAggregatePayload>>.HandleCommandAsync)) ??
                         throw new MissingMethodException("HandleCommandAsync not found");
                     var commandResponse
                         = (CommandResponse)await ((dynamic?)method.Invoke(
@@ -354,7 +356,7 @@ public class CommandExecutor(
                     var adapterClass = baseClass.MakeGenericType(typeof(TAggregatePayload), typeof(TCommand));
                     var adapter = Activator.CreateInstance(adapterClass, serviceProvider) ??
                         throw new MissingMethodException("Method not found");
-                    var method = adapterClass.GetMethod("HandleCommandAsync") ??
+                    var method = adapterClass.GetMethod(nameof(ICommandHandlerAdapterCommon.HandleCommandAsync)) ??
                         throw new MissingMethodException("HandleCommandAsync not found");
                     var commandResponse
                         = (ResultBox<CommandResponse>)await ((dynamic?)method.Invoke(
@@ -398,7 +400,7 @@ public class CommandExecutor(
                     var adapterClass = baseClass.MakeGenericType(parent, typeof(TAggregatePayload), typeof(TCommand));
                     var adapter = Activator.CreateInstance(adapterClass, aggregateLoader, serviceProvider, true) ??
                         throw new MissingMethodException("Method not found");
-                    var method = adapterClass.GetMethod("HandleCommandAsync") ??
+                    var method = adapterClass.GetMethod(nameof(ICommandHandlerAdapterCommon.HandleCommandAsync)) ??
                         throw new MissingMethodException("HandleCommandAsync not found");
                     var commandResponse
                         = (ResultBox<CommandResponse>)await ((dynamic?)method.Invoke(
