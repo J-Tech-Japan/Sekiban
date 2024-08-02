@@ -4,13 +4,13 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Infrastructure.Azure.Storage.Blobs</PackageId>
-        <Version>0.20.5</Version>
+        <Version>0.20.6</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Azure Storage Blob</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.20.5</PackageVersion>
-        <Description>Improve type checking rule</Description>
+        <PackageVersion>0.20.6</PackageVersion>
+        <Description>Beta Support for F#</Description>
         <TargetFramework>net8.0</TargetFramework>
         <LangVersion>preview</LangVersion>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -24,7 +24,7 @@
     <ItemGroup>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
         <PackageReference Include="Azure.Storage.Blobs" Version="12.21.1" />
-        <PackageReference Include="Sekiban.Core" Version="0.20.5"/>
+        <PackageReference Include="Sekiban.Core" Version="0.20.6"/>
         <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.0"/>
     </ItemGroup>
 

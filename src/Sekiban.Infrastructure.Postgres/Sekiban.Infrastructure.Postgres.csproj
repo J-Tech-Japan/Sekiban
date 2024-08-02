@@ -5,13 +5,13 @@
         <Nullable>enable</Nullable>
         <TargetFramework>net8.0</TargetFramework>
         <PackageId>Sekiban.Infrastructure.Postgres</PackageId>
-        <Version>0.20.5</Version>
+        <Version>0.20.6</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Dynamo Infrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.20.5</PackageVersion>
-        <Description>Improve type checking rule</Description>
+        <PackageVersion>0.20.6</PackageVersion>
+        <Description>Beta Support for F#</Description>
         <LangVersion>preview</LangVersion>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <PackageReadmeFile>README.md</PackageReadmeFile>
