@@ -144,7 +144,7 @@ public abstract class AggregateCommon : IAggregate
         }
         if (typeof(TAggregatePayload).IsSingleProjectionPayloadType())
         {
-            var method = typeof(TAggregatePayload).GetMethodInfoForCreateInstanceFromAggregatePayload();
+            var method = typeof(TAggregatePayload).GetMethodInfoForCreateInstanceFromSingleProjectionPayload();
             var created = method?.Invoke(typeof(TAggregatePayload), []);
             var converted = created is TAggregatePayload payload ? payload : default;
             if (converted is not null)
