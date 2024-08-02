@@ -1,7 +1,4 @@
-using Sekiban.Core.Command;
 using Sekiban.Core.Events;
-using Sekiban.Core.Snapshot.Aggregate;
-using Sekiban.Core.Snapshot.Aggregate.Commands;
 using System.Reflection;
 namespace Sekiban.Core.Types;
 
@@ -36,16 +33,16 @@ public static class EventTypesExtensions
         var baseType = eventPayloadType.GetImplementingFromGenericInterfaceType(typeof(IEventPayloadConvertingTo<>));
         return baseType.GenericTypeArguments[0];
     }
-    
+
     public static MethodInfo? GetConvertToMethod(this Type eventPayloadType)
     {
-        if (eventPayloadType.IsCommandHandlerType() || eventPayloadType.IsCommandWithHandlerType())
+        if (eventPayloadType.IsEventPayloadType())
         {
             return eventPayloadType.GetMethodFlex(nameof(IEventPayloadConvertingTo<IEventPayloadCommon>.ConvertTo));
         }
         return null;
     }
-    
+
     /// <summary>
     ///     Get aggregate payload type from event payload type
     /// </summary>

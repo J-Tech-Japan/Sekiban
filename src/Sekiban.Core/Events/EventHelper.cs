@@ -42,14 +42,22 @@ public static class EventHelper
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
     /// <exception cref="SekibanEventFailedToActivateException"></exception>
-    public static IEvent GenerateEventToSave<TEventPayload, TAggregatePayload>(Guid aggregateId, string rootPartitionKey, TEventPayload payload)
-        where TEventPayload : IEventPayloadApplicableTo<TAggregatePayload> where TAggregatePayload : IAggregatePayloadCommon
+    public static IEvent GenerateEventToSave<TEventPayload, TAggregatePayload>(
+        Guid aggregateId,
+        string rootPartitionKey,
+        TEventPayload payload) where TEventPayload : IEventPayloadApplicableTo<TAggregatePayload>
+        where TAggregatePayload : IAggregatePayloadCommon
     {
         var eventPayloadType = payload.GetType();
         // ReSharper disable once SuspiciousTypeConversion.Global
         var eventBaseType = typeof(Event<>);
         var eventType = eventBaseType.MakeGenericType(eventPayloadType);
-        return Activator.CreateInstance(eventType, aggregateId, typeof(TAggregatePayload), payload, rootPartitionKey) as IEvent ??
+        return Activator.CreateInstance(
+                eventType,
+                aggregateId,
+                typeof(TAggregatePayload),
+                payload,
+                rootPartitionKey) as IEvent ??
             throw new SekibanEventFailedToActivateException();
     }
     /// <summary>
@@ -58,14 +66,16 @@ public static class EventHelper
     /// <param name="ev"></param>
     /// <param name="payload"></param>
     /// <returns></returns>
-    public static (IEvent, IEventPayloadCommon) GetConvertedEventAndPayloadIfConverted(IEvent ev, IEventPayloadCommon payload)
+    public static (IEvent, IEventPayloadCommon) GetConvertedEventAndPayloadIfConverted(
+        IEvent ev,
+        IEventPayloadCommon payload)
     {
         if (payload.GetType().IsEventConvertingPayloadType())
         {
-            (ev, payload) = ev.GetConvertedEventAndPayload();
-            if (payload.GetType().IsEventConvertingPayloadType())
+            var (evConverted, payloadConverted) = ev.GetConvertedEventAndPayload();
+            if (payload != payloadConverted && payloadConverted.GetType().IsEventConvertingPayloadType())
             {
-                return GetConvertedEventAndPayloadIfConverted(ev, payload);
+                return GetConvertedEventAndPayloadIfConverted(evConverted, payloadConverted);
             }
         }
         return (ev, payload);
@@ -82,10 +92,12 @@ public static class EventHelper
         var eventPayload = new UnregisteredEventPayload
         {
             JsonString = payloadJson ?? string.Empty,
-            EventTypeName = dynamicObject.GetProperty(nameof(Event<EmptyEventPayload>.DocumentTypeName)).GetString() ?? string.Empty
+            EventTypeName = dynamicObject.GetProperty(nameof(Event<EmptyEventPayload>.DocumentTypeName)).GetString() ??
+                string.Empty
         };
-        var ev
-            = SekibanJsonHelper.Deserialize(SekibanJsonHelper.Serialize(dynamicObject), typeof(Event<EmptyEventPayload>)) as Event<EmptyEventPayload>;
+        var ev = SekibanJsonHelper.Deserialize(
+            SekibanJsonHelper.Serialize(dynamicObject),
+            typeof(Event<EmptyEventPayload>)) as Event<EmptyEventPayload>;
         return ev?.ChangePayload(eventPayload);
     }
 }
