@@ -77,6 +77,7 @@ public static class EventHelper
             {
                 return GetConvertedEventAndPayloadIfConverted(evConverted, payloadConverted);
             }
+            return (evConverted, payloadConverted);
         }
         return (ev, payload);
     }
