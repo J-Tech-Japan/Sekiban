@@ -17,12 +17,15 @@ public record AddRecentActivity(Guid RecentActivityId, string Activity) : IComma
     public class Handler : ICommandHandler<RecentActivity, AddRecentActivity>
     {
         private readonly ISekibanDateProducer _sekibanDateProducer;
+
         public Handler(ISekibanDateProducer sekibanDateProducer) => _sekibanDateProducer = sekibanDateProducer;
+
         public IEnumerable<IEventPayloadApplicableTo<RecentActivity>> HandleCommand(
             AddRecentActivity command,
             ICommandContext<RecentActivity> context)
         {
-            yield return new RecentActivityAdded(new RecentActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
+            yield return new RecentActivityAdded(
+                new RecentActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
         }
     }
 }

@@ -17,7 +17,9 @@ public record CancelDeleteClient : ICommandWithVersionValidation<Client>, ICance
 
     public class Handler : ICommandHandler<Client, CancelDeleteClient>
     {
-        public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(CancelDeleteClient command, ICommandContext<Client> context)
+        public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(
+            CancelDeleteClient command,
+            ICommandContext<Client> context)
         {
             yield return new ClientDeleteCancelled();
         }

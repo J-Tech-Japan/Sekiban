@@ -4,5 +4,8 @@ namespace FeatureCheck.Domain.Aggregates.SubTypes.RecordBaseTypes.Subtypes.Purch
 
 public record PaymentCompletedR : IEventPayload<PurchasedCartR, ShippingCartR, PaymentCompletedR>
 {
-    public static ShippingCartR OnEvent(PurchasedCartR aggregatePayload, Event<PaymentCompletedR> ev) => new() { Items = aggregatePayload.Items };
+    public static ShippingCartR OnEvent(PurchasedCartR aggregatePayload, Event<PaymentCompletedR> ev) => new()
+    {
+        Items = aggregatePayload.Items
+    };
 }

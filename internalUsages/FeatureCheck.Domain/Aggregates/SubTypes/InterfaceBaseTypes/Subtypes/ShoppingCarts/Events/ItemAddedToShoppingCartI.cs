@@ -6,11 +6,15 @@ public record ItemAddedToShoppingCartI : IEventPayload<ShoppingCartI, ItemAddedT
     public string Code { get; init; } = string.Empty;
     public string Name { get; init; } = string.Empty;
     public int Quantity { get; init; } = 0;
+
     public static ShoppingCartI OnEvent(ShoppingCartI aggregatePayload, Event<ItemAddedToShoppingCartI> ev) =>
         aggregatePayload with
         {
             Items = aggregatePayload.Items.Add(
                 aggregatePayload.Items.Count,
-                new CartItemRecordI { Code = ev.Payload.Code, Name = ev.Payload.Name, Quantity = ev.Payload.Quantity })
+                new CartItemRecordI
+                {
+                    Code = ev.Payload.Code, Name = ev.Payload.Name, Quantity = ev.Payload.Quantity
+                })
         };
 }

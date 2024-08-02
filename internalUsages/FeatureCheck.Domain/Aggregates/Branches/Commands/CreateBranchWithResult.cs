@@ -10,6 +10,7 @@ public record CreateBranchWithResult(
     string Name) : ICommandWithHandler<Branch, CreateBranchWithResult>
 {
     public Guid GetAggregateId() => Guid.NewGuid();
+
     public static ResultBox<UnitValue> HandleCommand(CreateBranchWithResult command, ICommandContext<Branch> context) =>
         context.AppendEvent(new BranchCreated(command.Name));
 }

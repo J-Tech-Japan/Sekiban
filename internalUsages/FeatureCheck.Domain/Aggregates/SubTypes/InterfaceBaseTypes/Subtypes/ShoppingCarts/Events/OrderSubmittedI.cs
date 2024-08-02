@@ -9,10 +9,15 @@ public record OrderSubmittedI : IEventPayload<ShoppingCartI, PurchasedCartI, Ord
     public DateTime OrderSubmittedLocalTime { get; init; }
 
     public static PurchasedCartI OnEvent(ShoppingCartI aggregatePayload, Event<OrderSubmittedI> ev) =>
-        new() { Items = aggregatePayload.Items, PurchasedDate = ev.Payload.OrderSubmittedLocalTime };
+        new()
+        {
+            Items = aggregatePayload.Items, PurchasedDate = ev.Payload.OrderSubmittedLocalTime
+        };
+
     public class Subscriber : IEventSubscriber<OrderSubmittedI, Subscriber>
     {
         private readonly ILogger<Subscriber> _logger;
+
         public Subscriber(ILogger<Subscriber> logger) => _logger = logger;
 
         public async Task HandleEventAsync(Event<OrderSubmittedI> ev)

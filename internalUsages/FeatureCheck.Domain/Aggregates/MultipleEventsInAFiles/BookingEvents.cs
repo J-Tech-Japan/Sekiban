@@ -20,9 +20,14 @@ public static class BookingEvents
                 TotalAmount = ev.Payload.TotalAmount
             };
     }
-    public record BookingPaid(BookingValueObjects.Money Amount, string PaymentNote) : IEventPayload<Booking, BookingPaid>
+
+    public record BookingPaid(BookingValueObjects.Money Amount, string PaymentNote)
+        : IEventPayload<Booking, BookingPaid>
     {
         public static Booking OnEvent(Booking aggregatePayload, Event<BookingPaid> ev) =>
-            aggregatePayload with { TotalReceived = aggregatePayload.TotalReceived.AddIfPossible(ev.Payload.Amount) };
+            aggregatePayload with
+            {
+                TotalReceived = aggregatePayload.TotalReceived.AddIfPossible(ev.Payload.Amount)
+            };
     }
 }

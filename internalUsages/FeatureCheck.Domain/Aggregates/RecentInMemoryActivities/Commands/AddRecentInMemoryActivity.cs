@@ -4,7 +4,8 @@ using Sekiban.Core.Events;
 using Sekiban.Core.Shared;
 namespace FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Commands;
 
-public record AddRecentInMemoryActivity(Guid RecentInMemoryActivityId, string Activity) : ICommand<RecentInMemoryActivity>
+public record AddRecentInMemoryActivity(Guid RecentInMemoryActivityId, string Activity)
+    : ICommand<RecentInMemoryActivity>
 {
 
     public int ReferenceVersion { get; init; }
@@ -24,7 +25,8 @@ public record AddRecentInMemoryActivity(Guid RecentInMemoryActivityId, string Ac
             AddRecentInMemoryActivity command,
             ICommandContext<RecentInMemoryActivity> context)
         {
-            yield return new RecentInMemoryActivityAdded(new RecentInMemoryActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
+            yield return new RecentInMemoryActivityAdded(
+                new RecentInMemoryActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
         }
     }
 }

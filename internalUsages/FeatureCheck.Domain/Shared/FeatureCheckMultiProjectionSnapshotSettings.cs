@@ -10,7 +10,8 @@ namespace FeatureCheck.Domain.Shared;
 
 public class FeatureCheckMultiProjectionSnapshotSettings : MultiProjectionSnapshotGenerateSettingAbstract
 {
-    public override void Define() =>
+    public override void Define()
+    {
         AddMultiProjectionsSnapshotType<ClientLoyaltyPointListProjection>()
             .AddMultiProjectionsSnapshotType<ClientLoyaltyPointMultiProjection>()
             .AddMultiProjectionsSnapshotType<DissolvableEventsProjection>()
@@ -19,4 +20,5 @@ public class FeatureCheckMultiProjectionSnapshotSettings : MultiProjectionSnapsh
             .AddAggregateListSnapshotType<Branch>()
             .AddSingleProjectionListSnapshotType<ClientNameHistoryProjection>()
             .SetMinimumNumberOfEventsToGenerateSnapshot(40);
+    }
 }

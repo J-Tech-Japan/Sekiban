@@ -4,16 +4,17 @@ using Sekiban.Core.Events;
 using Sekiban.Core.Shared;
 namespace FeatureCheck.Domain.Aggregates.RecentActivities.Commands;
 
-public record OnlyPublishingAddRecentActivityAsync(Guid RecentActivityId, string Activity) : ICommandWithoutLoadingAggregate<RecentActivity>
+public record OnlyPublishingAddRecentActivityAsync(Guid RecentActivityId, string Activity)
+    : ICommandWithoutLoadingAggregate<RecentActivity>
 {
-
     public OnlyPublishingAddRecentActivityAsync() : this(Guid.Empty, string.Empty)
     {
     }
 
     public Guid GetAggregateId() => RecentActivityId;
 
-    public class Handler : ICommandWithoutLoadingAggregateHandlerAsync<RecentActivity, OnlyPublishingAddRecentActivityAsync>
+    public class Handler : ICommandWithoutLoadingAggregateHandlerAsync<RecentActivity,
+        OnlyPublishingAddRecentActivityAsync>
     {
         private readonly ISekibanDateProducer _sekibanDateProducer;
 
@@ -24,7 +25,8 @@ public record OnlyPublishingAddRecentActivityAsync(Guid RecentActivityId, string
             OnlyPublishingAddRecentActivityAsync command)
         {
             await Task.CompletedTask;
-            yield return new RecentActivityAdded(new RecentActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
+            yield return new RecentActivityAdded(
+                new RecentActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
         }
     }
 }

@@ -7,5 +7,6 @@ public record PurchasedCartR : CartAggregateR, IAggregateSubtypePayload<CartAggr
     public DateTime PurchasedDate { get; init; } = DateTime.MinValue;
 
     public ImmutableList<PaymentRecordR> Payments { get; init; } = ImmutableList<PaymentRecordR>.Empty;
+
     public static PurchasedCartR CreateInitialPayload(PurchasedCartR? _) => new();
 }

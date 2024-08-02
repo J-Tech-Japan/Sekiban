@@ -9,12 +9,16 @@ using Microsoft.Extensions.Configuration;
 using Sekiban.Core.Snapshot.BackgroundServices;
 namespace FeatureCheck.Domain.Shared;
 
-public class FeatureCheckMultiProjectionSnapshotConfigurationSetting : MultiProjectionSnapshotGeneratorConfigurationSettingAbstract
+public class
+    FeatureCheckMultiProjectionSnapshotConfigurationSetting :
+    MultiProjectionSnapshotGeneratorConfigurationSettingAbstract
 {
     public FeatureCheckMultiProjectionSnapshotConfigurationSetting(IConfiguration configuration) : base(configuration)
-    { }
+    {
+    }
 
-    public override void Define() =>
+    public override void Define()
+    {
         AddMultiProjectionsSnapshotType<ClientLoyaltyPointListProjection>()
             .AddMultiProjectionsSnapshotType<ClientLoyaltyPointMultiProjection>()
             .AddMultiProjectionsSnapshotType<DissolvableEventsProjection>()
@@ -23,5 +27,7 @@ public class FeatureCheckMultiProjectionSnapshotConfigurationSetting : MultiProj
             .AddAggregateListSnapshotType<Branch>()
             .AddSingleProjectionListSnapshotType<ClientNameHistoryProjection>()
             .SetMinimumNumberOfEventsToGenerateSnapshot(
-                _configuration?.GetSection("Sekiban:Default:MinimumNumberOfEventsToGenerateSnapshot").Get<int>() ?? 1000);
+                _configuration?.GetSection("Sekiban:Default:MinimumNumberOfEventsToGenerateSnapshot").Get<int>() ??
+                1000);
+    }
 }

@@ -9,6 +9,7 @@ public class OldV2Command : ICommand<VersionCheckAggregate>
     public Guid AggregateId { get; init; }
     public int Amount { get; init; }
     public PaymentKind PaymentKind { get; init; }
+
     public Guid GetAggregateId() => AggregateId;
 
     public class Handler : ICommandHandler<VersionCheckAggregate, OldV2Command>

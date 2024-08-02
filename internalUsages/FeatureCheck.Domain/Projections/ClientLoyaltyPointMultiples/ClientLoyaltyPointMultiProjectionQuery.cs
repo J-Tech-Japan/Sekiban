@@ -8,7 +8,8 @@ public class ClientLoyaltyPointMultiProjectionQuery : IMultiProjectionQuery<Clie
 {
     public enum QuerySortKeys
     {
-        ClientName, Points
+        ClientName,
+        Points
     }
 
     public Response HandleFilter(Parameter param, MultiProjectionState<ClientLoyaltyPointMultiProjection> projection)
@@ -20,7 +21,9 @@ public class ClientLoyaltyPointMultiProjectionQuery : IMultiProjectionQuery<Clie
                 projection.Payload.Records.Where(m => m.BranchId == param.BranchId).ToImmutableList());
     }
 
-    public static ClientLoyaltyPointMultiProjection HandleSortAndPagingIfNeeded(Parameter param, ClientLoyaltyPointMultiProjection response)
+    public static ClientLoyaltyPointMultiProjection HandleSortAndPagingIfNeeded(
+        Parameter param,
+        ClientLoyaltyPointMultiProjection response)
     {
         return param.SortKey switch
         {
@@ -29,15 +32,13 @@ public class ClientLoyaltyPointMultiProjectionQuery : IMultiProjectionQuery<Clie
                 Records = param.SortIsAsc
                     ? response.Records.OrderBy(x => x.ClientName).ToImmutableList()
                     : response.Records.OrderByDescending(x => x.ClientName).ToImmutableList()
-            }
-            ,
+            },
             QuerySortKeys.Points => response with
             {
                 Records = param.SortIsAsc
                     ? response.Records.OrderBy(x => x.Point).ToImmutableList()
                     : response.Records.OrderByDescending(x => x.Point).ToImmutableList()
-            }
-            ,
+            },
             _ => response with
             {
                 Records = response.Records.OrderBy(x => x.ClientName).ToImmutableList()
@@ -49,6 +50,6 @@ public class ClientLoyaltyPointMultiProjectionQuery : IMultiProjectionQuery<Clie
 
     public record Response(
         ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedBranch> Branches,
-        ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord> Records) : ClientLoyaltyPointMultiProjection(Branches, Records),
-        IQueryResponse;
+        ImmutableList<ClientLoyaltyPointMultiProjection.ProjectedRecord> Records)
+        : ClientLoyaltyPointMultiProjection(Branches, Records), IQueryResponse;
 }

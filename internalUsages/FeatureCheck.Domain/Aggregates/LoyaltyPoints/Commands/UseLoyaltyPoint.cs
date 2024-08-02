@@ -5,10 +5,19 @@ using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 namespace FeatureCheck.Domain.Aggregates.LoyaltyPoints.Commands;
 
-public record UseLoyaltyPoint(Guid ClientId, DateTime HappenedDate, LoyaltyPointUsageTypeKeys Reason, int PointAmount, string Note)
-    : ICommandWithVersionValidation<LoyaltyPoint>
+public record UseLoyaltyPoint(
+    Guid ClientId,
+    DateTime HappenedDate,
+    LoyaltyPointUsageTypeKeys Reason,
+    int PointAmount,
+    string Note) : ICommandWithVersionValidation<LoyaltyPoint>
 {
-    public UseLoyaltyPoint() : this(Guid.Empty, DateTime.MinValue, LoyaltyPointUsageTypeKeys.FlightDomestic, 0, string.Empty)
+    public UseLoyaltyPoint() : this(
+        Guid.Empty,
+        DateTime.MinValue,
+        LoyaltyPointUsageTypeKeys.FlightDomestic,
+        0,
+        string.Empty)
     {
     }
 
@@ -18,17 +27,15 @@ public record UseLoyaltyPoint(Guid ClientId, DateTime HappenedDate, LoyaltyPoint
 
     public class Handler : ICommandHandler<LoyaltyPoint, UseLoyaltyPoint>
     {
-        public IEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommand(UseLoyaltyPoint command, ICommandContext<LoyaltyPoint> context)
+        public IEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommand(
+            UseLoyaltyPoint command,
+            ICommandContext<LoyaltyPoint> context)
         {
             if (context.GetState().Payload.LastOccuredTime > command.HappenedDate)
-            {
                 throw new SekibanLoyaltyPointCanNotHappenOnThisTimeException();
-            }
 
             if (context.GetState().Payload.CurrentPoint - command.PointAmount < 0)
-            {
                 throw new SekibanLoyaltyPointNotEnoughException();
-            }
 
             yield return new LoyaltyPointUsed(command.HappenedDate, command.Reason, command.PointAmount, command.Note);
         }

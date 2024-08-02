@@ -65,11 +65,7 @@ public class FeatureCheckDependency : DomainDependencyDefinitionBase
             .AddCommandHandler<NotAddingAnyEventCommand, NotAddingAnyEventCommand.Handler>()
             .AddAggregateQuery<BranchExistsQuery>();
 
-        AddServices(
-            services =>
-            {
-                services.AddTransient<DependencyInjectionSampleService>();
-            });
+        AddServices(services => { services.AddTransient<DependencyInjectionSampleService>(); });
 
         AddAggregate<Client>()
             .AddCommandHandler<CreateClient, CreateClient.Handler>()

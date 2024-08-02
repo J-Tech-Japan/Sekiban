@@ -10,7 +10,9 @@ public record ReceivePaymentToPurchasedCartI : ICommandWithVersionValidation<Pur
     public string PaymentMethod { get; init; } = "Cash";
     public decimal Amount { get; init; } = 0;
     public string Currency { get; init; } = "JPY";
+
     public Guid GetAggregateId() => CartId;
+
     public int ReferenceVersion { get; init; }
 
     public class Handler : ICommandHandler<PurchasedCartI, ReceivePaymentToPurchasedCartI>
@@ -19,7 +21,10 @@ public record ReceivePaymentToPurchasedCartI : ICommandWithVersionValidation<Pur
             ReceivePaymentToPurchasedCartI command,
             ICommandContext<PurchasedCartI> context)
         {
-            yield return new PaymentReceivedToCartI { PaymentMethod = command.PaymentMethod, Amount = command.Amount, Currency = command.Currency };
+            yield return new PaymentReceivedToCartI
+            {
+                PaymentMethod = command.PaymentMethod, Amount = command.Amount, Currency = command.Currency
+            };
             yield return new PaymentCompletedI();
         }
     }

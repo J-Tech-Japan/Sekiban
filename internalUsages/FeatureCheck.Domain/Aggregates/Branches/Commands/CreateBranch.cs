@@ -16,13 +16,18 @@ public record CreateBranch : ICommand<Branch>, ICleanupNecessaryCommand<CreateBr
 
     public CreateBranch(string name) => Name = name;
 
-    public CreateBranch CleanupCommand(CreateBranch command) => command with { Name = string.Empty };
+    public CreateBranch CleanupCommand(CreateBranch command) => command with
+    {
+        Name = string.Empty
+    };
 
     public Guid GetAggregateId() => Guid.NewGuid();
 
     public class Handler : ICommandHandler<Branch, CreateBranch>
     {
-        public IEnumerable<IEventPayloadApplicableTo<Branch>> HandleCommand(CreateBranch command, ICommandContext<Branch> context)
+        public IEnumerable<IEventPayloadApplicableTo<Branch>> HandleCommand(
+            CreateBranch command,
+            ICommandContext<Branch> context)
         {
             yield return new BranchCreated(command.Name);
         }

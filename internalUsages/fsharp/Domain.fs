@@ -1,23 +1,19 @@
 module fsCustomer.Domain
 
 open System
-open FSharp.Control
+open System.ComponentModel.DataAnnotations
+open System.IO
 open Sekiban.Core.Aggregate
 open Sekiban.Core.Command
 open Sekiban.Core.Events
 open Sekiban.Core.Query.QueryModel
+open ResultBoxes
 
 type Branch =
     { Name: string }
 
     interface IAggregatePayload<Branch> with
-        static member CreateInitialPayload(_ :Branch): Branch = { Name = "" }
-
-type CreateBranch(name: string) =
-    member this.Name = name
-
-    interface ICommand<Branch> with
-        member this.GetAggregateId() = Guid.NewGuid()
+        static member CreateInitialPayload(_: Branch) : Branch = { Name = "" }
 
 type BranchCreated =
     { Name: string }
@@ -25,71 +21,77 @@ type BranchCreated =
     interface IEventPayload<Branch, Branch, BranchCreated> with
         static member OnEvent(aggregatePayload, ev) = { Name = ev.Payload.Name }
 
-type CreateBranchHandler() =
-    interface ICommandHandlerAsync<Branch, CreateBranch> with
-        member this.HandleCommandAsync(command, context) =
-            taskSeq { yield { Name = command.Name } :> IEventPayloadApplicableTo<Branch> }
-
-
-type Client(name: string, email: string, branchId: Guid) =
+type CreateBranch(name: string) =
     member this.Name = name
-    member this.Email = email
-    member this.BranchId = branchId
 
-    interface IAggregatePayload<Client> with
-        static member CreateInitialPayload(_) = Client("", "", Guid.Empty)
-
-    new() = Client("", "", Guid.Empty)
-
-type CreateClient =
-    { Name: string
-      Email: string
-      BranchId: Guid }
-
-    interface ICommand<Client> with
+    interface ICommandWithHandler<Branch, CreateBranch> with
         member this.GetAggregateId() = Guid.NewGuid()
 
-type ClientCreated =
+        static member HandleCommand(command, context) =
+            context.AppendEvent({ Name = command.Name })
+
+type BranchExistsQuery(branchId: Guid) =
+    member this.BranchId = branchId
+
+    interface INextAggregateQuery<Branch, bool> with
+        member this.HandleFilter(list, context) =
+            list
+            |> Seq.exists (fun branch -> branch.AggregateId = this.BranchId)
+            |> ResultBox.FromValue
+
+type Client =
     { Name: string
       Email: string
       BranchId: Guid }
+
+    interface IAggregatePayload<Client> with
+        static member CreateInitialPayload(_) =
+            { Name = ""
+              Email = ""
+              BranchId = Guid.Empty }
+
+type ClientCreated(Name: string,Email: string,BranchId: Guid) =
+    member this.Name = Name
+    member this.Email = Email
+    member this.BranchId = BranchId
 
     interface IEventPayload<Client, Client, ClientCreated> with
         static member OnEvent(aggregatePayload, ev) =
-            Client(ev.Payload.Name, ev.Payload.Email, ev.Payload.BranchId)
+            { Name = ev.Payload.Name
+              Email = ev.Payload.Email
+              BranchId = ev.Payload.BranchId }
 
-type ClientEmailExistsQueryResponse =
-    { Exists: bool }
+type ClientEmailExistsNextQuery(email: string) =
+    member this.Email = email
 
-    interface IQueryResponse
+    interface INextAggregateQuery<Client, bool> with
+        member this.HandleFilter(list, context) =
+            list
+            |> Seq.exists (fun client -> client.Payload.Email = this.Email)
+            |> ResultBox.FromValue
 
-type ClientEmailExistsQueryParam =
-    { Email: string }
+type CreateClient =
+    {
+      [<Required>]Name: string
+      [<Required>]Email: string
+      [<Required>]BranchId: Guid }
 
-    interface IQueryParameter<ClientEmailExistsQueryResponse>
+    interface ICommandWithHandlerAsync<Client, CreateClient> with
+        member this.GetAggregateId() = Guid.NewGuid()
 
-
-
-type ClientEmailExistsQuery =
-    interface IAggregateQuery<Client, ClientEmailExistsQueryParam, ClientEmailExistsQueryResponse> with
-        member this.HandleFilter(queryParam, list) =
-            { Exists = list |> Seq.exists (fun client -> client.Payload.Email = queryParam.Email) }
-
-type CreateClientHandler(queryExecutor: IQueryExecutor) =
-    member this.QueryExecutor = queryExecutor
-
-    interface ICommandHandlerAsync<Client, CreateClient> with
-        member this.HandleCommandAsync(command, _) =
-            taskSeq {
-                let emailExistsQueryResponse =
-                    this.QueryExecutor.ExecuteAsync({ Email = command.Email })
-                    |> Async.AwaitTask
-                    |> Async.RunSynchronously
-
-                if not emailExistsQueryResponse.Exists then
-                    yield
-                        { Name = command.Name
-                          Email = command.Email
-                          BranchId = command.BranchId }
-                        :> IEventPayloadApplicableTo<Client>
-            }
+        static member HandleCommandAsync(command, context) =
+            context
+                .ExecuteQueryAsync(BranchExistsQuery(command.BranchId))
+                .Verify(fun exists ->
+                    if exists then
+                        ExceptionOrNone.None
+                    else
+                        ExceptionOrNone.FromException(InvalidDataException("Branch not exists")))
+                .Conveyor(fun () -> context.ExecuteQueryAsync(ClientEmailExistsNextQuery(command.Email)))
+                .Verify(fun exists ->
+                    if exists then
+                        ExceptionOrNone.FromException(InvalidDataException("Email not exists"))
+                    else
+                        ExceptionOrNone.None)
+                .Conveyor(fun () ->
+                    context.AppendEvent(ClientCreated(command.Name, command.Email, command.BranchId)))

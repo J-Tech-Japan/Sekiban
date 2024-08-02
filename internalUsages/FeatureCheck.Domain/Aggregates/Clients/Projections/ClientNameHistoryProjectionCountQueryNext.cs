@@ -11,7 +11,8 @@ public record ClientNameHistoryProjectionCountQueryNext(Guid? BranchId, Guid? Cl
         IQueryContext context)
     {
         return new ClientNameHistoryProjectionCountQuery_Response(
-            list.Where(m => BranchId is null || m.Payload.BranchId == BranchId)
+            list
+                .Where(m => BranchId is null || m.Payload.BranchId == BranchId)
                 .Where(m => ClientId is null || ClientId == m.AggregateId)
                 .Sum(m => m.Payload.ClientNames.Count));
     }

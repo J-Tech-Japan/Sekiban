@@ -5,13 +5,13 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Testing</PackageId>
-        <Version>0.20.5</Version>
+        <Version>0.20.6</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Testing</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.20.5</PackageVersion>
-        <Description>Improve type checking rule</Description>
+        <PackageVersion>0.20.6</PackageVersion>
+        <Description>Beta Support for F#</Description>
         <AssemblyName>Sekiban.Testing</AssemblyName>
         <RootNamespace>Sekiban.Testing</RootNamespace>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -24,7 +24,7 @@
         <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="8.0.0"/>
         <PackageReference Include="xunit.assert" Version="2.9.0" />
         <PackageReference Include="xunit.extensibility.core" Version="2.9.0" />
-        <PackageReference Include="Sekiban.Core" Version="0.20.5"/>
+        <PackageReference Include="Sekiban.Core" Version="0.20.6"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
         <PackageReference Include="xunit.extensibility.execution" Version="2.9.0" />
     </ItemGroup>

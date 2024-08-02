@@ -7,14 +7,21 @@ public record SubmitOrderI : ICommandWithVersionValidation<ShoppingCartI>
 {
     public Guid CartId { get; init; } = Guid.Empty;
     public DateTime OrderSubmittedLocalTime { get; init; }
+
     public Guid GetAggregateId() => CartId;
+
     public int ReferenceVersion { get; init; }
 
     public class Handler : ICommandHandler<ShoppingCartI, SubmitOrderI>
     {
-        public IEnumerable<IEventPayloadApplicableTo<ShoppingCartI>> HandleCommand(SubmitOrderI command, ICommandContext<ShoppingCartI> context)
+        public IEnumerable<IEventPayloadApplicableTo<ShoppingCartI>> HandleCommand(
+            SubmitOrderI command,
+            ICommandContext<ShoppingCartI> context)
         {
-            yield return new OrderSubmittedI { OrderSubmittedLocalTime = command.OrderSubmittedLocalTime };
+            yield return new OrderSubmittedI
+            {
+                OrderSubmittedLocalTime = command.OrderSubmittedLocalTime
+            };
         }
     }
 }

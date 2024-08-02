@@ -7,5 +7,8 @@ public record OrderSubmittedR : IEventPayload<ShoppingCartR, PurchasedCartR, Ord
     public DateTime OrderSubmittedLocalTime { get; init; }
 
     public static PurchasedCartR OnEvent(ShoppingCartR aggregatePayload, Event<OrderSubmittedR> ev) =>
-        new() { Items = aggregatePayload.Items, PurchasedDate = ev.Payload.OrderSubmittedLocalTime };
+        new()
+        {
+            Items = aggregatePayload.Items, PurchasedDate = ev.Payload.OrderSubmittedLocalTime
+        };
 }

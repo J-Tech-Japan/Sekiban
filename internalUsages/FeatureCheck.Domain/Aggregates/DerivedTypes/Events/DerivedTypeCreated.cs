@@ -4,5 +4,6 @@ namespace FeatureCheck.Domain.Aggregates.DerivedTypes.Events;
 
 public record DerivedTypeCreated(IVehicle Vehicle) : IEventPayload<DerivedTypeAggregate, DerivedTypeCreated>
 {
-    public static DerivedTypeAggregate OnEvent(DerivedTypeAggregate aggregatePayload, Event<DerivedTypeCreated> ev) => new(ev.Payload.Vehicle);
+    public static DerivedTypeAggregate OnEvent(DerivedTypeAggregate aggregatePayload, Event<DerivedTypeCreated> ev) =>
+        new(ev.Payload.Vehicle);
 }

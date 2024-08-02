@@ -5,13 +5,13 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Core</PackageId>
-        <Version>0.20.5</Version>
+        <Version>0.20.6</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Core</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.20.5</PackageVersion>
-        <Description>Improve type checking rule</Description>
+        <PackageVersion>0.20.6</PackageVersion>
+        <Description>Beta Support for F#</Description>
         <AssemblyName>Sekiban.Core</AssemblyName>
         <RootNamespace>Sekiban.Core</RootNamespace>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
