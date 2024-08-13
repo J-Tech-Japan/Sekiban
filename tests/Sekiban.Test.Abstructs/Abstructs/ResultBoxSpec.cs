@@ -13,7 +13,10 @@ namespace Sekiban.Test.Abstructs.Abstructs;
 public abstract class ResultBoxSpec(
     TestBase<FeatureCheckDependency>.SekibanTestFixture sekibanTestFixture,
     ITestOutputHelper testOutputHelper,
-    ISekibanServiceProviderGenerator providerGenerator) : TestBase<FeatureCheckDependency>(sekibanTestFixture, testOutputHelper, providerGenerator)
+    ISekibanServiceProviderGenerator providerGenerator) : TestBase<FeatureCheckDependency>(
+    sekibanTestFixture,
+    testOutputHelper,
+    providerGenerator)
 {
     public string _branchName = "TESTBRANCH";
     public string _clientNameBase = "CreateClient TEST ";
@@ -42,7 +45,8 @@ public abstract class ResultBoxSpec(
     public async Task UseAndReturnWithResultBoxTest()
     {
         RemoveAllFromDefaultAndDissolvable();
-        var branch = await sekibanExecutor.ExecuteCommand(new CreateBranch { Name = "Branch1" })
+        var branch = await sekibanExecutor
+            .ExecuteCommand(new CreateBranch { Name = "Branch1" })
             .Conveyor(result => result.ValidateEventCreated())
             .Conveyor(result => result.GetAggregateId())
             .Conveyor(async branchId => await aggregateLoader.AsDefaultStateWithResultAsync<Branch>(branchId));
@@ -83,7 +87,8 @@ public abstract class ResultBoxSpec(
     public async Task UseReturnBoxAndUnwrapWithoutValidationBoxTest()
     {
         RemoveAllFromDefaultAndDissolvable();
-        var branch = await sekibanExecutor.ExecuteCommandWithoutValidation(new CreateBranch { Name = "Branch1" })
+        var branch = await sekibanExecutor
+            .ExecuteCommandWithoutValidation(new CreateBranch { Name = "Branch1" })
             .Conveyor(result => result.ValidateEventCreated())
             .Conveyor(result => result.GetAggregateId())
             .Conveyor(async branchId => await aggregateLoader.AsDefaultStateWithResultAsync<Branch>(branchId))
@@ -96,7 +101,8 @@ public abstract class ResultBoxSpec(
     public async Task UseReturnBoxAndUnwrapWithoutValidationWithEventsBoxTest()
     {
         RemoveAllFromDefaultAndDissolvable();
-        var branch = await sekibanExecutor.ExecuteCommandWithoutValidationWithEvents(new CreateBranch { Name = "Branch1" })
+        var branch = await sekibanExecutor
+            .ExecuteCommandWithoutValidationWithEvents(new CreateBranch { Name = "Branch1" })
             .Conveyor(result => result.ValidateEventCreated())
             .Conveyor(result => result.GetAggregateId())
             .Conveyor(async branchId => await sekibanExecutor.GetAggregateState<Branch>(branchId))
@@ -131,7 +137,10 @@ public abstract class ResultBoxSpec(
                     { AggregateId: not null } => ResultBox.FromValue(BranchId.FromValue(response.AggregateId.Value)),
                     _ => new ApplicationException("AggregateId is null")
                 })
-            .Combine(async branchId => await sekibanExecutor.ExecuteCommand(new CreateClient(branchId.Value, "Client1", "client1@example.com")))
+            .Combine(
+                async branchId =>
+                    await sekibanExecutor.ExecuteCommand(
+                        new CreateClient(branchId.Value, "Client1", "client1@example.com")))
             .Conveyor(
                 twoValues => twoValues.Value2.AggregateId is not null
                     ? ResultBox.FromValue(TwoValues.FromValues(twoValues.Value1, twoValues.Value2.AggregateId.Value))
@@ -143,10 +152,13 @@ public abstract class ResultBoxSpec(
     }
     [Fact]
     public async Task NextQueryTest() =>
-        await ResultBox.WrapTry(RemoveAllFromDefaultAndDissolvableWithResultBox)
+        await ResultBox
+            .WrapTry(RemoveAllFromDefaultAndDissolvableWithResultBox)
             .Conveyor(_ => sekibanExecutor.ExecuteCommand(new CreateBranch { Name = "Branch 24" }))
             .Conveyor(response => response.GetAggregateId().Remap(BranchId.FromValue))
-            .Conveyor(branchId => sekibanExecutor.ExecuteCommand(new CreateClient(branchId.Value, "Client1", "test@example.com")))
+            .Conveyor(
+                branchId => sekibanExecutor.ExecuteCommand(
+                    new CreateClientR(branchId.Value, "Client1", "test@example.com")))
             .Conveyor(_ => sekibanExecutor.ExecuteQuery(new ClientEmailExistQueryNext("test@example.com")))
             .Do(Assert.True)
             .Combine(_ => sekibanExecutor.ExecuteQuery(new ClientEmailExistQueryNextAsync("test@example.com")))
@@ -158,7 +170,8 @@ public abstract class ResultBoxSpec(
             .ScanResult(result => Assert.True(result.IsSuccess));
     [Fact]
     public async Task CheckValidationError() =>
-        await sekibanExecutor.ExecuteCommand(new CreateBranch { Name = string.Empty })
+        await sekibanExecutor
+            .ExecuteCommand(new CreateBranch { Name = string.Empty })
             .DoResult(
                 result =>
                 {
@@ -168,7 +181,8 @@ public abstract class ResultBoxSpec(
 
     [Fact]
     public async Task CheckValidationErrorWithHandler() =>
-        await sekibanExecutor.ExecuteCommand(new CreateBranchWithResult(string.Empty))
+        await sekibanExecutor
+            .ExecuteCommand(new CreateBranchWithResult(string.Empty))
             .DoResult(
                 result =>
                 {
@@ -180,10 +194,13 @@ public abstract class ResultBoxSpec(
 
     [Fact]
     public Task NextQueryTest2() =>
-        ResultBox.WrapTry(RemoveAllFromDefaultAndDissolvableWithResultBox)
+        ResultBox
+            .WrapTry(RemoveAllFromDefaultAndDissolvableWithResultBox)
             .Conveyor(_ => sekibanExecutor.ExecuteCommand(new CreateBranch { Name = "Branch 24" }))
             .Conveyor(response => response.GetAggregateId().Remap(BranchId.FromValue))
-            .Conveyor(branchId => sekibanExecutor.ExecuteCommand(new CreateClient(branchId.Value, "Client1", "test@example.com")))
+            .Conveyor(
+                branchId => sekibanExecutor.ExecuteCommand(
+                    new CreateClient(branchId.Value, "Client1", "test@example.com")))
             .Conveyor(_ => sekibanExecutor.ExecuteQuery(new GetClientPayloadQueryNext("Client1")))
             .Combine(_ => sekibanExecutor.ExecuteQuery(new GetClientPayloadQuery.Parameter("Client1")))
             .Scan(Assert.Equal)
@@ -200,35 +217,30 @@ public abstract class ResultBoxSpec(
 
     [Fact]
     public Task NextQueryTestWithProjection() =>
-        ResultBox.WrapTry(RemoveAllFromDefaultAndDissolvableWithResultBox)
+        ResultBox
+            .WrapTry(RemoveAllFromDefaultAndDissolvableWithResultBox)
             .Conveyor(_ => sekibanExecutor.ExecuteCommand(new CreateBranch(_branchName)))
             .Conveyor(response => response.GetAggregateId().Remap(BranchId.FromValue))
-            .Do(branchId => sekibanExecutor.ExecuteCommand(new CreateClient(branchId.Value, _clientNameBase + 1, "test" + 1 + "@example.com")))
-            .Do(branchId => sekibanExecutor.ExecuteCommand(new CreateClient(branchId.Value, _clientNameBase + 2, "test" + 2 + "@example.com")))
-            .Do(branchId => sekibanExecutor.ExecuteCommand(new CreateClient(branchId.Value, _clientNameBase + 3, "test" + 3 + "@example.com")))
-            .Do(branchId => sekibanExecutor.ExecuteCommand(new CreateClient(branchId.Value, _clientNameBase + 4, "test" + 4 + "@example.com")))
-            .Do(branchId => sekibanExecutor.ExecuteCommand(new CreateClient(branchId.Value, _clientNameBase + 5, "test" + 5 + "@example.com")))
+            .Do(
+                branchId => sekibanExecutor.ExecuteCommand(
+                    new CreateClient(branchId.Value, _clientNameBase + 1, "test" + 1 + "@example.com")))
+            .Do(
+                branchId => sekibanExecutor.ExecuteCommand(
+                    new CreateClient(branchId.Value, _clientNameBase + 2, "test" + 2 + "@example.com")))
+            .Do(
+                branchId => sekibanExecutor.ExecuteCommand(
+                    new CreateClient(branchId.Value, _clientNameBase + 3, "test" + 3 + "@example.com")))
+            .Do(
+                branchId => sekibanExecutor.ExecuteCommand(
+                    new CreateClient(branchId.Value, _clientNameBase + 4, "test" + 4 + "@example.com")))
+            .Do(
+                branchId => sekibanExecutor.ExecuteCommand(
+                    new CreateClient(branchId.Value, _clientNameBase + 5, "test" + 5 + "@example.com")))
             .Conveyor(
                 _ => sekibanExecutor.ExecuteQuery(
-                    new ClientLoyaltyPointQueryNext(
-                        null,
-                        null,
-                        3,
-                        1,
-                        null,
-                        null,
-                        null,
-                        null)))
+                    new ClientLoyaltyPointQueryNext(null, null, 3, 1, null, null, null, null)))
             .Combine(
                 _ => sekibanExecutor.ExecuteQuery(
-                    new ClientLoyaltyPointQuery.Parameter(
-                        null,
-                        null,
-                        3,
-                        1,
-                        null,
-                        null,
-                        null,
-                        null)))
+                    new ClientLoyaltyPointQuery.Parameter(null, null, 3, 1, null, null, null, null)))
             .Do(Assert.Equal);
 }

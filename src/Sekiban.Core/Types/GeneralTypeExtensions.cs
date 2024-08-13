@@ -28,10 +28,10 @@ public static class GeneralTypeExtensions
             (type.BaseType != null && DoesInheritFromGenericType(type.BaseType, genericType));
     }
 
-    public static MethodInfo? GetMethodFlex(this Type type, string name, BindingFlags bindingAttr = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public)
-    {
-        return type.GetMethod(name,bindingAttr) ?? type.GetMethods().FirstOrDefault(m => m.Name.EndsWith($".{name}"));
-    }
+        public static MethodInfo? GetMethodFlex(this Type type, string name, BindingFlags bindingAttr = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public)
+        {
+            return type.GetMethod(name,bindingAttr) ?? type.GetMethods().FirstOrDefault(m => m.Name.EndsWith($".{name}"));
+        }
 
     /// <summary>
     ///     Get the type that inherits from the generic type.
