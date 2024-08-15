@@ -10,8 +10,15 @@ namespace Sekiban.Core.Query.QueryModel;
 /// <param name="PageSize"></param>
 /// <param name="Items"></param>
 /// <typeparam name="T"></typeparam>
-public record ListQueryResult<T>(int? TotalCount, int? TotalPages, int? CurrentPage, int? PageSize, IEnumerable<T> Items)
+public record ListQueryResult<T>(
+    int? TotalCount,
+    int? TotalPages,
+    int? CurrentPage,
+    int? PageSize,
+    IEnumerable<T> Items)
 {
+    public static ListQueryResult<T> Empty => new(0, 0, 0, 0, Array.Empty<T>());
+
     public virtual bool Equals(ListQueryResult<T>? other) =>
         other != null &&
         TotalCount == other.TotalCount &&
@@ -19,6 +26,7 @@ public record ListQueryResult<T>(int? TotalCount, int? TotalPages, int? CurrentP
         CurrentPage == other.CurrentPage &&
         PageSize == other.PageSize &&
         Items.SequenceEqual(other.Items);
+
     public override int GetHashCode()
     {
         unchecked
