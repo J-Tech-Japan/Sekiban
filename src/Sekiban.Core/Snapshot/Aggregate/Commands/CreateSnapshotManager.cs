@@ -1,4 +1,3 @@
-using ResultBoxes;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
 using Sekiban.Core.Shared;
@@ -12,7 +11,8 @@ public record CreateSnapshotManager : ICommand<SnapshotManager>
 {
     public Guid GetAggregateId() => SnapshotManager.SharedId;
 
-    public class Handler(ISekibanDateProducer sekibanDateProducer) : ICommandHandler<SnapshotManager, CreateSnapshotManager>
+    public class Handler(ISekibanDateProducer sekibanDateProducer)
+        : ICommandHandler<SnapshotManager, CreateSnapshotManager>
     {
         public IEnumerable<IEventPayloadApplicableTo<SnapshotManager>> HandleCommand(
             CreateSnapshotManager command,
@@ -21,11 +21,4 @@ public record CreateSnapshotManager : ICommand<SnapshotManager>
             yield return new SnapshotManagerCreated(sekibanDateProducer.UtcNow);
         }
     }
-}
-public record CreateSnapshotManagerAsync : ICommandWithHandlerAsync<SnapshotManager, CreateSnapshotManagerAsync>
-{
-    public Guid GetAggregateId() => SnapshotManager.SharedId;
-    public static Task<ResultBox<UnitValue>> HandleCommandAsync(CreateSnapshotManagerAsync command, ICommandContext<SnapshotManager> context) => 
-        context.GetRequiredService<ISekibanDateProducer>()
-            .Conveyor(sekibanDateProducer => context.AppendEvent( new SnapshotManagerCreated(sekibanDateProducer.UtcNow))).ToTask();
 }

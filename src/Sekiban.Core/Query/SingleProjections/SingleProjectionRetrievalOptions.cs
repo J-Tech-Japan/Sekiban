@@ -17,16 +17,23 @@ public record SingleProjectionRetrievalOptions
         var cachedAtPlusPostponedTime = cachedAt.Value.AddSeconds(PostponeEventFetchBySeconds.Value);
         return cachedAtPlusPostponedTime > currentUtc;
     }
-    public static SingleProjectionRetrievalOptions WithPostponeFetchSeconds(int seconds) => new() { PostponeEventFetchBySeconds = seconds };
-    public static SingleProjectionRetrievalOptions WithPostponeFetchMinutes(int minutes) => new() { PostponeEventFetchBySeconds = minutes * 60 };
-    public static SingleProjectionRetrievalOptions WithPostponeFetchHours(int hours) => new() { PostponeEventFetchBySeconds = hours * 3600 };
+    public static SingleProjectionRetrievalOptions WithPostponeFetchSeconds(int seconds) =>
+        new() { PostponeEventFetchBySeconds = seconds };
+    public static SingleProjectionRetrievalOptions WithPostponeFetchMinutes(int minutes) =>
+        new() { PostponeEventFetchBySeconds = minutes * 60 };
+    public static SingleProjectionRetrievalOptions WithPostponeFetchHours(int hours) =>
+        new() { PostponeEventFetchBySeconds = hours * 3600 };
 
-    public static SingleProjectionRetrievalOptions? IncludeResultFromCommandResponse(CommandExecutorResponse commandResponse) =>
+    public static SingleProjectionRetrievalOptions? IncludeResultFromCommandResponse(
+        CommandExecutorResponse commandResponse) =>
         commandResponse.LastSortableUniqueId is null
             ? null
-            : new SingleProjectionRetrievalOptions { IncludesSortableUniqueIdValue = commandResponse.LastSortableUniqueId };
-    public static SingleProjectionRetrievalOptions? IncludeResultFromCommandResponse(CommandExecutorResponseWithEvents commandResponse) =>
+            : new SingleProjectionRetrievalOptions
+                { IncludesSortableUniqueIdValue = commandResponse.LastSortableUniqueId };
+    public static SingleProjectionRetrievalOptions? IncludeResultFromCommandResponse(
+        CommandExecutorResponseWithEvents commandResponse) =>
         commandResponse.LastSortableUniqueId is null
             ? null
-            : new SingleProjectionRetrievalOptions { IncludesSortableUniqueIdValue = commandResponse.LastSortableUniqueId };
+            : new SingleProjectionRetrievalOptions
+                { IncludesSortableUniqueIdValue = commandResponse.LastSortableUniqueId };
 }

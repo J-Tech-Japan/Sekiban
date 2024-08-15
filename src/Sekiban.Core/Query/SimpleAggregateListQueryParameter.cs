@@ -8,6 +8,6 @@ namespace Sekiban.Core.Query;
 /// <param name="PageSize"></param>
 /// <param name="PageNumber"></param>
 /// <typeparam name="TAggregatePayload"></typeparam>
-public record SimpleAggregateListQueryParameter<TAggregatePayload>
-    (int? PageSize, int? PageNumber) : IListQueryPagingParameter<QueryAggregateState<TAggregatePayload>>
+public record SimpleAggregateListQueryParameter<TAggregatePayload>(int? PageSize, int? PageNumber)
+    : IListQueryPagingParameter<QueryAggregateState<TAggregatePayload>>
     where TAggregatePayload : IAggregatePayloadCommon;

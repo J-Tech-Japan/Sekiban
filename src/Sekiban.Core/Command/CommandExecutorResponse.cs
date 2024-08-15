@@ -26,17 +26,20 @@ public record CommandExecutorResponse(
             _ when AggregateId == Guid.Empty => ResultBox<CommandExecutorResponse>.FromException(
                 new SekibanCommandInvalidAggregateException(CommandId)),
             not null => ResultBox.FromValue(this),
-            _ => ResultBox<CommandExecutorResponse>.FromException(new SekibanCommandInvalidAggregateException(CommandId))
+            _ => ResultBox<CommandExecutorResponse>.FromException(
+                new SekibanCommandInvalidAggregateException(CommandId))
         };
     public ResultBox<Guid> GetAggregateId() =>
         AggregateId switch
         {
-            _ when AggregateId == Guid.Empty => ResultBox<Guid>.FromException(new SekibanCommandInvalidAggregateException(CommandId)),
+            _ when AggregateId == Guid.Empty => ResultBox<Guid>.FromException(
+                new SekibanCommandInvalidAggregateException(CommandId)),
             { } id => ResultBox.FromValue(id),
             _ => ResultBox<Guid>.FromException(new SekibanCommandInvalidAggregateException(CommandId))
         };
     public ResultBox<CommandExecutorResponse> ValidateEventCreated() =>
         EventCount == 0
-            ? ResultBox<CommandExecutorResponse>.FromException(new SekibanCommandNoEventCreatedException(AggregateId, CommandId))
+            ? ResultBox<CommandExecutorResponse>.FromException(
+                new SekibanCommandNoEventCreatedException(AggregateId, CommandId))
             : ResultBox.FromValue(this);
 }

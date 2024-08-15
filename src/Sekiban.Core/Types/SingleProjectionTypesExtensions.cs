@@ -40,13 +40,15 @@ public static class SingleProjectionTypesExtensions
     public static Type GetSingleProjectionPayloadFromSingleProjectionType(this Type type) =>
         type.IsSingleProjectionType()
             ? type.GenericTypeArguments[0]
-            : throw new SekibanSingleProjectionPayloadNotExistsException(type.FullName + "is not Single Projection Type");
+            : throw new SekibanSingleProjectionPayloadNotExistsException(
+                type.FullName + "is not Single Projection Type");
     /// <summary>
     ///     Check whether the given type is Single Projection Payload Type or not.
     /// </summary>
     /// <param name="typeInfo"></param>
     /// <returns></returns>
-    public static bool IsSingleProjectionPayloadType(this Type typeInfo) => IsSingleProjectionPayloadType(typeInfo.GetTypeInfo());
+    public static bool IsSingleProjectionPayloadType(this Type typeInfo) =>
+        IsSingleProjectionPayloadType(typeInfo.GetTypeInfo());
     /// <summary>
     ///     Check whether the given type is Single Projection Payload Type or not.
     /// </summary>
@@ -71,20 +73,22 @@ public static class SingleProjectionTypesExtensions
     {
         if (singleProjectionTypeInfo.IsSingleProjectionPayloadType())
         {
-            var implementedType = singleProjectionTypeInfo.GetImplementingFromGenericInterfaceType(typeof(ISingleProjectionPayload<,>));
+            var implementedType
+                = singleProjectionTypeInfo.GetImplementingFromGenericInterfaceType(typeof(ISingleProjectionPayload<,>));
             return implementedType.GenericTypeArguments[0];
         }
         throw new SekibanTypeNotFoundException("Can not find original type of " + singleProjectionTypeInfo.Name);
     }
-    
-    public static MethodInfo? GetMethodInfoForCreateInstanceFromSingleProjectionPayload(this Type singleProjectionPayloadType)
+
+    public static MethodInfo? GetMethodInfoForCreateInstanceFromSingleProjectionPayload(
+        this Type singleProjectionPayloadType)
     {
         if (singleProjectionPayloadType.IsSingleProjectionPayloadType())
         {
-            return singleProjectionPayloadType.GetMethodFlex( nameof(ISingleProjectionPayloadGeneratable<IAggregatePayloadCommon>.CreateInitialPayload),
+            return singleProjectionPayloadType.GetMethodFlex(
+                nameof(ISingleProjectionPayloadGeneratable<IAggregatePayloadCommon>.CreateInitialPayload),
                 BindingFlags.Static | BindingFlags.Public);
         }
         return null;
     }
-
 }

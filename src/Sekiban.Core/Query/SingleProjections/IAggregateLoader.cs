@@ -36,16 +36,23 @@ public interface IAggregateLoader
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
     /// <exception cref="SekibanAggregateNotExistsException"></exception>
-    public async Task<ResultBox<AggregateState<TAggregatePayload>>> AsDefaultStateFromInitialWithResultAsync<TAggregatePayload>(
-        Guid aggregateId,
-        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
-        int? toVersion = null) where TAggregatePayload : IAggregatePayloadCommon =>
+    public async Task<ResultBox<AggregateState<TAggregatePayload>>>
+        AsDefaultStateFromInitialWithResultAsync<TAggregatePayload>(
+            Guid aggregateId,
+            string rootPartitionKey = IDocument.DefaultRootPartitionKey,
+            int? toVersion = null) where TAggregatePayload : IAggregatePayloadCommon =>
         await ResultBox.WrapTry(
-            async () => await AsDefaultStateFromInitialAsync<TAggregatePayload>(aggregateId, rootPartitionKey, toVersion) switch
-            {
-                { } state => state,
-                null => throw new SekibanAggregateNotExistsException(aggregateId, typeof(TAggregatePayload).Name, rootPartitionKey)
-            });
+            async () => await AsDefaultStateFromInitialAsync<TAggregatePayload>(
+                    aggregateId,
+                    rootPartitionKey,
+                    toVersion) switch
+                {
+                    { } state => state,
+                    null => throw new SekibanAggregateNotExistsException(
+                        aggregateId,
+                        typeof(TAggregatePayload).Name,
+                        rootPartitionKey)
+                });
 
 
     /// <summary>
@@ -57,11 +64,13 @@ public interface IAggregateLoader
     /// <param name="retrievalOptions"></param>
     /// <typeparam name="TSingleProjectionPayload"></typeparam>
     /// <returns></returns>
-    public Task<SingleProjectionState<TSingleProjectionPayload>?> AsSingleProjectionStateAsync<TSingleProjectionPayload>(
-        Guid aggregateId,
-        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
-        int? toVersion = null,
-        SingleProjectionRetrievalOptions? retrievalOptions = null) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
+    public Task<SingleProjectionState<TSingleProjectionPayload>?>
+        AsSingleProjectionStateAsync<TSingleProjectionPayload>(
+            Guid aggregateId,
+            string rootPartitionKey = IDocument.DefaultRootPartitionKey,
+            int? toVersion = null,
+            SingleProjectionRetrievalOptions? retrievalOptions = null)
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
     /// <summary>
     ///     Get aggregate from initial events. (without snapshot nor memory cache)
     /// </summary>
@@ -70,10 +79,11 @@ public interface IAggregateLoader
     /// <param name="toVersion"></param>
     /// <typeparam name="TSingleProjectionPayload"></typeparam>
     /// <returns></returns>
-    public Task<SingleProjectionState<TSingleProjectionPayload>?> AsSingleProjectionStateFromInitialAsync<TSingleProjectionPayload>(
-        Guid aggregateId,
-        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
-        int? toVersion = null) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
+    public Task<SingleProjectionState<TSingleProjectionPayload>?>
+        AsSingleProjectionStateFromInitialAsync<TSingleProjectionPayload>(
+            Guid aggregateId,
+            string rootPartitionKey = IDocument.DefaultRootPartitionKey,
+            int? toVersion = null) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
 
     /// <summary>
     ///     The normal version that uses snapshots and memory cache.
@@ -113,11 +123,18 @@ public interface IAggregateLoader
         int? toVersion = null,
         SingleProjectionRetrievalOptions? retrievalOptions = null) where TAggregatePayload : IAggregatePayloadCommon =>
         await ResultBox.WrapTry(
-            async () => await AsDefaultStateAsync<TAggregatePayload>(aggregateId, rootPartitionKey, toVersion, retrievalOptions) switch
-            {
-                { } state => state,
-                null => throw new SekibanAggregateNotExistsException(aggregateId, typeof(TAggregatePayload).Name, rootPartitionKey)
-            });
+            async () => await AsDefaultStateAsync<TAggregatePayload>(
+                    aggregateId,
+                    rootPartitionKey,
+                    toVersion,
+                    retrievalOptions) switch
+                {
+                    { } state => state,
+                    null => throw new SekibanAggregateNotExistsException(
+                        aggregateId,
+                        typeof(TAggregatePayload).Name,
+                        rootPartitionKey)
+                });
 
     /// <summary>
     ///     Get all events for target aggregate.

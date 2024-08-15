@@ -10,7 +10,8 @@ public class HttpContextUserInformationFactory : IUserInformationFactory
 {
     private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public HttpContextUserInformationFactory(IHttpContextAccessor httpContextAccessor) => _httpContextAccessor = httpContextAccessor;
+    public HttpContextUserInformationFactory(IHttpContextAccessor httpContextAccessor) =>
+        _httpContextAccessor = httpContextAccessor;
 
     public string GetCurrentUserInformation()
     {
@@ -19,7 +20,8 @@ public class HttpContextUserInformationFactory : IUserInformationFactory
         var identity = _httpContextAccessor.HttpContext?.User.Identity;
         var userId = identity is null || identity.IsAuthenticated == false
             ? null
-            : (identity as ClaimsIdentity)?.Claims.FirstOrDefault(m => m.Properties.FirstOrDefault().Value == "sub")?.Value;
+            : (identity as ClaimsIdentity)?.Claims.FirstOrDefault(m => m.Properties.FirstOrDefault().Value == "sub")
+            ?.Value;
         return $"{userId ?? "Unauthenticated User"} from {ip ?? "ip address not found"}";
     }
 }

@@ -4,6 +4,7 @@ public class SekibanAggregateCreateFailedException : Exception, ISekibanExceptio
 {
     public string AggregateTypeName { get; }
 
-    public SekibanAggregateCreateFailedException(string aggregateTypeName) : base($"Aggregate {aggregateTypeName} failed to create.") =>
+    public SekibanAggregateCreateFailedException(string aggregateTypeName) : base(
+        $"Aggregate {aggregateTypeName} failed to create.") =>
         AggregateTypeName = aggregateTypeName;
 }

@@ -31,7 +31,8 @@ public class SekibanAggregateTypes
                 }
                 _registeredTypes.Add(aggregateType);
             }
-            var subtypes = assembly.DefinedTypes.Where(m => m.IsAggregatePayloadType() && m.IsAggregateSubtypePayload());
+            var subtypes
+                = assembly.DefinedTypes.Where(m => m.IsAggregatePayloadType() && m.IsAggregateSubtypePayload());
             foreach (var type in subtypes)
             {
                 var aggregateSubType = new AggregateSubType(type);
@@ -45,7 +46,9 @@ public class SekibanAggregateTypes
             var customProjectors = assembly.DefinedTypes.GetSingleProjectorTypes();
             foreach (var type in customProjectors)
             {
-                var projectorType = new SingleProjectionAggregateType(type.GetAggregatePayloadTypeFromSingleProjectionPayload(), type);
+                var projectorType = new SingleProjectionAggregateType(
+                    type.GetAggregatePayloadTypeFromSingleProjectionPayload(),
+                    type);
                 if (_registeredCustomProjectorTypes.Contains(projectorType))
                 {
                     continue;

@@ -22,7 +22,8 @@ public class MultiProjectionSnapshotCollectionBackgroundService<TSettings> : Bac
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var scope = _services.CreateScope();
-        var logger = scope.ServiceProvider.GetService<ILogger<MultiProjectionSnapshotCollectionBackgroundService<TSettings>>>();
+        var logger = scope.ServiceProvider
+            .GetService<ILogger<MultiProjectionSnapshotCollectionBackgroundService<TSettings>>>();
         var dateUtil = scope.ServiceProvider.GetService<ISekibanDateProducer>();
         var configuration = scope.ServiceProvider.GetService<IConfiguration>();
         if (configuration is null) { return; }
@@ -35,15 +36,21 @@ public class MultiProjectionSnapshotCollectionBackgroundService<TSettings> : Bac
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            logger?.LogInformation("Starting to Make Snapshots... UTCTime:{DateTime}", dateUtil?.UtcNow.ToString("yyyy/MM/dd HH:mm:ss"));
+            logger?.LogInformation(
+                "Starting to Make Snapshots... UTCTime:{DateTime}",
+                dateUtil?.UtcNow.ToString("yyyy/MM/dd HH:mm:ss"));
 
             var setting = GetSetting(configuration);
             if (setting is null) { break; }
             await multiProjectionCollectionGenerator.GenerateAsync(setting);
 
-            logger?.LogInformation("End Making Snapshots UTCTime:{DateTime}", dateUtil?.UtcNow.ToString("yyyy/MM/dd HH:mm:ss"));
+            logger?.LogInformation(
+                "End Making Snapshots UTCTime:{DateTime}",
+                dateUtil?.UtcNow.ToString("yyyy/MM/dd HH:mm:ss"));
 
-            logger?.LogInformation("Waiting for next execution {Seconds} Seconds...", setting.GetExecuteIntervalSeconds());
+            logger?.LogInformation(
+                "Waiting for next execution {Seconds} Seconds...",
+                setting.GetExecuteIntervalSeconds());
 
             await Task.Delay(TimeSpan.FromSeconds(setting.GetExecuteIntervalSeconds()), stoppingToken);
 

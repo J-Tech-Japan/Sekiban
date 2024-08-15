@@ -11,7 +11,8 @@ public static class AggregateQueryTypesExtensions
     /// </summary>
     /// <param name="query"></param>
     /// <returns></returns>
-    public static bool IsAggregateQueryType(this Type query) => query.DoesImplementingFromGenericInterfaceType(typeof(IAggregateQuery<,,>));
+    public static bool IsAggregateQueryType(this Type query) =>
+        query.DoesImplementingFromGenericInterfaceType(typeof(IAggregateQuery<,,>));
 
     /// <summary>
     ///     Checks if the given type is an Aggregate Query Type.
@@ -20,7 +21,8 @@ public static class AggregateQueryTypesExtensions
     /// <returns></returns>
     public static bool IsAggregateQueryNextType(this Type query) =>
         query.DoesImplementingFromGenericInterfaceType(typeof(INextAggregateQueryCommon<,>));
-    public static bool IsNextQueryAsync(this Type query) => query.GetInterfaces().Contains(typeof(INextQueryAsyncGeneral));
+    public static bool IsNextQueryAsync(this Type query) =>
+        query.GetInterfaces().Contains(typeof(INextQueryAsyncGeneral));
 
     /// <summary>
     ///     Gets the Aggregate Type from the given Aggregate Query Type.

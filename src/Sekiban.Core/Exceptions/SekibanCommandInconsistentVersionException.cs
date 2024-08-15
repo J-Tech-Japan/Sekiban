@@ -22,7 +22,11 @@ public class SekibanCommandInconsistentVersionException : Exception, ISekibanExc
     /// </summary>
     public string RootPartitionKey { get; }
 
-    public SekibanCommandInconsistentVersionException(Guid aggregateId, int passedVersion, int correctVersion, string rootPartitionKey) : base(
+    public SekibanCommandInconsistentVersionException(
+        Guid aggregateId,
+        int passedVersion,
+        int correctVersion,
+        string rootPartitionKey) : base(
         $"for aggregate {aggregateId} and {rootPartitionKey} : {passedVersion} was passed but should be {correctVersion}")
     {
         AggregateId = aggregateId;

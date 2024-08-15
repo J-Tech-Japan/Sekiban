@@ -8,5 +8,8 @@ namespace Sekiban.Core.Command;
 ///     If version validation failed, command execution will throw SekibanCommandInconsistentVersionException
 /// </summary>
 /// <typeparam name="TAggregatePayload"></typeparam>
-public interface ITenantCommandWithVersionValidationForExistingAggregate<TAggregatePayload> : ICommandWithVersionValidation<TAggregatePayload>,
-    ITenantCommandCommon, IAggregateShouldExistCommand where TAggregatePayload : IAggregatePayloadCommon;
+public interface
+    ITenantCommandWithVersionValidationForExistingAggregate<TAggregatePayload> :
+    ICommandWithVersionValidation<TAggregatePayload>,
+    ITenantCommandCommon,
+    IAggregateShouldExistCommand where TAggregatePayload : IAggregatePayloadCommon;

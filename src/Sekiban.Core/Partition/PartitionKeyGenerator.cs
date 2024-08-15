@@ -36,7 +36,11 @@ public static class PartitionKeyGenerator
     /// <param name="projectionType"></param>
     /// <param name="rootPartitionKey"></param>
     /// <returns></returns>
-    public static string ForAggregateSnapshot(Guid aggregateId, Type aggregateType, Type projectionType, string rootPartitionKey) =>
+    public static string ForAggregateSnapshot(
+        Guid aggregateId,
+        Type aggregateType,
+        Type projectionType,
+        string rootPartitionKey) =>
         aggregateType == projectionType || projectionType.IsAggregateSubtypePayload()
             ? $"s_{rootPartitionKey}_{aggregateType.Name}_{aggregateId}"
             : $"s_{rootPartitionKey}_{aggregateType.Name}_{projectionType.Name}_{aggregateId}";

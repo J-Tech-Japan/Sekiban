@@ -16,7 +16,8 @@ public interface IMultiProjection
     /// <returns></returns>
     Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjection, TProjectionPayload>(
         string rootPartitionKey,
-        MultiProjectionRetrievalOptions? retrievalOptions = null) where TProjection : IMultiProjector<TProjectionPayload>, new()
+        MultiProjectionRetrievalOptions? retrievalOptions = null)
+        where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon;
     /// <summary>
     ///     Get Multi Projection from initial events
@@ -28,10 +29,12 @@ public interface IMultiProjection
     /// <typeparam name="TProjection"></typeparam>
     /// <typeparam name="TProjectionPayload"></typeparam>
     /// <returns></returns>
-    Task<MultiProjectionState<TProjectionPayload>> GetInitialMultiProjectionFromStreamAsync<TProjection, TProjectionPayload>(
-        Stream stream,
-        string rootPartitionKey,
-        MultiProjectionRetrievalOptions? retrievalOptions = null) where TProjection : IMultiProjector<TProjectionPayload>, new()
+    Task<MultiProjectionState<TProjectionPayload>>
+        GetInitialMultiProjectionFromStreamAsync<TProjection, TProjectionPayload>(
+            Stream stream,
+            string rootPartitionKey,
+            MultiProjectionRetrievalOptions? retrievalOptions = null)
+        where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon;
 
     /// <summary>
@@ -43,9 +46,11 @@ public interface IMultiProjection
     /// <typeparam name="TProjection"></typeparam>
     /// <typeparam name="TProjectionPayload"></typeparam>
     /// <returns></returns>
-    Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionFromMultipleStreamAsync<TProjection, TProjectionPayload>(
-        Func<Task<Stream?>> stream,
-        string rootPartitionKey,
-        MultiProjectionRetrievalOptions? retrievalOptions = null) where TProjection : IMultiProjector<TProjectionPayload>, new()
+    Task<MultiProjectionState<TProjectionPayload>>
+        GetMultiProjectionFromMultipleStreamAsync<TProjection, TProjectionPayload>(
+            Func<Task<Stream?>> stream,
+            string rootPartitionKey,
+            MultiProjectionRetrievalOptions? retrievalOptions = null)
+        where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon;
 }

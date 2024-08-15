@@ -11,7 +11,8 @@ namespace Sekiban.Core.Command;
 /// <typeparam name="TAggregatePayload"></typeparam>
 /// <typeparam name="TCommand"></typeparam>
 public class CommandWithoutLoadingAggregateHandlerAdapter<TAggregatePayload, TCommand>
-    where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload> where TCommand : ICommandWithoutLoadingAggregate<TAggregatePayload>
+    where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>
+    where TCommand : ICommandWithoutLoadingAggregate<TAggregatePayload>
 {
     public async Task<CommandResponse> HandleCommandAsync(
         CommandDocument<TCommand> commandDocument,
@@ -27,30 +28,44 @@ public class CommandWithoutLoadingAggregateHandlerAdapter<TAggregatePayload, TCo
                 foreach (var eventPayload in publishHandler.HandleCommand(aggregateId, commandDocument.Payload))
                 {
                     events.Add(
-                        EventHelper.GenerateEventToSave<IEventPayloadApplicableTo<TAggregatePayload>, TAggregatePayload>(
-                            aggregateId,
-                            rootPartitionKey,
-                            eventPayload));
+                        EventHelper
+                            .GenerateEventToSave<IEventPayloadApplicableTo<TAggregatePayload>, TAggregatePayload>(
+                                aggregateId,
+                                rootPartitionKey,
+                                eventPayload));
                 }
                 await Task.CompletedTask;
-                return new CommandResponse(aggregateId, events.ToImmutableList(), 0, events.Max(m => m.SortableUniqueId));
+                return new CommandResponse(
+                    aggregateId,
+                    events.ToImmutableList(),
+                    0,
+                    events.Max(m => m.SortableUniqueId));
             }
             case ICommandWithoutLoadingAggregateHandlerAsync<TAggregatePayload, TCommand> publishHandlerAsync:
             {
-                await foreach (var eventPayload in publishHandlerAsync.HandleCommandAsync(aggregateId, commandDocument.Payload))
+                await foreach (var eventPayload in publishHandlerAsync.HandleCommandAsync(
+                    aggregateId,
+                    commandDocument.Payload))
                 {
                     events.Add(
-                        EventHelper.GenerateEventToSave<IEventPayloadApplicableTo<TAggregatePayload>, TAggregatePayload>(
-                            aggregateId,
-                            rootPartitionKey,
-                            eventPayload));
+                        EventHelper
+                            .GenerateEventToSave<IEventPayloadApplicableTo<TAggregatePayload>, TAggregatePayload>(
+                                aggregateId,
+                                rootPartitionKey,
+                                eventPayload));
                 }
                 await Task.CompletedTask;
-                return new CommandResponse(aggregateId, events.ToImmutableList(), 0, events.Max(m => m.SortableUniqueId));
+                return new CommandResponse(
+                    aggregateId,
+                    events.ToImmutableList(),
+                    0,
+                    events.Max(m => m.SortableUniqueId));
             }
             default:
                 throw new SekibanCommandHandlerNotMatchException(
-                    handler.GetType().Name + " handler should inherit " + typeof(ICommandWithoutLoadingAggregateHandler<,>).Name);
+                    handler.GetType().Name +
+                    " handler should inherit " +
+                    typeof(ICommandWithoutLoadingAggregateHandler<,>).Name);
         }
     }
 }

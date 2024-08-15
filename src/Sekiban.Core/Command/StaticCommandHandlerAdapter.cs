@@ -6,8 +6,6 @@ using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
-using Sekiban.Core.Snapshot.Aggregate;
-using Sekiban.Core.Snapshot.Aggregate.Commands;
 using Sekiban.Core.Types;
 using System.Collections.Immutable;
 namespace Sekiban.Core.Command;

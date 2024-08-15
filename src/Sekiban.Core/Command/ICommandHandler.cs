@@ -11,7 +11,8 @@ namespace Sekiban.Core.Command;
 /// <typeparam name="TAggregatePayload">Target Aggregate</typeparam>
 /// <typeparam name="TCommand">Target Command</typeparam>
 public interface ICommandHandler<TAggregatePayload, TCommand> : ICommandHandlerCommon<TAggregatePayload, TCommand>
-    where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload> where TCommand : ICommand<TAggregatePayload>
+    where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>
+    where TCommand : ICommand<TAggregatePayload>
 {
     /// <summary>
     ///     A Command Handler.
@@ -23,5 +24,7 @@ public interface ICommandHandler<TAggregatePayload, TCommand> : ICommandHandlerC
     /// <param name="command"></param>
     /// <param name="context">Command Context has feature to Get Current Aggregate State</param>
     /// <returns></returns>
-    public IEnumerable<IEventPayloadApplicableTo<TAggregatePayload>> HandleCommand(TCommand command, ICommandContext<TAggregatePayload> context);
+    public IEnumerable<IEventPayloadApplicableTo<TAggregatePayload>> HandleCommand(
+        TCommand command,
+        ICommandContext<TAggregatePayload> context);
 }

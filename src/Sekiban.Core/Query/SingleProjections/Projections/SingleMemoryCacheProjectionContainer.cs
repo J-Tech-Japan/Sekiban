@@ -10,8 +10,8 @@ namespace Sekiban.Core.Query.SingleProjections.Projections;
 /// <typeparam name="TAggregate"></typeparam>
 /// <typeparam name="TState"></typeparam>
 // ReSharper disable once UnusedTypeParameter
-public record SingleMemoryCacheProjectionContainer<TAggregate, TState> where TAggregate : IAggregateCommon, SingleProjections.ISingleProjection
-    where TState : IAggregateStateCommon
+public record SingleMemoryCacheProjectionContainer<TAggregate, TState>
+    where TAggregate : IAggregateCommon, SingleProjections.ISingleProjection where TState : IAggregateStateCommon
 {
     public Guid AggregateId { get; init; } = Guid.Empty;
     public List<IEvent> UnsafeEvents { get; init; } = [];

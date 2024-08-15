@@ -20,7 +20,8 @@ public static class SingleProjectionQueryTypesExtensions
     /// <returns></returns>
     public static Type GetSingleProjectionTypeFromSingleProjectionQueryType(this Type singleProjectionQuery)
     {
-        var baseType = singleProjectionQuery.GetImplementingFromGenericInterfaceType(typeof(ISingleProjectionQuery<,,>));
+        var baseType
+            = singleProjectionQuery.GetImplementingFromGenericInterfaceType(typeof(ISingleProjectionQuery<,,>));
         return baseType.GenericTypeArguments[0];
     }
     /// <summary>
@@ -30,7 +31,8 @@ public static class SingleProjectionQueryTypesExtensions
     /// <returns></returns>
     public static Type GetParamTypeFromSingleProjectionQueryType(this Type singleProjectionQuery)
     {
-        var baseType = singleProjectionQuery.GetImplementingFromGenericInterfaceType(typeof(ISingleProjectionQuery<,,>));
+        var baseType
+            = singleProjectionQuery.GetImplementingFromGenericInterfaceType(typeof(ISingleProjectionQuery<,,>));
         return baseType.GenericTypeArguments[1];
     }
     /// <summary>
@@ -40,7 +42,8 @@ public static class SingleProjectionQueryTypesExtensions
     /// <returns></returns>
     public static Type GetResponseTypeFromSingleProjectionQueryType(this Type singleProjectionQuery)
     {
-        var baseType = singleProjectionQuery.GetImplementingFromGenericInterfaceType(typeof(ISingleProjectionQuery<,,>));
+        var baseType
+            = singleProjectionQuery.GetImplementingFromGenericInterfaceType(typeof(ISingleProjectionQuery<,,>));
         return baseType.GenericTypeArguments[2];
     }
 }

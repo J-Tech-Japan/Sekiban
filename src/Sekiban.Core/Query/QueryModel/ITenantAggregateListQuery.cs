@@ -9,7 +9,8 @@ namespace Sekiban.Core.Query.QueryModel;
 /// <typeparam name="TQueryParameter"></typeparam>
 /// <typeparam name="TQueryResponse"></typeparam>
 public interface
-    ITenantAggregateListQuery<TAggregatePayload, in TQueryParameter, TQueryResponse> : IAggregateListQuery<TAggregatePayload, TQueryParameter,
-        TQueryResponse> where TAggregatePayload : IAggregatePayloadCommon
+    ITenantAggregateListQuery<TAggregatePayload, in TQueryParameter, TQueryResponse> : IAggregateListQuery<
+    TAggregatePayload
+    , TQueryParameter, TQueryResponse> where TAggregatePayload : IAggregatePayloadCommon
     where TQueryParameter : ITenantListQueryParameter<TQueryResponse>
     where TQueryResponse : IQueryResponse;

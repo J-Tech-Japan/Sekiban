@@ -30,10 +30,12 @@ public interface ICommandExecutor
     /// <param name="callHistories"></param>
     /// <typeparam name="TCommand"></typeparam>
     /// <returns></returns>
-    Task<ResultBox<CommandExecutorResponse>> ExecCommandWithResultAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null)
-        where TCommand : ICommandCommon;
-    Task<ResultBox<CommandExecutorResponse>> ExecCommandNextAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null)
-        where TCommand : ICommandCommon =>
+    Task<ResultBox<CommandExecutorResponse>> ExecCommandWithResultAsync<TCommand>(
+        TCommand command,
+        List<CallHistory>? callHistories = null) where TCommand : ICommandCommon;
+    Task<ResultBox<CommandExecutorResponse>> ExecCommandNextAsync<TCommand>(
+        TCommand command,
+        List<CallHistory>? callHistories = null) where TCommand : ICommandCommon =>
         ExecCommandWithResultAsync(command, callHistories);
 
 
@@ -46,8 +48,9 @@ public interface ICommandExecutor
     /// <param name="callHistories">Attaching Command History : ev.GetCallHistoriesIncludesItself() can create current history</param>
     /// <typeparam name="TCommand">Command should imprelemt <see cref="ICommandCommon" /></typeparam>
     /// <returns>Executed command response.</returns>
-    Task<CommandExecutorResponseWithEvents> ExecCommandWithEventsAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null)
-        where TCommand : ICommandCommon;
+    Task<CommandExecutorResponseWithEvents> ExecCommandWithEventsAsync<TCommand>(
+        TCommand command,
+        List<CallHistory>? callHistories = null) where TCommand : ICommandCommon;
 
     /// <summary>
     ///     Execute a command (basic)
@@ -76,8 +79,9 @@ public interface ICommandExecutor
     /// <param name="callHistories">Attaching Command History : ev.GetCallHistoriesIncludesItself() can create current history</param>
     /// <typeparam name="TCommand">Command should imprelemt <see cref="ICommandCommon" /></typeparam>
     /// <returns>Executed command response.</returns>
-    Task<CommandExecutorResponse> ExecCommandWithoutValidationAsync<TCommand>(TCommand command, List<CallHistory>? callHistories = null)
-        where TCommand : ICommandCommon;
+    Task<CommandExecutorResponse> ExecCommandWithoutValidationAsync<TCommand>(
+        TCommand command,
+        List<CallHistory>? callHistories = null) where TCommand : ICommandCommon;
 
     /// <summary>
     ///     Execute a command (basic)

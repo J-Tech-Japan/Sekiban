@@ -9,7 +9,8 @@ namespace Sekiban.Core.Query.MultiProjections.Projections;
 /// <typeparam name="TProjection"></typeparam>
 /// <typeparam name="TProjectionPayload"></typeparam>
 // ReSharper disable once UnusedTypeParameter
-public record MultipleMemoryProjectionContainer<TProjection, TProjectionPayload> where TProjection : IMultiProjector<TProjectionPayload>, new()
+public record MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>
+    where TProjection : IMultiProjector<TProjectionPayload>, new()
     where TProjectionPayload : IMultiProjectionPayloadCommon
 {
     /// <summary>

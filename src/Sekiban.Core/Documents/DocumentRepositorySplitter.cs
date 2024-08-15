@@ -47,7 +47,8 @@ public class DocumentRepositorySplitter : IDocumentRepository
             throw new SekibanCanNotRetrieveEventBecauseOriginalTypeIsNotAggregatePayloadException(
                 aggregatePayloadType.FullName + "is not aggregate payload");
         }
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+        var aggregateContainerGroup
+            = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
             await _documentTemporaryRepository.GetAllEventsForAggregateIdAsync(
@@ -60,17 +61,20 @@ public class DocumentRepositorySplitter : IDocumentRepository
             return;
         }
 
-        if (partitionKey is not null && _aggregateSettings.CanUseHybrid(aggregatePayloadType) && _hybridStoreManager.HasPartition(partitionKey))
+        if (partitionKey is not null &&
+            _aggregateSettings.CanUseHybrid(aggregatePayloadType) &&
+            _hybridStoreManager.HasPartition(partitionKey))
         {
-            if ((string.IsNullOrWhiteSpace(sinceSortableUniqueId) && _hybridStoreManager.FromInitialForPartitionKey(partitionKey)) ||
-                (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
-                    await _documentTemporaryRepository.EventsForAggregateIdHasSortableUniqueIdAsync(
-                        aggregateId,
-                        aggregatePayloadType,
-                        partitionKey,
-                        sinceSortableUniqueId)) ||
-                (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
-                    sinceSortableUniqueId.Equals(_hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey))))
+            if (string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
+                _hybridStoreManager.FromInitialForPartitionKey(partitionKey) ||
+                !string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
+                await _documentTemporaryRepository.EventsForAggregateIdHasSortableUniqueIdAsync(
+                    aggregateId,
+                    aggregatePayloadType,
+                    partitionKey,
+                    sinceSortableUniqueId) ||
+                !string.IsNullOrWhiteSpace(sinceSortableUniqueId) &&
+                sinceSortableUniqueId.Equals(_hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey)))
             {
                 await _documentTemporaryRepository.GetAllEventsForAggregateIdAsync(
                     aggregateId,
@@ -98,7 +102,8 @@ public class DocumentRepositorySplitter : IDocumentRepository
                         return;
                     }
                     var hasPartitionKey = _hybridStoreManager.HasPartition(partitionKey);
-                    var sinceSortableUniqueIdInPartition = _hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey);
+                    var sinceSortableUniqueIdInPartition
+                        = _hybridStoreManager.SortableUniqueIdForPartitionKey(partitionKey);
                     var fromInitial = _hybridStoreManager.FromInitialForPartitionKey(partitionKey);
 
                     if (string.IsNullOrWhiteSpace(sinceSortableUniqueId))
@@ -114,7 +119,11 @@ public class DocumentRepositorySplitter : IDocumentRepository
                         } else
                         {
                             if ((!string.IsNullOrWhiteSpace(sinceSortableUniqueIdInPartition) || !fromInitial) &&
-                                string.Compare(sinceSortableUniqueIdInPartition!, sinceSortableUniqueId, StringComparison.Ordinal) > 0)
+                                string.Compare(
+                                    sinceSortableUniqueIdInPartition!,
+                                    sinceSortableUniqueId,
+                                    StringComparison.Ordinal) >
+                                0)
                             {
                                 SaveEvents(eventList, aggregatePayloadType, partitionKey, sinceSortableUniqueId, false);
                             }
@@ -158,7 +167,8 @@ public class DocumentRepositorySplitter : IDocumentRepository
             throw new SekibanCanNotRetrieveEventBecauseOriginalTypeIsNotAggregatePayloadException(
                 aggregatePayloadType.FullName + "is not aggregate payload");
         }
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+        var aggregateContainerGroup
+            = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
             await _documentTemporaryRepository.GetAllCommandStringsForAggregateIdAsync(
@@ -212,7 +222,8 @@ public class DocumentRepositorySplitter : IDocumentRepository
         string rootPartitionKey,
         string payloadVersionIdentifier)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+        var aggregateContainerGroup
+            = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         return aggregateContainerGroup == AggregateContainerGroup.InMemory
             ? await _documentTemporaryRepository.GetLatestSnapshotForAggregateAsync(
                 aggregateId,
@@ -238,7 +249,8 @@ public class DocumentRepositorySplitter : IDocumentRepository
         string payloadVersionIdentifier,
         string rootPartitionKey)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionPayloadType);
+        var aggregateContainerGroup
+            = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionPayloadType);
         return aggregateContainerGroup == AggregateContainerGroup.InMemory
             ? await _documentTemporaryRepository.GetLatestSnapshotForMultiProjectionAsync(
                 multiProjectionPayloadType,
@@ -262,7 +274,8 @@ public class DocumentRepositorySplitter : IDocumentRepository
         string partitionKey,
         string rootPartitionKey)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+        var aggregateContainerGroup
+            = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         return aggregateContainerGroup == AggregateContainerGroup.InMemory
             ? _documentTemporaryRepository.GetSnapshotByIdAsync(
                 id,
@@ -286,9 +299,14 @@ public class DocumentRepositorySplitter : IDocumentRepository
         string rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+        var aggregateContainerGroup
+            = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         return aggregateContainerGroup == AggregateContainerGroup.InMemory
-            ? _documentTemporaryRepository.GetAllEventsForAggregateAsync(aggregatePayloadType, sinceSortableUniqueId, rootPartitionKey, resultAction)
+            ? _documentTemporaryRepository.GetAllEventsForAggregateAsync(
+                aggregatePayloadType,
+                sinceSortableUniqueId,
+                rootPartitionKey,
+                resultAction)
             : _documentPersistentRepository.GetAllEventsForAggregateAsync(
                 aggregatePayloadType,
                 sinceSortableUniqueId,
@@ -304,7 +322,8 @@ public class DocumentRepositorySplitter : IDocumentRepository
         string rootPartitionKey,
         string payloadVersionIdentifier)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+        var aggregateContainerGroup
+            = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         return aggregateContainerGroup != AggregateContainerGroup.InMemory &&
             await _documentPersistentRepository.ExistsSnapshotForAggregateAsync(
                 aggregateId,
@@ -315,7 +334,12 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 payloadVersionIdentifier);
     }
 
-    private void SaveEvents(List<IEvent> events, Type originalType, string partitionKey, string sortableUniqueKey, bool fromInitial)
+    private void SaveEvents(
+        List<IEvent> events,
+        Type originalType,
+        string partitionKey,
+        string sortableUniqueKey,
+        bool fromInitial)
     {
         _hybridStoreManager.AddPartitionKey(partitionKey, sortableUniqueKey, fromInitial);
         foreach (var ev in events)

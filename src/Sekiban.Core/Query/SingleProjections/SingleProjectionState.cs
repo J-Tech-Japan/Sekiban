@@ -24,14 +24,7 @@ public record SingleProjectionState<TPayload>(
     public string PayloadTypeName => Payload.GetType().Name;
 
 
-    public SingleProjectionState() : this(
-        default!,
-        Guid.Empty,
-        Guid.Empty,
-        string.Empty,
-        0,
-        0,
-        string.Empty)
+    public SingleProjectionState() : this(default!, Guid.Empty, Guid.Empty, string.Empty, 0, 0, string.Empty)
     {
     }
     public SingleProjectionState(IAggregateCommon aggregateCommon) : this(
@@ -45,7 +38,8 @@ public record SingleProjectionState<TPayload>(
     {
     }
 
-    public SingleProjectionState(IAggregateCommon aggregateCommon, TPayload payload) : this(aggregateCommon) => Payload = payload;
+    public SingleProjectionState(IAggregateCommon aggregateCommon, TPayload payload) : this(aggregateCommon) =>
+        Payload = payload;
     public dynamic GetPayload() => Payload;
     public string GetPayloadVersionIdentifier() => Payload.GetPayloadVersionIdentifier();
     public bool GetIsDeleted() => Payload is IDeletable { IsDeleted: true };

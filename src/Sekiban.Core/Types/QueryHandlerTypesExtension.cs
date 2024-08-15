@@ -12,38 +12,37 @@ public static class QueryHandlerTypesExtension
     /// </summary>
     /// <param name="queryType"></param>
     /// <returns></returns>
-    public static bool IsQueryInputType(this Type queryType) => queryType.DoesImplementingFromGenericInterfaceType(typeof(IQueryInput<>));
+    public static bool IsQueryInputType(this Type queryType) =>
+        queryType.DoesImplementingFromGenericInterfaceType(typeof(IQueryInput<>));
+
     /// <summary>
     ///     Check if the given type is query input type or not.
     /// </summary>
     /// <param name="queryType"></param>
     /// <returns></returns>
-    public static bool IsQueryNextType(this Type queryType) => queryType.DoesImplementingFromGenericInterfaceType(typeof(INextQueryCommon<>));
+    public static bool IsQueryNextType(this Type queryType) =>
+        queryType.DoesImplementingFromGenericInterfaceType(typeof(INextQueryCommon<>));
 
     public static Type GetAggregateProjectionOrQueryFromQueryNextType(this Type queryType) =>
         queryType.GetAggregatePayloadFromQueryNext() ?? queryType.GetMultiProjectionPayloadFromQueryNext() ?? queryType;
 
     public static Type? GetAggregatePayloadFromQueryNext(this Type queryType)
     {
-        if (!queryType.IsQueryNextType() && !queryType.IsListQueryNextType()) { return null; }
-        if (queryType.IsAggregateQueryNextType())
-        {
-            return queryType.GetAggregateTypeFromNextAggregateQueryType();
-        }
+        if (!queryType.IsQueryNextType() && !queryType.IsListQueryNextType()) return null;
+        if (queryType.IsAggregateQueryNextType()) return queryType.GetAggregateTypeFromNextAggregateQueryType();
         if (queryType.IsSingleProjectionNextQueryType())
         {
             var singleProjection = queryType.GetSingleProjectionTypeFromNextSingleProjectionQueryType();
             return singleProjection.GetAggregatePayloadTypeFromSingleProjectionPayload();
         }
+
         return null;
     }
+
     public static Type? GetMultiProjectionPayloadFromQueryNext(this Type queryType)
     {
-        if (!queryType.IsQueryNextType()) { return null; }
-        if (queryType.IsMultiProjectionNextQueryType())
-        {
-            return queryType.GetMultiProjectionPayloadFromQueryNext();
-        }
+        if (!queryType.IsQueryNextType()) return null;
+        if (queryType.IsMultiProjectionNextQueryType()) return queryType.GetMultiProjectionPayloadFromQueryNext();
         return null;
     }
 
@@ -57,6 +56,7 @@ public static class QueryHandlerTypesExtension
         var baseType = queryType.GetImplementingFromGenericInterfaceType(typeof(IQueryInput<>));
         return baseType.GenericTypeArguments[0];
     }
+
     /// <summary>
     ///     Get the query output types from given query input type.
     /// </summary>
@@ -73,13 +73,17 @@ public static class QueryHandlerTypesExtension
     /// </summary>
     /// <param name="queryType"></param>
     /// <returns></returns>
-    public static bool IsListQueryInputType(this Type queryType) => queryType.DoesImplementingFromGenericInterfaceType(typeof(IListQueryInput<>));
+    public static bool IsListQueryInputType(this Type queryType) =>
+        queryType.DoesImplementingFromGenericInterfaceType(typeof(IListQueryInput<>));
+
     /// <summary>
     ///     Check whether the given type is list query input type or not.
     /// </summary>
     /// <param name="queryType"></param>
     /// <returns></returns>
-    public static bool IsListQueryNextType(this Type queryType) => queryType.DoesImplementingFromGenericInterfaceType(typeof(INextListQueryCommon<>));
+    public static bool IsListQueryNextType(this Type queryType) =>
+        queryType.DoesImplementingFromGenericInterfaceType(typeof(INextListQueryCommon<>));
+
     /// <summary>
     ///     Get the query output types from given list query input type.
     /// </summary>
@@ -90,6 +94,7 @@ public static class QueryHandlerTypesExtension
         var baseType = queryType.GetImplementingFromGenericInterfaceType(typeof(IListQueryInput<>));
         return baseType.GenericTypeArguments[0];
     }
+
     /// <summary>
     ///     Get the query handler object from given list query input type.
     /// </summary>
@@ -98,12 +103,17 @@ public static class QueryHandlerTypesExtension
     /// <param name="outputType"></param>
     /// <returns></returns>
     /// <exception cref="Exception"></exception>
-    public static dynamic? GetQueryObjectFromListQueryInputType(this IServiceProvider serviceProvider, Type inputType, Type outputType)
+    public static dynamic? GetQueryObjectFromListQueryInputType(
+        this IServiceProvider serviceProvider,
+        Type inputType,
+        Type outputType)
     {
         var baseType = typeof(IListQueryHandlerCommon<,>);
-        var handlerType = baseType.MakeGenericType(inputType, outputType) ?? throw new SekibanTypeNotFoundException("Can not create handler type");
+        var handlerType = baseType.MakeGenericType(inputType, outputType) ??
+            throw new SekibanTypeNotFoundException("Can not create handler type");
         return serviceProvider.GetService(handlerType);
     }
+
     /// <summary>
     ///     Get the query handler object from given query input type.
     /// </summary>
@@ -112,10 +122,14 @@ public static class QueryHandlerTypesExtension
     /// <param name="outputType"></param>
     /// <returns></returns>
     /// <exception cref="Exception"></exception>
-    public static dynamic? GetQueryObjectFromQueryInputType(this IServiceProvider serviceProvider, Type inputType, Type outputType)
+    public static dynamic? GetQueryObjectFromQueryInputType(
+        this IServiceProvider serviceProvider,
+        Type inputType,
+        Type outputType)
     {
         var baseType = typeof(IQueryHandlerCommon<,>);
-        var handlerType = baseType.MakeGenericType(inputType, outputType) ?? throw new SekibanTypeNotFoundException("Can not create handler type");
+        var handlerType = baseType.MakeGenericType(inputType, outputType) ??
+            throw new SekibanTypeNotFoundException("Can not create handler type");
         return serviceProvider.GetService(handlerType);
     }
 }

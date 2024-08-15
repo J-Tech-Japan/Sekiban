@@ -43,8 +43,12 @@ public record ReportVersionToSnapshotManger(
             {
                 yield break;
             }
-            var key = SnapshotManager.SnapshotKey(command.AggregateType.Name, command.TargetAggregateId, nextSnapshotVersion);
-            if (!context.GetState().Payload.Requests.Contains(key) && !context.GetState().Payload.RequestTakens.Contains(key))
+            var key = SnapshotManager.SnapshotKey(
+                command.AggregateType.Name,
+                command.TargetAggregateId,
+                nextSnapshotVersion);
+            if (!context.GetState().Payload.Requests.Contains(key) &&
+                !context.GetState().Payload.RequestTakens.Contains(key))
             {
                 yield return new SnapshotManagerRequestAdded(
                     command.AggregateType.Name,

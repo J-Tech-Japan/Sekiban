@@ -15,9 +15,11 @@ public interface IMultiProjectionSnapshotGenerator
     /// <typeparam name="TProjection"></typeparam>
     /// <typeparam name="TProjectionPayload"></typeparam>
     /// <returns></returns>
-    Task<MultiProjectionState<TProjectionPayload>> GenerateMultiProjectionSnapshotAsync<TProjection, TProjectionPayload>(
-        int minimumNumberOfEventsToGenerateSnapshot,
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TProjection : IMultiProjector<TProjectionPayload>, new()
+    Task<MultiProjectionState<TProjectionPayload>>
+        GenerateMultiProjectionSnapshotAsync<TProjection, TProjectionPayload>(
+            int minimumNumberOfEventsToGenerateSnapshot,
+            string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions)
+        where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon;
     /// <summary>
     ///     Generate MultiProjection Snapshot for MultiProjection Payload
@@ -28,7 +30,8 @@ public interface IMultiProjectionSnapshotGenerator
     /// <returns></returns>
     Task<MultiProjectionState<TProjectionPayload>> GenerateMultiProjectionSnapshotAsync<TProjectionPayload>(
         int minimumNumberOfEventsToGenerateSnapshot,
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TProjectionPayload : IMultiProjectionPayloadCommon =>
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions)
+        where TProjectionPayload : IMultiProjectionPayloadCommon =>
         GenerateMultiProjectionSnapshotAsync<MultiProjection<TProjectionPayload>, TProjectionPayload>(
             minimumNumberOfEventsToGenerateSnapshot,
             rootPartitionKey);
@@ -40,12 +43,16 @@ public interface IMultiProjectionSnapshotGenerator
     /// <param name="rootPartitionKey"></param>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    Task<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>> GenerateAggregateListSnapshotAsync<TAggregatePayload>(
-        int minimumNumberOfEventsToGenerateSnapshot,
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TAggregatePayload : IAggregatePayloadCommon =>
+    Task<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>>
+        GenerateAggregateListSnapshotAsync<TAggregatePayload>(
+            int minimumNumberOfEventsToGenerateSnapshot,
+            string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions)
+        where TAggregatePayload : IAggregatePayloadCommon =>
         GenerateMultiProjectionSnapshotAsync<SingleProjectionListProjector<Aggregate<TAggregatePayload>,
                 AggregateState<TAggregatePayload>, DefaultSingleProjector<TAggregatePayload>>,
-            SingleProjectionListState<AggregateState<TAggregatePayload>>>(minimumNumberOfEventsToGenerateSnapshot, rootPartitionKey);
+            SingleProjectionListState<AggregateState<TAggregatePayload>>>(
+            minimumNumberOfEventsToGenerateSnapshot,
+            rootPartitionKey);
 
     /// <summary>
     ///     Generate MultiProjection Snapshot for Single Projection Payload List
@@ -61,7 +68,9 @@ public interface IMultiProjectionSnapshotGenerator
         where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon =>
         GenerateMultiProjectionSnapshotAsync<SingleProjectionListProjector<SingleProjection<TSingleProjectionPayload>,
                 SingleProjectionState<TSingleProjectionPayload>, SingleProjection<TSingleProjectionPayload>>,
-            SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>(minimumNumberOfEventsToGenerateSnapshot, rootPartitionKey);
+            SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>(
+            minimumNumberOfEventsToGenerateSnapshot,
+            rootPartitionKey);
     /// <summary>
     ///     Get Current State for MultiProjection Payload
     /// </summary>

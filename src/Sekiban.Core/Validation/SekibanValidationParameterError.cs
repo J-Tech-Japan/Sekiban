@@ -13,13 +13,17 @@ public record SekibanValidationParameterError(string PropertyName, IEnumerable<s
     /// </summary>
     /// <param name="validationResults"></param>
     /// <returns></returns>
-    public static IEnumerable<SekibanValidationParameterError> CreateFromValidationResults(IEnumerable<ValidationResult> validationResults)
+    public static IEnumerable<SekibanValidationParameterError> CreateFromValidationResults(
+        IEnumerable<ValidationResult> validationResults)
     {
         var list = validationResults.ToList();
         var errors = list.Select(m => m.MemberNames.FirstOrDefault() ?? string.Empty).Distinct().ToList();
         return errors.Select(
             param => new SekibanValidationParameterError(
                 param,
-                list.Where(m => (m.MemberNames.FirstOrDefault() ?? string.Empty) == param).Select(m => m.ErrorMessage ?? string.Empty).ToList()));
+                list
+                    .Where(m => (m.MemberNames.FirstOrDefault() ?? string.Empty) == param)
+                    .Select(m => m.ErrorMessage ?? string.Empty)
+                    .ToList()));
     }
 }

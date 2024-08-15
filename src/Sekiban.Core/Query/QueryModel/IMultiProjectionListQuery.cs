@@ -8,8 +8,8 @@ namespace Sekiban.Core.Query.QueryModel;
 /// <typeparam name="TQueryParameter"></typeparam>
 /// <typeparam name="TQueryResponse"></typeparam>
 public interface
-    IMultiProjectionListQuery<TProjectionPayload, in TQueryParameter, TQueryResponse> : IListQueryHandlerCommon<TQueryParameter, TQueryResponse>
-    where TProjectionPayload : IMultiProjectionPayloadCommon
+    IMultiProjectionListQuery<TProjectionPayload, in TQueryParameter, TQueryResponse> : IListQueryHandlerCommon<
+    TQueryParameter, TQueryResponse> where TProjectionPayload : IMultiProjectionPayloadCommon
     where TQueryParameter : IListQueryParameter<TQueryResponse>
     where TQueryResponse : IQueryResponse
 {
@@ -19,7 +19,9 @@ public interface
     /// <param name="queryParam"></param>
     /// <param name="projection"></param>
     /// <returns></returns>
-    public IEnumerable<TQueryResponse> HandleFilter(TQueryParameter queryParam, MultiProjectionState<TProjectionPayload> projection);
+    public IEnumerable<TQueryResponse> HandleFilter(
+        TQueryParameter queryParam,
+        MultiProjectionState<TProjectionPayload> projection);
     /// <summary>
     ///     sort filtered list and returns sorted list.
     /// </summary>

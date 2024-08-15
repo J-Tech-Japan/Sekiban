@@ -21,5 +21,9 @@ public interface ISnapshotDocumentCache
     /// <param name="projectionPayloadType"></param>
     /// <param name="rootPartitionKey"></param>
     /// <returns></returns>
-    public SnapshotDocument? Get(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType, string rootPartitionKey);
+    public SnapshotDocument? Get(
+        Guid aggregateId,
+        Type aggregatePayloadType,
+        Type projectionPayloadType,
+        string rootPartitionKey);
 }

@@ -1,10 +1,7 @@
 ﻿using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
-using Sekiban.Core.Query.SingleProjections;
-using Sekiban.Core.Snapshot.Aggregate;
 using Sekiban.Core.Types;
-using System.Reflection;
 namespace Sekiban.Core.Aggregate;
 
 /// <summary>
@@ -126,10 +123,11 @@ public abstract class AggregateCommon : IAggregate
         }
         if (typeof(TAggregatePayload).IsAggregatePayloadType())
         {
-            var method = typeof(TAggregatePayload).GetMethodInfoForCreateInstanceFromAggregatePayload()
-                ?? typeof(TAggregatePayload).GetMethods()
-                    .FirstOrDefault(m =>
-                        m.Name.EndsWith(
+            var method = typeof(TAggregatePayload).GetMethodInfoForCreateInstanceFromAggregatePayload() ??
+                typeof(TAggregatePayload)
+                    .GetMethods()
+                    .FirstOrDefault(
+                        m => m.Name.EndsWith(
                             $".{nameof(IAggregatePayloadGeneratable<TAggregatePayload>.CreateInitialPayload)}"));
             var created = method?.Invoke(typeof(TAggregatePayload), [null]);
             var converted = created is TAggregatePayload payload ? payload : default;

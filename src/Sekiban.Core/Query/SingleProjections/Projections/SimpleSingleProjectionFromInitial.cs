@@ -10,10 +10,14 @@ public class SimpleSingleProjectionFromInitial : ISingleProjectionFromInitial
 {
     private readonly IDocumentRepository _documentRepository;
 
-    public SimpleSingleProjectionFromInitial(IDocumentRepository documentRepository) => _documentRepository = documentRepository;
+    public SimpleSingleProjectionFromInitial(IDocumentRepository documentRepository) =>
+        _documentRepository = documentRepository;
 
-    public async Task<TProjection?> GetAggregateFromInitialAsync<TProjection, TProjector>(Guid aggregateId, string rootPartitionKey, int? toVersion)
-        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection where TProjector : ISingleProjector<TProjection>, new()
+    public async Task<TProjection?> GetAggregateFromInitialAsync<TProjection, TProjector>(
+        Guid aggregateId,
+        string rootPartitionKey,
+        int? toVersion) where TProjection : IAggregateCommon, SingleProjections.ISingleProjection
+        where TProjector : ISingleProjector<TProjection>, new()
     {
         var projector = new TProjector();
         var aggregate = projector.CreateInitialAggregate(aggregateId);

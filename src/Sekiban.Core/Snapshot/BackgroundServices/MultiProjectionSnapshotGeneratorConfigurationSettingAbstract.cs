@@ -11,7 +11,8 @@ namespace Sekiban.Core.Snapshot.BackgroundServices;
 ///     Developer who wants to generate snapshot can inherit this class and implement Define method.
 ///     This class allows user to use configuration to get value from settings.
 /// </summary>
-public abstract class MultiProjectionSnapshotGeneratorConfigurationSettingAbstract : IMultiProjectionsSnapshotGenerateSetting
+public abstract class
+    MultiProjectionSnapshotGeneratorConfigurationSettingAbstract : IMultiProjectionsSnapshotGenerateSetting
 {
     protected readonly IConfiguration? _configuration;
 
@@ -36,14 +37,18 @@ public abstract class MultiProjectionSnapshotGeneratorConfigurationSettingAbstra
     public int GetExecuteIntervalSeconds() => ExecuteIntervalSeconds;
     public int GetMinimumNumberOfEventsToGenerateSnapshot() => MinimumNumberOfEventsToGenerateSnapshot;
     public IEnumerable<string> GetRootPartitionKeys() =>
-        RootPartitionKeys.Count == 0 ? new[] { IMultiProjectionService.ProjectionAllRootPartitions } : RootPartitionKeys;
+        RootPartitionKeys.Count == 0
+            ? new[] { IMultiProjectionService.ProjectionAllRootPartitions }
+            : RootPartitionKeys;
 
-    public MultiProjectionSnapshotGeneratorConfigurationSettingAbstract AddMultiProjectionsSnapshotType<T>() where T : IMultiProjectionPayloadCommon
+    public MultiProjectionSnapshotGeneratorConfigurationSettingAbstract AddMultiProjectionsSnapshotType<T>()
+        where T : IMultiProjectionPayloadCommon
     {
         MultiProjectionsSnapshotTypes.Add(typeof(T));
         return this;
     }
-    public MultiProjectionSnapshotGeneratorConfigurationSettingAbstract AddAggregateListSnapshotType<T>() where T : IAggregatePayloadCommon
+    public MultiProjectionSnapshotGeneratorConfigurationSettingAbstract AddAggregateListSnapshotType<T>()
+        where T : IAggregatePayloadCommon
     {
         AggregateListSnapshotTypes.Add(typeof(T));
         return this;
@@ -65,7 +70,8 @@ public abstract class MultiProjectionSnapshotGeneratorConfigurationSettingAbstra
         RootPartitionKeys.Add(IMultiProjectionService.ProjectionAllRootPartitions);
         return this;
     }
-    public MultiProjectionSnapshotGeneratorConfigurationSettingAbstract SetExecuteIntervalSeconds(int executeIntervalSeconds)
+    public MultiProjectionSnapshotGeneratorConfigurationSettingAbstract SetExecuteIntervalSeconds(
+        int executeIntervalSeconds)
     {
         ExecuteIntervalSeconds = executeIntervalSeconds;
         return this;
@@ -86,8 +92,8 @@ public abstract class MultiProjectionSnapshotGeneratorConfigurationSettingAbstra
         }
         return this;
     }
-    public MultiProjectionSnapshotGeneratorConfigurationSettingAbstract AddAllSingleProjectionFromDependency<TDependency>()
-        where TDependency : IDependencyDefinition, new()
+    public MultiProjectionSnapshotGeneratorConfigurationSettingAbstract
+        AddAllSingleProjectionFromDependency<TDependency>() where TDependency : IDependencyDefinition, new()
     {
         var dependencyDefinition = new TDependency();
         foreach (var aggregateDefinition in dependencyDefinition.GetAggregateDefinitions())
@@ -99,11 +105,14 @@ public abstract class MultiProjectionSnapshotGeneratorConfigurationSettingAbstra
         }
         return this;
     }
-    public MultiProjectionSnapshotGeneratorConfigurationSettingAbstract AddAllMultiProjectionFromDependency<TDependency>()
-        where TDependency : IDependencyDefinition, new()
+    public MultiProjectionSnapshotGeneratorConfigurationSettingAbstract
+        AddAllMultiProjectionFromDependency<TDependency>() where TDependency : IDependencyDefinition, new()
     {
         var dependencyDefinition = new TDependency();
-        foreach (var multiProjection in dependencyDefinition.GetExecutingAssembly().DefinedTypes.Where(m => m.IsMultiProjectionPayloadType()))
+        foreach (var multiProjection in dependencyDefinition
+            .GetExecutingAssembly()
+            .DefinedTypes
+            .Where(m => m.IsMultiProjectionPayloadType()))
         {
             MultiProjectionsSnapshotTypes.Add(multiProjection);
         }

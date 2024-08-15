@@ -20,9 +20,11 @@ public class MultiProjectionCollectionGenerator
         {
             if (multiProjectionType.IsMultiProjectionPayloadType())
             {
-                var method = typeof(IMultiProjectionSnapshotGenerator).GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                var method = typeof(IMultiProjectionSnapshotGenerator)
+                    .GetMethods(BindingFlags.Public | BindingFlags.Instance)
                     .FirstOrDefault(
-                        info => info.Name == nameof(IMultiProjectionSnapshotGenerator.GenerateMultiProjectionSnapshotAsync) &&
+                        info => info.Name ==
+                            nameof(IMultiProjectionSnapshotGenerator.GenerateMultiProjectionSnapshotAsync) &&
                             info.GetGenericArguments().Length == 1);
 
                 if (method is null) { continue; }
@@ -42,9 +44,11 @@ public class MultiProjectionCollectionGenerator
         {
             if (aggregatePayloadType.IsAggregatePayloadType())
             {
-                var method = typeof(IMultiProjectionSnapshotGenerator).GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                var method = typeof(IMultiProjectionSnapshotGenerator)
+                    .GetMethods(BindingFlags.Public | BindingFlags.Instance)
                     .FirstOrDefault(
-                        info => info.Name == nameof(IMultiProjectionSnapshotGenerator.GenerateAggregateListSnapshotAsync) &&
+                        info => info.Name ==
+                            nameof(IMultiProjectionSnapshotGenerator.GenerateAggregateListSnapshotAsync) &&
                             info.GetGenericArguments().Length == 1);
 
                 if (method is null) { continue; }
@@ -64,9 +68,11 @@ public class MultiProjectionCollectionGenerator
         {
             if (singleProjectionPayloadType.IsSingleProjectionPayloadType())
             {
-                var method = typeof(IMultiProjectionSnapshotGenerator).GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                var method = typeof(IMultiProjectionSnapshotGenerator)
+                    .GetMethods(BindingFlags.Public | BindingFlags.Instance)
                     .FirstOrDefault(
-                        info => info.Name == nameof(IMultiProjectionSnapshotGenerator.GenerateSingleProjectionListSnapshotAsync) &&
+                        info => info.Name ==
+                            nameof(IMultiProjectionSnapshotGenerator.GenerateSingleProjectionListSnapshotAsync) &&
                             info.GetGenericArguments().Length == 1);
 
                 if (method is null) { continue; }

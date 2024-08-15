@@ -14,5 +14,9 @@ public interface IDocumentTemporaryRepository : IDocumentRepository
     /// <param name="partitionKey"></param>
     /// <param name="sortableUniqueId"></param>
     /// <returns></returns>
-    Task<bool> EventsForAggregateIdHasSortableUniqueIdAsync(Guid aggregateId, Type originalType, string? partitionKey, string? sortableUniqueId);
+    Task<bool> EventsForAggregateIdHasSortableUniqueIdAsync(
+        Guid aggregateId,
+        Type originalType,
+        string? partitionKey,
+        string? sortableUniqueId);
 }

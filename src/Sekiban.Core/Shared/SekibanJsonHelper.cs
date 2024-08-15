@@ -20,17 +20,16 @@ public static class SekibanJsonHelper
     /// </summary>
     /// <param name="obj"></param>
     /// <returns></returns>
-    public static string SerializeWithGeneric<T>(T obj) => JsonSerializer.Serialize(obj, GetDefaultJsonSerializerOptions());
+    public static string SerializeWithGeneric<T>(T obj) =>
+        JsonSerializer.Serialize(obj, GetDefaultJsonSerializerOptions());
 
     /// <summary>
     ///     serialize dynamic object to json string
     /// </summary>
     /// <param name="obj"></param>
     /// <returns></returns>
-    public static string? Serialize(dynamic? obj)
-    {
-        return obj is null ? null : (string)JsonSerializer.Serialize(obj, GetDefaultJsonSerializerOptions());
-    }
+    public static string? Serialize(dynamic? obj) =>
+        obj is null ? null : (string)JsonSerializer.Serialize(obj, GetDefaultJsonSerializerOptions());
 
     /// <summary>
     ///     Serialize Exception to json string
@@ -47,12 +46,10 @@ public static class SekibanJsonHelper
     /// <param name="jsonString"></param>
     /// <param name="returnType"></param>
     /// <returns></returns>
-    public static object? Deserialize(string? jsonString, Type returnType)
-    {
-        return string.IsNullOrEmpty(jsonString)
+    public static object? Deserialize(string? jsonString, Type returnType) =>
+        string.IsNullOrEmpty(jsonString)
             ? default
             : JsonSerializer.Deserialize(jsonString, returnType, GetDefaultJsonSerializerOptions());
-    }
 
     /// <summary>
     ///     Deserialize typed object from json string
@@ -60,10 +57,9 @@ public static class SekibanJsonHelper
     /// <param name="jsonString"></param>
     /// <typeparam name="T"></typeparam>
     /// <returns></returns>
-    public static T? Deserialize<T>(string? jsonString)
-    {
-        return string.IsNullOrEmpty(jsonString) ? default : JsonSerializer.Deserialize<T>(jsonString, GetDefaultJsonSerializerOptions());
-    }
+    public static T? Deserialize<T>(string? jsonString) => string.IsNullOrEmpty(jsonString)
+        ? default
+        : JsonSerializer.Deserialize<T>(jsonString, GetDefaultJsonSerializerOptions());
 
     /// <summary>
     ///     Deserialize events from json string
@@ -75,7 +71,8 @@ public static class SekibanJsonHelper
     {
         return GetValue<string>(jsonElement, nameof(IDocument.DocumentTypeName)) is not { } typeName
             ? null
-            : registeredTypes.Where(m => m.Name == typeName)
+            : registeredTypes
+                .Where(m => m.Name == typeName)
                 .Select(m => ConvertTo(jsonElement, typeof(Event<>).MakeGenericType(m)) as IEvent)
                 .FirstOrDefault(m => m is not null) ??
             EventHelper.GetUnregisteredEvent(jsonElement);
@@ -121,7 +118,8 @@ public static class SekibanJsonHelper
     /// <param name="propertyName"></param>
     /// <typeparam name="T"></typeparam>
     /// <returns></returns>
-    public static T? GetValue<T>(dynamic? jsonObj, string propertyName) => GetValue<T>(Serialize(jsonObj), propertyName);
+    public static T? GetValue<T>(dynamic? jsonObj, string propertyName) =>
+        GetValue<T>(Serialize(jsonObj), propertyName);
 
     /// <summary>
     ///     Get Value from Json Element
@@ -137,7 +135,9 @@ public static class SekibanJsonHelper
             return default;
         }
 
-        var node = JsonNode.Parse(jsonString, new JsonNodeOptions { PropertyNameCaseInsensitive = true })?[propertyName];
+        var node = JsonNode.Parse(
+            jsonString,
+            new JsonNodeOptions { PropertyNameCaseInsensitive = true })?[propertyName];
         return node is null ? default : node.GetValue<T>();
     }
 }

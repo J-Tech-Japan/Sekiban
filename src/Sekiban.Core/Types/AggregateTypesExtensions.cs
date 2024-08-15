@@ -30,22 +30,24 @@ public static class AggregateTypesExtensions
         type != typeof(IParentAggregatePayload<>) &&
         !type.IsAggregateSubtypePayload() &&
         !type.ImplementedInterfaces.Contains(typeof(ISingleProjectionPayloadCommon));
-    public static bool IsAggregatePayloadTypeWithoutSubtype(this Type type) => type.GetTypeInfo().IsAggregatePayloadTypeWithoutSubtype();
+    public static bool IsAggregatePayloadTypeWithoutSubtype(this Type type) =>
+        type.GetTypeInfo().IsAggregatePayloadTypeWithoutSubtype();
     public static bool IsAggregatePayloadType(this TypeInfo type) =>
         type.ImplementedInterfaces.Contains(typeof(IAggregatePayloadCommon)) &&
         !type.ImplementedInterfaces.Contains(typeof(ISingleProjectionPayloadCommon));
 
-    
+
     public static MethodInfo? GetMethodInfoForCreateInstanceFromAggregatePayload(this Type aggregatePayloadType)
     {
         if (aggregatePayloadType.DoesImplementingFromGenericInterfaceType(typeof(IAggregatePayloadGeneratable<>)))
         {
-            return aggregatePayloadType.GetMethodFlex( nameof(IAggregatePayloadGeneratable<IAggregatePayloadCommon>.CreateInitialPayload),
+            return aggregatePayloadType.GetMethodFlex(
+                nameof(IAggregatePayloadGeneratable<IAggregatePayloadCommon>.CreateInitialPayload),
                 BindingFlags.Static | BindingFlags.Public);
         }
         return null;
     }
-    
+
     /// <summary>
     ///     Check if given type is Aggregate Payload Type.
     /// </summary>
@@ -58,7 +60,8 @@ public static class AggregateTypesExtensions
     /// </summary>
     /// <param name="type"></param>
     /// <returns></returns>
-    public static bool IsParentAggregatePayload(this Type type) => type.DoesImplementingFromGenericInterfaceType(typeof(IParentAggregatePayload<,>));
+    public static bool IsParentAggregatePayload(this Type type) =>
+        type.DoesImplementingFromGenericInterfaceType(typeof(IParentAggregatePayload<,>));
     /// <summary>
     ///     Check if given type is Aggregate Payload Subtype.
     /// </summary>
@@ -120,7 +123,8 @@ public static class AggregateTypesExtensions
     /// </summary>
     /// <param name="aggregate"></param>
     /// <returns></returns>
-    public static bool IsAggregateType(this IAggregateCommon aggregate) => aggregate.GetType().GetGenericTypeDefinition() == typeof(Aggregate<>);
+    public static bool IsAggregateType(this IAggregateCommon aggregate) =>
+        aggregate.GetType().GetGenericTypeDefinition() == typeof(Aggregate<>);
     /// <summary>
     ///     Check if given type is Aggregate State Type.
     /// </summary>
@@ -163,5 +167,6 @@ public static class AggregateTypesExtensions
     public static Type GetAggregatePayloadTypeFromAggregateState(this Type aggregateStateType) =>
         aggregateStateType.IsGenericType && aggregateStateType.GetGenericTypeDefinition() == typeof(AggregateState<>)
             ? aggregateStateType.GenericTypeArguments[0]
-            : throw new SekibanAggregatePayloadNotExistsException(aggregateStateType.FullName + " is not an aggregate state");
+            : throw new SekibanAggregatePayloadNotExistsException(
+                aggregateStateType.FullName + " is not an aggregate state");
 }

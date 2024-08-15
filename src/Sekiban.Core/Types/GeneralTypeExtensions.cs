@@ -24,14 +24,17 @@ public static class GeneralTypeExtensions
             throw new ArgumentException("The genericType must be a generic type definition.", nameof(genericType));
         }
 
-        return (type.IsGenericType && type.GetGenericTypeDefinition() == genericType) ||
-            (type.BaseType != null && DoesInheritFromGenericType(type.BaseType, genericType));
+        return type.IsGenericType && type.GetGenericTypeDefinition() == genericType ||
+            type.BaseType != null && DoesInheritFromGenericType(type.BaseType, genericType);
     }
 
-        public static MethodInfo? GetMethodFlex(this Type type, string name, BindingFlags bindingAttr = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public)
-        {
-            return type.GetMethod(name,bindingAttr) ?? type.GetMethods().FirstOrDefault(m => m.Name.EndsWith($".{name}"));
-        }
+    public static MethodInfo? GetMethodFlex(
+        this Type type,
+        string name,
+        BindingFlags bindingAttr = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public)
+    {
+        return type.GetMethod(name, bindingAttr) ?? type.GetMethods().FirstOrDefault(m => m.Name.EndsWith($".{name}"));
+    }
 
     /// <summary>
     ///     Get the type that inherits from the generic type.
@@ -77,7 +80,9 @@ public static class GeneralTypeExtensions
     /// <exception cref="ArgumentException"></exception>
     public static Type GetImplementingFromGenericInterfaceType(this Type type, Type genericInterface)
     {
-        return type.GetInterfaces().FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == genericInterface) ??
+        return type
+                .GetInterfaces()
+                .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == genericInterface) ??
             throw new ArgumentException("The type does not implement the generic interface.", nameof(type));
     }
 
@@ -142,7 +147,8 @@ public static class GeneralTypeExtensions
         {
             var genericType = type.GetGenericArguments()[0];
             var constructedListType = typeof(List<>).MakeGenericType(genericType);
-            var genericTypeList = (dynamic?)Activator.CreateInstance(constructedListType) ?? throw new InvalidCastException();
+            var genericTypeList = (dynamic?)Activator.CreateInstance(constructedListType) ??
+                throw new InvalidCastException();
             genericTypeList.Add(genericType.CreateDefaultInstance());
             return genericTypeList;
         }

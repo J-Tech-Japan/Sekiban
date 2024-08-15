@@ -20,7 +20,8 @@ public class RegisteredEventTypes
         foreach (var assembly in assemblies)
         {
             var types = assembly.DefinedTypes;
-            var decoratedTypes = types.Where(x => x.IsClass && x.ImplementedInterfaces.Contains(typeof(IEventPayloadCommon)));
+            var decoratedTypes = types.Where(
+                x => x.IsClass && x.ImplementedInterfaces.Contains(typeof(IEventPayloadCommon)));
             foreach (var type in decoratedTypes)
             {
                 if (_registeredTypes.Contains(type))

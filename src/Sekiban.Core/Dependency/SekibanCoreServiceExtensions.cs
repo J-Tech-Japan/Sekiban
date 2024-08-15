@@ -81,7 +81,8 @@ public static class SekibanCoreServiceExtensions
         services.AddHostedService(
             serviceProvider =>
             {
-                var snapshotTakingBackgroundService = serviceProvider.GetRequiredService<SnapshotTakingBackgroundService>();
+                var snapshotTakingBackgroundService
+                    = serviceProvider.GetRequiredService<SnapshotTakingBackgroundService>();
                 snapshotTakingBackgroundService.ServiceProvider = serviceProvider;
                 return snapshotTakingBackgroundService;
             });
@@ -93,7 +94,9 @@ public static class SekibanCoreServiceExtensions
         return services;
     }
 
-    public static IServiceCollection AddSekibanCoreInMemory(this IServiceCollection services, ISekibanDateProducer? sekibanDateProducer = null)
+    public static IServiceCollection AddSekibanCoreInMemory(
+        this IServiceCollection services,
+        ISekibanDateProducer? sekibanDateProducer = null)
     {
         services.AddMemoryCache();
         services.AddLogging();
@@ -136,7 +139,8 @@ public static class SekibanCoreServiceExtensions
         services.AddHostedService(
             serviceProvider =>
             {
-                var snapshotTakingBackgroundService = serviceProvider.GetRequiredService<SnapshotTakingBackgroundService>();
+                var snapshotTakingBackgroundService
+                    = serviceProvider.GetRequiredService<SnapshotTakingBackgroundService>();
                 snapshotTakingBackgroundService.ServiceProvider = serviceProvider;
                 return snapshotTakingBackgroundService;
             });
@@ -148,7 +152,9 @@ public static class SekibanCoreServiceExtensions
         return services;
     }
 
-    public static IServiceCollection AddSekibanCoreAggregateTest(this IServiceCollection services, ISekibanDateProducer? sekibanDateProducer = null)
+    public static IServiceCollection AddSekibanCoreAggregateTest(
+        this IServiceCollection services,
+        ISekibanDateProducer? sekibanDateProducer = null)
     {
         services.AddMemoryCache();
         services.AddLogging();
@@ -190,7 +196,8 @@ public static class SekibanCoreServiceExtensions
         services.AddHostedService(
             serviceProvider =>
             {
-                var snapshotTakingBackgroundService = serviceProvider.GetRequiredService<SnapshotTakingBackgroundService>();
+                var snapshotTakingBackgroundService
+                    = serviceProvider.GetRequiredService<SnapshotTakingBackgroundService>();
                 snapshotTakingBackgroundService.ServiceProvider = serviceProvider;
                 return snapshotTakingBackgroundService;
             });
@@ -202,7 +209,9 @@ public static class SekibanCoreServiceExtensions
         return services;
     }
 
-    public static IServiceCollection AddSekibanHTTPUser(this IServiceCollection services, HttpContextType contextType = HttpContextType.Local)
+    public static IServiceCollection AddSekibanHTTPUser(
+        this IServiceCollection services,
+        HttpContextType contextType = HttpContextType.Local)
     {
         // Users Information
         services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
@@ -219,13 +228,15 @@ public static class SekibanCoreServiceExtensions
         return services;
     }
 
-    public static IServiceCollection AddSekibanMultiProjectionSnapshotBackgroundService<TSettings>(this IServiceCollection services)
-        where TSettings : IMultiProjectionsSnapshotGenerateSetting
+    public static IServiceCollection AddSekibanMultiProjectionSnapshotBackgroundService<TSettings>(
+        this IServiceCollection services) where TSettings : IMultiProjectionsSnapshotGenerateSetting
     {
         services.AddHostedService<MultiProjectionSnapshotCollectionBackgroundService<TSettings>>();
         return services;
     }
-    public static IServiceCollection AddSekibanAppSettingsFromObject(this IServiceCollection services, AggregateSettings settings)
+    public static IServiceCollection AddSekibanAppSettingsFromObject(
+        this IServiceCollection services,
+        AggregateSettings settings)
     {
         // Example
         // services.AddSingleton<IAggregateSettings>(

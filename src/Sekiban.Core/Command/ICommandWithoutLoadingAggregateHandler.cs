@@ -10,8 +10,11 @@ namespace Sekiban.Core.Command;
 /// </summary>
 /// <typeparam name="TAggregatePayload">Target Aggregate</typeparam>
 /// <typeparam name="TCommand">Target Command</typeparam>
-public interface ICommandWithoutLoadingAggregateHandler<TAggregatePayload, TCommand> : ICommandHandlerCommon<TAggregatePayload, TCommand>
-    where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload> where TCommand : ICommandWithoutLoadingAggregate<TAggregatePayload>
+public interface
+    ICommandWithoutLoadingAggregateHandler<TAggregatePayload, TCommand> : ICommandHandlerCommon<TAggregatePayload,
+    TCommand>
+    where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>
+    where TCommand : ICommandWithoutLoadingAggregate<TAggregatePayload>
 {
     /// <summary>
     ///     Command Handler. In this method, you can not see the current state of the aggregate.

@@ -9,6 +9,7 @@ namespace Sekiban.Core.Aggregate;
 /// <typeparam name="TParentAggregatePayload">Parent Aggregate Payload</typeparam>
 /// <typeparam name="TSubtypeAggregatePayload">Subtype Aggregate Payload (This record itself)</typeparam>
 public interface
-    IAggregateSubtypePayload<TParentAggregatePayload, TSubtypeAggregatePayload> : IAggregateSubtypePayloadParentApplicable<TParentAggregatePayload>,
-        IAggregatePayloadGeneratable<TSubtypeAggregatePayload> where TParentAggregatePayload : IAggregatePayloadCommon
+    IAggregateSubtypePayload<TParentAggregatePayload, TSubtypeAggregatePayload> :
+    IAggregateSubtypePayloadParentApplicable<TParentAggregatePayload>,
+    IAggregatePayloadGeneratable<TSubtypeAggregatePayload> where TParentAggregatePayload : IAggregatePayloadCommon
     where TSubtypeAggregatePayload : IAggregateSubtypePayload<TParentAggregatePayload, TSubtypeAggregatePayload>;

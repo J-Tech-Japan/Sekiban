@@ -29,19 +29,24 @@ public abstract class MultiProjectionSnapshotGenerateSettingAbstract : IMultiPro
     public int GetExecuteIntervalSeconds() => ExecuteIntervalSeconds;
     public int GetMinimumNumberOfEventsToGenerateSnapshot() => MinimumNumberOfEventsToGenerateSnapshot;
     public IEnumerable<string> GetRootPartitionKeys() =>
-        RootPartitionKeys.Count == 0 ? new[] { IMultiProjectionService.ProjectionAllRootPartitions } : RootPartitionKeys;
+        RootPartitionKeys.Count == 0
+            ? new[] { IMultiProjectionService.ProjectionAllRootPartitions }
+            : RootPartitionKeys;
 
-    public MultiProjectionSnapshotGenerateSettingAbstract AddMultiProjectionsSnapshotType<T>() where T : IMultiProjectionPayloadCommon
+    public MultiProjectionSnapshotGenerateSettingAbstract AddMultiProjectionsSnapshotType<T>()
+        where T : IMultiProjectionPayloadCommon
     {
         MultiProjectionsSnapshotTypes.Add(typeof(T));
         return this;
     }
-    public MultiProjectionSnapshotGenerateSettingAbstract AddAggregateListSnapshotType<T>() where T : IAggregatePayloadCommon
+    public MultiProjectionSnapshotGenerateSettingAbstract AddAggregateListSnapshotType<T>()
+        where T : IAggregatePayloadCommon
     {
         AggregateListSnapshotTypes.Add(typeof(T));
         return this;
     }
-    public MultiProjectionSnapshotGenerateSettingAbstract AddSingleProjectionListSnapshotType<T>() where T : ISingleProjectionPayloadCommon
+    public MultiProjectionSnapshotGenerateSettingAbstract AddSingleProjectionListSnapshotType<T>()
+        where T : ISingleProjectionPayloadCommon
     {
         SingleProjectionListSnapshotTypes.Add(typeof(T));
         return this;
@@ -62,7 +67,8 @@ public abstract class MultiProjectionSnapshotGenerateSettingAbstract : IMultiPro
         ExecuteIntervalSeconds = executeIntervalSeconds;
         return this;
     }
-    public MultiProjectionSnapshotGenerateSettingAbstract SetMinimumNumberOfEventsToGenerateSnapshot(int minimumNumberOfEventsToGenerateSnapshot)
+    public MultiProjectionSnapshotGenerateSettingAbstract SetMinimumNumberOfEventsToGenerateSnapshot(
+        int minimumNumberOfEventsToGenerateSnapshot)
     {
         MinimumNumberOfEventsToGenerateSnapshot = minimumNumberOfEventsToGenerateSnapshot;
         return this;
@@ -97,13 +103,17 @@ public abstract class MultiProjectionSnapshotGenerateSettingAbstract : IMultiPro
     {
         var dependencyDefinition = new TDependency();
         dependencyDefinition.Define();
-        foreach (var multiProjection in dependencyDefinition.GetExecutingAssembly().DefinedTypes.Where(m => m.IsMultiProjectionPayloadType()))
+        foreach (var multiProjection in dependencyDefinition
+            .GetExecutingAssembly()
+            .DefinedTypes
+            .Where(m => m.IsMultiProjectionPayloadType()))
         {
             MultiProjectionsSnapshotTypes.Add(multiProjection);
         }
         return this;
     }
-    public MultiProjectionSnapshotGenerateSettingAbstract AddAllFromDependency<TDependency>() where TDependency : IDependencyDefinition, new()
+    public MultiProjectionSnapshotGenerateSettingAbstract AddAllFromDependency<TDependency>()
+        where TDependency : IDependencyDefinition, new()
     {
         AddAllAggregatesFromDependency<TDependency>();
         AddAllSingleProjectionFromDependency<TDependency>();

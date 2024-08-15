@@ -6,4 +6,5 @@ namespace Sekiban.Core.Query.QueryModel;
 ///     Query developers can use this interface to implement Query Parameter.
 /// </summary>
 /// <typeparam name="TQueryOutput"></typeparam>
-public interface IQueryParameter<TQueryOutput> : IQueryParameterCommon, IQueryInput<TQueryOutput> where TQueryOutput : IQueryResponse;
+public interface IQueryParameter<TQueryOutput> : IQueryParameterCommon, IQueryInput<TQueryOutput>
+    where TQueryOutput : IQueryResponse;

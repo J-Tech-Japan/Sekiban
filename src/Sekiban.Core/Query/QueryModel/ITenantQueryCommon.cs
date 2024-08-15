@@ -6,5 +6,5 @@ namespace Sekiban.Core.Query.QueryModel;
 /// </summary>
 public interface ITenantQueryCommon
 {
-    public string TenantId { get; }
+    public string GetTenantId();
 }

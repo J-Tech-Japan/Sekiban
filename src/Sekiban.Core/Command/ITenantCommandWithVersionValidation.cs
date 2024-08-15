@@ -7,8 +7,9 @@ namespace Sekiban.Core.Command;
 ///     If version validation failed, command execution will throw SekibanCommandInconsistentVersionException
 /// </summary>
 /// <typeparam name="TAggregatePayload"></typeparam>
-public interface ITenantCommandWithVersionValidation<TAggregatePayload> : ICommandWithVersionValidation<TAggregatePayload>, ITenantCommandCommon
-    where TAggregatePayload : IAggregatePayloadCommon
+public interface
+    ITenantCommandWithVersionValidation<TAggregatePayload> : ICommandWithVersionValidation<TAggregatePayload>,
+    ITenantCommandCommon where TAggregatePayload : IAggregatePayloadCommon
 {
     string ICommandCommon.GetRootPartitionKey() => TenantId;
 }

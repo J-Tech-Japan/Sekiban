@@ -5,7 +5,8 @@ namespace Sekiban.Core.Exceptions;
 /// </summary>
 public class SekibanEventOutdatedException : Exception, ISekibanException
 {
-    public SekibanEventOutdatedException(Type outdatedEventPayloadType) : base(outdatedEventPayloadType.Name + " event has been outdated")
+    public SekibanEventOutdatedException(Type outdatedEventPayloadType) : base(
+        outdatedEventPayloadType.Name + " event has been outdated")
     {
     }
 }

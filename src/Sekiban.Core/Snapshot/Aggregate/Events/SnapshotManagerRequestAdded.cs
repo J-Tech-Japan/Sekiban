@@ -19,6 +19,9 @@ public record SnapshotManagerRequestAdded(
         payload with
         {
             Requests = payload.Requests.Add(
-                SnapshotManager.SnapshotKey(ev.Payload.AggregateTypeName, ev.Payload.TargetAggregateId, ev.Payload.NextSnapshotVersion))
+                SnapshotManager.SnapshotKey(
+                    ev.Payload.AggregateTypeName,
+                    ev.Payload.TargetAggregateId,
+                    ev.Payload.NextSnapshotVersion))
         };
 }

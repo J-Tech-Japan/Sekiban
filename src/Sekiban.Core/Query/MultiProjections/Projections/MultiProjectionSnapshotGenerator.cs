@@ -20,9 +20,11 @@ public class MultiProjectionSnapshotGenerator(
 {
     private static readonly JsonSerializerOptions _jsonSerializerOptions = new();
 
-    public async Task<MultiProjectionState<TProjectionPayload>> GenerateMultiProjectionSnapshotAsync<TProjection, TProjectionPayload>(
-        int minimumNumberOfEventsToGenerateSnapshot,
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TProjection : IMultiProjector<TProjectionPayload>, new()
+    public async Task<MultiProjectionState<TProjectionPayload>>
+        GenerateMultiProjectionSnapshotAsync<TProjection, TProjectionPayload>(
+            int minimumNumberOfEventsToGenerateSnapshot,
+            string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions)
+        where TProjection : IMultiProjector<TProjectionPayload>, new()
         where TProjectionPayload : IMultiProjectionPayloadCommon
     {
         var projector = new TProjection();
@@ -65,7 +67,11 @@ public class MultiProjectionSnapshotGenerator(
                 SekibanBlobContainer.MultiProjectionState,
                 FilenameForSnapshot(typeof(TProjectionPayload), blobId, state.LastSortableUniqueId),
                 memoryStream);
-            var snapshotDocument = new MultiProjectionSnapshotDocument(typeof(TProjectionPayload), blobId, projector, rootPartitionKey);
+            var snapshotDocument = new MultiProjectionSnapshotDocument(
+                typeof(TProjectionPayload),
+                blobId,
+                projector,
+                rootPartitionKey);
             await documentWriter.SaveAsync(snapshotDocument, typeof(TProjectionPayload));
             logger.LogInformation(
                 "Generate multi snapshot for {ProjectionName} and rootPartitionKey {RootPartitionKey} because state version is {StateVersion}, and number of events after the state is {UsedVersion}",
@@ -73,8 +79,7 @@ public class MultiProjectionSnapshotGenerator(
                 rootPartitionKey,
                 state.Version,
                 usedVersion);
-        }
-        else
+        } else
         {
             logger.LogInformation(
                 "skip making snapshot for {ProjectionName} and rootPartitionKey {RootPartitionKey} because state version is {StateVersion} and events after that is {UsedVersion} and minimum is {MinimumNumberOfEventsToGenerateSnapshot}",
@@ -87,8 +92,8 @@ public class MultiProjectionSnapshotGenerator(
         return projector.ToState();
     }
 
-    public async Task<MultiProjectionState<TProjectionPayload>> GetCurrentStateAsync<TProjectionPayload>(string rootPartitionKey)
-        where TProjectionPayload : IMultiProjectionPayloadCommon
+    public async Task<MultiProjectionState<TProjectionPayload>> GetCurrentStateAsync<TProjectionPayload>(
+        string rootPartitionKey) where TProjectionPayload : IMultiProjectionPayloadCommon
     {
         var payload = GeneratePayload<TProjectionPayload>();
         var snapshotDocument = await documentRepository.GetLatestSnapshotForMultiProjectionAsync(
@@ -103,7 +108,10 @@ public class MultiProjectionSnapshotGenerator(
             {
                 var snapshotStream = await blobAccessor.GetBlobWithGZipAsync(
                     SekibanBlobContainer.MultiProjectionState,
-                    FilenameForSnapshot(typeof(TProjectionPayload), snapshotDocument.Id, snapshotDocument.LastSortableUniqueId));
+                    FilenameForSnapshot(
+                        typeof(TProjectionPayload),
+                        snapshotDocument.Id,
+                        snapshotDocument.LastSortableUniqueId));
                 if (snapshotStream != null)
                 {
                     using var reader = new StreamReader(snapshotStream);
@@ -123,7 +131,8 @@ public class MultiProjectionSnapshotGenerator(
         return new MultiProjectionState<TProjectionPayload>();
     }
 
-    private static TProjectionPayload GeneratePayload<TProjectionPayload>() where TProjectionPayload : IMultiProjectionPayloadCommon
+    private static TProjectionPayload GeneratePayload<TProjectionPayload>()
+        where TProjectionPayload : IMultiProjectionPayloadCommon
     {
         var payloadType = typeof(TProjectionPayload);
         if (payloadType.IsMultiProjectionPayloadType())

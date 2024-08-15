@@ -5,5 +5,5 @@ namespace Sekiban.Core.Query.QueryModel;
 ///     implementing this interface supports Paging.
 /// </summary>
 /// <typeparam name="TQueryOutput"></typeparam>
-public interface IListQueryPagingParameter<TQueryOutput> : IListQueryParameter<TQueryOutput>, IQueryPagingParameterCommon
-    where TQueryOutput : IQueryResponse;
+public interface IListQueryPagingParameter<TQueryOutput> : IListQueryParameter<TQueryOutput>,
+    IQueryPagingParameterCommon where TQueryOutput : IQueryResponse;
