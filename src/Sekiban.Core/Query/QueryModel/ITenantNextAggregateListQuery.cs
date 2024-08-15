@@ -3,4 +3,7 @@ namespace Sekiban.Core.Query.QueryModel;
 
 public interface
     ITenantNextAggregateListQuery<TAggregatePayload, TOutput> : INextAggregateListQuery<TAggregatePayload, TOutput>,
-    ITenantQueryCommon where TOutput : notnull where TAggregatePayload : IAggregatePayloadCommon;
+    ITenantQueryCommon where TOutput : notnull where TAggregatePayload : IAggregatePayloadCommon
+{
+    string IQueryPartitionKeyCommon.GetRootPartitionKey() => GetTenantId();
+}

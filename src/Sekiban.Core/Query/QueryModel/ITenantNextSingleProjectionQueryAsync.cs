@@ -4,4 +4,7 @@ namespace Sekiban.Core.Query.QueryModel;
 public interface
     ITenantNextSingleProjectionQueryAsync<TSingleProjectionPayloadCommon, TOutput> :
     INextSingleProjectionQueryAsync<TSingleProjectionPayloadCommon, TOutput>,
-    ITenantQueryCommon where TOutput : notnull where TSingleProjectionPayloadCommon : ISingleProjectionPayloadCommon;
+    ITenantQueryCommon where TOutput : notnull where TSingleProjectionPayloadCommon : ISingleProjectionPayloadCommon
+{
+    string IQueryPartitionKeyCommon.GetRootPartitionKey() => GetTenantId();
+}
