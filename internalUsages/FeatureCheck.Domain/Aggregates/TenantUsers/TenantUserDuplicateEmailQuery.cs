@@ -10,7 +10,10 @@ public class TenantUserDuplicateEmailQuery : ITenantAggregateQuery<TenantUser, T
         return list.Any(m => m.Payload.Email == queryParam.Email) ? new Response(true) : new Response(false);
     }
 
-    public record Parameter(string TenantId, string Email) : ITenantQueryParameter<Response>;
+    public record Parameter(string TenantId, string Email) : ITenantQueryParameter<Response>
+    {
+        public string GetTenantId() => TenantId;
+    }
 
     public record Response(bool IsDuplicate) : IQueryResponse;
 }
