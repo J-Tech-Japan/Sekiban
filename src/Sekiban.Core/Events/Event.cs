@@ -95,7 +95,11 @@ public record Event<TEventPayload> : Document, IEvent where TEventPayload : IEve
     /// <param name="eventPayload"></param>
     /// <param name="rootPartitionKey"></param>
     /// <returns></returns>
-    public static Event<TEventPayload> GenerateEvent(Guid aggregateId, Type aggregateType, TEventPayload eventPayload, string rootPartitionKey) =>
+    public static Event<TEventPayload> GenerateEvent(
+        Guid aggregateId,
+        Type aggregateType,
+        TEventPayload eventPayload,
+        string rootPartitionKey) =>
         new(aggregateId, aggregateType, eventPayload, rootPartitionKey);
     /// <summary>
     ///     change payload to converted payload and make new event object
@@ -103,7 +107,8 @@ public record Event<TEventPayload> : Document, IEvent where TEventPayload : IEve
     /// <param name="newPayload"></param>
     /// <typeparam name="TNewPayload"></typeparam>
     /// <returns></returns>
-    public Event<TNewPayload> ChangePayload<TNewPayload>(TNewPayload newPayload) where TNewPayload : IEventPayloadCommon =>
+    public Event<TNewPayload> ChangePayload<TNewPayload>(TNewPayload newPayload)
+        where TNewPayload : IEventPayloadCommon =>
         new()
         {
             Id = Id,
@@ -163,7 +168,8 @@ public static class Event
         int version,
         string rootPartitionKey,
         List<CallHistory> callHistories) =>
-        typeof(Event).GetMethod(nameof(GenerateEvent), BindingFlags.Public | BindingFlags.Static)
+        typeof(Event)
+            .GetMethod(nameof(GenerateEvent), BindingFlags.Public | BindingFlags.Static)
             ?.MakeGenericMethod(eventPayload.GetType())
             .Invoke(
                 null,

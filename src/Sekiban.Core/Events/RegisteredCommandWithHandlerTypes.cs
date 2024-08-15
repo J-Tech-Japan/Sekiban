@@ -18,7 +18,8 @@ public class RegisteredCommandWithHandlerTypes
         foreach (var assembly in assemblies)
         {
             var types = assembly.DefinedTypes;
-            var decoratedTypes = types.Where(x => x.IsClass && x.ImplementedInterfaces.Contains(typeof(ICommandWithHandlerCommon)));
+            var decoratedTypes = types.Where(
+                x => x.IsClass && x.ImplementedInterfaces.Contains(typeof(ICommandWithHandlerCommon)));
             foreach (var type in decoratedTypes)
             {
                 if (_registeredTypes.Contains(type))

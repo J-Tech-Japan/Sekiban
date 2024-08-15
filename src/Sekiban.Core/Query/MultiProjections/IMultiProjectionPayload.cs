@@ -6,7 +6,8 @@ namespace Sekiban.Core.Query.MultiProjections;
 ///     Interface for MultiProjectionPayload
 /// </summary>
 /// <typeparam name="TProjectionPayload"></typeparam>
-public interface IMultiProjectionPayload<TProjectionPayload> : IMultiProjectionPayloadGeneratePayload<TProjectionPayload>
+public interface
+    IMultiProjectionPayload<TProjectionPayload> : IMultiProjectionPayloadGeneratePayload<TProjectionPayload>
     where TProjectionPayload : IMultiProjectionPayloadCommon
 {
     /// <summary>
@@ -24,8 +25,9 @@ public interface IMultiProjectionPayload<TProjectionPayload> : IMultiProjectionP
     /// <param name="ev"></param>
     /// <typeparam name="TEventPayload"></typeparam>
     /// <returns></returns>
-    public static abstract TProjectionPayload? ApplyEvent<TEventPayload>(TProjectionPayload projectionPayload, Event<TEventPayload> ev)
-        where TEventPayload : IEventPayloadCommon;
+    public static abstract TProjectionPayload? ApplyEvent<TEventPayload>(
+        TProjectionPayload projectionPayload,
+        Event<TEventPayload> ev) where TEventPayload : IEventPayloadCommon;
     /// <summary>
     ///     General Apply Event method. usually it does not need to override this method.
     /// </summary>
@@ -34,8 +36,11 @@ public interface IMultiProjectionPayload<TProjectionPayload> : IMultiProjectionP
     public TProjectionPayload ApplyIEvent(IEvent ev)
     {
         var payloadType = ev.GetPayload().GetType();
-        var method = typeof(TProjectionPayload).GetMethod(nameof(ApplyEvent), BindingFlags.Static | BindingFlags.Public);
+        var method = typeof(TProjectionPayload).GetMethod(
+            nameof(ApplyEvent),
+            BindingFlags.Static | BindingFlags.Public);
         var genericMethod = method?.MakeGenericMethod(payloadType);
-        return (TProjectionPayload?)genericMethod?.Invoke(typeof(TProjectionPayload), [this, ev]) ?? (TProjectionPayload)this;
+        return (TProjectionPayload?)genericMethod?.Invoke(typeof(TProjectionPayload), [this, ev]) ??
+            (TProjectionPayload)this;
     }
 }

@@ -7,5 +7,6 @@ namespace Sekiban.Core.Command;
 ///     If aggregate does not exist, command execution will throw SekibanAggregateNotFoundException
 /// </summary>
 /// <typeparam name="TAggregatePayload"></typeparam>
-public interface ITenantCommandForExistingAggregate<TAggregatePayload> : ICommand<TAggregatePayload>, ITenantCommandCommon,
+public interface ITenantCommandForExistingAggregate<TAggregatePayload> : ICommand<TAggregatePayload>,
+    ITenantCommandCommon,
     IAggregateShouldExistCommand where TAggregatePayload : IAggregatePayloadCommon;

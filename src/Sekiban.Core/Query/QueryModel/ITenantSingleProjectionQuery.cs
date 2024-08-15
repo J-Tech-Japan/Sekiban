@@ -9,7 +9,9 @@ namespace Sekiban.Core.Query.QueryModel;
 /// <typeparam name="TQueryParameter"></typeparam>
 /// <typeparam name="TQueryResponse"></typeparam>
 public interface
-    ITenantSingleProjectionQuery<TSingleProjectionPayload, in TQueryParameter, out TQueryResponse> : ISingleProjectionQuery<TSingleProjectionPayload,
-        TQueryParameter, TQueryResponse> where TSingleProjectionPayload : ISingleProjectionPayloadCommon
+    ITenantSingleProjectionQuery<TSingleProjectionPayload, in TQueryParameter, out TQueryResponse> :
+    ISingleProjectionQuery<
+        TSingleProjectionPayload, TQueryParameter, TQueryResponse>
+    where TSingleProjectionPayload : ISingleProjectionPayloadCommon
     where TQueryParameter : ITenantQueryParameter<TQueryResponse>
     where TQueryResponse : IQueryResponse;

@@ -14,7 +14,8 @@ namespace Sekiban.Core.Command;
 ///     Application Developer does not need to implement this interface
 /// </summary>
 public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> : ICommandContext<TAggregatePayload>
-    where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload> where TCommand : ICommand<TAggregatePayload>
+    where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>
+    where TCommand : ICommand<TAggregatePayload>
 {
     private readonly IAggregateLoader _aggregateLoader;
     private readonly bool _checkVersion;
@@ -23,19 +24,24 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> : IComman
     private Aggregate<TAggregatePayload>? _aggregate;
     private string _rootPartitionKey = string.Empty;
 
-    public CommandHandlerAdapter(IAggregateLoader aggregateLoader, IServiceProvider serviceProvider, bool checkVersion = true)
+    public CommandHandlerAdapter(
+        IAggregateLoader aggregateLoader,
+        IServiceProvider serviceProvider,
+        bool checkVersion = true)
     {
         _aggregateLoader = aggregateLoader;
         _serviceProvider = serviceProvider;
         _checkVersion = checkVersion;
     }
     public AggregateState<TAggregatePayload> GetState() => GetAggregateState();
-    public ResultBox<T1> GetRequiredService<T1>() where T1 : class => ResultBox.WrapTry(() => _serviceProvider.GetRequiredService<T1>());
+    public ResultBox<T1> GetRequiredService<T1>() where T1 : class =>
+        ResultBox.WrapTry(() => _serviceProvider.GetRequiredService<T1>());
 
     public ResultBox<TwoValues<T1, T2>> GetRequiredService<T1, T2>() where T1 : class where T2 : class =>
         GetRequiredService<T1>().Combine(ResultBox.WrapTry(() => _serviceProvider.GetRequiredService<T2>()));
 
-    public ResultBox<ThreeValues<T1, T2, T3>> GetRequiredService<T1, T2, T3>() where T1 : class where T2 : class where T3 : class =>
+    public ResultBox<ThreeValues<T1, T2, T3>> GetRequiredService<T1, T2, T3>()
+        where T1 : class where T2 : class where T3 : class =>
         GetRequiredService<T1, T2>().Combine(ResultBox.WrapTry(() => _serviceProvider.GetRequiredService<T3>()));
 
     public ResultBox<FourValues<T1, T2, T3, T4>> GetRequiredService<T1, T2, T3, T4>()
@@ -45,47 +51,77 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> : IComman
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
-        SingleProjectionRetrievalOptions? retrievalOptions = null) where TAnotherAggregatePayload : IAggregatePayloadCommon =>
+        SingleProjectionRetrievalOptions? retrievalOptions = null)
+        where TAnotherAggregatePayload : IAggregatePayloadCommon =>
         GetRequiredService<IAggregateLoader>()
-            .Conveyor(executor => executor.AsDefaultStateWithResultAsync<TAnotherAggregatePayload>(aggregateId, rootPartitionKey, toVersion));
-    public Task<ResultBox<AggregateState<TAnotherAggregatePayload>>> GetAggregateStateFromInitial<TAnotherAggregatePayload>(
-        Guid aggregateId,
-        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
-        int? toVersion = null) where TAnotherAggregatePayload : IAggregatePayloadCommon =>
+            .Conveyor(
+                executor => executor.AsDefaultStateWithResultAsync<TAnotherAggregatePayload>(
+                    aggregateId,
+                    rootPartitionKey,
+                    toVersion));
+    public Task<ResultBox<AggregateState<TAnotherAggregatePayload>>>
+        GetAggregateStateFromInitial<TAnotherAggregatePayload>(
+            Guid aggregateId,
+            string rootPartitionKey = IDocument.DefaultRootPartitionKey,
+            int? toVersion = null) where TAnotherAggregatePayload : IAggregatePayloadCommon =>
         GetRequiredService<IAggregateLoader>()
-            .Conveyor(loader => loader.AsDefaultStateFromInitialWithResultAsync<TAnotherAggregatePayload>(aggregateId, rootPartitionKey, toVersion));
-    public Task<ResultBox<SingleProjectionState<TSingleProjectionPayload>>> GetSingleProjectionStateFromInitialAsync<TSingleProjectionPayload>(
-        Guid aggregateId,
-        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
-        int? toVersion = null) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon =>
+            .Conveyor(
+                loader => loader.AsDefaultStateFromInitialWithResultAsync<TAnotherAggregatePayload>(
+                    aggregateId,
+                    rootPartitionKey,
+                    toVersion));
+    public Task<ResultBox<SingleProjectionState<TSingleProjectionPayload>>>
+        GetSingleProjectionStateFromInitialAsync<TSingleProjectionPayload>(
+            Guid aggregateId,
+            string rootPartitionKey = IDocument.DefaultRootPartitionKey,
+            int? toVersion = null) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon =>
         GetRequiredService<IAggregateLoader>()
             .Conveyor(
                 loader => ResultBox.CheckNullWrapTry(
-                    () => loader.AsSingleProjectionStateFromInitialAsync<TSingleProjectionPayload>(aggregateId, rootPartitionKey, toVersion)));
-    public Task<ResultBox<SingleProjectionState<TSingleProjectionPayload>>> GetSingleProjectionStateAsync<TSingleProjectionPayload>(
-        Guid aggregateId,
-        string rootPartitionKey = IDocument.DefaultRootPartitionKey,
-        int? toVersion = null,
-        SingleProjectionRetrievalOptions? retrievalOptions = null) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon =>
+                    () => loader.AsSingleProjectionStateFromInitialAsync<TSingleProjectionPayload>(
+                        aggregateId,
+                        rootPartitionKey,
+                        toVersion)));
+    public Task<ResultBox<SingleProjectionState<TSingleProjectionPayload>>>
+        GetSingleProjectionStateAsync<TSingleProjectionPayload>(
+            Guid aggregateId,
+            string rootPartitionKey = IDocument.DefaultRootPartitionKey,
+            int? toVersion = null,
+            SingleProjectionRetrievalOptions? retrievalOptions = null)
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon =>
         GetRequiredService<IAggregateLoader>()
             .Conveyor(
                 loader => ResultBox.CheckNullWrapTry(
-                    () => loader.AsSingleProjectionStateAsync<TSingleProjectionPayload>(aggregateId, rootPartitionKey, toVersion)));
-    public Task<ResultBox<TOutput>> ExecuteQueryAsync<TOutput>(INextQueryCommon<TOutput> query) where TOutput : notnull =>
+                    () => loader.AsSingleProjectionStateAsync<TSingleProjectionPayload>(
+                        aggregateId,
+                        rootPartitionKey,
+                        toVersion)));
+    public Task<ResultBox<TOutput>> ExecuteQueryAsync<TOutput>(INextQueryCommon<TOutput> query)
+        where TOutput : notnull =>
         GetRequiredService<IQueryExecutor>().Conveyor(executor => executor.ExecuteAsync(query));
-    public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteQueryAsync<TOutput>(INextListQueryCommon<TOutput> query) where TOutput : notnull =>
+    public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteQueryAsync<TOutput>(INextListQueryCommon<TOutput> query)
+        where TOutput : notnull =>
         GetRequiredService<IQueryExecutor>().Conveyor(executor => executor.ExecuteAsync(query));
-    public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteQueryAsync<TOutput>(IListQueryInput<TOutput> param) where TOutput : IQueryResponse =>
+    public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteQueryAsync<TOutput>(IListQueryInput<TOutput> param)
+        where TOutput : IQueryResponse =>
         GetRequiredService<IQueryExecutor>().Conveyor(executor => executor.ExecuteWithResultAsync(param));
-    public Task<ResultBox<TOutput>> ExecuteQueryAsync<TOutput>(IQueryInput<TOutput> param) where TOutput : IQueryResponse =>
+    public Task<ResultBox<TOutput>> ExecuteQueryAsync<TOutput>(IQueryInput<TOutput> param)
+        where TOutput : IQueryResponse =>
         GetRequiredService<IQueryExecutor>().Conveyor(executor => executor.ExecuteWithResultAsync(param));
 
     public ResultBox<UnitValue> AppendEvent(IEventPayloadApplicableTo<TAggregatePayload> eventPayload) =>
-        ResultBox.Start.Conveyor(_ => _aggregate is not null ? ResultBox.FromValue(_aggregate) : new SekibanCommandHandlerAggregateNullException())
+        ResultBox
+            .Start
+            .Conveyor(
+                _ => _aggregate is not null
+                    ? ResultBox.FromValue(_aggregate)
+                    : new SekibanCommandHandlerAggregateNullException())
             .Scan(aggregate => _events.Add(EventHelper.HandleEvent(aggregate, eventPayload, _rootPartitionKey)))
             .Remap(_ => UnitValue.None);
     public ResultBox<UnitValue> AppendEvents(params IEventPayloadApplicableTo<TAggregatePayload>[] eventPayloads) =>
-        ResultBox.FromValue(eventPayloads.ToList()).ReduceEach(UnitValue.Unit, (nextEventPayload, _) => AppendEvent(nextEventPayload));
+        ResultBox
+            .FromValue(eventPayloads.ToList())
+            .ReduceEach(UnitValue.Unit, (nextEventPayload, _) => AppendEvent(nextEventPayload));
 
     /// <summary>
     ///     Common Command handler, it is used for test and production code.
@@ -116,7 +152,9 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> : IComman
         }
 
         // Validate AddAggregate Version
-        if (_checkVersion && command is IVersionValidationCommandCommon validationCommand && validationCommand.ReferenceVersion != _aggregate.Version)
+        if (_checkVersion &&
+            command is IVersionValidationCommandCommon validationCommand &&
+            validationCommand.ReferenceVersion != _aggregate.Version)
         {
             throw new SekibanCommandInconsistentVersionException(
                 _aggregate.AggregateId,

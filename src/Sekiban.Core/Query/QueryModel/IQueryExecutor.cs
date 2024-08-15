@@ -8,7 +8,8 @@ namespace Sekiban.Core.Query.QueryModel;
 public interface IQueryExecutor
 {
     public Task<ResultBox<TOutput>> ExecuteAsync<TOutput>(INextQueryCommon<TOutput> query) where TOutput : notnull;
-    public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteAsync<TOutput>(INextListQueryCommon<TOutput> query) where TOutput : notnull;
+    public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteAsync<TOutput>(INextListQueryCommon<TOutput> query)
+        where TOutput : notnull;
 
     /// <summary>
     ///     Execute Query (List Query).
@@ -17,7 +18,8 @@ public interface IQueryExecutor
     /// <param name="param"></param>
     /// <typeparam name="TOutput"></typeparam>
     /// <returns></returns>
-    public Task<ListQueryResult<TOutput>> ExecuteAsync<TOutput>(IListQueryInput<TOutput> param) where TOutput : IQueryResponse;
+    public Task<ListQueryResult<TOutput>> ExecuteAsync<TOutput>(IListQueryInput<TOutput> param)
+        where TOutput : IQueryResponse;
 
     /// <summary>
     ///     Execute Query (List Query) with ResultBox.
@@ -27,8 +29,8 @@ public interface IQueryExecutor
     /// <param name="param"></param>
     /// <typeparam name="TOutput"></typeparam>
     /// <returns></returns>
-    public async Task<ResultBox<ListQueryResult<TOutput>>> ExecuteWithResultAsync<TOutput>(IListQueryInput<TOutput> param)
-        where TOutput : IQueryResponse =>
+    public async Task<ResultBox<ListQueryResult<TOutput>>> ExecuteWithResultAsync<TOutput>(
+        IListQueryInput<TOutput> param) where TOutput : IQueryResponse =>
         await ResultBox.WrapTry(async () => await ExecuteAsync(param));
 
     /// <summary>
@@ -48,6 +50,7 @@ public interface IQueryExecutor
     /// <param name="param"></param>
     /// <typeparam name="TOutput"></typeparam>
     /// <returns></returns>
-    public async Task<ResultBox<TOutput>> ExecuteWithResultAsync<TOutput>(IQueryInput<TOutput> param) where TOutput : IQueryResponse =>
+    public async Task<ResultBox<TOutput>> ExecuteWithResultAsync<TOutput>(IQueryInput<TOutput> param)
+        where TOutput : IQueryResponse =>
         await ResultBox.WrapTry(async () => await ExecuteAsync(param));
 }

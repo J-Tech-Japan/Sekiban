@@ -9,5 +9,6 @@ namespace Sekiban.Core.Query.SingleProjections;
 /// <typeparam name="TSingleProjectionPayload">Implementation class itself</typeparam>
 public interface
     IDeletableSingleProjectionPayload<TAggregatePayload, TSingleProjectionPayload> :
-        ISingleProjectionPayload<TAggregatePayload, TSingleProjectionPayload>, IDeletable where TAggregatePayload : IAggregatePayloadCommon
+    ISingleProjectionPayload<TAggregatePayload, TSingleProjectionPayload>,
+    IDeletable where TAggregatePayload : IAggregatePayloadCommon
     where TSingleProjectionPayload : ISingleProjectionPayloadCommon;

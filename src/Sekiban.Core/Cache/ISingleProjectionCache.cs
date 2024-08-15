@@ -18,7 +18,9 @@ public interface ISingleProjectionCache
     /// <param name="container"></param>
     /// <typeparam name="TAggregate"></typeparam>
     /// <typeparam name="TState"></typeparam>
-    public void SetContainer<TAggregate, TState>(Guid aggregateId, SingleMemoryCacheProjectionContainer<TAggregate, TState> container)
+    public void SetContainer<TAggregate, TState>(
+        Guid aggregateId,
+        SingleMemoryCacheProjectionContainer<TAggregate, TState> container)
         where TAggregate : IAggregateCommon, ISingleProjection where TState : IAggregateStateCommon;
 
     /// <summary>

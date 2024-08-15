@@ -11,9 +11,12 @@ public record MultiProjectionRetrievalOptions
     public bool RetrieveNewEvents { get; init; } = true;
     public static MultiProjectionRetrievalOptions Default => new();
 
-    public static MultiProjectionRetrievalOptions WithPostponeFetchSeconds(int seconds) => new() { PostponeEventFetchBySeconds = seconds };
-    public static MultiProjectionRetrievalOptions WithPostponeFetchMinutes(int minutes) => new() { PostponeEventFetchBySeconds = minutes * 60 };
-    public static MultiProjectionRetrievalOptions WithPostponeFetchHours(int hours) => new() { PostponeEventFetchBySeconds = hours * 3600 };
+    public static MultiProjectionRetrievalOptions WithPostponeFetchSeconds(int seconds) =>
+        new() { PostponeEventFetchBySeconds = seconds };
+    public static MultiProjectionRetrievalOptions WithPostponeFetchMinutes(int minutes) =>
+        new() { PostponeEventFetchBySeconds = minutes * 60 };
+    public static MultiProjectionRetrievalOptions WithPostponeFetchHours(int hours) =>
+        new() { PostponeEventFetchBySeconds = hours * 3600 };
     public bool ShouldPostponeFetch(DateTime? cachedAt, DateTime? currentUtc)
     {
         if (cachedAt is null || currentUtc is null || PostponeEventFetchBySeconds is null)
@@ -23,17 +26,25 @@ public record MultiProjectionRetrievalOptions
         var cachedAtPlusPostponedTime = cachedAt.Value.AddSeconds(PostponeEventFetchBySeconds.Value);
         return cachedAtPlusPostponedTime > currentUtc;
     }
-    public static MultiProjectionRetrievalOptions? IncludeResultFromCommandResponse(CommandExecutorResponse commandResponse) =>
+    public static MultiProjectionRetrievalOptions? IncludeResultFromCommandResponse(
+        CommandExecutorResponse commandResponse) =>
         commandResponse.LastSortableUniqueId is null
             ? null
-            : new MultiProjectionRetrievalOptions { IncludesSortableUniqueIdValue = commandResponse.LastSortableUniqueId };
-    public static MultiProjectionRetrievalOptions? IncludeResultFromCommandResponse(CommandExecutorResponseWithEvents commandResponse) =>
+            : new MultiProjectionRetrievalOptions
+                { IncludesSortableUniqueIdValue = commandResponse.LastSortableUniqueId };
+    public static MultiProjectionRetrievalOptions? IncludeResultFromCommandResponse(
+        CommandExecutorResponseWithEvents commandResponse) =>
         commandResponse.LastSortableUniqueId is null
             ? null
-            : new MultiProjectionRetrievalOptions { IncludesSortableUniqueIdValue = commandResponse.LastSortableUniqueId };
+            : new MultiProjectionRetrievalOptions
+                { IncludesSortableUniqueIdValue = commandResponse.LastSortableUniqueId };
 
     public static MultiProjectionRetrievalOptions? GetFromQuery(IQueryParameterCommon query) =>
-        query is IQueryParameterMultiProjectionOptionSettable settable ? settable.MultiProjectionRetrievalOptions : null;
+        query is IQueryParameterMultiProjectionOptionSettable settable
+            ? settable.MultiProjectionRetrievalOptions
+            : null;
     public static MultiProjectionRetrievalOptions? GetFromQuery(INextQueryGeneral query) =>
-        query is IQueryParameterMultiProjectionOptionSettable settable ? settable.MultiProjectionRetrievalOptions : null;
+        query is IQueryParameterMultiProjectionOptionSettable settable
+            ? settable.MultiProjectionRetrievalOptions
+            : null;
 }

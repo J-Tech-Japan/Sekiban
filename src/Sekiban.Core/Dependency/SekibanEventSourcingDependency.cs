@@ -22,7 +22,9 @@ public static class SekibanEventSourcingDependency
     /// <param name="builder"></param>
     /// <param name="dependencyDefinition"></param>
     /// <returns></returns>
-    public static WebApplicationBuilder AddSekibanWithDependency(this WebApplicationBuilder builder, IDependencyDefinition dependencyDefinition)
+    public static WebApplicationBuilder AddSekibanWithDependency(
+        this WebApplicationBuilder builder,
+        IDependencyDefinition dependencyDefinition)
     {
         builder.Services.AddSekibanWithDependency(dependencyDefinition, builder.Configuration);
         return builder;
@@ -61,8 +63,9 @@ public static class SekibanEventSourcingDependency
     /// <param name="services"></param>
     /// <param name="configuration"></param>
     /// <returns></returns>
-    public static IServiceCollection AddSekibanWithDependency<TDependency>(this IServiceCollection services, IConfiguration configuration)
-        where TDependency : IDependencyDefinition, new()
+    public static IServiceCollection AddSekibanWithDependency<TDependency>(
+        this IServiceCollection services,
+        IConfiguration configuration) where TDependency : IDependencyDefinition, new()
     {
         var dependencyDefinition = new TDependency();
         var settings = SekibanSettings.FromConfiguration(configuration);
@@ -110,7 +113,8 @@ public static class SekibanEventSourcingDependency
         IDependencyDefinition dependencyDefinition,
         SekibanSettings settings,
         ISekibanDateProducer? sekibanDateProducer = null,
-        SekibanCoreServiceExtensions.MultiProjectionType multiProjectionType = SekibanCoreServiceExtensions.MultiProjectionType.MemoryCache)
+        SekibanCoreServiceExtensions.MultiProjectionType multiProjectionType
+            = SekibanCoreServiceExtensions.MultiProjectionType.MemoryCache)
     {
         Register(services, dependencyDefinition, settings, sekibanDateProducer, multiProjectionType);
         return services;
@@ -137,8 +141,10 @@ public static class SekibanEventSourcingDependency
     public static IEnumerable<(Type serviceType, Type? implementationType)> GetDependencies()
     {
         // AddAggregate: RecentInMemoryActivity
-        yield return (typeof(ICommandHandlerCommon<SnapshotManager, CreateSnapshotManager>), typeof(CreateSnapshotManager.Handler));
-        yield return (typeof(ICommandHandlerCommon<SnapshotManager, ReportVersionToSnapshotManger>), typeof(ReportVersionToSnapshotManger.Handler));
+        yield return (typeof(ICommandHandlerCommon<SnapshotManager, CreateSnapshotManager>),
+            typeof(CreateSnapshotManager.Handler));
+        yield return (typeof(ICommandHandlerCommon<SnapshotManager, ReportVersionToSnapshotManger>),
+            typeof(ReportVersionToSnapshotManger.Handler));
     }
 
     public static void Register(
@@ -146,10 +152,14 @@ public static class SekibanEventSourcingDependency
         IDependencyDefinition dependencyDefinition,
         SekibanSettings settings,
         ISekibanDateProducer? sekibanDateProducer = null,
-        SekibanCoreServiceExtensions.MultiProjectionType multiProjectionType = SekibanCoreServiceExtensions.MultiProjectionType.MemoryCache)
+        SekibanCoreServiceExtensions.MultiProjectionType multiProjectionType
+            = SekibanCoreServiceExtensions.MultiProjectionType.MemoryCache)
     {
         // MediatR
-        services.AddMediatR(new MediatRServiceConfiguration().RegisterServicesFromAssemblies(Assembly.GetExecutingAssembly(), GetAssembly()));
+        services.AddMediatR(
+            new MediatRServiceConfiguration().RegisterServicesFromAssemblies(
+                Assembly.GetExecutingAssembly(),
+                GetAssembly()));
         // Sekiban Event Sourcing
         services.AddSekibanCore(settings, sekibanDateProducer ?? new SekibanDateProducer(), multiProjectionType);
         services.AddSekibanHTTPUser();
@@ -199,7 +209,10 @@ public static class SekibanEventSourcingDependency
         ISekibanDateProducer? sekibanDateProducer = null)
     {
         // MediatR
-        services.AddMediatR(new MediatRServiceConfiguration().RegisterServicesFromAssemblies(Assembly.GetExecutingAssembly(), GetAssembly()));
+        services.AddMediatR(
+            new MediatRServiceConfiguration().RegisterServicesFromAssemblies(
+                Assembly.GetExecutingAssembly(),
+                GetAssembly()));
 
         // Sekiban Event Sourcing
         services.AddSekibanCoreInMemory(sekibanDateProducer);
@@ -278,7 +291,9 @@ public static class SekibanEventSourcingDependency
         }
     }
 
-    public static void AddTransient(this IServiceCollection services, IEnumerable<(Type serviceType, Type? implementationType)> dependencies)
+    public static void AddTransient(
+        this IServiceCollection services,
+        IEnumerable<(Type serviceType, Type? implementationType)> dependencies)
     {
         foreach (var (serviceType, implementationType) in dependencies)
         {

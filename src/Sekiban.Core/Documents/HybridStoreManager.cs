@@ -28,17 +28,11 @@ public class HybridStoreManager
         return true;
     }
 
-    public string? SortableUniqueIdForPartitionKey(string partitionKey)
-    {
-        return Enabled && HybridPartitionKeys.TryGetValue(partitionKey, out var value)
-            ? value.SortableUniqueId
-            : null;
-    }
+    public string? SortableUniqueIdForPartitionKey(string partitionKey) =>
+        Enabled && HybridPartitionKeys.TryGetValue(partitionKey, out var value) ? value.SortableUniqueId : null;
 
-    public bool FromInitialForPartitionKey(string partitionKey)
-    {
-        return Enabled && HybridPartitionKeys.TryGetValue(partitionKey, out var value) && value.FromInitial;
-    }
+    public bool FromInitialForPartitionKey(string partitionKey) =>
+        Enabled && HybridPartitionKeys.TryGetValue(partitionKey, out var value) && value.FromInitial;
 
     private record HybridStatus(bool FromInitial, string SortableUniqueId);
 }

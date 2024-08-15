@@ -7,7 +7,9 @@ namespace Sekiban.Core.Exceptions;
 /// </summary>
 // ReSharper disable once ParameterTypeCanBeEnumerable.Local
 public class SekibanValidationErrorsException(List<SekibanValidationParameterError> errors) : Exception(
-        errors.Select(e => e.PropertyName + ":" + e.ErrorMessages.Aggregate("", (s, s1) => s + s1)).Aggregate("", (s, s1) => s + "\n" + s1)),
+        errors
+            .Select(e => e.PropertyName + ":" + e.ErrorMessages.Aggregate("", (s, s1) => s + s1))
+            .Aggregate("", (s, s1) => s + "\n" + s1)),
     ISekibanException
 {
     public List<SekibanValidationParameterError> Errors => errors;

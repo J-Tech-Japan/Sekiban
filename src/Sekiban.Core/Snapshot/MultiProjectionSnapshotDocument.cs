@@ -22,7 +22,11 @@ public record MultiProjectionSnapshotDocument : IDocument
     {
     }
 
-    public MultiProjectionSnapshotDocument(Type projectionType, Guid id, IMultiProjectionCommon projection, string rootPartitionKey)
+    public MultiProjectionSnapshotDocument(
+        Type projectionType,
+        Guid id,
+        IMultiProjectionCommon projection,
+        string rootPartitionKey)
     {
         Id = id;
         RootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions.SequenceEqual(rootPartitionKey)
@@ -51,7 +55,8 @@ public record MultiProjectionSnapshotDocument : IDocument
     public SortableUniqueIdValue GetSortableUniqueId() => SortableUniqueId;
     public static string DocumentTypeNameFromProjectionType(Type projectionType)
     {
-        if (projectionType.IsGenericType && projectionType.GetGenericTypeDefinition() == typeof(SingleProjectionListState<>))
+        if (projectionType.IsGenericType &&
+            projectionType.GetGenericTypeDefinition() == typeof(SingleProjectionListState<>))
         {
             var stateType = projectionType.GenericTypeArguments[0];
             if (stateType.IsGenericType)

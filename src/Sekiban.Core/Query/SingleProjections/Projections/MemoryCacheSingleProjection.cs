@@ -26,19 +26,26 @@ public class MemoryCacheSingleProjection(
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
         SingleProjectionRetrievalOptions? retrievalOptions = null)
-        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<TState>
+        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection,
+        ISingleProjectionStateConvertible<TState>
         where TState : IAggregateStateCommon
         where TProjector : ISingleProjector<TProjection>, new()
     {
         var savedContainer = singleProjectionCache.GetContainer<TProjection, TState>(aggregateId);
         if (savedContainer == null)
         {
-            return await GetAggregateWithoutCacheAsync<TProjection, TState, TProjector>(aggregateId, rootPartitionKey, toVersion);
+            return await GetAggregateWithoutCacheAsync<TProjection, TState, TProjector>(
+                aggregateId,
+                rootPartitionKey,
+                toVersion);
         }
         var projector = new TProjector();
         if (savedContainer.SafeState is null && savedContainer.SafeSortableUniqueId?.Value is null)
         {
-            return await GetAggregateWithoutCacheAsync<TProjection, TState, TProjector>(aggregateId, rootPartitionKey, toVersion);
+            return await GetAggregateWithoutCacheAsync<TProjection, TState, TProjector>(
+                aggregateId,
+                rootPartitionKey,
+                toVersion);
         }
         var aggregate = projector.CreateInitialAggregate(aggregateId);
         if (savedContainer.SafeState is not null && aggregate.CanApplySnapshot(savedContainer.SafeState))
@@ -80,7 +87,10 @@ public class MemoryCacheSingleProjection(
             await documentRepository.GetAllEventsForAggregateIdAsync(
                 aggregateId,
                 projector.GetOriginalAggregatePayloadType(),
-                PartitionKeyGenerator.ForEvent(aggregateId, projector.GetOriginalAggregatePayloadType(), rootPartitionKey),
+                PartitionKeyGenerator.ForEvent(
+                    aggregateId,
+                    projector.GetOriginalAggregatePayloadType(),
+                    rootPartitionKey),
                 savedContainer.SafeSortableUniqueId?.Value,
                 rootPartitionKey,
                 events =>
@@ -121,7 +131,10 @@ public class MemoryCacheSingleProjection(
         }
         catch (SekibanEventOrderMixedUpException)
         {
-            return await GetAggregateWithoutCacheAsync<TProjection, TState, TProjector>(aggregateId, rootPartitionKey, toVersion);
+            return await GetAggregateWithoutCacheAsync<TProjection, TState, TProjector>(
+                aggregateId,
+                rootPartitionKey,
+                toVersion);
         }
         if (aggregate.Version == 0)
         {
@@ -131,7 +144,8 @@ public class MemoryCacheSingleProjection(
         {
             throw new SekibanVersionNotReachToSpecificVersion();
         }
-        if (aggregate.IsAggregateType() && !aggregate.GetPayloadTypeIs(aggregate.GetAggregatePayloadTypeFromAggregate()))
+        if (aggregate.IsAggregateType() &&
+            !aggregate.GetPayloadTypeIs(aggregate.GetAggregatePayloadTypeFromAggregate()))
         {
             return aggregate;
         }
@@ -140,7 +154,10 @@ public class MemoryCacheSingleProjection(
             container.SafeSortableUniqueId == null &&
             container.LastSortableUniqueId?.IsEarlierThan(SortableUniqueIdValue.GetSafeIdFromUtc()) == true)
         {
-            container = container with { SafeState = container.State, SafeSortableUniqueId = container.LastSortableUniqueId };
+            container = container with
+            {
+                SafeState = container.State, SafeSortableUniqueId = container.LastSortableUniqueId
+            };
         }
 
         if (container.SafeState is not null)
@@ -150,9 +167,12 @@ public class MemoryCacheSingleProjection(
         return aggregate;
     }
 
-    private async Task<TProjection?>
-        GetAggregateWithoutCacheAsync<TProjection, TState, TProjector>(Guid aggregateId, string rootPartitionKey, int? toVersion = null)
-        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<TState>
+    private async Task<TProjection?> GetAggregateWithoutCacheAsync<TProjection, TState, TProjector>(
+        Guid aggregateId,
+        string rootPartitionKey,
+        int? toVersion = null)
+        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection,
+        ISingleProjectionStateConvertible<TState>
         where TState : IAggregateStateCommon
         where TProjector : ISingleProjector<TProjection>, new()
     {
@@ -173,7 +193,10 @@ public class MemoryCacheSingleProjection(
         }
         if (toVersion.HasValue && aggregate.Version >= toVersion.Value)
         {
-            return await GetAggregateFromInitialAsync<TProjection, TState, TProjector>(aggregateId, rootPartitionKey, toVersion.Value);
+            return await GetAggregateFromInitialAsync<TProjection, TState, TProjector>(
+                aggregateId,
+                rootPartitionKey,
+                toVersion.Value);
         }
 
         await documentRepository.GetAllEventsForAggregateIdAsync(
@@ -192,7 +215,9 @@ public class MemoryCacheSingleProjection(
                     {
                         throw new SekibanEventDuplicateException();
                     }
-                    if (container.LastSortableUniqueId == null && e.GetSortableUniqueId().IsEarlierThan(targetSafeId) && aggregate.Version > 0)
+                    if (container.LastSortableUniqueId == null &&
+                        e.GetSortableUniqueId().IsEarlierThan(targetSafeId) &&
+                        aggregate.Version > 0)
                     {
                         container = container with
                         {
@@ -223,7 +248,8 @@ public class MemoryCacheSingleProjection(
         {
             throw new SekibanVersionNotReachToSpecificVersion();
         }
-        if (aggregate.IsAggregateType() && !aggregate.GetPayloadTypeIs(aggregate.GetAggregatePayloadTypeFromAggregate()))
+        if (aggregate.IsAggregateType() &&
+            !aggregate.GetPayloadTypeIs(aggregate.GetAggregatePayloadTypeFromAggregate()))
         {
             return aggregate;
         }
@@ -232,7 +258,10 @@ public class MemoryCacheSingleProjection(
             container.SafeSortableUniqueId == null &&
             container.LastSortableUniqueId?.IsEarlierThan(SortableUniqueIdValue.GetSafeIdFromUtc()) == true)
         {
-            container = container with { SafeState = container.State, SafeSortableUniqueId = container.LastSortableUniqueId };
+            container = container with
+            {
+                SafeState = container.State, SafeSortableUniqueId = container.LastSortableUniqueId
+            };
         }
 
         if (container.SafeState is not null)
@@ -242,9 +271,12 @@ public class MemoryCacheSingleProjection(
         return aggregate;
     }
 
-    public async Task<TProjection?>
-        GetAggregateFromInitialAsync<TProjection, TState, TProjector>(Guid aggregateId, string rootPartitionKey, int? toVersion)
-        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<TState>
+    public async Task<TProjection?> GetAggregateFromInitialAsync<TProjection, TState, TProjector>(
+        Guid aggregateId,
+        string rootPartitionKey,
+        int? toVersion)
+        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection,
+        ISingleProjectionStateConvertible<TState>
         where TState : IAggregateStateCommon
         where TProjector : ISingleProjector<TProjection>, new()
     {
@@ -272,7 +304,9 @@ public class MemoryCacheSingleProjection(
                 var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
                 foreach (var e in events)
                 {
-                    if (container.LastSortableUniqueId == null && e.GetSortableUniqueId().IsEarlierThan(targetSafeId) && aggregate.Version > 0)
+                    if (container.LastSortableUniqueId == null &&
+                        e.GetSortableUniqueId().IsEarlierThan(targetSafeId) &&
+                        aggregate.Version > 0)
                     {
                         container = container with
                         {
@@ -306,7 +340,10 @@ public class MemoryCacheSingleProjection(
             container.SafeSortableUniqueId == null &&
             container.LastSortableUniqueId?.IsEarlierThan(SortableUniqueIdValue.GetSafeIdFromUtc()) == true)
         {
-            container = container with { SafeState = container.State, SafeSortableUniqueId = container.LastSortableUniqueId };
+            container = container with
+            {
+                SafeState = container.State, SafeSortableUniqueId = container.LastSortableUniqueId
+            };
         }
 
         if (container.SafeState is not null)

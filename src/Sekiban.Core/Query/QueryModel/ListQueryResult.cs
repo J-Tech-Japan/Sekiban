@@ -32,10 +32,10 @@ public record ListQueryResult<T>(
         unchecked
         {
             var hashCode = TotalCount.GetHashCode();
-            hashCode = (hashCode * 397) ^ TotalPages.GetHashCode();
-            hashCode = (hashCode * 397) ^ CurrentPage.GetHashCode();
-            hashCode = (hashCode * 397) ^ PageSize.GetHashCode();
-            hashCode = (hashCode * 397) ^ Items.GetHashCode();
+            hashCode = hashCode * 397 ^ TotalPages.GetHashCode();
+            hashCode = hashCode * 397 ^ CurrentPage.GetHashCode();
+            hashCode = hashCode * 397 ^ PageSize.GetHashCode();
+            hashCode = hashCode * 397 ^ Items.GetHashCode();
             return hashCode;
         }
     }

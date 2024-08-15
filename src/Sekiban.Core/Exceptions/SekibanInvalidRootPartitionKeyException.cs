@@ -5,7 +5,8 @@ namespace Sekiban.Core.Exceptions;
 /// </summary>
 public class SekibanInvalidRootPartitionKeyException : Exception, ISekibanException
 {
-    public SekibanInvalidRootPartitionKeyException(string rootPartitionKey) : base($"Invalid root partition key: {rootPartitionKey}")
+    public SekibanInvalidRootPartitionKeyException(string rootPartitionKey) : base(
+        $"Invalid root partition key: {rootPartitionKey}")
     {
     }
 }

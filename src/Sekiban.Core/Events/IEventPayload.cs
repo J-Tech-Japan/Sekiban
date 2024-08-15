@@ -7,7 +7,8 @@ namespace Sekiban.Core.Events;
 /// </summary>
 /// <typeparam name="TAggregatePayload"></typeparam>
 /// <typeparam name="TEventPayload"> Need to put Event Payload's own type.</typeparam>
-public interface IEventPayload<TAggregatePayload, TEventPayload> : IEventPayload<TAggregatePayload, TAggregatePayload, TEventPayload>
+public interface
+    IEventPayload<TAggregatePayload, TEventPayload> : IEventPayload<TAggregatePayload, TAggregatePayload, TEventPayload>
     where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>
     where TEventPayload : IEventPayload<TAggregatePayload, TAggregatePayload, TEventPayload>;
 /// <summary>
@@ -18,7 +19,9 @@ public interface IEventPayload<TAggregatePayload, TEventPayload> : IEventPayload
 /// <typeparam name="TAggregatePayloadIn"></typeparam>
 /// <typeparam name="TAggregatePayloadOut"></typeparam>
 /// <typeparam name="TEventPayload"> Need to put Event Payload's own type.</typeparam>
-public interface IEventPayload<TAggregatePayloadIn, TAggregatePayloadOut, TEventPayload> : IEventPayloadApplicableTo<TAggregatePayloadIn>
+public interface
+    IEventPayload<TAggregatePayloadIn, TAggregatePayloadOut, TEventPayload> : IEventPayloadApplicableTo<
+    TAggregatePayloadIn>
     where TAggregatePayloadIn : IAggregatePayloadCommon
     where TEventPayload : IEventPayload<TAggregatePayloadIn, TAggregatePayloadOut, TEventPayload>
     where TAggregatePayloadOut : IAggregatePayloadGeneratable<TAggregatePayloadOut>

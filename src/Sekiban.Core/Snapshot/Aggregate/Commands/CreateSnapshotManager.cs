@@ -12,7 +12,8 @@ public record CreateSnapshotManager : ICommand<SnapshotManager>
 {
     public Guid GetAggregateId() => SnapshotManager.SharedId;
 
-    public class Handler(ISekibanDateProducer sekibanDateProducer) : ICommandHandler<SnapshotManager, CreateSnapshotManager>
+    public class Handler(ISekibanDateProducer sekibanDateProducer)
+        : ICommandHandler<SnapshotManager, CreateSnapshotManager>
     {
         public IEnumerable<IEventPayloadApplicableTo<SnapshotManager>> HandleCommand(
             CreateSnapshotManager command,
@@ -25,7 +26,12 @@ public record CreateSnapshotManager : ICommand<SnapshotManager>
 public record CreateSnapshotManagerAsync : ICommandWithHandlerAsync<SnapshotManager, CreateSnapshotManagerAsync>
 {
     public Guid GetAggregateId() => SnapshotManager.SharedId;
-    public static Task<ResultBox<UnitValue>> HandleCommandAsync(CreateSnapshotManagerAsync command, ICommandContext<SnapshotManager> context) => 
-        context.GetRequiredService<ISekibanDateProducer>()
-            .Conveyor(sekibanDateProducer => context.AppendEvent( new SnapshotManagerCreated(sekibanDateProducer.UtcNow))).ToTask();
+    public static Task<ResultBox<UnitValue>> HandleCommandAsync(
+        CreateSnapshotManagerAsync command,
+        ICommandContext<SnapshotManager> context) =>
+        context
+            .GetRequiredService<ISekibanDateProducer>()
+            .Conveyor(
+                sekibanDateProducer => context.AppendEvent(new SnapshotManagerCreated(sekibanDateProducer.UtcNow)))
+            .ToTask();
 }

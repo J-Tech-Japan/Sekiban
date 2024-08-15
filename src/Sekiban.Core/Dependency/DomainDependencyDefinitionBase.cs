@@ -13,14 +13,16 @@ namespace Sekiban.Core.Dependency;
 public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
 {
     public bool ShouldAddExceptionFilter => true;
-    private ImmutableList<IAggregateDependencyDefinition> AggregateDefinitions { get; set; } = ImmutableList<IAggregateDependencyDefinition>.Empty;
+    private ImmutableList<IAggregateDependencyDefinition> AggregateDefinitions { get; set; }
+        = ImmutableList<IAggregateDependencyDefinition>.Empty;
 
     private ImmutableList<Type> MultiProjectionQueryTypes { get; set; } = ImmutableList<Type>.Empty;
     private ImmutableList<Type> MultiProjectionListQueryTypes { get; set; } = ImmutableList<Type>.Empty;
     private ImmutableList<Type> GeneralQueryTypes { get; set; } = ImmutableList<Type>.Empty;
     private ImmutableList<Type> GeneralListQueryTypes { get; set; } = ImmutableList<Type>.Empty;
     private ImmutableList<Assembly> Assemblies { get; set; } = ImmutableList<Assembly>.Empty;
-    private ImmutableList<Action<IServiceCollection>> ServiceActions { get; set; } = ImmutableList<Action<IServiceCollection>>.Empty;
+    private ImmutableList<Action<IServiceCollection>> ServiceActions { get; set; }
+        = ImmutableList<Action<IServiceCollection>>.Empty;
     public abstract Assembly GetExecutingAssembly();
 
     public IEnumerable<(Type serviceType, Type? implementationType)> GetCommandDependencies()
@@ -92,13 +94,15 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
         ServiceActions = ServiceActions.Add(serviceAction);
     }
 
-    public DomainDependencyDefinitionBase AddDependency<TDependency>() where TDependency : DomainDependencyDefinitionBase, new()
+    public DomainDependencyDefinitionBase AddDependency<TDependency>()
+        where TDependency : DomainDependencyDefinitionBase, new()
     {
         var toAdd = new TDependency();
         toAdd.Define();
         AggregateDefinitions = AggregateDefinitions.Concat(toAdd.AggregateDefinitions).ToImmutableList();
         MultiProjectionQueryTypes = MultiProjectionQueryTypes.Concat(toAdd.MultiProjectionQueryTypes).ToImmutableList();
-        MultiProjectionListQueryTypes = MultiProjectionListQueryTypes.Concat(toAdd.MultiProjectionListQueryTypes).ToImmutableList();
+        MultiProjectionListQueryTypes
+            = MultiProjectionListQueryTypes.Concat(toAdd.MultiProjectionListQueryTypes).ToImmutableList();
         Assemblies = Assemblies.Concat(toAdd.Assemblies).ToImmutableList();
         return this;
     }
@@ -118,7 +122,8 @@ public abstract class DomainDependencyDefinitionBase : IDependencyDefinition
         return AggregateDefinitions.SelectMany(s => s.AggregateSubtypes);
     }
 
-    protected AggregateDependencyDefinition<TAggregatePayload> AddAggregate<TAggregatePayload>() where TAggregatePayload : IAggregatePayloadCommon
+    protected AggregateDependencyDefinition<TAggregatePayload> AddAggregate<TAggregatePayload>()
+        where TAggregatePayload : IAggregatePayloadCommon
     {
         if (AggregateDefinitions.SingleOrDefault(s => s.AggregateType == typeof(TAggregatePayload)) is
             AggregateDependencyDefinition<TAggregatePayload> existing)

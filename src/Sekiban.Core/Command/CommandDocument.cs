@@ -33,7 +33,10 @@ public sealed record CommandDocument<TCommand> : Document, ICommandDocumentCommo
         string rootPartitionKey,
         List<CallHistory>? callHistories = null) : base(
         aggregateId,
-        PartitionKeyGenerator.ForCommand(aggregateId, aggregateType.GetBaseAggregatePayloadTypeFromAggregate(), rootPartitionKey),
+        PartitionKeyGenerator.ForCommand(
+            aggregateId,
+            aggregateType.GetBaseAggregatePayloadTypeFromAggregate(),
+            rootPartitionKey),
         DocumentType.Command,
         typeof(TCommand).Name,
         aggregateType.GetBaseAggregatePayloadTypeFromAggregate().Name,
@@ -55,7 +58,8 @@ public sealed record CommandDocument<TCommand> : Document, ICommandDocumentCommo
     /// </summary>
     public List<CallHistory> CallHistories { get; init; } = [];
     public ICommandCommon GetPayload() => Payload;
-    public TCommandPayload? GetPayload<TCommandPayload>() where TCommandPayload : class, ICommandCommon => Payload as TCommandPayload;
+    public TCommandPayload? GetPayload<TCommandPayload>() where TCommandPayload : class, ICommandCommon =>
+        Payload as TCommandPayload;
     /// <summary>
     ///     Get call histories includes itself.
     ///     This is used to create history next to this command.

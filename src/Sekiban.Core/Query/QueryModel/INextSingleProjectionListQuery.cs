@@ -5,7 +5,8 @@ namespace Sekiban.Core.Query.QueryModel;
 public interface
     INextSingleProjectionListQuery<TSingleProjectionPayloadCommon, TOutput> :
     INextSingleProjectionQueryCommon<TSingleProjectionPayloadCommon, TOutput>,
-    INextListQueryCommon<TOutput> where TOutput : notnull where TSingleProjectionPayloadCommon : ISingleProjectionPayloadCommon
+    INextListQueryCommon<TOutput> where TOutput : notnull
+    where TSingleProjectionPayloadCommon : ISingleProjectionPayloadCommon
 {
     public QueryListType QueryListType => QueryListType.ActiveOnly;
     public ResultBox<IEnumerable<TOutput>> HandleFilter(

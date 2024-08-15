@@ -36,7 +36,8 @@ public class NonBlockingEventSubscriber<TEventPayload, TEventSubscriber> : INoti
                 () =>
                 {
                     using var scope = _serviceProvider.CreateScope();
-                    var eventSubscriber = scope.ServiceProvider.GetService<IEventSubscriber<TEventPayload, TEventSubscriber>>();
+                    var eventSubscriber = scope.ServiceProvider
+                        .GetService<IEventSubscriber<TEventPayload, TEventSubscriber>>();
                     if (eventSubscriber is null) { return; }
                     eventSubscriber.HandleEventAsync(ev).Wait(cancellationToken);
                 }) { IsBackground = true };

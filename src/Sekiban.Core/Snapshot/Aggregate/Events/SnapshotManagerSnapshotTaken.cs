@@ -18,8 +18,14 @@ public record SnapshotManagerSnapshotTaken(
         payload with
         {
             Requests = payload.Requests.Remove(
-                SnapshotManager.SnapshotKey(ev.Payload.AggregateTypeName, ev.Payload.TargetAggregateId, ev.Payload.NextSnapshotVersion)),
+                SnapshotManager.SnapshotKey(
+                    ev.Payload.AggregateTypeName,
+                    ev.Payload.TargetAggregateId,
+                    ev.Payload.NextSnapshotVersion)),
             RequestTakens = payload.RequestTakens.Add(
-                SnapshotManager.SnapshotKey(ev.Payload.AggregateTypeName, ev.Payload.TargetAggregateId, ev.Payload.NextSnapshotVersion))
+                SnapshotManager.SnapshotKey(
+                    ev.Payload.AggregateTypeName,
+                    ev.Payload.TargetAggregateId,
+                    ev.Payload.NextSnapshotVersion))
         };
 }

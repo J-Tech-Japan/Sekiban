@@ -10,7 +10,8 @@ namespace Sekiban.Core.Query.MultiProjections;
 /// <typeparam name="TProjection"></typeparam>
 /// <typeparam name="TState"></typeparam>
 /// <typeparam name="TProjector"></typeparam>
-public class SingleProjectionListProjector<TProjection, TState, TProjector> : IMultiProjector<SingleProjectionListState<TState>>
+public class
+    SingleProjectionListProjector<TProjection, TState, TProjector> : IMultiProjector<SingleProjectionListState<TState>>
     where TProjection : IAggregateCommon, ISingleProjection, ISingleProjectionStateConvertible<TState>
     where TState : IAggregateStateCommon
     where TProjector : ISingleProjector<TProjection>, new()
@@ -25,7 +26,8 @@ public class SingleProjectionListProjector<TProjection, TState, TProjector> : IM
     {
         State = new SingleProjectionListState<TState> { List = List.Select(m => m.ToState()).ToList() };
     }
-    public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().IsLaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
+    public bool EventShouldBeApplied(IEvent ev) =>
+        ev.GetSortableUniqueId().IsLaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
 
     public void ApplyEvent(IEvent ev)
     {
@@ -64,7 +66,9 @@ public class SingleProjectionListProjector<TProjection, TState, TProjector> : IM
         LastSortableUniqueId = snapshot.LastSortableUniqueId;
         AppliedSnapshotVersion = snapshot.Version;
         State = snapshot.Payload;
-        List = State.List.Select(
+        List = State
+            .List
+            .Select(
                 m =>
                 {
                     var aggregate = _projector.CreateInitialAggregate(m.AggregateId);
@@ -74,7 +78,8 @@ public class SingleProjectionListProjector<TProjection, TState, TProjector> : IM
             .ToList();
     }
 
-    public IList<string> TargetAggregateNames() => new List<string> { _projector.GetOriginalAggregatePayloadType().Name };
+    public IList<string> TargetAggregateNames() =>
+        new List<string> { _projector.GetOriginalAggregatePayloadType().Name };
 
     public Guid LastEventId { get; private set; } = Guid.Empty;
     public string LastSortableUniqueId { get; private set; } = string.Empty;

@@ -49,7 +49,8 @@ public record SnapshotDocument : Document
 
     public IAggregateStateCommon? GetState() => Snapshot as IAggregateStateCommon;
 
-    public static TProjection? ToProjection<TProjection>(SekibanAggregateTypes sekibanAggregateTypes) where TProjection : IAggregateCommon
+    public static TProjection? ToProjection<TProjection>(SekibanAggregateTypes sekibanAggregateTypes)
+        where TProjection : IAggregateCommon
     {
         var projectionType = typeof(TProjection);
         if (!projectionType.IsGenericType) { return default; }
@@ -64,5 +65,6 @@ public record SnapshotDocument : Document
         return default;
     }
 
-    public string FilenameForSnapshot() => $"{DocumentTypeName}_{AggregateId}_{SavedVersion}_{PayloadVersionIdentifier}.json";
+    public string FilenameForSnapshot() =>
+        $"{DocumentTypeName}_{AggregateId}_{SavedVersion}_{PayloadVersionIdentifier}.json";
 }

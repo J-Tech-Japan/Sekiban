@@ -9,7 +9,8 @@ namespace Sekiban.Core.Query.MultiProjections;
 ///     General Multi Projection Payload's projector
 /// </summary>
 /// <typeparam name="TProjectionPayload"></typeparam>
-public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPayload> where TProjectionPayload : IMultiProjectionPayloadCommon
+public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPayload>
+    where TProjectionPayload : IMultiProjectionPayloadCommon
 {
     private MultiProjectionState<TProjectionPayload> state = new(
         GeneratePayload(),
@@ -34,7 +35,8 @@ public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPa
         state = state.ApplyEvent(ev);
     }
     public MultiProjectionState<TProjectionPayload> ToState() => state;
-    public bool EventShouldBeApplied(IEvent ev) => ev.GetSortableUniqueId().IsLaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
+    public bool EventShouldBeApplied(IEvent ev) =>
+        ev.GetSortableUniqueId().IsLaterThanOrEqual(new SortableUniqueIdValue(LastSortableUniqueId));
 
     public void ApplySnapshot(MultiProjectionState<TProjectionPayload> snapshot)
     {

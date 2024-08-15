@@ -7,5 +7,6 @@ namespace Sekiban.Core.Query;
 /// </summary>
 /// <param name="State"></param>
 /// <typeparam name="TSingleProjectionPayload"></typeparam>
-public record QuerySingleProjectionState<TSingleProjectionPayload>(SingleProjectionState<TSingleProjectionPayload> State) : IQueryResponse
-    where TSingleProjectionPayload : ISingleProjectionPayloadCommon;
+public record QuerySingleProjectionState<TSingleProjectionPayload>(
+    SingleProjectionState<TSingleProjectionPayload> State)
+    : IQueryResponse where TSingleProjectionPayload : ISingleProjectionPayloadCommon;

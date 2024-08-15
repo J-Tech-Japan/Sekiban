@@ -19,13 +19,15 @@ public static class MultiProjectionTypesExtensions
     /// </summary>
     /// <param name="type"></param>
     /// <returns></returns>
-    public static bool IsMultiProjectionType(this TypeInfo type) => type.IsClass && type.DoesInheritFromGenericType(typeof(MultiProjection<>));
+    public static bool IsMultiProjectionType(this TypeInfo type) =>
+        type.IsClass && type.DoesInheritFromGenericType(typeof(MultiProjection<>));
     /// <summary>
     ///     Check whether the given type is Multi Projection Payload Type or not.
     /// </summary>
     /// <param name="type"></param>
     /// <returns></returns>
-    public static bool IsMultiProjectionPayloadType(this Type type) => type.GetTypeInfo().IsMultiProjectionPayloadType();
+    public static bool IsMultiProjectionPayloadType(this Type type) =>
+        type.GetTypeInfo().IsMultiProjectionPayloadType();
     /// <summary>
     ///     Check whether the given type is Multi Projection Payload Type or not.
     /// </summary>
@@ -33,8 +35,12 @@ public static class MultiProjectionTypesExtensions
     /// <returns></returns>
     public static bool IsMultiProjectionPayloadType(this TypeInfo type)
     {
-        if (!type.DoesImplementingFromGenericInterfaceType(typeof(IMultiProjectionPayloadGeneratePayload<>))) { return false; }
-        var genericType = type.GetImplementingFromGenericInterfaceType(typeof(IMultiProjectionPayloadGeneratePayload<>));
+        if (!type.DoesImplementingFromGenericInterfaceType(typeof(IMultiProjectionPayloadGeneratePayload<>)))
+        {
+            return false;
+        }
+        var genericType
+            = type.GetImplementingFromGenericInterfaceType(typeof(IMultiProjectionPayloadGeneratePayload<>));
         // CreateInitialPayload type should be equal to the type of the payload.
         return genericType.GenericTypeArguments[0] == type;
     }
@@ -47,5 +53,6 @@ public static class MultiProjectionTypesExtensions
     public static Type GetMultiProjectionPayloadTypeFromMultiProjection(this Type projectionType) =>
         projectionType.IsMultiProjectionType()
             ? projectionType.GenericTypeArguments[0]
-            : throw new SekibanMultiProjectionPayloadNotExistsException(projectionType.FullName + " is not multi projection type");
+            : throw new SekibanMultiProjectionPayloadNotExistsException(
+                projectionType.FullName + " is not multi projection type");
 }

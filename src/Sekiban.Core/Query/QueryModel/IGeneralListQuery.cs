@@ -7,7 +7,8 @@ namespace Sekiban.Core.Query.QueryModel;
 /// </summary>
 /// <typeparam name="TQueryParameter"></typeparam>
 /// <typeparam name="TQueryResponse"></typeparam>
-public interface IGeneralListQuery<in TQueryParameter, TQueryResponse> : IListQueryHandlerCommon<TQueryParameter, TQueryResponse>
+public interface
+    IGeneralListQuery<in TQueryParameter, TQueryResponse> : IListQueryHandlerCommon<TQueryParameter, TQueryResponse>
     where TQueryParameter : IListQueryParameter<TQueryResponse> where TQueryResponse : IQueryResponse
 {
     /// <summary>

@@ -26,13 +26,15 @@ public class SnapshotGenerator(
 
     public async Task Generate<TEvent>(TEvent notification) where TEvent : IEvent
     {
-        var aggregateType = sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == notification.AggregateType);
+        var aggregateType
+            = sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == notification.AggregateType);
         if (aggregateType is null)
         {
             return;
         }
 
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType.Aggregate);
+        var aggregateContainerGroup
+            = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType.Aggregate);
 
         if (aggregateContainerGroup != AggregateContainerGroup.InMemory)
         {
@@ -56,16 +58,22 @@ public class SnapshotGenerator(
                         null));
                 if (snapshotManagerResponse.Events.Any(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken)))
                 {
-                    foreach (var taken in snapshotManagerResponse.Events.Where(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken))
+                    foreach (var taken in snapshotManagerResponse
+                        .Events
+                        .Where(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken))
                         .Select(m => (Event<SnapshotManagerSnapshotTaken>)m))
                     {
 
-                        dynamic? awaitable = aggregateLoader.GetType()
+                        dynamic? awaitable = aggregateLoader
+                            .GetType()
                             .GetMethod(nameof(aggregateLoader.AsDefaultStateAsync))
                             ?.MakeGenericMethod(aggregateType.Aggregate)
                             .Invoke(
                                 aggregateLoader,
-                                [notification.AggregateId, notification.RootPartitionKey, taken.Payload.NextSnapshotVersion, null]);
+                                [
+                                    notification.AggregateId, notification.RootPartitionKey,
+                                    taken.Payload.NextSnapshotVersion, null
+                                ]);
                         if (awaitable is null)
                         {
                             continue;
@@ -93,7 +101,9 @@ public class SnapshotGenerator(
                             continue;
                         }
 
-                        var snapshotDocument = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(aggregateToSnapshot);
+                        var snapshotDocument
+                            = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(
+                                aggregateToSnapshot);
                         // var snapshotDocument = new SnapshotDocument(
                         //     notification.AggregateId,
                         //     aggregateType.Aggregate,
@@ -122,20 +132,27 @@ public class SnapshotGenerator(
                         notification.AggregateId,
                         notification.Version,
                         null));
-                if (snapshotManagerResponseP.Events.All(m => m.DocumentTypeName != nameof(SnapshotManagerSnapshotTaken)))
+                if (snapshotManagerResponseP.Events.All(
+                    m => m.DocumentTypeName != nameof(SnapshotManagerSnapshotTaken)))
                 {
                     continue;
                 }
 
-                foreach (var taken in snapshotManagerResponseP.Events.Where(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken))
+                foreach (var taken in snapshotManagerResponseP
+                    .Events
+                    .Where(m => m.DocumentTypeName == nameof(SnapshotManagerSnapshotTaken))
                     .Select(m => (Event<SnapshotManagerSnapshotTaken>)m))
                 {
-                    dynamic? awaitable = aggregateLoader.GetType()
+                    dynamic? awaitable = aggregateLoader
+                        .GetType()
                         .GetMethod(nameof(aggregateLoader.AsSingleProjectionStateAsync))
                         ?.MakeGenericMethod(projection.SingleProjectionPayloadType)
                         .Invoke(
                             aggregateLoader,
-                            [notification.AggregateId, notification.RootPartitionKey, taken.Payload.NextSnapshotVersion, null]);
+                            [
+                                notification.AggregateId, notification.RootPartitionKey,
+                                taken.Payload.NextSnapshotVersion, null
+                            ]);
                     if (awaitable is null)
                     {
                         continue;

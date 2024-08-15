@@ -9,28 +9,35 @@ public class AggregateSettings : IAggregateSettings
 
     public bool ShouldTakeSnapshotForType(Type aggregatePayloadType)
     {
-        return Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == aggregatePayloadType.Name)?.MakeSnapshots ?? Helper.TakeSnapshotDefault;
+        return Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == aggregatePayloadType.Name)
+                ?.MakeSnapshots ??
+            Helper.TakeSnapshotDefault;
     }
 
     public bool CanUseHybrid(Type aggregatePayloadType)
     {
-        return Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == aggregatePayloadType.Name)?.UseHybrid ?? Helper.UseHybridDefault;
+        return Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == aggregatePayloadType.Name)?.UseHybrid ??
+            Helper.UseHybridDefault;
     }
 
     public int SnapshotFrequencyForType(Type aggregatePayloadType)
     {
-        return Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == aggregatePayloadType.Name)?.SnapshotFrequency ??
+        return Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == aggregatePayloadType.Name)
+                ?.SnapshotFrequency ??
             Helper.SnapshotFrequencyDefault;
     }
 
     public int SnapshotOffsetForType(Type aggregatePayloadType)
     {
-        return Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == aggregatePayloadType.Name)?.SnapshotOffset ??
+        return Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == aggregatePayloadType.Name)
+                ?.SnapshotOffset ??
             Helper.SnapshotOffsetDefault;
     }
 
     public bool UseUpdateMarkerForType(string aggregatePayloadTypeName)
     {
-        return Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == aggregatePayloadTypeName)?.UseUpdateMarker ?? Helper.UseUpdateMarker;
+        return Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == aggregatePayloadTypeName)
+                ?.UseUpdateMarker ??
+            Helper.UseUpdateMarker;
     }
 }

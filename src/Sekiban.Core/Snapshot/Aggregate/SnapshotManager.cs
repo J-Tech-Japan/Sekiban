@@ -11,15 +11,18 @@ namespace Sekiban.Core.Snapshot.Aggregate;
 /// <param name="RequestTakens"></param>
 /// <param name="CreatedAt"></param>
 [AggregateContainerGroup(AggregateContainerGroup.InMemory)]
-public record SnapshotManager
-    (ImmutableList<string> Requests, ImmutableList<string> RequestTakens, DateTime CreatedAt) : IAggregatePayload<SnapshotManager>
+public record SnapshotManager(ImmutableList<string> Requests, ImmutableList<string> RequestTakens, DateTime CreatedAt)
+    : IAggregatePayload<SnapshotManager>
 {
     internal const int SnapshotCount = 40;
     internal const int SnapshotTakeOffset = 15;
 
     public static Guid SharedId { get; } = Guid.NewGuid();
 
-    public SnapshotManager() : this(ImmutableList<string>.Empty, ImmutableList<string>.Empty, SekibanDateProducer.GetRegistered().UtcNow)
+    public SnapshotManager() : this(
+        ImmutableList<string>.Empty,
+        ImmutableList<string>.Empty,
+        SekibanDateProducer.GetRegistered().UtcNow)
     {
     }
     public static SnapshotManager CreateInitialPayload(SnapshotManager? _) =>

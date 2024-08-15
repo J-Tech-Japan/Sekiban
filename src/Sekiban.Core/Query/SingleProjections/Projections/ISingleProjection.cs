@@ -13,7 +13,8 @@ public interface ISingleProjection
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
         SingleProjectionRetrievalOptions? retrievalOptions = null)
-        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection, ISingleProjectionStateConvertible<TState>
+        where TProjection : IAggregateCommon, SingleProjections.ISingleProjection,
+        ISingleProjectionStateConvertible<TState>
         where TState : IAggregateStateCommon
         where TProjector : ISingleProjector<TProjection>, new();
 }

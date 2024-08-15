@@ -57,14 +57,16 @@ public record SortableUniqueIdValue(string Value)
     /// </summary>
     /// <returns></returns>
     public static string GetSafeIdFromUtc() =>
-        GetTickString(SekibanDateProducer.GetRegistered().UtcNow.AddMilliseconds(-SafeMilliseconds).Ticks) + GetIdString(Guid.Empty);
+        GetTickString(SekibanDateProducer.GetRegistered().UtcNow.AddMilliseconds(-SafeMilliseconds).Ticks) +
+        GetIdString(Guid.Empty);
 
     /// <summary>
     ///     Generate Sortable Unique Id from Current UTC.
     ///     UTC will be retrieve from <see cref="SekibanDateProducer" />
     /// </summary>
     /// <returns></returns>
-    public static string GetCurrentIdFromUtc() => GetTickString(SekibanDateProducer.GetRegistered().UtcNow.Ticks) + GetIdString(Guid.Empty);
+    public static string GetCurrentIdFromUtc() =>
+        GetTickString(SekibanDateProducer.GetRegistered().UtcNow.Ticks) + GetIdString(Guid.Empty);
 
     /// <summary>
     ///     Generate Safe Sortable Unique Id from Current UTC.
@@ -110,5 +112,6 @@ public record SortableUniqueIdValue(string Value)
     /// <returns></returns>
     public static string GetIdString(Guid id) => (Math.Abs(id.GetHashCode()) % IdModBase).ToString(IdFormatter);
 
-    public static SortableUniqueIdValue? NullableValue(string? value) => value != null ? new SortableUniqueIdValue(value) : null;
+    public static SortableUniqueIdValue? NullableValue(string? value) =>
+        value != null ? new SortableUniqueIdValue(value) : null;
 }

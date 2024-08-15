@@ -11,6 +11,7 @@ public class SekibanCommandNotRegisteredException : Exception, ISekibanException
     ///     Command that was not registered
     /// </summary>
     public string CommandName { get; set; }
-    public SekibanCommandNotRegisteredException(string commandName) : base($"{commandName} was not registered in Dependency Definition") =>
+    public SekibanCommandNotRegisteredException(string commandName) : base(
+        $"{commandName} was not registered in Dependency Definition") =>
         CommandName = commandName;
 }

@@ -15,18 +15,20 @@ public class MultiProjectionService : IMultiProjectionService
     public Task<MultiProjectionState<TProjectionPayload>> GetMultiProjectionAsync<TProjectionPayload>(
         string rootPartitionKey,
         MultiProjectionRetrievalOptions? retrievalOptions) where TProjectionPayload : IMultiProjectionPayloadCommon =>
-        multiProjection.GetMultiProjectionAsync<MultiProjection<TProjectionPayload>, TProjectionPayload>(rootPartitionKey, retrievalOptions);
+        multiProjection.GetMultiProjectionAsync<MultiProjection<TProjectionPayload>, TProjectionPayload>(
+            rootPartitionKey,
+            retrievalOptions);
 
-    public async Task<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>> GetAggregateListObject<TAggregatePayload>(
-        string rootPartitionKey,
-        MultiProjectionRetrievalOptions? retrievalOptions) where TAggregatePayload : IAggregatePayloadCommon
+    public async Task<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>>
+        GetAggregateListObject<TAggregatePayload>(
+            string rootPartitionKey,
+            MultiProjectionRetrievalOptions? retrievalOptions) where TAggregatePayload : IAggregatePayloadCommon
     {
         var list = await multiProjection
             .GetMultiProjectionAsync<
                 SingleProjectionListProjector<Aggregate<TAggregatePayload>, AggregateState<TAggregatePayload>,
-                    DefaultSingleProjector<TAggregatePayload>>, SingleProjectionListState<AggregateState<TAggregatePayload>>>(
-                rootPartitionKey,
-                retrievalOptions);
+                    DefaultSingleProjector<TAggregatePayload>>,
+                SingleProjectionListState<AggregateState<TAggregatePayload>>>(rootPartitionKey, retrievalOptions);
         return list;
     }
 
@@ -46,21 +48,27 @@ public class MultiProjectionService : IMultiProjectionService
     }
 
     public Task<MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>
-        GetSingleProjectionListObject<TSingleProjectionPayload>(string rootPartitionKey, MultiProjectionRetrievalOptions? retrievalOptions)
+        GetSingleProjectionListObject<TSingleProjectionPayload>(
+            string rootPartitionKey,
+            MultiProjectionRetrievalOptions? retrievalOptions)
         where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon =>
         multiProjection
             .GetMultiProjectionAsync<
-                SingleProjectionListProjector<SingleProjection<TSingleProjectionPayload>, SingleProjectionState<TSingleProjectionPayload>,
-                    SingleProjection<TSingleProjectionPayload>>, SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>(
+                SingleProjectionListProjector<SingleProjection<TSingleProjectionPayload>,
+                    SingleProjectionState<TSingleProjectionPayload>, SingleProjection<TSingleProjectionPayload>>,
+                SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>(
                 rootPartitionKey,
                 retrievalOptions);
 
-    public async Task<List<SingleProjectionState<TSingleProjectionPayload>>> GetSingleProjectionList<TSingleProjectionPayload>(
-        QueryListType queryListType = QueryListType.ActiveOnly,
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions,
-        MultiProjectionRetrievalOptions? retrievalOptions = null) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
+    public async Task<List<SingleProjectionState<TSingleProjectionPayload>>>
+        GetSingleProjectionList<TSingleProjectionPayload>(
+            QueryListType queryListType = QueryListType.ActiveOnly,
+            string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions,
+            MultiProjectionRetrievalOptions? retrievalOptions = null)
+        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
-        var projection = await GetSingleProjectionListObject<TSingleProjectionPayload>(rootPartitionKey, retrievalOptions);
+        var projection
+            = await GetSingleProjectionListObject<TSingleProjectionPayload>(rootPartitionKey, retrievalOptions);
         return queryListType switch
         {
             QueryListType.ActiveAndDeleted => [.. projection.Payload.List],

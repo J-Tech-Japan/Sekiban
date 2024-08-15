@@ -16,28 +16,34 @@ public class QueryHandler : IQueryContext
     public QueryHandler(IServiceProvider serviceProvider) => _serviceProvider = serviceProvider;
 
 
-    public ResultBox<T1> GetRequiredService<T1>() where T1 : class => ResultBox.WrapTry(() => _serviceProvider.GetRequiredService<T1>());
+    public ResultBox<T1> GetRequiredService<T1>() where T1 : class =>
+        ResultBox.WrapTry(() => _serviceProvider.GetRequiredService<T1>());
 
     public ResultBox<TwoValues<T1, T2>> GetRequiredService<T1, T2>() where T1 : class where T2 : class =>
         GetRequiredService<T1>().Combine(ResultBox.WrapTry(() => _serviceProvider.GetRequiredService<T2>()));
 
-    public ResultBox<ThreeValues<T1, T2, T3>> GetRequiredService<T1, T2, T3>() where T1 : class where T2 : class where T3 : class =>
+    public ResultBox<ThreeValues<T1, T2, T3>> GetRequiredService<T1, T2, T3>()
+        where T1 : class where T2 : class where T3 : class =>
         GetRequiredService<T1, T2>().Combine(ResultBox.WrapTry(() => _serviceProvider.GetRequiredService<T3>()));
 
     public ResultBox<FourValues<T1, T2, T3, T4>> GetRequiredService<T1, T2, T3, T4>()
         where T1 : class where T2 : class where T3 : class where T4 : class =>
         GetRequiredService<T1, T2, T3>().Combine(ResultBox.WrapTry(() => _serviceProvider.GetRequiredService<T4>()));
-    public ResultBox<IMultiProjectionService> GetMultiProjectionService() => GetRequiredService<IMultiProjectionService>();
+    public ResultBox<IMultiProjectionService> GetMultiProjectionService() =>
+        GetRequiredService<IMultiProjectionService>();
 
-    public ListQueryResult<TQueryResponse> GetMultiProjectionListQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
-        TQueryParameter param,
-        MultiProjectionState<TProjectionPayload> projection) where TProjectionPayload : IMultiProjectionPayloadCommon
+    public ListQueryResult<TQueryResponse>
+        GetMultiProjectionListQuery<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
+            TQueryParameter param,
+            MultiProjectionState<TProjectionPayload> projection)
+        where TProjectionPayload : IMultiProjectionPayloadCommon
         where TQuery : IMultiProjectionListQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IListQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
         var query = _serviceProvider.GetService<TQuery>() ??
-            throw new SekibanQueryNotRegisteredException($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
+            throw new SekibanQueryNotRegisteredException(
+                $"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
         var filtered = query.HandleFilter(param, projection);
         var sorted = query.HandleSort(param, filtered);
         var queryResponses = sorted.ToList();
@@ -53,7 +59,8 @@ public class QueryHandler : IQueryContext
         where TProjectionPayload : IMultiProjectionPayloadCommon
         where TQuery : INextMultiProjectionListQueryAsync<TProjectionPayload, TQueryResponse>
         where TQueryResponse : notnull =>
-        query.HandleFilterAsync(projection, this)
+        query
+            .HandleFilterAsync(projection, this)
             .Conveyor(sorted => query.HandleSortAsync(sorted, this))
             .Remap(sorted => sorted.ToList())
             .Remap(
@@ -62,11 +69,14 @@ public class QueryHandler : IQueryContext
                     : new ListQueryResult<TQueryResponse>(sorted.Count, null, null, null, sorted));
 
     public ResultBox<ListQueryResult<TQueryResponse>>
-        GetMultiProjectionListQueryNext<TProjectionPayload, TQuery, TQueryResponse>(TQuery query, MultiProjectionState<TProjectionPayload> projection)
+        GetMultiProjectionListQueryNext<TProjectionPayload, TQuery, TQueryResponse>(
+            TQuery query,
+            MultiProjectionState<TProjectionPayload> projection)
         where TProjectionPayload : IMultiProjectionPayloadCommon
         where TQuery : INextMultiProjectionListQuery<TProjectionPayload, TQueryResponse>
         where TQueryResponse : notnull =>
-        query.HandleFilter(projection, this)
+        query
+            .HandleFilter(projection, this)
             .Conveyor(sorted => query.HandleSort(sorted, this))
             .Remap(sorted => sorted.ToList())
             .Remap(
@@ -83,7 +93,8 @@ public class QueryHandler : IQueryContext
         where TQueryResponse : IQueryResponse
     {
         var query = _serviceProvider.GetService<TQuery>() ??
-            throw new SekibanQueryNotRegisteredException($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
+            throw new SekibanQueryNotRegisteredException(
+                $"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
         var filtered = query.HandleFilter(param, projection);
         return filtered;
     }
@@ -105,13 +116,15 @@ public class QueryHandler : IQueryContext
 
 
 
-    public async Task<ListQueryResult<TQueryResponse>> GetGeneralListQueryAsync<TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
+    public async Task<ListQueryResult<TQueryResponse>>
+        GetGeneralListQueryAsync<TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TQuery : IGeneralListQuery<TQueryParameter, TQueryResponse>
         where TQueryParameter : IListQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
         var query = _serviceProvider.GetService<TQuery>() ??
-            throw new SekibanQueryNotRegisteredException($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
+            throw new SekibanQueryNotRegisteredException(
+                $"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
         var filtered = await query.HandleFilterAsync(param);
         var sorted = query.HandleSort(param, filtered);
         var queryResponses = sorted.ToList();
@@ -120,9 +133,11 @@ public class QueryHandler : IQueryContext
             : new ListQueryResult<TQueryResponse>(queryResponses.ToList().Count, null, null, null, queryResponses);
     }
 
-    public Task<ResultBox<ListQueryResult<TQueryResponse>>> GetGeneralListQueryNextAsync<TQuery, TQueryResponse>(TQuery query)
+    public Task<ResultBox<ListQueryResult<TQueryResponse>>>
+        GetGeneralListQueryNextAsync<TQuery, TQueryResponse>(TQuery query)
         where TQuery : INextGeneralListQueryAsync<TQueryResponse> where TQueryResponse : notnull =>
-        query.HandleFilterAsync(this)
+        query
+            .HandleFilterAsync(this)
             .Conveyor(sorted => query.HandleSortAsync(sorted, this))
             .Remap(sorted => sorted.ToList())
             .Remap(
@@ -131,7 +146,8 @@ public class QueryHandler : IQueryContext
                     : new ListQueryResult<TQueryResponse>(sorted.Count, null, null, null, sorted));
     public ResultBox<ListQueryResult<TQueryResponse>> GetGeneralListQueryNext<TQuery, TQueryResponse>(TQuery query)
         where TQuery : INextGeneralListQuery<TQueryResponse> where TQueryResponse : notnull =>
-        query.HandleFilter(this)
+        query
+            .HandleFilter(this)
             .Conveyor(sorted => query.HandleSort(sorted, this))
             .Remap(sorted => sorted.ToList())
             .Remap(
@@ -140,13 +156,15 @@ public class QueryHandler : IQueryContext
                     : new ListQueryResult<TQueryResponse>(sorted.Count, null, null, null, sorted));
 
 
-    public async Task<TQueryResponse> GetGeneralQueryAsync<TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
+    public async Task<TQueryResponse>
+        GetGeneralQueryAsync<TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TQuery : IGeneralQuery<TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
         var query = _serviceProvider.GetService<TQuery>() ??
-            throw new SekibanQueryNotRegisteredException($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
+            throw new SekibanQueryNotRegisteredException(
+                $"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
         var filtered = await query.HandleFilterAsync(param);
         return filtered;
     }
@@ -160,18 +178,21 @@ public class QueryHandler : IQueryContext
 
 
 
-    public ListQueryResult<TQueryResponse> GetAggregateListQuery<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
-        TQueryParameter param,
-        IEnumerable<AggregateState<TAggregatePayload>> list) where TAggregatePayload : IAggregatePayloadCommon
+    public ListQueryResult<TQueryResponse>
+        GetAggregateListQuery<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
+            TQueryParameter param,
+            IEnumerable<AggregateState<TAggregatePayload>> list) where TAggregatePayload : IAggregatePayloadCommon
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IListQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
         var query = _serviceProvider.GetService<TQuery>() ??
-            throw new SekibanQueryNotRegisteredException($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
+            throw new SekibanQueryNotRegisteredException(
+                $"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
         if (query is not IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse> queryImplement)
         {
-            throw new SekibanQueryNotRegisteredException($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
+            throw new SekibanQueryNotRegisteredException(
+                $"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
         }
         var filtered = queryImplement.HandleFilter(param, list);
         var sorted = queryImplement.HandleSort(param, filtered);
@@ -185,11 +206,13 @@ public class QueryHandler : IQueryContext
 
 
     public async Task<ResultBox<ListQueryResult<TQueryResponse>>>
-        GetAggregateListQueryNextAsync<TAggregatePayload, TQuery, TQueryResponse>(TQuery query, IEnumerable<AggregateState<TAggregatePayload>> list)
-        where TAggregatePayload : IAggregatePayloadCommon
+        GetAggregateListQueryNextAsync<TAggregatePayload, TQuery, TQueryResponse>(
+            TQuery query,
+            IEnumerable<AggregateState<TAggregatePayload>> list) where TAggregatePayload : IAggregatePayloadCommon
         where TQuery : INextAggregateListQueryAsync<TAggregatePayload, TQueryResponse>
         where TQueryResponse : notnull =>
-        await query.HandleFilterAsync(list, this)
+        await query
+            .HandleFilterAsync(list, this)
             .Conveyor(filtered => query.HandleSortAsync(filtered, this))
             .Remap(sorted => sorted.ToList())
             .Remap(
@@ -199,11 +222,13 @@ public class QueryHandler : IQueryContext
 
 
     public ResultBox<ListQueryResult<TQueryResponse>>
-        GetAggregateListQueryNext<TAggregatePayload, TQuery, TQueryResponse>(TQuery query, IEnumerable<AggregateState<TAggregatePayload>> list)
-        where TAggregatePayload : IAggregatePayloadCommon
+        GetAggregateListQueryNext<TAggregatePayload, TQuery, TQueryResponse>(
+            TQuery query,
+            IEnumerable<AggregateState<TAggregatePayload>> list) where TAggregatePayload : IAggregatePayloadCommon
         where TQuery : INextAggregateListQuery<TAggregatePayload, TQueryResponse>
         where TQueryResponse : notnull =>
-        query.HandleFilter(list, this)
+        query
+            .HandleFilter(list, this)
             .Conveyor(filtered => query.HandleSort(filtered, this))
             .Remap(sorted => sorted.ToList())
             .Remap(
@@ -221,7 +246,8 @@ public class QueryHandler : IQueryContext
         where TQueryResponse : IQueryResponse
     {
         var query = _serviceProvider.GetService<TQuery>() ??
-            throw new SekibanQueryNotRegisteredException($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
+            throw new SekibanQueryNotRegisteredException(
+                $"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
         var filtered = query.HandleFilter(param, list);
         return filtered;
     }
@@ -246,15 +272,18 @@ public class QueryHandler : IQueryContext
     }
 
 
-    public ListQueryResult<TQueryResponse> GetSingleProjectionListQuery<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
-        TQueryParameter param,
-        IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections) where TSingleProjectionPayload : ISingleProjectionPayloadCommon
+    public ListQueryResult<TQueryResponse>
+        GetSingleProjectionListQuery<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
+            TQueryParameter param,
+            IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections)
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IListQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
         var query = _serviceProvider.GetService<TQuery>() ??
-            throw new SekibanQueryNotRegisteredException($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
+            throw new SekibanQueryNotRegisteredException(
+                $"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
         var filtered = query.HandleFilter(param, projections);
         var sorted = query.HandleSort(param, filtered);
         var queryResponses = sorted.ToList();
@@ -264,13 +293,16 @@ public class QueryHandler : IQueryContext
     }
 
 
-    public ResultBox<ListQueryResult<TQueryResponse>> GetSingleProjectionListNextQuery<TSingleProjectionPayload, TQuery, TQueryResponse>(
-        TQuery query,
-        IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections) where TSingleProjectionPayload : ISingleProjectionPayloadCommon
+    public ResultBox<ListQueryResult<TQueryResponse>>
+        GetSingleProjectionListNextQuery<TSingleProjectionPayload, TQuery, TQueryResponse>(
+            TQuery query,
+            IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections)
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon
         where TQuery : INextSingleProjectionListQuery<TSingleProjectionPayload, TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
-        return query.HandleFilter(projections, this)
+        return query
+            .HandleFilter(projections, this)
             .Conveyor(sorted => query.HandleSort(sorted, this))
             .Remap(sorted => sorted.ToList())
             .Remap(
@@ -278,13 +310,16 @@ public class QueryHandler : IQueryContext
                     ? MakeQueryListResult(pagingParam, sorted)
                     : new ListQueryResult<TQueryResponse>(sorted.Count, null, null, null, sorted));
     }
-    public Task<ResultBox<ListQueryResult<TQueryResponse>>> GetSingleProjectionListNextQueryAsync<TSingleProjectionPayload, TQuery, TQueryResponse>(
-        TQuery query,
-        IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections) where TSingleProjectionPayload : ISingleProjectionPayloadCommon
+    public Task<ResultBox<ListQueryResult<TQueryResponse>>>
+        GetSingleProjectionListNextQueryAsync<TSingleProjectionPayload, TQuery, TQueryResponse>(
+            TQuery query,
+            IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections)
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon
         where TQuery : INextSingleProjectionListQueryAsync<TSingleProjectionPayload, TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
-        return query.HandleFilterAsync(projections, this)
+        return query
+            .HandleFilterAsync(projections, this)
             .Conveyor(sorted => query.HandleSortAsync(sorted, this))
             .Remap(sorted => sorted.ToList())
             .Remap(
@@ -322,25 +357,30 @@ public class QueryHandler : IQueryContext
 
     public TQueryResponse GetSingleProjectionQuery<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
         TQueryParameter param,
-        IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections) where TSingleProjectionPayload : ISingleProjectionPayloadCommon
+        IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections)
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter<TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
         var query = _serviceProvider.GetService<TQuery>() ??
-            throw new SekibanQueryNotRegisteredException($"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
+            throw new SekibanQueryNotRegisteredException(
+                $"AddQuery {typeof(TQuery).FullName} is not registered to dependency injection");
         var filtered = query.HandleFilter(param, projections);
         return filtered;
     }
-    public Task<ResultBox<TQueryResponse>> GetSingleProjectionQueryNextAsync<TSingleProjectionPayload, TQuery, TQueryResponse>(
-        TQuery query,
-        IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections) where TSingleProjectionPayload : ISingleProjectionPayloadCommon
+    public Task<ResultBox<TQueryResponse>>
+        GetSingleProjectionQueryNextAsync<TSingleProjectionPayload, TQuery, TQueryResponse>(
+            TQuery query,
+            IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections)
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon
         where TQuery : INextSingleProjectionQueryAsync<TSingleProjectionPayload, TQueryResponse>
         where TQueryResponse : notnull =>
         query.HandleFilterAsync(projections, this);
     public ResultBox<TQueryResponse> GetSingleProjectionQueryNext<TSingleProjectionPayload, TQuery, TQueryResponse>(
         TQuery query,
-        IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections) where TSingleProjectionPayload : ISingleProjectionPayloadCommon
+        IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections)
+        where TSingleProjectionPayload : ISingleProjectionPayloadCommon
         where TQuery : INextSingleProjectionQuery<TSingleProjectionPayload, TQueryResponse>
         where TQueryResponse : notnull =>
         query.HandleFilter(projections, this);

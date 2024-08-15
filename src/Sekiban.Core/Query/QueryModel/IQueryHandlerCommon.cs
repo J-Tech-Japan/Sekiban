@@ -7,5 +7,5 @@ namespace Sekiban.Core.Query.QueryModel;
 /// <typeparam name="TQueryParameter"></typeparam>
 /// <typeparam name="TQueryResponse"></typeparam>
 // ReSharper disable once UnusedTypeParameter
-public interface IQueryHandlerCommon<in TQueryParameter, out TQueryResponse> where TQueryParameter : IQueryParameter<TQueryResponse>
-    where TQueryResponse : IQueryResponse;
+public interface IQueryHandlerCommon<in TQueryParameter, out TQueryResponse>
+    where TQueryParameter : IQueryParameter<TQueryResponse> where TQueryResponse : IQueryResponse;

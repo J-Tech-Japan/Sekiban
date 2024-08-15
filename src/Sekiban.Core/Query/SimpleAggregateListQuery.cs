@@ -6,8 +6,10 @@ namespace Sekiban.Core.Query;
 ///     Generic aggregate list query parameter.
 /// </summary>
 /// <typeparam name="TAggregatePayload"></typeparam>
-public class SimpleAggregateListQuery<TAggregatePayload> : IAggregateListQuery<TAggregatePayload, SimpleAggregateListQueryParameter<TAggregatePayload>
-    , QueryAggregateState<TAggregatePayload>> where TAggregatePayload : IAggregatePayloadCommon
+public class
+    SimpleAggregateListQuery<TAggregatePayload> : IAggregateListQuery<TAggregatePayload,
+    SimpleAggregateListQueryParameter<TAggregatePayload>, QueryAggregateState<TAggregatePayload>>
+    where TAggregatePayload : IAggregatePayloadCommon
 {
     public IEnumerable<QueryAggregateState<TAggregatePayload>> HandleFilter(
         SimpleAggregateListQueryParameter<TAggregatePayload> queryParam,

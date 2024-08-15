@@ -5,5 +5,6 @@ namespace Sekiban.Core.Aggregate;
 ///     Note : No need to implement this interface. It is used internally.
 /// </summary>
 /// <typeparam name="TParentAggregatePayload">Refers Parent Aggregate Itself</typeparam>
-public interface IParentAggregatePayloadCommon<TParentAggregatePayload> : IApplicableAggregatePayload<TParentAggregatePayload>
+public interface
+    IParentAggregatePayloadCommon<TParentAggregatePayload> : IApplicableAggregatePayload<TParentAggregatePayload>
     where TParentAggregatePayload : IAggregatePayloadCommon;

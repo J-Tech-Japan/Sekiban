@@ -15,8 +15,8 @@ public class TargetAggregatePayloadCollection
         TargetAggregatePayloads = TargetAggregatePayloads.Add(typeof(TAggregatePayload));
         return this;
     }
-    public TargetAggregatePayloadCollection Add<TAggregatePayload, TAggregatePayload2>() where TAggregatePayload : IAggregatePayloadCommon
-        where TAggregatePayload2 : IAggregatePayloadCommon
+    public TargetAggregatePayloadCollection Add<TAggregatePayload, TAggregatePayload2>()
+        where TAggregatePayload : IAggregatePayloadCommon where TAggregatePayload2 : IAggregatePayloadCommon
     {
         Add<TAggregatePayload>();
         Add<TAggregatePayload2>();
@@ -31,7 +31,8 @@ public class TargetAggregatePayloadCollection
         Add<TAggregatePayload3>();
         return this;
     }
-    public TargetAggregatePayloadCollection Add<TAggregatePayload, TAggregatePayload2, TAggregatePayload3, TAggregatePayload4>()
+    public TargetAggregatePayloadCollection
+        Add<TAggregatePayload, TAggregatePayload2, TAggregatePayload3, TAggregatePayload4>()
         where TAggregatePayload : IAggregatePayloadCommon
         where TAggregatePayload2 : IAggregatePayloadCommon
         where TAggregatePayload3 : IAggregatePayloadCommon
@@ -41,7 +42,8 @@ public class TargetAggregatePayloadCollection
         Add<TAggregatePayload4>();
         return this;
     }
-    public TargetAggregatePayloadCollection Add<TAggregatePayload, TAggregatePayload2, TAggregatePayload3, TAggregatePayload4, TAggregatePayload5>()
+    public TargetAggregatePayloadCollection
+        Add<TAggregatePayload, TAggregatePayload2, TAggregatePayload3, TAggregatePayload4, TAggregatePayload5>()
         where TAggregatePayload : IAggregatePayloadCommon
         where TAggregatePayload2 : IAggregatePayloadCommon
         where TAggregatePayload3 : IAggregatePayloadCommon
@@ -52,8 +54,9 @@ public class TargetAggregatePayloadCollection
         Add<TAggregatePayload4>();
         return this;
     }
-    public TargetAggregatePayloadCollection Add<TAggregatePayload, TAggregatePayload2, TAggregatePayload3, TAggregatePayload4, TAggregatePayload5,
-        TAggregatePayload6>() where TAggregatePayload : IAggregatePayloadCommon
+    public TargetAggregatePayloadCollection
+        Add<TAggregatePayload, TAggregatePayload2, TAggregatePayload3, TAggregatePayload4, TAggregatePayload5,
+            TAggregatePayload6>() where TAggregatePayload : IAggregatePayloadCommon
         where TAggregatePayload2 : IAggregatePayloadCommon
         where TAggregatePayload3 : IAggregatePayloadCommon
         where TAggregatePayload4 : IAggregatePayloadCommon
@@ -64,8 +67,9 @@ public class TargetAggregatePayloadCollection
         Add<TAggregatePayload6>();
         return this;
     }
-    public TargetAggregatePayloadCollection Add<TAggregatePayload, TAggregatePayload2, TAggregatePayload3, TAggregatePayload4, TAggregatePayload5,
-        TAggregatePayload6, TAggregatePayload7>() where TAggregatePayload : IAggregatePayloadCommon
+    public TargetAggregatePayloadCollection
+        Add<TAggregatePayload, TAggregatePayload2, TAggregatePayload3, TAggregatePayload4, TAggregatePayload5,
+            TAggregatePayload6, TAggregatePayload7>() where TAggregatePayload : IAggregatePayloadCommon
         where TAggregatePayload2 : IAggregatePayloadCommon
         where TAggregatePayload3 : IAggregatePayloadCommon
         where TAggregatePayload4 : IAggregatePayloadCommon
@@ -73,7 +77,8 @@ public class TargetAggregatePayloadCollection
         where TAggregatePayload6 : IAggregatePayloadCommon
         where TAggregatePayload7 : IAggregatePayloadCommon
     {
-        Add<TAggregatePayload, TAggregatePayload2, TAggregatePayload3, TAggregatePayload4, TAggregatePayload5, TAggregatePayload6>();
+        Add<TAggregatePayload, TAggregatePayload2, TAggregatePayload3, TAggregatePayload4, TAggregatePayload5,
+            TAggregatePayload6>();
         Add<TAggregatePayload7>();
         return this;
     }
