@@ -19,4 +19,5 @@ public class CreateClient : ITenantCommand<ClientPayload>
             yield return new ClientCreated(command.Name);
         }
     }
+    public string GetTenantId() => TenantId;
 }
