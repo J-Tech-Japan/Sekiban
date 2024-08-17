@@ -6,5 +6,5 @@ public interface
     ICommandWithHandlerWithVersionValidationForExistingAggregateAsync<TAggregatePayload, TCommand>,
     ITenantCommandCommon where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayload>
 {
-    string ICommandCommon.GetRootPartitionKey() => TenantId;
+    string ICommandCommon.GetRootPartitionKey() => GetTenantId();
 }

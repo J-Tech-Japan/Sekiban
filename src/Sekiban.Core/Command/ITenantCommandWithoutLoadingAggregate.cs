@@ -5,5 +5,5 @@ public interface
     ITenantCommandWithoutLoadingAggregate<TAggregatePayload> : ICommandWithoutLoadingAggregate<TAggregatePayload>,
     ITenantCommandCommon where TAggregatePayload : IAggregatePayloadCommon
 {
-    string ICommandCommon.GetRootPartitionKey() => TenantId;
+    string ICommandCommon.GetRootPartitionKey() => GetTenantId();
 }

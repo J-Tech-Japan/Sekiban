@@ -11,5 +11,5 @@ public interface
     ITenantCommandWithVersionValidation<TAggregatePayload> : ICommandWithVersionValidation<TAggregatePayload>,
     ITenantCommandCommon where TAggregatePayload : IAggregatePayloadCommon
 {
-    string ICommandCommon.GetRootPartitionKey() => TenantId;
+    string ICommandCommon.GetRootPartitionKey() => GetTenantId();
 }
