@@ -6,7 +6,7 @@ public interface
     ICommandWithHandlerWithoutLoadingAggregate<TAggregatePayload, in TCommand> :
     ICommandWithHandlerCommon<TAggregatePayload, TCommand>,
     ICommandWithoutLoadingAggregateCommon where TAggregatePayload : IAggregatePayloadCommon
-    where TCommand : ICommand<TAggregatePayload>
+    where TCommand : ICommandCommon<TAggregatePayload>
 {
     public static abstract ResultBox<UnitValue> HandleCommand(
         TCommand command,

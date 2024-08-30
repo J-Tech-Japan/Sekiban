@@ -5,10 +5,7 @@ namespace Sekiban.Core.Command;
 ///     Interface for defining a command
 /// </summary>
 /// <typeparam name="TAggregatePayload">Target Aggregate Payload to execute the command</typeparam>
-// ReSharper disable once UnusedTypeParameter
-[CommandRootPartitionValidation]
-// ReSharper disable once UnusedTypeParameter
-public interface ICommand<TAggregatePayload> : ICommandCommon where TAggregatePayload : IAggregatePayloadCommon
+public interface ICommand<TAggregatePayload> : ICommandCommon<TAggregatePayload> where TAggregatePayload : IAggregatePayloadCommon
 {
     /// <summary>
     ///     Set Aggregate Id for the Command.
@@ -20,3 +17,8 @@ public interface ICommand<TAggregatePayload> : ICommandCommon where TAggregatePa
     /// <returns></returns>
     public Guid GetAggregateId();
 }
+
+// ReSharper disable once UnusedTypeParameter
+[CommandRootPartitionValidation]
+// ReSharper disable once UnusedTypeParameter
+public interface ICommandCommon<TAggregatePayload> : ICommandCommon where TAggregatePayload : IAggregatePayloadCommon;

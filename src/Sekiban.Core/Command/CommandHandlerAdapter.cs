@@ -15,7 +15,7 @@ namespace Sekiban.Core.Command;
 /// </summary>
 public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> : ICommandContext<TAggregatePayload>
     where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>
-    where TCommand : ICommand<TAggregatePayload>
+    where TCommand : ICommandCommon<TAggregatePayload>
 {
     private readonly IAggregateLoader _aggregateLoader;
     private readonly bool _checkVersion;

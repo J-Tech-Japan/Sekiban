@@ -32,7 +32,7 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
     public Guid ExecuteCommand<TAggregatePayload>(
-        ICommand<TAggregatePayload> command,
+        ICommandCommon<TAggregatePayload> command,
         Guid? injectingAggregateId = null) where TAggregatePayload : IAggregatePayloadCommon =>
         ExecuteCommandPrivate(command, injectingAggregateId, false);
     /// <summary>
@@ -44,14 +44,15 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
     public Guid ExecuteCommandWithPublish<TAggregatePayload>(
-        ICommand<TAggregatePayload> command,
+        ICommandCommon<TAggregatePayload> command,
         Guid? injectingAggregateId = null) where TAggregatePayload : IAggregatePayloadCommon =>
         ExecuteCommandPrivate(command, injectingAggregateId, true);
     /// <summary>
     ///     Execute command and returns aggregate id
     ///     Also publish events and all local subscriptions will be executed
     ///     Even non blocking subscriptions will be executed by same thread and block the execution
-    ///     (To test subscription values, use this method. But be careful, orders could be different from actual execution)
+    ///     (To test subscription values, use this method. But be careful, orders could be different from actual
+    ///     execution)
     /// </summary>
     /// <param name="command"></param>
     /// <param name="injectingAggregateId"></param>
@@ -68,7 +69,7 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
     }
 
     private Guid ExecuteCommandPrivate<TAggregatePayload>(
-        ICommand<TAggregatePayload> command,
+        ICommandCommon<TAggregatePayload> command,
         Guid? injectingAggregateId,
         bool withPublish) where TAggregatePayload : IAggregatePayloadCommon
     {
@@ -101,7 +102,7 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
                 }
             }
         }
-        var aggregateId = injectingAggregateId ?? command.GetAggregateId();
+        var aggregateId = injectingAggregateId ?? CommandExecutor.GetAggregateId<TAggregatePayload>(command);
         if (command is ICommandWithoutLoadingAggregateCommon && command is not ICommandWithHandlerCommon)
         {
             var handler = serviceProvider.GetService(genericType) ??

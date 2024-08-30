@@ -5,8 +5,7 @@ namespace FeatureCheck.Domain.Aggregates.SubTypes.InheritInSubtypesTypes.Command
 
 public record ChangeToSecond(Guid AggregateId, int SecondProperty) : ICommandWithHandler<FirstStage, ChangeToSecond>
 {
-    public Guid GetAggregateId() => AggregateId;
-
     public static ResultBox<UnitValue> HandleCommand(ChangeToSecond command, ICommandContext<FirstStage> context) =>
         context.AppendEvent(new InheritInSubtypesMovedToSecond(command.SecondProperty));
+    public static Guid SpecifyAggregateId(ChangeToSecond command) => command.AggregateId;
 }

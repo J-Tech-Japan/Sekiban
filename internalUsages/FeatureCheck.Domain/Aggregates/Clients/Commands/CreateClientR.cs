@@ -14,8 +14,6 @@ public record CreateClientR(
     [property: Required]
     string ClientEmail) : ICommandWithHandlerAsync<Client, CreateClientR>
 {
-    public Guid GetAggregateId() => Guid.NewGuid();
-
     public static Task<ResultBox<UnitValue>>
         HandleCommandAsync(CreateClientR command, ICommandContext<Client> context) => context
         .ExecuteQueryAsync(new BranchExistsQueryN(command.BranchId))
@@ -24,4 +22,5 @@ public record CreateClientR(
         .Verify(exists => exists ? new InvalidDataException("Email not exists") : ExceptionOrNone.None)
         .Conveyor(
             _ => context.AppendEvent(new ClientCreated(command.BranchId, command.ClientName, command.ClientEmail)));
+    public static Guid SpecifyAggregateId(CreateClientR command) => Guid.NewGuid();
 }

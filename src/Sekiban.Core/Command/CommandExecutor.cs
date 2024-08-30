@@ -7,6 +7,8 @@ using Sekiban.Core.Exceptions;
 using Sekiban.Core.History;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Shared;
+using Sekiban.Core.Snapshot.Aggregate;
+using Sekiban.Core.Snapshot.Aggregate.Commands;
 using Sekiban.Core.Types;
 using Sekiban.Core.Validation;
 using System.Collections.Immutable;
@@ -246,7 +248,7 @@ public class CommandExecutor(
     public async Task<ResultBox<TwoValues<CommandExecutorResponse, List<IEvent>>>>
         ExecCommandAsyncTyped<TAggregatePayload, TCommand>(TCommand command, List<CallHistory>? callHistories = null)
         where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>
-        where TCommand : ICommand<TAggregatePayload>
+        where TCommand : ICommandCommon<TAggregatePayload>
     {
         var validationResult = command.ValidateProperties().ToList();
         if (validationResult.Count != 0)
@@ -271,7 +273,7 @@ public class CommandExecutor(
             TCommand command,
             List<CallHistory>? callHistories = null)
         where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>
-        where TCommand : ICommand<TAggregatePayload>
+        where TCommand : ICommandCommon<TAggregatePayload>
     {
         var rootPartitionKey = command.GetRootPartitionKey();
         if (!CommandRootPartitionValidationAttribute.IsValidRootPartitionKey(rootPartitionKey))
@@ -300,7 +302,7 @@ public class CommandExecutor(
         {
             await SemaphoreInMemory.WaitAsync();
         }
-        var aggregateId = command.GetAggregateId();
+        var aggregateId = GetAggregateId<TAggregatePayload>(command);
         try
         {
 
@@ -487,6 +489,26 @@ public class CommandExecutor(
             events);
     }
 
+    public static Guid GetAggregateId<TAggregatePayload>(ICommandCommon command)
+        where TAggregatePayload : IAggregatePayloadCommon => command switch
+    {
+        ICommand<TAggregatePayload> instanceCommand => instanceCommand.GetAggregateId(),
+        _ => GetAggregateIdFromCommand(command)
+    };
+    public static Guid GetAggregateIdFromCommand<TCommand>(TCommand command) where TCommand : notnull
+    {
+        if (!command.GetType().IsCommandWithHandlerType())
+        {
+            throw new SekibanCommandNotRegisteredException(
+                $"Command {command.GetType().Name} needs to inherit ICommandWithHandler");
+        }
+        var commandClass = command.GetType();
+        var method = commandClass.GetMethod(
+                nameof(ICommandWithHandler<SnapshotManager, CreateSnapshotManager>.SpecifyAggregateId)) ??
+            throw new MissingMethodException("Method not found");
+        return (Guid?)method.Invoke(commandClass, [command]) ??
+            throw new SekibanInvalidArgumentException("AggregateId is null");
+    }
     private static string GetAggregatePayloadOut<TAggregatePayload>(IEnumerable<IEvent> events)
     {
         var list = events.ToList();
@@ -498,7 +520,7 @@ public class CommandExecutor(
     private async Task<List<IEvent>> HandleEventsAsync<TAggregatePayload, TCommand>(
         IReadOnlyCollection<IEvent> events,
         CommandDocument<TCommand> commandDocument) where TAggregatePayload : IAggregatePayloadCommon
-        where TCommand : ICommand<TAggregatePayload>
+        where TCommand : ICommandCommon<TAggregatePayload>
     {
         var toReturnEvents = new List<IEvent>();
         if (events.Count == 0)

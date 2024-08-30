@@ -6,7 +6,6 @@ namespace Sekiban.Core.Snapshot.Aggregate.Commands;
 
 public record CreateSnapshotManagerAsync : ICommandWithHandlerAsync<SnapshotManager, CreateSnapshotManagerAsync>
 {
-    public Guid GetAggregateId() => SnapshotManager.SharedId;
     public static Task<ResultBox<UnitValue>> HandleCommandAsync(
         CreateSnapshotManagerAsync command,
         ICommandContext<SnapshotManager> context) =>
@@ -15,4 +14,5 @@ public record CreateSnapshotManagerAsync : ICommandWithHandlerAsync<SnapshotMana
             .Conveyor(
                 sekibanDateProducer => context.AppendEvent(new SnapshotManagerCreated(sekibanDateProducer.UtcNow)))
             .ToTask();
+    public static Guid SpecifyAggregateId(CreateSnapshotManagerAsync command) => SnapshotManager.SharedId;
 }

@@ -15,7 +15,7 @@ public static class CommandTypesExtensions
     /// <param name="commandType"></param>
     /// <returns></returns>
     public static bool IsCommandType(this Type commandType) =>
-        commandType.DoesImplementingFromGenericInterfaceType(typeof(ICommand<>));
+        commandType.DoesImplementingFromGenericInterfaceType(typeof(ICommandCommon<>));
 
     /// <summary>
     ///     Check whether the type is a command handler type.
@@ -101,7 +101,7 @@ public static class CommandTypesExtensions
     {
         if (commandType.IsCommandType())
         {
-            var baseType = commandType.GetImplementingFromGenericInterfaceType(typeof(ICommand<>));
+            var baseType = commandType.GetImplementingFromGenericInterfaceType(typeof(ICommandCommon<>));
             return baseType.GetGenericArguments()[0];
         }
 
