@@ -8,8 +8,6 @@ public record ReopenInheritedAggregate : ICommand<ClosedSubAggregate>
     public string Reason { get; init; } = string.Empty;
     public Guid AggregateId { get; init; }
 
-    public Guid GetAggregateId() => AggregateId;
-
     public class Handler : ICommandHandler<ClosedSubAggregate, ReopenInheritedAggregate>
     {
         public IEnumerable<IEventPayloadApplicableTo<ClosedSubAggregate>> HandleCommand(

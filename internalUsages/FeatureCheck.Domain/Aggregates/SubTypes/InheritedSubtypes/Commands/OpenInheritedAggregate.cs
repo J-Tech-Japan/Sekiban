@@ -9,8 +9,6 @@ public record OpenInheritedAggregate : ICommand<ProcessingSubAggregate>
     [Range(202001, 203012)]
     public int YearMonth { get; init; }
 
-    public Guid GetAggregateId() => Guid.NewGuid();
-
     public class Handler : ICommandHandler<ProcessingSubAggregate, OpenInheritedAggregate>
     {
         public IEnumerable<IEventPayloadApplicableTo<ProcessingSubAggregate>> HandleCommand(

@@ -13,8 +13,6 @@ public record OnlyPublishingAddRecentActivity(Guid RecentActivityId, string Acti
     {
     }
 
-    public Guid GetAggregateId() => RecentActivityId;
-
     public class Handler : ICommandWithoutLoadingAggregateHandler<RecentActivity, OnlyPublishingAddRecentActivity>
     {
         private readonly ISekibanDateProducer _sekibanDateProducer;

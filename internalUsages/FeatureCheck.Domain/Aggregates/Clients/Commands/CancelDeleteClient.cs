@@ -13,8 +13,6 @@ public record CancelDeleteClient : ICommandWithVersionValidation<Client>, ICance
 
     public int ReferenceVersion { get; init; }
 
-    public Guid GetAggregateId() => ClientId;
-
     public class Handler : ICommandHandler<Client, CancelDeleteClient>
     {
         public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(

@@ -11,8 +11,6 @@ public record OnlyPublishingAddRecentActivityAsync(Guid RecentActivityId, string
     {
     }
 
-    public Guid GetAggregateId() => RecentActivityId;
-
     public class Handler : ICommandWithoutLoadingAggregateHandlerAsync<RecentActivity,
         OnlyPublishingAddRecentActivityAsync>
     {

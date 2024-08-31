@@ -5,8 +5,6 @@ namespace FeatureCheck.Domain.Aggregates.SubTypes.InheritInSubtypesTypes.Command
 
 public record ChangeToSecondYield(Guid AggregateId, int SecondProperty) : ICommand<FirstStage>
 {
-    public Guid GetAggregateId() => AggregateId;
-
     public class Handler : ICommandHandler<FirstStage, ChangeToSecondYield>
     {
         public IEnumerable<IEventPayloadApplicableTo<FirstStage>> HandleCommand(

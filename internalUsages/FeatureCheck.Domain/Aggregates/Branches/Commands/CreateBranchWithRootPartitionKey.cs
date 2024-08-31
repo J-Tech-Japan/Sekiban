@@ -13,8 +13,6 @@ public class CreateBranchWithRootPartitionKey : ICommand<Branch>
 
     public string GetRootPartitionKey() => RootPartitionKey;
 
-    public Guid GetAggregateId() => Guid.NewGuid();
-
     public class Handler : ICommandHandler<Branch, CreateBranchWithRootPartitionKey>
     {
         public IEnumerable<IEventPayloadApplicableTo<Branch>> HandleCommand(

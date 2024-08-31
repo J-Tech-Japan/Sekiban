@@ -21,8 +21,6 @@ public record CreateBranch : ICommand<Branch>, ICleanupNecessaryCommand<CreateBr
         Name = string.Empty
     };
 
-    public Guid GetAggregateId() => Guid.NewGuid();
-
     public class Handler : ICommandHandler<Branch, CreateBranch>
     {
         public IEnumerable<IEventPayloadApplicableTo<Branch>> HandleCommand(

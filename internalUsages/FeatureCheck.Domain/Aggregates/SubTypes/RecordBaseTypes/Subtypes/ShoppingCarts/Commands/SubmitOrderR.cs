@@ -10,8 +10,6 @@ public record SubmitOrderR : ICommandWithVersionValidation<ShoppingCartR>
 
     public int ReferenceVersion { get; init; }
 
-    public Guid GetAggregateId() => CartId;
-
     public class Handler : ICommandHandler<ShoppingCartR, SubmitOrderR>
     {
         public IEnumerable<IEventPayloadApplicableTo<ShoppingCartR>> HandleCommand(

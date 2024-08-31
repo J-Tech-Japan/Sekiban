@@ -4,8 +4,6 @@ namespace FeatureCheck.Domain.Aggregates.Branches.Commands;
 
 public record NotAddingAnyEventCommand : ICommand<Branch>
 {
-    public Guid GetAggregateId() => Guid.Empty;
-
     public class Handler : ICommandHandler<Branch, NotAddingAnyEventCommand>
     {
         public IEnumerable<IEventPayloadApplicableTo<Branch>> HandleCommand(

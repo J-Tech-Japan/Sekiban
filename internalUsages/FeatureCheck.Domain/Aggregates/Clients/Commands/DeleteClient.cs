@@ -11,8 +11,6 @@ public record DeleteClient(Guid ClientId) : ICommandWithVersionValidation<Client
 
     public int ReferenceVersion { get; init; }
 
-    public Guid GetAggregateId() => ClientId;
-
     public class Handler : ICommandHandler<Client, DeleteClient>
     {
         public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(

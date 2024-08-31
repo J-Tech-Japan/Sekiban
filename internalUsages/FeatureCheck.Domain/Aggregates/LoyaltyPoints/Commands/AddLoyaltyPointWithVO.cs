@@ -16,8 +16,6 @@ public record AddLoyaltyPointWithVO : ICommandWithVersionValidation<LoyaltyPoint
     public string Note { get; init; } = string.Empty;
     public int ReferenceVersion { get; init; }
 
-    public Guid GetAggregateId() => ClientId;
-
     public class Handler : ICommandHandler<LoyaltyPoint, AddLoyaltyPointWithVO>
     {
         public IEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommand(

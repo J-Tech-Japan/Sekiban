@@ -11,8 +11,6 @@ public class CreateClient : ITenantCommand<ClientPayload>
     public string Name { get; init; } = string.Empty;
     public string TenantId { get; init; } = string.Empty;
     public string GetTenantId() => TenantId;
-    public Guid GetAggregateId() => Guid.NewGuid();
-
     public class Handler : ICommandHandler<ClientPayload, CreateClient>
     {
         public IEnumerable<IEventPayloadApplicableTo<ClientPayload>> HandleCommand(

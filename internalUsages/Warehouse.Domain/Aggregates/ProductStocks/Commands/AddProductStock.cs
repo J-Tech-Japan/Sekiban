@@ -9,7 +9,6 @@ public record AddProductStock : ICommand<ProductStock>
 {
     public Guid ProductId { get; init; }
     public decimal AddedAmount { get; init; }
-    public Guid GetAggregateId() => ProductId;
     public class Handler : ICommandHandlerAsync<ProductStock, AddProductStock>
     {
         private readonly IProductExistsPort _productExistsPort;

@@ -35,8 +35,6 @@ public record CreateClient : ICommand<Client>
 
     public string GetRootPartitionKey() => IDocument.DefaultRootPartitionKey;
 
-    public Guid GetAggregateId() => Guid.NewGuid();
-
     public class Handler : ICommandHandlerAsync<Client, CreateClient>
     {
         private readonly IQueryExecutor queryExecutor;

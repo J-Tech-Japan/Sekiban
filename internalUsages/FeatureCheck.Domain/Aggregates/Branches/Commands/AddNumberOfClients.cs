@@ -10,8 +10,6 @@ public class AddNumberOfClients : ICommandForExistingAggregate<Branch>
     public Guid BranchId { get; init; }
     public Guid ClientId { get; init; }
 
-    public Guid GetAggregateId() => BranchId;
-
     public class Handler : ICommandHandlerAsync<Branch, AddNumberOfClients>
     {
         private readonly IAggregateLoader aggregateLoader;

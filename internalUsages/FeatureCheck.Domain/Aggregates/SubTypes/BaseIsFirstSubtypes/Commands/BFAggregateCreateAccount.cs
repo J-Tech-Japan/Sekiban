@@ -5,8 +5,6 @@ namespace FeatureCheck.Domain.Aggregates.SubTypes.BaseIsFirstSubtypes.Commands;
 
 public record BFAggregateCreateAccount(string Name, long Price) : ICommand<BaseFirstAggregate>
 {
-    public Guid GetAggregateId() => Guid.NewGuid();
-
     public class Handler : ICommandHandler<BaseFirstAggregate, BFAggregateCreateAccount>
     {
         public IEnumerable<IEventPayloadApplicableTo<BaseFirstAggregate>> HandleCommand(

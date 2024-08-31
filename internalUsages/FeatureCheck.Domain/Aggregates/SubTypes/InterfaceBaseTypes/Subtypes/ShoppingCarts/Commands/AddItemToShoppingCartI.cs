@@ -17,8 +17,6 @@ public class AddItemToShoppingCartI : ICommand<ShoppingCartI>
     [Range(1, 1000)]
     public int Quantity { get; init; } = 0;
 
-    public Guid GetAggregateId() => CartId;
-
     public class Handler : ICommandHandler<ShoppingCartI, AddItemToShoppingCartI>
     {
         public IEnumerable<IEventPayloadApplicableTo<ShoppingCartI>> HandleCommand(

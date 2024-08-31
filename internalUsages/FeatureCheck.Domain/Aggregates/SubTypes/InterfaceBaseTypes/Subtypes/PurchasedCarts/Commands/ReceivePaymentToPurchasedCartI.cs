@@ -13,8 +13,6 @@ public record ReceivePaymentToPurchasedCartI : ICommandWithVersionValidation<Pur
 
     public int ReferenceVersion { get; init; }
 
-    public Guid GetAggregateId() => CartId;
-
     public class Handler : ICommandHandler<PurchasedCartI, ReceivePaymentToPurchasedCartI>
     {
         public IEnumerable<IEventPayloadApplicableTo<PurchasedCartI>> HandleCommand(
