@@ -19,5 +19,6 @@ public record OpenInheritedAggregate : ICommand<ProcessingSubAggregate>
         {
             yield return new InheritedAggregateOpened(command.YearMonth);
         }
+        public Guid SpecifyAggregateId(OpenInheritedAggregate command) => Guid.NewGuid();
     }
 }

@@ -302,7 +302,7 @@ public class CommandExecutor(
         {
             await SemaphoreInMemory.WaitAsync();
         }
-        var aggregateId = GetAggregateId<TAggregatePayload>(command);
+        var aggregateId = GetAggregateId<TAggregatePayload>(command, serviceProvider);
         try
         {
 
@@ -489,12 +489,33 @@ public class CommandExecutor(
             events);
     }
 
-    public static Guid GetAggregateId<TAggregatePayload>(ICommandCommon command)
+    public static Guid GetAggregateId<TAggregatePayload>(ICommandCommon command, IServiceProvider serviceProvider)
         where TAggregatePayload : IAggregatePayloadCommon => command switch
     {
-        ICommand<TAggregatePayload> instanceCommand => instanceCommand.GetAggregateId(),
+        ICommand<TAggregatePayload> => GetAggregateIdFromHandler<TAggregatePayload, ICommandCommon>(
+            command,
+            serviceProvider),
         _ => GetAggregateIdFromCommand(command)
     };
+    public static Guid GetAggregateIdFromHandler<TAggregatePayload, TCommand>(
+        TCommand command,
+        IServiceProvider serviceProvider) where TAggregatePayload : IAggregatePayloadCommon
+        where TCommand : ICommandCommon
+    {
+        var baseClass = typeof(ICommandHandlerCommon<,>);
+        var genericClass = baseClass.MakeGenericType(typeof(TAggregatePayload), command.GetType());
+
+        var handler = serviceProvider.GetService(genericClass) ??
+            throw new SekibanCommandNotRegisteredException(typeof(TCommand).Name);
+
+        var method = handler
+                .GetType()
+                .GetMethod(nameof(ICommandHandlerCommon<SnapshotManager, CreateSnapshotManager>.SpecifyAggregateId)) ??
+            throw new MissingMethodException("Method not found");
+
+        return method.Invoke(handler, [command]) as Guid? ??
+            throw new SekibanInvalidArgumentException("AggregateId is null");
+    }
     public static Guid GetAggregateIdFromCommand<TCommand>(TCommand command) where TCommand : notnull
     {
         if (!command.GetType().IsCommandWithHandlerType())

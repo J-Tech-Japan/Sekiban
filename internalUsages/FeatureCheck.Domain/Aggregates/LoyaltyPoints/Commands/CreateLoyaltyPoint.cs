@@ -19,5 +19,6 @@ public record CreateLoyaltyPoint(Guid ClientId, int InitialPoint) : ICommand<Loy
         {
             yield return new LoyaltyPointCreated(command.InitialPoint);
         }
+        public Guid SpecifyAggregateId(CreateLoyaltyPoint command) => command.ClientId;
     }
 }

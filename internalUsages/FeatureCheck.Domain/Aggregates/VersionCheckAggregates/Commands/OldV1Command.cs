@@ -18,5 +18,6 @@ public record OldV1Command : ICommand<VersionCheckAggregate>
         {
             yield return new PaymentAdded_V1(command.Amount);
         }
+        public Guid SpecifyAggregateId(OldV1Command command) => command.AggregateId;
     }
 }

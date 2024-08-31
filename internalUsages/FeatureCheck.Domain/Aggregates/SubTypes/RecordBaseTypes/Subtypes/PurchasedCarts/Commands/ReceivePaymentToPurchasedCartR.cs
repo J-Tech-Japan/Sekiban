@@ -11,9 +11,9 @@ public class ReceivePaymentToPurchasedCartR : ICommandWithVersionValidation<Purc
     public decimal Amount { get; init; } = 0;
     public string Currency { get; init; } = "JPY";
 
-    public Guid GetAggregateId() => CartId;
-
     public int ReferenceVersion { get; init; }
+
+    public Guid GetAggregateId() => CartId;
 
     public class Handler : ICommandHandler<PurchasedCartR, ReceivePaymentToPurchasedCartR>
     {
@@ -27,5 +27,6 @@ public class ReceivePaymentToPurchasedCartR : ICommandWithVersionValidation<Purc
             };
             yield return new PaymentCompletedR();
         }
+        public Guid SpecifyAggregateId(ReceivePaymentToPurchasedCartR command) => command.CartId;
     }
 }

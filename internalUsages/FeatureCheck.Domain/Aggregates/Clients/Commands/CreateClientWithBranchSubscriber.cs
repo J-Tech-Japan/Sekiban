@@ -70,5 +70,6 @@ public record CreateClientWithBranchSubscriber : ICommand<Client>
 
             yield return new ClientCreatedWithBranchAdd(command.BranchId, command.ClientName, command.ClientEmail);
         }
+        public Guid SpecifyAggregateId(CreateClientWithBranchSubscriber command) => Guid.NewGuid();
     }
 }

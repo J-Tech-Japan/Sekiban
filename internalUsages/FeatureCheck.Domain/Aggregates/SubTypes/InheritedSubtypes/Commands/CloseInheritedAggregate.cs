@@ -18,5 +18,6 @@ public record CloseInheritedAggregate : ICommand<ProcessingSubAggregate>
         {
             yield return new InheritedAggregateClosed(command.Reason);
         }
+        public Guid SpecifyAggregateId(CloseInheritedAggregate command) => command.AggregateId;
     }
 }

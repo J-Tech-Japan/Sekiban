@@ -34,5 +34,6 @@ public record AddLoyaltyPointWithVO : ICommandWithVersionValidation<LoyaltyPoint
                 command.LoyaltyPointValue,
                 command.Note);
         }
+        public Guid SpecifyAggregateId(AddLoyaltyPointWithVO command) => command.ClientId;
     }
 }

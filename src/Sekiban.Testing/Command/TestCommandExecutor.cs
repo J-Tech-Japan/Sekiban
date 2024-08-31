@@ -102,7 +102,8 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
                 }
             }
         }
-        var aggregateId = injectingAggregateId ?? CommandExecutor.GetAggregateId<TAggregatePayload>(command);
+        var aggregateId = injectingAggregateId ??
+            CommandExecutor.GetAggregateId<TAggregatePayload>(command, serviceProvider);
         if (command is ICommandWithoutLoadingAggregateCommon && command is not ICommandWithHandlerCommon)
         {
             var handler = serviceProvider.GetService(genericType) ??

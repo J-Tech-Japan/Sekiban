@@ -21,5 +21,6 @@ public record CreateRecentInMemoryActivity : ICommand<RecentInMemoryActivity>
             yield return new RecentInMemoryActivityCreated(
                 new RecentInMemoryActivityRecord("First Event Created", _sekibanDateProducer.UtcNow));
         }
+        public Guid SpecifyAggregateId(CreateRecentInMemoryActivity command) => Guid.NewGuid();
     }
 }

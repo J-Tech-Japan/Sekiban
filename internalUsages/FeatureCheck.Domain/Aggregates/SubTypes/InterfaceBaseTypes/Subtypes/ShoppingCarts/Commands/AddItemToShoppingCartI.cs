@@ -30,5 +30,6 @@ public class AddItemToShoppingCartI : ICommand<ShoppingCartI>
                 Code = command.Code, Name = command.Name, Quantity = command.Quantity
             };
         }
+        public Guid SpecifyAggregateId(AddItemToShoppingCartI command) => command.CartId;
     }
 }

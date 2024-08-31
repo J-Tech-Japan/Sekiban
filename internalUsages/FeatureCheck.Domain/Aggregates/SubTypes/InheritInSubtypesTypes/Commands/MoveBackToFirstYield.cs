@@ -15,5 +15,6 @@ public record MoveBackToFirstYield(Guid AggregateId) : ICommand<SecondStage>
         {
             yield return new InheritInSubtypesMovedSecondToFirst();
         }
+        public Guid SpecifyAggregateId(MoveBackToFirstYield command) => command.AggregateId;
     }
 }

@@ -67,5 +67,6 @@ public record ReportVersionToSnapshotManger(
                     command.SnapshotVersion);
             }
         }
+        public Guid SpecifyAggregateId(ReportVersionToSnapshotManger command) => command.SnapshotManagerId;
     }
 }

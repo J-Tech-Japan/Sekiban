@@ -21,5 +21,6 @@ public record CurrentV3Command : ICommand<VersionCheckAggregate>
         {
             yield return new PaymentAdded_V3(command.Amount, command.PaymentKind, command.Description);
         }
+        public Guid SpecifyAggregateId(CurrentV3Command command) => command.AggregateId;
     }
 }

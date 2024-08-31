@@ -31,5 +31,6 @@ public record CreateBranch : ICommand<Branch>, ICleanupNecessaryCommand<CreateBr
         {
             yield return new BranchCreated(command.Name);
         }
+        public Guid SpecifyAggregateId(CreateBranch command) => Guid.NewGuid();
     }
 }

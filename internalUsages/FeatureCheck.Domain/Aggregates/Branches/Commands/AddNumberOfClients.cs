@@ -25,5 +25,6 @@ public class AddNumberOfClients : ICommandForExistingAggregate<Branch>
             var result = await aggregateLoader.AsDefaultStateAsync<Client>(command.ClientId);
             if (result is not null) yield return new BranchMemberAdded(command.ClientId);
         }
+        public Guid SpecifyAggregateId(AddNumberOfClients command) => command.BranchId;
     }
 }

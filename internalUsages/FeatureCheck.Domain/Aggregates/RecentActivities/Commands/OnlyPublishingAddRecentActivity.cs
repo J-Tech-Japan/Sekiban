@@ -28,5 +28,6 @@ public record OnlyPublishingAddRecentActivity(Guid RecentActivityId, string Acti
             yield return new RecentActivityAdded(
                 new RecentActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
         }
+        public Guid SpecifyAggregateId(OnlyPublishingAddRecentActivity command) => command.RecentActivityId;
     }
 }

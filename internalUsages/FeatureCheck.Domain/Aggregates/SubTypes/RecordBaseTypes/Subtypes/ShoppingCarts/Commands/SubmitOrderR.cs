@@ -8,9 +8,9 @@ public record SubmitOrderR : ICommandWithVersionValidation<ShoppingCartR>
     public Guid CartId { get; init; } = Guid.Empty;
     public DateTime OrderSubmittedLocalTime { get; init; }
 
-    public Guid GetAggregateId() => CartId;
-
     public int ReferenceVersion { get; init; }
+
+    public Guid GetAggregateId() => CartId;
 
     public class Handler : ICommandHandler<ShoppingCartR, SubmitOrderR>
     {
@@ -23,5 +23,6 @@ public record SubmitOrderR : ICommandWithVersionValidation<ShoppingCartR>
                 OrderSubmittedLocalTime = command.OrderSubmittedLocalTime
             };
         }
+        public Guid SpecifyAggregateId(SubmitOrderR command) => command.CartId;
     }
 }

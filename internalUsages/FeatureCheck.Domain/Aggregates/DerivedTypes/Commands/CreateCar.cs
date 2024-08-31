@@ -14,5 +14,6 @@ public record CreateCar(
     {
         public ICommand<DerivedTypeAggregate> ConvertCommand(CreateCar command) =>
             new CreateVehicle(new Car(command.Color, command.Name));
+        public Guid SpecifyAggregateId(CreateCar command) => command.GetAggregateId();
     }
 }

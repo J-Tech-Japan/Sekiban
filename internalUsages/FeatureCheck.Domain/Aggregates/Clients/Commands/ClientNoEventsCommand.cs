@@ -16,5 +16,6 @@ public record ClientNoEventsCommand : ICommand<Client>
         {
             yield break;
         }
+        public Guid SpecifyAggregateId(ClientNoEventsCommand command) => command.ClientId;
     }
 }

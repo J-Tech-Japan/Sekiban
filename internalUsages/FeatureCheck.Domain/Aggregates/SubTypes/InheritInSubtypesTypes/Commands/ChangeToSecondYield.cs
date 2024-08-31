@@ -15,5 +15,6 @@ public record ChangeToSecondYield(Guid AggregateId, int SecondProperty) : IComma
         {
             yield return new InheritInSubtypesMovedToSecond(command.SecondProperty);
         }
+        public Guid SpecifyAggregateId(ChangeToSecondYield command) => command.AggregateId;
     }
 }

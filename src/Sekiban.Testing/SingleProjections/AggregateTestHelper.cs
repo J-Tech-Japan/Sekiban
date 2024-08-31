@@ -692,7 +692,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
                 }
             }
         }
-        AggregateIdHolder.AggregateId = CommandExecutor.GetAggregateId<TAggregatePayloadIn>(command);
+        AggregateIdHolder.AggregateId = CommandExecutor.GetAggregateId<TAggregatePayloadIn>(command, _serviceProvider);
         AggregateIdHolder.RootPartitionKey = command.GetRootPartitionKey();
 
         var commandDocument = new CommandDocument<TCommand>(

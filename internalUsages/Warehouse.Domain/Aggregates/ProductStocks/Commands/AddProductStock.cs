@@ -23,5 +23,6 @@ public record AddProductStock : ICommand<ProductStock>
                 ? throw new SekibanTypeNotFoundException("Product does not exist")
                 : (IEventPayloadApplicableTo<ProductStock>)new ProductStockAdded { AddedAmount = command.AddedAmount };
         }
+        public Guid SpecifyAggregateId(AddProductStock command) => command.ProductId;
     }
 }

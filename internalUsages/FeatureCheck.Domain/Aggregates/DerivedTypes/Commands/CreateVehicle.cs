@@ -16,5 +16,6 @@ public record CreateVehicle(IVehicle Vehicle) : ICommand<DerivedTypeAggregate>
         {
             yield return new DerivedTypeCreated(command.Vehicle);
         }
+        public Guid SpecifyAggregateId(CreateVehicle command) => Guid.NewGuid();
     }
 }

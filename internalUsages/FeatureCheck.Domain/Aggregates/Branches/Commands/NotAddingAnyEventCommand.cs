@@ -14,5 +14,6 @@ public record NotAddingAnyEventCommand : ICommand<Branch>
         {
             yield break;
         }
+        public Guid SpecifyAggregateId(NotAddingAnyEventCommand command) => Guid.Empty;
     }
 }

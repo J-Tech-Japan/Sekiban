@@ -20,5 +20,6 @@ public record CreateSnapshotManager : ICommand<SnapshotManager>
         {
             yield return new SnapshotManagerCreated(sekibanDateProducer.UtcNow);
         }
+        public Guid SpecifyAggregateId(CreateSnapshotManager command) => SnapshotManager.SharedId;
     }
 }

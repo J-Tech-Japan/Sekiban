@@ -13,5 +13,6 @@ public record ReportProductStockCount : ICommand<ProductStock>
             ReportProductStockCount command,
             ICommandContext<ProductStock> context) =>
             throw new NotImplementedException();
+        public Guid SpecifyAggregateId(ReportProductStockCount command) => throw new NotImplementedException();
     }
 }

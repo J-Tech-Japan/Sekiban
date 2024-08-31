@@ -21,5 +21,6 @@ public record CreateRecentActivity : ICommand<RecentActivity>
             yield return new RecentActivityCreated(
                 new RecentActivityRecord("First Event Created", _sekibanDateProducer.UtcNow));
         }
+        public Guid SpecifyAggregateId(CreateRecentActivity command) => Guid.NewGuid();
     }
 }

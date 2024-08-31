@@ -66,5 +66,6 @@ public record CreateClient : ICommand<Client>
 
             yield return new ClientCreated(command.BranchId, command.ClientName, command.ClientEmail);
         }
+        public Guid SpecifyAggregateId(CreateClient command) => Guid.NewGuid();
     }
 }

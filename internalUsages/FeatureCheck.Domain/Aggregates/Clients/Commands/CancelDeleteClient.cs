@@ -23,5 +23,6 @@ public record CancelDeleteClient : ICommandWithVersionValidation<Client>, ICance
         {
             yield return new ClientDeleteCancelled();
         }
+        public Guid SpecifyAggregateId(CancelDeleteClient command) => command.ClientId;
     }
 }

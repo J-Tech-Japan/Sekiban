@@ -21,5 +21,6 @@ public record DeleteClient(Guid ClientId) : ICommandWithVersionValidation<Client
         {
             yield return new ClientDeleted();
         }
+        public Guid SpecifyAggregateId(DeleteClient command) => command.ClientId;
     }
 }

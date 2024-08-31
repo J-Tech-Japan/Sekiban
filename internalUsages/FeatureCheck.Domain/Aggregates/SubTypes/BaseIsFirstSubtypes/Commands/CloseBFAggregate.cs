@@ -15,5 +15,6 @@ public record CloseBFAggregate(Guid BfAggregateId) : ICommand<ActiveBFAggregate>
         {
             yield return new BFAggregateClosed();
         }
+        public Guid SpecifyAggregateId(CloseBFAggregate command) => command.BfAggregateId;
     }
 }

@@ -15,5 +15,6 @@ public record BFAggregateCreateAccount(string Name, long Price) : ICommand<BaseF
         {
             yield return new BFAggregateInitiated(command.Name, command.Price);
         }
+        public Guid SpecifyAggregateId(BFAggregateCreateAccount command) => Guid.NewGuid();
     }
 }

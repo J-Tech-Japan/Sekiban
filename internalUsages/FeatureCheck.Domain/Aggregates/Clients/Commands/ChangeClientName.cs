@@ -27,5 +27,6 @@ public record ChangeClientName(Guid ClientId, string ClientName)
         {
             yield return new ClientNameChanged(command.ClientName);
         }
+        public Guid SpecifyAggregateId(ChangeClientName command) => command.ClientId;
     }
 }

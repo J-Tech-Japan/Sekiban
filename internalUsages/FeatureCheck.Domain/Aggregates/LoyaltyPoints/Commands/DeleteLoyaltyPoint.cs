@@ -21,5 +21,6 @@ public record DeleteLoyaltyPoint(Guid ClientId) : ICommand<LoyaltyPoint>
         {
             yield return new LoyaltyPointDeleted();
         }
+        public Guid SpecifyAggregateId(DeleteLoyaltyPoint command) => command.ClientId;
     }
 }

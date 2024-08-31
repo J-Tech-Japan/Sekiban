@@ -39,5 +39,6 @@ public record UseLoyaltyPoint(
 
             yield return new LoyaltyPointUsed(command.HappenedDate, command.Reason, command.PointAmount, command.Note);
         }
+        public Guid SpecifyAggregateId(UseLoyaltyPoint command) => command.ClientId;
     }
 }

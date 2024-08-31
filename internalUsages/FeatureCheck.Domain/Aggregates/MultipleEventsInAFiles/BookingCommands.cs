@@ -26,6 +26,7 @@ public static class BookingCommands
                     command.CheckOutDate,
                     command.TotalAmount);
             }
+            public Guid SpecifyAggregateId(BookRoom command) => Guid.NewGuid();
         }
     }
 
@@ -43,6 +44,7 @@ public static class BookingCommands
                     context.GetState().Payload.TotalAmount.CanAdd(command.Payment))
                     yield return new BookingEvents.BookingPaid(command.Payment, command.Note);
             }
+            public Guid SpecifyAggregateId(PayBookedRoom command) => command.BookingId;
         }
     }
 }

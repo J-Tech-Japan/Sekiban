@@ -19,5 +19,6 @@ public record ALotOfEventsCreateCommand : ICommand<ALotOfEventsAggregate>
             foreach (var i in Enumerable.Range(0, command.NumberOfEvents))
                 yield return new ALotOfEventsSingleEvent(i.ToString());
         }
+        public Guid SpecifyAggregateId(ALotOfEventsCreateCommand command) => command.AggregateId;
     }
 }

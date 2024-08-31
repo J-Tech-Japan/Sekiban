@@ -11,9 +11,9 @@ public class CreateBranchWithRootPartitionKey : ICommand<Branch>
     [Required]
     public string Name { get; init; } = string.Empty;
 
-    public Guid GetAggregateId() => Guid.NewGuid();
-
     public string GetRootPartitionKey() => RootPartitionKey;
+
+    public Guid GetAggregateId() => Guid.NewGuid();
 
     public class Handler : ICommandHandler<Branch, CreateBranchWithRootPartitionKey>
     {
@@ -23,5 +23,6 @@ public class CreateBranchWithRootPartitionKey : ICommand<Branch>
         {
             yield return new BranchCreated(command.Name);
         }
+        public Guid SpecifyAggregateId(CreateBranchWithRootPartitionKey command) => Guid.NewGuid();
     }
 }

@@ -48,5 +48,6 @@ public record CreateLoyaltyPointAndAddPoint(Guid ClientId, int AddingPoint) : IC
                     command.AddingPoint,
                     "Gmail users gift");
         }
+        public Guid SpecifyAggregateId(CreateLoyaltyPointAndAddPoint command) => command.ClientId;
     }
 }

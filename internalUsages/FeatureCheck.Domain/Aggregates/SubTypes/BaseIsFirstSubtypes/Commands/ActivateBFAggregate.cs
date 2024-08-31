@@ -15,5 +15,6 @@ public record ActivateBFAggregate(Guid BfAggregateId) : ICommand<BaseFirstAggreg
         {
             yield return new BFAggregateActivated();
         }
+        public Guid SpecifyAggregateId(ActivateBFAggregate command) => command.BfAggregateId;
     }
 }
