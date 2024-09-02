@@ -33,8 +33,6 @@ public record CreateClientWithBranchSubscriber : ICommand<Client>
         ClientEmail = clientEmail;
     }
 
-    public Guid GetAggregateId() => Guid.NewGuid();
-
     public class Handler : ICommandHandlerAsync<Client, CreateClientWithBranchSubscriber>
     {
         private readonly DependencyInjectionSampleService dependencyInjectionSampleService;
@@ -70,5 +68,6 @@ public record CreateClientWithBranchSubscriber : ICommand<Client>
 
             yield return new ClientCreatedWithBranchAdd(command.BranchId, command.ClientName, command.ClientEmail);
         }
+        public Guid SpecifyAggregateId(CreateClientWithBranchSubscriber command) => Guid.NewGuid();
     }
 }

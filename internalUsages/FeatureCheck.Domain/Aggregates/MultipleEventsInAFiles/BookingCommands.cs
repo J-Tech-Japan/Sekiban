@@ -11,8 +11,6 @@ public static class BookingCommands
         BookingValueObjects.DateOnly CheckOutDate,
         BookingValueObjects.Money TotalAmount) : ICommand<Booking>
     {
-        public Guid GetAggregateId() => Guid.NewGuid();
-
         public class Handler : ICommandHandler<Booking, BookRoom>
         {
             public IEnumerable<IEventPayloadApplicableTo<Booking>> HandleCommand(
@@ -26,13 +24,12 @@ public static class BookingCommands
                     command.CheckOutDate,
                     command.TotalAmount);
             }
+            public Guid SpecifyAggregateId(BookRoom command) => Guid.NewGuid();
         }
     }
 
     public record PayBookedRoom(Guid BookingId, BookingValueObjects.Money Payment, string Note) : ICommand<Booking>
     {
-        public Guid GetAggregateId() => BookingId;
-
         public class Handler : ICommandHandler<Booking, PayBookedRoom>
         {
             public IEnumerable<IEventPayloadApplicableTo<Booking>> HandleCommand(
@@ -43,6 +40,7 @@ public static class BookingCommands
                     context.GetState().Payload.TotalAmount.CanAdd(command.Payment))
                     yield return new BookingEvents.BookingPaid(command.Payment, command.Note);
             }
+            public Guid SpecifyAggregateId(PayBookedRoom command) => command.BookingId;
         }
     }
 }

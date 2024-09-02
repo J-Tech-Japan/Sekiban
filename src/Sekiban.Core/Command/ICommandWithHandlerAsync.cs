@@ -4,7 +4,7 @@ namespace Sekiban.Core.Command;
 
 public interface
     ICommandWithHandlerAsync<TAggregatePayload, in TCommand> : ICommandWithHandlerCommon<TAggregatePayload, TCommand>
-    where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayload>
+    where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommandCommon<TAggregatePayload>
 {
 
     public static abstract Task<ResultBox<UnitValue>> HandleCommandAsync(

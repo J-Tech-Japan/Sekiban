@@ -5,8 +5,6 @@ namespace FeatureCheck.Domain.Aggregates.SubTypes.InheritInSubtypesTypes.Command
 
 public record MoveBackToFirstYield(Guid AggregateId) : ICommand<SecondStage>
 {
-    public Guid GetAggregateId() => AggregateId;
-
     public class Handler : ICommandHandler<SecondStage, MoveBackToFirstYield>
     {
         public IEnumerable<IEventPayloadApplicableTo<SecondStage>> HandleCommand(
@@ -15,5 +13,6 @@ public record MoveBackToFirstYield(Guid AggregateId) : ICommand<SecondStage>
         {
             yield return new InheritInSubtypesMovedSecondToFirst();
         }
+        public Guid SpecifyAggregateId(MoveBackToFirstYield command) => command.AggregateId;
     }
 }

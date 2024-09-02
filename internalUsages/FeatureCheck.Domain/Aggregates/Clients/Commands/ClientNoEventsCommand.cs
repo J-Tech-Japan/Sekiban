@@ -6,8 +6,6 @@ public record ClientNoEventsCommand : ICommand<Client>
 {
     public Guid ClientId { get; init; }
 
-    public Guid GetAggregateId() => ClientId;
-
     public class Handler : ICommandHandler<Client, ClientNoEventsCommand>
     {
         public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(
@@ -16,5 +14,6 @@ public record ClientNoEventsCommand : ICommand<Client>
         {
             yield break;
         }
+        public Guid SpecifyAggregateId(ClientNoEventsCommand command) => command.ClientId;
     }
 }

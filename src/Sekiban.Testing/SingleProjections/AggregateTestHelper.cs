@@ -141,47 +141,51 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         }
     }
     public IAggregateTestHelper<TAggregatePayload> GivenCommand<TCommand>(TCommand command)
-        where TCommand : ICommand<TAggregatePayload> =>
+        where TCommand : ICommandCommon<TAggregatePayload> =>
         WhenCommand(command);
     public IAggregateTestHelper<TAggregatePayload> GivenSubtypeCommand<TAggregateSubtype>(
-        ICommand<TAggregateSubtype> command)
+        ICommandCommon<TAggregateSubtype> command)
         where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload> =>
         WhenSubtypeCommand(command);
     public IAggregateTestHelper<TAggregatePayload> GivenSubtypeCommandWithPublish<TAggregateSubtype>(
-        ICommand<TAggregateSubtype> command)
+        ICommandCommon<TAggregateSubtype> command)
         where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload> =>
         WhenSubtypeCommandWithPublish(command);
     public IAggregateTestHelper<TAggregatePayload>
-        GivenSubtypeCommandWithPublishAndBlockingSubscriber<TAggregateSubtype>(ICommand<TAggregateSubtype> command)
+        GivenSubtypeCommandWithPublishAndBlockingSubscriber<TAggregateSubtype>(
+            ICommandCommon<TAggregateSubtype> command)
         where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload> =>
         WhenSubtypeCommandWithPublishAndBlockingSubscriber(command);
     public IAggregateTestHelper<TAggregatePayload> GivenCommand<TCommand>(
-        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommand<TAggregatePayload> =>
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommandCommon<TAggregatePayload> =>
         WhenCommand(commandFunc);
     public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublish<TCommand>(TCommand command)
-        where TCommand : ICommand<TAggregatePayload> =>
+        where TCommand : ICommandCommon<TAggregatePayload> =>
         WhenCommandWithPublish(command);
     public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublishAndBlockingSubscriber<TCommand>(
-        TCommand command) where TCommand : ICommand<TAggregatePayload> =>
+        TCommand command) where TCommand : ICommandCommon<TAggregatePayload> =>
         WhenCommandWithPublishAndBlockingSubscriber(command);
     public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublish<TCommand>(
-        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommand<TAggregatePayload> =>
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommandCommon<TAggregatePayload> =>
         WhenCommandWithPublish(commandFunc);
     public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublishAndBlockingSubscriber<TCommand>(
-        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommand<TAggregatePayload> =>
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommandCommon<TAggregatePayload> =>
         WhenCommandWithPublishAndBlockingSubscriber(commandFunc);
 
     public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommand<TAggregateSubtype>(
-        ICommand<TAggregateSubtype> command)
+        ICommandCommon<TAggregateSubtype> command)
         where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload> =>
         WhenSubtypeCommandPrivate(command, false);
     public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommandWithPublish<TAggregateSubtype>(
-        ICommand<TAggregateSubtype> command)
+        ICommandCommon<TAggregateSubtype> command)
         where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload> =>
         WhenSubtypeCommandPrivate(command, true);
 
     public IAggregateTestHelper<TAggregatePayload>
-        WhenSubtypeCommandWithPublishAndBlockingSubscriber<TAggregateSubtype>(ICommand<TAggregateSubtype> command)
+        WhenSubtypeCommandWithPublishAndBlockingSubscriber<TAggregateSubtype>(ICommandCommon<TAggregateSubtype> command)
         where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload>
     {
         var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>() ??
@@ -190,16 +194,17 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         return this;
     }
     public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(TCommand command)
-        where TCommand : ICommand<TAggregatePayload>
+        where TCommand : ICommandCommon<TAggregatePayload>
     {
         return WhenCommand(_ => command);
     }
     public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(
-        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommand<TAggregatePayload> =>
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommandCommon<TAggregatePayload> =>
         WhenCommandPrivateFunc<TAggregatePayload, TCommand>(commandFunc, false);
 
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublishAndBlockingSubscriber<TCommand>(
-        TCommand command) where TCommand : ICommand<TAggregatePayload>
+        TCommand command) where TCommand : ICommandCommon<TAggregatePayload>
     {
         var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>() ??
             throw new SekibanTypeNotFoundException("EventNonBlockingStatus is not registered");
@@ -207,16 +212,18 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         return this;
     }
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(TCommand command)
-        where TCommand : ICommand<TAggregatePayload>
+        where TCommand : ICommandCommon<TAggregatePayload>
     {
         return WhenCommandPrivateFunc<TAggregatePayload, TCommand>(_ => command, true);
     }
 
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(
-        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommand<TAggregatePayload> =>
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommandCommon<TAggregatePayload> =>
         WhenCommandPrivateFunc<TAggregatePayload, TCommand>(commandFunc, true);
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublishAndBlockingSubscriber<TCommand>(
-        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommand<TAggregatePayload>
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommandCommon<TAggregatePayload>
     {
         var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>() ??
             throw new SekibanTypeNotFoundException("EventNonBlockingStatus is not registered");
@@ -479,11 +486,11 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     }
 
     public Guid RunEnvironmentCommand<TEnvironmentAggregatePayload>(
-        ICommand<TEnvironmentAggregatePayload> command,
+        ICommandCommon<TEnvironmentAggregatePayload> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon =>
         _commandExecutor.ExecuteCommand(command, injectingAggregateId);
     public Guid GivenEnvironmentCommand<TEnvironmentAggregatePayload>(
-        ICommand<TEnvironmentAggregatePayload> command,
+        ICommandCommon<TEnvironmentAggregatePayload> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon =>
         RunEnvironmentCommand(command, injectingAggregateId);
 
@@ -520,15 +527,15 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     }
 
     public Guid RunEnvironmentCommandWithPublish<TEnvironmentAggregatePayload>(
-        ICommand<TEnvironmentAggregatePayload> command,
+        ICommandCommon<TEnvironmentAggregatePayload> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon =>
         _commandExecutor.ExecuteCommandWithPublish(command, injectingAggregateId);
     public Guid GivenEnvironmentCommandWithPublish<TEnvironmentAggregatePayload>(
-        ICommand<TEnvironmentAggregatePayload> command,
+        ICommandCommon<TEnvironmentAggregatePayload> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon =>
         RunEnvironmentCommandWithPublish(command, injectingAggregateId);
     public Guid RunEnvironmentCommandWithPublishAndBlockingEvent<TEnvironmentAggregatePayload>(
-        ICommand<TEnvironmentAggregatePayload> command,
+        ICommandCommon<TEnvironmentAggregatePayload> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon
     {
         var nonBlockingStatus = _serviceProvider.GetService<EventNonBlockingStatus>() ??
@@ -536,7 +543,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         return nonBlockingStatus.RunBlockingFunc(() => RunEnvironmentCommandWithPublish(command));
     }
     public Guid GivenEnvironmentCommandWithPublishAndBlockingEvent<TEnvironmentAggregatePayload>(
-        ICommand<TEnvironmentAggregatePayload> command,
+        ICommandCommon<TEnvironmentAggregatePayload> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon =>
         RunEnvironmentCommandWithPublishAndBlockingEvent(command, injectingAggregateId);
 
@@ -614,7 +621,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         ;
     }
     public IAggregateTestHelper<TAggregatePayload> WhenSubtypeCommandPrivate<TAggregateSubtype>(
-        ICommand<TAggregateSubtype> command,
+        ICommandCommon<TAggregateSubtype> command,
         bool withPublish) where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload>
     {
         var commandType = command.GetType();
@@ -645,12 +652,12 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     }
     private IAggregateTestHelper<TAggregatePayload>
         WhenCommandPrivate<TAggregatePayloadIn, TCommand>(TCommand command, bool withPublish)
-        where TAggregatePayloadIn : IAggregatePayloadCommon where TCommand : ICommand<TAggregatePayloadIn> =>
+        where TAggregatePayloadIn : IAggregatePayloadCommon where TCommand : ICommandCommon<TAggregatePayloadIn> =>
         WhenCommandPrivateFunc<TAggregatePayloadIn, TCommand>(_ => command, withPublish);
     private IAggregateTestHelper<TAggregatePayload> WhenCommandPrivateFunc<TAggregatePayloadIn, TCommand>(
         Func<AggregateState<TAggregatePayload>, TCommand> commandFunc,
         bool withPublish) where TAggregatePayloadIn : IAggregatePayloadCommon
-        where TCommand : ICommand<TAggregatePayloadIn>
+        where TCommand : ICommandCommon<TAggregatePayloadIn>
     {
         ResetBeforeCommand();
         var command = commandFunc(GetAggregateStateIfNotNullEmptyAggregate());
@@ -685,7 +692,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
                 }
             }
         }
-        AggregateIdHolder.AggregateId = command.GetAggregateId();
+        AggregateIdHolder.AggregateId = CommandExecutor.GetAggregateId<TAggregatePayloadIn>(command, _serviceProvider);
         AggregateIdHolder.RootPartitionKey = command.GetRootPartitionKey();
 
         var commandDocument = new CommandDocument<TCommand>(

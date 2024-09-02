@@ -13,8 +13,6 @@ public record AddRecentInMemoryActivity(Guid RecentInMemoryActivityId, string Ac
     {
     }
 
-    public Guid GetAggregateId() => RecentInMemoryActivityId;
-
     public class Handler : ICommandHandler<RecentInMemoryActivity, AddRecentInMemoryActivity>
     {
         private readonly ISekibanDateProducer _sekibanDateProducer;
@@ -28,5 +26,6 @@ public record AddRecentInMemoryActivity(Guid RecentInMemoryActivityId, string Ac
             yield return new RecentInMemoryActivityAdded(
                 new RecentInMemoryActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
         }
+        public Guid SpecifyAggregateId(AddRecentInMemoryActivity command) => command.RecentInMemoryActivityId;
     }
 }

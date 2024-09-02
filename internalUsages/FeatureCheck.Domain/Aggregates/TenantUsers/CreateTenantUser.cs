@@ -5,8 +5,6 @@ namespace FeatureCheck.Domain.Aggregates.TenantUsers;
 public record CreateTenantUser(string Name, string Email, string TenantId)
     : ITenantCommandWithHandlerAsync<TenantUser, CreateTenantUser>
 {
-    public Guid GetAggregateId() => Guid.NewGuid();
-
     public static async Task<ResultBox<UnitValue>> HandleCommandAsync(
         CreateTenantUser command,
         ICommandContext<TenantUser> context)
@@ -20,4 +18,5 @@ public record CreateTenantUser(string Name, string Email, string TenantId)
             .Conveyor(_ => context.AppendEvent(new TenantUserCreated(command.Name, command.Email)));
     }
     public string GetTenantId() => TenantId;
+    public static Guid SpecifyAggregateId(CreateTenantUser command) => Guid.NewGuid();
 }

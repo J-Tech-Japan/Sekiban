@@ -6,8 +6,6 @@ namespace FeatureCheck.Domain.Aggregates.RecentInMemoryActivities.Commands;
 
 public record CreateRecentInMemoryActivity : ICommand<RecentInMemoryActivity>
 {
-    public Guid GetAggregateId() => Guid.NewGuid();
-
     public class Handler : ICommandHandler<RecentInMemoryActivity, CreateRecentInMemoryActivity>
     {
         private readonly ISekibanDateProducer _sekibanDateProducer;
@@ -21,5 +19,6 @@ public record CreateRecentInMemoryActivity : ICommand<RecentInMemoryActivity>
             yield return new RecentInMemoryActivityCreated(
                 new RecentInMemoryActivityRecord("First Event Created", _sekibanDateProducer.UtcNow));
         }
+        public Guid SpecifyAggregateId(CreateRecentInMemoryActivity command) => Guid.NewGuid();
     }
 }

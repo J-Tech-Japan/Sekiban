@@ -11,8 +11,6 @@ public record CurrentV3Command : ICommand<VersionCheckAggregate>
     public PaymentKind PaymentKind { get; init; }
     public string Description { get; init; } = string.Empty;
 
-    public Guid GetAggregateId() => AggregateId;
-
     public class Handler : ICommandHandler<VersionCheckAggregate, CurrentV3Command>
     {
         public IEnumerable<IEventPayloadApplicableTo<VersionCheckAggregate>> HandleCommand(
@@ -21,5 +19,6 @@ public record CurrentV3Command : ICommand<VersionCheckAggregate>
         {
             yield return new PaymentAdded_V3(command.Amount, command.PaymentKind, command.Description);
         }
+        public Guid SpecifyAggregateId(CurrentV3Command command) => command.AggregateId;
     }
 }

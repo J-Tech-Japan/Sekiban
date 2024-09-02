@@ -5,8 +5,6 @@ namespace FeatureCheck.Domain.Aggregates.SubTypes.BaseIsFirstSubtypes.Commands;
 
 public record CloseBFAggregate(Guid BfAggregateId) : ICommand<ActiveBFAggregate>
 {
-    public Guid GetAggregateId() => BfAggregateId;
-
     public class Handler : ICommandHandler<ActiveBFAggregate, CloseBFAggregate>
     {
         public IEnumerable<IEventPayloadApplicableTo<ActiveBFAggregate>> HandleCommand(
@@ -15,5 +13,6 @@ public record CloseBFAggregate(Guid BfAggregateId) : ICommand<ActiveBFAggregate>
         {
             yield return new BFAggregateClosed();
         }
+        public Guid SpecifyAggregateId(CloseBFAggregate command) => command.BfAggregateId;
     }
 }

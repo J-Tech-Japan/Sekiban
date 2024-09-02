@@ -17,8 +17,6 @@ public record ChangeClientName(Guid ClientId, string ClientName)
 
     public int ReferenceVersion { get; init; }
 
-    public Guid GetAggregateId() => ClientId;
-
     public class Handler : ICommandHandler<Client, ChangeClientName>
     {
         public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(
@@ -27,5 +25,6 @@ public record ChangeClientName(Guid ClientId, string ClientName)
         {
             yield return new ClientNameChanged(command.ClientName);
         }
+        public Guid SpecifyAggregateId(ChangeClientName command) => command.ClientId;
     }
 }

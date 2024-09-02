@@ -10,8 +10,6 @@ public class OldV2Command : ICommand<VersionCheckAggregate>
     public int Amount { get; init; }
     public PaymentKind PaymentKind { get; init; }
 
-    public Guid GetAggregateId() => AggregateId;
-
     public class Handler : ICommandHandler<VersionCheckAggregate, OldV2Command>
     {
         public IEnumerable<IEventPayloadApplicableTo<VersionCheckAggregate>> HandleCommand(
@@ -20,5 +18,6 @@ public class OldV2Command : ICommand<VersionCheckAggregate>
         {
             yield return new PaymentAdded_V2(command.Amount, command.PaymentKind);
         }
+        public Guid SpecifyAggregateId(OldV2Command command) => command.AggregateId;
     }
 }

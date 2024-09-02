@@ -6,8 +6,6 @@ namespace FeatureCheck.Domain.Aggregates.DerivedTypes.Commands;
 
 public record CreateVehicle(IVehicle Vehicle) : ICommand<DerivedTypeAggregate>
 {
-    public Guid GetAggregateId() => Guid.NewGuid();
-
     public class Handler : ICommandHandler<DerivedTypeAggregate, CreateVehicle>
     {
         public IEnumerable<IEventPayloadApplicableTo<DerivedTypeAggregate>> HandleCommand(
@@ -16,5 +14,6 @@ public record CreateVehicle(IVehicle Vehicle) : ICommand<DerivedTypeAggregate>
         {
             yield return new DerivedTypeCreated(command.Vehicle);
         }
+        public Guid SpecifyAggregateId(CreateVehicle command) => Guid.NewGuid();
     }
 }

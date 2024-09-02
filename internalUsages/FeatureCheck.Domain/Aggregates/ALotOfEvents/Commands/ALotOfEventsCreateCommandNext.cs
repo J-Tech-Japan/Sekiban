@@ -7,8 +7,6 @@ namespace FeatureCheck.Domain.Aggregates.ALotOfEvents.Commands;
 public record ALotOfEventsCreateCommandNext(Guid AggregateId, int NumberOfEvents)
     : ICommandWithHandler<ALotOfEventsAggregate, ALotOfEventsCreateCommandNext>
 {
-    public Guid GetAggregateId() => AggregateId;
-
     public static ResultBox<UnitValue> HandleCommand(
         ALotOfEventsCreateCommandNext command,
         ICommandContext<ALotOfEventsAggregate> context)
@@ -23,4 +21,5 @@ public record ALotOfEventsCreateCommandNext(Guid AggregateId, int NumberOfEvents
                     .ToArray())
             .Conveyor(context.AppendEvents);
     }
+    public static Guid SpecifyAggregateId(ALotOfEventsCreateCommandNext command) => command.AggregateId;
 }

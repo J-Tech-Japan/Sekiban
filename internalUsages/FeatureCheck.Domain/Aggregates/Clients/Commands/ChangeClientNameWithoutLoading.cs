@@ -5,8 +5,6 @@ namespace FeatureCheck.Domain.Aggregates.Clients.Commands;
 
 public record ChangeClientNameWithoutLoading(Guid ClientId, string ClientName) : ICommandWithoutLoadingAggregate<Client>
 {
-    public Guid GetAggregateId() => ClientId;
-
     public class Handler : ICommandWithoutLoadingAggregateHandler<Client, ChangeClientNameWithoutLoading>
     {
         public IEnumerable<IEventPayloadApplicableTo<Client>> HandleCommand(
@@ -15,5 +13,6 @@ public record ChangeClientNameWithoutLoading(Guid ClientId, string ClientName) :
         {
             yield return new ClientNameChanged(command.ClientName);
         }
+        public Guid SpecifyAggregateId(ChangeClientNameWithoutLoading command) => command.ClientId;
     }
 }

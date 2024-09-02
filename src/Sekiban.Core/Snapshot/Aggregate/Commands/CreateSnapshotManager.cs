@@ -9,8 +9,6 @@ namespace Sekiban.Core.Snapshot.Aggregate.Commands;
 /// </summary>
 public record CreateSnapshotManager : ICommand<SnapshotManager>
 {
-    public Guid GetAggregateId() => SnapshotManager.SharedId;
-
     public class Handler(ISekibanDateProducer sekibanDateProducer)
         : ICommandHandler<SnapshotManager, CreateSnapshotManager>
     {
@@ -20,5 +18,6 @@ public record CreateSnapshotManager : ICommand<SnapshotManager>
         {
             yield return new SnapshotManagerCreated(sekibanDateProducer.UtcNow);
         }
+        public Guid SpecifyAggregateId(CreateSnapshotManager command) => SnapshotManager.SharedId;
     }
 }

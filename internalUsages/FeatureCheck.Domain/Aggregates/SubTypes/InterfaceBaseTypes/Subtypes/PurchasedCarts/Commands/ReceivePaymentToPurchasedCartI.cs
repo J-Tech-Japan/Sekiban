@@ -11,8 +11,6 @@ public record ReceivePaymentToPurchasedCartI : ICommandWithVersionValidation<Pur
     public decimal Amount { get; init; } = 0;
     public string Currency { get; init; } = "JPY";
 
-    public Guid GetAggregateId() => CartId;
-
     public int ReferenceVersion { get; init; }
 
     public class Handler : ICommandHandler<PurchasedCartI, ReceivePaymentToPurchasedCartI>
@@ -27,5 +25,6 @@ public record ReceivePaymentToPurchasedCartI : ICommandWithVersionValidation<Pur
             };
             yield return new PaymentCompletedI();
         }
+        public Guid SpecifyAggregateId(ReceivePaymentToPurchasedCartI command) => command.CartId;
     }
 }

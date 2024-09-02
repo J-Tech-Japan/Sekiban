@@ -6,10 +6,9 @@ namespace FeatureCheck.Domain.Aggregates.SubTypes.InheritInSubtypesTypes.Command
 public record CreateInheritInSubtypesType(int FirstProperty)
     : ICommandWithHandler<FirstStage, CreateInheritInSubtypesType>
 {
-    public Guid GetAggregateId() => Guid.NewGuid();
-
     public static ResultBox<UnitValue> HandleCommand(
         CreateInheritInSubtypesType command,
         ICommandContext<FirstStage> context) =>
         context.AppendEvent(new InheritInSubTypesCreated(command.FirstProperty));
+    public static Guid SpecifyAggregateId(CreateInheritInSubtypesType command) => Guid.NewGuid();
 }

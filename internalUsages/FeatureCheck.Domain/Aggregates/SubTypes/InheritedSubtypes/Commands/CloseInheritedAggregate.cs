@@ -8,8 +8,6 @@ public record CloseInheritedAggregate : ICommand<ProcessingSubAggregate>
     public string Reason { get; init; } = string.Empty;
     public Guid AggregateId { get; init; }
 
-    public Guid GetAggregateId() => AggregateId;
-
     public class Handler : ICommandHandler<ProcessingSubAggregate, CloseInheritedAggregate>
     {
         public IEnumerable<IEventPayloadApplicableTo<ProcessingSubAggregate>> HandleCommand(
@@ -18,5 +16,6 @@ public record CloseInheritedAggregate : ICommand<ProcessingSubAggregate>
         {
             yield return new InheritedAggregateClosed(command.Reason);
         }
+        public Guid SpecifyAggregateId(CloseInheritedAggregate command) => command.AggregateId;
     }
 }

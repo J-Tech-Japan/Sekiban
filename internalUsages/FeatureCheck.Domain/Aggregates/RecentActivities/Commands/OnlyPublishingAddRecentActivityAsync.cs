@@ -11,8 +11,6 @@ public record OnlyPublishingAddRecentActivityAsync(Guid RecentActivityId, string
     {
     }
 
-    public Guid GetAggregateId() => RecentActivityId;
-
     public class Handler : ICommandWithoutLoadingAggregateHandlerAsync<RecentActivity,
         OnlyPublishingAddRecentActivityAsync>
     {
@@ -28,5 +26,6 @@ public record OnlyPublishingAddRecentActivityAsync(Guid RecentActivityId, string
             yield return new RecentActivityAdded(
                 new RecentActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
         }
+        public Guid SpecifyAggregateId(OnlyPublishingAddRecentActivityAsync command) => command.RecentActivityId;
     }
 }

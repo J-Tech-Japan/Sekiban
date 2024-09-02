@@ -12,8 +12,6 @@ public record AddRecentActivity(Guid RecentActivityId, string Activity) : IComma
     {
     }
 
-    public Guid GetAggregateId() => RecentActivityId;
-
     public class Handler : ICommandHandler<RecentActivity, AddRecentActivity>
     {
         private readonly ISekibanDateProducer _sekibanDateProducer;
@@ -27,5 +25,6 @@ public record AddRecentActivity(Guid RecentActivityId, string Activity) : IComma
             yield return new RecentActivityAdded(
                 new RecentActivityRecord(command.Activity, _sekibanDateProducer.UtcNow));
         }
+        public Guid SpecifyAggregateId(AddRecentActivity command) => command.RecentActivityId;
     }
 }

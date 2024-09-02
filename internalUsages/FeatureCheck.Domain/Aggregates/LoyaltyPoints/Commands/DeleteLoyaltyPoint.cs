@@ -11,8 +11,6 @@ public record DeleteLoyaltyPoint(Guid ClientId) : ICommand<LoyaltyPoint>
     {
     }
 
-    public Guid GetAggregateId() => ClientId;
-
     public class Handler : ICommandHandler<LoyaltyPoint, DeleteLoyaltyPoint>
     {
         public IEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommand(
@@ -21,5 +19,6 @@ public record DeleteLoyaltyPoint(Guid ClientId) : ICommand<LoyaltyPoint>
         {
             yield return new LoyaltyPointDeleted();
         }
+        public Guid SpecifyAggregateId(DeleteLoyaltyPoint command) => command.ClientId;
     }
 }

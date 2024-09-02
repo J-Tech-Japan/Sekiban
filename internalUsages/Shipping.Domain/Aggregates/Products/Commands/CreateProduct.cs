@@ -9,13 +9,14 @@ public record CreateProduct : ICommand<Product>
     public string Code { get; init; } = string.Empty;
     public decimal Price { get; init; }
 
-    public Guid GetAggregateId() => Guid.NewGuid();
-
     public class Handler : ICommandHandler<Product, CreateProduct>
     {
-        public IEnumerable<IEventPayloadApplicableTo<Product>> HandleCommand(CreateProduct command, ICommandContext<Product> context)
+        public IEnumerable<IEventPayloadApplicableTo<Product>> HandleCommand(
+            CreateProduct command,
+            ICommandContext<Product> context)
         {
             yield return new ProductCreated { Name = command.Name, Code = command.Code, Price = command.Price };
         }
+        public Guid SpecifyAggregateId(CreateProduct command) => Guid.NewGuid();
     }
 }

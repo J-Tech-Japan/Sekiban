@@ -9,4 +9,7 @@ namespace Sekiban.Core.Command;
 /// <typeparam name="TCommand">Target command</typeparam>
 // ReSharper disable once UnusedTypeParameter
 public interface ICommandHandlerCommon<TAggregate, TCommand> : ICommandHandlerCommonBase
-    where TAggregate : IAggregatePayloadCommon where TCommand : ICommand<TAggregate>;
+    where TAggregate : IAggregatePayloadCommon where TCommand : ICommandCommon<TAggregate>
+{
+    public Guid SpecifyAggregateId(TCommand command);
+}

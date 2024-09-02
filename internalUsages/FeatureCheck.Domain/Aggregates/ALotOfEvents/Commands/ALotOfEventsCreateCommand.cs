@@ -8,8 +8,6 @@ public record ALotOfEventsCreateCommand : ICommand<ALotOfEventsAggregate>
     public Guid AggregateId { get; init; }
     public int NumberOfEvents { get; init; }
 
-    public Guid GetAggregateId() => AggregateId;
-
     public class Handler : ICommandHandler<ALotOfEventsAggregate, ALotOfEventsCreateCommand>
     {
         public IEnumerable<IEventPayloadApplicableTo<ALotOfEventsAggregate>> HandleCommand(
@@ -19,5 +17,6 @@ public record ALotOfEventsCreateCommand : ICommand<ALotOfEventsAggregate>
             foreach (var i in Enumerable.Range(0, command.NumberOfEvents))
                 yield return new ALotOfEventsSingleEvent(i.ToString());
         }
+        public Guid SpecifyAggregateId(ALotOfEventsCreateCommand command) => command.AggregateId;
     }
 }

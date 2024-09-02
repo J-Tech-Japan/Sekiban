@@ -9,7 +9,6 @@ public record AddProductStock : ICommand<ProductStock>
 {
     public Guid ProductId { get; init; }
     public decimal AddedAmount { get; init; }
-    public Guid GetAggregateId() => ProductId;
     public class Handler : ICommandHandlerAsync<ProductStock, AddProductStock>
     {
         private readonly IProductExistsPort _productExistsPort;
@@ -23,5 +22,6 @@ public record AddProductStock : ICommand<ProductStock>
                 ? throw new SekibanTypeNotFoundException("Product does not exist")
                 : (IEventPayloadApplicableTo<ProductStock>)new ProductStockAdded { AddedAmount = command.AddedAmount };
         }
+        public Guid SpecifyAggregateId(AddProductStock command) => command.ProductId;
     }
 }

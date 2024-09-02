@@ -8,11 +8,10 @@ public record CreateCar(
     [property: Required]
     string Name) : ICommandConverter<DerivedTypeAggregate>
 {
-    public Guid GetAggregateId() => Guid.NewGuid();
-
     public class Handler : ICommandConverterHandler<DerivedTypeAggregate, CreateCar>
     {
         public ICommand<DerivedTypeAggregate> ConvertCommand(CreateCar command) =>
             new CreateVehicle(new Car(command.Color, command.Name));
+        public Guid SpecifyAggregateId(CreateCar command) => Guid.NewGuid();
     }
 }

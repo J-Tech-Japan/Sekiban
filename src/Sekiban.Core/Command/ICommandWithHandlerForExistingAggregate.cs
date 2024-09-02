@@ -5,6 +5,6 @@ public interface
     ICommandWithHandlerForExistingAggregate<TAggregatePayload, in TCommand> :
     ICommandWithHandler<TAggregatePayload, TCommand>,
     IAggregateShouldExistCommand where TAggregatePayload : IAggregatePayloadCommon
-    where TCommand : ICommand<TAggregatePayload>
+    where TCommand : ICommandCommon<TAggregatePayload>
 {
 }

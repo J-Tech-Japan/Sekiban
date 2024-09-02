@@ -22,8 +22,6 @@ public record ReportVersionToSnapshotManger(
     {
     }
 
-    public Guid GetAggregateId() => SnapshotManagerId;
-
     public class Handler : ICommandHandler<SnapshotManager, ReportVersionToSnapshotManger>
     {
         private readonly IAggregateSettings _aggregateSettings;
@@ -67,5 +65,6 @@ public record ReportVersionToSnapshotManger(
                     command.SnapshotVersion);
             }
         }
+        public Guid SpecifyAggregateId(ReportVersionToSnapshotManger command) => command.SnapshotManagerId;
     }
 }

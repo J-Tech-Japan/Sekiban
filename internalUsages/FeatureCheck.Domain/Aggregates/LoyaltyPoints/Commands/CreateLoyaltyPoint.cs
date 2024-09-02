@@ -9,8 +9,6 @@ public record CreateLoyaltyPoint(Guid ClientId, int InitialPoint) : ICommand<Loy
     {
     }
 
-    public Guid GetAggregateId() => ClientId;
-
     public class Handler : ICommandHandler<LoyaltyPoint, CreateLoyaltyPoint>
     {
         public IEnumerable<IEventPayloadApplicableTo<LoyaltyPoint>> HandleCommand(
@@ -19,5 +17,6 @@ public record CreateLoyaltyPoint(Guid ClientId, int InitialPoint) : ICommand<Loy
         {
             yield return new LoyaltyPointCreated(command.InitialPoint);
         }
+        public Guid SpecifyAggregateId(CreateLoyaltyPoint command) => command.ClientId;
     }
 }
