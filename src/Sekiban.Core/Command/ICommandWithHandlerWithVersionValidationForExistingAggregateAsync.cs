@@ -6,6 +6,6 @@ public interface
     ICommandWithHandlerAsync<TAggregatePayload, TCommand>,
     IVersionValidationCommandCommon,
     IAggregateShouldExistCommand where TAggregatePayload : IAggregatePayloadCommon
-    where TCommand : ICommand<TAggregatePayload>
+    where TCommand : ICommandCommon<TAggregatePayload>
 {
 }
