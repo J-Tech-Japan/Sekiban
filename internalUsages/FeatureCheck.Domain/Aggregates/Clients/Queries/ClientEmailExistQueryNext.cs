@@ -5,7 +5,7 @@ using Sekiban.Core.Query.QueryModel;
 using System.Data;
 namespace FeatureCheck.Domain.Aggregates.Clients.Queries;
 
-public record ClientEmailExistQueryNext(string Email) : INextAggregateQuery<Client, bool>
+public record ClientEmailExistQueryNext(string Email) : INextAggregateQuery<Client, ClientEmailExistQueryNext, bool>
 {
     public string RootPartitionKey { get; init; } = IDocument.DefaultRootPartitionKey;
 

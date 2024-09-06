@@ -5,7 +5,7 @@ using Sekiban.Core.Query.QueryModel;
 namespace FeatureCheck.Domain.Projections;
 
 public class GeneralListQuerySampleNext(string EmailContains)
-    : INextGeneralListQueryAsync<GeneralListQuerySample_Response>
+    : INextGeneralListQueryAsync<GeneralListQuerySampleNext, GeneralListQuerySample_Response>
 {
     public Task<ResultBox<IEnumerable<GeneralListQuerySample_Response>>> HandleFilterAsync(IQueryContext context)
     {

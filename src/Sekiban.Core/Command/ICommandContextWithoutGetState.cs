@@ -42,9 +42,10 @@ public interface ICommandContextWithoutGetState<TAggregatePayload> where TAggreg
             SingleProjectionRetrievalOptions? retrievalOptions = null)
         where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
 
-    public Task<ResultBox<TOutput>> ExecuteQueryAsync<TOutput>(INextQueryCommon<TOutput> query) where TOutput : notnull;
-    public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteQueryAsync<TOutput>(INextListQueryCommon<TOutput> query)
+    public Task<ResultBox<TOutput>> ExecuteQueryAsync<TOutput>(INextQueryCommonOutput<TOutput> query)
         where TOutput : notnull;
+    public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteQueryAsync<TOutput>(
+        INextListQueryCommonOutput<TOutput> query) where TOutput : notnull;
 
     public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteQueryAsync<TOutput>(IListQueryInput<TOutput> param)
         where TOutput : IQueryResponse;

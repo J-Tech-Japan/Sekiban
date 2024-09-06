@@ -1,7 +1,7 @@
 namespace Sekiban.Core.Query.QueryModel;
 
-public interface ITenantNextGeneralListQueryAsync<TOutput> : INextGeneralListQueryAsync<TOutput>, ITenantQueryCommon
-    where TOutput : notnull
+public interface ITenantNextGeneralListQueryAsync<TQuery, TOutput> : INextGeneralListQueryAsync<TQuery, TOutput>,
+    ITenantQueryCommon where TOutput : notnull where TQuery : ITenantNextGeneralListQueryAsync<TQuery, TOutput>
 {
     string IQueryPartitionKeyCommon.GetRootPartitionKey() => GetTenantId();
 }

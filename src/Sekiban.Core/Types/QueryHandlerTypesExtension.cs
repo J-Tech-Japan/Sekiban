@@ -21,7 +21,7 @@ public static class QueryHandlerTypesExtension
     /// <param name="queryType"></param>
     /// <returns></returns>
     public static bool IsQueryNextType(this Type queryType) =>
-        queryType.DoesImplementingFromGenericInterfaceType(typeof(INextQueryCommon<>));
+        queryType.DoesImplementingFromGenericInterfaceType(typeof(INextQueryCommonOutput<>));
 
     public static Type GetAggregateProjectionOrQueryFromQueryNextType(this Type queryType) =>
         queryType.GetAggregatePayloadFromQueryNext() ?? queryType.GetMultiProjectionPayloadFromQueryNext() ?? queryType;
@@ -82,7 +82,7 @@ public static class QueryHandlerTypesExtension
     /// <param name="queryType"></param>
     /// <returns></returns>
     public static bool IsListQueryNextType(this Type queryType) =>
-        queryType.DoesImplementingFromGenericInterfaceType(typeof(INextListQueryCommon<>));
+        queryType.DoesImplementingFromGenericInterfaceType(typeof(INextListQueryCommon<,>));
 
     /// <summary>
     ///     Get the query output types from given list query input type.

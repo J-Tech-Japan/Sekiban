@@ -52,8 +52,9 @@ public interface ISekibanExecutor
             SingleProjectionRetrievalOptions? retrievalOptions = null)
         where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon;
 
-    public Task<ResultBox<TOutput>> ExecuteQuery<TOutput>(INextQueryCommon<TOutput> query) where TOutput : notnull;
-    public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteQuery<TOutput>(INextListQueryCommon<TOutput> query)
+    public Task<ResultBox<TOutput>> ExecuteQuery<TOutput>(INextQueryCommonOutput<TOutput> query)
+        where TOutput : notnull;
+    public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteQuery<TOutput>(INextListQueryCommonOutput<TOutput> query)
         where TOutput : notnull;
 
     public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteQuery<TOutput>(IListQueryInput<TOutput> param)

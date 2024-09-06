@@ -4,7 +4,8 @@ using Sekiban.Core.Query.SingleProjections;
 namespace FeatureCheck.Domain.Aggregates.Clients.Projections;
 
 public record ClientNameHistoryProjectionCountQueryNext(Guid? BranchId, Guid? ClientId)
-    : INextSingleProjectionQuery<ClientNameHistoryProjection, ClientNameHistoryProjectionCountQuery_Response>
+    : INextSingleProjectionQuery<ClientNameHistoryProjection, ClientNameHistoryProjectionCountQueryNext,
+        ClientNameHistoryProjectionCountQuery_Response>
 {
     public ResultBox<ClientNameHistoryProjectionCountQuery_Response> HandleFilter(
         IEnumerable<SingleProjectionState<ClientNameHistoryProjection>> list,

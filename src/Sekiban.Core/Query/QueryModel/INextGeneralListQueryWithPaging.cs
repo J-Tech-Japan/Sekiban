@@ -1,4 +1,4 @@
 namespace Sekiban.Core.Query.QueryModel;
 
-public interface INextGeneralListQueryWithPaging<TOutput> : INextGeneralListQuery<TOutput>, IQueryPagingParameterCommon
-    where TOutput : notnull;
+public interface INextGeneralListQueryWithPaging<TQuery, TOutput> : INextGeneralListQuery<TQuery, TOutput>,
+    IQueryPagingParameterCommon where TOutput : notnull where TQuery : INextGeneralListQueryWithPaging<TQuery, TOutput>;

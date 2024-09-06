@@ -4,7 +4,7 @@ using Sekiban.Core.Query.QueryModel;
 namespace FeatureCheck.Domain.Aggregates.Clients.Queries;
 
 public record GetClientPayloadQueryNextAsync(string NameFilter)
-    : INextAggregateListQueryAsync<Client, GetClientPayloadQuery_Response>
+    : INextAggregateListQueryAsync<Client, GetClientPayloadQueryNextAsync, GetClientPayloadQuery_Response>
 {
     public Task<ResultBox<IEnumerable<GetClientPayloadQuery_Response>>> HandleFilterAsync(
         IEnumerable<AggregateState<Client>> list,

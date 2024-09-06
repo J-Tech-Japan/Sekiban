@@ -3,10 +3,11 @@ using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Query.QueryModel;
 
 public interface
-    INextSingleProjectionListQueryAsync<TSingleProjectionPayloadCommon, TOutput> :
+    INextSingleProjectionListQueryAsync<TSingleProjectionPayloadCommon, TQuery, TOutput> :
     INextSingleProjectionQueryCommon<TSingleProjectionPayloadCommon, TOutput>,
-    INextListQueryCommon<TOutput> where TOutput : notnull
+    INextListQueryCommon<TQuery, TOutput> where TOutput : notnull
     where TSingleProjectionPayloadCommon : ISingleProjectionPayloadCommon
+    where TQuery : INextSingleProjectionListQueryAsync<TSingleProjectionPayloadCommon, TQuery, TOutput>
 {
     public QueryListType QueryListType => QueryListType.ActiveOnly;
     public Task<ResultBox<IEnumerable<TOutput>>> HandleFilterAsync(

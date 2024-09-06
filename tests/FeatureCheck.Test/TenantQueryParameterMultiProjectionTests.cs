@@ -49,27 +49,41 @@ public class TenantQueryParameterMultiProjectionTests
         // Assert
         Assert.Equal("tenant1", result);
     }
-    public record TestNextMultiProjectionQuery(string Tenant) : ITenantNextMultiProjectionQuery<ClientLoyaltyPointMultiProjection,bool>
+    public record TestNextMultiProjectionQuery(string Tenant)
+        : ITenantNextMultiProjectionQuery<ClientLoyaltyPointMultiProjection, TestNextMultiProjectionQuery, bool>
     {
         public string GetTenantId() => Tenant;
-        public ResultBox<bool> HandleFilter(MultiProjectionState<ClientLoyaltyPointMultiProjection> projection, IQueryContext context) => throw new NotImplementedException();
+        public ResultBox<bool> HandleFilter(
+            MultiProjectionState<ClientLoyaltyPointMultiProjection> projection,
+            IQueryContext context) => throw new NotImplementedException();
     }
-    public record TestNextMultiProjectionQueryAsync(string Tenant) : ITenantNextMultiProjectionQueryAsync<ClientLoyaltyPointMultiProjection,bool>
+    public record TestNextMultiProjectionQueryAsync(string Tenant)
+        : ITenantNextMultiProjectionQueryAsync<ClientLoyaltyPointMultiProjection, TestNextMultiProjectionQueryAsync,
+            bool>
     {
         public string GetTenantId() => Tenant;
-        public Task<ResultBox<bool>> HandleFilterAsync(MultiProjectionState<ClientLoyaltyPointMultiProjection> projection, IQueryContext context) => throw new NotImplementedException();
+        public Task<ResultBox<bool>> HandleFilterAsync(
+            MultiProjectionState<ClientLoyaltyPointMultiProjection> projection,
+            IQueryContext context) => throw new NotImplementedException();
     }
-    public record TestNextMultiProjectionListQuery(string Tenant) : ITenantNextMultiProjectionListQuery<ClientLoyaltyPointMultiProjection,bool>
+    public record TestNextMultiProjectionListQuery(string Tenant)
+        : ITenantNextMultiProjectionListQuery<ClientLoyaltyPointMultiProjection, TestNextMultiProjectionListQuery, bool>
     {
         public string GetTenantId() => Tenant;
-        public ResultBox<IEnumerable<bool>> HandleFilter(MultiProjectionState<ClientLoyaltyPointMultiProjection> projection, IQueryContext context) => throw new NotImplementedException();
+        public ResultBox<IEnumerable<bool>> HandleFilter(
+            MultiProjectionState<ClientLoyaltyPointMultiProjection> projection,
+            IQueryContext context) => throw new NotImplementedException();
         public ResultBox<IEnumerable<bool>> HandleSort(IEnumerable<bool> filteredList, IQueryContext context) =>
             throw new NotImplementedException();
     }
-    public record TestNextMultiProjectionListQueryAsync(string Tenant) : ITenantNextMultiProjectionListQueryAsync<ClientLoyaltyPointMultiProjection,bool>
+    public record TestNextMultiProjectionListQueryAsync(string Tenant)
+        : ITenantNextMultiProjectionListQueryAsync<ClientLoyaltyPointMultiProjection,
+            TestNextMultiProjectionListQueryAsync, bool>
     {
         public string GetTenantId() => Tenant;
-        public Task<ResultBox<IEnumerable<bool>>> HandleFilterAsync(MultiProjectionState<ClientLoyaltyPointMultiProjection> projection, IQueryContext context) => throw new NotImplementedException();
+        public Task<ResultBox<IEnumerable<bool>>> HandleFilterAsync(
+            MultiProjectionState<ClientLoyaltyPointMultiProjection> projection,
+            IQueryContext context) => throw new NotImplementedException();
         public Task<ResultBox<IEnumerable<bool>>> HandleSortAsync(
             IEnumerable<bool> filteredList,
             IQueryContext context) =>

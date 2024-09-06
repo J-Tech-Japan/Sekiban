@@ -5,7 +5,7 @@ using System.Data;
 namespace FeatureCheck.Domain.Aggregates.Clients.Queries;
 
 public record GetClientPayloadQueryNext(string NameFilter)
-    : INextAggregateListQuery<Client, GetClientPayloadQuery_Response>
+    : INextAggregateListQuery<Client, GetClientPayloadQueryNext, GetClientPayloadQuery_Response>
 {
     public ResultBox<IEnumerable<GetClientPayloadQuery_Response>> HandleFilter(
         IEnumerable<AggregateState<Client>> list,

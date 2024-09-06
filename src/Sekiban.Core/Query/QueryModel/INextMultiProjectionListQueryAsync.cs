@@ -3,10 +3,11 @@ using Sekiban.Core.Query.MultiProjections;
 namespace Sekiban.Core.Query.QueryModel;
 
 public interface
-    INextMultiProjectionListQueryAsync<TMultiProjectionPayloadCommon, TOutput> :
+    INextMultiProjectionListQueryAsync<TMultiProjectionPayloadCommon, TQuery, TOutput> :
     INextMultiProjectionQueryCommon<TMultiProjectionPayloadCommon, TOutput>,
-    INextListQueryCommon<TOutput> where TOutput : notnull
+    INextListQueryCommon<TQuery, TOutput> where TOutput : notnull
     where TMultiProjectionPayloadCommon : IMultiProjectionPayloadCommon
+    where TQuery : INextMultiProjectionListQueryAsync<TMultiProjectionPayloadCommon, TQuery, TOutput>
 {
     public Task<ResultBox<IEnumerable<TOutput>>> HandleFilterAsync(
         MultiProjectionState<TMultiProjectionPayloadCommon> projection,

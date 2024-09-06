@@ -91,13 +91,15 @@ public class TenantQueryParameterTests
             public string GetTenantId() => Tenant;
         }
     }
-    public record TestNextAggregateQuery(string Tenant) : ITenantNextAggregateQuery<Branch, bool>
+    public record TestNextAggregateQuery(string Tenant)
+        : ITenantNextAggregateQuery<Branch, TestNextAggregateQuery, bool>
     {
         public ResultBox<bool> HandleFilter(IEnumerable<AggregateState<Branch>> list, IQueryContext context) =>
             throw new NotImplementedException();
         public string GetTenantId() => Tenant;
     }
-    public record TestNextAggregateQueryAsync(string Tenant) : ITenantNextAggregateQueryAsync<Branch, bool>
+    public record TestNextAggregateQueryAsync(string Tenant)
+        : ITenantNextAggregateQueryAsync<Branch, TestNextAggregateQueryAsync, bool>
     {
 
         public string GetTenantId() => Tenant;
@@ -106,7 +108,8 @@ public class TenantQueryParameterTests
             IQueryContext context) =>
             throw new NotImplementedException();
     }
-    public record TestNextAggregateListQuery(string Tenant) : ITenantNextAggregateListQuery<Branch, bool>
+    public record TestNextAggregateListQuery(string Tenant)
+        : ITenantNextAggregateListQuery<Branch, TestNextAggregateListQuery, bool>
     {
         public string GetTenantId() => Tenant;
         public ResultBox<IEnumerable<bool>> HandleFilter(
@@ -115,7 +118,8 @@ public class TenantQueryParameterTests
         public ResultBox<IEnumerable<bool>> HandleSort(IEnumerable<bool> filteredList, IQueryContext context) =>
             throw new NotImplementedException();
     }
-    public record TestNextAggregateListQueryAsync(string Tenant) : ITenantNextAggregateListQueryAsync<Branch, bool>
+    public record TestNextAggregateListQueryAsync(string Tenant)
+        : ITenantNextAggregateListQueryAsync<Branch, TestNextAggregateListQueryAsync, bool>
     {
         public string GetTenantId() => Tenant;
         public Task<ResultBox<IEnumerable<bool>>> HandleFilterAsync(

@@ -2,9 +2,11 @@ using Sekiban.Core.Query.MultiProjections;
 namespace Sekiban.Core.Query.QueryModel;
 
 public interface
-    ITenantNextMultiProjectionListWithPagingQuery<TMultiProjectionPayloadCommon, TOutput> :
-    INextMultiProjectionListWithPagingQuery<TMultiProjectionPayloadCommon, TOutput>,
-    ITenantQueryCommon where TOutput : notnull where TMultiProjectionPayloadCommon : IMultiProjectionPayloadCommon
+    ITenantNextMultiProjectionListWithPagingQuery<TMultiProjectionPayloadCommon, TQuery, TOutput> :
+    INextMultiProjectionListWithPagingQuery<TMultiProjectionPayloadCommon, TQuery, TOutput>,
+    ITenantQueryCommon where TOutput : notnull
+    where TMultiProjectionPayloadCommon : IMultiProjectionPayloadCommon
+    where TQuery : ITenantNextMultiProjectionListWithPagingQuery<TMultiProjectionPayloadCommon, TQuery, TOutput>
 {
     string IQueryPartitionKeyCommon.GetRootPartitionKey() => GetTenantId();
 }

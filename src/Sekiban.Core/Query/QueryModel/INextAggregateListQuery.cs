@@ -3,8 +3,10 @@ using Sekiban.Core.Aggregate;
 namespace Sekiban.Core.Query.QueryModel;
 
 public interface
-    INextAggregateListQuery<TAggregatePayload, TOutput> : INextAggregateQueryCommon<TAggregatePayload, TOutput>,
-    INextListQueryCommon<TOutput> where TOutput : notnull where TAggregatePayload : IAggregatePayloadCommon
+    INextAggregateListQuery<TAggregatePayload, TQuery, TOutput> : INextAggregateQueryCommon<TAggregatePayload, TOutput>,
+    INextListQueryCommon<TQuery, TOutput> where TOutput : notnull
+    where TAggregatePayload : IAggregatePayloadCommon
+    where TQuery : INextAggregateListQuery<TAggregatePayload, TQuery, TOutput>
 {
     public QueryListType QueryListType => QueryListType.ActiveOnly;
     public ResultBox<IEnumerable<TOutput>> HandleFilter(

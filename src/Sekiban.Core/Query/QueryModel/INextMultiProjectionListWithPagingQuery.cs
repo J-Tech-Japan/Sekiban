@@ -2,7 +2,8 @@ using Sekiban.Core.Query.MultiProjections;
 namespace Sekiban.Core.Query.QueryModel;
 
 public interface
-    INextMultiProjectionListWithPagingQuery<TMultiProjectionPayloadCommon, TOutput> :
-    INextMultiProjectionListQuery<TMultiProjectionPayloadCommon, TOutput>,
+    INextMultiProjectionListWithPagingQuery<TMultiProjectionPayloadCommon, TQuery, TOutput> :
+    INextMultiProjectionListQuery<TMultiProjectionPayloadCommon, TQuery, TOutput>,
     IQueryPagingParameterCommon where TOutput : notnull
-    where TMultiProjectionPayloadCommon : IMultiProjectionPayloadCommon;
+    where TMultiProjectionPayloadCommon : IMultiProjectionPayloadCommon
+    where TQuery : INextMultiProjectionListWithPagingQuery<TMultiProjectionPayloadCommon, TQuery, TOutput>;

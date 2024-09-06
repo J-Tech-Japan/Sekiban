@@ -13,7 +13,8 @@ public record ClientLoyaltyPointQueryNext(
     ClientLoyaltyPointQueryNext.FilterSortKey? SortKey2,
     bool? SortKey1Asc,
     bool? SortKey2Asc)
-    : INextMultiProjectionListWithPagingQuery<ClientLoyaltyPointListProjection, ClientLoyaltyPointQuery_Response>
+    : INextMultiProjectionListWithPagingQuery<ClientLoyaltyPointListProjection, ClientLoyaltyPointQueryNext,
+        ClientLoyaltyPointQuery_Response>
 {
     public enum FilterSortKey
     {

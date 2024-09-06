@@ -13,12 +13,11 @@ public class BaseNextQueryController<TQuery, TQueryResponse>(
     IQueryExecutor queryExecutor,
     IServiceProvider serviceProvider,
     IWebDependencyDefinition webDependencyDefinition)
-    : ControllerBase where TQuery : INextQueryCommon<TQueryResponse> where TQueryResponse : notnull
+    : ControllerBase where TQuery : INextQueryCommonOutput<TQueryResponse> where TQueryResponse : notnull
 {
     [HttpGet]
     [Route("")]
-    public async Task<ActionResult<ListQueryResult<TQueryResponse>>> GetQueryResult(
-        [FromQuery] TQuery query)
+    public async Task<ActionResult<ListQueryResult<TQueryResponse>>> GetQueryResult([FromQuery] TQuery query)
     {
         if (await webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.Get,
