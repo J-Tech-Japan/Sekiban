@@ -6,11 +6,11 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Aspire.Infrastructure.Cosmos</PackageId>
-        <Version>0.22.0-preview2</Version>
+        <Version>0.22.0-preview3</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Cosmos Aspire Connector</PackageDescription>
-        <PackageVersion>0.22.0-preview2</PackageVersion>
+        <PackageVersion>0.22.0-preview3</PackageVersion>
         <Description>Beta Support for F#</Description>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <RootNamespace>Sekiban.Aspire.Infrastructure.Cosmos</RootNamespace>
@@ -22,16 +22,16 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="8.1.0" />
-        <PackageReference Include="Sekiban.Infrastructure.Cosmos" Version="0.22.0-preview2"/>
-        <PackageReference Include="Sekiban.Web" Version="0.22.0-preview2"/>
+        <PackageReference Include="Aspire.Azure.Storage.Blobs" Version="8.2.0" />
+        <PackageReference Include="Sekiban.Infrastructure.Cosmos" Version="0.22.0-preview3"/>
+        <PackageReference Include="Sekiban.Web" Version="0.22.0-preview3"/>
         <ProjectReference Include="..\Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj"/>
         <ProjectReference Include="..\Sekiban.Web\Sekiban.Web.csproj"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Aspire.Microsoft.Azure.Cosmos" Version="8.1.0" />
+        <PackageReference Include="Aspire.Microsoft.Azure.Cosmos" Version="8.2.0" />
     </ItemGroup>
 
 </Project>
