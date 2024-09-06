@@ -21,7 +21,7 @@ public class BaseCommandController<TAggregatePayload, TCommand>(
     IWebDependencyDefinition webDependencyDefinition,
     IServiceProvider serviceProvider)
     : ControllerBase where TAggregatePayload : IAggregatePayloadCommon
-    where TCommand : ICommand<TAggregatePayload>
+    where TCommand : ICommandCommon<TAggregatePayload>
 {
 
     [HttpPost]
