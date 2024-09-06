@@ -20,7 +20,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="AWSSDK.DynamoDBv2" Version="3.7.400.7"/>
+        <PackageReference Include="AWSSDK.DynamoDBv2" Version="3.7.400.15" />
         <PackageReference Include="Sekiban.Core" Version="0.22.0-preview3"/>
         <PackageReference Include="Sekiban.Infrastructure.Aws.S3" Version="0.22.0-preview3"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
