@@ -22,13 +22,14 @@ public record ClientLoyaltyPointQueryNext(
         ClientName
     }
 
-    public ResultBox<IEnumerable<ClientLoyaltyPointQuery_Response>> HandleSort(
+    public static ResultBox<IEnumerable<ClientLoyaltyPointQuery_Response>> HandleSort(
         IEnumerable<ClientLoyaltyPointQuery_Response> filteredList,
+        ClientLoyaltyPointQueryNext query,
         IQueryContext context)
     {
         var sort = new Dictionary<FilterSortKey, bool>();
-        if (SortKey1 != null) sort.Add(SortKey1.Value, SortKey1Asc ?? true);
-        if (SortKey2 != null) sort.Add(SortKey2.Value, SortKey2Asc ?? true);
+        if (query.SortKey1 != null) sort.Add(query.SortKey1.Value, query.SortKey1Asc ?? true);
+        if (query.SortKey2 != null) sort.Add(query.SortKey2.Value, query.SortKey2Asc ?? true);
         if (sort.Count == 0)
             return ResultBox.FromValue(
                 filteredList.OrderBy(m => m.BranchName).ThenBy(m => m.ClientName).AsEnumerable());
@@ -71,14 +72,15 @@ public record ClientLoyaltyPointQueryNext(
         return ResultBox.FromValue(result);
     }
 
-    public ResultBox<IEnumerable<ClientLoyaltyPointQuery_Response>> HandleFilter(
+    public static ResultBox<IEnumerable<ClientLoyaltyPointQuery_Response>> HandleFilter(
         MultiProjectionState<ClientLoyaltyPointListProjection> projection,
+        ClientLoyaltyPointQueryNext query,
         IQueryContext context)
     {
         var result = projection.Payload.Records.Select(
             m => new ClientLoyaltyPointQuery_Response(m.BranchId, m.BranchName, m.ClientId, m.ClientName, m.Point));
-        if (BranchId.HasValue) result = result.Where(x => x.BranchId == BranchId.Value).ToImmutableList();
-        if (ClientId.HasValue) result = result.Where(x => x.ClientId == ClientId.Value).ToImmutableList();
+        if (query.BranchId.HasValue) result = result.Where(x => x.BranchId == query.BranchId.Value).ToImmutableList();
+        if (query.ClientId.HasValue) result = result.Where(x => x.ClientId == query.ClientId.Value).ToImmutableList();
         return ResultBox.FromValue(result);
     }
 }

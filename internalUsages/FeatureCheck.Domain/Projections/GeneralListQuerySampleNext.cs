@@ -4,10 +4,12 @@ using ResultBoxes;
 using Sekiban.Core.Query.QueryModel;
 namespace FeatureCheck.Domain.Projections;
 
-public class GeneralListQuerySampleNext(string EmailContains)
+public record GeneralListQuerySampleNext(string EmailContains)
     : INextGeneralListQueryAsync<GeneralListQuerySampleNext, GeneralListQuerySample_Response>
 {
-    public Task<ResultBox<IEnumerable<GeneralListQuerySample_Response>>> HandleFilterAsync(IQueryContext context)
+    public static Task<ResultBox<IEnumerable<GeneralListQuerySample_Response>>> HandleFilterAsync(
+        GeneralListQuerySampleNext query,
+        IQueryContext context)
     {
         return context
             .GetMultiProjectionAsync<ClientLoyaltyPointListProjection>()
@@ -24,12 +26,13 @@ public class GeneralListQuerySampleNext(string EmailContains)
                         {
                             x, y
                         })
-                    .Where(x => x.y.Payload.ClientEmail.Contains(EmailContains))
+                    .Where(x => x.y.Payload.ClientEmail.Contains(query.EmailContains))
                     .Select(x => new GeneralListQuerySample_Response(x.x.ClientName, x.x.BranchName)));
     }
 
-    public Task<ResultBox<IEnumerable<GeneralListQuerySample_Response>>> HandleSortAsync(
+    public static Task<ResultBox<IEnumerable<GeneralListQuerySample_Response>>> HandleSortAsync(
         IEnumerable<GeneralListQuerySample_Response> filteredList,
+        GeneralListQuerySampleNext query,
         IQueryContext context)
     {
         return ResultBox.WrapTry(() => filteredList.OrderBy(x => x.Name).AsEnumerable()).ToTask();

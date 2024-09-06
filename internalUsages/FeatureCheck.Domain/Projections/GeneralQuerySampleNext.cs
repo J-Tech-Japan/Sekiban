@@ -6,7 +6,7 @@ namespace FeatureCheck.Domain.Projections;
 
 public record GeneralQuerySampleNext(string EmailContains) : INextGeneralQueryAsync<GeneralQuerySampleNext, int>
 {
-    public Task<ResultBox<int>> HandleFilterAsync(IQueryContext context)
+    public static Task<ResultBox<int>> HandleFilterAsync(GeneralQuerySampleNext query, IQueryContext context)
     {
         return context
             .GetMultiProjectionAsync<ClientLoyaltyPointListProjection>()
@@ -23,6 +23,6 @@ public record GeneralQuerySampleNext(string EmailContains) : INextGeneralQueryAs
                         {
                             x, y
                         })
-                    .Count(x => x.y.Payload.ClientEmail.Contains(EmailContains)));
+                    .Count(x => x.y.Payload.ClientEmail.Contains(query.EmailContains)));
     }
 }

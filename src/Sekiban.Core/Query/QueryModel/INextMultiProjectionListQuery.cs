@@ -9,8 +9,12 @@ public interface
     where TMultiProjectionPayloadCommon : IMultiProjectionPayloadCommon
     where TQuery : INextMultiProjectionListQuery<TMultiProjectionPayloadCommon, TQuery, TOutput>
 {
-    public ResultBox<IEnumerable<TOutput>> HandleFilter(
+    public static abstract ResultBox<IEnumerable<TOutput>> HandleFilter(
         MultiProjectionState<TMultiProjectionPayloadCommon> projection,
+        TQuery query,
         IQueryContext context);
-    public ResultBox<IEnumerable<TOutput>> HandleSort(IEnumerable<TOutput> filteredList, IQueryContext context);
+    public static abstract ResultBox<IEnumerable<TOutput>> HandleSort(
+        IEnumerable<TOutput> filteredList,
+        TQuery query,
+        IQueryContext context);
 }

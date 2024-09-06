@@ -10,10 +10,12 @@ public interface
     where TQuery : INextSingleProjectionListQueryAsync<TSingleProjectionPayloadCommon, TQuery, TOutput>
 {
     public QueryListType QueryListType => QueryListType.ActiveOnly;
-    public Task<ResultBox<IEnumerable<TOutput>>> HandleFilterAsync(
+    public static abstract Task<ResultBox<IEnumerable<TOutput>>> HandleFilterAsync(
         IEnumerable<SingleProjectionState<TSingleProjectionPayloadCommon>> list,
+        TQuery query,
         IQueryContext context);
-    public Task<ResultBox<IEnumerable<TOutput>>> HandleSortAsync(
+    public static abstract Task<ResultBox<IEnumerable<TOutput>>> HandleSortAsync(
         IEnumerable<TOutput> filteredList,
+        TQuery query,
         IQueryContext context);
 }

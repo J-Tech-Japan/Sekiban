@@ -9,7 +9,8 @@ public interface
     where TMultiProjectionPayloadCommon : IMultiProjectionPayloadCommon
     where TQuery : INextMultiProjectionQuery<TMultiProjectionPayloadCommon, TQuery, TOutput>
 {
-    public ResultBox<TOutput> HandleFilter(
+    public static abstract ResultBox<TOutput> HandleFilter(
         MultiProjectionState<TMultiProjectionPayloadCommon> projection,
+        TQuery query,
         IQueryContext context);
 }

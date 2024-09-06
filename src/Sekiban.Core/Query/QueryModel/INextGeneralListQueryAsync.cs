@@ -5,8 +5,9 @@ public interface INextGeneralListQueryAsync<TQuery, TOutput> : INextGeneralQuery
     INextListQueryCommon<TQuery, TOutput>,
     INextQueryAsyncGeneral where TOutput : notnull where TQuery : INextGeneralListQueryAsync<TQuery, TOutput>
 {
-    public Task<ResultBox<IEnumerable<TOutput>>> HandleFilterAsync(IQueryContext context);
-    public Task<ResultBox<IEnumerable<TOutput>>> HandleSortAsync(
+    public static abstract Task<ResultBox<IEnumerable<TOutput>>> HandleFilterAsync(TQuery query, IQueryContext context);
+    public static abstract Task<ResultBox<IEnumerable<TOutput>>> HandleSortAsync(
         IEnumerable<TOutput> filteredList,
+        TQuery query,
         IQueryContext context);
 }

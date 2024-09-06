@@ -11,7 +11,8 @@ public interface
     where TQuery : INextAggregateQueryAsync<TAggregatePayload, TQuery, TOutput>
 {
     public QueryListType QueryListType => QueryListType.ActiveOnly;
-    public Task<ResultBox<TOutput>> HandleFilterAsync(
+    public static abstract Task<ResultBox<TOutput>> HandleFilterAsync(
         IEnumerable<AggregateState<TAggregatePayload>> list,
+        TQuery query,
         IQueryContext context);
 }

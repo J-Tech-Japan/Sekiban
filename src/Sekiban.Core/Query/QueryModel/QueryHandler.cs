@@ -59,9 +59,9 @@ public class QueryHandler : IQueryContext
         where TProjectionPayload : IMultiProjectionPayloadCommon
         where TQuery : INextMultiProjectionListQueryAsync<TProjectionPayload, TQuery, TQueryResponse>
         where TQueryResponse : notnull =>
-        query
-            .HandleFilterAsync(projection, this)
-            .Conveyor(sorted => query.HandleSortAsync(sorted, this))
+        TQuery
+            .HandleFilterAsync(projection, query, this)
+            .Conveyor(sorted => TQuery.HandleSortAsync(sorted, query, this))
             .Remap(sorted => sorted.ToList())
             .Remap(
                 sorted => query is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam
@@ -75,9 +75,9 @@ public class QueryHandler : IQueryContext
         where TProjectionPayload : IMultiProjectionPayloadCommon
         where TQuery : INextMultiProjectionListQuery<TProjectionPayload, TQuery, TQueryResponse>
         where TQueryResponse : notnull =>
-        query
-            .HandleFilter(projection, this)
-            .Conveyor(sorted => query.HandleSort(sorted, this))
+        TQuery
+            .HandleFilter(projection, query, this)
+            .Conveyor(sorted => TQuery.HandleSort(sorted, query, this))
             .Remap(sorted => sorted.ToList())
             .Remap(
                 sorted => query is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam
@@ -105,13 +105,13 @@ public class QueryHandler : IQueryContext
         MultiProjectionState<TProjectionPayload> projection) where TProjectionPayload : IMultiProjectionPayloadCommon
         where TQuery : INextMultiProjectionQuery<TProjectionPayload, TQuery, TQueryResponse>
         where TQueryResponse : notnull =>
-        query.HandleFilter(projection, this);
+        TQuery.HandleFilter(projection, query, this);
     public Task<ResultBox<TQueryResponse>> GetMultiProjectionQueryNextAsync<TProjectionPayload, TQuery, TQueryResponse>(
         TQuery query,
         MultiProjectionState<TProjectionPayload> projection) where TProjectionPayload : IMultiProjectionPayloadCommon
         where TQuery : INextMultiProjectionQueryAsync<TProjectionPayload, TQuery, TQueryResponse>
         where TQueryResponse : notnull =>
-        query.HandleFilterAsync(projection, this);
+        TQuery.HandleFilterAsync(projection, query, this);
 
 
 
@@ -136,9 +136,9 @@ public class QueryHandler : IQueryContext
     public Task<ResultBox<ListQueryResult<TQueryResponse>>>
         GetGeneralListQueryNextAsync<TQuery, TQueryResponse>(TQuery query)
         where TQuery : INextGeneralListQueryAsync<TQuery, TQueryResponse> where TQueryResponse : notnull =>
-        query
-            .HandleFilterAsync(this)
-            .Conveyor(sorted => query.HandleSortAsync(sorted, this))
+        TQuery
+            .HandleFilterAsync(query, this)
+            .Conveyor(sorted => TQuery.HandleSortAsync(sorted, query, this))
             .Remap(sorted => sorted.ToList())
             .Remap(
                 sorted => query is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam
@@ -146,9 +146,9 @@ public class QueryHandler : IQueryContext
                     : new ListQueryResult<TQueryResponse>(sorted.Count, null, null, null, sorted));
     public ResultBox<ListQueryResult<TQueryResponse>> GetGeneralListQueryNext<TQuery, TQueryResponse>(TQuery query)
         where TQuery : INextGeneralListQuery<TQuery, TQueryResponse> where TQueryResponse : notnull =>
-        query
-            .HandleFilter(this)
-            .Conveyor(sorted => query.HandleSort(sorted, this))
+        TQuery
+            .HandleFilter(query, this)
+            .Conveyor(sorted => TQuery.HandleSort(sorted, query, this))
             .Remap(sorted => sorted.ToList())
             .Remap(
                 sorted => query is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam
@@ -171,10 +171,10 @@ public class QueryHandler : IQueryContext
 
     public Task<ResultBox<TQueryResponse>> GetGeneralQueryNextAsync<TQuery, TQueryResponse>(TQuery query)
         where TQuery : INextGeneralQueryAsync<TQuery, TQueryResponse> where TQueryResponse : notnull =>
-        query.HandleFilterAsync(this);
+        TQuery.HandleFilterAsync(query, this);
     public Task<ResultBox<TQueryResponse>> GetGeneralQueryNext<TQuery, TQueryResponse>(TQuery query)
         where TQuery : INextGeneralQuery<TQuery, TQueryResponse> where TQueryResponse : notnull =>
-        query.HandleFilter(this).ToTask();
+        TQuery.HandleFilter(query, this).ToTask();
 
 
 
@@ -211,9 +211,9 @@ public class QueryHandler : IQueryContext
             IEnumerable<AggregateState<TAggregatePayload>> list) where TAggregatePayload : IAggregatePayloadCommon
         where TQuery : INextAggregateListQueryAsync<TAggregatePayload, TQuery, TQueryResponse>
         where TQueryResponse : notnull =>
-        await query
-            .HandleFilterAsync(list, this)
-            .Conveyor(filtered => query.HandleSortAsync(filtered, this))
+        await TQuery
+            .HandleFilterAsync(list, query, this)
+            .Conveyor(filtered => TQuery.HandleSortAsync(filtered, query, this))
             .Remap(sorted => sorted.ToList())
             .Remap(
                 sorted => query is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam
@@ -227,9 +227,9 @@ public class QueryHandler : IQueryContext
             IEnumerable<AggregateState<TAggregatePayload>> list) where TAggregatePayload : IAggregatePayloadCommon
         where TQuery : INextAggregateListQuery<TAggregatePayload, TQuery, TQueryResponse>
         where TQueryResponse : notnull =>
-        query
-            .HandleFilter(list, this)
-            .Conveyor(filtered => query.HandleSort(filtered, this))
+        TQuery
+            .HandleFilter(list, query, this)
+            .Conveyor(filtered => TQuery.HandleSort(filtered, query, this))
             .Remap(sorted => sorted.ToList())
             .Remap(
                 sorted => query is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam
@@ -258,7 +258,7 @@ public class QueryHandler : IQueryContext
         where TQuery : INextAggregateQuery<TAggregatePayload, TQuery, TQueryResponse>
         where TQueryResponse : notnull
     {
-        var filtered = query.HandleFilter(list, this);
+        var filtered = TQuery.HandleFilter(list, query, this);
         return filtered;
     }
     public async Task<ResultBox<TQueryResponse>> GetAggregateQueryNextAsync<TAggregatePayload, TQuery, TQueryResponse>(
@@ -267,7 +267,7 @@ public class QueryHandler : IQueryContext
         where TQuery : INextAggregateQueryAsync<TAggregatePayload, TQuery, TQueryResponse>
         where TQueryResponse : notnull
     {
-        var filtered = await query.HandleFilterAsync(list, this);
+        var filtered = await TQuery.HandleFilterAsync(list, query, this);
         return filtered;
     }
 
@@ -301,9 +301,9 @@ public class QueryHandler : IQueryContext
         where TQuery : INextSingleProjectionListQuery<TSingleProjectionPayload, TQuery, TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
-        return query
-            .HandleFilter(projections, this)
-            .Conveyor(sorted => query.HandleSort(sorted, this))
+        return TQuery
+            .HandleFilter(projections, query, this)
+            .Conveyor(sorted => TQuery.HandleSort(sorted, query, this))
             .Remap(sorted => sorted.ToList())
             .Remap(
                 sorted => query is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam
@@ -318,9 +318,9 @@ public class QueryHandler : IQueryContext
         where TQuery : INextSingleProjectionListQueryAsync<TSingleProjectionPayload, TQuery, TQueryResponse>
         where TQueryResponse : IQueryResponse
     {
-        return query
-            .HandleFilterAsync(projections, this)
-            .Conveyor(sorted => query.HandleSortAsync(sorted, this))
+        return TQuery
+            .HandleFilterAsync(projections, query, this)
+            .Conveyor(sorted => TQuery.HandleSortAsync(sorted, query, this))
             .Remap(sorted => sorted.ToList())
             .Remap(
                 sorted => query is IQueryPagingParameterCommon { PageNumber: not null, PageSize: not null } pagingParam
@@ -376,12 +376,12 @@ public class QueryHandler : IQueryContext
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon
         where TQuery : INextSingleProjectionQueryAsync<TSingleProjectionPayload, TQuery, TQueryResponse>
         where TQueryResponse : notnull =>
-        query.HandleFilterAsync(projections, this);
+        TQuery.HandleFilterAsync(projections, query, this);
     public ResultBox<TQueryResponse> GetSingleProjectionQueryNext<TSingleProjectionPayload, TQuery, TQueryResponse>(
         TQuery query,
         IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon
         where TQuery : INextSingleProjectionQuery<TSingleProjectionPayload, TQuery, TQueryResponse>
         where TQueryResponse : notnull =>
-        query.HandleFilter(projections, this);
+        TQuery.HandleFilter(projections, query, this);
 }

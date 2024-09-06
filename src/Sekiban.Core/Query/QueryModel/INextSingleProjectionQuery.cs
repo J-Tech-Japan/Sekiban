@@ -10,7 +10,8 @@ public interface
     where TQuery : INextSingleProjectionQuery<TSingleProjectionPayloadCommon, TQuery, TOutput>
 {
     public QueryListType QueryListType => QueryListType.ActiveOnly;
-    public ResultBox<TOutput> HandleFilter(
+    public static abstract ResultBox<TOutput> HandleFilter(
         IEnumerable<SingleProjectionState<TSingleProjectionPayloadCommon>> list,
+        TQuery query,
         IQueryContext context);
 }
