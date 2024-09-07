@@ -8,7 +8,7 @@ public interface
     where TAggregatePayload : IAggregatePayloadCommon
     where TQuery : INextAggregateQuery<TAggregatePayload, TQuery, TOutput>
 {
-    public QueryListType QueryListType => QueryListType.ActiveOnly;
+    public virtual static QueryListType GetQueryListType(TQuery query) => QueryListType.ActiveOnly;
     public static abstract ResultBox<TOutput> HandleFilter(
         IEnumerable<AggregateState<TAggregatePayload>> list,
         TQuery query,

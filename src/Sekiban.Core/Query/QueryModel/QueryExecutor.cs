@@ -488,7 +488,7 @@ public class QueryExecutor : IQueryExecutor
         where TQueryResponse : notnull
     {
         var allProjection = await multiProjectionService.GetAggregateList<TAggregatePayload>(
-            param.QueryListType,
+            TQuery.GetQueryListType(param),
             param.GetRootPartitionKey(),
             MultiProjectionRetrievalOptions.GetFromQuery(param));
         return await queryHandler.GetAggregateQueryNextAsync<TAggregatePayload, TQuery, TQueryResponse>(
@@ -502,7 +502,7 @@ public class QueryExecutor : IQueryExecutor
         where TQueryResponse : notnull
     {
         var allProjection = await multiProjectionService.GetAggregateList<TAggregatePayload>(
-            param.QueryListType,
+            TQuery.GetQueryListType(param),
             param.GetRootPartitionKey(),
             MultiProjectionRetrievalOptions.GetFromQuery(param));
         return queryHandler.GetAggregateQueryNext<TAggregatePayload, TQuery, TQueryResponse>(param, allProjection);
@@ -514,7 +514,7 @@ public class QueryExecutor : IQueryExecutor
         where TQueryResponse : notnull
     {
         var allProjection = await multiProjectionService.GetAggregateList<TAggregatePayload>(
-            param.QueryListType,
+            TQuery.GetQueryListType(param),
             param.GetRootPartitionKey(),
             MultiProjectionRetrievalOptions.GetFromQuery(param));
         return await queryHandler.GetAggregateListQueryNextAsync<TAggregatePayload, TQuery, TQueryResponse>(
@@ -528,7 +528,7 @@ public class QueryExecutor : IQueryExecutor
         where TQueryResponse : notnull
     {
         var allProjection = await multiProjectionService.GetAggregateList<TAggregatePayload>(
-            param.QueryListType,
+            TQuery.GetQueryListType(param),
             param.GetRootPartitionKey(),
             MultiProjectionRetrievalOptions.GetFromQuery(param));
         return queryHandler.GetAggregateListQueryNext<TAggregatePayload, TQuery, TQueryResponse>(param, allProjection);
@@ -561,7 +561,7 @@ public class QueryExecutor : IQueryExecutor
         ResultBox
             .FromValue(
                 multiProjectionService.GetSingleProjectionList<TProjectionPayload>(
-                    query.QueryListType,
+                    TQuery.GetQueryListType(query),
                     query.GetRootPartitionKey(),
                     MultiProjectionRetrievalOptions.GetFromQuery(query)))
             .Conveyor(
@@ -577,7 +577,7 @@ public class QueryExecutor : IQueryExecutor
         ResultBox
             .FromValue(
                 multiProjectionService.GetSingleProjectionList<TProjectionPayload>(
-                    query.QueryListType,
+                    TQuery.GetQueryListType(query),
                     query.GetRootPartitionKey(),
                     MultiProjectionRetrievalOptions.GetFromQuery(query)))
             .Conveyor(
@@ -610,7 +610,7 @@ public class QueryExecutor : IQueryExecutor
         where TQueryResponse : notnull
     {
         var allProjection = await multiProjectionService.GetSingleProjectionList<TSingleProjectionPayload>(
-            query.QueryListType,
+            TQuery.GetQueryListType(query),
             query.GetRootPartitionKey(),
             MultiProjectionRetrievalOptions.GetFromQuery(query));
         return await queryHandler.GetSingleProjectionQueryNextAsync<TSingleProjectionPayload, TQuery, TQueryResponse>(
@@ -624,7 +624,7 @@ public class QueryExecutor : IQueryExecutor
         where TQueryResponse : notnull
     {
         var allProjection = await multiProjectionService.GetSingleProjectionList<TSingleProjectionPayload>(
-            query.QueryListType,
+            TQuery.GetQueryListType(query),
             query.GetRootPartitionKey(),
             MultiProjectionRetrievalOptions.GetFromQuery(query));
         return queryHandler.GetSingleProjectionQueryNext<TSingleProjectionPayload, TQuery, TQueryResponse>(

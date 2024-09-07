@@ -9,7 +9,7 @@ public interface
     where TSingleProjectionPayloadCommon : ISingleProjectionPayloadCommon
     where TQuery : INextSingleProjectionListQuery<TSingleProjectionPayloadCommon, TQuery, TOutput>
 {
-    public QueryListType QueryListType => QueryListType.ActiveOnly;
+    public virtual static QueryListType GetQueryListType(TQuery query) => QueryListType.ActiveOnly;
     public static abstract ResultBox<IEnumerable<TOutput>> HandleFilter(
         IEnumerable<SingleProjectionState<TSingleProjectionPayloadCommon>> list,
         TQuery query,
