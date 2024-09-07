@@ -60,7 +60,7 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
     /// <returns></returns>
     /// <exception cref="Exception"></exception>
     public Guid ExecuteCommandWithPublishAndBlockingSubscriptions<TAggregatePayload>(
-        ICommand<TAggregatePayload> command,
+        ICommandCommon<TAggregatePayload> command,
         Guid? injectingAggregateId = null) where TAggregatePayload : IAggregatePayloadCommon
     {
         var nonBlockingStatus = serviceProvider.GetService<EventNonBlockingStatus>() ??

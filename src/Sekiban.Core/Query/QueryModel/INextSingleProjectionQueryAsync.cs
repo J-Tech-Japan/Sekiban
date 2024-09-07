@@ -9,7 +9,7 @@ public interface
     where TSingleProjectionPayloadCommon : ISingleProjectionPayloadCommon
     where TQuery : INextSingleProjectionQueryAsync<TSingleProjectionPayloadCommon, TQuery, TOutput>
 {
-    public QueryListType QueryListType => QueryListType.ActiveOnly;
+    public virtual static QueryListType GetQueryListType(TQuery query) => QueryListType.ActiveOnly;
     public static abstract Task<ResultBox<TOutput>> HandleFilterAsync(
         IEnumerable<SingleProjectionState<TSingleProjectionPayloadCommon>> list,
         TQuery query,
