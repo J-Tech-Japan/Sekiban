@@ -6,6 +6,6 @@ public interface
     ITenantCommandNextCommon<TAggregatePayload, TCommand> where TAggregatePayload : IAggregatePayloadCommon
     where TCommand : ITenantCommandWithHandler<TAggregatePayload, TCommand>
 {
-    static string ICommandWithHandlerCommon<TAggregatePayload, TCommand>.GetRootPartitionKey(TCommand command) =>
+    public static new string GetRootPartitionKey(TCommand command) =>
         TCommand.GetTenantId(command);
 }

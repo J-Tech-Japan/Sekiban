@@ -261,7 +261,7 @@ public class CommandExecutor(
         string rootPartitionKey,
         List<ValidationResult> validationResults)
     {
-        if (CommandExecutor.IsValidRootPartitionKey(rootPartitionKey))
+        if (!CommandExecutor.IsValidRootPartitionKey(rootPartitionKey))
         {
             validationResults.Add(
                 new ValidationResult(
@@ -300,25 +300,36 @@ public class CommandExecutor(
     {
         if (typeof(TCommand).IsCommandWithHandlerType())
         {
-            var rootPartitionMethod = typeof(TCommand).GetMethod(
-                    nameof(ICommandHandlerCommon<SnapshotManager, CreateSnapshotManagerAsync>),
-                    BindingFlags.Static) ??
+            var aggregateType = typeof(TCommand).GetAggregatePayloadTypeFromCommandWithHandlerType();
+            var baseClass = typeof(ICommandHandlerCommon<,>);
+            var genericClass = baseClass.MakeGenericType(aggregateType, typeof(TCommand));
+
+            var rootPartitionMethod = genericClass.GetMethod(
+                    nameof(ICommandHandlerCommon<SnapshotManager, CreateSnapshotManagerAsync>.GetRootPartitionKey),
+                    BindingFlags.Static | BindingFlags.Public) ??
                 throw new MissingMethodException("Method not found");
             return (string?)rootPartitionMethod.Invoke(typeof(TCommand), [command]) ??
                 throw new SekibanInvalidArgumentException("RootPartitionKey is null");
+        } else
+        {
+
+            var aggregateType = typeof(TCommand).GetAggregatePayloadTypeFromCommandType();
+            var baseClass = typeof(ICommandHandlerCommon<,>);
+            var genericClass = baseClass.MakeGenericType(aggregateType, typeof(TCommand));
+
+            var handler
+                = serviceProvider.GetService(typeof(ICommandHandlerCommon<SnapshotManager, CreateSnapshotManager>)) as
+                    ICommandHandlerCommon<SnapshotManager, CreateSnapshotManager> ??
+                throw new SekibanCommandNotRegisteredException(typeof(TCommand).Name);
+            var handlerType = handler.GetType();
+            var method = genericClass.GetMethod(
+                    nameof(ICommandHandlerCommon<SnapshotManager, CreateSnapshotManager>.GetRootPartitionKey),
+                    BindingFlags.Static | BindingFlags.Public) ??
+                throw new MissingMethodException("Method not found");
+            var rootPartitionKey = (string?)method.Invoke(handlerType, [command]) ??
+                throw new SekibanInvalidArgumentException("RootPartitionKey is null");
+            return rootPartitionKey;
         }
-        var handler
-            = serviceProvider.GetService(typeof(ICommandHandlerCommon<SnapshotManager, CreateSnapshotManager>)) as
-                ICommandHandlerCommon<SnapshotManager, CreateSnapshotManager> ??
-            throw new SekibanCommandNotRegisteredException(typeof(TCommand).Name);
-        var handlerType = handler.GetType();
-        var method = handlerType.GetMethod(
-                nameof(ICommandHandlerCommon<SnapshotManager, CreateSnapshotManager>.GetRootPartitionKey),
-                BindingFlags.Static) ??
-            throw new MissingMethodException("Method not found");
-        var rootPartitionKey = (string?)method.Invoke(handlerType, [command]) ??
-            throw new SekibanInvalidArgumentException("RootPartitionKey is null");
-        return rootPartitionKey;
     }
 
     public async Task<ResultBox<TwoValues<CommandExecutorResponse, List<IEvent>>>>

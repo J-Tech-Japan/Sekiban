@@ -24,7 +24,8 @@ public class BranchRootPartitionKeySpec : AggregateTest<Branch, FeatureCheckDepe
     [Fact]
     public void CreateSuccessGuid()
     {
-        var command = new CreateBranchWithRootPartitionKey { Name = "BranchName", RootPartitionKey = Guid.NewGuid().ToString() };
+        var command = new CreateBranchWithRootPartitionKey
+            { Name = "BranchName", RootPartitionKey = Guid.NewGuid().ToString() };
         WhenCommand(command);
         ThenPayloadIs(new Branch("BranchName", 0));
     }
@@ -62,6 +63,7 @@ public class BranchRootPartitionKeySpec : AggregateTest<Branch, FeatureCheckDepe
         var command = new CreateBranchWithRootPartitionKey { Name = "BranchName", RootPartitionKey = rootPartitionKey };
         WhenCommand(command);
         ThenHasValidationErrors(
-            new SekibanValidationParameterError[] { new("", new[] { "Root Partition Key only allow a-z, 0-9, -, _ and length 1-36" }) });
+            new SekibanValidationParameterError[]
+                { new("RootPartitionKey", new[] { "Root Partition Key only allow a-z, 0-9, -, _ and length 1-36" }) });
     }
 }

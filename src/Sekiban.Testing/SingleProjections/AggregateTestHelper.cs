@@ -666,6 +666,8 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         var command = commandFunc(GetAggregateStateIfNotNullEmptyAggregate());
         _latestCommand = command;
         var validationResults = command.ValidateProperties().ToList();
+        var rootPartitionKey = CommandExecutor.GetRootPartitionKey(command, _serviceProvider);
+        validationResults = CommandExecutor.AddRootPropertyValidation(rootPartitionKey, validationResults);
         if (validationResults.Count != 0)
         {
             _latestValidationErrors
@@ -708,7 +710,6 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         AggregateTestHelper<TAggregatePayload>.CheckCommandJSONSupports(commandDocument);
 
         var aggregateId = GetAggregateId();
-        var rootPartitionKey = CommandExecutor.GetRootPartitionKey(command, _serviceProvider);
         var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
             throw new SekibanTypeNotFoundException("Failed to get AddAggregate Service");
         try

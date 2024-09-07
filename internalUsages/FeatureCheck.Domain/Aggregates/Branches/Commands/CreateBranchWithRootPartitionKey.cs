@@ -11,8 +11,6 @@ public class CreateBranchWithRootPartitionKey : ICommand<Branch>
     [Required]
     public string Name { get; init; } = string.Empty;
 
-    public string GetRootPartitionKey() => RootPartitionKey;
-
     public class Handler : ICommandHandler<Branch, CreateBranchWithRootPartitionKey>
     {
         public IEnumerable<IEventPayloadApplicableTo<Branch>> HandleCommand(
@@ -22,5 +20,7 @@ public class CreateBranchWithRootPartitionKey : ICommand<Branch>
             yield return new BranchCreated(command.Name);
         }
         public Guid SpecifyAggregateId(CreateBranchWithRootPartitionKey command) => Guid.NewGuid();
+        static string ICommandHandlerCommon<Branch, CreateBranchWithRootPartitionKey>.GetRootPartitionKey(
+            CreateBranchWithRootPartitionKey command) => command.RootPartitionKey;
     }
 }
