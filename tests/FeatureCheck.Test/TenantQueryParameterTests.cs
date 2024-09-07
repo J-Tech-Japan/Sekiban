@@ -91,39 +91,43 @@ public class TenantQueryParameterTests
             public string GetTenantId() => Tenant;
         }
     }
-    public record TestNextAggregateQuery(string Tenant) : ITenantNextAggregateQuery<Branch, bool>
+    public record TestNextAggregateQuery(string Tenant)
+        : ITenantNextAggregateQuery<Branch, TestNextAggregateQuery, bool>
     {
-        public ResultBox<bool> HandleFilter(IEnumerable<AggregateState<Branch>> list, IQueryContext context) =>
-            throw new NotImplementedException();
         public string GetTenantId() => Tenant;
+        public static ResultBox<bool> HandleFilter(
+            IEnumerable<AggregateState<Branch>> list,
+            TestNextAggregateQuery query,
+            IQueryContext context) => throw new NotImplementedException();
     }
-    public record TestNextAggregateQueryAsync(string Tenant) : ITenantNextAggregateQueryAsync<Branch, bool>
+    public record TestNextAggregateQueryAsync(string Tenant)
+        : ITenantNextAggregateQueryAsync<Branch, TestNextAggregateQueryAsync, bool>
     {
 
         public string GetTenantId() => Tenant;
-        public Task<ResultBox<bool>> HandleFilterAsync(
+        public static Task<ResultBox<bool>> HandleFilterAsync(
             IEnumerable<AggregateState<Branch>> list,
-            IQueryContext context) =>
-            throw new NotImplementedException();
+            TestNextAggregateQueryAsync query,
+            IQueryContext context) => throw new NotImplementedException();
     }
-    public record TestNextAggregateListQuery(string Tenant) : ITenantNextAggregateListQuery<Branch, bool>
+    public record TestNextAggregateListQuery(string Tenant)
+        : ITenantNextAggregateListQuery<Branch, TestNextAggregateListQuery, bool>
     {
         public string GetTenantId() => Tenant;
-        public ResultBox<IEnumerable<bool>> HandleFilter(
+        public static ResultBox<IEnumerable<bool>> HandleFilter(
             IEnumerable<AggregateState<Branch>> list,
+            TestNextAggregateListQuery query,
             IQueryContext context) => throw new NotImplementedException();
-        public ResultBox<IEnumerable<bool>> HandleSort(IEnumerable<bool> filteredList, IQueryContext context) =>
-            throw new NotImplementedException();
-    }
-    public record TestNextAggregateListQueryAsync(string Tenant) : ITenantNextAggregateListQueryAsync<Branch, bool>
-    {
-        public string GetTenantId() => Tenant;
-        public Task<ResultBox<IEnumerable<bool>>> HandleFilterAsync(
-            IEnumerable<AggregateState<Branch>> list,
-            IQueryContext context) => throw new NotImplementedException();
-        public Task<ResultBox<IEnumerable<bool>>> HandleSortAsync(
+        public static ResultBox<IEnumerable<bool>> HandleSort(
             IEnumerable<bool> filteredList,
-            IQueryContext context) =>
-            throw new NotImplementedException();
+            TestNextAggregateListQuery query,
+            IQueryContext context) => throw new NotImplementedException();
+    }
+    public record TestNextAggregateListQueryAsync(string Tenant)
+        : ITenantNextAggregateListQueryAsync<Branch, TestNextAggregateListQueryAsync, bool>
+    {
+        public string GetTenantId() => Tenant;
+        public static Task<ResultBox<IEnumerable<bool>>> HandleFilterAsync(IEnumerable<AggregateState<Branch>> list, TestNextAggregateListQueryAsync query, IQueryContext context) => throw new NotImplementedException();
+        public static Task<ResultBox<IEnumerable<bool>>> HandleSortAsync(IEnumerable<bool> filteredList, TestNextAggregateListQueryAsync query, IQueryContext context) => throw new NotImplementedException();
     }
 }

@@ -100,11 +100,11 @@ public sealed class StaticCommandHandlerAdapter<TAggregatePayloadBase, TAggregat
                         aggregateId,
                         rootPartitionKey,
                         toVersion)));
-    public Task<ResultBox<TOutput>> ExecuteQueryAsync<TOutput>(INextQueryCommon<TOutput> query)
+    public Task<ResultBox<TOutput>> ExecuteQueryAsync<TOutput>(INextQueryCommonOutput<TOutput> query)
         where TOutput : notnull =>
         GetRequiredService<IQueryExecutor>().Conveyor(executor => executor.ExecuteAsync(query));
-    public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteQueryAsync<TOutput>(INextListQueryCommon<TOutput> query)
-        where TOutput : notnull =>
+    public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteQueryAsync<TOutput>(
+        INextListQueryCommonOutput<TOutput> query) where TOutput : notnull =>
         GetRequiredService<IQueryExecutor>().Conveyor(executor => executor.ExecuteAsync(query));
     public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteQueryAsync<TOutput>(IListQueryInput<TOutput> param)
         where TOutput : IQueryResponse =>

@@ -261,7 +261,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <typeparam name="TAggregateSubtype"></typeparam>
     /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload>
-        GivenSubtypeCommandWithPublishAndBlockingSubscriber<TAggregateSubtype>(ICommandCommon<TAggregateSubtype> command)
+        GivenSubtypeCommandWithPublishAndBlockingSubscriber<TAggregateSubtype>(
+            ICommandCommon<TAggregateSubtype> command)
         where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload>;
     /// <summary>
     ///     Run a command.
@@ -272,7 +273,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <typeparam name="TCommand"></typeparam>
     /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> GivenCommand<TCommand>(
-        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommandCommon<TAggregatePayload>;
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommandCommon<TAggregatePayload>;
     /// <summary>
     ///     Run a Command and publish events.
     ///     When events are published, local subscriber will be executed.
@@ -308,7 +310,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <typeparam name="TCommand"></typeparam>
     /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublish<TCommand>(
-        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommandCommon<TAggregatePayload>;
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommandCommon<TAggregatePayload>;
     /// <summary>
     ///     Run a Command and publish events.
     ///     When events are published, local subscriber will be executed.
@@ -322,7 +325,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <typeparam name="TCommand"></typeparam>
     /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublishAndBlockingSubscriber<TCommand>(
-        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommandCommon<TAggregatePayload>;
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommandCommon<TAggregatePayload>;
     #endregion
 
     #region When
@@ -371,7 +375,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <typeparam name="TCommand"></typeparam>
     /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> WhenCommand<TCommand>(
-        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommandCommon<TAggregatePayload>;
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommandCommon<TAggregatePayload>;
     /// <summary>
     ///     Run a Command and publish events.
     ///     When events are published, local subscriber will be executed.
@@ -401,7 +406,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <typeparam name="TCommand"></typeparam>
     /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublish<TCommand>(
-        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommandCommon<TAggregatePayload>;
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommandCommon<TAggregatePayload>;
     /// <summary>
     ///     Run a Command and publish events.
     ///     When events are published, local subscriber will be executed.
@@ -413,7 +419,8 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     /// <typeparam name="TCommand"></typeparam>
     /// <returns></returns>
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublishAndBlockingSubscriber<TCommand>(
-        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc) where TCommand : ICommandCommon<TAggregatePayload>;
+        Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
+        where TCommand : ICommandCommon<TAggregatePayload>;
     #endregion
 
     #region Then
@@ -697,7 +704,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         IListQueryInput<TQueryResponse> param,
         ListQueryResult<TQueryResponse> expectedResponse) where TQueryResponse : IQueryResponse;
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIs<TQueryResponse>(
-        INextListQueryCommon<TQueryResponse> param,
+        INextListQueryCommonOutput<TQueryResponse> param,
         ListQueryResult<TQueryResponse> expectedResponse) where TQueryResponse : notnull;
     /// <summary>
     ///     Write Query Response to Json file
@@ -720,7 +727,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         IListQueryInput<TQueryResponse> param,
         Action<ListQueryResult<TQueryResponse>> responseAction) where TQueryResponse : IQueryResponse;
     public IAggregateTestHelper<TAggregatePayload> ThenGetQueryResponse<TQueryResponse>(
-        INextListQueryCommon<TQueryResponse> param,
+        INextListQueryCommonOutput<TQueryResponse> param,
         Action<ListQueryResult<TQueryResponse>> responseAction) where TQueryResponse : notnull;
     /// <summary>
     ///     Check if Query Response is expected value from Json
@@ -733,7 +740,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         IListQueryInput<TQueryResponse> param,
         string responseJson) where TQueryResponse : IQueryResponse;
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(
-        INextListQueryCommon<TQueryResponse> param,
+        INextListQueryCommonOutput<TQueryResponse> param,
         string responseJson) where TQueryResponse : notnull;
     /// <summary>
     ///     Check if Query Response is expected value from Json file
@@ -746,7 +753,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         IListQueryInput<TQueryResponse> param,
         string responseFilename) where TQueryResponse : IQueryResponse;
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromFile<TQueryResponse>(
-        INextListQueryCommon<TQueryResponse> param,
+        INextListQueryCommonOutput<TQueryResponse> param,
         string responseFilename) where TQueryResponse : notnull;
     /// <summary>
     ///     Check if query throws an exception with specified type
@@ -780,7 +787,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         IListQueryInput<TQueryResponse> param,
         Action<Exception> checkException) where TQueryResponse : IQueryResponse;
     public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<TQueryResponse>(
-        INextListQueryCommon<TQueryResponse> param,
+        INextListQueryCommonOutput<TQueryResponse> param,
         Action<Exception> checkException) where TQueryResponse : notnull;
     /// <summary>
     ///     Check if query not throws an exception
@@ -799,12 +806,12 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
 
     public TQueryResponse GetQueryResponse<TQueryResponse>(IQueryInput<TQueryResponse> param)
         where TQueryResponse : IQueryResponse;
-    public TQueryResponse GetQueryResponse<TQueryResponse>(INextQueryCommon<TQueryResponse> param)
+    public TQueryResponse GetQueryResponse<TQueryResponse>(INextQueryCommonOutput<TQueryResponse> param)
         where TQueryResponse : notnull;
     public ListQueryResult<TQueryResponse> GetQueryResponse<TQueryResponse>(IListQueryInput<TQueryResponse> param)
         where TQueryResponse : IQueryResponse;
-    public ListQueryResult<TQueryResponse> GetQueryResponse<TQueryResponse>(INextListQueryCommon<TQueryResponse> param)
-        where TQueryResponse : notnull;
+    public ListQueryResult<TQueryResponse> GetQueryResponse<TQueryResponse>(
+        INextListQueryCommonOutput<TQueryResponse> param) where TQueryResponse : notnull;
     #endregion
 
     #region Query Test (not list)
@@ -820,7 +827,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         TQueryResponse expectedResponse) where TQueryResponse : IQueryResponse;
 
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIs<TQueryResponse>(
-        INextQueryCommon<TQueryResponse> param,
+        INextQueryCommonOutput<TQueryResponse> param,
         TQueryResponse expectedResponse) where TQueryResponse : notnull;
 
 
@@ -845,7 +852,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         IQueryInput<TQueryResponse> param,
         Action<TQueryResponse> responseAction) where TQueryResponse : IQueryResponse;
     public IAggregateTestHelper<TAggregatePayload> ThenGetQueryResponse<TQueryResponse>(
-        INextQueryCommon<TQueryResponse> param,
+        INextQueryCommonOutput<TQueryResponse> param,
         Action<TQueryResponse> responseAction) where TQueryResponse : notnull;
     /// <summary>
     ///     Check if Query Response is expected value from Json
@@ -858,7 +865,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         IQueryInput<TQueryResponse> param,
         string responseJson) where TQueryResponse : IQueryResponse;
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(
-        INextQueryCommon<TQueryResponse> param,
+        INextQueryCommonOutput<TQueryResponse> param,
         string responseJson) where TQueryResponse : notnull;
     /// <summary>
     ///     Check if Query Response is expected value from Json file
@@ -871,7 +878,7 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
         IQueryInput<TQueryResponse> param,
         string responseFilename) where TQueryResponse : IQueryResponse;
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromFile<TQueryResponse>(
-        INextQueryCommon<TQueryResponse> param,
+        INextQueryCommonOutput<TQueryResponse> param,
         string responseFilename) where TQueryResponse : notnull;
     /// <summary>
     ///     Check if query throws an exception with specified type

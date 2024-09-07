@@ -254,11 +254,6 @@ public class
         _helper.ThenHasValidationErrors(validationParameterErrors);
 
     public IAggregateTestHelper<TAggregatePayload> ThenHasValidationErrors() => _helper.ThenHasValidationErrors();
-
-    public void Dispose()
-    {
-        ThrowIfTestHasUnhandledErrors();
-    }
     public Guid RunEnvironmentCommandWithPublishAndBlockingEvent<TEnvironmentAggregatePayload>(
         ICommandCommon<TEnvironmentAggregatePayload> command,
         Guid? injectingAggregateId = null) where TEnvironmentAggregatePayload : IAggregatePayloadCommon =>
@@ -293,6 +288,11 @@ public class
         ICommandCommon<TAggregateSubtype> command)
         where TAggregateSubtype : IAggregateSubtypePayloadParentApplicable<TAggregatePayload> =>
         _helper.WhenSubtypeCommandWithPublish(command);
+
+    public void Dispose()
+    {
+        ThrowIfTestHasUnhandledErrors();
+    }
 
 
     protected virtual void SetupDependency(IServiceCollection serviceCollection)
@@ -348,7 +348,7 @@ public class
         ListQueryResult<TQueryResponse> expectedResponse) where TQueryResponse : IQueryResponse =>
         _helper.ThenQueryResponseIs(param, expectedResponse);
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIs<TQueryResponse>(
-        INextListQueryCommon<TQueryResponse> param,
+        INextListQueryCommonOutput<TQueryResponse> param,
         ListQueryResult<TQueryResponse> expectedResponse) where TQueryResponse : notnull =>
         _helper.ThenQueryResponseIs(param, expectedResponse);
     public IAggregateTestHelper<TAggregatePayload> WriteQueryResponseToFile<TQueryResponse>(
@@ -360,7 +360,7 @@ public class
         Action<ListQueryResult<TQueryResponse>> responseAction) where TQueryResponse : IQueryResponse =>
         _helper.ThenGetQueryResponse(param, responseAction);
     public IAggregateTestHelper<TAggregatePayload> ThenGetQueryResponse<TQueryResponse>(
-        INextListQueryCommon<TQueryResponse> param,
+        INextListQueryCommonOutput<TQueryResponse> param,
         Action<ListQueryResult<TQueryResponse>> responseAction) where TQueryResponse : notnull =>
         _helper.ThenGetQueryResponse(param, responseAction);
 
@@ -369,7 +369,7 @@ public class
         string responseJson) where TQueryResponse : IQueryResponse =>
         _helper.ThenQueryResponseIsFromJson(param, responseJson);
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(
-        INextListQueryCommon<TQueryResponse> param,
+        INextListQueryCommonOutput<TQueryResponse> param,
         string responseJson) where TQueryResponse : notnull =>
         _helper.ThenQueryResponseIsFromJson(param, responseJson);
 
@@ -378,7 +378,7 @@ public class
         string responseFilename) where TQueryResponse : IQueryResponse =>
         _helper.ThenQueryResponseIsFromFile(param, responseFilename);
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromFile<TQueryResponse>(
-        INextListQueryCommon<TQueryResponse> param,
+        INextListQueryCommonOutput<TQueryResponse> param,
         string responseFilename) where TQueryResponse : notnull =>
         _helper.ThenQueryResponseIsFromFile(param, responseFilename);
     public IAggregateTestHelper<TAggregatePayload> ThenQueryThrows<T>(IListQueryInputCommon param)
@@ -398,7 +398,7 @@ public class
         Action<Exception> checkException) where TQueryResponse : IQueryResponse =>
         _helper.ThenQueryGetException(param, checkException);
     public IAggregateTestHelper<TAggregatePayload> ThenQueryGetException<TQueryResponse>(
-        INextListQueryCommon<TQueryResponse> param,
+        INextListQueryCommonOutput<TQueryResponse> param,
         Action<Exception> checkException) where TQueryResponse : notnull =>
         _helper.ThenQueryGetException(param, checkException);
     public IAggregateTestHelper<TAggregatePayload> ThenQueryNotThrowsAnException(IListQueryInputCommon param) =>
@@ -412,14 +412,14 @@ public class
     public TQueryResponse GetQueryResponse<TQueryResponse>(IQueryInput<TQueryResponse> param)
         where TQueryResponse : IQueryResponse =>
         _helper.GetQueryResponse(param);
-    public TQueryResponse GetQueryResponse<TQueryResponse>(INextQueryCommon<TQueryResponse> param)
+    public TQueryResponse GetQueryResponse<TQueryResponse>(INextQueryCommonOutput<TQueryResponse> param)
         where TQueryResponse : notnull =>
         _helper.GetQueryResponse(param);
     public ListQueryResult<TQueryResponse> GetQueryResponse<TQueryResponse>(IListQueryInput<TQueryResponse> param)
         where TQueryResponse : IQueryResponse =>
         _helper.GetQueryResponse(param);
-    public ListQueryResult<TQueryResponse> GetQueryResponse<TQueryResponse>(INextListQueryCommon<TQueryResponse> param)
-        where TQueryResponse : notnull =>
+    public ListQueryResult<TQueryResponse> GetQueryResponse<TQueryResponse>(
+        INextListQueryCommonOutput<TQueryResponse> param) where TQueryResponse : notnull =>
         _helper.GetQueryResponse(param);
     #endregion
 
@@ -429,7 +429,7 @@ public class
         TQueryResponse expectedResponse) where TQueryResponse : IQueryResponse =>
         _helper.ThenQueryResponseIs(param, expectedResponse);
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIs<TQueryResponse>(
-        INextQueryCommon<TQueryResponse> param,
+        INextQueryCommonOutput<TQueryResponse> param,
         TQueryResponse expectedResponse) where TQueryResponse : notnull =>
         _helper.ThenQueryResponseIs(param, expectedResponse);
     public IAggregateTestHelper<TAggregatePayload> WriteQueryResponseToFile<TQueryResponse>(
@@ -441,7 +441,7 @@ public class
         Action<TQueryResponse> responseAction) where TQueryResponse : IQueryResponse =>
         _helper.ThenGetQueryResponse(param, responseAction);
     public IAggregateTestHelper<TAggregatePayload> ThenGetQueryResponse<TQueryResponse>(
-        INextQueryCommon<TQueryResponse> param,
+        INextQueryCommonOutput<TQueryResponse> param,
         Action<TQueryResponse> responseAction) where TQueryResponse : notnull =>
         _helper.ThenGetQueryResponse(param, responseAction);
 
@@ -450,7 +450,7 @@ public class
         string responseJson) where TQueryResponse : IQueryResponse =>
         _helper.ThenQueryResponseIsFromJson(param, responseJson);
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromJson<TQueryResponse>(
-        INextQueryCommon<TQueryResponse> param,
+        INextQueryCommonOutput<TQueryResponse> param,
         string responseJson) where TQueryResponse : notnull =>
         _helper.ThenQueryResponseIsFromJson(param, responseJson);
 
@@ -459,7 +459,7 @@ public class
         string responseFilename) where TQueryResponse : IQueryResponse =>
         _helper.ThenQueryResponseIsFromFile(param, responseFilename);
     public IAggregateTestHelper<TAggregatePayload> ThenQueryResponseIsFromFile<TQueryResponse>(
-        INextQueryCommon<TQueryResponse> param,
+        INextQueryCommonOutput<TQueryResponse> param,
         string responseFilename) where TQueryResponse : notnull =>
         _helper.ThenQueryResponseIsFromFile(param, responseFilename);
     public IAggregateTestHelper<TAggregatePayload> ThenQueryThrows<T>(IQueryInputCommon param) where T : Exception =>

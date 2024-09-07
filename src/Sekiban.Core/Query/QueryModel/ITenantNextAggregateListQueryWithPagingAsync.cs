@@ -2,9 +2,11 @@ using Sekiban.Core.Aggregate;
 namespace Sekiban.Core.Query.QueryModel;
 
 public interface
-    ITenantNextAggregateListQueryWithPagingAsync<TAggregatePayload, TOutput> :
-    INextAggregateListQueryWithPagingAsync<TAggregatePayload, TOutput>,
-    ITenantQueryCommon where TOutput : notnull where TAggregatePayload : IAggregatePayloadCommon
+    ITenantNextAggregateListQueryWithPagingAsync<TAggregatePayload, TQuery, TOutput> :
+    INextAggregateListQueryWithPagingAsync<TAggregatePayload, TQuery, TOutput>,
+    ITenantQueryCommon where TOutput : notnull
+    where TAggregatePayload : IAggregatePayloadCommon
+    where TQuery : ITenantNextAggregateListQueryWithPagingAsync<TAggregatePayload, TQuery, TOutput>
 {
     string IQueryPartitionKeyCommon.GetRootPartitionKey() => GetTenantId();
 }

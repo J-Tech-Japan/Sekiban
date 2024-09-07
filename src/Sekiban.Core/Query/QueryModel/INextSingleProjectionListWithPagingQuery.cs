@@ -2,7 +2,8 @@ using Sekiban.Core.Query.SingleProjections;
 namespace Sekiban.Core.Query.QueryModel;
 
 public interface
-    INextSingleProjectionListWithPagingQuery<TSingleProjectionPayloadCommon, TOutput> :
-    INextSingleProjectionListQuery<TSingleProjectionPayloadCommon, TOutput>,
+    INextSingleProjectionListWithPagingQuery<TSingleProjectionPayloadCommon, TQuery, TOutput> :
+    INextSingleProjectionListQuery<TSingleProjectionPayloadCommon, TQuery, TOutput>,
     IQueryPagingParameterCommon where TOutput : notnull
-    where TSingleProjectionPayloadCommon : ISingleProjectionPayloadCommon;
+    where TSingleProjectionPayloadCommon : ISingleProjectionPayloadCommon
+    where TQuery : INextSingleProjectionListWithPagingQuery<TSingleProjectionPayloadCommon, TQuery, TOutput>;

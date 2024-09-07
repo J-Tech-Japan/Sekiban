@@ -80,9 +80,10 @@ public class SekibanExecutor(
                 rootPartitionKey,
                 toVersion,
                 retrievalOptions));
-    public Task<ResultBox<TOutput>> ExecuteQuery<TOutput>(INextQueryCommon<TOutput> query) where TOutput : notnull =>
+    public Task<ResultBox<TOutput>> ExecuteQuery<TOutput>(INextQueryCommonOutput<TOutput> query)
+        where TOutput : notnull =>
         queryExecutor.ExecuteAsync(query);
-    public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteQuery<TOutput>(INextListQueryCommon<TOutput> query)
+    public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteQuery<TOutput>(INextListQueryCommonOutput<TOutput> query)
         where TOutput : notnull =>
         queryExecutor.ExecuteAsync(query);
     public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteQuery<TOutput>(IListQueryInput<TOutput> param)

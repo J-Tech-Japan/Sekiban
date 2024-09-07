@@ -68,7 +68,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <returns></returns>
     public AggregateTest<TAggregatePayload, TDependencyDefinition> GetAggregateTest<TAggregatePayload>(
         Guid aggregateId,
-        string rootPartitionKey = IDocument.DefaultRootPartitionKey) where TAggregatePayload : IAggregatePayloadCommon =>
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey)
+        where TAggregatePayload : IAggregatePayloadCommon =>
         new(_serviceProvider, aggregateId, rootPartitionKey);
     /// <summary>
     ///     Get Aggregate test
@@ -88,7 +89,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <returns></returns>
     public UnifiedTest<TDependencyDefinition> ThenGetAggregateTest<TAggregatePayload>(
         Guid aggregateId,
-        Action<AggregateTest<TAggregatePayload, TDependencyDefinition>> testAction) where TAggregatePayload : IAggregatePayloadCommon =>
+        Action<AggregateTest<TAggregatePayload, TDependencyDefinition>> testAction)
+        where TAggregatePayload : IAggregatePayloadCommon =>
         ThenGetAggregateTest(aggregateId, IDocument.DefaultRootPartitionKey, testAction);
     /// <summary>
     ///     Get Aggregate test in action.
@@ -101,9 +103,14 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     public UnifiedTest<TDependencyDefinition> ThenGetAggregateTest<TAggregatePayload>(
         Guid aggregateId,
         string rootPartitionKey,
-        Action<AggregateTest<TAggregatePayload, TDependencyDefinition>> testAction) where TAggregatePayload : IAggregatePayloadCommon
+        Action<AggregateTest<TAggregatePayload, TDependencyDefinition>> testAction)
+        where TAggregatePayload : IAggregatePayloadCommon
     {
-        testAction(new AggregateTest<TAggregatePayload, TDependencyDefinition>(_serviceProvider, aggregateId, rootPartitionKey));
+        testAction(
+            new AggregateTest<TAggregatePayload, TDependencyDefinition>(
+                _serviceProvider,
+                aggregateId,
+                rootPartitionKey));
         return this;
     }
 
@@ -114,7 +121,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
     public UnifiedTest<TDependencyDefinition> ThenGetAggregateTest<TAggregatePayload>(
-        Action<AggregateTest<TAggregatePayload, TDependencyDefinition>> testAction) where TAggregatePayload : IAggregatePayloadCommon
+        Action<AggregateTest<TAggregatePayload, TDependencyDefinition>> testAction)
+        where TAggregatePayload : IAggregatePayloadCommon
     {
         testAction(new AggregateTest<TAggregatePayload, TDependencyDefinition>(_serviceProvider));
         return this;
@@ -132,16 +140,20 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     private ListQueryResult<TQueryResponse> GetListQueryResponse<TQueryResponse>(IListQueryInput<TQueryResponse> param)
         where TQueryResponse : IQueryResponse
     {
-        var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new SekibanTypeNotFoundException("Failed to get Query service");
+        var queryService = _serviceProvider.GetService<IQueryExecutor>() ??
+            throw new SekibanTypeNotFoundException("Failed to get Query service");
         return queryService.ExecuteAsync(param).Result ??
-            throw new SekibanTypeNotFoundException("Failed to get Aggregate Query Response for " + param.GetType().Name);
+            throw new SekibanTypeNotFoundException(
+                "Failed to get Aggregate Query Response for " + param.GetType().Name);
     }
-    private ListQueryResult<TQueryResponse> GetListQueryResponse<TQueryResponse>(INextListQueryCommon<TQueryResponse> param)
-        where TQueryResponse : notnull
+    private ListQueryResult<TQueryResponse> GetListQueryResponse<TQueryResponse>(
+        INextListQueryCommonOutput<TQueryResponse> param) where TQueryResponse : notnull
     {
-        var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new SekibanTypeNotFoundException("Failed to get Query service");
+        var queryService = _serviceProvider.GetService<IQueryExecutor>() ??
+            throw new SekibanTypeNotFoundException("Failed to get Query service");
         return queryService.ExecuteAsync(param).Result.UnwrapBox() ??
-            throw new SekibanTypeNotFoundException("Failed to get Aggregate Query Response for " + param.GetType().Name);
+            throw new SekibanTypeNotFoundException(
+                "Failed to get Aggregate Query Response for " + param.GetType().Name);
     }
     /// <summary>
     ///     Get Exception from Query
@@ -152,7 +164,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <exception cref="Exception"></exception>
     private Exception? GetQueryException(IListQueryInputCommon param)
     {
-        var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new SekibanTypeNotFoundException("Failed to get Query service");
+        var queryService = _serviceProvider.GetService<IQueryExecutor>() ??
+            throw new SekibanTypeNotFoundException("Failed to get Query service");
         try
         {
             _ = queryService.ExecuteAsync((dynamic)param).Result;
@@ -165,7 +178,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     }
     private Exception? GetQueryException(INextListQueryCommon param)
     {
-        var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new SekibanTypeNotFoundException("Failed to get Query service");
+        var queryService = _serviceProvider.GetService<IQueryExecutor>() ??
+            throw new SekibanTypeNotFoundException("Failed to get Query service");
         try
         {
             var result = queryService.ExecuteAsync((dynamic)param).Result;
@@ -205,7 +219,9 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <typeparam name="T"></typeparam>
     /// <returns></returns>
     /// <exception cref="Exception"></exception>
-    public UnifiedTest<TDependencyDefinition> ThenQueryGetException<T>(IListQueryInputCommon param, Action<T> checkException) where T : Exception
+    public UnifiedTest<TDependencyDefinition> ThenQueryGetException<T>(
+        IListQueryInputCommon param,
+        Action<T> checkException) where T : Exception
     {
         var exception = GetQueryException(param);
         Assert.NotNull(exception);
@@ -213,7 +229,9 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         checkException(exception as T ?? throw new SekibanTypeNotFoundException("Failed to cast exception"));
         return this;
     }
-    public UnifiedTest<TDependencyDefinition> ThenQueryGetException<T>(INextListQueryCommon param, Action<T> checkException) where T : Exception
+    public UnifiedTest<TDependencyDefinition> ThenQueryGetException<T>(
+        INextListQueryCommon param,
+        Action<T> checkException) where T : Exception
     {
         var exception = GetQueryException(param);
         Assert.NotNull(exception);
@@ -239,7 +257,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         return this;
     }
     public UnifiedTest<TDependencyDefinition> ThenQueryGetException<TQueryResponse>(
-        INextListQueryCommon<TQueryResponse> param,
+        INextListQueryCommonOutput<TQueryResponse> param,
         Action<Exception> checkException) where TQueryResponse : notnull
     {
         var exception = GetQueryException(param);
@@ -306,7 +324,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <typeparam name="TQueryResponse"></typeparam>
     /// <returns></returns>
     public UnifiedTest<TDependencyDefinition> ThenQueryResponseIs<TQueryResponse>(
-        INextListQueryCommon<TQueryResponse> param,
+        INextListQueryCommonOutput<TQueryResponse> param,
         ListQueryResult<TQueryResponse> expectedResponse) where TQueryResponse : notnull
     {
         var actual = GetListQueryResponse(param);
@@ -316,8 +334,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
-    public ListQueryResult<TQueryResponse> GetQueryResponse<TQueryResponse>(INextListQueryCommon<TQueryResponse> param)
-        where TQueryResponse : notnull =>
+    public ListQueryResult<TQueryResponse> GetQueryResponse<TQueryResponse>(
+        INextListQueryCommonOutput<TQueryResponse> param) where TQueryResponse : notnull =>
         GetListQueryResponse(param);
     /// <summary>
     ///     Run query and write query response to file.
@@ -327,8 +345,9 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <typeparam name="TQueryResponse"></typeparam>
     /// <returns></returns>
     /// <exception cref="InvalidDataException"></exception>
-    public UnifiedTest<TDependencyDefinition> WriteQueryResponseToFile<TQueryResponse>(IListQueryInput<TQueryResponse> param, string filename)
-        where TQueryResponse : IQueryResponse
+    public UnifiedTest<TDependencyDefinition> WriteQueryResponseToFile<TQueryResponse>(
+        IListQueryInput<TQueryResponse> param,
+        string filename) where TQueryResponse : IQueryResponse
     {
         var json = SekibanJsonHelper.Serialize(GetListQueryResponse(param));
         if (string.IsNullOrEmpty(json))
@@ -360,8 +379,9 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <typeparam name="TQueryResponse"></typeparam>
     /// <returns></returns>
     /// <exception cref="InvalidDataException"></exception>
-    public UnifiedTest<TDependencyDefinition> ThenQueryResponseIsFromJson<TQueryResponse>(IListQueryInput<TQueryResponse> param, string responseJson)
-        where TQueryResponse : IQueryResponse
+    public UnifiedTest<TDependencyDefinition> ThenQueryResponseIsFromJson<TQueryResponse>(
+        IListQueryInput<TQueryResponse> param,
+        string responseJson) where TQueryResponse : IQueryResponse
     {
         var response = JsonSerializer.Deserialize<ListQueryResult<TQueryResponse>>(responseJson) ??
             throw new InvalidDataException("Failed to serialize in JSON.");
@@ -396,17 +416,23 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <typeparam name="TQueryResponse"></typeparam>
     /// <returns></returns>
     /// <exception cref="Exception"></exception>
-    public TQueryResponse GetQueryResponse<TQueryResponse>(IQueryInput<TQueryResponse> param) where TQueryResponse : IQueryResponse
+    public TQueryResponse GetQueryResponse<TQueryResponse>(IQueryInput<TQueryResponse> param)
+        where TQueryResponse : IQueryResponse
     {
-        var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new SekibanTypeNotFoundException("Failed to get Query service");
+        var queryService = _serviceProvider.GetService<IQueryExecutor>() ??
+            throw new SekibanTypeNotFoundException("Failed to get Query service");
         return queryService.ExecuteAsync(param).Result ??
-            throw new SekibanTypeNotFoundException("Failed to get Aggregate Query Response for " + param.GetType().Name);
+            throw new SekibanTypeNotFoundException(
+                "Failed to get Aggregate Query Response for " + param.GetType().Name);
     }
-    public TQueryResponse GetQueryResponse<TQueryResponse>(INextQueryCommon<TQueryResponse> param) where TQueryResponse : notnull
+    public TQueryResponse GetQueryResponse<TQueryResponse>(INextQueryCommonOutput<TQueryResponse> param)
+        where TQueryResponse : notnull
     {
-        var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new SekibanTypeNotFoundException("Failed to get Query service");
+        var queryService = _serviceProvider.GetService<IQueryExecutor>() ??
+            throw new SekibanTypeNotFoundException("Failed to get Query service");
         return queryService.ExecuteAsync(param).Result.UnwrapBox() ??
-            throw new SekibanTypeNotFoundException("Failed to get Aggregate Query Response for " + param.GetType().Name);
+            throw new SekibanTypeNotFoundException(
+                "Failed to get Aggregate Query Response for " + param.GetType().Name);
     }
     /// <summary>
     ///     Get Exception from Query, returns null if no exception is thrown.
@@ -416,7 +442,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <exception cref="Exception"></exception>
     private Exception? GetQueryException(IQueryInputCommon param)
     {
-        var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new SekibanTypeNotFoundException("Failed to get Query service");
+        var queryService = _serviceProvider.GetService<IQueryExecutor>() ??
+            throw new SekibanTypeNotFoundException("Failed to get Query service");
         try
         {
             var _ = queryService.ExecuteAsync((dynamic)param).Result;
@@ -429,7 +456,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     }
     private Exception? GetQueryException(INextQueryCommon param)
     {
-        var queryService = _serviceProvider.GetService<IQueryExecutor>() ?? throw new SekibanTypeNotFoundException("Failed to get Query service");
+        var queryService = _serviceProvider.GetService<IQueryExecutor>() ??
+            throw new SekibanTypeNotFoundException("Failed to get Query service");
         try
         {
             var result = queryService.ExecuteAsync((dynamic)param).Result;
@@ -468,7 +496,9 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <typeparam name="T"></typeparam>
     /// <returns></returns>
     /// <exception cref="Exception"></exception>
-    public UnifiedTest<TDependencyDefinition> ThenQueryGetException<T>(IQueryInputCommon param, Action<T> checkException) where T : Exception
+    public UnifiedTest<TDependencyDefinition> ThenQueryGetException<T>(
+        IQueryInputCommon param,
+        Action<T> checkException) where T : Exception
     {
         var exception = GetQueryException(param);
         Assert.NotNull(exception);
@@ -476,7 +506,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         checkException(exception as T ?? throw new SekibanTypeNotFoundException("Failed to cast exception"));
         return this;
     }
-    public UnifiedTest<TDependencyDefinition> ThenQueryGetException<T>(INextQueryCommon param, Action<T> checkException) where T : Exception
+    public UnifiedTest<TDependencyDefinition> ThenQueryGetException<T>(INextQueryCommon param, Action<T> checkException)
+        where T : Exception
     {
         var exception = GetQueryException(param);
         Assert.NotNull(exception);
@@ -491,14 +522,18 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <param name="checkException"></param>
     /// <returns></returns>
     /// <exception cref="Exception"></exception>
-    public UnifiedTest<TDependencyDefinition> ThenQueryGetException(IQueryInputCommon param, Action<Exception> checkException)
+    public UnifiedTest<TDependencyDefinition> ThenQueryGetException(
+        IQueryInputCommon param,
+        Action<Exception> checkException)
     {
         var exception = GetQueryException(param);
         Assert.NotNull(exception);
         checkException(exception);
         return this;
     }
-    public UnifiedTest<TDependencyDefinition> ThenQueryGetException(INextQueryCommon param, Action<Exception> checkException)
+    public UnifiedTest<TDependencyDefinition> ThenQueryGetException(
+        INextQueryCommon param,
+        Action<Exception> checkException)
     {
         var exception = GetQueryException(param);
         Assert.NotNull(exception);
@@ -543,8 +578,9 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <param name="expectedResponse"></param>
     /// <typeparam name="TQueryResponse"></typeparam>
     /// <returns></returns>
-    public UnifiedTest<TDependencyDefinition> ThenQueryResponseIs<TQueryResponse>(IQueryInput<TQueryResponse> param, TQueryResponse expectedResponse)
-        where TQueryResponse : IQueryResponse
+    public UnifiedTest<TDependencyDefinition> ThenQueryResponseIs<TQueryResponse>(
+        IQueryInput<TQueryResponse> param,
+        TQueryResponse expectedResponse) where TQueryResponse : IQueryResponse
     {
         var actual = GetQueryResponse(param);
         var expected = expectedResponse;
@@ -554,7 +590,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         return this;
     }
     public UnifiedTest<TDependencyDefinition> ThenQueryResponseIs<TQueryResponse>(
-        INextQueryCommon<TQueryResponse> param,
+        INextQueryCommonOutput<TQueryResponse> param,
         TQueryResponse expectedResponse) where TQueryResponse : notnull
     {
         var actual = GetQueryResponse(param);
@@ -572,8 +608,9 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <typeparam name="TQueryResponse"></typeparam>
     /// <returns></returns>
     /// <exception cref="InvalidDataException"></exception>
-    public UnifiedTest<TDependencyDefinition> WriteQueryResponseToFile<TQueryResponse>(IQueryInput<TQueryResponse> param, string filename)
-        where TQueryResponse : IQueryResponse
+    public UnifiedTest<TDependencyDefinition> WriteQueryResponseToFile<TQueryResponse>(
+        IQueryInput<TQueryResponse> param,
+        string filename) where TQueryResponse : IQueryResponse
     {
         var json = SekibanJsonHelper.Serialize(GetQueryResponse(param));
         if (string.IsNullOrEmpty(json))
@@ -583,8 +620,9 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         File.WriteAllTextAsync(filename, json);
         return this;
     }
-    public UnifiedTest<TDependencyDefinition> WriteQueryResponseToFile<TQueryResponse>(INextQueryCommon<TQueryResponse> param, string filename)
-        where TQueryResponse : IQueryResponse
+    public UnifiedTest<TDependencyDefinition> WriteQueryResponseToFile<TQueryResponse>(
+        INextQueryCommonOutput<TQueryResponse> param,
+        string filename) where TQueryResponse : IQueryResponse
     {
         var json = SekibanJsonHelper.Serialize(GetQueryResponse(param));
         if (string.IsNullOrEmpty(json))
@@ -609,7 +647,7 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         return this;
     }
     public UnifiedTest<TDependencyDefinition> ThenGetQueryResponse<TQueryResponse>(
-        INextQueryCommon<TQueryResponse> param,
+        INextQueryCommonOutput<TQueryResponse> param,
         Action<TQueryResponse> responseAction) where TQueryResponse : IQueryResponse
     {
         responseAction(GetQueryResponse(param));
@@ -623,17 +661,21 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <typeparam name="TQueryResponse"></typeparam>
     /// <returns></returns>
     /// <exception cref="InvalidDataException"></exception>
-    public UnifiedTest<TDependencyDefinition> ThenQueryResponseIsFromJson<TQueryResponse>(IQueryInput<TQueryResponse> param, string responseJson)
-        where TQueryResponse : IQueryResponse
+    public UnifiedTest<TDependencyDefinition> ThenQueryResponseIsFromJson<TQueryResponse>(
+        IQueryInput<TQueryResponse> param,
+        string responseJson) where TQueryResponse : IQueryResponse
     {
-        var response = JsonSerializer.Deserialize<TQueryResponse>(responseJson) ?? throw new InvalidDataException("Failed to serialize in JSON.");
+        var response = JsonSerializer.Deserialize<TQueryResponse>(responseJson) ??
+            throw new InvalidDataException("Failed to serialize in JSON.");
         ThenQueryResponseIs(param, response);
         return this;
     }
-    public UnifiedTest<TDependencyDefinition> ThenQueryResponseIsFromJson<TQueryResponse>(INextQueryCommon<TQueryResponse> param, string responseJson)
-        where TQueryResponse : IQueryResponse
+    public UnifiedTest<TDependencyDefinition> ThenQueryResponseIsFromJson<TQueryResponse>(
+        INextQueryCommonOutput<TQueryResponse> param,
+        string responseJson) where TQueryResponse : IQueryResponse
     {
-        var response = JsonSerializer.Deserialize<TQueryResponse>(responseJson) ?? throw new InvalidDataException("Failed to serialize in JSON.");
+        var response = JsonSerializer.Deserialize<TQueryResponse>(responseJson) ??
+            throw new InvalidDataException("Failed to serialize in JSON.");
         ThenQueryResponseIs(param, response);
         return this;
     }
@@ -645,19 +687,23 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <typeparam name="TQueryResponse"></typeparam>
     /// <returns></returns>
     /// <exception cref="InvalidDataException"></exception>
-    public UnifiedTest<TDependencyDefinition> ThenQueryResponseIsFromFile<TQueryResponse>(IQueryInput<TQueryResponse> param, string responseFilename)
-        where TQueryResponse : IQueryResponse
+    public UnifiedTest<TDependencyDefinition> ThenQueryResponseIsFromFile<TQueryResponse>(
+        IQueryInput<TQueryResponse> param,
+        string responseFilename) where TQueryResponse : IQueryResponse
     {
         using var openStream = File.OpenRead(responseFilename);
-        var response = JsonSerializer.Deserialize<TQueryResponse>(openStream) ?? throw new InvalidDataException("Failed to serialize in JSON.");
+        var response = JsonSerializer.Deserialize<TQueryResponse>(openStream) ??
+            throw new InvalidDataException("Failed to serialize in JSON.");
         ThenQueryResponseIs(param, response);
         return this;
     }
-    public UnifiedTest<TDependencyDefinition> ThenQueryResponseIsFromFile<TQueryResponse>(INextQueryCommon<TQueryResponse> param, string responseFilename)
-        where TQueryResponse : IQueryResponse
+    public UnifiedTest<TDependencyDefinition> ThenQueryResponseIsFromFile<TQueryResponse>(
+        INextQueryCommonOutput<TQueryResponse> param,
+        string responseFilename) where TQueryResponse : IQueryResponse
     {
         using var openStream = File.OpenRead(responseFilename);
-        var response = JsonSerializer.Deserialize<TQueryResponse>(openStream) ?? throw new InvalidDataException("Failed to serialize in JSON.");
+        var response = JsonSerializer.Deserialize<TQueryResponse>(openStream) ??
+            throw new InvalidDataException("Failed to serialize in JSON.");
         ThenQueryResponseIs(param, response);
         return this;
     }
@@ -672,15 +718,18 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <returns></returns>
     /// <exception cref="Exception"></exception>
     public MultiProjectionState<TMultiProjectionPayload> GetMultiProjectionState<TMultiProjectionPayload>(
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TMultiProjectionPayload : IMultiProjectionPayloadCommon
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions)
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon
     {
         var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ??
             throw new SekibanTypeNotFoundException("Failed to get Query service");
         return multiProjectionService.GetMultiProjectionAsync<TMultiProjectionPayload>(
                     rootPartitionKey,
-                    new MultiProjectionRetrievalOptions { IncludesSortableUniqueIdValue = SortableUniqueIdValue.GetSafeIdFromUtc() })
+                    new MultiProjectionRetrievalOptions
+                        { IncludesSortableUniqueIdValue = SortableUniqueIdValue.GetSafeIdFromUtc() })
                 .Result ??
-            throw new SekibanTypeNotFoundException("Failed to get Multi Projection Response for " + typeof(TMultiProjectionPayload).Name);
+            throw new SekibanTypeNotFoundException(
+                "Failed to get Multi Projection Response for " + typeof(TMultiProjectionPayload).Name);
     }
     /// <summary>
     ///     Check if Multi Projection Payload is same with file specified.
@@ -692,7 +741,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <exception cref="InvalidDataException"></exception>
     public UnifiedTest<TDependencyDefinition> ThenMultiProjectionPayloadIsFromFile<TMultiProjectionPayload>(
         string filename,
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TMultiProjectionPayload : IMultiProjectionPayloadCommon
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions)
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon
     {
         using var openStream = File.OpenRead(filename);
         var projection = JsonSerializer.Deserialize<TMultiProjectionPayload>(openStream) ??
@@ -705,8 +755,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <param name="payloadAction"></param>
     /// <typeparam name="TMultiProjectionPayload"></typeparam>
     /// <returns></returns>
-    public UnifiedTest<TDependencyDefinition> ThenGetMultiProjectionPayload<TMultiProjectionPayload>(Action<TMultiProjectionPayload> payloadAction)
-        where TMultiProjectionPayload : IMultiProjectionPayloadCommon =>
+    public UnifiedTest<TDependencyDefinition> ThenGetMultiProjectionPayload<TMultiProjectionPayload>(
+        Action<TMultiProjectionPayload> payloadAction) where TMultiProjectionPayload : IMultiProjectionPayloadCommon =>
         ThenGetMultiProjectionPayload(IMultiProjectionService.ProjectionAllRootPartitions, payloadAction);
 
     public UnifiedTest<TDependencyDefinition> ThenGetMultiProjectionPayload<TMultiProjectionPayload>(
@@ -725,7 +775,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <returns></returns>
     public UnifiedTest<TDependencyDefinition> ThenGetMultiProjectionState<TMultiProjectionPayload>(
         string rootPartitionKey,
-        Action<MultiProjectionState<TMultiProjectionPayload>> stateAction) where TMultiProjectionPayload : IMultiProjectionPayloadCommon
+        Action<MultiProjectionState<TMultiProjectionPayload>> stateAction)
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon
     {
         stateAction(GetMultiProjectionState<TMultiProjectionPayload>(rootPartitionKey));
         return this;
@@ -736,15 +787,21 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <param name="state"></param>
     /// <typeparam name="TMultiProjectionPayload"></typeparam>
     /// <returns></returns>
-    public UnifiedTest<TDependencyDefinition> ThenMultiProjectionStateIs<TMultiProjectionPayload>(MultiProjectionState<TMultiProjectionPayload> state)
+    public UnifiedTest<TDependencyDefinition> ThenMultiProjectionStateIs<TMultiProjectionPayload>(
+        MultiProjectionState<TMultiProjectionPayload> state)
         where TMultiProjectionPayload : IMultiProjectionPayloadCommon =>
         ThenMultiProjectionStateIs(IMultiProjectionService.ProjectionAllRootPartitions, state);
     public UnifiedTest<TDependencyDefinition> ThenMultiProjectionStateIs<TMultiProjectionPayload>(
         string rootPartitionKey,
-        MultiProjectionState<TMultiProjectionPayload> state) where TMultiProjectionPayload : IMultiProjectionPayloadCommon
+        MultiProjectionState<TMultiProjectionPayload> state)
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon
     {
         var actual = GetMultiProjectionState<TMultiProjectionPayload>(rootPartitionKey);
-        var expected = state with { LastEventId = actual.LastEventId, LastSortableUniqueId = actual.LastSortableUniqueId, Version = actual.Version };
+        var expected = state with
+        {
+            LastEventId = actual.LastEventId, LastSortableUniqueId = actual.LastSortableUniqueId,
+            Version = actual.Version
+        };
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
         Assert.Equal(expectedJson, actualJson);
@@ -759,7 +816,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <returns></returns>
     public UnifiedTest<TDependencyDefinition> ThenMultiProjectionPayloadIs<TMultiProjectionPayload>(
         TMultiProjectionPayload payload,
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TMultiProjectionPayload : IMultiProjectionPayloadCommon
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions)
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon
     {
         var actual = GetMultiProjectionState<TMultiProjectionPayload>(rootPartitionKey).Payload;
         var expected = payload;
@@ -778,7 +836,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <exception cref="InvalidDataException"></exception>
     public UnifiedTest<TDependencyDefinition> ThenMultiProjectionStateIsFromFile<TMultiProjectionPayload>(
         string filename,
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TMultiProjectionPayload : IMultiProjectionPayloadCommon
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions)
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon
     {
         using var openStream = File.OpenRead(filename);
         var projection = JsonSerializer.Deserialize<MultiProjectionState<TMultiProjectionPayload>>(openStream) ??
@@ -794,7 +853,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <returns></returns>
     public UnifiedTest<TDependencyDefinition> WriteMultiProjectionStateToFile<TMultiProjectionPayload>(
         string filename,
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TMultiProjectionPayload : IMultiProjectionPayloadCommon
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions)
+        where TMultiProjectionPayload : IMultiProjectionPayloadCommon
     {
         var json = SekibanJsonHelper.Serialize(GetMultiProjectionState<TMultiProjectionPayload>(rootPartitionKey));
         File.WriteAllTextAsync(filename, json);
@@ -810,16 +870,20 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
     /// <exception cref="Exception"></exception>
-    public MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>> GetAggregateListProjectionState<TAggregatePayload>(
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TAggregatePayload : IAggregatePayloadCommon
+    public MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>
+        GetAggregateListProjectionState<TAggregatePayload>(
+            string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions)
+        where TAggregatePayload : IAggregatePayloadCommon
     {
         var multiProjectionService = _serviceProvider.GetService<IMultiProjectionService>() ??
             throw new SekibanTypeNotFoundException("Failed to get Query service");
         return multiProjectionService.GetAggregateListObject<TAggregatePayload>(
                     rootPartitionKey,
-                    new MultiProjectionRetrievalOptions { IncludesSortableUniqueIdValue = SortableUniqueIdValue.GetCurrentIdFromUtc() })
+                    new MultiProjectionRetrievalOptions
+                        { IncludesSortableUniqueIdValue = SortableUniqueIdValue.GetCurrentIdFromUtc() })
                 .Result ??
-            throw new SekibanTypeNotFoundException("Failed to get Aggregate List Projection Response for " + typeof(TAggregatePayload).Name);
+            throw new SekibanTypeNotFoundException(
+                "Failed to get Aggregate List Projection Response for " + typeof(TAggregatePayload).Name);
     }
     /// <summary>
     ///     Check if Aggregate List Projection Payload is same with file specified.
@@ -831,10 +895,12 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <exception cref="InvalidDataException"></exception>
     public UnifiedTest<TDependencyDefinition> ThenAggregateListProjectionPayloadIsFromFile<TAggregatePayload>(
         string filename,
-        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions) where TAggregatePayload : IAggregatePayloadCommon
+        string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions)
+        where TAggregatePayload : IAggregatePayloadCommon
     {
         using var openStream = File.OpenRead(filename);
-        var projection = JsonSerializer.Deserialize<SingleProjectionListState<AggregateState<TAggregatePayload>>>(openStream) ??
+        var projection
+            = JsonSerializer.Deserialize<SingleProjectionListState<AggregateState<TAggregatePayload>>>(openStream) ??
             throw new InvalidDataException("Failed to serialize in JSON.");
         return ThenAggregateListProjectionPayloadIs(rootPartitionKey, projection);
     }
@@ -845,7 +911,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
     public UnifiedTest<TDependencyDefinition> ThenGetAggregateListProjectionPayload<TAggregatePayload>(
-        Action<SingleProjectionListState<AggregateState<TAggregatePayload>>> payloadAction) where TAggregatePayload : IAggregatePayloadCommon =>
+        Action<SingleProjectionListState<AggregateState<TAggregatePayload>>> payloadAction)
+        where TAggregatePayload : IAggregatePayloadCommon =>
         ThenGetAggregateListProjectionPayload(IMultiProjectionService.ProjectionAllRootPartitions, payloadAction);
 
     /// <summary>
@@ -857,7 +924,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <returns></returns>
     public UnifiedTest<TDependencyDefinition> ThenGetAggregateListProjectionPayload<TAggregatePayload>(
         string rootPartitionKey,
-        Action<SingleProjectionListState<AggregateState<TAggregatePayload>>> payloadAction) where TAggregatePayload : IAggregatePayloadCommon
+        Action<SingleProjectionListState<AggregateState<TAggregatePayload>>> payloadAction)
+        where TAggregatePayload : IAggregatePayloadCommon
     {
         payloadAction(GetAggregateListProjectionState<TAggregatePayload>(rootPartitionKey).Payload);
         return this;
@@ -895,7 +963,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
     public UnifiedTest<TDependencyDefinition> ThenAggregateListProjectionStateIs<TAggregatePayload>(
-        MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>> state) where TAggregatePayload : IAggregatePayloadCommon =>
+        MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>> state)
+        where TAggregatePayload : IAggregatePayloadCommon =>
         ThenAggregateListProjectionStateIs(IMultiProjectionService.ProjectionAllRootPartitions, state);
     /// <summary>
     ///     Check if Aggregate List Projection State is same with specified state. This specifies the root partition key.
@@ -906,17 +975,23 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <returns></returns>
     public UnifiedTest<TDependencyDefinition> ThenAggregateListProjectionStateIs<TAggregatePayload>(
         string rootPartitionKey,
-        MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>> state) where TAggregatePayload : IAggregatePayloadCommon
+        MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>> state)
+        where TAggregatePayload : IAggregatePayloadCommon
     {
         var actual = GetAggregateListProjectionState<TAggregatePayload>(rootPartitionKey);
-        var expected = state with { LastEventId = actual.LastEventId, LastSortableUniqueId = actual.LastSortableUniqueId, Version = actual.Version };
+        var expected = state with
+        {
+            LastEventId = actual.LastEventId, LastSortableUniqueId = actual.LastSortableUniqueId,
+            Version = actual.Version
+        };
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
         Assert.Equal(expectedJson, actualJson);
         return this;
     }
     /// <summary>
-    ///     Check if Aggregate List Projection Payload is same with specified payload. This specifies the root partition key.
+    ///     Check if Aggregate List Projection Payload is same with specified payload. This specifies the root partition
+    ///     key.
     /// </summary>
     /// <param name="rootPartitionKey"></param>
     /// <param name="payload"></param>
@@ -924,7 +999,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <returns></returns>
     public UnifiedTest<TDependencyDefinition> ThenAggregateListProjectionPayloadIs<TAggregatePayload>(
         string rootPartitionKey,
-        SingleProjectionListState<AggregateState<TAggregatePayload>> payload) where TAggregatePayload : IAggregatePayloadCommon
+        SingleProjectionListState<AggregateState<TAggregatePayload>> payload)
+        where TAggregatePayload : IAggregatePayloadCommon
     {
         var actual = GetAggregateListProjectionState<TAggregatePayload>(rootPartitionKey).Payload;
         var expected = payload;
@@ -934,18 +1010,23 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         return this;
     }
     /// <summary>
-    ///     Check if Aggregate List Projection Payload is same with specified payload. This specifies the root partition key.
+    ///     Check if Aggregate List Projection Payload is same with specified payload. This specifies the root partition
+    ///     key.
     /// </summary>
     /// <param name="rootPartitionKey"></param>
     /// <param name="filename"></param>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
     /// <exception cref="InvalidDataException"></exception>
-    public UnifiedTest<TDependencyDefinition> ThenAggregateListProjectionStateIsFromFile<TAggregatePayload>(string rootPartitionKey, string filename)
-        where TAggregatePayload : IAggregatePayloadCommon
+    public UnifiedTest<TDependencyDefinition> ThenAggregateListProjectionStateIsFromFile<TAggregatePayload>(
+        string rootPartitionKey,
+        string filename) where TAggregatePayload : IAggregatePayloadCommon
     {
         using var openStream = File.OpenRead(filename);
-        var projection = JsonSerializer.Deserialize<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>>(openStream) ??
+        var projection
+            = JsonSerializer
+                .Deserialize<MultiProjectionState<SingleProjectionListState<AggregateState<TAggregatePayload>>>>(
+                    openStream) ??
             throw new InvalidDataException("Failed to serialize in JSON.");
         return ThenAggregateListProjectionStateIs(rootPartitionKey, projection);
     }
@@ -956,8 +1037,9 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <param name="filename"></param>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public UnifiedTest<TDependencyDefinition> WriteAggregateListProjectionStateToFile<TAggregatePayload>(string rootPartitionKey, string filename)
-        where TAggregatePayload : IAggregatePayloadCommon
+    public UnifiedTest<TDependencyDefinition> WriteAggregateListProjectionStateToFile<TAggregatePayload>(
+        string rootPartitionKey,
+        string filename) where TAggregatePayload : IAggregatePayloadCommon
     {
         var json = SekibanJsonHelper.Serialize(GetAggregateListProjectionState<TAggregatePayload>(rootPartitionKey));
         File.WriteAllTextAsync(filename, json);
@@ -981,10 +1063,12 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
             throw new SekibanTypeNotFoundException("Failed to get Query service");
         return multiProjectionService.GetSingleProjectionListObject<TSingleProjectionPayload>(
                     rootPartitionKey,
-                    new MultiProjectionRetrievalOptions { IncludesSortableUniqueIdValue = SortableUniqueIdValue.GetCurrentIdFromUtc() })
+                    new MultiProjectionRetrievalOptions
+                        { IncludesSortableUniqueIdValue = SortableUniqueIdValue.GetCurrentIdFromUtc() })
                 .Result ??
             throw new SekibanTypeNotFoundException(
-                "Failed to get Single Projection List Projection Response for " + typeof(TSingleProjectionPayload).Name);
+                "Failed to get Single Projection List Projection Response for " +
+                typeof(TSingleProjectionPayload).Name);
     }
     /// <summary>
     ///     Check if Single Projection List Payload is same with file specified. Specify the root partition key.
@@ -999,12 +1083,15 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         string filename) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
         using var openStream = File.OpenRead(filename);
-        var projection = JsonSerializer.Deserialize<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>(openStream) ??
+        var projection
+            = JsonSerializer.Deserialize<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>(
+                openStream) ??
             throw new InvalidDataException("Failed to serialize in JSON.");
         return ThenSingleProjectionListPayloadIs(rootPartitionKey, projection);
     }
     /// <summary>
-    ///     Get Single Projection List Payload in action. No root partition key specified, and get all root partition key data.
+    ///     Get Single Projection List Payload in action. No root partition key specified, and get all root partition key
+    ///     data.
     /// </summary>
     /// <param name="payloadAction"></param>
     /// <typeparam name="TSingleProjectionPayload"></typeparam>
@@ -1031,8 +1118,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <returns></returns>
     public UnifiedTest<TDependencyDefinition> ThenGetSingleProjectionListState<TSingleProjectionPayload>(
         string rootPartitionKey,
-        Action<MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>> stateAction)
-        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
+        Action<MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>
+            stateAction) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
         stateAction(GetSingleProjectionListState<TSingleProjectionPayload>(rootPartitionKey));
         return this;
@@ -1050,7 +1137,11 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
         var actual = GetAggregateListProjectionState<TSingleProjectionPayload>(rootPartitionKey);
-        var expected = state with { LastEventId = actual.LastEventId, LastSortableUniqueId = actual.LastSortableUniqueId, Version = actual.Version };
+        var expected = state with
+        {
+            LastEventId = actual.LastEventId, LastSortableUniqueId = actual.LastSortableUniqueId,
+            Version = actual.Version
+        };
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
         Assert.Equal(expectedJson, actualJson);
@@ -1090,7 +1181,9 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         using var openStream = File.OpenRead(filename);
         var projection
             = JsonSerializer
-                .Deserialize<MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>(openStream) ??
+                .Deserialize<
+                    MultiProjectionState<SingleProjectionListState<SingleProjectionState<TSingleProjectionPayload>>>>(
+                    openStream) ??
             throw new InvalidDataException("Failed to serialize in JSON.");
         return ThenSingleProjectionListStateIs(rootPartitionKey, projection);
     }
@@ -1101,10 +1194,12 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <param name="filename"></param>
     /// <typeparam name="TSingleProjectionPayload"></typeparam>
     /// <returns></returns>
-    public UnifiedTest<TDependencyDefinition> WriteSingleProjectionListStateToFile<TSingleProjectionPayload>(string rootPartitionKey, string filename)
-        where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
+    public UnifiedTest<TDependencyDefinition> WriteSingleProjectionListStateToFile<TSingleProjectionPayload>(
+        string rootPartitionKey,
+        string filename) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
-        var json = SekibanJsonHelper.Serialize(GetSingleProjectionListState<TSingleProjectionPayload>(rootPartitionKey));
+        var json = SekibanJsonHelper.Serialize(
+            GetSingleProjectionListState<TSingleProjectionPayload>(rootPartitionKey));
         File.WriteAllTextAsync(filename, json);
         return this;
     }
@@ -1133,12 +1228,18 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <exception cref="SekibanAggregateNotExistsException"></exception>
     public AggregateState<TEnvironmentAggregatePayload> GetAggregateState<TEnvironmentAggregatePayload>(
         Guid aggregateId,
-        string rootPartitionKey = IDocument.DefaultRootPartitionKey) where TEnvironmentAggregatePayload : IAggregatePayloadCommon
+        string rootPartitionKey = IDocument.DefaultRootPartitionKey)
+        where TEnvironmentAggregatePayload : IAggregatePayloadCommon
     {
-        var singleProjectionService = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
+        var singleProjectionService
+            = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
             throw new SekibanTypeNotFoundException("Failed to get single aggregate service");
         var aggregate = singleProjectionService.AsDefaultStateAsync<TEnvironmentAggregatePayload>(aggregateId).Result;
-        return aggregate ?? throw new SekibanAggregateNotExistsException(aggregateId, typeof(TEnvironmentAggregatePayload).Name, rootPartitionKey);
+        return aggregate ??
+            throw new SekibanAggregateNotExistsException(
+                aggregateId,
+                typeof(TEnvironmentAggregatePayload).Name,
+                rootPartitionKey);
     }
     /// <summary>
     ///     Get latest events from command.
@@ -1151,7 +1252,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <param name="aggregateId"></param>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public IReadOnlyCollection<IEvent> GetAllAggregateEvents<TAggregatePayload>(Guid aggregateId) where TAggregatePayload : IAggregatePayloadCommon =>
+    public IReadOnlyCollection<IEvent> GetAllAggregateEvents<TAggregatePayload>(Guid aggregateId)
+        where TAggregatePayload : IAggregatePayloadCommon =>
         _commandExecutor.GetAllAggregateEvents<TAggregatePayload>(aggregateId);
 
     #region GivenEvents
@@ -1196,7 +1298,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// </summary>
     /// <param name="events"></param>
     /// <returns></returns>
-    public UnifiedTest<TDependencyDefinition> GivenEventsWithPublish(params IEvent[] events) => GivenEventsWithPublish(events.AsEnumerable());
+    public UnifiedTest<TDependencyDefinition> GivenEventsWithPublish(params IEvent[] events) =>
+        GivenEventsWithPublish(events.AsEnumerable());
     /// <summary>
     ///     Given events and publish them. Subscribed handlers will be executed and block until all handlers are executed.
     /// </summary>
@@ -1229,7 +1332,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// </summary>
     /// <param name="eventTuples"></param>
     /// <returns></returns>
-    public UnifiedTest<TDependencyDefinition> GivenEvents(params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTuples)
+    public UnifiedTest<TDependencyDefinition> GivenEvents(
+        params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTuples)
     {
         _eventHandler.GivenEvents(eventTuples);
         return this;
@@ -1246,7 +1350,8 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         return this;
     }
     /// <summary>
-    ///     Given events from aggregate Id, partition Key and Payload. Subscribed handlers will be executed and block until all
+    ///     Given events from aggregate Id, partition Key and Payload. Subscribed handlers will be executed and block
+    ///     until all
     ///     handlers are executed.
     /// </summary>
     /// <param name="eventTuples"></param>
@@ -1329,8 +1434,9 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <param name="injectingAggregateId"></param>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Guid RunCommandWithPublish<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
-        where TAggregatePayload : IAggregatePayloadCommon =>
+    public Guid RunCommandWithPublish<TAggregatePayload>(
+        ICommand<TAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TAggregatePayload : IAggregatePayloadCommon =>
         _commandExecutor.ExecuteCommandWithPublish(command, injectingAggregateId);
     /// <summary>
     ///     Run command as given condition and get aggregate Id. Subscribed handlers will be executed.
@@ -1339,8 +1445,9 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <param name="injectingAggregateId"></param>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Guid GivenCommandWithPublish<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
-        where TAggregatePayload : IAggregatePayloadCommon =>
+    public Guid GivenCommandWithPublish<TAggregatePayload>(
+        ICommand<TAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TAggregatePayload : IAggregatePayloadCommon =>
         _commandExecutor.ExecuteCommandWithPublish(command, injectingAggregateId);
     /// <summary>
     ///     Run command as when statement and get aggregate Id. Subscribed handlers will be executed.
@@ -1349,11 +1456,13 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
     /// <param name="injectingAggregateId"></param>
     /// <typeparam name="TAggregatePayload"></typeparam>
     /// <returns></returns>
-    public Guid WhenCommandWithPublish<TAggregatePayload>(ICommand<TAggregatePayload> command, Guid? injectingAggregateId = null)
-        where TAggregatePayload : IAggregatePayloadCommon =>
+    public Guid WhenCommandWithPublish<TAggregatePayload>(
+        ICommand<TAggregatePayload> command,
+        Guid? injectingAggregateId = null) where TAggregatePayload : IAggregatePayloadCommon =>
         _commandExecutor.ExecuteCommandWithPublish(command, injectingAggregateId);
     /// <summary>
-    ///     Run command and get aggregate Id. Subscribed handlers will be executed and block until all handlers are executed.
+    ///     Run command and get aggregate Id. Subscribed handlers will be executed and block until all handlers are
+    ///     executed.
     /// </summary>
     /// <param name="command"></param>
     /// <param name="injectingAggregateId"></param>

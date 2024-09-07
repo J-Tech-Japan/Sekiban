@@ -47,31 +47,39 @@ public class TenantQueryParameterGeneralTests
         // Assert
         Assert.Equal("tenant1", result);
     }
-    public record TestNextGeneralQuery(string Tenant) : ITenantNextGeneralQuery<bool>
+    public record TestNextGeneralQuery(string Tenant) : ITenantNextGeneralQuery<TestNextGeneralQuery, bool>
     {
         public string GetTenantId() => Tenant;
-        public ResultBox<bool> HandleFilter(IQueryContext context) => throw new NotImplementedException();
-    }
-    public record TestNextGeneralQueryAsync(string Tenant) : ITenantNextGeneralQueryAsync<bool>
-    {
-        public string GetTenantId() => Tenant;
-        public Task<ResultBox<bool>> HandleFilterAsync(IQueryContext context) => throw new NotImplementedException();
-    }
-    public record TestNextGeneralListQuery(string Tenant) : ITenantNextGeneralListQuery<bool>
-    {
-        public string GetTenantId() => Tenant;
-        public ResultBox<IEnumerable<bool>> HandleFilter(IQueryContext context) => throw new NotImplementedException();
-        public ResultBox<IEnumerable<bool>> HandleSort(IEnumerable<bool> filteredList, IQueryContext context) =>
+        public static ResultBox<bool> HandleFilter(TestNextGeneralQuery query, IQueryContext context) =>
             throw new NotImplementedException();
     }
-    public record TestNextGeneralListQueryAsync(string Tenant) : ITenantNextGeneralListQueryAsync<bool>
+    public record TestNextGeneralQueryAsync(string Tenant)
+        : ITenantNextGeneralQueryAsync<TestNextGeneralQueryAsync, bool>
     {
         public string GetTenantId() => Tenant;
-        public Task<ResultBox<IEnumerable<bool>>> HandleFilterAsync(IQueryContext context) =>
+        public static Task<ResultBox<bool>> HandleFilterAsync(TestNextGeneralQueryAsync query, IQueryContext context) =>
             throw new NotImplementedException();
-        public Task<ResultBox<IEnumerable<bool>>> HandleSortAsync(
+    }
+    public record TestNextGeneralListQuery(string Tenant) : ITenantNextGeneralListQuery<TestNextGeneralListQuery, bool>
+    {
+        public string GetTenantId() => Tenant;
+        public static ResultBox<IEnumerable<bool>>
+            HandleFilter(TestNextGeneralListQuery query, IQueryContext context) => throw new NotImplementedException();
+        public static ResultBox<IEnumerable<bool>> HandleSort(
             IEnumerable<bool> filteredList,
-            IQueryContext context) =>
-            throw new NotImplementedException();
+            TestNextGeneralListQuery query,
+            IQueryContext context) => throw new NotImplementedException();
+    }
+    public record TestNextGeneralListQueryAsync(string Tenant)
+        : ITenantNextGeneralListQueryAsync<TestNextGeneralListQueryAsync, bool>
+    {
+        public string GetTenantId() => Tenant;
+        public static Task<ResultBox<IEnumerable<bool>>> HandleFilterAsync(
+            TestNextGeneralListQueryAsync query,
+            IQueryContext context) => throw new NotImplementedException();
+        public static Task<ResultBox<IEnumerable<bool>>> HandleSortAsync(
+            IEnumerable<bool> filteredList,
+            TestNextGeneralListQueryAsync query,
+            IQueryContext context) => throw new NotImplementedException();
     }
 }

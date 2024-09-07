@@ -96,10 +96,7 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> : IComman
                         aggregateId,
                         rootPartitionKey,
                         toVersion)));
-    public Task<ResultBox<TOutput>> ExecuteQueryAsync<TOutput>(INextQueryCommon<TOutput> query)
-        where TOutput : notnull =>
-        GetRequiredService<IQueryExecutor>().Conveyor(executor => executor.ExecuteAsync(query));
-    public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteQueryAsync<TOutput>(INextListQueryCommon<TOutput> query)
+    public Task<ResultBox<TOutput>> ExecuteQueryAsync<TOutput>(INextQueryCommonOutput<TOutput> query)
         where TOutput : notnull =>
         GetRequiredService<IQueryExecutor>().Conveyor(executor => executor.ExecuteAsync(query));
     public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteQueryAsync<TOutput>(IListQueryInput<TOutput> param)
@@ -122,6 +119,9 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> : IComman
         ResultBox
             .FromValue(eventPayloads.ToList())
             .ReduceEach(UnitValue.Unit, (nextEventPayload, _) => AppendEvent(nextEventPayload));
+    public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteQueryAsync<TOutput>(
+        INextListQueryCommonOutput<TOutput> query) where TOutput : notnull =>
+        GetRequiredService<IQueryExecutor>().Conveyor(executor => executor.ExecuteAsync(query));
 
     /// <summary>
     ///     Common Command handler, it is used for test and production code.
