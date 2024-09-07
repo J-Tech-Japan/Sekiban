@@ -55,7 +55,7 @@ public record CreateClientWithBranchSubscriber : ICommand<Client>
                 throw new SekibanAggregateNotExistsException(
                     command.BranchId,
                     nameof(Branch),
-                    (command as ICommandCommon).GetRootPartitionKey());
+                    context.GetRootPartitionKey());
 
             // Check no email duplicates
             var emailExistsOutput

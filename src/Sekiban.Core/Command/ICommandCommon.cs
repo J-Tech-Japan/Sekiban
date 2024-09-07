@@ -1,4 +1,3 @@
-using Sekiban.Core.Documents;
 namespace Sekiban.Core.Command;
 
 /// <summary>
@@ -7,9 +6,4 @@ namespace Sekiban.Core.Command;
 /// </summary>
 public interface ICommandCommon
 {
-    /// <summary>
-    ///     Set root partition key for the command.
-    /// </summary>
-    /// <returns>root partition key</returns>
-    public string GetRootPartitionKey() => IDocument.DefaultRootPartitionKey;
 }

@@ -9,8 +9,4 @@ public interface ICommand<TAggregatePayload> : ICommandCommon<TAggregatePayload>
     where TAggregatePayload : IAggregatePayloadCommon
 {
 }
-
-// ReSharper disable once UnusedTypeParameter
-[CommandRootPartitionValidation]
-// ReSharper disable once UnusedTypeParameter
 public interface ICommandCommon<TAggregatePayload> : ICommandCommon where TAggregatePayload : IAggregatePayloadCommon;

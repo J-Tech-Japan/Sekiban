@@ -626,7 +626,10 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
     {
         var commandType = command.GetType();
         var aggregateIn = commandType.GetAggregatePayloadTypeFromCommandType();
-        var method = GetType().GetMethod(nameof(WhenCommandPrivate), BindingFlags.NonPublic | BindingFlags.Instance);
+        var method = GetType()
+            .GetMethod(
+                nameof(AggregateTestHelper<TAggregatePayload>.WhenCommandPrivate),
+                BindingFlags.NonPublic | BindingFlags.Instance);
         var genericMethod = method?.MakeGenericMethod(aggregateIn, commandType) ??
             throw new SekibanTypeNotFoundException("Failed to get WhenCommandPrivate method");
         return genericMethod.Invoke(this, new object?[] { command, withPublish }) as
@@ -680,7 +683,9 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             if (((dynamic)handler).ConvertCommand((dynamic)converter) is ICommandCommon convertedCommand)
             {
                 var method = GetType()
-                    .GetMethod(nameof(WhenCommandPrivate), BindingFlags.NonPublic | BindingFlags.Instance);
+                    .GetMethod(
+                        nameof(AggregateTestHelper<TAggregatePayload>.WhenCommandPrivate),
+                        BindingFlags.NonPublic | BindingFlags.Instance);
                 var param1 = convertedCommand.GetType().GetAggregatePayloadTypeFromCommandType();
                 var param2 = convertedCommand.GetType();
                 var generated = method?.MakeGenericMethod(param1, param2);
@@ -693,17 +698,17 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             }
         }
         AggregateIdHolder.AggregateId = CommandExecutor.GetAggregateId<TAggregatePayloadIn>(command, _serviceProvider);
-        AggregateIdHolder.RootPartitionKey = command.GetRootPartitionKey();
+        AggregateIdHolder.RootPartitionKey = CommandExecutor.GetRootPartitionKey(command, _serviceProvider);
 
         var commandDocument = new CommandDocument<TCommand>(
             GetAggregateId(),
             command,
             typeof(TAggregatePayload),
             GetRootPartitionKey());
-        CheckCommandJSONSupports(commandDocument);
+        AggregateTestHelper<TAggregatePayload>.CheckCommandJSONSupports(commandDocument);
 
         var aggregateId = GetAggregateId();
-        var rootPartitionKey = command.GetRootPartitionKey();
+        var rootPartitionKey = CommandExecutor.GetRootPartitionKey(command, _serviceProvider);
         var aggregateLoader = _serviceProvider.GetRequiredService(typeof(IAggregateLoader)) as IAggregateLoader ??
             throw new SekibanTypeNotFoundException("Failed to get AddAggregate Service");
         try

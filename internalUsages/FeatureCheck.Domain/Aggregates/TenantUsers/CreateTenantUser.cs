@@ -17,6 +17,6 @@ public record CreateTenantUser(string Name, string Email, string TenantId)
                     : ExceptionOrNone.None)
             .Conveyor(_ => context.AppendEvent(new TenantUserCreated(command.Name, command.Email)));
     }
-    public string GetTenantId() => TenantId;
     public static Guid SpecifyAggregateId(CreateTenantUser command) => Guid.NewGuid();
+    public static string GetTenantId(CreateTenantUser command) => command.TenantId;
 }

@@ -6,6 +6,8 @@ namespace Sekiban.Core.Documents;
 /// </summary>
 public interface IDocument
 {
+    public const string RootPartitionKeyRegexPattern = "^[a-z0-9-_]{1,36}$";
+
     /// <summary>
     ///     Default Root Partition Key - when app uses single root partition,
     ///     it should use this.

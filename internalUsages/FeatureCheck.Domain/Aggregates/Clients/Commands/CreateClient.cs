@@ -52,13 +52,13 @@ public record CreateClient : ICommand<Client>
                 throw new SekibanAggregateNotExistsException(
                     command.BranchId,
                     nameof(Branch),
-                    (command as ICommandCommon).GetRootPartitionKey());
+                    context.GetRootPartitionKey());
 
             // Check no email duplicates
             var emailExistsOutput = await queryExecutor.ExecuteAsync(
                 new ClientEmailExistsQuery.Parameter(command.ClientEmail)
                 {
-                    RootPartitionKey = (command as ICommandCommon).GetRootPartitionKey()
+                    RootPartitionKey = context.GetRootPartitionKey()
                 });
             if (emailExistsOutput.Exists) throw new SekibanEmailAlreadyRegistered();
 

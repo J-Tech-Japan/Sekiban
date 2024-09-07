@@ -4,7 +4,9 @@ namespace Sekiban.Core.Command;
 public interface
     ITenantCommandWithHandlerWithVersionValidation<TAggregatePayload, in TCommand> :
     ICommandWithHandlerWithVersionValidation<TAggregatePayload, TCommand>,
-    ITenantCommandCommon where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommandCommon<TAggregatePayload>
+    ITenantCommandNextCommon<TAggregatePayload, TCommand> where TAggregatePayload : IAggregatePayloadCommon
+    where TCommand : ITenantCommandWithHandlerWithVersionValidation<TAggregatePayload, TCommand>
 {
-    string ICommandCommon.GetRootPartitionKey() => GetTenantId();
+    static string ICommandWithHandlerCommon<TAggregatePayload, TCommand>.GetRootPartitionKey(TCommand command) =>
+        TCommand.GetTenantId(command);
 }

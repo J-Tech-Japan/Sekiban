@@ -1,6 +1,8 @@
+using Sekiban.Core.Aggregate;
 namespace Sekiban.Core.Command;
 
-public interface ITenantCommandCommon
+public interface ITenantCommandNextCommon<TAggregatePayload, in TCommand> : ICommandCommon<TAggregatePayload>
+    where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommandCommon<TAggregatePayload>
 {
-    public string GetTenantId();
+    public static abstract string GetTenantId(TCommand command);
 }

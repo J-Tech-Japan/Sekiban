@@ -11,6 +11,5 @@ public class MultiTenantDependency : DomainDependencyDefinitionBase
     public override Assembly GetExecutingAssembly() => Assembly.GetExecutingAssembly();
     public override void Define()
     {
-        AddAggregate<ClientPayload>().AddCommandHandler<CreateClient, CreateClient.Handler>().AddAggregateListQuery<ClientListQuery>();
     }
 }

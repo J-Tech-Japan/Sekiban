@@ -12,6 +12,9 @@ using Sekiban.Core.Snapshot.Aggregate.Commands;
 using Sekiban.Core.Types;
 using Sekiban.Core.Validation;
 using System.Collections.Immutable;
+using System.ComponentModel.DataAnnotations;
+using System.Reflection;
+using System.Text.RegularExpressions;
 namespace Sekiban.Core.Command;
 
 /// <summary>
@@ -43,6 +46,8 @@ public class CommandExecutor(
             if (command is ICommandConverterCommon converter)
             {
                 var validationResult = command.ValidateProperties().ToList();
+                var rootPartitionKey = CommandExecutor.GetRootPartitionKey(command, serviceProvider);
+                validationResult = CommandExecutor.AddRootPropertyValidation(rootPartitionKey, validationResult);
                 if (validationResult.Count != 0)
                 {
                     return new CommandExecutorResponse(
@@ -72,7 +77,7 @@ public class CommandExecutor(
             {
                 throw new SekibanCommandNotRegisteredException(command.GetType().Name);
             }
-            var method = GetType().GetMethod(nameof(ExecCommandAsyncTyped)) ??
+            var method = GetType().GetMethod(nameof(CommandExecutor.ExecCommandAsyncTyped)) ??
                 throw new MissingMethodException("Method not found");
             var genericMethod = method.MakeGenericMethod(
                 command.GetType().GetAggregatePayloadTypeFromCommandType(),
@@ -105,6 +110,8 @@ public class CommandExecutor(
         if (command is ICommandConverterCommon converter)
         {
             var validationResult = command.ValidateProperties().ToList();
+            var rootPartitionKey = CommandExecutor.GetRootPartitionKey(command, serviceProvider);
+            validationResult = CommandExecutor.AddRootPropertyValidation(rootPartitionKey, validationResult);
             if (validationResult.Count != 0)
             {
                 return new CommandExecutorResponseWithEvents(
@@ -136,7 +143,7 @@ public class CommandExecutor(
         {
             throw new SekibanCommandNotRegisteredException(command.GetType().Name);
         }
-        var method = GetType().GetMethod(nameof(ExecCommandAsyncTyped)) ??
+        var method = GetType().GetMethod(nameof(CommandExecutor.ExecCommandAsyncTyped)) ??
             throw new MissingMethodException("Method not found");
         var genericMethod = method.MakeGenericMethod(
             command.GetType().GetAggregatePayloadTypeFromCommandType(),
@@ -179,7 +186,7 @@ public class CommandExecutor(
         {
             throw new SekibanCommandNotRegisteredException(command.GetType().Name);
         }
-        var method = GetType().GetMethod(nameof(ExecCommandWithoutValidationAsyncTyped)) ??
+        var method = GetType().GetMethod(nameof(CommandExecutor.ExecCommandWithoutValidationAsyncTyped)) ??
             throw new MissingMethodException("Method not found");
         var genericMethod = method.MakeGenericMethod(
             command.GetType().GetAggregatePayloadTypeFromCommandType(),
@@ -220,7 +227,7 @@ public class CommandExecutor(
         {
             throw new SekibanCommandNotRegisteredException(command.GetType().Name);
         }
-        var method = GetType().GetMethod(nameof(ExecCommandWithoutValidationAsyncTyped)) ??
+        var method = GetType().GetMethod(nameof(CommandExecutor.ExecCommandWithoutValidationAsyncTyped)) ??
             throw new MissingMethodException("Method not found");
         var genericMethod = method.MakeGenericMethod(
             command.GetType().GetAggregatePayloadTypeFromCommandType(),
@@ -244,6 +251,25 @@ public class CommandExecutor(
             userInformationFactory.GetCurrentUserInformation());
         return [..callHistories ?? new List<CallHistory>(), toAdd];
     }
+    public static bool IsValidRootPartitionKey(string rootPartitionKey) =>
+        Regex.IsMatch(
+            rootPartitionKey,
+            IDocument.RootPartitionKeyRegexPattern,
+            RegexOptions.IgnoreCase,
+            TimeSpan.FromMilliseconds(250));
+    public static List<ValidationResult> AddRootPropertyValidation(
+        string rootPartitionKey,
+        List<ValidationResult> validationResults)
+    {
+        if (CommandExecutor.IsValidRootPartitionKey(rootPartitionKey))
+        {
+            validationResults.Add(
+                new ValidationResult(
+                    "Root Partition Key only allow a-z, 0-9, -, _ and length 1-36",
+                    ["RootPartitionKey"]));
+        }
+        return validationResults;
+    }
 
     public async Task<ResultBox<TwoValues<CommandExecutorResponse, List<IEvent>>>>
         ExecCommandAsyncTyped<TAggregatePayload, TCommand>(TCommand command, List<CallHistory>? callHistories = null)
@@ -251,6 +277,8 @@ public class CommandExecutor(
         where TCommand : ICommandCommon<TAggregatePayload>
     {
         var validationResult = command.ValidateProperties().ToList();
+        var rootPartitionKey = CommandExecutor.GetRootPartitionKey(command, serviceProvider);
+        validationResult = CommandExecutor.AddRootPropertyValidation(rootPartitionKey, validationResult);
         if (validationResult.Count != 0)
         {
             return TwoValues.FromValues(
@@ -260,12 +288,37 @@ public class CommandExecutor(
                     0,
                     validationResult,
                     null,
-                    GetAggregatePayloadOut<TAggregatePayload>(Enumerable.Empty<IEvent>()),
+                    CommandExecutor.GetAggregatePayloadOut<TAggregatePayload>(Enumerable.Empty<IEvent>()),
                     0),
                 Enumerable.Empty<IEvent>().ToList());
         }
 
         return await ExecCommandWithoutValidationAsyncTyped<TAggregatePayload, TCommand>(command, callHistories);
+    }
+    public static string GetRootPartitionKey<TCommand>(TCommand command, IServiceProvider serviceProvider)
+        where TCommand : ICommandCommon
+    {
+        if (typeof(TCommand).IsCommandWithHandlerType())
+        {
+            var rootPartitionMethod = typeof(TCommand).GetMethod(
+                    nameof(ICommandHandlerCommon<SnapshotManager, CreateSnapshotManagerAsync>),
+                    BindingFlags.Static) ??
+                throw new MissingMethodException("Method not found");
+            return (string?)rootPartitionMethod.Invoke(typeof(TCommand), [command]) ??
+                throw new SekibanInvalidArgumentException("RootPartitionKey is null");
+        }
+        var handler
+            = serviceProvider.GetService(typeof(ICommandHandlerCommon<SnapshotManager, CreateSnapshotManager>)) as
+                ICommandHandlerCommon<SnapshotManager, CreateSnapshotManager> ??
+            throw new SekibanCommandNotRegisteredException(typeof(TCommand).Name);
+        var handlerType = handler.GetType();
+        var method = handlerType.GetMethod(
+                nameof(ICommandHandlerCommon<SnapshotManager, CreateSnapshotManager>.GetRootPartitionKey),
+                BindingFlags.Static) ??
+            throw new MissingMethodException("Method not found");
+        var rootPartitionKey = (string?)method.Invoke(handlerType, [command]) ??
+            throw new SekibanInvalidArgumentException("RootPartitionKey is null");
+        return rootPartitionKey;
     }
 
     public async Task<ResultBox<TwoValues<CommandExecutorResponse, List<IEvent>>>>
@@ -275,8 +328,8 @@ public class CommandExecutor(
         where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>
         where TCommand : ICommandCommon<TAggregatePayload>
     {
-        var rootPartitionKey = command.GetRootPartitionKey();
-        if (!CommandRootPartitionValidationAttribute.IsValidRootPartitionKey(rootPartitionKey))
+        var rootPartitionKey = CommandExecutor.GetRootPartitionKey(command, serviceProvider);
+        if (!CommandExecutor.IsValidRootPartitionKey(rootPartitionKey))
         {
             return ResultBox<TwoValues<CommandExecutorResponse, List<IEvent>>>.FromException(
                 new SekibanInvalidRootPartitionKeyException(rootPartitionKey));
@@ -302,7 +355,7 @@ public class CommandExecutor(
         {
             await SemaphoreInMemory.WaitAsync();
         }
-        var aggregateId = GetAggregateId<TAggregatePayload>(command, serviceProvider);
+        var aggregateId = CommandExecutor.GetAggregateId<TAggregatePayload>(command, serviceProvider);
         try
         {
 
@@ -391,7 +444,7 @@ public class CommandExecutor(
                                 version,
                                 null,
                                 lastSortableUniqueId,
-                                GetAggregatePayloadOut<TAggregatePayload>(events),
+                                CommandExecutor.GetAggregatePayloadOut<TAggregatePayload>(events),
                                 events.Count),
                             events));
                 }
@@ -435,7 +488,7 @@ public class CommandExecutor(
                                 version,
                                 null,
                                 lastSortableUniqueId,
-                                GetAggregatePayloadOut<TAggregatePayload>(events),
+                                CommandExecutor.GetAggregatePayloadOut<TAggregatePayload>(events),
                                 events.Count),
                             events));
                 }
@@ -484,7 +537,7 @@ public class CommandExecutor(
                 version,
                 null,
                 lastSortableUniqueId,
-                GetAggregatePayloadOut<TAggregatePayload>(events),
+                CommandExecutor.GetAggregatePayloadOut<TAggregatePayload>(events),
                 events.Count),
             events);
     }
@@ -492,10 +545,10 @@ public class CommandExecutor(
     public static Guid GetAggregateId<TAggregatePayload>(ICommandCommon command, IServiceProvider serviceProvider)
         where TAggregatePayload : IAggregatePayloadCommon => command switch
     {
-        ICommand<TAggregatePayload> => GetAggregateIdFromHandler<TAggregatePayload, ICommandCommon>(
+        ICommand<TAggregatePayload> => CommandExecutor.GetAggregateIdFromHandler<TAggregatePayload, ICommandCommon>(
             command,
             serviceProvider),
-        _ => GetAggregateIdFromCommand(command)
+        _ => CommandExecutor.GetAggregateIdFromCommand(command)
     };
     public static Guid GetAggregateIdFromHandler<TAggregatePayload, TCommand>(
         TCommand command,

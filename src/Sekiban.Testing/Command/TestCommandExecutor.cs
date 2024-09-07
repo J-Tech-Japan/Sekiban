@@ -73,7 +73,7 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
         Guid? injectingAggregateId,
         bool withPublish) where TAggregatePayload : IAggregatePayloadCommon
     {
-        var rootPartitionKey = command.GetRootPartitionKey();
+        var rootPartitionKey = CommandExecutor.GetRootPartitionKey(command, serviceProvider);
         var validationResults = command.ValidateProperties().ToList();
         if (validationResults.Count != 0)
         {
@@ -90,7 +90,9 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
             if (((dynamic)handler).ConvertCommand((dynamic)converter) is ICommandCommon convertedCommand)
             {
                 var method = GetType()
-                    .GetMethod(nameof(ExecuteCommandPrivate), BindingFlags.NonPublic | BindingFlags.Instance);
+                    .GetMethod(
+                        nameof(TestCommandExecutor.ExecuteCommandPrivate),
+                        BindingFlags.NonPublic | BindingFlags.Instance);
                 var param1 = convertedCommand.GetType().GetAggregatePayloadTypeFromCommandType();
                 var generated = method?.MakeGenericMethod(param1);
                 if (generated is not null)

@@ -15,4 +15,5 @@ public interface ICommandContext<TAggregatePayload> : ICommandContextWithoutGetS
     /// </summary>
     /// <returns>Current Aggregate State</returns>
     public AggregateState<TAggregatePayload> GetState();
+    public string GetRootPartitionKey() => GetState().RootPartitionKey;
 }
