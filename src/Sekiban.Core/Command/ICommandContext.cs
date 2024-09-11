@@ -10,9 +10,12 @@ public interface ICommandContext<TAggregatePayload> : ICommandContextWithoutGetS
 {
     /// <summary>
     ///     Get current Aggregate State
-    ///     "Current" meaning if you have already yield return event, this function will return the state after adding yield
+    ///     "Current" meaning if you have already yield return event, this function will return the state after adding
+    ///     yield
     ///     returned events.
     /// </summary>
     /// <returns>Current Aggregate State</returns>
     public AggregateState<TAggregatePayload> GetState();
+    public Guid GetAggregateId() => GetState().AggregateId;
+    public ICommandDocumentCommon GetCommandDocument();
 }

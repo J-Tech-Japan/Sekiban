@@ -40,6 +40,7 @@ public sealed class Aggregate<TAggregatePayload> : AggregateCommon,
     {
         _basicInfo = _basicInfo with
         {
+            AggregateId = snapshot.AggregateId,
             Version = snapshot.Version,
             LastEventId = snapshot.LastEventId,
             LastSortableUniqueId = snapshot.LastSortableUniqueId,
