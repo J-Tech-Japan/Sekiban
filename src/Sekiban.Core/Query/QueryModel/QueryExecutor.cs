@@ -443,7 +443,7 @@ public class QueryExecutor : IQueryExecutor
 
     public async Task<TQueryResponse>
         ForGeneralQueryAsync<TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
-        where TQuery : IGeneralQuery<TQueryParameter, TQueryResponse>, IEquatable<TQueryParameter>
+        where TQuery : IGeneralQuery<TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
         where TQueryResponse : IQueryResponse =>
         await queryHandler.GetGeneralQueryAsync<TQuery, TQueryParameter, TQueryResponse>(param);
@@ -469,7 +469,7 @@ public class QueryExecutor : IQueryExecutor
     public async Task<TQueryResponse>
         ForAggregateQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TAggregatePayload : IAggregatePayloadCommon
-        where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>, IEquatable<TQueryParameter>
+        where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
         where TQueryParameter : IQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
         where TQueryResponse : IQueryResponse
     {
