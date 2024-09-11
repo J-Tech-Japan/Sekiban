@@ -20,9 +20,10 @@ public sealed class StaticCommandHandlerAdapter<TAggregatePayloadBase, TAggregat
 {
     private readonly List<IEvent> _events = [];
     private Aggregate<TAggregatePayloadBase>? _aggregate;
+    private ICommandDocumentCommon _commandDocument = null!;
     private string _rootPartitionKey = string.Empty;
-
     public AggregateState<TAggregatePayloadState> GetState() => GetAggregateState();
+    public ICommandDocumentCommon GetCommandDocument() => _commandDocument;
     public ResultBox<T1> GetRequiredService<T1>() where T1 : class =>
         ResultBox.WrapTry(() => serviceProvider.GetRequiredService<T1>());
 
@@ -130,6 +131,7 @@ public sealed class StaticCommandHandlerAdapter<TAggregatePayloadBase, TAggregat
         Guid aggregateId,
         string rootPartitionKey)
     {
+        _commandDocument = commandDocument;
         var command = commandDocument.Payload;
         _aggregate = await aggregateLoader.AsAggregateAsync<TAggregatePayloadBase>(aggregateId, rootPartitionKey) ??
             new Aggregate<TAggregatePayloadBase> { AggregateId = aggregateId };

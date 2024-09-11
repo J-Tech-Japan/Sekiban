@@ -8,7 +8,6 @@ namespace Sekiban.Core.Command;
 /// </summary>
 public interface ICommandDocumentCommon : IAggregateDocument, ICallHistories
 {
-
     /// <summary>
     ///     Executed user can be set by implementing <see cref="IUserInformationFactory" />
     /// </summary>

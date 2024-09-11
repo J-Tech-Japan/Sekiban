@@ -22,6 +22,7 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> : IComman
     private readonly List<IEvent> _events = [];
     private readonly IServiceProvider _serviceProvider;
     private Aggregate<TAggregatePayload>? _aggregate;
+    private ICommandDocumentCommon _commandDocument = null!;
     private string _rootPartitionKey = string.Empty;
 
     public CommandHandlerAdapter(
@@ -34,6 +35,7 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> : IComman
         _checkVersion = checkVersion;
     }
     public AggregateState<TAggregatePayload> GetState() => GetAggregateState();
+    public ICommandDocumentCommon GetCommandDocument() => _commandDocument;
     public ResultBox<T1> GetRequiredService<T1>() where T1 : class =>
         ResultBox.WrapTry(() => _serviceProvider.GetRequiredService<T1>());
 
@@ -141,6 +143,7 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> : IComman
         Guid aggregateId,
         string rootPartitionKey)
     {
+        _commandDocument = commandDocument;
         var command = commandDocument.Payload;
         _aggregate = await _aggregateLoader.AsAggregateAsync<TAggregatePayload>(aggregateId, rootPartitionKey) ??
             new Aggregate<TAggregatePayload> { AggregateId = aggregateId };
