@@ -4,9 +4,9 @@ namespace Sekiban.Core.Command;
 
 public interface
     ICommandWithHandler<TAggregatePayload, in TCommand> : ICommandWithHandlerCommon<TAggregatePayload, TCommand>
-    where TAggregatePayload : IAggregatePayloadCommon where TCommand : ICommandCommon<TAggregatePayload>
+    where TAggregatePayload : IAggregatePayloadCommon
+    where TCommand : ICommandCommon<TAggregatePayload>, IEquatable<TCommand>
 {
-
     public static abstract ResultBox<UnitValue> HandleCommand(
         TCommand command,
         ICommandContext<TAggregatePayload> context);
