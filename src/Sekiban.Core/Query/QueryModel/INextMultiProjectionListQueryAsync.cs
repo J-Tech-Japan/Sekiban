@@ -7,7 +7,8 @@ public interface
     INextMultiProjectionQueryCommon<TMultiProjectionPayloadCommon, TOutput>,
     INextListQueryCommon<TQuery, TOutput> where TOutput : notnull
     where TMultiProjectionPayloadCommon : IMultiProjectionPayloadCommon
-    where TQuery : INextMultiProjectionListQueryAsync<TMultiProjectionPayloadCommon, TQuery, TOutput>
+    where TQuery : INextMultiProjectionListQueryAsync<TMultiProjectionPayloadCommon, TQuery, TOutput>,
+    IEquatable<TQuery>
 {
     public static abstract Task<ResultBox<IEnumerable<TOutput>>> HandleFilterAsync(
         MultiProjectionState<TMultiProjectionPayloadCommon> projection,

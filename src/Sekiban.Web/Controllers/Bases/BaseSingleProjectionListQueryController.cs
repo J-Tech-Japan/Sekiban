@@ -26,7 +26,7 @@ public class BaseSingleProjectionListQueryController<TSingleProjectionPayload, T
     : ControllerBase where TSingleProjectionPayload : ISingleProjectionPayloadCommon
     where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter,
         TQueryResponse>
-    where TQueryParameter : IListQueryParameter<TQueryResponse>
+    where TQueryParameter : IListQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
     where TQueryResponse : IQueryResponse
 {
     protected readonly IQueryExecutor QueryExecutor = queryExecutor;

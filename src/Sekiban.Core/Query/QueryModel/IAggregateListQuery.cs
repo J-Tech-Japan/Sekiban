@@ -11,7 +11,7 @@ public interface
     IAggregateListQuery<TAggregatePayload, in TQueryParameter, TQueryResponse> : IListQueryHandlerCommon<TQueryParameter
     ,
     TQueryResponse> where TAggregatePayload : IAggregatePayloadCommon
-    where TQueryParameter : IListQueryParameter<TQueryResponse>
+    where TQueryParameter : IListQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
     where TQueryResponse : IQueryResponse
 {
     /// <summary>

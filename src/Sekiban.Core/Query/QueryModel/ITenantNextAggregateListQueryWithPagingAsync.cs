@@ -6,7 +6,7 @@ public interface
     INextAggregateListQueryWithPagingAsync<TAggregatePayload, TQuery, TOutput>,
     ITenantQueryCommon where TOutput : notnull
     where TAggregatePayload : IAggregatePayloadCommon
-    where TQuery : ITenantNextAggregateListQueryWithPagingAsync<TAggregatePayload, TQuery, TOutput>
+    where TQuery : ITenantNextAggregateListQueryWithPagingAsync<TAggregatePayload, TQuery, TOutput>, IEquatable<TQuery>
 {
     string IQueryPartitionKeyCommon.GetRootPartitionKey() => GetTenantId();
 }

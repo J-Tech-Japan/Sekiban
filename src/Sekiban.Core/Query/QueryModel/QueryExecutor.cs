@@ -339,7 +339,7 @@ public class QueryExecutor : IQueryExecutor
         ForMultiProjectionQueryAsync<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TProjectionPayload : IMultiProjectionPayloadCommon
         where TQuery : IMultiProjectionQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryParameter : IQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
         where TQueryResponse : IQueryResponse
     {
         var allProjection = await multiProjectionService.GetMultiProjectionAsync<TProjectionPayload>(
@@ -355,7 +355,7 @@ public class QueryExecutor : IQueryExecutor
     public Task<ResultBox<TQueryResponse>>
         ForMultiProjectionQueryNextAsync<TProjectionPayload, TQuery, TQueryResponse>(TQuery query)
         where TProjectionPayload : IMultiProjectionPayloadCommon
-        where TQuery : INextMultiProjectionQueryAsync<TProjectionPayload, TQuery, TQueryResponse>
+        where TQuery : INextMultiProjectionQueryAsync<TProjectionPayload, TQuery, TQueryResponse>, IEquatable<TQuery>
         where TQueryResponse : notnull =>
         ResultBox
             .WrapTry(
@@ -371,7 +371,7 @@ public class QueryExecutor : IQueryExecutor
     public Task<ResultBox<TQueryResponse>>
         ForMultiProjectionQueryNext<TProjectionPayload, TQuery, TQueryResponse>(TQuery query)
         where TProjectionPayload : IMultiProjectionPayloadCommon
-        where TQuery : INextMultiProjectionQuery<TProjectionPayload, TQuery, TQueryResponse>
+        where TQuery : INextMultiProjectionQuery<TProjectionPayload, TQuery, TQueryResponse>, IEquatable<TQuery>
         where TQueryResponse : notnull =>
         ResultBox
             .WrapTry(
@@ -389,7 +389,7 @@ public class QueryExecutor : IQueryExecutor
         ForMultiProjectionListQueryAsync<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
             TQueryParameter param) where TProjectionPayload : IMultiProjectionPayloadCommon
         where TQuery : IMultiProjectionListQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryParameter : IListQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
         where TQueryResponse : IQueryResponse
     {
         var allProjection = await multiProjectionService.GetMultiProjectionAsync<TProjectionPayload>(
@@ -404,7 +404,8 @@ public class QueryExecutor : IQueryExecutor
     public Task<ResultBox<ListQueryResult<TQueryResponse>>>
         ForMultiProjectionListQueryNextAsync<TProjectionPayload, TQuery, TQueryResponse>(TQuery query)
         where TProjectionPayload : IMultiProjectionPayloadCommon
-        where TQuery : INextMultiProjectionListQueryAsync<TProjectionPayload, TQuery, TQueryResponse>
+        where TQuery : INextMultiProjectionListQueryAsync<TProjectionPayload, TQuery, TQueryResponse>,
+        IEquatable<TQuery>
         where TQueryResponse : notnull =>
         ResultBox
             .WrapTry(
@@ -419,7 +420,7 @@ public class QueryExecutor : IQueryExecutor
     public Task<ResultBox<ListQueryResult<TQueryResponse>>>
         ForMultiProjectionListQueryNext<TProjectionPayload, TQuery, TQueryResponse>(TQuery query)
         where TProjectionPayload : IMultiProjectionPayloadCommon
-        where TQuery : INextMultiProjectionListQuery<TProjectionPayload, TQuery, TQueryResponse>
+        where TQuery : INextMultiProjectionListQuery<TProjectionPayload, TQuery, TQueryResponse>, IEquatable<TQuery>
         where TQueryResponse : notnull =>
         ResultBox
             .WrapTry(
@@ -436,14 +437,14 @@ public class QueryExecutor : IQueryExecutor
     public async Task<ListQueryResult<TQueryResponse>>
         ForGeneralListQueryAsync<TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TQuery : IGeneralListQuery<TQueryParameter, TQueryResponse>
-        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryParameter : IListQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
         where TQueryResponse : IQueryResponse =>
         await queryHandler.GetGeneralListQueryAsync<TQuery, TQueryParameter, TQueryResponse>(param);
 
     public async Task<TQueryResponse>
         ForGeneralQueryAsync<TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TQuery : IGeneralQuery<TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryParameter : IQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
         where TQueryResponse : IQueryResponse =>
         await queryHandler.GetGeneralQueryAsync<TQuery, TQueryParameter, TQueryResponse>(param);
 
@@ -453,7 +454,7 @@ public class QueryExecutor : IQueryExecutor
         ForAggregateListQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TAggregatePayload : IAggregatePayloadCommon
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryParameter : IListQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
         where TQueryResponse : IQueryResponse
     {
         var allProjection = await multiProjectionService.GetAggregateList<TAggregatePayload>(
@@ -469,7 +470,7 @@ public class QueryExecutor : IQueryExecutor
         ForAggregateQueryAsync<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TAggregatePayload : IAggregatePayloadCommon
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryParameter : IQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
         where TQueryResponse : IQueryResponse
     {
         var allProjection = await multiProjectionService.GetAggregateList<TAggregatePayload>(
@@ -484,7 +485,7 @@ public class QueryExecutor : IQueryExecutor
     public async Task<ResultBox<TQueryResponse>>
         ForAggregateQueryNextAsync<TAggregatePayload, TQuery, TQueryResponse>(TQuery param)
         where TAggregatePayload : IAggregatePayloadCommon
-        where TQuery : INextAggregateQueryAsync<TAggregatePayload, TQuery, TQueryResponse>
+        where TQuery : INextAggregateQueryAsync<TAggregatePayload, TQuery, TQueryResponse>, IEquatable<TQuery>
         where TQueryResponse : notnull
     {
         var allProjection = await multiProjectionService.GetAggregateList<TAggregatePayload>(
@@ -498,7 +499,7 @@ public class QueryExecutor : IQueryExecutor
     public async Task<ResultBox<TQueryResponse>>
         ForAggregateQueryNext<TAggregatePayload, TQuery, TQueryResponse>(TQuery param)
         where TAggregatePayload : IAggregatePayloadCommon
-        where TQuery : INextAggregateQuery<TAggregatePayload, TQuery, TQueryResponse>
+        where TQuery : INextAggregateQuery<TAggregatePayload, TQuery, TQueryResponse>, IEquatable<TQuery>
         where TQueryResponse : notnull
     {
         var allProjection = await multiProjectionService.GetAggregateList<TAggregatePayload>(
@@ -510,7 +511,7 @@ public class QueryExecutor : IQueryExecutor
     public async Task<ResultBox<ListQueryResult<TQueryResponse>>>
         ForAggregateListQueryNextAsync<TAggregatePayload, TQuery, TQueryResponse>(TQuery param)
         where TAggregatePayload : IAggregatePayloadCommon
-        where TQuery : INextAggregateListQueryAsync<TAggregatePayload, TQuery, TQueryResponse>
+        where TQuery : INextAggregateListQueryAsync<TAggregatePayload, TQuery, TQueryResponse>, IEquatable<TQuery>
         where TQueryResponse : notnull
     {
         var allProjection = await multiProjectionService.GetAggregateList<TAggregatePayload>(
@@ -524,7 +525,7 @@ public class QueryExecutor : IQueryExecutor
     public async Task<ResultBox<ListQueryResult<TQueryResponse>>>
         ForAggregateListQueryNext<TAggregatePayload, TQuery, TQueryResponse>(TQuery param)
         where TAggregatePayload : IAggregatePayloadCommon
-        where TQuery : INextAggregateListQuery<TAggregatePayload, TQuery, TQueryResponse>
+        where TQuery : INextAggregateListQuery<TAggregatePayload, TQuery, TQueryResponse>, IEquatable<TQuery>
         where TQueryResponse : notnull
     {
         var allProjection = await multiProjectionService.GetAggregateList<TAggregatePayload>(
@@ -540,7 +541,7 @@ public class QueryExecutor : IQueryExecutor
         ForSingleProjectionListQueryAsync<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
             TQueryParameter param) where TProjectionPayload : class, ISingleProjectionPayloadCommon
         where TQuery : ISingleProjectionListQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryParameter : IListQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
         where TQueryResponse : IQueryResponse
     {
         var allProjection = await multiProjectionService.GetSingleProjectionList<TProjectionPayload>(
@@ -556,7 +557,8 @@ public class QueryExecutor : IQueryExecutor
     public Task<ResultBox<ListQueryResult<TQueryResponse>>>
         ForSingleProjectionListQueryNextAsync<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(TQuery query)
         where TProjectionPayload : class, ISingleProjectionPayloadCommon
-        where TQuery : INextSingleProjectionListQueryAsync<TProjectionPayload, TQuery, TQueryResponse>
+        where TQuery : INextSingleProjectionListQueryAsync<TProjectionPayload, TQuery, TQueryResponse>,
+        IEquatable<TQuery>
         where TQueryResponse : IQueryResponse =>
         ResultBox
             .FromValue(
@@ -572,7 +574,7 @@ public class QueryExecutor : IQueryExecutor
     public Task<ResultBox<ListQueryResult<TQueryResponse>>>
         ForSingleProjectionListQueryNext<TProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(TQuery query)
         where TProjectionPayload : class, ISingleProjectionPayloadCommon
-        where TQuery : INextSingleProjectionListQuery<TProjectionPayload, TQuery, TQueryResponse>
+        where TQuery : INextSingleProjectionListQuery<TProjectionPayload, TQuery, TQueryResponse>, IEquatable<TQuery>
         where TQueryResponse : IQueryResponse =>
         ResultBox
             .FromValue(
@@ -590,7 +592,7 @@ public class QueryExecutor : IQueryExecutor
         ForSingleProjectionQueryAsync<TSingleProjectionPayload, TQuery, TQueryParameter, TQueryResponse>(
             TQueryParameter param) where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryParameter : IQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
         where TQueryResponse : IQueryResponse
     {
         var allProjection = await multiProjectionService.GetSingleProjectionList<TSingleProjectionPayload>(
@@ -606,7 +608,8 @@ public class QueryExecutor : IQueryExecutor
     public async Task<ResultBox<TQueryResponse>>
         ForSingleProjectionNextQueryAsync<TSingleProjectionPayload, TQuery, TQueryResponse>(TQuery query)
         where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
-        where TQuery : INextSingleProjectionQueryAsync<TSingleProjectionPayload, TQuery, TQueryResponse>
+        where TQuery : INextSingleProjectionQueryAsync<TSingleProjectionPayload, TQuery, TQueryResponse>,
+        IEquatable<TQuery>
         where TQueryResponse : notnull
     {
         var allProjection = await multiProjectionService.GetSingleProjectionList<TSingleProjectionPayload>(
@@ -620,7 +623,7 @@ public class QueryExecutor : IQueryExecutor
     public async Task<ResultBox<TQueryResponse>>
         ForSingleProjectionNextQuery<TSingleProjectionPayload, TQuery, TQueryResponse>(TQuery query)
         where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
-        where TQuery : INextSingleProjectionQuery<TSingleProjectionPayload, TQuery, TQueryResponse>
+        where TQuery : INextSingleProjectionQuery<TSingleProjectionPayload, TQuery, TQueryResponse>, IEquatable<TQuery>
         where TQueryResponse : notnull
     {
         var allProjection = await multiProjectionService.GetSingleProjectionList<TSingleProjectionPayload>(

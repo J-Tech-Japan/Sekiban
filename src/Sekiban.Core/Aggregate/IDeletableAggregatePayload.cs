@@ -6,4 +6,4 @@ namespace Sekiban.Core.Aggregate;
 ///     If you want to make your aggregate NOT deletable, please use <see cref="IAggregatePayload{TAggregatePayload}" />.
 /// </summary>
 public interface IDeletableAggregatePayload<TAggregatePayload> : IAggregatePayload<TAggregatePayload>, IDeletable
-    where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>;
+    where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>, IEquatable<TAggregatePayload>;

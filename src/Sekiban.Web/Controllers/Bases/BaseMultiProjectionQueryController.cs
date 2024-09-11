@@ -25,7 +25,7 @@ public class BaseMultiProjectionQueryController<TProjectionPayload, TQuery, TQue
     IServiceProvider serviceProvider)
     : ControllerBase where TProjectionPayload : IMultiProjectionPayloadCommon
     where TQuery : IMultiProjectionQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
-    where TQueryParameter : IQueryParameter<TQueryResponse>
+    where TQueryParameter : IQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
     where TQueryResponse : IQueryResponse
 {
     protected readonly IQueryExecutor QueryExecutor = queryExecutor;

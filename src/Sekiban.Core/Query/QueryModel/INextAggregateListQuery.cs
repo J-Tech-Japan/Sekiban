@@ -6,7 +6,7 @@ public interface
     INextAggregateListQuery<TAggregatePayload, TQuery, TOutput> : INextAggregateQueryCommon<TAggregatePayload, TOutput>,
     INextListQueryCommon<TQuery, TOutput> where TOutput : notnull
     where TAggregatePayload : IAggregatePayloadCommon
-    where TQuery : INextAggregateListQuery<TAggregatePayload, TQuery, TOutput>
+    where TQuery : INextAggregateListQuery<TAggregatePayload, TQuery, TOutput>, IEquatable<TQuery>
 {
     public virtual static QueryListType GetQueryListType(TQuery query) => QueryListType.ActiveOnly;
     public static abstract ResultBox<IEnumerable<TOutput>> HandleFilter(

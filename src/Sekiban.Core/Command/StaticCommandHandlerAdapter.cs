@@ -16,7 +16,7 @@ public sealed class StaticCommandHandlerAdapter<TAggregatePayloadBase, TAggregat
     bool checkVersion = true)
     : ICommandContext<TAggregatePayloadState> where TAggregatePayloadBase : IAggregatePayloadCommon
     where TAggregatePayloadState : IAggregatePayloadCommon
-    where TCommand : ICommandWithHandlerCommon<TAggregatePayloadState, TCommand>
+    where TCommand : ICommandWithHandlerCommon<TAggregatePayloadState, TCommand>, IEquatable<TCommand>
 {
     private readonly List<IEvent> _events = [];
     private Aggregate<TAggregatePayloadBase>? _aggregate;

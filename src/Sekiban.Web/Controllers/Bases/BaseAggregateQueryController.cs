@@ -16,7 +16,7 @@ namespace Sekiban.Web.Controllers.Bases;
 public class BaseAggregateQueryController<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse> : ControllerBase
     where TAggregatePayload : IAggregatePayloadCommon
     where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-    where TQueryParameter : IQueryParameter<TQueryResponse>
+    where TQueryParameter : IQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
     where TQueryResponse : IQueryResponse
 {
     protected readonly IQueryExecutor QueryExecutor;

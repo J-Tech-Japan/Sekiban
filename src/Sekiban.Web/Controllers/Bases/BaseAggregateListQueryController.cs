@@ -18,14 +18,12 @@ namespace Sekiban.Web.Controllers.Bases;
 [ApiController]
 [Produces("application/json")]
 // ReSharper disable once UnusedTypeParameter
-public class BaseAggregateListQueryController<TAggregatePayload, TQuery, TQueryParameter,
-    TQueryResponse>(
+public class BaseAggregateListQueryController<TAggregatePayload, TQuery, TQueryParameter, TQueryResponse>(
     IQueryExecutor queryExecutor,
     IServiceProvider serviceProvider,
-    IWebDependencyDefinition webDependencyDefinition)
-    : ControllerBase where TAggregatePayload : IAggregatePayloadCommon
+    IWebDependencyDefinition webDependencyDefinition) : ControllerBase where TAggregatePayload : IAggregatePayloadCommon
     where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-    where TQueryParameter : IListQueryParameter<TQueryResponse>
+    where TQueryParameter : IListQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
     where TQueryResponse : IQueryResponse
 {
     protected readonly IQueryExecutor QueryExecutor = queryExecutor;

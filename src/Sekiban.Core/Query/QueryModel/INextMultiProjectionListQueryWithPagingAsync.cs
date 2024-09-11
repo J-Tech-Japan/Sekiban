@@ -6,4 +6,5 @@ public interface
     INextMultiProjectionListQueryAsync<TMultiProjectionPayloadCommon, TQuery, TOutput>,
     IQueryPagingParameterCommon where TOutput : notnull
     where TMultiProjectionPayloadCommon : IMultiProjectionPayloadCommon
-    where TQuery : INextMultiProjectionListQueryWithPagingAsync<TMultiProjectionPayloadCommon, TQuery, TOutput>;
+    where TQuery : INextMultiProjectionListQueryWithPagingAsync<TMultiProjectionPayloadCommon, TQuery, TOutput>,
+    IEquatable<TQuery>;

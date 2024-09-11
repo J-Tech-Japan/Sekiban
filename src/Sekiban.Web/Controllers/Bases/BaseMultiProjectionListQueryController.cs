@@ -19,7 +19,7 @@ public class BaseMultiProjectionListQueryController<TProjectionPayload, TQuery, 
     TQueryResponse> : ControllerBase
     where TProjectionPayload : IMultiProjectionPayloadCommon
     where TQuery : IMultiProjectionListQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
-    where TQueryParameter : IListQueryParameter<TQueryResponse>
+    where TQueryParameter : IListQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
     where TQueryResponse : IQueryResponse
 {
     private readonly IServiceProvider _serviceProvider;

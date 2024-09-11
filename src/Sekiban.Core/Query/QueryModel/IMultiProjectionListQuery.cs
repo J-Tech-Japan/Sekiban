@@ -10,7 +10,7 @@ namespace Sekiban.Core.Query.QueryModel;
 public interface
     IMultiProjectionListQuery<TProjectionPayload, in TQueryParameter, TQueryResponse> : IListQueryHandlerCommon<
     TQueryParameter, TQueryResponse> where TProjectionPayload : IMultiProjectionPayloadCommon
-    where TQueryParameter : IListQueryParameter<TQueryResponse>
+    where TQueryParameter : IListQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
     where TQueryResponse : IQueryResponse
 {
     /// <summary>

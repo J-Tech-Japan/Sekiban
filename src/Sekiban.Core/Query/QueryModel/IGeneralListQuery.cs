@@ -9,7 +9,8 @@ namespace Sekiban.Core.Query.QueryModel;
 /// <typeparam name="TQueryResponse"></typeparam>
 public interface
     IGeneralListQuery<in TQueryParameter, TQueryResponse> : IListQueryHandlerCommon<TQueryParameter, TQueryResponse>
-    where TQueryParameter : IListQueryParameter<TQueryResponse> where TQueryResponse : IQueryResponse
+    where TQueryParameter : IListQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
+    where TQueryResponse : IQueryResponse
 {
     /// <summary>
     ///     returns filtered list.

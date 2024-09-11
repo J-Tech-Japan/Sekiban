@@ -6,4 +6,5 @@ public interface
     INextSingleProjectionListQuery<TSingleProjectionPayloadCommon, TQuery, TOutput>,
     IQueryPagingParameterCommon where TOutput : notnull
     where TSingleProjectionPayloadCommon : ISingleProjectionPayloadCommon
-    where TQuery : INextSingleProjectionListWithPagingQuery<TSingleProjectionPayloadCommon, TQuery, TOutput>;
+    where TQuery : INextSingleProjectionListWithPagingQuery<TSingleProjectionPayloadCommon, TQuery, TOutput>,
+    IEquatable<TQuery>;
