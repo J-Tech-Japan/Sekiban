@@ -6,7 +6,8 @@ public interface
     INextMultiProjectionListWithPagingQuery<TMultiProjectionPayloadCommon, TQuery, TOutput>,
     ITenantQueryCommon where TOutput : notnull
     where TMultiProjectionPayloadCommon : IMultiProjectionPayloadCommon
-    where TQuery : ITenantNextMultiProjectionListWithPagingQuery<TMultiProjectionPayloadCommon, TQuery, TOutput>
+    where TQuery : ITenantNextMultiProjectionListWithPagingQuery<TMultiProjectionPayloadCommon, TQuery, TOutput>,
+    IEquatable<TQuery>
 {
     string IQueryPartitionKeyCommon.GetRootPartitionKey() => GetTenantId();
 }

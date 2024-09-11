@@ -57,7 +57,8 @@ public class QueryHandler : IQueryContext
             TQuery query,
             MultiProjectionState<TProjectionPayload> projection)
         where TProjectionPayload : IMultiProjectionPayloadCommon
-        where TQuery : INextMultiProjectionListQueryAsync<TProjectionPayload, TQuery, TQueryResponse>
+        where TQuery : INextMultiProjectionListQueryAsync<TProjectionPayload, TQuery, TQueryResponse>,
+        IEquatable<TQuery>
         where TQueryResponse : notnull =>
         TQuery
             .HandleFilterAsync(projection, query, this)
@@ -73,7 +74,7 @@ public class QueryHandler : IQueryContext
             TQuery query,
             MultiProjectionState<TProjectionPayload> projection)
         where TProjectionPayload : IMultiProjectionPayloadCommon
-        where TQuery : INextMultiProjectionListQuery<TProjectionPayload, TQuery, TQueryResponse>
+        where TQuery : INextMultiProjectionListQuery<TProjectionPayload, TQuery, TQueryResponse>, IEquatable<TQuery>
         where TQueryResponse : notnull =>
         TQuery
             .HandleFilter(projection, query, this)
@@ -103,13 +104,13 @@ public class QueryHandler : IQueryContext
     public ResultBox<TQueryResponse> GetMultiProjectionQueryNext<TProjectionPayload, TQuery, TQueryResponse>(
         TQuery query,
         MultiProjectionState<TProjectionPayload> projection) where TProjectionPayload : IMultiProjectionPayloadCommon
-        where TQuery : INextMultiProjectionQuery<TProjectionPayload, TQuery, TQueryResponse>
+        where TQuery : INextMultiProjectionQuery<TProjectionPayload, TQuery, TQueryResponse>, IEquatable<TQuery>
         where TQueryResponse : notnull =>
         TQuery.HandleFilter(projection, query, this);
     public Task<ResultBox<TQueryResponse>> GetMultiProjectionQueryNextAsync<TProjectionPayload, TQuery, TQueryResponse>(
         TQuery query,
         MultiProjectionState<TProjectionPayload> projection) where TProjectionPayload : IMultiProjectionPayloadCommon
-        where TQuery : INextMultiProjectionQueryAsync<TProjectionPayload, TQuery, TQueryResponse>
+        where TQuery : INextMultiProjectionQueryAsync<TProjectionPayload, TQuery, TQueryResponse>, IEquatable<TQuery>
         where TQueryResponse : notnull =>
         TQuery.HandleFilterAsync(projection, query, this);
 
@@ -135,7 +136,8 @@ public class QueryHandler : IQueryContext
 
     public Task<ResultBox<ListQueryResult<TQueryResponse>>>
         GetGeneralListQueryNextAsync<TQuery, TQueryResponse>(TQuery query)
-        where TQuery : INextGeneralListQueryAsync<TQuery, TQueryResponse> where TQueryResponse : notnull =>
+        where TQuery : INextGeneralListQueryAsync<TQuery, TQueryResponse>, IEquatable<TQuery>
+        where TQueryResponse : notnull =>
         TQuery
             .HandleFilterAsync(query, this)
             .Conveyor(sorted => TQuery.HandleSortAsync(sorted, query, this))
@@ -145,7 +147,8 @@ public class QueryHandler : IQueryContext
                     ? MakeQueryListResult(pagingParam, sorted)
                     : new ListQueryResult<TQueryResponse>(sorted.Count, null, null, null, sorted));
     public ResultBox<ListQueryResult<TQueryResponse>> GetGeneralListQueryNext<TQuery, TQueryResponse>(TQuery query)
-        where TQuery : INextGeneralListQuery<TQuery, TQueryResponse> where TQueryResponse : notnull =>
+        where TQuery : INextGeneralListQuery<TQuery, TQueryResponse>, IEquatable<TQuery>
+        where TQueryResponse : notnull =>
         TQuery
             .HandleFilter(query, this)
             .Conveyor(sorted => TQuery.HandleSort(sorted, query, this))
@@ -170,10 +173,11 @@ public class QueryHandler : IQueryContext
     }
 
     public Task<ResultBox<TQueryResponse>> GetGeneralQueryNextAsync<TQuery, TQueryResponse>(TQuery query)
-        where TQuery : INextGeneralQueryAsync<TQuery, TQueryResponse> where TQueryResponse : notnull =>
+        where TQuery : INextGeneralQueryAsync<TQuery, TQueryResponse>, IEquatable<TQuery>
+        where TQueryResponse : notnull =>
         TQuery.HandleFilterAsync(query, this);
     public Task<ResultBox<TQueryResponse>> GetGeneralQueryNext<TQuery, TQueryResponse>(TQuery query)
-        where TQuery : INextGeneralQuery<TQuery, TQueryResponse> where TQueryResponse : notnull =>
+        where TQuery : INextGeneralQuery<TQuery, TQueryResponse>, IEquatable<TQuery> where TQueryResponse : notnull =>
         TQuery.HandleFilter(query, this).ToTask();
 
 
@@ -209,7 +213,7 @@ public class QueryHandler : IQueryContext
         GetAggregateListQueryNextAsync<TAggregatePayload, TQuery, TQueryResponse>(
             TQuery query,
             IEnumerable<AggregateState<TAggregatePayload>> list) where TAggregatePayload : IAggregatePayloadCommon
-        where TQuery : INextAggregateListQueryAsync<TAggregatePayload, TQuery, TQueryResponse>
+        where TQuery : INextAggregateListQueryAsync<TAggregatePayload, TQuery, TQueryResponse>, IEquatable<TQuery>
         where TQueryResponse : notnull =>
         await TQuery
             .HandleFilterAsync(list, query, this)
@@ -225,7 +229,7 @@ public class QueryHandler : IQueryContext
         GetAggregateListQueryNext<TAggregatePayload, TQuery, TQueryResponse>(
             TQuery query,
             IEnumerable<AggregateState<TAggregatePayload>> list) where TAggregatePayload : IAggregatePayloadCommon
-        where TQuery : INextAggregateListQuery<TAggregatePayload, TQuery, TQueryResponse>
+        where TQuery : INextAggregateListQuery<TAggregatePayload, TQuery, TQueryResponse>, IEquatable<TQuery>
         where TQueryResponse : notnull =>
         TQuery
             .HandleFilter(list, query, this)
@@ -255,7 +259,7 @@ public class QueryHandler : IQueryContext
     public ResultBox<TQueryResponse> GetAggregateQueryNext<TAggregatePayload, TQuery, TQueryResponse>(
         TQuery query,
         IEnumerable<AggregateState<TAggregatePayload>> list) where TAggregatePayload : IAggregatePayloadCommon
-        where TQuery : INextAggregateQuery<TAggregatePayload, TQuery, TQueryResponse>
+        where TQuery : INextAggregateQuery<TAggregatePayload, TQuery, TQueryResponse>, IEquatable<TQuery>
         where TQueryResponse : notnull
     {
         var filtered = TQuery.HandleFilter(list, query, this);
@@ -264,7 +268,7 @@ public class QueryHandler : IQueryContext
     public async Task<ResultBox<TQueryResponse>> GetAggregateQueryNextAsync<TAggregatePayload, TQuery, TQueryResponse>(
         TQuery query,
         IEnumerable<AggregateState<TAggregatePayload>> list) where TAggregatePayload : IAggregatePayloadCommon
-        where TQuery : INextAggregateQueryAsync<TAggregatePayload, TQuery, TQueryResponse>
+        where TQuery : INextAggregateQueryAsync<TAggregatePayload, TQuery, TQueryResponse>, IEquatable<TQuery>
         where TQueryResponse : notnull
     {
         var filtered = await TQuery.HandleFilterAsync(list, query, this);
@@ -298,7 +302,8 @@ public class QueryHandler : IQueryContext
             TQuery query,
             IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon
-        where TQuery : INextSingleProjectionListQuery<TSingleProjectionPayload, TQuery, TQueryResponse>
+        where TQuery : INextSingleProjectionListQuery<TSingleProjectionPayload, TQuery, TQueryResponse>,
+        IEquatable<TQuery>
         where TQueryResponse : IQueryResponse
     {
         return TQuery
@@ -315,7 +320,8 @@ public class QueryHandler : IQueryContext
             TQuery query,
             IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon
-        where TQuery : INextSingleProjectionListQueryAsync<TSingleProjectionPayload, TQuery, TQueryResponse>
+        where TQuery : INextSingleProjectionListQueryAsync<TSingleProjectionPayload, TQuery, TQueryResponse>,
+        IEquatable<TQuery>
         where TQueryResponse : IQueryResponse
     {
         return TQuery
@@ -374,14 +380,15 @@ public class QueryHandler : IQueryContext
             TQuery query,
             IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon
-        where TQuery : INextSingleProjectionQueryAsync<TSingleProjectionPayload, TQuery, TQueryResponse>
+        where TQuery : INextSingleProjectionQueryAsync<TSingleProjectionPayload, TQuery, TQueryResponse>,
+        IEquatable<TQuery>
         where TQueryResponse : notnull =>
         TQuery.HandleFilterAsync(projections, query, this);
     public ResultBox<TQueryResponse> GetSingleProjectionQueryNext<TSingleProjectionPayload, TQuery, TQueryResponse>(
         TQuery query,
         IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon
-        where TQuery : INextSingleProjectionQuery<TSingleProjectionPayload, TQuery, TQueryResponse>
+        where TQuery : INextSingleProjectionQuery<TSingleProjectionPayload, TQuery, TQueryResponse>, IEquatable<TQuery>
         where TQueryResponse : notnull =>
         TQuery.HandleFilter(projections, query, this);
 }

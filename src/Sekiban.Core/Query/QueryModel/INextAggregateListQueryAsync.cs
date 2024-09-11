@@ -8,7 +8,7 @@ public interface
     INextListQueryCommon<TQuery, TOutput>,
     INextQueryAsyncGeneral where TOutput : notnull
     where TAggregatePayload : IAggregatePayloadCommon
-    where TQuery : INextAggregateListQueryAsync<TAggregatePayload, TQuery, TOutput>
+    where TQuery : INextAggregateListQueryAsync<TAggregatePayload, TQuery, TOutput>, IEquatable<TQuery>
 {
     public virtual static QueryListType GetQueryListType(TQuery query) => QueryListType.ActiveOnly;
     public static abstract Task<ResultBox<IEnumerable<TOutput>>> HandleFilterAsync(

@@ -6,4 +6,4 @@ public interface
     INextAggregateListQuery<TAggregatePayload, TQuery, TOutput>,
     IQueryPagingParameterCommon where TOutput : notnull
     where TAggregatePayload : IAggregatePayloadCommon
-    where TQuery : INextAggregateListQueryWithPaging<TAggregatePayload, TQuery, TOutput>;
+    where TQuery : INextAggregateListQueryWithPaging<TAggregatePayload, TQuery, TOutput>, IEquatable<TQuery>;
