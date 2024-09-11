@@ -12,5 +12,5 @@ public interface
     ITenantAggregateQuery<TAggregatePayload, in TQueryParameter, out TQueryResponse> : IAggregateQuery<TAggregatePayload
     ,
     TQueryParameter, TQueryResponse> where TAggregatePayload : IAggregatePayloadCommon
-    where TQueryParameter : ITenantQueryParameter<TQueryResponse>
+    where TQueryParameter : ITenantQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
     where TQueryResponse : IQueryResponse;

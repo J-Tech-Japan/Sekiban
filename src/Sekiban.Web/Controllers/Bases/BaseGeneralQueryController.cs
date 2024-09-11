@@ -14,7 +14,7 @@ namespace Sekiban.Web.Controllers.Bases;
 [Produces("application/json")]
 public class BaseGeneralQueryController<TQuery, TQueryParameter, TQueryResponse> : ControllerBase
     where TQuery : IGeneralQuery<TQueryParameter, TQueryResponse>
-    where TQueryParameter : IQueryParameter<TQueryResponse>
+    where TQueryParameter : IQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
     where TQueryResponse : IQueryResponse
 {
     private readonly IServiceProvider _serviceProvider;
@@ -33,8 +33,7 @@ public class BaseGeneralQueryController<TQuery, TQueryParameter, TQueryResponse>
 
     [HttpGet]
     [Route("")]
-    public async Task<ActionResult<TQueryResponse>> GetQueryResult(
-        [FromQuery] TQueryParameter queryParam)
+    public async Task<ActionResult<TQueryResponse>> GetQueryResult([FromQuery] TQueryParameter queryParam)
     {
         if (await _webDependencyDefinition.AuthorizationDefinitions.CheckAuthorization(
                 AuthorizeMethodType.MultiProjection,

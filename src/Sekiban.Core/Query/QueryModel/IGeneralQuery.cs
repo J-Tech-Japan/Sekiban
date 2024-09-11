@@ -9,7 +9,8 @@ namespace Sekiban.Core.Query.QueryModel;
 /// <typeparam name="TQueryResponse"></typeparam>
 public interface
     IGeneralQuery<in TQueryParameter, TQueryResponse> : IQueryHandlerCommon<TQueryParameter, TQueryResponse>
-    where TQueryParameter : IQueryParameter<TQueryResponse> where TQueryResponse : IQueryResponse
+    where TQueryParameter : IQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
+    where TQueryResponse : IQueryResponse
 {
     public Task<TQueryResponse> HandleFilterAsync(TQueryParameter queryParam);
 }

@@ -13,5 +13,5 @@ public interface
     ISingleProjectionListQuery<
         TSingleProjectionPayload, TQueryParam, TQueryResponse>
     where TSingleProjectionPayload : ISingleProjectionPayloadCommon
-    where TQueryParam : ITenantListQueryParameter<TQueryResponse>
+    where TQueryParam : ITenantListQueryParameter<TQueryResponse>, IEquatable<TQueryParam>
     where TQueryResponse : IQueryResponse;

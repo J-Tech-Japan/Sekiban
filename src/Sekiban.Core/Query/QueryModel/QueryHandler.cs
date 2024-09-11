@@ -38,7 +38,7 @@ public class QueryHandler : IQueryContext
             MultiProjectionState<TProjectionPayload> projection)
         where TProjectionPayload : IMultiProjectionPayloadCommon
         where TQuery : IMultiProjectionListQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryParameter : IListQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
         where TQueryResponse : IQueryResponse
     {
         var query = _serviceProvider.GetService<TQuery>() ??
@@ -90,7 +90,7 @@ public class QueryHandler : IQueryContext
         TQueryParameter param,
         MultiProjectionState<TProjectionPayload> projection) where TProjectionPayload : IMultiProjectionPayloadCommon
         where TQuery : IMultiProjectionQuery<TProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryParameter : IQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
         where TQueryResponse : IQueryResponse
     {
         var query = _serviceProvider.GetService<TQuery>() ??
@@ -120,7 +120,7 @@ public class QueryHandler : IQueryContext
     public async Task<ListQueryResult<TQueryResponse>>
         GetGeneralListQueryAsync<TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TQuery : IGeneralListQuery<TQueryParameter, TQueryResponse>
-        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryParameter : IListQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
         where TQueryResponse : IQueryResponse
     {
         var query = _serviceProvider.GetService<TQuery>() ??
@@ -162,7 +162,7 @@ public class QueryHandler : IQueryContext
     public async Task<TQueryResponse>
         GetGeneralQueryAsync<TQuery, TQueryParameter, TQueryResponse>(TQueryParameter param)
         where TQuery : IGeneralQuery<TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryParameter : IQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
         where TQueryResponse : IQueryResponse
     {
         var query = _serviceProvider.GetService<TQuery>() ??
@@ -187,7 +187,7 @@ public class QueryHandler : IQueryContext
             TQueryParameter param,
             IEnumerable<AggregateState<TAggregatePayload>> list) where TAggregatePayload : IAggregatePayloadCommon
         where TQuery : IAggregateListQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryParameter : IListQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
         where TQueryResponse : IQueryResponse
     {
         var query = _serviceProvider.GetService<TQuery>() ??
@@ -246,7 +246,7 @@ public class QueryHandler : IQueryContext
         TQueryParameter param,
         IEnumerable<AggregateState<TAggregatePayload>> list) where TAggregatePayload : IAggregatePayloadCommon
         where TQuery : IAggregateQuery<TAggregatePayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryParameter : IQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
         where TQueryResponse : IQueryResponse
     {
         var query = _serviceProvider.GetService<TQuery>() ??
@@ -282,7 +282,7 @@ public class QueryHandler : IQueryContext
             IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon
         where TQuery : ISingleProjectionListQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IListQueryParameter<TQueryResponse>
+        where TQueryParameter : IListQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
         where TQueryResponse : IQueryResponse
     {
         var query = _serviceProvider.GetService<TQuery>() ??
@@ -366,7 +366,7 @@ public class QueryHandler : IQueryContext
         IEnumerable<SingleProjectionState<TSingleProjectionPayload>> projections)
         where TSingleProjectionPayload : ISingleProjectionPayloadCommon
         where TQuery : ISingleProjectionQuery<TSingleProjectionPayload, TQueryParameter, TQueryResponse>
-        where TQueryParameter : IQueryParameter<TQueryResponse>
+        where TQueryParameter : IQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
         where TQueryResponse : IQueryResponse
     {
         var query = _serviceProvider.GetService<TQuery>() ??

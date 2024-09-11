@@ -12,10 +12,9 @@ namespace Sekiban.Web.Controllers.Bases;
 /// <typeparam name="TQueryResponse"></typeparam>
 [ApiController]
 [Produces("application/json")]
-public class
-    BaseGeneralListQueryController<TQuery, TQueryParameter, TQueryResponse> : ControllerBase
+public class BaseGeneralListQueryController<TQuery, TQueryParameter, TQueryResponse> : ControllerBase
     where TQuery : IGeneralListQuery<TQueryParameter, TQueryResponse>
-    where TQueryParameter : IListQueryParameter<TQueryResponse>
+    where TQueryParameter : IListQueryParameter<TQueryResponse>, IEquatable<TQueryParameter>
     where TQueryResponse : IQueryResponse
 {
     private readonly IServiceProvider _serviceProvider;
