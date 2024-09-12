@@ -11,7 +11,9 @@ namespace Sekiban.Core.Command;
 /// <typeparam name="TCommand">Target Command</typeparam>
 public interface
     ICommandWithoutLoadingAggregateHandlerAsync<TAggregatePayload, TCommand> : ICommandHandlerCommon<TAggregatePayload,
-    TCommand> where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>
+    TCommand>
+    where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>,
+    IAggregatePayloadCommon<TAggregatePayload>
     where TCommand : ICommandWithoutLoadingAggregate<TAggregatePayload>
 {
     /// <summary>

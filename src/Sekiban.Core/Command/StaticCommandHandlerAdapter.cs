@@ -165,7 +165,7 @@ public sealed class StaticCommandHandlerAdapter<TAggregatePayloadBase, TAggregat
 
         switch (command)
         {
-            case not null when command is ICommandWithHandler<TAggregatePayloadState, TCommand>:
+            case not null when command is ICommandWithHandlerAbove<TAggregatePayloadState, TCommand>:
             {
                 // execute static HandleCommand of typeof(command) using reflection
                 var commandType = command.GetType();
@@ -192,7 +192,7 @@ public sealed class StaticCommandHandlerAdapter<TAggregatePayloadBase, TAggregat
                         _aggregate.Version,
                         _events.Max(m => m.SortableUniqueId)));
             }
-            case not null when command is ICommandWithHandlerAsync<TAggregatePayloadState, TCommand>:
+            case not null when command is ICommandWithHandlerAsyncAbove<TAggregatePayloadState, TCommand>:
             {
                 // execute static HandleCommandAsync of typeof(command) using reflection
                 var commandType = command.GetType();

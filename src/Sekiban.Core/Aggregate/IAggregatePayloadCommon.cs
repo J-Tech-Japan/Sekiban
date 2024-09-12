@@ -17,3 +17,7 @@ public interface IAggregatePayloadCommon
     /// <returns>Payload Version</returns>
     public string GetPayloadVersionIdentifier() => "initial";
 }
+public interface IAggregatePayloadCommon<TAggregatePayload>
+    where TAggregatePayload : IAggregatePayloadCommon<TAggregatePayload>;
+public interface ITenantAggregatePayloadCommon<TAggregatePayload>
+    where TAggregatePayload : ITenantAggregatePayloadCommon<TAggregatePayload>;

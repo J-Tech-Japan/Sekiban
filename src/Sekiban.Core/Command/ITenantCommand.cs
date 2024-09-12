@@ -6,8 +6,8 @@ namespace Sekiban.Core.Command;
 ///     Tenant Id will be the root partition key
 /// </summary>
 /// <typeparam name="TAggregatePayload"></typeparam>
-public interface ITenantCommand<TAggregatePayload> : ICommand<TAggregatePayload>, ITenantCommandCommon
-    where TAggregatePayload : IAggregatePayloadCommon
+public interface ITenantCommand<TAggregatePayload> : ICommandCommon<TAggregatePayload>, ITenantCommandCommon
+    where TAggregatePayload : IAggregatePayloadCommon, ITenantAggregatePayloadCommon<TAggregatePayload>
 {
     string ICommandCommon.GetRootPartitionKey() => GetTenantId();
 }

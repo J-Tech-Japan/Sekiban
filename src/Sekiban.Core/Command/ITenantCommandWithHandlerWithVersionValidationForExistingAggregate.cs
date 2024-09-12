@@ -3,8 +3,10 @@ namespace Sekiban.Core.Command;
 
 public interface
     ITenantCommandWithHandlerWithVersionValidationForExistingAggregate<TAggregatePayload, in TCommand> :
-    ICommandWithHandlerWithVersionValidationForExistingAggregate<TAggregatePayload, TCommand>,
-    ITenantCommandCommon where TAggregatePayload : IAggregatePayloadCommon
+    ITenantCommandWithHandler<TAggregatePayload, TCommand>,
+    IVersionValidationCommandCommon,
+    IAggregateShouldExistCommand
+    where TAggregatePayload : IAggregatePayloadCommon, ITenantAggregatePayloadCommon<TAggregatePayload>
     where TCommand : ICommandCommon<TAggregatePayload>, IEquatable<TCommand>
 {
     string ICommandCommon.GetRootPartitionKey() => GetTenantId();

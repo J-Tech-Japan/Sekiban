@@ -9,7 +9,9 @@ namespace Sekiban.Core.Command;
 /// </summary>
 /// <typeparam name="TAggregatePayload"></typeparam>
 public interface
-    ITenantCommandWithVersionValidationForExistingAggregate<TAggregatePayload> :
-    ICommandWithVersionValidation<TAggregatePayload>,
+    ITenantCommandWithVersionValidationForExistingAggregate<TAggregatePayload> : ICommandCommon<TAggregatePayload>,
+    IVersionValidationCommandCommon,
+    ITenantAggregatePayloadCommon<TAggregatePayload>,
     ITenantCommandCommon,
-    IAggregateShouldExistCommand where TAggregatePayload : IAggregatePayloadCommon;
+    IAggregateShouldExistCommand
+    where TAggregatePayload : IAggregatePayloadCommon, ITenantAggregatePayloadCommon<TAggregatePayload>;

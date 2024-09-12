@@ -95,7 +95,7 @@ public class AggregateDependencyDefinition<TAggregatePayload> : IAggregateDepend
     /// <typeparam name="TCommandHandler">Command Handler for Target Command</typeparam>
     /// <returns>Self for method chain</returns>
     public AggregateDependencyDefinition<TAggregatePayload> AddCommandHandler<TCommand, TCommandHandler>()
-        where TCommand : ICommand<TAggregatePayload>
+        where TCommand : ICommandCommon<TAggregatePayload>
         where TCommandHandler : ICommandHandlerCommon<TAggregatePayload, TCommand>
     {
         SelfCommandTypes = SelfCommandTypes.Add(

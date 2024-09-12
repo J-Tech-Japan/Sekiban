@@ -6,7 +6,7 @@ namespace Sekiban.Core.Command;
 /// </summary>
 /// <typeparam name="TAggregatePayload">Target Aggregate Payload to execute the command</typeparam>
 public interface ICommand<TAggregatePayload> : ICommandCommon<TAggregatePayload>
-    where TAggregatePayload : IAggregatePayloadCommon
+    where TAggregatePayload : IAggregatePayloadCommon<TAggregatePayload>, IAggregatePayloadCommon
 {
 }
 
