@@ -119,7 +119,7 @@ public class
         _aggregateId = aggregateId;
         switch (commandDocument.Payload)
         {
-            case ICommandWithHandlerWithoutLoadingAggregate<TAggregatePayload, TCommand> syncCommand:
+            case ICommandWithHandlerWithoutLoadingAggregateAbove<TAggregatePayload, TCommand> syncCommand:
             {
                 var commandType = syncCommand.GetType();
                 var method = commandType.GetHandleCommandOrAsyncMethod();
@@ -143,7 +143,7 @@ public class
                     0,
                     _events.Max(m => m.SortableUniqueId));
             }
-            case ICommandWithHandlerWithoutLoadingAggregateAsync<TAggregatePayload, TCommand> asyncCommand:
+            case ICommandWithHandlerWithoutLoadingAggregateAsyncAbove<TAggregatePayload, TCommand> asyncCommand:
             {
                 var commandType = asyncCommand.GetType();
                 var method = commandType.GetHandleCommandOrAsyncMethod();

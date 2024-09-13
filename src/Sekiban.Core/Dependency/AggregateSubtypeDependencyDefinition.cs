@@ -31,7 +31,8 @@ public class
         return this;
     }
     public AggregateSubtypeDependencyDefinition<TParentAggregatePayload, TAggregateSubtypePayload>
-        AddCommandHandler<TCreateCommand, TCommandHandler>() where TCreateCommand : ICommand<TAggregateSubtypePayload>
+        AddCommandHandler<TCreateCommand, TCommandHandler>()
+        where TCreateCommand : ICommandCommon<TAggregateSubtypePayload>
         where TCommandHandler : ICommandHandlerCommon<TAggregateSubtypePayload, TCreateCommand>
     {
         CommandTypes = CommandTypes.Add(

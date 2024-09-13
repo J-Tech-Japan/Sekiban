@@ -6,5 +6,11 @@ namespace Sekiban.Core.Aggregate;
 ///     If you want to make your aggregate deletable, please use
 ///     <see cref="IDeletableAggregatePayload{TAggregatePayload}" />.
 /// </summary>
-public interface IAggregatePayload<TAggregatePayload> : IAggregatePayloadGeneratable<TAggregatePayload>
-    where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>, IEquatable<TAggregatePayload>;
+public interface IAggregatePayload<TAggregatePayload> : IAggregatePayloadGeneratable<TAggregatePayload>,
+    IAggregatePayloadCommon<TAggregatePayload>
+    where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>, IEquatable<TAggregatePayload>,
+    IAggregatePayload<TAggregatePayload>;
+public interface ITenantAggregatePayload<TAggregatePayload> : IAggregatePayloadGeneratable<TAggregatePayload>,
+    ITenantAggregatePayloadCommon<TAggregatePayload>
+    where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>, IEquatable<TAggregatePayload>,
+    ITenantAggregatePayload<TAggregatePayload>;

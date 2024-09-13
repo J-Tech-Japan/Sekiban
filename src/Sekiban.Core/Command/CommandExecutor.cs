@@ -336,8 +336,8 @@ public class CommandExecutor(
                     var adapter = Activator.CreateInstance(adapterClass) ??
                         throw new MissingMethodException("Method not found");
                     var method = adapterClass.GetMethod(
-                            nameof(CommandWithoutLoadingAggregateHandlerAdapter<TAggregatePayload,
-                                ICommandWithoutLoadingAggregate<TAggregatePayload>>.HandleCommandAsync)) ??
+                            nameof(CommandWithoutLoadingAggregateHandlerAdapter<SnapshotManager,
+                                ICommandWithoutLoadingAggregate<SnapshotManager>>.HandleCommandAsync)) ??
                         throw new MissingMethodException("HandleCommandAsync not found");
                     var commandResponse
                         = (CommandResponse)await ((dynamic?)method.Invoke(
@@ -492,10 +492,8 @@ public class CommandExecutor(
     public static Guid GetAggregateId<TAggregatePayload>(ICommandCommon command, IServiceProvider serviceProvider)
         where TAggregatePayload : IAggregatePayloadCommon => command switch
     {
-        ICommand<TAggregatePayload> => GetAggregateIdFromHandler<TAggregatePayload, ICommandCommon>(
-            command,
-            serviceProvider),
-        _ => GetAggregateIdFromCommand(command)
+        _ when command.GetType().IsCommandWithHandlerType() => GetAggregateIdFromCommand(command),
+        _ => GetAggregateIdFromHandler<TAggregatePayload, ICommandCommon>(command, serviceProvider)
     };
     public static Guid GetAggregateIdFromHandler<TAggregatePayload, TCommand>(
         TCommand command,

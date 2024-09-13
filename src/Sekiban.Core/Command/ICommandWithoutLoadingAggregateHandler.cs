@@ -13,7 +13,8 @@ namespace Sekiban.Core.Command;
 public interface
     ICommandWithoutLoadingAggregateHandler<TAggregatePayload, TCommand> : ICommandHandlerCommon<TAggregatePayload,
     TCommand>
-    where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>
+    where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>,
+    IAggregatePayloadCommon<TAggregatePayload>
     where TCommand : ICommandWithoutLoadingAggregate<TAggregatePayload>
 {
     /// <summary>

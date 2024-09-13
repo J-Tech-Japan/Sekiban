@@ -6,5 +6,5 @@ public interface
     ICommandConverterHandlerCommon where TAggregatePayload : IAggregatePayloadCommon
     where TCommand : ICommandConverter<TAggregatePayload>
 {
-    public ICommand<TAggregatePayload> ConvertCommand(TCommand command);
+    public ICommandCommon<TAggregatePayload> ConvertCommand(TCommand command);
 }

@@ -7,4 +7,6 @@ namespace Sekiban.Core.Command;
 /// </summary>
 /// <typeparam name="TAggregatePayload"></typeparam>
 public interface ICommandWithoutLoadingAggregate<TAggregatePayload> : ICommand<TAggregatePayload>,
-    ICommandWithoutLoadingAggregateCommon where TAggregatePayload : IAggregatePayloadCommon;
+    ICommandWithoutLoadingAggregateCommon,
+    IAggregatePayloadCommon<TAggregatePayload>
+    where TAggregatePayload : IAggregatePayloadCommon, IAggregatePayloadCommon<TAggregatePayload>;

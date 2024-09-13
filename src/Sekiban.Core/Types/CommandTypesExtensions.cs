@@ -46,12 +46,12 @@ public static class CommandTypesExtensions
     {
         if (commandHandlerType.IsCommandHandlerType() || commandHandlerType.IsCommandWithHandlerType())
         {
-            if (commandHandlerType.DoesImplementingFromGenericInterfaceType(typeof(ICommandWithHandlerAsync<,>)) ||
+            if (commandHandlerType.DoesImplementingFromGenericInterfaceType(typeof(ICommandWithHandlerAsyncAbove<,>)) ||
                 commandHandlerType.DoesImplementingFromGenericInterfaceType(typeof(ICommandHandlerAsync<,>)) ||
                 commandHandlerType.DoesImplementingFromGenericInterfaceType(
                     typeof(ICommandWithoutLoadingAggregateHandlerAsync<,>)) ||
                 commandHandlerType.DoesImplementingFromGenericInterfaceType(
-                    typeof(ICommandWithHandlerWithoutLoadingAggregateAsync<,>)))
+                    typeof(ICommandWithHandlerWithoutLoadingAggregateAsyncAbove<,>)))
             {
                 return commandHandlerType.GetMethodFlex(
                     nameof(ICommandWithHandlerAsync<SnapshotManager, CreateSnapshotManagerAsync>.HandleCommandAsync));
