@@ -19,5 +19,3 @@ public interface IAggregatePayloadCommon
 }
 public interface IAggregatePayloadCommon<TAggregatePayload>
     where TAggregatePayload : IAggregatePayloadCommon<TAggregatePayload>;
-public interface ITenantAggregatePayloadCommon<TAggregatePayload>
-    where TAggregatePayload : ITenantAggregatePayloadCommon<TAggregatePayload>;

@@ -10,6 +10,7 @@ using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Types;
+using Sekiban.Core.Usecase;
 using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
 using System.Diagnostics;
@@ -230,6 +231,20 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         nonBlockingStatus.RunBlockingAction(
             () => WhenCommandPrivateFunc<TAggregatePayload, TCommand>(commandFunc, true));
         return this;
+    }
+    public ResultBox<TOut> WhenUsecase<TIn, TOut>(ISekibanUsecaseAsync<TIn, TOut> usecaseAsync)
+        where TIn : class, ISekibanUsecaseAsync<TIn, TOut>, IEquatable<TIn> where TOut : notnull
+    {
+        var executor = _serviceProvider.GetService<ISekibanUsecaseExecutor>() ??
+            throw new SekibanTypeNotFoundException("SekibanExecutor is not registered");
+        return executor.Execute(usecaseAsync).Result;
+    }
+    public ResultBox<TOut> WhenUsecase<TIn, TOut>(ISekibanUsecase<TIn, TOut> usecaseAsync)
+        where TIn : class, ISekibanUsecase<TIn, TOut>, IEquatable<TIn> where TOut : notnull
+    {
+        var executor = _serviceProvider.GetService<ISekibanUsecaseExecutor>() ??
+            throw new SekibanTypeNotFoundException("SekibanExecutor is not registered");
+        return executor.Execute(usecaseAsync);
     }
 
     public IAggregateTestHelper<TAggregatePayload> ThenGetLatestEvents(Action<List<IEvent>> checkEventsAction)

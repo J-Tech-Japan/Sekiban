@@ -1,6 +1,10 @@
 using FeatureCheck.Domain.Shared;
+using FeatureCheck.Domain.Usecases;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Cosmos;
+using ResultBoxes;
 using Sekiban.Core.Dependency;
+using Sekiban.Core.Usecase;
 using Sekiban.Infrastructure.Cosmos;
 using Sekiban.Infrastructure.Cosmos.Lib.Json;
 using Sekiban.Web.Dependency;
@@ -27,9 +31,9 @@ builder.AddSekibanCosmosDb(
 
 // Sekiban Web Setting
 builder.AddSekibanWebFromDomainDependency<FeatureCheckDependency>();
+builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options => options.ConfigureForSekibanWeb());
 
-builder.Services.AddEndpointsApiExplorer();
 
 var app = builder.Build();
 
@@ -40,8 +44,17 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app
+    .MapPost(
+        "/api/createbranchandclient",
+        async ([FromBody] AddBranchAndClientUsecase usecase, [FromServices] ISekibanUsecaseContext context) =>
+        await AddBranchAndClientUsecase
+            .ExecuteAsync(usecase, context)
+            .Match(success => Results.Ok(), exception => Results.Problem(exception.Message)))
+    .WithName("GetWeatherForecast")
+    .WithOpenApi();
+
 app.UseAuthorization();
 
 app.MapControllers();
-
 app.Run();

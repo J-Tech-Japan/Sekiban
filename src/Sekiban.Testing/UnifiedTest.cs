@@ -13,6 +13,7 @@ using Sekiban.Core.Query.MultiProjections.Projections;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Shared;
+using Sekiban.Core.Usecase;
 using Sekiban.Testing.Command;
 using Sekiban.Testing.Projection;
 using Sekiban.Testing.SingleProjections;
@@ -1463,6 +1464,29 @@ public abstract class UnifiedTest<TDependencyDefinition> where TDependencyDefini
         ICommandCommon<TAggregatePayload> command,
         Guid? injectingAggregateId = null) where TAggregatePayload : IAggregatePayloadCommon =>
         _commandExecutor.ExecuteCommandWithPublish(command, injectingAggregateId);
+
+    public ResultBox<TOut> GivenUsecase<TIn, TOut>(ISekibanUsecaseAsync<TIn, TOut> usecaseAsync)
+        where TIn : class, ISekibanUsecaseAsync<TIn, TOut>, IEquatable<TIn> where TOut : notnull =>
+        WhenUsecase(usecaseAsync);
+    public ResultBox<TOut> GivenUsecase<TIn, TOut>(ISekibanUsecase<TIn, TOut> usecase)
+        where TIn : class, ISekibanUsecase<TIn, TOut>, IEquatable<TIn> where TOut : notnull =>
+        WhenUsecase(usecase);
+
+    public ResultBox<TOut> WhenUsecase<TIn, TOut>(ISekibanUsecaseAsync<TIn, TOut> usecaseAsync)
+        where TIn : class, ISekibanUsecaseAsync<TIn, TOut>, IEquatable<TIn> where TOut : notnull
+    {
+        var executor = _serviceProvider.GetService<ISekibanUsecaseExecutor>() ??
+            throw new ApplicationException("Failed to get usecase executor");
+        return executor.Execute(usecaseAsync).Result;
+    }
+    public ResultBox<TOut> WhenUsecase<TIn, TOut>(ISekibanUsecase<TIn, TOut> usecaseAsync)
+        where TIn : class, ISekibanUsecase<TIn, TOut>, IEquatable<TIn> where TOut : notnull
+    {
+        var executor = _serviceProvider.GetService<ISekibanUsecaseExecutor>() ??
+            throw new ApplicationException("Failed to get usecase executor");
+        return executor.Execute(usecaseAsync);
+    }
+
     /// <summary>
     ///     Run command and get aggregate Id. Subscribed handlers will be executed and block until all handlers are
     ///     executed.

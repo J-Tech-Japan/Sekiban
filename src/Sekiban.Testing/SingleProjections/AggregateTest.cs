@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
@@ -8,6 +9,7 @@ using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
+using Sekiban.Core.Usecase;
 using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
 using Xunit.Abstractions;
@@ -176,6 +178,12 @@ public class
         Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
         where TCommand : ICommandCommon<TAggregatePayload> =>
         _helper.WhenCommandWithPublishAndBlockingSubscriber(commandFunc);
+    public ResultBox<TOut> WhenUsecase<TIn, TOut>(ISekibanUsecaseAsync<TIn, TOut> usecaseAsync)
+        where TIn : class, ISekibanUsecaseAsync<TIn, TOut>, IEquatable<TIn> where TOut : notnull =>
+        _helper.WhenUsecase(usecaseAsync);
+    public ResultBox<TOut> WhenUsecase<TIn, TOut>(ISekibanUsecase<TIn, TOut> usecaseAsync)
+        where TIn : class, ISekibanUsecase<TIn, TOut>, IEquatable<TIn> where TOut : notnull =>
+        _helper.WhenUsecase(usecaseAsync);
 
     public IAggregateTestHelper<TAggregatePayload> ThenGetLatestEvents(Action<List<IEvent>> checkEventsAction) =>
         _helper.ThenGetLatestEvents(checkEventsAction);

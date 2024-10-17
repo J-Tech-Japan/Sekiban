@@ -10,7 +10,3 @@ public interface IAggregatePayload<TAggregatePayload> : IAggregatePayloadGenerat
     IAggregatePayloadCommon<TAggregatePayload>
     where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>, IEquatable<TAggregatePayload>,
     IAggregatePayload<TAggregatePayload>;
-public interface ITenantAggregatePayload<TAggregatePayload> : IAggregatePayloadGeneratable<TAggregatePayload>,
-    ITenantAggregatePayloadCommon<TAggregatePayload>
-    where TAggregatePayload : IAggregatePayloadGeneratable<TAggregatePayload>, IEquatable<TAggregatePayload>,
-    ITenantAggregatePayload<TAggregatePayload>;
