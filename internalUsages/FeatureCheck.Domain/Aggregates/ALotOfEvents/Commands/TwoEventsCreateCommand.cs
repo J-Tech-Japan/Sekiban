@@ -6,7 +6,7 @@ namespace FeatureCheck.Domain.Aggregates.ALotOfEvents.Commands;
 public record TwoEventsCreateCommand(Guid AggregateId)
     : ICommandWithHandler<ALotOfEventsAggregate, TwoEventsCreateCommand>
 {
-    public static ResultBox<UnitValue> HandleCommand(
+    public static ResultBox<EventOrNone<ALotOfEventsAggregate>> HandleCommand(
         TwoEventsCreateCommand command,
         ICommandContext<ALotOfEventsAggregate> context) =>
         context.AppendEvents(new ALotOfEventsSingleEvent("0"), new ALotOfEventsSingleEvent("1"));

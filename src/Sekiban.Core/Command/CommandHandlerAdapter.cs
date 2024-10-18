@@ -108,7 +108,8 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> : IComman
         where TOutput : IQueryResponse =>
         GetRequiredService<IQueryExecutor>().Conveyor(executor => executor.ExecuteWithResultAsync(param));
 
-    public ResultBox<UnitValue> AppendEvent(IEventPayloadApplicableTo<TAggregatePayload> eventPayload) =>
+    public ResultBox<EventOrNone<TAggregatePayload>> AppendEvent(
+        IEventPayloadApplicableTo<TAggregatePayload> eventPayload) =>
         ResultBox
             .Start
             .Conveyor(
@@ -116,11 +117,12 @@ public sealed class CommandHandlerAdapter<TAggregatePayload, TCommand> : IComman
                     ? ResultBox.FromValue(_aggregate)
                     : new SekibanCommandHandlerAggregateNullException())
             .Scan(aggregate => _events.Add(EventHelper.HandleEvent(aggregate, eventPayload, _rootPartitionKey)))
-            .Remap(_ => UnitValue.None);
-    public ResultBox<UnitValue> AppendEvents(params IEventPayloadApplicableTo<TAggregatePayload>[] eventPayloads) =>
+            .Conveyor(_ => EventOrNone<TAggregatePayload>.None);
+    public ResultBox<EventOrNone<TAggregatePayload>> AppendEvents(
+        params IEventPayloadApplicableTo<TAggregatePayload>[] eventPayloads) =>
         ResultBox
             .FromValue(eventPayloads.ToList())
-            .ReduceEach(UnitValue.Unit, (nextEventPayload, _) => AppendEvent(nextEventPayload));
+            .ReduceEach(EventOrNone<TAggregatePayload>.Empty, (nextEventPayload, _) => AppendEvent(nextEventPayload));
     public Task<ResultBox<ListQueryResult<TOutput>>> ExecuteQueryAsync<TOutput>(
         INextListQueryCommonOutput<TOutput> query) where TOutput : notnull =>
         GetRequiredService<IQueryExecutor>().Conveyor(executor => executor.ExecuteAsync(query));

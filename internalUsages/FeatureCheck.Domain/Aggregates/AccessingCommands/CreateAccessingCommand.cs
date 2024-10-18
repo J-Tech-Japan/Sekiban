@@ -5,7 +5,7 @@ namespace FeatureCheck.Domain.Aggregates.AccessingCommands;
 public record CreateAccessingCommand : ICommandWithHandler<AccessingCommand, CreateAccessingCommand>
 {
     public static Guid SpecifyAggregateId(CreateAccessingCommand command) => Guid.NewGuid();
-    public static ResultBox<UnitValue> HandleCommand(
+    public static ResultBox<EventOrNone<AccessingCommand>> HandleCommand(
         CreateAccessingCommand command,
         ICommandContext<AccessingCommand> context) =>
         context.AppendEvent(

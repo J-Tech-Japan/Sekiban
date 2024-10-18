@@ -38,7 +38,8 @@ public sealed class StaticCommandHandlerAdapter<TAggregatePayloadBase, TAggregat
         where T1 : class where T2 : class where T3 : class where T4 : class =>
         GetRequiredService<T1, T2, T3>().Combine(ResultBox.WrapTry(() => serviceProvider.GetRequiredService<T4>()));
 
-    public ResultBox<UnitValue> AppendEvent(IEventPayloadApplicableTo<TAggregatePayloadState> eventPayload) =>
+    public ResultBox<EventOrNone<TAggregatePayloadState>> AppendEvent(
+        IEventPayloadApplicableTo<TAggregatePayloadState> eventPayload) =>
         ResultBox
             .Start
             .Conveyor(
@@ -46,12 +47,14 @@ public sealed class StaticCommandHandlerAdapter<TAggregatePayloadBase, TAggregat
                     ? ResultBox.FromValue(_aggregate)
                     : new SekibanCommandHandlerAggregateNullException())
             .Scan(aggregate => _events.Add(EventHelper.HandleEvent(aggregate, eventPayload, _rootPartitionKey)))
-            .Remap(_ => UnitValue.None);
-    public ResultBox<UnitValue> AppendEvents(
+            .Conveyor(_ => EventOrNone<TAggregatePayloadState>.None);
+    public ResultBox<EventOrNone<TAggregatePayloadState>> AppendEvents(
         params IEventPayloadApplicableTo<TAggregatePayloadState>[] eventPayloads) =>
         ResultBox
             .FromValue(eventPayloads.ToList())
-            .ReduceEach(UnitValue.Unit, (nextEventPayload, _) => AppendEvent(nextEventPayload));
+            .ReduceEach(
+                EventOrNone<TAggregatePayloadState>.Empty,
+                (nextEventPayload, _) => AppendEvent(nextEventPayload));
     public Task<ResultBox<AggregateState<TAnotherAggregatePayload>>> GetAggregateState<TAnotherAggregatePayload>(
         Guid aggregateId,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
@@ -176,12 +179,18 @@ public sealed class StaticCommandHandlerAdapter<TAggregatePayloadBase, TAggregat
                         new SekibanCommandHandlerNotMatchException(
                             commandType.Name + " handler should inherit " + typeof(ICommandWithHandler<,>).Name));
                 }
-                var result = method.Invoke(null, new object[] { command, this }) as ResultBox<UnitValue>;
+                var result
+                    = method.Invoke(null, new object[] { command, this }) as
+                        ResultBox<EventOrNone<TAggregatePayloadState>>;
                 if (result is null)
                 {
                     return ResultBox<CommandResponse>.FromException(
                         new SekibanCommandHandlerNotMatchException(
                             commandType.Name + " handler should inherit " + typeof(ICommandWithHandler<,>).Name));
+                }
+                if (result.IsSuccess && result.GetValue().HasValue)
+                {
+                    AppendEvent(result.GetValue().GetValue());
                 }
                 result.UnwrapBox();
 
@@ -203,7 +212,9 @@ public sealed class StaticCommandHandlerAdapter<TAggregatePayloadBase, TAggregat
                         new SekibanCommandHandlerNotMatchException(
                             commandType.Name + " handler should inherit " + typeof(ICommandWithHandlerAsync<,>).Name));
                 }
-                var resultAsync = method.Invoke(null, new object[] { command, this }) as Task<ResultBox<UnitValue>>;
+                var resultAsync
+                    = method.Invoke(null, new object[] { command, this }) as
+                        Task<ResultBox<EventOrNone<TAggregatePayloadState>>>;
                 if (resultAsync is null)
                 {
                     return ResultBox<CommandResponse>.FromException(
@@ -211,6 +222,10 @@ public sealed class StaticCommandHandlerAdapter<TAggregatePayloadBase, TAggregat
                             commandType.Name + " handler should inherit " + typeof(ICommandWithHandlerAsync<,>).Name));
                 }
                 var result = await resultAsync;
+                if (result.IsSuccess && result.GetValue().HasValue)
+                {
+                    AppendEvent(result.GetValue().GetValue());
+                }
 
                 return result.Remap(
                     _ => new CommandResponse(

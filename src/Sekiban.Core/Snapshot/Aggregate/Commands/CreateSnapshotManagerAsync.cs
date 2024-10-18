@@ -6,7 +6,7 @@ namespace Sekiban.Core.Snapshot.Aggregate.Commands;
 
 public record CreateSnapshotManagerAsync : ICommandWithHandlerAsync<SnapshotManager, CreateSnapshotManagerAsync>
 {
-    public static Task<ResultBox<UnitValue>> HandleCommandAsync(
+    public static Task<ResultBox<EventOrNone<SnapshotManager>>> HandleCommandAsync(
         CreateSnapshotManagerAsync command,
         ICommandContext<SnapshotManager> context) =>
         context

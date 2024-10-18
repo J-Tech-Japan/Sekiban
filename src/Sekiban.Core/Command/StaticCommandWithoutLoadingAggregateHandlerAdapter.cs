@@ -96,7 +96,8 @@ public class
         GetRequiredService<IQueryExecutor>().Conveyor(executor => executor.ExecuteWithResultAsync(param));
 
 
-    public ResultBox<UnitValue> AppendEvent(IEventPayloadApplicableTo<TAggregatePayload> eventPayload) =>
+    public ResultBox<EventOrNone<TAggregatePayload>> AppendEvent(
+        IEventPayloadApplicableTo<TAggregatePayload> eventPayload) =>
         ResultBox
             .Start
             .Scan(
@@ -105,11 +106,12 @@ public class
                         _aggregateId,
                         _rootPartitionKey,
                         eventPayload)))
-            .Remap(_ => UnitValue.None);
-    public ResultBox<UnitValue> AppendEvents(params IEventPayloadApplicableTo<TAggregatePayload>[] eventPayloads) =>
+            .Conveyor(_ => EventOrNone<TAggregatePayload>.None);
+    public ResultBox<EventOrNone<TAggregatePayload>> AppendEvents(
+        params IEventPayloadApplicableTo<TAggregatePayload>[] eventPayloads) =>
         ResultBox
             .FromValue(eventPayloads.ToList())
-            .ReduceEach(UnitValue.Unit, (nextEventPayload, _) => AppendEvent(nextEventPayload));
+            .ReduceEach(EventOrNone<TAggregatePayload>.Empty, (nextEventPayload, _) => AppendEvent(nextEventPayload));
     public async Task<ResultBox<CommandResponse>> HandleCommandAsync(
         CommandDocument<TCommand> commandDocument,
         Guid aggregateId,
@@ -129,12 +131,18 @@ public class
                         new SekibanCommandHandlerNotMatchException(
                             commandType.Name + " handler should inherit " + typeof(ICommandWithHandler<,>).Name));
                 }
-                var result = method.Invoke(null, new object[] { syncCommand, this }) as ResultBox<UnitValue>;
+                var result
+                    = method.Invoke(null, new object[] { syncCommand, this }) as
+                        ResultBox<EventOrNone<TAggregatePayload>>;
                 if (result is null)
                 {
                     return ResultBox<CommandResponse>.FromException(
                         new SekibanCommandHandlerNotMatchException(
                             commandType.Name + " handler should inherit " + typeof(ICommandWithHandler<,>).Name));
+                }
+                if (result.IsSuccess && result.GetValue().HasValue)
+                {
+                    AppendEvent(result.GetValue().GetValue());
                 }
                 result.UnwrapBox();
                 return new CommandResponse(
@@ -153,7 +161,9 @@ public class
                         new SekibanCommandHandlerNotMatchException(
                             commandType.Name + " handler should inherit " + typeof(ICommandWithHandler<,>).Name));
                 }
-                var resultTask = method.Invoke(null, new object[] { asyncCommand, this }) as Task<ResultBox<UnitValue>>;
+                var resultTask
+                    = method.Invoke(null, new object[] { asyncCommand, this }) as
+                        Task<ResultBox<EventOrNone<TAggregatePayload>>>;
                 if (resultTask is null)
                 {
                     return ResultBox<CommandResponse>.FromException(
@@ -161,6 +171,10 @@ public class
                             commandType.Name + " handler should inherit " + typeof(ICommandWithHandler<,>).Name));
                 }
                 var result = await resultTask;
+                if (result.IsSuccess && result.GetValue().HasValue)
+                {
+                    AppendEvent(result.GetValue().GetValue());
+                }
                 result.UnwrapBox();
                 return new CommandResponse(
                     aggregateId,

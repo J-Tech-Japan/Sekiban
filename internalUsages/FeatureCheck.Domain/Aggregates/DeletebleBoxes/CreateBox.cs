@@ -6,6 +6,6 @@ public record CreateBox(string Code, string Name) : ICommandWithHandler<Box, Cre
 {
 
     public static Guid SpecifyAggregateId(CreateBox command) => Guid.NewGuid();
-    public static ResultBox<UnitValue> HandleCommand(CreateBox command, ICommandContext<Box> context) =>
+    public static ResultBox<EventOrNone<Box>> HandleCommand(CreateBox command, ICommandContext<Box> context) =>
         context.AppendEvent(new BoxCreated(command.Code, command.Name));
 }
