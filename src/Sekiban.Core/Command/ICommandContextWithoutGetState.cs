@@ -53,6 +53,8 @@ public interface ICommandContextWithoutGetState<TAggregatePayload> where TAggreg
     public Task<ResultBox<TOutput>> ExecuteQueryAsync<TOutput>(IQueryInput<TOutput> param)
         where TOutput : IQueryResponse;
 
-    public ResultBox<UnitValue> AppendEvent(IEventPayloadApplicableTo<TAggregatePayload> eventPayload);
-    public ResultBox<UnitValue> AppendEvents(params IEventPayloadApplicableTo<TAggregatePayload>[] eventPayloads);
+    public ResultBox<EventOrNone<TAggregatePayload>> AppendEvent(
+        IEventPayloadApplicableTo<TAggregatePayload> eventPayload);
+    public ResultBox<EventOrNone<TAggregatePayload>> AppendEvents(
+        params IEventPayloadApplicableTo<TAggregatePayload>[] eventPayloads);
 }

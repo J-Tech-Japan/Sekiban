@@ -6,7 +6,7 @@ namespace FeatureCheck.Domain.Aggregates.SubTypes.InheritInSubtypesTypes.Command
 public record CreateInheritInSubtypesType(int FirstProperty)
     : ICommandWithHandler<FirstStage, CreateInheritInSubtypesType>
 {
-    public static ResultBox<UnitValue> HandleCommand(
+    public static ResultBox<EventOrNone<FirstStage>> HandleCommand(
         CreateInheritInSubtypesType command,
         ICommandContext<FirstStage> context) =>
         context.AppendEvent(new InheritInSubTypesCreated(command.FirstProperty));

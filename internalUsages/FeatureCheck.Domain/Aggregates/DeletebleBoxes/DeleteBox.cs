@@ -4,7 +4,7 @@ namespace FeatureCheck.Domain.Aggregates.DeletebleBoxes;
 
 public record DeleteBox(Guid BoxId) : ICommandWithHandlerForExistingAggregate<Box, DeleteBox>
 {
-    public static ResultBox<UnitValue> HandleCommand(DeleteBox command, ICommandContext<Box> context) =>
-        context.AppendEvent(new BoxDeleted());
+    public static ResultBox<EventOrNone<Box>> HandleCommand(DeleteBox command, ICommandContext<Box> context) =>
+        EventOrNone.Event(new BoxDeleted());
     public static Guid SpecifyAggregateId(DeleteBox command) => command.BoxId;
 }

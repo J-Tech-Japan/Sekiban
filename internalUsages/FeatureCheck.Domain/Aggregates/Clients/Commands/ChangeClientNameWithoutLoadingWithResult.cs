@@ -6,7 +6,7 @@ namespace FeatureCheck.Domain.Aggregates.Clients.Commands;
 public record ChangeClientNameWithoutLoadingWithResult(Guid ClientId, string ClientName)
     : ICommandWithHandlerWithoutLoadingAggregate<Client, ChangeClientNameWithoutLoadingWithResult>
 {
-    public static ResultBox<UnitValue> HandleCommand(
+    public static ResultBox<EventOrNone<Client>> HandleCommand(
         ChangeClientNameWithoutLoadingWithResult command,
         ICommandContextWithoutGetState<Client> context) =>
         context.AppendEvent(new ClientNameChanged(command.ClientName));

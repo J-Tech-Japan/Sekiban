@@ -12,6 +12,8 @@ public record CreateClient : ITenantCommandWithHandler<ClientPayload, CreateClie
     public string TenantId { get; init; } = string.Empty;
     public string GetTenantId() => TenantId;
     public static Guid SpecifyAggregateId(CreateClient command) => Guid.NewGuid();
-    public static ResultBox<UnitValue> HandleCommand(CreateClient command, ICommandContext<ClientPayload> context) =>
+    public static ResultBox<EventOrNone<ClientPayload>> HandleCommand(
+        CreateClient command,
+        ICommandContext<ClientPayload> context) =>
         context.AppendEvent(new ClientCreated(command.Name));
 }

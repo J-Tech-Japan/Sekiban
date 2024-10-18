@@ -8,7 +8,7 @@ public interface
     ICommandWithoutLoadingAggregateCommon where TAggregatePayload : IAggregatePayloadCommon
     where TCommand : ICommandCommon<TAggregatePayload>
 {
-    public static abstract Task<ResultBox<UnitValue>> HandleCommandAsync(
+    public static abstract Task<ResultBox<EventOrNone<TAggregatePayload>>> HandleCommandAsync(
         TCommand command,
         ICommandContextWithoutGetState<TAggregatePayload> context);
 }

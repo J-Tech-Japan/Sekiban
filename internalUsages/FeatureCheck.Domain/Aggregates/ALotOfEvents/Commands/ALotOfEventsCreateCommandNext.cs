@@ -7,7 +7,7 @@ namespace FeatureCheck.Domain.Aggregates.ALotOfEvents.Commands;
 public record ALotOfEventsCreateCommandNext(Guid AggregateId, int NumberOfEvents)
     : ICommandWithHandler<ALotOfEventsAggregate, ALotOfEventsCreateCommandNext>
 {
-    public static ResultBox<UnitValue> HandleCommand(
+    public static ResultBox<EventOrNone<ALotOfEventsAggregate>> HandleCommand(
         ALotOfEventsCreateCommandNext command,
         ICommandContext<ALotOfEventsAggregate> context)
     {
