@@ -1,8 +1,8 @@
+using FeatureCheck.Domain.Aggregates.Branches.Commands;
 using FeatureCheck.Domain.Shared;
 using FeatureCheck.Domain.Usecases;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Cosmos;
-using ResultBoxes;
+using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Usecase;
 using Sekiban.Infrastructure.Cosmos;
@@ -45,14 +45,25 @@ if (app.Environment.IsDevelopment())
 }
 
 app
-    .MapPost(
-        "/api/createbranchandclient",
-        async ([FromBody] AddBranchAndClientUsecase usecase, [FromServices] ISekibanUsecaseContext context) =>
-        await AddBranchAndClientUsecase
-            .ExecuteAsync(usecase, context)
-            .Match(success => Results.Ok(), exception => Results.Problem(exception.Message)))
-    .WithName("GetWeatherForecast")
+    .MapPost("/api/createbranchandclient", SekibanUsecase.CreateSimpleExecutorAsync<AddBranchAndClientUsecase, bool>())
+    .WithName("CreateBranchAndClient")
     .WithOpenApi();
+
+app
+    .MapPost("/api/createbranch", CommandExecutor.CreateSimpleCommandExecutor<CreateBranch>())
+    .WithName("CreateBranch")
+    .WithOpenApi();
+
+
+// app
+//     .MapPost(
+//         "/api/createbranchandclient",
+//         async ([FromBody] AddBranchAndClientUsecase usecase, [FromServices] ISekibanUsecaseContext context) =>
+//         await AddBranchAndClientUsecase
+//             .ExecuteAsync(usecase, context)
+//             .Match(success => Results.Ok(), exception => Results.Problem(exception.Message)))
+//     .WithName("GetWeatherForecast")
+//     .WithOpenApi();
 
 app.UseAuthorization();
 

@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command.UserInformation;
@@ -10,6 +12,7 @@ using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot.Aggregate;
 using Sekiban.Core.Snapshot.Aggregate.Commands;
 using Sekiban.Core.Types;
+using Sekiban.Core.Usecase;
 using Sekiban.Core.Validation;
 using System.Collections.Immutable;
 namespace Sekiban.Core.Command;
@@ -554,4 +557,12 @@ public class CommandExecutor(
         await documentWriter.SaveAndPublishEvents(events, typeof(TAggregatePayload));
         return toReturnEvents;
     }
+
+
+    public static Func<TCommon, ISekibanExecutor, Task<IResult>> CreateSimpleCommandExecutor<TCommon>()
+        where TCommon : class, ICommandCommon =>
+        ([FromBody] input, [FromServices] executor) => executor.ExecuteCommand(input).ToResults();
+    public static Func<TCommon, ISekibanExecutor, Task<IResult>> CreateSimpleCommandExecutorWithErrorHandler<TCommon>(
+        Func<Exception, IResult> errorHandler) where TCommon : class, ICommandCommon =>
+        ([FromBody] input, [FromServices] executor) => executor.ExecuteCommand(input).ToResults();
 }
