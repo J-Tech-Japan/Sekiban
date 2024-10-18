@@ -14,9 +14,3 @@ public interface
     IAggregatePayloadGeneratable<TSubtypeAggregatePayload>,
     IAggregatePayloadCommon<TSubtypeAggregatePayload> where TParentAggregatePayload : IAggregatePayloadCommon
     where TSubtypeAggregatePayload : IAggregateSubtypePayload<TParentAggregatePayload, TSubtypeAggregatePayload>;
-public interface
-    ITenantAggregateSubtypePayload<TParentAggregatePayload, TSubtypeAggregatePayload> :
-    IAggregateSubtypePayloadParentApplicable<TParentAggregatePayload>,
-    IAggregatePayloadGeneratable<TSubtypeAggregatePayload>,
-    ITenantAggregatePayloadCommon<TSubtypeAggregatePayload> where TParentAggregatePayload : IAggregatePayloadCommon
-    where TSubtypeAggregatePayload : ITenantAggregateSubtypePayload<TParentAggregatePayload, TSubtypeAggregatePayload>;

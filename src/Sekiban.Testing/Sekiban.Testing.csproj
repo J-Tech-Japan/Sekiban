@@ -5,12 +5,12 @@
         <Nullable>enable</Nullable>
         <LangVersion>preview</LangVersion>
         <PackageId>Sekiban.Testing</PackageId>
-        <Version>0.22.0-preview4</Version>
+        <Version>0.22.1</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Testing</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.22.0-preview4</PackageVersion>
+        <PackageVersion>0.22.1</PackageVersion>
         <Description>Beta Support for F#</Description>
         <AssemblyName>Sekiban.Testing</AssemblyName>
         <RootNamespace>Sekiban.Testing</RootNamespace>
@@ -21,12 +21,12 @@
     </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="MartinCostello.Logging.XUnit" Version="0.4.0"/>
-        <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="8.0.0"/>
-        <PackageReference Include="xunit.assert" Version="2.9.0" />
-        <PackageReference Include="xunit.extensibility.core" Version="2.9.0" />
-        <PackageReference Include="Sekiban.Core" Version="0.22.0-preview4"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="8.0.1"/>
+        <PackageReference Include="xunit.assert" Version="2.9.2"/>
+        <PackageReference Include="xunit.extensibility.core" Version="2.9.2"/>
+        <PackageReference Include="Sekiban.Core" Version="0.22.1"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
-        <PackageReference Include="xunit.extensibility.execution" Version="2.9.0" />
+        <PackageReference Include="xunit.extensibility.execution" Version="2.9.2"/>
     </ItemGroup>
     <ItemGroup>
         <None Update="host.json">

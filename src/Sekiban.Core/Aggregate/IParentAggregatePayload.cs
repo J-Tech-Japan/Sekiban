@@ -44,13 +44,6 @@ public interface
     where TParentAggregatePayload : IAggregatePayloadCommon, IAggregatePayloadCommon<TParentAggregatePayload>
     where TFirstAggregatePayload : IAggregatePayloadGeneratable<TFirstAggregatePayload>;
 public interface
-    ITenantParentAggregatePayload<TParentAggregatePayload> :
-    IParentAggregatePayload<TParentAggregatePayload, TParentAggregatePayload>,
-    IAggregatePayloadGeneratable<TParentAggregatePayload>,
-    ITenantAggregatePayloadCommon<TParentAggregatePayload>
-    where TParentAggregatePayload : IAggregatePayloadGeneratable<TParentAggregatePayload>,
-    ITenantParentAggregatePayload<TParentAggregatePayload>;
-public interface
     ITenantParentAggregatePayload<TParentAggregatePayload, TFirstAggregatePayload> :
     IParentAggregatePayloadCommon<TParentAggregatePayload>,
     ITenantAggregatePayloadCommon<TParentAggregatePayload>

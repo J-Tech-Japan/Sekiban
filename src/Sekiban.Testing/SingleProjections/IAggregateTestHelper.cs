@@ -1,9 +1,11 @@
+using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Events;
 using Sekiban.Core.Query.QueryModel;
 using Sekiban.Core.Query.SingleProjections;
+using Sekiban.Core.Usecase;
 using Sekiban.Core.Validation;
 using Sekiban.Testing.Command;
 namespace Sekiban.Testing.SingleProjections;
@@ -327,6 +329,13 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public IAggregateTestHelper<TAggregatePayload> GivenCommandWithPublishAndBlockingSubscriber<TCommand>(
         Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
         where TCommand : ICommandCommon<TAggregatePayload>;
+
+    public ResultBox<TOut> GivenUsecase<TIn, TOut>(ISekibanUsecaseAsync<TIn, TOut> usecaseAsync)
+        where TIn : class, ISekibanUsecaseAsync<TIn, TOut>, IEquatable<TIn> where TOut : notnull =>
+        WhenUsecase(usecaseAsync);
+    public ResultBox<TOut> GivenUsecase<TIn, TOut>(ISekibanUsecase<TIn, TOut> usecaseAsync)
+        where TIn : class, ISekibanUsecase<TIn, TOut>, IEquatable<TIn> where TOut : notnull =>
+        WhenUsecase(usecaseAsync);
     #endregion
 
     #region When
@@ -421,6 +430,11 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     public IAggregateTestHelper<TAggregatePayload> WhenCommandWithPublishAndBlockingSubscriber<TCommand>(
         Func<AggregateState<TAggregatePayload>, TCommand> commandFunc)
         where TCommand : ICommandCommon<TAggregatePayload>;
+
+    public ResultBox<TOut> WhenUsecase<TIn, TOut>(ISekibanUsecaseAsync<TIn, TOut> usecaseAsync)
+        where TIn : class, ISekibanUsecaseAsync<TIn, TOut>, IEquatable<TIn> where TOut : notnull;
+    public ResultBox<TOut> WhenUsecase<TIn, TOut>(ISekibanUsecase<TIn, TOut> usecaseAsync)
+        where TIn : class, ISekibanUsecase<TIn, TOut>, IEquatable<TIn> where TOut : notnull;
     #endregion
 
     #region Then

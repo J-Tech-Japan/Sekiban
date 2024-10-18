@@ -14,6 +14,7 @@ using Sekiban.Core.Query.UpdateNotice;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot.BackgroundServices;
+using Sekiban.Core.Usecase;
 using ISingleProjection = Sekiban.Core.Query.SingleProjections.Projections.ISingleProjection;
 namespace Sekiban.Core.Dependency;
 
@@ -91,6 +92,10 @@ public static class SekibanCoreServiceExtensions
         services.AddSingleton<ICommandExecuteAwaiter, CommandExecuteAwaiter>();
         services.AddTransient<MultiProjectionCollectionGenerator>();
         services.AddScoped<EventNonBlockingStatus>();
+
+        services.AddTransient<ISekibanUsecaseExecutor, SekibanUsecaseExecutor>();
+        services.AddTransient<ISekibanUsecaseContext, SekibanUsecaseContext>();
+
         return services;
     }
 
@@ -149,6 +154,8 @@ public static class SekibanCoreServiceExtensions
         services.AddSingleton<ICommandExecuteAwaiter, CommandExecuteAwaiter>();
         services.AddTransient<MultiProjectionCollectionGenerator>();
         services.AddScoped<EventNonBlockingStatus>();
+        services.AddTransient<ISekibanUsecaseExecutor, SekibanUsecaseExecutor>();
+        services.AddTransient<ISekibanUsecaseContext, SekibanUsecaseContext>();
         return services;
     }
 
@@ -206,6 +213,8 @@ public static class SekibanCoreServiceExtensions
         services.AddSingleton<ICommandExecuteAwaiter, CommandExecuteAwaiter>();
         services.AddTransient<MultiProjectionCollectionGenerator>();
         services.AddScoped<EventNonBlockingStatus>();
+        services.AddTransient<ISekibanUsecaseExecutor, SekibanUsecaseExecutor>();
+        services.AddTransient<ISekibanUsecaseContext, SekibanUsecaseContext>();
         return services;
     }
 
