@@ -1,4 +1,5 @@
-﻿using ResultBoxes;
+﻿using NickStrupat;
+using ResultBoxes;
 using System.Runtime.InteropServices;
 namespace MemStat.Net;
 
@@ -6,13 +7,14 @@ public class MemoryUsageFinder : IMemoryUsageFinder
 {
     public OptionalValue<MacVmStat> MacVmStat { get; private set; } = OptionalValue<MacVmStat>.Empty;
     public OptionalValue<LinuxMemoryInfo> LinuxMemoryInfo { get; private set; } = OptionalValue<LinuxMemoryInfo>.Empty;
-
+    public OptionalValue<ComputerInfo> WindowsComputerInfo { get; private set; } = OptionalValue<ComputerInfo>.Empty;
     public ResultBox<UnitValue> ReceiveCurrentMemoryUsage() =>
         ResultBox.Start.Conveyor(
             _ => _ switch
             {
                 not null when RuntimeInformation.IsOSPlatform(OSPlatform.Linux) => ReceiveCurrentMemoryUsageLinux(),
                 not null when RuntimeInformation.IsOSPlatform(OSPlatform.OSX) => ReceiveCurrentMemoryUsageOSX(),
+                not null when RuntimeInformation.IsOSPlatform(OSPlatform.Windows) => ReceiveCurrentMemoryUsageWindows(),
                 _ => new PlatformNotSupportedException()
             });
 
@@ -29,6 +31,7 @@ public class MemoryUsageFinder : IMemoryUsageFinder
         .Conveyor(lines => ResultBox.WrapTry(() => Net.LinuxMemoryInfo.Parse(lines, DateTime.UtcNow)))
         .Do(stat => LinuxMemoryInfo = stat)
         .Conveyor(() => ResultBox.UnitValue);
+    public ResultBox<UnitValue> ReceiveCurrentMemoryUsageWindows() => ResultBox.FromValue(new ComputerInfo()).Do(info => WindowsComputerInfo = info).Conveyor(()=>ResultBox.UnitValue);
 
     public ResultBox<double> GetTotalMemoryUsage() =>
         ResultBox.Start.Conveyor(
@@ -36,6 +39,7 @@ public class MemoryUsageFinder : IMemoryUsageFinder
             {
                 not null when RuntimeInformation.IsOSPlatform(OSPlatform.Linux) => GetLinuxTotalMemory(),
                 not null when RuntimeInformation.IsOSPlatform(OSPlatform.OSX) => GetMacTotalMemory(),
+                not null when RuntimeInformation.IsOSPlatform(OSPlatform.Windows) => GetWindowsTotalMemory(),
                 _ => new PlatformNotSupportedException()
             });
 
@@ -45,6 +49,7 @@ public class MemoryUsageFinder : IMemoryUsageFinder
             {
                 not null when RuntimeInformation.IsOSPlatform(OSPlatform.Linux) => GetLinuxMemoryUsagePercentage(),
                 not null when RuntimeInformation.IsOSPlatform(OSPlatform.OSX) => GetMacMemoryUsagePercentage(),
+                not null when RuntimeInformation.IsOSPlatform(OSPlatform.Windows) => GetWindowsMemoryUsagePercentage(),
                 _ => new PlatformNotSupportedException()
             });
 
@@ -52,7 +57,9 @@ public class MemoryUsageFinder : IMemoryUsageFinder
         stat => (Net.MacVmStat.TotalPages(stat) * stat.PageSize).ToResultBox(),
         () => new InvalidOperationException("VmStat is not set. Please run ReceiveCurrentMemoryUsage() first."));
 
-
+    private ResultBox<double> GetWindowsTotalMemory() => WindowsComputerInfo.Match(
+        info => ((double)info.TotalPhysicalMemory).ToResultBox(),
+        () => new InvalidOperationException("ComputerInfo is not set. Please run ReceiveCurrentMemoryUsage() first."));
     private ResultBox<double> GetMacMemoryUsagePercentage() => MacVmStat.Match(
         stat => Net.MacVmStat.MemoryUsagePercentage(stat).ToResultBox(),
         () => new InvalidOperationException("VmStat is not set. Please run ReceiveCurrentMemoryUsage() first."));
@@ -64,4 +71,7 @@ public class MemoryUsageFinder : IMemoryUsageFinder
     private ResultBox<double> GetLinuxMemoryUsagePercentage() => LinuxMemoryInfo.Match(
         info => Net.LinuxMemoryInfo.MemoryUsagePercentage(info).ToResultBox(),
         () => new InvalidOperationException("MemoryInfo is not set. Please run ReceiveCurrentMemoryUsage() first."));
+    private ResultBox<double> GetWindowsMemoryUsagePercentage() => WindowsComputerInfo.Match(
+        info => (((double)info.TotalPhysicalMemory - info.AvailablePhysicalMemory) / info.TotalPhysicalMemory).ToResultBox(),
+        () => new InvalidOperationException("ComputerInfo is not set. Please run ReceiveCurrentMemoryUsage() first."));
 }
