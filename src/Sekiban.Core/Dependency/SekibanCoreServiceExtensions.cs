@@ -1,3 +1,4 @@
+using MemStat.Net;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Cache;
@@ -95,7 +96,7 @@ public static class SekibanCoreServiceExtensions
 
         services.AddTransient<ISekibanUsecaseExecutor, SekibanUsecaseExecutor>();
         services.AddTransient<ISekibanUsecaseContext, SekibanUsecaseContext>();
-
+        services.AddResourceMonitoring();
         return services;
     }
 
@@ -156,6 +157,7 @@ public static class SekibanCoreServiceExtensions
         services.AddScoped<EventNonBlockingStatus>();
         services.AddTransient<ISekibanUsecaseExecutor, SekibanUsecaseExecutor>();
         services.AddTransient<ISekibanUsecaseContext, SekibanUsecaseContext>();
+        services.AddTransient<IMemoryUsageFinder, MemoryUsageFinder>();
         return services;
     }
 
@@ -215,6 +217,7 @@ public static class SekibanCoreServiceExtensions
         services.AddScoped<EventNonBlockingStatus>();
         services.AddTransient<ISekibanUsecaseExecutor, SekibanUsecaseExecutor>();
         services.AddTransient<ISekibanUsecaseContext, SekibanUsecaseContext>();
+        services.AddTransient<IMemoryUsageFinder, MemoryUsageFinder>();
         return services;
     }
 
@@ -267,3 +270,155 @@ public static class SekibanCoreServiceExtensions
         return services;
     }
 }
+
+// public class MemoryUsageFinder : 
+// {
+//     public double GetTotalMemory() => GetTotalMemoryUsage();
+//     public double GetPercentage() => GetMemoryUsagePercentage();
+//
+//     private static double GetMemoryUsagePercentage()
+//     {
+//         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+//         {
+//             var info = new ComputerInfo();
+//             double totalMemory = info.TotalPhysicalMemory;
+//             double availableMemory = info.AvailablePhysicalMemory;
+//             return (totalMemory - availableMemory) / totalMemory * 100.0;
+//         }
+//         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) || RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+//         {
+//             return GetUnixMemoryUsagePercentage();
+//         }
+//         throw new PlatformNotSupportedException("Unsupported OS.");
+//     }
+//
+//     private static double GetUnixMemoryUsagePercentage()
+//     {
+//         var info = new ProcessStartInfo
+//         {
+//             FileName = "sh",
+//             Arguments = "-c \"free -m | grep Mem\"",
+//             RedirectStandardOutput = true,
+//             UseShellExecute = false
+//         };
+//
+//         using (var process = Process.Start(info))
+//         using (var reader = process.StandardOutput)
+//         {
+//             var output = reader.ReadLine();
+//             if (output != null)
+//             {
+//                 var parts = output.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+//                 if (parts.Length >= 3 &&
+//                     double.TryParse(parts[1], out var totalMemory) &&
+//                     double.TryParse(parts[2], out var usedMemory))
+//                 {
+//                     return usedMemory / totalMemory * 100.0;
+//                 }
+//             }
+//         }
+//
+//         return -1.0; // メモリ使用量の取得に失敗した場合
+//     }
+//
+//     private static double GetTotalMemoryUsage()
+//     {
+//         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+//         {
+//             return GetWindowsMemoryUsage();
+//         }
+//         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+//         {
+//             return GetLinuxMemoryUsage();
+//         }
+//         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+//         {
+//             return GetMacOSMemoryUsage();
+//         }
+//         throw new PlatformNotSupportedException("This platform is not supported.");
+//     }
+//
+//     private static double GetWindowsMemoryUsage()
+//     {
+//         var info = new ComputerInfo();
+//         var totalMemory = info.TotalPhysicalMemory;
+//         var availableMemory = info.AvailablePhysicalMemory;
+//         var usedMemory = (double)(totalMemory - availableMemory) / totalMemory * 100.0;
+//         return usedMemory;
+//     }
+//
+//     private static double GetLinuxMemoryUsage()
+//     {
+//         var info = new ProcessStartInfo
+//         {
+//             FileName = "sh",
+//             Arguments = "-c \"free -b | grep Mem\"",
+//             RedirectStandardOutput = true,
+//             UseShellExecute = false,
+//             CreateNoWindow = true
+//         };
+//
+//         using (var process = Process.Start(info))
+//         using (var reader = process.StandardOutput)
+//         {
+//             var output = reader.ReadLine();
+//             if (output != null)
+//             {
+//                 var parts = output.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+//                 if (parts.Length >= 3 &&
+//                     ulong.TryParse(parts[1], out var totalMemory) &&
+//                     ulong.TryParse(parts[2], out var usedMemory))
+//                 {
+//                     return (double)usedMemory / totalMemory * 100.0;
+//                 }
+//             }
+//         }
+//
+//         return -1.0; // メモリ使用量の取得に失敗した場合
+//     }
+//
+//     private static double GetMacOSMemoryUsage()
+//     {
+//         var info = new ProcessStartInfo
+//         {
+//             FileName = "sh",
+//             Arguments = "-c \"vm_stat | grep 'Pages free'\"",
+//             RedirectStandardOutput = true,
+//             UseShellExecute = false,
+//             CreateNoWindow = true
+//         };
+//
+//         using (var process = Process.Start(info))
+//         using (var reader = process.StandardOutput)
+//         {
+//             var output = reader.ReadLine();
+//             if (output != null)
+//             {
+//                 var parts = output.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+//                 if (parts.Length >= 3 && ulong.TryParse(parts[2].Replace(".", ""), out var freePages))
+//                 {
+//                     ulong pageSize = 4096; // 通常のmacOSのページサイズ（4KB）
+//                     var freeMemory = freePages * pageSize;
+//
+//                     info.Arguments = "-c \"sysctl hw.memsize\"";
+//                     using (var memProcess = Process.Start(info))
+//                     using (var memReader = memProcess.StandardOutput)
+//                     {
+//                         var memOutput = memReader.ReadLine();
+//                         if (memOutput != null)
+//                         {
+//                             var memParts = memOutput.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+//                             if (memParts.Length >= 2 && ulong.TryParse(memParts[1], out var totalMemory))
+//                             {
+//                                 var usedMemory = totalMemory - freeMemory;
+//                                 return (double)usedMemory / totalMemory * 100.0;
+//                             }
+//                         }
+//                     }
+//                 }
+//             }
+//         }
+//
+//         return -1.0; // メモリ使用量の取得に失敗した場合
+//     }
+// }

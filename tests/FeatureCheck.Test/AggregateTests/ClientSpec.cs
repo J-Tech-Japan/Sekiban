@@ -10,7 +10,10 @@ using FeatureCheck.Domain.Shared;
 using FeatureCheck.Domain.Shared.Exceptions;
 using FeatureCheck.Domain.Usecases;
 using FeatureCheck.Test.AggregateTests.CommandsHelpers;
+using MemStat.Net;
+using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Dependency;
 using Sekiban.Core.Exceptions;
 using Sekiban.Testing.SingleProjections;
 using System;
@@ -162,5 +165,14 @@ public class ClientSpec : AggregateTest<Client, FeatureCheckDependency>
         var result = WhenUsecase(new AddBranchAndClientUsecase("TEST", "client", "client@jtechs.com"));
         Assert.True(result.IsSuccess);
         ThenQueryResponseIs(new ClientEmailExistQueryNext("client@jtechs.com"), true);
+    }
+    [Fact]
+    public void MemoryUsageTest()
+    {
+        var finder = _serviceProvider.GetRequiredService<IMemoryUsageFinder>();
+        var usage = finder.GetTotalMemory();
+        var percentage = finder.GetPercentage();
+        Assert.True(usage > 0);
+        Assert.True(percentage > 0);
     }
 }
