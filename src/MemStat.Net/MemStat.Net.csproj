@@ -6,4 +6,8 @@
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
+    <ItemGroup>
+        <PackageReference Include="ResultBoxes" Version="0.3.26"/>
+    </ItemGroup>
+
 </Project>
