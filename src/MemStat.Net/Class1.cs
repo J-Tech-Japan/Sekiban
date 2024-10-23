@@ -9,61 +9,64 @@ public interface IMemoryUsageFinder
 }
 public class MemoryUsageFinder : IMemoryUsageFinder
 {
-    private readonly string _freeCommand;
-    private readonly string _osName;
-    private readonly string _vmStatCommand;
-
-    public MemoryUsageFinder()
-    {
-        _osName = RuntimeInformation.OSDescription;
-        _vmStatCommand = _osName.Contains("Darwin") ? "vm_stat" : "vmstat";
-        _freeCommand = _osName.Contains("Darwin") ? "sysctl vm.swapusage" : "free";
-    }
-
     public double GetTotalMemory()
     {
-        return _osName switch
+        // if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        // {
+        //     return GetWindowsMemoryUsage();
+        // }
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
-            var os when os.Contains("Darwin") => GetMacTotalMemory(),
-            var os when os.Contains("Linux") => GetLinuxTotalMemory(),
-            _ => throw new PlatformNotSupportedException()
-        };
+            return GetLinuxTotalMemory();
+        }
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            return GetMacTotalMemory();
+        }
+        throw new PlatformNotSupportedException();
     }
 
     public double GetPercentage()
     {
-        return _osName switch
+        // if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        // {
+        //     return GetWindowsMemoryUsage();
+        // }
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
-            var os when os.Contains("Darwin") => GetMacMemoryUsagePercentage(),
-            var os when os.Contains("Linux") => GetLinuxMemoryUsagePercentage(),
-            _ => throw new PlatformNotSupportedException()
-        };
+            return GetLinuxMemoryUsagePercentage();
+        }
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            return GetMacMemoryUsagePercentage();
+        }
+        throw new PlatformNotSupportedException();
     }
 
     private double GetMacTotalMemory()
     {
-        var lines = ProcessToStringList.GetProcessOutput(_vmStatCommand, string.Empty);
+        var lines = ProcessToStringList.GetProcessOutput("sh", "-c vm_stat");
         var stat = MacVmStat.Parse(lines, DateTime.UtcNow);
         return MacVmStat.TotalPages(stat) * stat.PageSize;
     }
 
     private double GetMacMemoryUsagePercentage()
     {
-        var lines = ProcessToStringList.GetProcessOutput(_vmStatCommand, string.Empty);
+        var lines = ProcessToStringList.GetProcessOutput("sh", "-c vm_stat");
         var stat = MacVmStat.Parse(lines, DateTime.UtcNow);
         return MacVmStat.MemoryUsagePercentage(stat);
     }
 
     private double GetLinuxTotalMemory()
     {
-        var lines = ProcessToStringList.GetProcessOutput(_freeCommand, string.Empty);
+        var lines = ProcessToStringList.GetProcessOutput("sh", "-c free");
         var info = LinuxMemoryInfo.Parse(lines);
         return info.Total;
     }
 
     private double GetLinuxMemoryUsagePercentage()
     {
-        var lines = ProcessToStringList.GetProcessOutput(_freeCommand, string.Empty);
+        var lines = ProcessToStringList.GetProcessOutput("sh", "-c free");
         var info = LinuxMemoryInfo.Parse(lines);
         return LinuxMemoryInfo.MemoryUsagePercentage(info);
     }
