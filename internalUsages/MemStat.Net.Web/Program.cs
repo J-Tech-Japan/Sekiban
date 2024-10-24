@@ -50,7 +50,7 @@ app.MapGet(
         .Conveyor(_ => memoryUsageFinder.GetTotalMemoryUsage())
         .Combine(_ => memoryUsageFinder.GetMemoryUsagePercentage())
         .Remap((total, percent) => new MemoryInfo(total, percent))
-        .UnwrapBox());
+        .Match(some => Results.Ok(some), error => Results.Ok(error.Message)));
 
 app.MapGet(
     "/memoryusage2",
