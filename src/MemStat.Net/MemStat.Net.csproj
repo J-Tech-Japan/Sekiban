@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="ComputerInfo" Version="0.2.0" />
+        <PackageReference Include="Microsoft.VisualBasic" Version="10.3.0" />
+        <PackageReference Include="ResultBoxes" Version="0.3.26" />
+    </ItemGroup>
+
+</Project>
