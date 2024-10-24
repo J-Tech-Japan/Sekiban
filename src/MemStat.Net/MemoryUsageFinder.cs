@@ -102,6 +102,7 @@ public class WindowsMemoryInfo
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
     public class MEMORYSTATUSEX
     {
+        // @formatter:off
         public uint dwLength;
         public uint dwMemoryLoad;
         public ulong ullTotalPhys;
@@ -111,7 +112,7 @@ public class WindowsMemoryInfo
         public ulong ullTotalVirtual;
         public ulong ullAvailVirtual;
         public ulong ullAvailExtendedVirtual;
-
         public MEMORYSTATUSEX() => dwLength = (uint)Marshal.SizeOf(typeof(MEMORYSTATUSEX));
+        // @formatter:on
     }
 }
