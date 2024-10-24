@@ -35,8 +35,8 @@ public record LinuxMemoryInfo(
 
     public static double MemoryUsagePercentage(LinuxMemoryInfo info) =>
         // Calculate the memory usage percentage including used and buff/cache.
-        (info.Used + info.BuffCache) / (double)info.Total;
+        info.Used / (double)info.Total;
 
-    public static double SwapPercentage(LinuxMemoryInfo info) => info.SwapUsed / (double)info.Total;
+    public static double SwapPercentage(LinuxMemoryInfo info) => info.SwapUsed / (double)info.SwapTotal;
     private static long TryParseLong(string? value) => long.TryParse(value, out var result) ? result : 0;
 }

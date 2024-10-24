@@ -1,0 +1,6 @@
+@MemStat.Net.Web_HostAddress = http://localhost:5075
+
+GET {{MemStat.Net.Web_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
