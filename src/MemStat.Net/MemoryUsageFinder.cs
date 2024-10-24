@@ -104,13 +104,13 @@ public class WindowsMemoryInfo
     {
         public uint dwLength;
         public uint dwMemoryLoad;
-        public ulong ullAvailExtendedVirtual;
-        public ulong ullAvailPageFile;
-        public ulong ullAvailPhys;
-        public ulong ullAvailVirtual;
-        public ulong ullTotalPageFile;
         public ulong ullTotalPhys;
+        public ulong ullAvailPhys;
+        public ulong ullTotalPageFile;
+        public ulong ullAvailPageFile;
         public ulong ullTotalVirtual;
+        public ulong ullAvailVirtual;
+        public ulong ullAvailExtendedVirtual;
 
         public MEMORYSTATUSEX() => dwLength = (uint)Marshal.SizeOf(typeof(MEMORYSTATUSEX));
     }

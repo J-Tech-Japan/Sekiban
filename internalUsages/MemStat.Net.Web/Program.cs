@@ -72,6 +72,16 @@ app.MapGet(
                 value => value.ToResultBox(),
                 () => new InvalidOperationException("LinuxMemoryInfo is not set.")))
         .UnwrapBox());
+app.MapGet(
+    "/memoryusage4",
+    ([FromServices] IMemoryUsageFinder memoryUsageFinder) => memoryUsageFinder
+        .ReceiveCurrentMemoryUsage()
+        .Remap(_ => (MemoryUsageFinder)memoryUsageFinder)
+        .Conveyor(
+            finder => finder.WindowsComputerInfo.Match(
+                value => value.ToResultBox(),
+                () => new InvalidOperationException("Windows MemoryInfo is not set.")))
+        .UnwrapBox());
 
 app.Run();
 
