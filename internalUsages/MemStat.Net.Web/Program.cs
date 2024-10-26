@@ -7,8 +7,8 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddTransient<IMemoryUsageFinder, MemoryUsageFinder>();
-
+builder.Services.AddMemoryUsageFinder();
+// builder.Services.AddTransient<IMemoryUsageFinder, MemoryUsageFinder>();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -56,31 +56,7 @@ app.MapGet(
     "/memoryusage2",
     ([FromServices] IMemoryUsageFinder memoryUsageFinder) => memoryUsageFinder
         .ReceiveCurrentMemoryUsage()
-        .Remap(_ => (MemoryUsageFinder)memoryUsageFinder)
-        .Conveyor(
-            finder => finder.LinuxMemoryInfo.Match(
-                value => value.ToResultBox(),
-                () => new InvalidOperationException("LinuxMemoryInfo is not set.")))
-        .UnwrapBox());
-app.MapGet(
-    "/memoryusage3",
-    ([FromServices] IMemoryUsageFinder memoryUsageFinder) => memoryUsageFinder
-        .ReceiveCurrentMemoryUsage()
-        .Remap(_ => (MemoryUsageFinder)memoryUsageFinder)
-        .Conveyor(
-            finder => finder.MacVmStat.Match(
-                value => value.ToResultBox(),
-                () => new InvalidOperationException("LinuxMemoryInfo is not set.")))
-        .UnwrapBox());
-app.MapGet(
-    "/memoryusage4",
-    ([FromServices] IMemoryUsageFinder memoryUsageFinder) => memoryUsageFinder
-        .ReceiveCurrentMemoryUsage()
-        .Remap(_ => (MemoryUsageFinder)memoryUsageFinder)
-        .Conveyor(
-            finder => finder.WindowsComputerInfo.Match(
-                value => value.ToResultBox(),
-                () => new InvalidOperationException("Windows MemoryInfo is not set.")))
+        .Conveyor(memoryUsageFinder.GetRawMemoryUsageObject)
         .UnwrapBox());
 
 app.Run();

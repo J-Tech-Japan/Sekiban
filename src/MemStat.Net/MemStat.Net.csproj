@@ -7,9 +7,10 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="ComputerInfo" Version="0.2.0" />
-        <PackageReference Include="Microsoft.VisualBasic" Version="10.3.0" />
-        <PackageReference Include="ResultBoxes" Version="0.3.26" />
+        <PackageReference Include="ComputerInfo" Version="0.2.0"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2"/>
+        <PackageReference Include="Microsoft.VisualBasic" Version="10.3.0"/>
+        <PackageReference Include="ResultBoxes" Version="0.3.26"/>
     </ItemGroup>
 
 </Project>
