@@ -8,7 +8,6 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddMemoryUsageFinder();
-// builder.Services.AddTransient<IMemoryUsageFinder, MemoryUsageFinder>();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
