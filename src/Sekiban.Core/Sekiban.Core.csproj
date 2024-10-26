@@ -25,6 +25,7 @@
         <FrameworkReference Include="Microsoft.AspNetCore.App"/>
         <PackageReference Include="ComputerInfo" Version="0.2.0"/>
         <PackageReference Include="MediatR" Version="12.4.1"/>
+        <PackageReference Include="MemStat.Net" Version="0.1.0" />
         <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="8.0.1"/>
         <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0"/>
         <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="8.0.0"/>
