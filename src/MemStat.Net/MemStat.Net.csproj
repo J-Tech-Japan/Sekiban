@@ -10,7 +10,7 @@
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>MemStat - Get Memory Usage Stats in Multi Platform</PackageDescription>
-        <PackageVersion>0.1.0</PackageVersion>
+        <PackageVersion>0.1.1</PackageVersion>
         <Description>Initial Release</Description>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
         <RootNamespace>MemStat.Net</RootNamespace>
