@@ -43,7 +43,7 @@ public class MultiProjection<TProjectionPayload> : IMultiProjector<TProjectionPa
         state = snapshot with { AppliedSnapshotVersion = snapshot.Version };
     }
 
-    public virtual IList<string> TargetAggregateNames()
+    public virtual List<string> TargetAggregateNames()
     {
         var projectionPayload = Payload as IMultiProjectionPayload<TProjectionPayload> ??
             throw new SekibanMultiProjectionMustInheritISingleProjectionEventApplicable();

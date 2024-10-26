@@ -82,7 +82,7 @@ public class TargetAggregatePayloadCollection
         Add<TAggregatePayload7>();
         return this;
     }
-    public IList<string> GetAggregateNames()
+    public List<string> GetAggregateNames()
     {
         return TargetAggregatePayloads.Select(e => e.GetBaseAggregatePayloadTypeFromAggregate().Name).ToList();
     }

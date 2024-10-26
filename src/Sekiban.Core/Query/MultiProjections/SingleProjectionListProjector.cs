@@ -78,7 +78,7 @@ public class
             .ToList();
     }
 
-    public IList<string> TargetAggregateNames() =>
+    public List<string> TargetAggregateNames() =>
         new List<string> { _projector.GetOriginalAggregatePayloadType().Name };
 
     public Guid LastEventId { get; private set; } = Guid.Empty;

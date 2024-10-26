@@ -36,5 +36,5 @@ public interface IMultiProjector<TProjectionPayload> : IMultiProjectionCommon
     ///     If Empty, all aggregates will be targeted.
     /// </summary>
     /// <returns></returns>
-    IList<string> TargetAggregateNames();
+    List<string> TargetAggregateNames();
 }
