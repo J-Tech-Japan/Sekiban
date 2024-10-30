@@ -96,7 +96,6 @@ public static class SekibanCoreServiceExtensions
 
         services.AddTransient<ISekibanUsecaseExecutor, SekibanUsecaseExecutor>();
         services.AddTransient<ISekibanUsecaseContext, SekibanUsecaseContext>();
-        services.AddResourceMonitoring();
         services.AddMemoryUsageFinder();
         return services;
     }

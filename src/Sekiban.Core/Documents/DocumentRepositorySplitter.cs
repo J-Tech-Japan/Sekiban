@@ -1,3 +1,4 @@
+using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
@@ -34,6 +35,9 @@ public class DocumentRepositorySplitter : IDocumentRepository
         _aggregateSettings = aggregateSettings;
     }
 
+    public Task<ResultBox<UnitValue>> GetEvents(
+        EventRetrievalInfo eventRetrievalInfo,
+        Action<IEnumerable<IEvent>> resultAction) => throw new NotImplementedException();
     public async Task GetAllEventsForAggregateIdAsync(
         Guid aggregateId,
         Type aggregatePayloadType,

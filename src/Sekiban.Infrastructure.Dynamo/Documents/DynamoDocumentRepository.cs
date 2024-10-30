@@ -1,5 +1,6 @@
 using Amazon.DynamoDBv2.DocumentModel;
 using Amazon.DynamoDBv2.Model;
+using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.ValueObjects;
@@ -23,6 +24,57 @@ public class DynamoDocumentRepository(
     RegisteredEventTypes registeredEventTypes,
     ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor) : IDocumentPersistentRepository
 {
+    public async Task<ResultBox<UnitValue>> GetEvents(
+        EventRetrievalInfo eventRetrievalInfo,
+        Action<IEnumerable<IEvent>> resultAction)
+    {
+        await dbFactory.DynamoActionAsync(
+            DocumentType.Event,
+            eventRetrievalInfo.GetAggregateContainerGroup(),
+            async table =>
+            {
+                if (eventRetrievalInfo.GetIsPartition())
+                {
+                    var filter = new QueryFilter();
+                    var partitionKey = eventRetrievalInfo.GetPartitionKey().UnwrapBox();
+                    filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
+                    filter.AddSortableUniqueIdIfNull(eventRetrievalInfo.SinceSortableUniqueId);
+                    var config = new QueryOperationConfig { Filter = filter, BackwardSearch = false };
+                    var search = table.Query(config);
+
+                    var resultList = await FetchDocumentsAsync(search);
+                    var events = ProcessEventDocuments(resultList, eventRetrievalInfo.SinceSortableUniqueId);
+                    resultAction(events.OrderBy(m => m.SortableUniqueId));
+                } else
+                {
+                    var filter = new ScanFilter();
+                    if (eventRetrievalInfo.HasAggregateStream())
+                    {
+                        var aggregates = eventRetrievalInfo.AggregateStream.GetValue().GetStreamNames();
+                        filter.AddCondition(
+                            nameof(IEvent.AggregateType),
+                            ScanOperator.In,
+                            aggregates.Select(m => new AttributeValue(m)).ToList());
+                    }
+                    if (eventRetrievalInfo.HasRootPartitionKey())
+                    {
+                        filter.AddCondition(
+                            nameof(Document.RootPartitionKey),
+                            ScanOperator.Equal,
+                            eventRetrievalInfo.RootPartitionKey.GetValue());
+                    }
+                    filter.AddSortableUniqueIdIfNull(eventRetrievalInfo.SinceSortableUniqueId);
+                    var config = new ScanOperationConfig { Filter = filter };
+                    var search = table.Scan(config);
+
+                    var resultList = await FetchDocumentsAsync(search);
+                    var events = ProcessEventDocuments(resultList, eventRetrievalInfo.SinceSortableUniqueId);
+                    resultAction(events.OrderBy(m => m.SortableUniqueId));
+
+                }
+            });
+        return ResultBox.UnitValue;
+    }
     public async Task GetAllEventsForAggregateIdAsync(
         Guid aggregateId,
         Type aggregatePayloadType,
@@ -31,26 +83,17 @@ public class DynamoDocumentRepository(
         string rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-
-        await dbFactory.DynamoActionAsync(
-            DocumentType.Event,
-            aggregateContainerGroup,
-            async table =>
-            {
-                var filter = new QueryFilter();
-                filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
-                filter.AddSortableUniqueIdIfNull(sinceSortableUniqueId);
-                var config = new QueryOperationConfig { Filter = filter, BackwardSearch = false };
-                var search = table.Query(config);
-
-                var resultList = await FetchDocumentsAsync(search);
-                var events = ProcessEventDocuments(resultList, sinceSortableUniqueId);
-                resultAction(events.OrderBy(m => m.SortableUniqueId));
-
-
-            });
-
+        await GetEvents(
+            new EventRetrievalInfo(
+                string.IsNullOrEmpty(rootPartitionKey)
+                    ? OptionalValue<string>.Empty
+                    : OptionalValue.FromValue(rootPartitionKey),
+                new AggregateTypeStream(aggregatePayloadType),
+                OptionalValue.FromValue(aggregateId),
+                string.IsNullOrWhiteSpace(sinceSortableUniqueId)
+                    ? OptionalValue<SortableUniqueIdValue>.Empty
+                    : new SortableUniqueIdValue(sinceSortableUniqueId)),
+            resultAction);
     }
 
     public async Task GetAllEventStringsForAggregateIdAsync(
@@ -80,7 +123,8 @@ public class DynamoDocumentRepository(
         string rootPartitionKey,
         Action<IEnumerable<string>> resultAction)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+        var aggregateContainerGroup
+            = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
 
         await dbFactory.DynamoActionAsync(
             DocumentType.Command,
@@ -115,27 +159,18 @@ public class DynamoDocumentRepository(
         string rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-
-        await dbFactory.DynamoActionAsync(
-            DocumentType.Event,
-            aggregateContainerGroup,
-            async table =>
-            {
-                var filter = new QueryFilter();
-                filter.AddCondition(nameof(IEvent.AggregateType), QueryOperator.Equal, aggregatePayloadType.Name);
-                if (rootPartitionKey != IMultiProjectionService.ProjectionAllRootPartitions)
-                {
-                    filter.AddCondition(nameof(Document.RootPartitionKey), QueryOperator.Equal, rootPartitionKey);
-                }
-                filter.AddSortableUniqueIdIfNull(sinceSortableUniqueId);
-                var config = new QueryOperationConfig { Filter = filter, BackwardSearch = true };
-                var search = table.Query(config);
-
-                var resultList = await FetchDocumentsAsync(search);
-                var events = ProcessEventDocuments(resultList, sinceSortableUniqueId);
-                resultAction(events.OrderBy(m => m.SortableUniqueId));
-            });
+        await GetEvents(
+                new EventRetrievalInfo(
+                    string.IsNullOrEmpty(rootPartitionKey)
+                        ? OptionalValue<string>.Empty
+                        : OptionalValue.FromValue(rootPartitionKey),
+                    new AggregateTypeStream(aggregatePayloadType),
+                    OptionalValue<Guid>.Empty,
+                    string.IsNullOrWhiteSpace(sinceSortableUniqueId)
+                        ? OptionalValue<SortableUniqueIdValue>.Empty
+                        : new SortableUniqueIdValue(sinceSortableUniqueId)),
+                resultAction)
+            .UnwrapBox();
     }
 
     public async Task GetAllEventsAsync(
@@ -145,33 +180,18 @@ public class DynamoDocumentRepository(
         string rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionType);
-
-        await dbFactory.DynamoActionAsync(
-            DocumentType.Event,
-            aggregateContainerGroup,
-            async table =>
-            {
-                var filter = new ScanFilter();
-                if (targetAggregateNames.Count > 0)
-                {
-                    filter.AddCondition(
-                        nameof(IEvent.AggregateType),
-                        ScanOperator.In,
-                        targetAggregateNames.Select(m => new AttributeValue(m)).ToList());
-                }
-                if (!rootPartitionKey.Equals(IMultiProjectionService.ProjectionAllRootPartitions))
-                {
-                    filter.AddCondition(nameof(IDocument.RootPartitionKey), ScanOperator.Equal, rootPartitionKey);
-                }
-                filter.AddSortableUniqueIdIfNull(sinceSortableUniqueId);
-                var config = new ScanOperationConfig { Filter = filter };
-                var search = table.Scan(config);
-
-                var resultList = await FetchDocumentsAsync(search);
-                var events = ProcessEventDocuments(resultList, sinceSortableUniqueId);
-                resultAction(events.OrderBy(m => m.SortableUniqueId));
-            });
+        await GetEvents(
+                new EventRetrievalInfo(
+                    string.IsNullOrEmpty(rootPartitionKey)
+                        ? OptionalValue<string>.Empty
+                        : OptionalValue.FromValue(rootPartitionKey),
+                    new MultiProjectionTypeStream(multiProjectionType, targetAggregateNames),
+                    OptionalValue<Guid>.Empty,
+                    string.IsNullOrWhiteSpace(sinceSortableUniqueId)
+                        ? OptionalValue<SortableUniqueIdValue>.Empty
+                        : new SortableUniqueIdValue(sinceSortableUniqueId)),
+                resultAction)
+            .UnwrapBox();
     }
 
     public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
@@ -181,7 +201,8 @@ public class DynamoDocumentRepository(
         string rootPartitionKey,
         string payloadVersionIdentifier)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+        var aggregateContainerGroup
+            = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         return await dbFactory.DynamoActionAsync(
             DocumentType.AggregateSnapshot,
             aggregateContainerGroup,
@@ -194,7 +215,10 @@ public class DynamoDocumentRepository(
                     rootPartitionKey);
                 var filter = new QueryFilter();
                 filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
-                filter.AddCondition(nameof(SnapshotDocument.PayloadVersionIdentifier), QueryOperator.Equal, payloadVersionIdentifier);
+                filter.AddCondition(
+                    nameof(SnapshotDocument.PayloadVersionIdentifier),
+                    QueryOperator.Equal,
+                    payloadVersionIdentifier);
 
                 var config = new QueryOperationConfig { Filter = filter, BackwardSearch = true };
                 var search = table.Query(config);
@@ -207,7 +231,9 @@ public class DynamoDocumentRepository(
                 var snapshotJson = snapshots.FirstOrDefault();
                 if (string.IsNullOrEmpty(snapshotJson)) { return null; }
                 var snapshot = SekibanJsonHelper.Deserialize<SnapshotDocument>(snapshotJson);
-                return snapshot is null ? null : await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshot);
+                return snapshot is null
+                    ? null
+                    : await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshot);
             });
     }
 
@@ -216,16 +242,22 @@ public class DynamoDocumentRepository(
         string payloadVersionIdentifier,
         string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionPayloadType);
+        var aggregateContainerGroup
+            = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionPayloadType);
         return await dbFactory.DynamoActionAsync(
             DocumentType.MultiProjectionSnapshot,
             aggregateContainerGroup,
             async table =>
             {
-                var partitionKey = PartitionKeyGenerator.ForMultiProjectionSnapshot(multiProjectionPayloadType, rootPartitionKey);
+                var partitionKey = PartitionKeyGenerator.ForMultiProjectionSnapshot(
+                    multiProjectionPayloadType,
+                    rootPartitionKey);
                 var filter = new QueryFilter();
                 filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
-                filter.AddCondition(nameof(MultiProjectionSnapshotDocument.PayloadVersionIdentifier), QueryOperator.Equal, payloadVersionIdentifier);
+                filter.AddCondition(
+                    nameof(MultiProjectionSnapshotDocument.PayloadVersionIdentifier),
+                    QueryOperator.Equal,
+                    payloadVersionIdentifier);
 
                 var config = new QueryOperationConfig { Filter = filter, BackwardSearch = true };
                 var search = table.Query(config);
@@ -251,7 +283,8 @@ public class DynamoDocumentRepository(
         string rootPartitionKey,
         string payloadVersionIdentifier)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+        var aggregateContainerGroup
+            = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         return await dbFactory.DynamoActionAsync(
             DocumentType.AggregateSnapshot,
             aggregateContainerGroup,
@@ -264,7 +297,10 @@ public class DynamoDocumentRepository(
                     rootPartitionKey);
                 var filter = new QueryFilter();
                 filter.AddCondition(nameof(Document.PartitionKey), QueryOperator.Equal, partitionKey);
-                filter.AddCondition(nameof(SnapshotDocument.PayloadVersionIdentifier), QueryOperator.Equal, payloadVersionIdentifier);
+                filter.AddCondition(
+                    nameof(SnapshotDocument.PayloadVersionIdentifier),
+                    QueryOperator.Equal,
+                    payloadVersionIdentifier);
                 filter.AddCondition(nameof(SnapshotDocument.SavedVersion), QueryOperator.Equal, version);
 
                 var config = new QueryOperationConfig { Filter = filter, BackwardSearch = true };
@@ -288,7 +324,8 @@ public class DynamoDocumentRepository(
         Type projectionPayloadType,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+        var aggregateContainerGroup
+            = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         return await dbFactory.DynamoActionAsync<List<SnapshotDocument>>(
             DocumentType.AggregateSnapshot,
             aggregateContainerGroup,
@@ -310,13 +347,15 @@ public class DynamoDocumentRepository(
                                  let sortableUniqueId = document[nameof(IDocument.SortableUniqueId)].AsString()
                                  select json).ToList();
                 if (snapshots.Count == 0) { return []; }
-                var snapshotDocuments = snapshots.Select(m => SekibanJsonHelper.Deserialize<SnapshotDocument>(m)).ToList();
+                var snapshotDocuments
+                    = snapshots.Select(m => SekibanJsonHelper.Deserialize<SnapshotDocument>(m)).ToList();
                 if (snapshotDocuments.Count == 0) { return []; }
                 var toReturn = new List<SnapshotDocument>();
                 foreach (var snapshotDocument in snapshotDocuments)
                 {
                     if (snapshotDocument is null) { continue; }
-                    var filledSnapshot = await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshotDocument);
+                    var filledSnapshot
+                        = await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshotDocument);
                     if (filledSnapshot is null) { continue; }
                     toReturn.Add(filledSnapshot);
                 }
@@ -333,7 +372,8 @@ public class DynamoDocumentRepository(
         string partitionKey,
         string rootPartitionKey)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+        var aggregateContainerGroup
+            = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         return await dbFactory.DynamoActionAsync(
             DocumentType.AggregateSnapshot,
             aggregateContainerGroup,
@@ -353,7 +393,9 @@ public class DynamoDocumentRepository(
                 var snapshotJson = snapshots.FirstOrDefault();
                 if (string.IsNullOrEmpty(snapshotJson)) { return null; }
                 var snapshot = SekibanJsonHelper.Deserialize<SnapshotDocument>(snapshotJson);
-                return snapshot is null ? null : await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshot);
+                return snapshot is null
+                    ? null
+                    : await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshot);
             });
     }
 
@@ -372,7 +414,9 @@ public class DynamoDocumentRepository(
         return resultList;
     }
 
-    private List<IEvent> ProcessEventDocuments(List<Amazon.DynamoDBv2.DocumentModel.Document> documents, string? sinceSortableUniqueId)
+    private List<IEvent> ProcessEventDocuments(
+        List<Amazon.DynamoDBv2.DocumentModel.Document> documents,
+        OptionalValue<SortableUniqueIdValue> sinceSortableUniqueId)
     {
         var types = registeredEventTypes.RegisteredTypes;
         var events = new List<IEvent>();
@@ -382,12 +426,14 @@ public class DynamoDocumentRepository(
             var jsonElement = JsonDocument.Parse(json).RootElement;
             var documentTypeName = document[nameof(IDocument.DocumentTypeName)].AsString();
             if (documentTypeName is null) { continue; }
-            var toAdd = (types.Where(m => m.Name == documentTypeName)
+            var toAdd = (types
+                        .Where(m => m.Name == documentTypeName)
                         .Select(m => SekibanJsonHelper.Deserialize(json, typeof(Event<>).MakeGenericType(m)) as IEvent)
                         .FirstOrDefault(m => m is not null) ??
                     EventHelper.GetUnregisteredEvent(jsonElement)) ??
                 throw new SekibanUnregisteredEventFoundException();
-            if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
+            if (sinceSortableUniqueId.HasValue &&
+                toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId.GetValue()))
             {
                 continue;
             }
