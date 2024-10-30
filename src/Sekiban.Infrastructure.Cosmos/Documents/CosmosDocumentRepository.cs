@@ -2,6 +2,7 @@ using Microsoft.Azure.Cosmos.Linq;
 using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
@@ -27,26 +28,6 @@ public class CosmosDocumentRepository(
 {
     private const int DefaultOptionsMax = -1;
 
-    public async Task GetAllEventsAsync(
-        Type multiProjectionType,
-        IList<string> targetAggregateNames,
-        string? sinceSortableUniqueId,
-        string rootPartitionKey,
-        Action<IEnumerable<IEvent>> resultAction)
-    {
-        await GetEvents(
-                new EventRetrievalInfo(
-                    string.IsNullOrEmpty(rootPartitionKey)
-                        ? OptionalValue<string>.Empty
-                        : OptionalValue.FromValue(rootPartitionKey),
-                    new MultiProjectionTypeStream(multiProjectionType, targetAggregateNames),
-                    OptionalValue<Guid>.Empty,
-                    string.IsNullOrWhiteSpace(sinceSortableUniqueId)
-                        ? OptionalValue<SortableUniqueIdValue>.Empty
-                        : new SortableUniqueIdValue(sinceSortableUniqueId)),
-                resultAction)
-            .UnwrapBox();
-    }
     public async Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(
         Type multiProjectionPayloadType,
         string payloadVersionIdentifier,
@@ -213,27 +194,6 @@ public class CosmosDocumentRepository(
             });
         return ResultBox.UnitValue;
     }
-    public async Task GetAllEventsForAggregateIdAsync(
-        Guid aggregateId,
-        Type aggregatePayloadType,
-        string? partitionKey,
-        string? sinceSortableUniqueId,
-        string rootPartitionKey,
-        Action<IEnumerable<IEvent>> resultAction)
-    {
-        await GetEvents(
-            new EventRetrievalInfo(
-                string.IsNullOrEmpty(rootPartitionKey)
-                    ? OptionalValue<string>.Empty
-                    : OptionalValue.FromValue(rootPartitionKey),
-                new AggregateTypeStream(aggregatePayloadType),
-                OptionalValue.FromValue(aggregateId),
-                string.IsNullOrWhiteSpace(sinceSortableUniqueId)
-                    ? OptionalValue<SortableUniqueIdValue>.Empty
-                    : new SortableUniqueIdValue(sinceSortableUniqueId)),
-            resultAction);
-    }
-
     public async Task GetAllCommandStringsForAggregateIdAsync(
         Guid aggregateId,
         Type aggregatePayloadType,
@@ -277,26 +237,6 @@ public class CosmosDocumentRepository(
 
                 resultAction(commands);
             });
-    }
-
-    public async Task GetAllEventsForAggregateAsync(
-        Type aggregatePayloadType,
-        string? sinceSortableUniqueId,
-        string rootPartitionKey,
-        Action<IEnumerable<IEvent>> resultAction)
-    {
-        await GetEvents(
-                new EventRetrievalInfo(
-                    string.IsNullOrEmpty(rootPartitionKey)
-                        ? OptionalValue<string>.Empty
-                        : OptionalValue.FromValue(rootPartitionKey),
-                    new AggregateTypeStream(aggregatePayloadType),
-                    OptionalValue<Guid>.Empty,
-                    string.IsNullOrWhiteSpace(sinceSortableUniqueId)
-                        ? OptionalValue<SortableUniqueIdValue>.Empty
-                        : new SortableUniqueIdValue(sinceSortableUniqueId)),
-                resultAction)
-            .UnwrapBox();
     }
 
     public async Task<bool> ExistsSnapshotForAggregateAsync(
@@ -402,12 +342,12 @@ public class CosmosDocumentRepository(
         string rootPartitionKey,
         Action<IEnumerable<string>> resultAction)
     {
-        await GetAllEventsForAggregateIdAsync(
-            aggregateId,
-            aggregatePayloadType,
-            partitionKey,
-            sinceSortableUniqueId,
-            rootPartitionKey,
+        await GetEvents(
+            EventRetrievalInfo.FromNullableValues(
+                rootPartitionKey,
+                new AggregateTypeStream(aggregatePayloadType),
+                aggregateId,
+                sinceSortableUniqueId),
             events =>
             {
                 resultAction(events.Select(SekibanJsonHelper.Serialize).Where(m => !string.IsNullOrEmpty(m))!);

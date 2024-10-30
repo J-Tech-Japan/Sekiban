@@ -1,7 +1,7 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
-using Sekiban.Core.Partition;
 using Sekiban.Core.Query.SingleProjections.Projections;
 namespace Sekiban.Core.Query.SingleProjections;
 
@@ -92,12 +92,12 @@ public class AggregateLoader : IAggregateLoader
         int? toVersion = null) where TAggregatePayload : IAggregatePayloadCommon
     {
         var toReturn = new List<IEvent>();
-        await _documentRepository.GetAllEventsForAggregateIdAsync(
-            aggregateId,
-            typeof(TAggregatePayload),
-            PartitionKeyGenerator.ForEvent(aggregateId, typeof(TAggregatePayload), rootPartitionKey),
-            null,
-            rootPartitionKey,
+        await _documentRepository.GetEvents(
+            EventRetrievalInfo.FromNullableValues(
+                rootPartitionKey,
+                new AggregateTypeStream(typeof(TAggregatePayload)),
+                aggregateId,
+                null),
             eventObjects => { toReturn.AddRange(eventObjects); });
         return toVersion is null ? toReturn : toReturn.ToList().Take(toVersion.Value);
     }

@@ -1,6 +1,6 @@
 using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Exceptions;
-using Sekiban.Core.Partition;
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
 /// <summary>
@@ -22,12 +22,13 @@ public class SimpleSingleProjectionFromInitial : ISingleProjectionFromInitial
         var projector = new TProjector();
         var aggregate = projector.CreateInitialAggregate(aggregateId);
         var addFinished = false;
-        await _documentRepository.GetAllEventsForAggregateIdAsync(
-            aggregateId,
-            projector.GetOriginalAggregatePayloadType(),
-            PartitionKeyGenerator.ForEvent(aggregateId, projector.GetOriginalAggregatePayloadType(), rootPartitionKey),
-            null,
-            rootPartitionKey,
+
+        await _documentRepository.GetEvents(
+            EventRetrievalInfo.FromNullableValues(
+                rootPartitionKey,
+                new AggregateTypeStream(projector.GetOriginalAggregatePayloadType()),
+                aggregateId,
+                null),
             events =>
             {
                 var enumerable = events.ToList();

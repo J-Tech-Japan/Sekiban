@@ -1,4 +1,5 @@
 using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Shared;
@@ -25,11 +26,12 @@ public class SimpleMultiProjection : IMultiProjection
         where TProjectionPayload : IMultiProjectionPayloadCommon
     {
         var projector = new TProjection();
-        await _documentRepository.GetAllEventsAsync(
-            typeof(TProjection),
-            projector.TargetAggregateNames(),
-            null,
-            rootPartitionKey,
+        await _documentRepository.GetEvents(
+            EventRetrievalInfo.FromNullableValues(
+                rootPartitionKey,
+                new MultiProjectionTypeStream(typeof(TProjection), projector.TargetAggregateNames()),
+                null,
+                null),
             events =>
             {
                 foreach (var ev in events)
