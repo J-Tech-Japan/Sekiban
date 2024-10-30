@@ -44,7 +44,10 @@ public class InMemoryDocumentRepository(
             var partitionKey = eventRetrievalInfo.GetPartitionKey();
             if (partitionKey.IsSuccess)
             {
-                var list = inMemoryDocumentStore.GetEventPartition(partitionKey.GetValue(), sekibanIdentifier).ToList();
+                var list = inMemoryDocumentStore
+                    .GetEventPartition(partitionKey.GetValue(), sekibanIdentifier)
+                    .OrderBy(m => m.SortableUniqueId)
+                    .ToList();
                 if (eventRetrievalInfo.SinceSortableUniqueId.HasValue)
                 {
                     var index = list.FindIndex(
