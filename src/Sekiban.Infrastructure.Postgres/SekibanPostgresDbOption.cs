@@ -22,12 +22,14 @@ public record SekibanPostgresDbOption
         string context = SekibanContext.Default)
     {
         var azureSection = section.GetSection("Postgres");
-        var postgresConnectionStringName = azureSection.GetValue<string>(nameof(ConnectionStringName)) ?? PostgresConnectionStringNameDefaultValue;
+        var postgresConnectionStringName = azureSection.GetValue<string>(nameof(ConnectionStringName)) ??
+            PostgresConnectionStringNameDefaultValue;
         var postgresConnectionString = configurationRoot.GetConnectionString(postgresConnectionStringName) ??
             section.GetValue<string>(nameof(ConnectionString)) ?? section.GetValue<string>("PostgresConnectionString");
         return new SekibanPostgresDbOption
         {
-            Context = context, ConnectionStringName = postgresConnectionStringName, ConnectionString = postgresConnectionString
+            Context = context, ConnectionStringName = postgresConnectionStringName,
+            ConnectionString = postgresConnectionString
         };
 
     }
@@ -40,7 +42,8 @@ public record SekibanPostgresDbOption
         var postgresConnectionString = configurationRoot.GetConnectionString(postgresConnectionStringName);
         return new SekibanPostgresDbOption
         {
-            Context = context, ConnectionStringName = postgresConnectionStringName, ConnectionString = postgresConnectionString
+            Context = context, ConnectionStringName = postgresConnectionStringName,
+            ConnectionString = postgresConnectionString
         };
     }
 }

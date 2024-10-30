@@ -19,7 +19,8 @@ public static class PostgresDbServiceCollectionExtensions
     /// </summary>
     /// <param name="builder"></param>
     /// <returns></returns>
-    public static SekibanPostgresDbOptionsServiceCollection AddSekibanPostgresDbOnly(this WebApplicationBuilder builder) =>
+    public static SekibanPostgresDbOptionsServiceCollection
+        AddSekibanPostgresDbOnly(this WebApplicationBuilder builder) =>
         AddSekibanPostgresDbOnly(builder.Services, builder.Configuration);
 
 
@@ -28,13 +29,15 @@ public static class PostgresDbServiceCollectionExtensions
     /// </summary>
     /// <param name="builder"></param>
     /// <returns></returns>
-    public static SekibanPostgresDbOptionsServiceCollection AddSekibanPostgresDbWithAzureBlobStorage(this WebApplicationBuilder builder)
+    public static SekibanPostgresDbOptionsServiceCollection AddSekibanPostgresDbWithAzureBlobStorage(
+        this WebApplicationBuilder builder)
     {
         builder.AddSekibanAzureBlobStorage();
         return AddSekibanPostgresDbOnly(builder.Services, builder.Configuration);
     }
 
-    public static SekibanPostgresDbOptionsServiceCollection AddSekibanPostgresDbWithAwsS3(this WebApplicationBuilder builder)
+    public static SekibanPostgresDbOptionsServiceCollection AddSekibanPostgresDbWithAwsS3(
+        this WebApplicationBuilder builder)
     {
         builder.AddSekibanAwsS3();
         return AddSekibanPostgresDbOnly(builder.Services, builder.Configuration);
@@ -71,7 +74,8 @@ public static class PostgresDbServiceCollectionExtensions
     {
         var options = SekibanPostgresOptions.FromConnectionStringName(
             connectionStringName,
-            configuration as IConfigurationRoot ?? throw new ConfigurationErrorsException("postgres configuration failed."));
+            configuration as IConfigurationRoot ??
+            throw new ConfigurationErrorsException("postgres configuration failed."));
         return AddSekibanPostgresDbOnly(services, options);
     }
 
@@ -81,7 +85,9 @@ public static class PostgresDbServiceCollectionExtensions
     /// <param name="services"></param>
     /// <param name="configuration"></param>
     /// <returns></returns>
-    public static SekibanPostgresDbOptionsServiceCollection AddSekibanPostgresDbOnly(this IServiceCollection services, IConfiguration configuration)
+    public static SekibanPostgresDbOptionsServiceCollection AddSekibanPostgresDbOnly(
+        this IServiceCollection services,
+        IConfiguration configuration)
     {
         var options = SekibanPostgresOptions.FromConfiguration(configuration);
         return AddSekibanPostgresDbOnly(services, options);

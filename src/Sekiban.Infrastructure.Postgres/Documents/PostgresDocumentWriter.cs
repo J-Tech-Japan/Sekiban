@@ -11,8 +11,10 @@ using Sekiban.Infrastructure.Postgres.Databases;
 using System.Text;
 namespace Sekiban.Infrastructure.Postgres.Documents;
 
-public class PostgresDocumentWriter(PostgresDbFactory dbFactory, EventPublisher eventPublisher, IBlobAccessor blobAccessor)
-    : IDocumentPersistentWriter
+public class PostgresDocumentWriter(
+    PostgresDbFactory dbFactory,
+    EventPublisher eventPublisher,
+    IBlobAccessor blobAccessor) : IDocumentPersistentWriter
 {
     public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType) where TDocument : IDocument
     {
@@ -36,7 +38,9 @@ public class PostgresDocumentWriter(PostgresDbFactory dbFactory, EventPublisher 
                         break;
                     case (DocumentType.MultiProjectionSnapshot, _, MultiProjectionSnapshotDocument multiSnapshot):
                         dbContext.MultiProjectionSnapshots.Add(
-                            DbMultiProjectionDocument.FromMultiProjectionSnapshotDocument(multiSnapshot, aggregateContainerGroup));
+                            DbMultiProjectionDocument.FromMultiProjectionSnapshotDocument(
+                                multiSnapshot,
+                                aggregateContainerGroup));
                         break;
                 }
                 await dbContext.SaveChangesAsync();
@@ -74,13 +78,19 @@ public class PostgresDocumentWriter(PostgresDbFactory dbFactory, EventPublisher 
         if (useBlob)
         {
             var blobSnapshot = document with { Snapshot = null };
-            var json = SekibanJsonHelper.Serialize(document.Snapshot) as string ?? throw new SekibanInvalidDocumentTypeException();
+            var json = SekibanJsonHelper.Serialize(document.Snapshot) as string ??
+                throw new SekibanInvalidDocumentTypeException();
             var memoryStream = new MemoryStream(Encoding.UTF8.GetBytes(json));
-            await blobAccessor.SetBlobWithGZipAsync(SekibanBlobContainer.SingleProjectionState, blobSnapshot.FilenameForSnapshot(), memoryStream);
+            await blobAccessor.SetBlobWithGZipAsync(
+                SekibanBlobContainer.SingleProjectionState,
+                blobSnapshot.FilenameForSnapshot(),
+                memoryStream);
             await dbFactory.DbActionAsync(
                 async dbContext =>
                 {
-                    var newItem = DbSingleProjectionSnapshotDocument.FromDocument(blobSnapshot, aggregateContainerGroup);
+                    var newItem = DbSingleProjectionSnapshotDocument.FromDocument(
+                        blobSnapshot,
+                        aggregateContainerGroup);
                     dbContext.SingleProjectionSnapshots.Add(newItem);
                     await dbContext.SaveChangesAsync();
                 });

@@ -27,7 +27,9 @@ public record DbCommandDocument
     public string AggregateType { get; init; } = string.Empty;
     public string RootPartitionKey { get; init; } = string.Empty;
 
-    public static DbCommandDocument FromCommandDocument(ICommandDocumentCommon commandDocument, AggregateContainerGroup aggregateContainerGroup) =>
+    public static DbCommandDocument FromCommandDocument(
+        ICommandDocumentCommon commandDocument,
+        AggregateContainerGroup aggregateContainerGroup) =>
         new()
         {
             AggregateContainerGroup = aggregateContainerGroup,

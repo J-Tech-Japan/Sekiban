@@ -28,7 +28,9 @@ public record DbSingleProjectionSnapshotDocument
     public string AggregateType { get; init; } = string.Empty;
     public string RootPartitionKey { get; init; } = string.Empty;
 
-    public static DbSingleProjectionSnapshotDocument FromDocument(SnapshotDocument document, AggregateContainerGroup aggregateContainerGroup) =>
+    public static DbSingleProjectionSnapshotDocument FromDocument(
+        SnapshotDocument document,
+        AggregateContainerGroup aggregateContainerGroup) =>
         new()
         {
             AggregateContainerGroup = aggregateContainerGroup,

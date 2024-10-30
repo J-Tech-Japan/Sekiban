@@ -25,8 +25,9 @@ public record DbMultiProjectionDocument
     public int SavedVersion { get; init; }
 
     public string PayloadVersionIdentifier { get; init; } = string.Empty;
-    public static DbMultiProjectionDocument
-        FromMultiProjectionSnapshotDocument(MultiProjectionSnapshotDocument commandDocument, AggregateContainerGroup aggregateContainerGroup) =>
+    public static DbMultiProjectionDocument FromMultiProjectionSnapshotDocument(
+        MultiProjectionSnapshotDocument commandDocument,
+        AggregateContainerGroup aggregateContainerGroup) =>
         new()
         {
             AggregateContainerGroup = aggregateContainerGroup,
