@@ -3,6 +3,7 @@ using Amazon.DynamoDBv2.Model;
 using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;

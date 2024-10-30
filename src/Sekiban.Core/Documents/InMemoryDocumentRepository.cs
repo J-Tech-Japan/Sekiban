@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using ResultBoxes;
 using Sekiban.Core.Cache;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 using Sekiban.Core.Query.MultiProjections;

@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Setting;

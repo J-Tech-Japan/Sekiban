@@ -1,4 +1,5 @@
 using ResultBoxes;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Snapshot;
