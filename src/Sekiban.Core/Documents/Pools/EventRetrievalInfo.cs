@@ -10,6 +10,18 @@ public record EventRetrievalInfo(
     OptionalValue<Guid> AggregateId,
     OptionalValue<SortableUniqueIdValue> SinceSortableUniqueId)
 {
+    public static EventRetrievalInfo FromNullableValues(
+        string? rootPartitionKey,
+        IAggregatesStream aggregatesStream,
+        Guid? aggregateId,
+        string? sinceSortableUniqueId) => new(
+        string.IsNullOrWhiteSpace(rootPartitionKey)
+            ? OptionalValue<string>.Empty
+            : OptionalValue.FromNullableValue(rootPartitionKey),
+        OptionalValue<IAggregatesStream>.FromValue(aggregatesStream),
+        OptionalValue.FromNullableValue(aggregateId),
+        OptionalValue.FromNullableValue(sinceSortableUniqueId).Remap(id => new SortableUniqueIdValue(id)));
+
     public bool GetIsPartition() => AggregateId.HasValue;
     public bool HasAggregateStream() =>
         AggregateStream.HasValue && AggregateStream.GetValue().GetStreamNames().Count > 0;

@@ -55,25 +55,5 @@ public interface IDocumentRepository
     Task<ResultBox<UnitValue>> GetEvents(
         EventRetrievalInfo eventRetrievalInfo,
         Action<IEnumerable<IEvent>> resultAction);
-    Task GetAllEventsForAggregateIdAsync(
-        Guid aggregateId,
-        Type aggregatePayloadType,
-        string? partitionKey,
-        string? sinceSortableUniqueId,
-        string rootPartitionKey,
-        Action<IEnumerable<IEvent>> resultAction);
-
-    Task GetAllEventsForAggregateAsync(
-        Type aggregatePayloadType,
-        string? sinceSortableUniqueId,
-        string rootPartitionKey,
-        Action<IEnumerable<IEvent>> resultAction);
-
-    Task GetAllEventsAsync(
-        Type multiProjectionType,
-        IList<string> targetAggregateNames,
-        string? sinceSortableUniqueId,
-        string rootPartitionKey,
-        Action<IEnumerable<IEvent>> resultAction);
     #endregion
 }

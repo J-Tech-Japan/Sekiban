@@ -138,26 +138,6 @@ public class PostgresDocumentRepository(
             });
         return ResultBox.UnitValue;
     }
-    public async Task GetAllEventsForAggregateIdAsync(
-        Guid aggregateId,
-        Type aggregatePayloadType,
-        string? partitionKey,
-        string? sinceSortableUniqueId,
-        string rootPartitionKey,
-        Action<IEnumerable<IEvent>> resultAction)
-    {
-        await GetEvents(
-            new EventRetrievalInfo(
-                string.IsNullOrEmpty(rootPartitionKey)
-                    ? OptionalValue<string>.Empty
-                    : OptionalValue.FromValue(rootPartitionKey),
-                new AggregateTypeStream(aggregatePayloadType),
-                OptionalValue.FromValue(aggregateId),
-                string.IsNullOrWhiteSpace(sinceSortableUniqueId)
-                    ? OptionalValue<SortableUniqueIdValue>.Empty
-                    : new SortableUniqueIdValue(sinceSortableUniqueId)),
-            resultAction);
-    }
     public async Task GetAllEventStringsForAggregateIdAsync(
         Guid aggregateId,
         Type aggregatePayloadType,
@@ -166,12 +146,12 @@ public class PostgresDocumentRepository(
         string rootPartitionKey,
         Action<IEnumerable<string>> resultAction)
     {
-        await GetAllEventsForAggregateIdAsync(
-            aggregateId,
-            aggregatePayloadType,
-            partitionKey,
-            sinceSortableUniqueId,
-            rootPartitionKey,
+        await GetEvents(
+            EventRetrievalInfo.FromNullableValues(
+                rootPartitionKey,
+                new AggregateTypeStream(aggregatePayloadType),
+                aggregateId,
+                sinceSortableUniqueId),
             events =>
             {
                 resultAction(events.Select(SekibanJsonHelper.Serialize).Where(m => !string.IsNullOrEmpty(m))!);
@@ -195,45 +175,6 @@ public class PostgresDocumentRepository(
                 GetCommandsInBatches(query, sinceSortableUniqueId).ForEach(resultAction);
                 await Task.CompletedTask;
             });
-    }
-    public async Task GetAllEventsForAggregateAsync(
-        Type aggregatePayloadType,
-        string? sinceSortableUniqueId,
-        string rootPartitionKey,
-        Action<IEnumerable<IEvent>> resultAction)
-    {
-        await GetEvents(
-                new EventRetrievalInfo(
-                    string.IsNullOrEmpty(rootPartitionKey)
-                        ? OptionalValue<string>.Empty
-                        : OptionalValue.FromValue(rootPartitionKey),
-                    new AggregateTypeStream(aggregatePayloadType),
-                    OptionalValue<Guid>.Empty,
-                    string.IsNullOrWhiteSpace(sinceSortableUniqueId)
-                        ? OptionalValue<SortableUniqueIdValue>.Empty
-                        : new SortableUniqueIdValue(sinceSortableUniqueId)),
-                resultAction)
-            .UnwrapBox();
-    }
-    public async Task GetAllEventsAsync(
-        Type multiProjectionType,
-        IList<string> targetAggregateNames,
-        string? sinceSortableUniqueId,
-        string rootPartitionKey,
-        Action<IEnumerable<IEvent>> resultAction)
-    {
-        await GetEvents(
-                new EventRetrievalInfo(
-                    string.IsNullOrEmpty(rootPartitionKey)
-                        ? OptionalValue<string>.Empty
-                        : OptionalValue.FromValue(rootPartitionKey),
-                    new MultiProjectionTypeStream(multiProjectionType, targetAggregateNames),
-                    OptionalValue<Guid>.Empty,
-                    string.IsNullOrWhiteSpace(sinceSortableUniqueId)
-                        ? OptionalValue<SortableUniqueIdValue>.Empty
-                        : new SortableUniqueIdValue(sinceSortableUniqueId)),
-                resultAction)
-            .UnwrapBox();
     }
     public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
         Guid aggregateId,
