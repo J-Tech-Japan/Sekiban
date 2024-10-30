@@ -21,17 +21,14 @@ public class DocumentRepositorySplitter : IDocumentRepository
     private readonly IDocumentPersistentRepository _documentPersistentRepository;
     private readonly IDocumentTemporaryRepository _documentTemporaryRepository;
     private readonly IDocumentTemporaryWriter _documentTemporaryWriter;
-    private readonly HybridStoreManager _hybridStoreManager;
     public DocumentRepositorySplitter(
         IDocumentPersistentRepository documentPersistentRepository,
         IDocumentTemporaryRepository documentTemporaryRepository,
-        HybridStoreManager hybridStoreManager,
         IDocumentTemporaryWriter documentTemporaryWriter,
         IAggregateSettings aggregateSettings)
     {
         _documentPersistentRepository = documentPersistentRepository;
         _documentTemporaryRepository = documentTemporaryRepository;
-        _hybridStoreManager = hybridStoreManager;
         _documentTemporaryWriter = documentTemporaryWriter;
         _aggregateSettings = aggregateSettings;
     }
@@ -204,7 +201,6 @@ public class DocumentRepositorySplitter : IDocumentRepository
         string sortableUniqueKey,
         bool fromInitial)
     {
-        _hybridStoreManager.AddPartitionKey(partitionKey, sortableUniqueKey, fromInitial);
         foreach (var ev in events)
         {
             _documentTemporaryWriter.SaveAsync(ev, originalType).Wait();

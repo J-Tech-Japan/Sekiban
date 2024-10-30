@@ -14,11 +14,6 @@ public class AggregateSetting
     /// </summary>
     public bool? MakeSnapshots { get; init; }
     /// <summary>
-    ///     Use Hybrid (keeps event created in server and use that for the projection)
-    ///     Only works with single server environment.
-    /// </summary>
-    public bool? UseHybrid { get; init; }
-    /// <summary>
     ///     How often snapshot will be taken.
     /// </summary>
     public int? SnapshotFrequency { get; init; }
@@ -28,7 +23,8 @@ public class AggregateSetting
     /// </summary>
     public int? SnapshotOffset { get; init; }
     /// <summary>
-    ///     Uses Update marker. Update marker works only with single server environment or multiple servers sending updates to
+    ///     Uses Update marker. Update marker works only with single server environment or multiple servers sending
+    ///     updates to
     ///     the projection server.
     /// </summary>
     public bool? UseUpdateMarker { get; set; }
@@ -39,13 +35,11 @@ public class AggregateSetting
     public AggregateSetting(
         string aggregateClassName,
         bool? makeSnapshots,
-        bool? useHybrid,
         bool? useUpdateMarker = null,
         int? snapshotFrequency = null,
         int? snapshotOffset = null)
     {
         AggregateClassName = aggregateClassName;
-        UseHybrid = useHybrid;
         MakeSnapshots = makeSnapshots;
         SnapshotFrequency = snapshotFrequency;
         SnapshotOffset = snapshotOffset;

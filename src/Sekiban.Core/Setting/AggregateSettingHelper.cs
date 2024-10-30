@@ -8,7 +8,6 @@ namespace Sekiban.Core.Setting;
 public class AggregateSettingHelper
 {
     private const string AggregatesSection = "Aggregates";
-    public bool UseHybridDefault { get; }
     public bool TakeSnapshotDefault { get; }
     public int SnapshotFrequencyDefault { get; }
     public int SnapshotOffsetDefault { get; }
@@ -16,7 +15,6 @@ public class AggregateSettingHelper
     public IEnumerable<AggregateSetting> Exceptions { get; } = Enumerable.Empty<AggregateSetting>();
     public AggregateSettingHelper()
     {
-        UseHybridDefault = false;
         TakeSnapshotDefault = true;
         SnapshotFrequencyDefault = 80;
         SnapshotOffsetDefault = 15;
@@ -25,14 +23,12 @@ public class AggregateSettingHelper
 
     public AggregateSettingHelper(
         bool takeSnapshotDefault,
-        bool useHybridDefault,
         int snapshotFrequencyDefault,
         int snapshotOffsetDefault,
         bool useUpdateMarker,
         IEnumerable<AggregateSetting> exceptions)
     {
         TakeSnapshotDefault = takeSnapshotDefault;
-        UseHybridDefault = useHybridDefault;
         SnapshotFrequencyDefault = snapshotFrequencyDefault;
         SnapshotOffsetDefault = snapshotOffsetDefault;
         UseUpdateMarker = useUpdateMarker;
@@ -41,7 +37,6 @@ public class AggregateSettingHelper
     public static AggregateSettingHelper FromConfigurationSection(IConfigurationSection section)
     {
         section = section.GetSection(AggregatesSection);
-        var useHybridDefault = section.GetValue<bool?>("UseHybridDefault") ?? false;
         var takeSnapshotDefault = section.GetValue<bool?>("TakeSnapshotDefault") ?? true;
         var snapshotFrequencyDefault = section.GetValue<int?>("SnapshotFrequencyDefault") ?? 80;
         var snapshotOffsetDefault = section.GetValue<int?>("SnapshotOffsetDefault") ?? 15;
@@ -49,7 +44,6 @@ public class AggregateSettingHelper
         var exceptions = section.GetSection("SingleAggregateExceptions").Get<List<AggregateSetting>>() ?? [];
         return new AggregateSettingHelper(
             takeSnapshotDefault,
-            useHybridDefault,
             snapshotFrequencyDefault,
             snapshotOffsetDefault,
             useUpdateMarker,

@@ -69,7 +69,6 @@ public static class SekibanCoreServiceExtensions
         services.AddTransient<IDocumentTemporaryRepository, InMemoryDocumentRepository>();
         services.AddTransient<IDocumentWriter, DocumentWriterSplitter>();
         services.AddTransient<IDocumentRepository, DocumentRepositorySplitter>();
-        services.AddSingleton(new HybridStoreManager(true));
         services.AddScoped<ISekibanContext, SekibanContext>();
         services.AddTransient<IQueryExecutor, QueryExecutor>();
         services.AddTransient<ISekibanExecutor, SekibanExecutor>();
@@ -123,7 +122,6 @@ public static class SekibanCoreServiceExtensions
         services.AddSingleton(new InMemoryDocumentStore());
         services.AddTransient<IDocumentWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentRepository, InMemoryDocumentRepository>();
-        services.AddSingleton(new HybridStoreManager(true));
         services.AddScoped<ISekibanContext, SekibanContext>();
 
         services.AddTransient<IDocumentTemporaryRepository, InMemoryDocumentRepository>();
@@ -184,7 +182,6 @@ public static class SekibanCoreServiceExtensions
         services.AddSingleton(new InMemoryDocumentStore());
         services.AddTransient<IDocumentWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentRepository, InMemoryDocumentRepository>();
-        services.AddSingleton(new HybridStoreManager(true));
         services.AddScoped<ISekibanContext, SekibanContext>();
 
         services.AddTransient<IDocumentTemporaryRepository, InMemoryDocumentRepository>();

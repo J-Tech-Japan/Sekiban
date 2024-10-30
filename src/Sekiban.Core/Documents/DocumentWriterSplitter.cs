@@ -14,17 +14,14 @@ public class DocumentWriterSplitter : IDocumentWriter
     private readonly IAggregateSettings _aggregateSettings;
     private readonly IDocumentPersistentWriter _documentPersistentWriter;
     private readonly IDocumentTemporaryWriter _documentTemporaryWriter;
-    private readonly HybridStoreManager _hybridStoreManager;
 
     public DocumentWriterSplitter(
         IDocumentPersistentWriter documentPersistentWriter,
         IDocumentTemporaryWriter documentTemporaryWriter,
-        HybridStoreManager hybridStoreManager,
         IAggregateSettings aggregateSettings)
     {
         _documentPersistentWriter = documentPersistentWriter;
         _documentTemporaryWriter = documentTemporaryWriter;
-        _hybridStoreManager = hybridStoreManager;
         _aggregateSettings = aggregateSettings;
     }
 
@@ -57,23 +54,6 @@ public class DocumentWriterSplitter : IDocumentWriter
             return;
         }
         var enumerable = events.ToList();
-        foreach (var ev in enumerable)
-        {
-            await AddToHybridIfPossible(ev, aggregateType);
-        }
         await _documentPersistentWriter.SaveAndPublishEvents(enumerable, aggregateType);
-    }
-
-    private async Task AddToHybridIfPossible(IEvent ev, Type aggregateType)
-    {
-        if (!_aggregateSettings.CanUseHybrid(aggregateType))
-        {
-            return;
-        }
-        if (!_hybridStoreManager.HasPartition(ev.PartitionKey))
-        {
-            _hybridStoreManager.AddPartitionKey(ev.PartitionKey, string.Empty, false);
-        }
-        await _documentTemporaryWriter.SaveAsync(ev, aggregateType);
     }
 }
