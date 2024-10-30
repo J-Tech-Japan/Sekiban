@@ -47,7 +47,7 @@ public class DynamoDocumentRepository(
                     resultAction(events.OrderBy(m => m.SortableUniqueId));
                 } else
                 {
-                    var filter = new QueryFilter();
+                    var filter = new ScanFilter();
                     if (eventRetrievalInfo.HasAggregateStream())
                     {
                         var aggregates = eventRetrievalInfo.AggregateStream.GetValue().GetStreamNames();
@@ -60,12 +60,12 @@ public class DynamoDocumentRepository(
                     {
                         filter.AddCondition(
                             nameof(Document.RootPartitionKey),
-                            QueryOperator.Equal,
+                            ScanOperator.Equal,
                             eventRetrievalInfo.RootPartitionKey.GetValue());
                     }
                     filter.AddSortableUniqueIdIfNull(eventRetrievalInfo.SinceSortableUniqueId);
-                    var config = new QueryOperationConfig { Filter = filter, BackwardSearch = true };
-                    var search = table.Query(config);
+                    var config = new ScanOperationConfig { Filter = filter };
+                    var search = table.Scan(config);
 
                     var resultList = await FetchDocumentsAsync(search);
                     var events = ProcessEventDocuments(resultList, eventRetrievalInfo.SinceSortableUniqueId);

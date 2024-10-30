@@ -35,4 +35,17 @@ public static class QueryFilterExtensions
         }
         scanFilter.AddCondition(nameof(Document.SortableUniqueId), ScanOperator.GreaterThan, sinceSortableUniqueId);
     }
+    public static void AddSortableUniqueIdIfNull(
+        this ScanFilter scanFilter,
+        OptionalValue<SortableUniqueIdValue> sinceSortableUniqueId)
+    {
+        if (!sinceSortableUniqueId.HasValue)
+        {
+            return;
+        }
+        scanFilter.AddCondition(
+            nameof(Document.SortableUniqueId),
+            ScanOperator.GreaterThan,
+            sinceSortableUniqueId.GetValue().Value);
+    }
 }

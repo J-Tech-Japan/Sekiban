@@ -2,6 +2,7 @@ using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.History;
@@ -19,9 +20,123 @@ public class PostgresDocumentRepository(
     RegisteredEventTypes registeredEventTypes,
     ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor) : IDocumentPersistentRepository
 {
-    public Task<ResultBox<UnitValue>> GetEvents(
+    public async Task<ResultBox<UnitValue>> GetEvents(
         EventRetrievalInfo eventRetrievalInfo,
-        Action<IEnumerable<IEvent>> resultAction) => throw new NotImplementedException();
+        Action<IEnumerable<IEvent>> resultAction)
+    {
+        var aggregateContainerGroup = eventRetrievalInfo.GetAggregateContainerGroup();
+        await dbFactory.DbActionAsync(
+            async dbContext =>
+            {
+                if (eventRetrievalInfo.GetIsPartition())
+                {
+                    var partitionKey = eventRetrievalInfo.GetPartitionKey().UnwrapBox();
+                    switch (aggregateContainerGroup)
+                    {
+                        case AggregateContainerGroup.Default:
+
+                            var query = dbContext.Events.Where(m => m.PartitionKey == partitionKey) ??
+                                throw new SekibanInvalidArgumentException();
+                            query = eventRetrievalInfo.SinceSortableUniqueId.HasValue
+                                ? query
+                                    .Where(
+                                        m => string.Compare(
+                                                m.SortableUniqueId,
+                                                eventRetrievalInfo.SinceSortableUniqueId.GetValue().Value) >
+                                            0)
+                                    .OrderByDescending(m => m.SortableUniqueId)
+                                : query.OrderBy(m => m.SortableUniqueId);
+                            // take 1000 events each and run resultAction
+                            GetEventsInBatches(query, eventRetrievalInfo.SinceSortableUniqueId).ForEach(resultAction);
+                            break;
+
+                        case AggregateContainerGroup.Dissolvable:
+                            var queryDissolvable
+                                = dbContext.DissolvableEvents.Where(m => m.PartitionKey == partitionKey) ??
+                                throw new SekibanInvalidArgumentException();
+                            queryDissolvable = eventRetrievalInfo.SinceSortableUniqueId.HasValue
+                                ? queryDissolvable
+                                    .Where(
+                                        m => string.Compare(
+                                                m.SortableUniqueId,
+                                                eventRetrievalInfo.SinceSortableUniqueId.GetValue().Value) >
+                                            0)
+                                    .OrderByDescending(m => m.SortableUniqueId)
+                                : queryDissolvable.OrderBy(m => m.SortableUniqueId);
+                            // take 1000 events each and run resultAction
+                            foreach (var ev in GetEventsInBatches(
+                                queryDissolvable,
+                                eventRetrievalInfo.SinceSortableUniqueId))
+                            {
+                                resultAction(ev);
+                            }
+                            break;
+                    }
+                } else
+                {
+                    switch (aggregateContainerGroup)
+                    {
+                        case AggregateContainerGroup.Default:
+                            var query = dbContext.Events.AsQueryable();
+                            if (eventRetrievalInfo.HasAggregateStream())
+                            {
+                                var aggregateNames = eventRetrievalInfo.AggregateStream.GetValue().GetStreamNames();
+                                query = query.Where(m => aggregateNames.Contains(m.AggregateType));
+                            }
+                            if (eventRetrievalInfo.HasRootPartitionKey())
+                            {
+                                var rootPartitionKey = eventRetrievalInfo.RootPartitionKey.GetValue();
+                                query = query.Where(m => m.RootPartitionKey == rootPartitionKey);
+                            }
+                            query = eventRetrievalInfo.SinceSortableUniqueId.HasValue
+                                ? query
+                                    .Where(
+                                        m => string.Compare(
+                                                m.SortableUniqueId,
+                                                eventRetrievalInfo.SinceSortableUniqueId.GetValue().Value) >
+                                            0)
+                                    .OrderByDescending(m => m.SortableUniqueId)
+                                : query.OrderBy(m => m.SortableUniqueId);
+                            // take 1000 events each and run resultAction
+                            GetEventsInBatches(query, eventRetrievalInfo.SinceSortableUniqueId).ForEach(resultAction);
+                            break;
+
+                        case AggregateContainerGroup.Dissolvable:
+
+
+                            var queryDissolvable = dbContext.DissolvableEvents.AsQueryable();
+                            if (eventRetrievalInfo.HasAggregateStream())
+                            {
+                                var aggregateNames = eventRetrievalInfo.AggregateStream.GetValue().GetStreamNames();
+                                queryDissolvable
+                                    = queryDissolvable.Where(m => aggregateNames.Contains(m.AggregateType));
+                            }
+                            if (eventRetrievalInfo.HasRootPartitionKey())
+                            {
+                                var rootPartitionKey = eventRetrievalInfo.RootPartitionKey.GetValue();
+                                queryDissolvable = queryDissolvable.Where(m => m.RootPartitionKey == rootPartitionKey);
+                            }
+                            queryDissolvable = eventRetrievalInfo.SinceSortableUniqueId.HasValue
+                                ? queryDissolvable
+                                    .Where(
+                                        m => string.Compare(
+                                                m.SortableUniqueId,
+                                                eventRetrievalInfo.SinceSortableUniqueId.GetValue().Value) >
+                                            0)
+                                    .OrderByDescending(m => m.SortableUniqueId)
+                                : queryDissolvable.OrderBy(m => m.SortableUniqueId);
+                            // take 1000 events each and run resultAction
+                            GetEventsInBatches(queryDissolvable, eventRetrievalInfo.SinceSortableUniqueId)
+                                .ForEach(resultAction);
+                            break;
+                    }
+                    await Task.CompletedTask;
+
+                }
+
+            });
+        return ResultBox.UnitValue;
+    }
     public async Task GetAllEventsForAggregateIdAsync(
         Guid aggregateId,
         Type aggregatePayloadType,
@@ -30,43 +145,17 @@ public class PostgresDocumentRepository(
         string rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction)
     {
-        var aggregateContainerGroup
-            = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-        await dbFactory.DbActionAsync(
-            async dbContext =>
-            {
-                switch (aggregateContainerGroup)
-                {
-                    case AggregateContainerGroup.Default:
-
-                        var query = dbContext.Events.Where(m => m.PartitionKey == partitionKey) ??
-                            throw new SekibanInvalidArgumentException();
-                        query = string.IsNullOrEmpty(sinceSortableUniqueId)
-                            ? query.OrderBy(m => m.SortableUniqueId)
-                            : query
-                                .Where(m => string.Compare(m.SortableUniqueId, sinceSortableUniqueId) > 0)
-                                .OrderByDescending(m => m.SortableUniqueId);
-                        // take 1000 events each and run resultAction
-                        GetEventsInBatches(query, sinceSortableUniqueId).ForEach(resultAction);
-                        break;
-
-                    case AggregateContainerGroup.Dissolvable:
-                        var queryDissolvable = dbContext.DissolvableEvents.Where(m => m.PartitionKey == partitionKey) ??
-                            throw new SekibanInvalidArgumentException();
-                        queryDissolvable = string.IsNullOrEmpty(sinceSortableUniqueId)
-                            ? queryDissolvable.OrderBy(m => m.SortableUniqueId)
-                            : queryDissolvable
-                                .Where(m => string.Compare(m.SortableUniqueId, sinceSortableUniqueId) > 0)
-                                .OrderByDescending(m => m.SortableUniqueId);
-                        // take 1000 events each and run resultAction
-                        foreach (var ev in GetEventsInBatches(queryDissolvable, sinceSortableUniqueId))
-                        {
-                            resultAction(ev);
-                        }
-                        break;
-                }
-                await Task.CompletedTask;
-            });
+        await GetEvents(
+            new EventRetrievalInfo(
+                string.IsNullOrEmpty(rootPartitionKey)
+                    ? OptionalValue<string>.Empty
+                    : OptionalValue.FromValue(rootPartitionKey),
+                new AggregateTypeStream(aggregatePayloadType),
+                OptionalValue.FromValue(aggregateId),
+                string.IsNullOrWhiteSpace(sinceSortableUniqueId)
+                    ? OptionalValue<SortableUniqueIdValue>.Empty
+                    : new SortableUniqueIdValue(sinceSortableUniqueId)),
+            resultAction);
     }
     public async Task GetAllEventStringsForAggregateIdAsync(
         Guid aggregateId,
@@ -112,48 +201,18 @@ public class PostgresDocumentRepository(
         string rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction)
     {
-        var aggregateContainerGroup
-            = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-        await dbFactory.DbActionAsync(
-            async dbContext =>
-            {
-                switch (aggregateContainerGroup)
-                {
-                    case AggregateContainerGroup.Default:
-                        var query = dbContext.Events.Where(m => m.AggregateType == aggregatePayloadType.Name);
-                        if (rootPartitionKey != IMultiProjectionService.ProjectionAllRootPartitions)
-                        {
-                            query = query.Where(m => m.RootPartitionKey == rootPartitionKey);
-                        }
-                        query = string.IsNullOrEmpty(sinceSortableUniqueId)
-                            ? query.OrderBy(m => m.SortableUniqueId)
-                            : query
-                                .Where(m => string.Compare(m.SortableUniqueId, sinceSortableUniqueId) > 0)
-                                .OrderByDescending(m => m.SortableUniqueId);
-                        // take 1000 events each and run resultAction
-                        GetEventsInBatches(query, sinceSortableUniqueId).ForEach(resultAction);
-                        break;
-
-                    case AggregateContainerGroup.Dissolvable:
-
-
-                        var queryDissolvable
-                            = dbContext.DissolvableEvents.Where(m => m.AggregateType == aggregatePayloadType.Name);
-                        if (rootPartitionKey != IMultiProjectionService.ProjectionAllRootPartitions)
-                        {
-                            queryDissolvable = queryDissolvable.Where(m => m.RootPartitionKey == rootPartitionKey);
-                        }
-                        queryDissolvable = string.IsNullOrEmpty(sinceSortableUniqueId)
-                            ? queryDissolvable.OrderBy(m => m.SortableUniqueId)
-                            : queryDissolvable
-                                .Where(m => string.Compare(m.SortableUniqueId, sinceSortableUniqueId) > 0)
-                                .OrderByDescending(m => m.SortableUniqueId);
-                        // take 1000 events each and run resultAction
-                        GetEventsInBatches(queryDissolvable, sinceSortableUniqueId).ForEach(resultAction);
-                        break;
-                }
-                await Task.CompletedTask;
-            });
+        await GetEvents(
+                new EventRetrievalInfo(
+                    string.IsNullOrEmpty(rootPartitionKey)
+                        ? OptionalValue<string>.Empty
+                        : OptionalValue.FromValue(rootPartitionKey),
+                    new AggregateTypeStream(aggregatePayloadType),
+                    OptionalValue<Guid>.Empty,
+                    string.IsNullOrWhiteSpace(sinceSortableUniqueId)
+                        ? OptionalValue<SortableUniqueIdValue>.Empty
+                        : new SortableUniqueIdValue(sinceSortableUniqueId)),
+                resultAction)
+            .UnwrapBox();
     }
     public async Task GetAllEventsAsync(
         Type multiProjectionType,
@@ -162,48 +221,18 @@ public class PostgresDocumentRepository(
         string rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionType);
-        await dbFactory.DbActionAsync(
-            async dbContext =>
-            {
-                switch (aggregateContainerGroup)
-                {
-                    case AggregateContainerGroup.Default:
-                        var query = dbContext.Events.Where(
-                            m => targetAggregateNames.Count == 0 || targetAggregateNames.Contains(m.AggregateType));
-                        if (sinceSortableUniqueId != null)
-                        {
-                            query = query.Where(m => string.Compare(m.SortableUniqueId, sinceSortableUniqueId) > 0);
-                        }
-                        if (!string.IsNullOrEmpty(rootPartitionKey))
-                        {
-                            query = query.Where(m => m.RootPartitionKey == rootPartitionKey);
-                        }
-                        query = query.OrderBy(m => m.SortableUniqueId);
-                        // take 1000 events each and run resultAction
-                        GetEventsInBatches(query, sinceSortableUniqueId).ForEach(resultAction);
-                        break;
-
-                    case AggregateContainerGroup.Dissolvable:
-
-                        var queryDissolvable = dbContext.DissolvableEvents.Where(
-                            m => targetAggregateNames.Count == 0 || targetAggregateNames.Contains(m.AggregateType));
-                        if (sinceSortableUniqueId != null)
-                        {
-                            queryDissolvable = queryDissolvable.Where(
-                                m => string.Compare(m.SortableUniqueId, sinceSortableUniqueId) > 0);
-                        }
-                        if (!string.IsNullOrEmpty(rootPartitionKey))
-                        {
-                            queryDissolvable = queryDissolvable.Where(m => m.RootPartitionKey == rootPartitionKey);
-                        }
-                        queryDissolvable = queryDissolvable.OrderBy(m => m.SortableUniqueId);
-                        // take 1000 events each and run resultAction
-                        GetEventsInBatches(queryDissolvable, sinceSortableUniqueId).ForEach(resultAction);
-                        break;
-                }
-                await Task.CompletedTask;
-            });
+        await GetEvents(
+                new EventRetrievalInfo(
+                    string.IsNullOrEmpty(rootPartitionKey)
+                        ? OptionalValue<string>.Empty
+                        : OptionalValue.FromValue(rootPartitionKey),
+                    new MultiProjectionTypeStream(multiProjectionType, targetAggregateNames),
+                    OptionalValue<Guid>.Empty,
+                    string.IsNullOrWhiteSpace(sinceSortableUniqueId)
+                        ? OptionalValue<SortableUniqueIdValue>.Empty
+                        : new SortableUniqueIdValue(sinceSortableUniqueId)),
+                resultAction)
+            .UnwrapBox();
     }
     public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
         Guid aggregateId,
@@ -460,7 +489,7 @@ public class PostgresDocumentRepository(
 
     private IEnumerable<IEnumerable<IEvent>> GetEventsInBatches(
         IEnumerable<IDbEvent> events,
-        string? sinceSortableUniqueId)
+        OptionalValue<SortableUniqueIdValue> sinceSortableUniqueId)
     {
         const int batchSize = 1000;
         List<IEvent> eventBatch = [];
@@ -481,7 +510,7 @@ public class PostgresDocumentRepository(
             yield return eventBatch;
         }
     }
-    private IEvent? FromDbEvent(IDbEvent dbEvent, string? sinceSortableUniqueId)
+    private IEvent? FromDbEvent(IDbEvent dbEvent, OptionalValue<SortableUniqueIdValue> sinceSortableUniqueId)
     {
         if (string.IsNullOrEmpty(dbEvent.DocumentTypeName))
         {
