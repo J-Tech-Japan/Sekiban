@@ -11,7 +11,8 @@ public record SekibanPostgresOptions
 
     public static SekibanPostgresOptions Default => new();
 
-    public SekibanPostgresDbOption GetContextOption(string context) => Contexts.Find(x => x.Context == context) ?? new SekibanPostgresDbOption();
+    public SekibanPostgresDbOption GetContextOption(string context) =>
+        Contexts.Find(x => x.Context == context) ?? new SekibanPostgresDbOption();
     public SekibanPostgresDbOption GetContextOption(IServiceProvider serviceProvider) =>
         Contexts.Find(x => x.Context == SekibanContextIdentifier(serviceProvider)) ?? new SekibanPostgresDbOption();
     public SekibanPostgresDbOption GetContextOption(ISekibanContext context) =>
@@ -25,8 +26,11 @@ public record SekibanPostgresOptions
     public static SekibanPostgresOptions FromConfiguration(IConfiguration configuration) =>
         FromConfigurationSection(
             configuration.GetSection("Sekiban"),
-            configuration as IConfigurationRoot ?? throw new ConfigurationErrorsException("postgres configuration failed."));
-    public static SekibanPostgresOptions FromConfigurationSection(IConfigurationSection section, IConfigurationRoot configurationRoot)
+            configuration as IConfigurationRoot ??
+            throw new ConfigurationErrorsException("postgres configuration failed."));
+    public static SekibanPostgresOptions FromConfigurationSection(
+        IConfigurationSection section,
+        IConfigurationRoot configurationRoot)
     {
         var defaultContextSection = section.GetSection("Default");
         var contexts = section.GetSection("Contexts").GetChildren().ToList();
@@ -45,7 +49,9 @@ public record SekibanPostgresOptions
         }
         return new SekibanPostgresOptions { Contexts = contextSettings };
     }
-    public static SekibanPostgresOptions FromConnectionStringName(string connectionStringName, IConfigurationRoot configurationRoot) =>
+    public static SekibanPostgresOptions FromConnectionStringName(
+        string connectionStringName,
+        IConfigurationRoot configurationRoot) =>
         new()
         {
             Contexts = new List<SekibanPostgresDbOption>
@@ -53,5 +59,6 @@ public record SekibanPostgresOptions
                 SekibanPostgresDbOption.FromConnectionStringName(connectionStringName, configurationRoot)
             }
         };
-    private static string GetLastPathComponent(IConfigurationSection section) => section.Path.Split(':').LastOrDefault() ?? section.Path;
+    private static string GetLastPathComponent(IConfigurationSection section) =>
+        section.Path.Split(':').LastOrDefault() ?? section.Path;
 }

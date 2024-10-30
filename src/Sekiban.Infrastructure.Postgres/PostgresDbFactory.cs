@@ -7,7 +7,10 @@ using Sekiban.Core.Setting;
 using Sekiban.Infrastructure.Postgres.Databases;
 namespace Sekiban.Infrastructure.Postgres;
 
-public class PostgresDbFactory(SekibanPostgresOptions dbOptions, IMemoryCacheAccessor memoryCache, IServiceProvider serviceProvider)
+public class PostgresDbFactory(
+    SekibanPostgresOptions dbOptions,
+    IMemoryCacheAccessor memoryCache,
+    IServiceProvider serviceProvider)
 {
     private string SekibanContextIdentifier()
     {
@@ -24,13 +27,15 @@ public class PostgresDbFactory(SekibanPostgresOptions dbOptions, IMemoryCacheAcc
         return (documentType, containerGroup) switch
         {
             (DocumentType.Event, AggregateContainerGroup.Default) => SekibanPostgresDbOption.EventsTableId,
-            (DocumentType.Event, AggregateContainerGroup.Dissolvable) => SekibanPostgresDbOption.EventsTableIdDissolvable,
+            (DocumentType.Event, AggregateContainerGroup.Dissolvable) => SekibanPostgresDbOption
+                .EventsTableIdDissolvable,
             (_, AggregateContainerGroup.Default) => SekibanPostgresDbOption.ItemsTableId,
             _ => SekibanPostgresDbOption.ItemsTableIdDissolvable
         };
     }
 
-    private static string GetMemoryCacheDbContextKey(string sekibanContextIdentifier) => $"dbContext.{sekibanContextIdentifier}";
+    private static string GetMemoryCacheDbContextKey(string sekibanContextIdentifier) =>
+        $"dbContext.{sekibanContextIdentifier}";
     private string GetConnectionString()
     {
         var dbOption = GetSekibanDbOption();
@@ -56,7 +61,8 @@ public class PostgresDbFactory(SekibanPostgresOptions dbOptions, IMemoryCacheAcc
         // }
         //
         var connectionString = GetConnectionString();
-        var dbContext = new SekibanDbContext(new DbContextOptions<SekibanDbContext>()) { ConnectionString = connectionString };
+        var dbContext = new SekibanDbContext(new DbContextOptions<SekibanDbContext>())
+            { ConnectionString = connectionString };
         if (!GetMigrationFinished())
         {
             await dbContext.Database.MigrateAsync();
@@ -80,11 +86,13 @@ public class PostgresDbFactory(SekibanPostgresOptions dbOptions, IMemoryCacheAcc
                         dbContext.Events.RemoveRange(dbContext.Events);
                         break;
                     case (DocumentType.Command, _):
-                        dbContext.Commands.RemoveRange(dbContext.Commands.Where(m => m.AggregateContainerGroup == containerGroup));
+                        dbContext.Commands.RemoveRange(
+                            dbContext.Commands.Where(m => m.AggregateContainerGroup == containerGroup));
                         break;
                     case (DocumentType.AggregateSnapshot, _):
                         dbContext.SingleProjectionSnapshots.RemoveRange(
-                            dbContext.SingleProjectionSnapshots.Where(m => m.AggregateContainerGroup == containerGroup));
+                            dbContext.SingleProjectionSnapshots.Where(
+                                m => m.AggregateContainerGroup == containerGroup));
                         break;
                     case (DocumentType.MultiProjectionSnapshot, _):
                         dbContext.MultiProjectionSnapshots.RemoveRange(
