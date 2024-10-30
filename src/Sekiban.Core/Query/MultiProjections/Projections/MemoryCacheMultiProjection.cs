@@ -296,7 +296,7 @@ public class MemoryCacheMultiProjection(
         await documentRepository.GetEvents(
             EventRetrievalInfo.FromNullableValues(
                 rootPartitionKey,
-                new MultiProjectionTypeStream(typeof(TProjectionPayload), projector.TargetAggregateNames()),
+                new MultiProjectionTypeStream(typeof(TProjection), projector.TargetAggregateNames()),
                 null,
                 null),
             events =>
