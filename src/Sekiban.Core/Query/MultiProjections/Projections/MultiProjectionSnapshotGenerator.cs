@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Setting;
@@ -37,11 +38,12 @@ public class MultiProjectionSnapshotGenerator(
         }
 
         // get events from after snapshot or the initial and project them
-        await documentRepository.GetAllEventsAsync(
-            typeof(TProjection),
-            projector.TargetAggregateNames(),
-            state.Version > 0 ? state.LastSortableUniqueId : null,
-            rootPartitionKey,
+        await documentRepository.GetEvents(
+            EventRetrievalInfo.FromNullableValues(
+                rootPartitionKey,
+                new MultiProjectionTypeStream(typeof(TProjection), projector.TargetAggregateNames()),
+                null,
+                state.Version > 0 ? state.LastSortableUniqueId : null),
             events =>
             {
                 var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
@@ -54,7 +56,6 @@ public class MultiProjectionSnapshotGenerator(
                     }
                 }
             });
-
         // save snapshot
         var usedVersion = projector.Version - state.Version;
         if (usedVersion > minimumNumberOfEventsToGenerateSnapshot)

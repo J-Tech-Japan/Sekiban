@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
-using Sekiban.Core.Partition;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Query.UpdateNotice;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
@@ -47,30 +47,25 @@ public class SekibanApiListController<T>(
         var list = new List<SekibanAggregateInfo>();
         foreach (var aggregateType in webDependencyDefinition.GetAggregatePayloadTypes())
         {
-            var stateResponseType =
-                typeof(AggregateState<>).MakeGenericType(aggregateType).GetTypeInfo();
+            var stateResponseType = typeof(AggregateState<>).MakeGenericType(aggregateType).GetTypeInfo();
             var aggregateInfo = new SekibanAggregateInfo(
                 aggregateType.Name,
                 new SekibanQueryInfo
                 {
-                    GetUrl =
-                        $"/{webDependencyDefinition.Options.QueryPrefix}/{aggregateType.Name}/get",
-                    GetEventsUrl =
-                        $"/{webDependencyDefinition.Options.InfoPrefix}/events/{aggregateType.Name}/{{id}}",
-                    GetCommandsUrl =
-                        $"/{webDependencyDefinition.Options.InfoPrefix}/commands/{aggregateType.Name}/{{id}}",
+                    GetUrl = $"/{webDependencyDefinition.Options.QueryPrefix}/{aggregateType.Name}/get",
+                    GetEventsUrl = $"/{webDependencyDefinition.Options.InfoPrefix}/events/{aggregateType.Name}/{{id}}",
+                    GetCommandsUrl
+                        = $"/{webDependencyDefinition.Options.InfoPrefix}/commands/{aggregateType.Name}/{{id}}",
                     Method = "GET",
                     SampleResponseObject = Activator.CreateInstance(stateResponseType)!
                 },
                 []);
             list.Add(aggregateInfo);
-            foreach (var (_, implementationType) in
-                webDependencyDefinition.GetCommandDependencies())
+            foreach (var (_, implementationType) in webDependencyDefinition.GetCommandDependencies())
             {
                 if (implementationType != null && implementationType.IsCommandHandlerType())
                 {
-                    if (aggregateType !=
-                        implementationType.GetAggregatePayloadTypeFromCommandHandlerType())
+                    if (aggregateType != implementationType.GetAggregatePayloadTypeFromCommandHandlerType())
                     {
                         continue;
                     }
@@ -79,8 +74,8 @@ public class SekibanApiListController<T>(
                     aggregateInfo.Commands.Add(
                         new SekibanCommandInfo
                         {
-                            Url =
-                                $"/{webDependencyDefinition.Options.CreateCommandPrefix}/{aggregateType.Name}/{commandType.Name}",
+                            Url
+                                = $"/{webDependencyDefinition.Options.CreateCommandPrefix}/{aggregateType.Name}/{commandType.Name}",
                             JsonBodyType = commandType.Name,
                             Method = "POST",
                             SampleBodyObject = commandType.CreateDefaultInstance(),
@@ -89,8 +84,7 @@ public class SekibanApiListController<T>(
                 }
                 if (implementationType != null && implementationType.IsCommandWithHandlerType())
                 {
-                    if (aggregateType !=
-                        implementationType.GetAggregatePayloadTypeFromCommandWithHandlerType())
+                    if (aggregateType != implementationType.GetAggregatePayloadTypeFromCommandWithHandlerType())
                     {
                         continue;
                     }
@@ -99,8 +93,8 @@ public class SekibanApiListController<T>(
                     aggregateInfo.Commands.Add(
                         new SekibanCommandInfo
                         {
-                            Url =
-                                $"/{webDependencyDefinition.Options.CreateCommandPrefix}/{aggregateType.Name}/{commandType.Name}",
+                            Url
+                                = $"/{webDependencyDefinition.Options.CreateCommandPrefix}/{aggregateType.Name}/{commandType.Name}",
                             JsonBodyType = commandType.Name,
                             Method = "POST",
                             SampleBodyObject = commandType.CreateDefaultInstance(),
@@ -123,10 +117,7 @@ public class SekibanApiListController<T>(
     {
         foreach (var aggregateType in webDependencyDefinition.GetAggregatePayloadTypes())
         {
-            if (!string.Equals(
-                aggregateName,
-                aggregateType.Name,
-                StringComparison.CurrentCultureIgnoreCase))
+            if (!string.Equals(aggregateName, aggregateType.Name, StringComparison.CurrentCultureIgnoreCase))
             {
                 continue;
             }
@@ -143,12 +134,12 @@ public class SekibanApiListController<T>(
                 return Unauthorized();
             }
             var events = new List<dynamic>();
-            await documentRepository.GetAllEventsForAggregateIdAsync(
-                id,
-                aggregateType,
-                PartitionKeyGenerator.ForEvent(id, aggregateType, rootPartitionKey),
-                null,
-                rootPartitionKey,
+            await documentRepository.GetEvents(
+                EventRetrievalInfo.FromNullableValues(
+                    rootPartitionKey,
+                    new AggregateTypeStream(aggregateType),
+                    id,
+                    null),
                 eventObjects => { events.AddRange(eventObjects); });
             return Ok(events);
         }
@@ -165,10 +156,7 @@ public class SekibanApiListController<T>(
     {
         foreach (var aggregateType in webDependencyDefinition.GetAggregatePayloadTypes())
         {
-            if (!string.Equals(
-                aggregateName,
-                aggregateType.Name,
-                StringComparison.CurrentCultureIgnoreCase))
+            if (!string.Equals(aggregateName, aggregateType.Name, StringComparison.CurrentCultureIgnoreCase))
             {
                 continue;
             }
@@ -192,9 +180,7 @@ public class SekibanApiListController<T>(
                 rootPartitionKey,
                 eventObjects =>
                 {
-                    events.AddRange(
-                        eventObjects.Select(
-                            m => SekibanJsonHelper.Deserialize(m, typeof(object))!));
+                    events.AddRange(eventObjects.Select(m => SekibanJsonHelper.Deserialize(m, typeof(object))!));
                 });
             return Ok(events);
         }
@@ -211,10 +197,7 @@ public class SekibanApiListController<T>(
     {
         foreach (var aggregatePayloadType in webDependencyDefinition.GetAggregatePayloadTypes())
         {
-            if (!string.Equals(
-                aggregateName,
-                aggregatePayloadType.Name,
-                StringComparison.CurrentCultureIgnoreCase))
+            if (!string.Equals(aggregateName, aggregatePayloadType.Name, StringComparison.CurrentCultureIgnoreCase))
             {
                 continue;
             }
@@ -242,9 +225,7 @@ public class SekibanApiListController<T>(
     }
 
     [HttpGet]
-    [Route(
-        "snapshots/{aggregateName}/{aggregateId}/{snapshotId}",
-        Name = "SekibanSnapshotsWithSnapshotId")]
+    [Route("snapshots/{aggregateName}/{aggregateId}/{snapshotId}", Name = "SekibanSnapshotsWithSnapshotId")]
     public virtual async Task<ActionResult<SnapshotDocument>> SnapshotsAsync(
         string aggregateName,
         Guid aggregateId,
@@ -253,10 +234,7 @@ public class SekibanApiListController<T>(
     {
         foreach (var aggregatePayloadType in webDependencyDefinition.GetAggregatePayloadTypes())
         {
-            if (!string.Equals(
-                aggregateName,
-                aggregatePayloadType.Name,
-                StringComparison.CurrentCultureIgnoreCase))
+            if (!string.Equals(aggregateName, aggregatePayloadType.Name, StringComparison.CurrentCultureIgnoreCase))
             {
                 continue;
             }
@@ -295,10 +273,7 @@ public class SekibanApiListController<T>(
         await Task.CompletedTask;
         foreach (var aggregateType in webDependencyDefinition.GetAggregatePayloadTypes())
         {
-            if (!string.Equals(
-                aggregateName,
-                aggregateType.Name,
-                StringComparison.CurrentCultureIgnoreCase))
+            if (!string.Equals(aggregateName, aggregateType.Name, StringComparison.CurrentCultureIgnoreCase))
             {
                 continue;
             }
@@ -314,12 +289,7 @@ public class SekibanApiListController<T>(
             {
                 return Unauthorized();
             }
-            updateNotice.SendUpdate(
-                rootPartitionKey,
-                aggregateName,
-                id,
-                sortableUniqueId,
-                locationType);
+            updateNotice.SendUpdate(rootPartitionKey, aggregateName, id, sortableUniqueId, locationType);
             return Ok(sortableUniqueId);
         }
 

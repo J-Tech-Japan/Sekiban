@@ -2,7 +2,7 @@ using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
-using Sekiban.Core.Documents.ValueObjects;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.History;
@@ -44,10 +44,10 @@ public class PostgresDocumentRepository(
                                                 m.SortableUniqueId,
                                                 eventRetrievalInfo.SinceSortableUniqueId.GetValue().Value) >
                                             0)
-                                    .OrderByDescending(m => m.SortableUniqueId)
+                                    .OrderBy(m => m.SortableUniqueId)
                                 : query.OrderBy(m => m.SortableUniqueId);
                             // take 1000 events each and run resultAction
-                            GetEventsInBatches(query, eventRetrievalInfo.SinceSortableUniqueId).ForEach(resultAction);
+                            GetEventsInBatches(query).ForEach(resultAction);
                             break;
 
                         case AggregateContainerGroup.Dissolvable:
@@ -61,12 +61,10 @@ public class PostgresDocumentRepository(
                                                 m.SortableUniqueId,
                                                 eventRetrievalInfo.SinceSortableUniqueId.GetValue().Value) >
                                             0)
-                                    .OrderByDescending(m => m.SortableUniqueId)
+                                    .OrderBy(m => m.SortableUniqueId)
                                 : queryDissolvable.OrderBy(m => m.SortableUniqueId);
                             // take 1000 events each and run resultAction
-                            foreach (var ev in GetEventsInBatches(
-                                queryDissolvable,
-                                eventRetrievalInfo.SinceSortableUniqueId))
+                            foreach (var ev in GetEventsInBatches(queryDissolvable))
                             {
                                 resultAction(ev);
                             }
@@ -95,10 +93,10 @@ public class PostgresDocumentRepository(
                                                 m.SortableUniqueId,
                                                 eventRetrievalInfo.SinceSortableUniqueId.GetValue().Value) >
                                             0)
-                                    .OrderByDescending(m => m.SortableUniqueId)
+                                    .OrderBy(m => m.SortableUniqueId)
                                 : query.OrderBy(m => m.SortableUniqueId);
                             // take 1000 events each and run resultAction
-                            GetEventsInBatches(query, eventRetrievalInfo.SinceSortableUniqueId).ForEach(resultAction);
+                            GetEventsInBatches(query).ForEach(resultAction);
                             break;
 
                         case AggregateContainerGroup.Dissolvable:
@@ -123,11 +121,10 @@ public class PostgresDocumentRepository(
                                                 m.SortableUniqueId,
                                                 eventRetrievalInfo.SinceSortableUniqueId.GetValue().Value) >
                                             0)
-                                    .OrderByDescending(m => m.SortableUniqueId)
+                                    .OrderBy(m => m.SortableUniqueId)
                                 : queryDissolvable.OrderBy(m => m.SortableUniqueId);
                             // take 1000 events each and run resultAction
-                            GetEventsInBatches(queryDissolvable, eventRetrievalInfo.SinceSortableUniqueId)
-                                .ForEach(resultAction);
+                            GetEventsInBatches(queryDissolvable).ForEach(resultAction);
                             break;
                     }
                     await Task.CompletedTask;
@@ -137,26 +134,6 @@ public class PostgresDocumentRepository(
             });
         return ResultBox.UnitValue;
     }
-    public async Task GetAllEventsForAggregateIdAsync(
-        Guid aggregateId,
-        Type aggregatePayloadType,
-        string? partitionKey,
-        string? sinceSortableUniqueId,
-        string rootPartitionKey,
-        Action<IEnumerable<IEvent>> resultAction)
-    {
-        await GetEvents(
-            new EventRetrievalInfo(
-                string.IsNullOrEmpty(rootPartitionKey)
-                    ? OptionalValue<string>.Empty
-                    : OptionalValue.FromValue(rootPartitionKey),
-                new AggregateTypeStream(aggregatePayloadType),
-                OptionalValue.FromValue(aggregateId),
-                string.IsNullOrWhiteSpace(sinceSortableUniqueId)
-                    ? OptionalValue<SortableUniqueIdValue>.Empty
-                    : new SortableUniqueIdValue(sinceSortableUniqueId)),
-            resultAction);
-    }
     public async Task GetAllEventStringsForAggregateIdAsync(
         Guid aggregateId,
         Type aggregatePayloadType,
@@ -165,12 +142,12 @@ public class PostgresDocumentRepository(
         string rootPartitionKey,
         Action<IEnumerable<string>> resultAction)
     {
-        await GetAllEventsForAggregateIdAsync(
-            aggregateId,
-            aggregatePayloadType,
-            partitionKey,
-            sinceSortableUniqueId,
-            rootPartitionKey,
+        await GetEvents(
+            EventRetrievalInfo.FromNullableValues(
+                rootPartitionKey,
+                new AggregateTypeStream(aggregatePayloadType),
+                aggregateId,
+                sinceSortableUniqueId),
             events =>
             {
                 resultAction(events.Select(SekibanJsonHelper.Serialize).Where(m => !string.IsNullOrEmpty(m))!);
@@ -194,45 +171,6 @@ public class PostgresDocumentRepository(
                 GetCommandsInBatches(query, sinceSortableUniqueId).ForEach(resultAction);
                 await Task.CompletedTask;
             });
-    }
-    public async Task GetAllEventsForAggregateAsync(
-        Type aggregatePayloadType,
-        string? sinceSortableUniqueId,
-        string rootPartitionKey,
-        Action<IEnumerable<IEvent>> resultAction)
-    {
-        await GetEvents(
-                new EventRetrievalInfo(
-                    string.IsNullOrEmpty(rootPartitionKey)
-                        ? OptionalValue<string>.Empty
-                        : OptionalValue.FromValue(rootPartitionKey),
-                    new AggregateTypeStream(aggregatePayloadType),
-                    OptionalValue<Guid>.Empty,
-                    string.IsNullOrWhiteSpace(sinceSortableUniqueId)
-                        ? OptionalValue<SortableUniqueIdValue>.Empty
-                        : new SortableUniqueIdValue(sinceSortableUniqueId)),
-                resultAction)
-            .UnwrapBox();
-    }
-    public async Task GetAllEventsAsync(
-        Type multiProjectionType,
-        IList<string> targetAggregateNames,
-        string? sinceSortableUniqueId,
-        string rootPartitionKey,
-        Action<IEnumerable<IEvent>> resultAction)
-    {
-        await GetEvents(
-                new EventRetrievalInfo(
-                    string.IsNullOrEmpty(rootPartitionKey)
-                        ? OptionalValue<string>.Empty
-                        : OptionalValue.FromValue(rootPartitionKey),
-                    new MultiProjectionTypeStream(multiProjectionType, targetAggregateNames),
-                    OptionalValue<Guid>.Empty,
-                    string.IsNullOrWhiteSpace(sinceSortableUniqueId)
-                        ? OptionalValue<SortableUniqueIdValue>.Empty
-                        : new SortableUniqueIdValue(sinceSortableUniqueId)),
-                resultAction)
-            .UnwrapBox();
     }
     public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
         Guid aggregateId,
@@ -487,16 +425,14 @@ public class PostgresDocumentRepository(
     }
 
 
-    private IEnumerable<IEnumerable<IEvent>> GetEventsInBatches(
-        IEnumerable<IDbEvent> events,
-        OptionalValue<SortableUniqueIdValue> sinceSortableUniqueId)
+    private IEnumerable<IEnumerable<IEvent>> GetEventsInBatches(IEnumerable<IDbEvent> events)
     {
         const int batchSize = 1000;
         List<IEvent> eventBatch = [];
 
         foreach (var eventItem in events)
         {
-            eventBatch.Add(FromDbEvent(eventItem, sinceSortableUniqueId)!);
+            eventBatch.Add(FromDbEvent(eventItem)!);
 
             if (eventBatch.Count >= batchSize)
             {
@@ -510,7 +446,7 @@ public class PostgresDocumentRepository(
             yield return eventBatch;
         }
     }
-    private IEvent? FromDbEvent(IDbEvent dbEvent, OptionalValue<SortableUniqueIdValue> sinceSortableUniqueId)
+    private IEvent? FromDbEvent(IDbEvent dbEvent)
     {
         if (string.IsNullOrEmpty(dbEvent.DocumentTypeName))
         {

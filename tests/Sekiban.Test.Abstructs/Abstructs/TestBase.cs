@@ -31,7 +31,6 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
     protected readonly IDocumentPersistentWriter documentPersistentWriter;
     protected readonly IDocumentRemover documentRemover;
 
-    protected readonly HybridStoreManager hybridStoreManager;
     protected readonly InMemoryDocumentStore inMemoryDocumentStore;
     protected readonly IMemoryCacheAccessor memoryCache;
     protected readonly IMultiProjectionService multiProjectionService;
@@ -42,7 +41,10 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
 
     protected ITestOutputHelper TestOutputHelper => sekibanTestFixture.TestOutputHelper!;
 
-    public TestBase(SekibanTestFixture sekibanTestFixture, ITestOutputHelper output, ISekibanServiceProviderGenerator providerGenerator)
+    public TestBase(
+        SekibanTestFixture sekibanTestFixture,
+        ITestOutputHelper output,
+        ISekibanServiceProviderGenerator providerGenerator)
     {
         sekibanTestFixture.TestOutputHelper = output;
         this.sekibanTestFixture = sekibanTestFixture;
@@ -57,7 +59,6 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
         commandExecutor = GetService<ICommandExecutor>();
         aggregateLoader = GetService<IAggregateLoader>();
         sekibanExecutor = GetService<ISekibanExecutor>();
-        hybridStoreManager = GetService<HybridStoreManager>();
         inMemoryDocumentStore = GetService<InMemoryDocumentStore>();
         memoryCache = GetService<IMemoryCacheAccessor>();
         documentPersistentWriter = GetService<IDocumentPersistentWriter>();
@@ -82,7 +83,8 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
 
     public T GetService<T>()
     {
-        var toReturn = serviceProvider.GetService<T>() ?? throw new SekibanTypeNotFoundException("The object has not been registered." + typeof(T));
+        var toReturn = serviceProvider.GetService<T>() ??
+            throw new SekibanTypeNotFoundException("The object has not been registered." + typeof(T));
         return toReturn;
     }
 
@@ -108,7 +110,6 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
     {
         // Remove in memory data
         inMemoryDocumentStore.ResetInMemoryStore();
-        hybridStoreManager.ClearHybridPartitions();
         (memoryCache.Cache as MemoryCache)?.Compact(1);
     }
 
@@ -119,7 +120,8 @@ public class TestBase<TDependency> : IClassFixture<TestBase<TDependency>.Sekiban
     {
         public SekibanTestFixture()
         {
-            var builder = new ConfigurationBuilder().SetBasePath(ApplicationEnvironment.ApplicationBasePath)
+            var builder = new ConfigurationBuilder()
+                .SetBasePath(ApplicationEnvironment.ApplicationBasePath)
                 .AddJsonFile("appsettings.json", false, false)
                 .AddEnvironmentVariables()
                 .AddUserSecrets(Assembly.GetExecutingAssembly());

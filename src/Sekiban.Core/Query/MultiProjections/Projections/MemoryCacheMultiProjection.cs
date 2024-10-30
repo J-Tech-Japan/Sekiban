@@ -1,5 +1,6 @@
 using Sekiban.Core.Cache;
 using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
@@ -197,11 +198,12 @@ public class MemoryCacheMultiProjection(
 
         try
         {
-            await documentRepository.GetAllEventsAsync(
-                typeof(TProjection),
-                projector.TargetAggregateNames(),
-                savedContainer.SafeSortableUniqueId?.Value,
-                rootPartitionKey,
+            await documentRepository.GetEvents(
+                EventRetrievalInfo.FromNullableValues(
+                    rootPartitionKey,
+                    new MultiProjectionTypeStream(typeof(TProjection), projector.TargetAggregateNames()),
+                    null,
+                    savedContainer.SafeSortableUniqueId?.Value),
                 events =>
                 {
                     var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
@@ -290,11 +292,13 @@ public class MemoryCacheMultiProjection(
     {
         var projector = new TProjection();
         var container = new MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>();
-        await documentRepository.GetAllEventsAsync(
-            typeof(TProjection),
-            projector.TargetAggregateNames(),
-            null,
-            rootPartitionKey,
+
+        await documentRepository.GetEvents(
+            EventRetrievalInfo.FromNullableValues(
+                rootPartitionKey,
+                new MultiProjectionTypeStream(typeof(TProjection), projector.TargetAggregateNames()),
+                null,
+                null),
             events =>
             {
                 var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();

@@ -14,12 +14,6 @@ public class AggregateSettings : IAggregateSettings
             Helper.TakeSnapshotDefault;
     }
 
-    public bool CanUseHybrid(Type aggregatePayloadType)
-    {
-        return Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == aggregatePayloadType.Name)?.UseHybrid ??
-            Helper.UseHybridDefault;
-    }
-
     public int SnapshotFrequencyForType(Type aggregatePayloadType)
     {
         return Helper.Exceptions.FirstOrDefault(m => m.AggregateClassName == aggregatePayloadType.Name)

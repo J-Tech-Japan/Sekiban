@@ -1,9 +1,9 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Exceptions;
-using Sekiban.Core.Partition;
 using Sekiban.Core.Query.UpdateNotice;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
@@ -84,15 +84,12 @@ public class MemoryCacheSingleProjection(
 
         try
         {
-            await documentRepository.GetAllEventsForAggregateIdAsync(
-                aggregateId,
-                projector.GetOriginalAggregatePayloadType(),
-                PartitionKeyGenerator.ForEvent(
+            await documentRepository.GetEvents(
+                EventRetrievalInfo.FromNullableValues(
+                    rootPartitionKey,
+                    new AggregateTypeStream(projector.GetOriginalAggregatePayloadType()),
                     aggregateId,
-                    projector.GetOriginalAggregatePayloadType(),
-                    rootPartitionKey),
-                savedContainer.SafeSortableUniqueId?.Value,
-                rootPartitionKey,
+                    savedContainer.SafeSortableUniqueId?.Value),
                 events =>
                 {
                     var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
@@ -198,13 +195,12 @@ public class MemoryCacheSingleProjection(
                 rootPartitionKey,
                 toVersion.Value);
         }
-
-        await documentRepository.GetAllEventsForAggregateIdAsync(
-            aggregateId,
-            projector.GetOriginalAggregatePayloadType(),
-            PartitionKeyGenerator.ForEvent(aggregateId, projector.GetOriginalAggregatePayloadType(), rootPartitionKey),
-            state?.LastSortableUniqueId,
-            rootPartitionKey,
+        await documentRepository.GetEvents(
+            EventRetrievalInfo.FromNullableValues(
+                rootPartitionKey,
+                new AggregateTypeStream(projector.GetOriginalAggregatePayloadType()),
+                aggregateId,
+                state?.LastSortableUniqueId),
             events =>
             {
                 var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
@@ -284,12 +280,13 @@ public class MemoryCacheSingleProjection(
         var container = new SingleMemoryCacheProjectionContainer<TProjection, TState> { AggregateId = aggregateId };
         var aggregate = projector.CreateInitialAggregate(aggregateId);
         var addFinished = false;
-        await documentRepository.GetAllEventsForAggregateIdAsync(
-            aggregateId,
-            projector.GetOriginalAggregatePayloadType(),
-            PartitionKeyGenerator.ForEvent(aggregateId, projector.GetOriginalAggregatePayloadType(), rootPartitionKey),
-            null,
-            rootPartitionKey,
+
+        await documentRepository.GetEvents(
+            EventRetrievalInfo.FromNullableValues(
+                rootPartitionKey,
+                new AggregateTypeStream(projector.GetOriginalAggregatePayloadType()),
+                aggregateId,
+                null),
             events =>
             {
                 events = events.ToList();

@@ -1,7 +1,7 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Exceptions;
-using Sekiban.Core.Partition;
 namespace Sekiban.Core.Query.SingleProjections.Projections;
 
 /// <summary>
@@ -62,12 +62,12 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
                 rootPartitionKey,
                 toVersion.Value);
         }
-        await _documentRepository.GetAllEventsForAggregateIdAsync(
-            aggregateId,
-            projector.GetOriginalAggregatePayloadType(),
-            PartitionKeyGenerator.ForEvent(aggregateId, projector.GetOriginalAggregatePayloadType(), rootPartitionKey),
-            state?.LastSortableUniqueId,
-            rootPartitionKey,
+        await _documentRepository.GetEvents(
+            EventRetrievalInfo.FromNullableValues(
+                rootPartitionKey,
+                new AggregateTypeStream(projector.GetOriginalAggregatePayloadType()),
+                aggregateId,
+                state?.LastSortableUniqueId),
             events =>
             {
                 foreach (var e in events)

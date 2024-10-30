@@ -3,9 +3,9 @@ using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
-using Sekiban.Core.Partition;
 using Sekiban.Core.PubSub;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Types;
@@ -252,12 +252,12 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
             = serviceProvider.GetRequiredService(typeof(IDocumentRepository)) as IDocumentRepository ??
             throw new SekibanTypeNotFoundException("Failed to get document repository");
         documentRepository
-            .GetAllEventsForAggregateIdAsync(
-                aggregateId,
-                typeof(TAggregatePayload),
-                PartitionKeyGenerator.ForEvent(aggregateId, typeof(TAggregatePayload), rootPartitionKey),
-                null,
-                rootPartitionKey,
+            .GetEvents(
+                EventRetrievalInfo.FromNullableValues(
+                    rootPartitionKey,
+                    new AggregateTypeStream<TAggregatePayload>(),
+                    aggregateId,
+                    null),
                 eventObjects => { toReturn.AddRange(eventObjects); })
             .Wait();
         return toReturn;
