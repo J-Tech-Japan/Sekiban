@@ -27,6 +27,15 @@ public static class PartitionKeyGenerator
     /// <returns></returns>
     public static string ForEvent(Guid aggregateId, Type aggregateType, string rootPartitionKey) =>
         $"{rootPartitionKey}_{aggregateType.Name}_{aggregateId}";
+    /// <summary>
+    ///     Partition Key for the Event Group Document
+    /// </summary>
+    /// <param name="aggregateId"></param>
+    /// <param name="aggregateType"></param>
+    /// <param name="rootPartitionKey"></param>
+    /// <returns></returns>
+    public static string ForEventGroup(Guid aggregateId, string aggregateType, string rootPartitionKey) =>
+        $"{rootPartitionKey}_{aggregateType}_{aggregateId}";
 
     /// <summary>
     ///     Partition Key for the Aggregate Snapshot Document

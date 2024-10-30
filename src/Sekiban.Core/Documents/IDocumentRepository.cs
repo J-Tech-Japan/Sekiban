@@ -1,3 +1,4 @@
+using ResultBoxes;
 using Sekiban.Core.Events;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Snapshot;
@@ -5,13 +6,7 @@ namespace Sekiban.Core.Documents;
 
 public interface IDocumentRepository
 {
-    Task GetAllEventsForAggregateIdAsync(
-        Guid aggregateId,
-        Type aggregatePayloadType,
-        string? partitionKey,
-        string? sinceSortableUniqueId,
-        string rootPartitionKey,
-        Action<IEnumerable<IEvent>> resultAction);
+
 
     Task GetAllEventStringsForAggregateIdAsync(
         Guid aggregateId,
@@ -27,19 +22,6 @@ public interface IDocumentRepository
         string? sinceSortableUniqueId,
         string rootPartitionKey,
         Action<IEnumerable<string>> resultAction);
-
-    Task GetAllEventsForAggregateAsync(
-        Type aggregatePayloadType,
-        string? sinceSortableUniqueId,
-        string rootPartitionKey,
-        Action<IEnumerable<IEvent>> resultAction);
-
-    Task GetAllEventsAsync(
-        Type multiProjectionType,
-        IList<string> targetAggregateNames,
-        string? sinceSortableUniqueId,
-        string rootPartitionKey,
-        Action<IEnumerable<IEvent>> resultAction);
 
     Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(
         Guid aggregateId,
@@ -68,4 +50,29 @@ public interface IDocumentRepository
         Type projectionPayloadType,
         string partitionKey,
         string rootPartitionKey);
+    #region Event Retrieval Methods (can be simplified in one method)
+    Task<ResultBox<UnitValue>> GetEvents(
+        EventRetrievalInfo eventRetrievalInfo,
+        Action<IEnumerable<IEvent>> resultAction);
+    Task GetAllEventsForAggregateIdAsync(
+        Guid aggregateId,
+        Type aggregatePayloadType,
+        string? partitionKey,
+        string? sinceSortableUniqueId,
+        string rootPartitionKey,
+        Action<IEnumerable<IEvent>> resultAction);
+
+    Task GetAllEventsForAggregateAsync(
+        Type aggregatePayloadType,
+        string? sinceSortableUniqueId,
+        string rootPartitionKey,
+        Action<IEnumerable<IEvent>> resultAction);
+
+    Task GetAllEventsAsync(
+        Type multiProjectionType,
+        IList<string> targetAggregateNames,
+        string? sinceSortableUniqueId,
+        string rootPartitionKey,
+        Action<IEnumerable<IEvent>> resultAction);
+    #endregion
 }

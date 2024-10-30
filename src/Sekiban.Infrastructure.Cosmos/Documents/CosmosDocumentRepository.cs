@@ -1,4 +1,5 @@
 using Microsoft.Azure.Cosmos.Linq;
+using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.ValueObjects;
@@ -33,57 +34,46 @@ public class CosmosDocumentRepository(
         string rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionType);
-
-        await cosmosDbFactory.CosmosActionAsync(
-            DocumentType.Event,
-            aggregateContainerGroup,
-            async container =>
-            {
-                var options = CreateDefaultOptions();
-                var query = targetAggregateNames.Count switch
-                {
-                    0 => container.GetItemLinqQueryable<IEvent>(),
-                    _ => container.GetItemLinqQueryable<IEvent>().Where(b => targetAggregateNames.Contains(b.AggregateType))
-                };
-                if (!string.IsNullOrEmpty(sinceSortableUniqueId))
-                {
-                    query = query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0);
-                }
-                if (!string.IsNullOrEmpty(rootPartitionKey))
-                {
-                    query = query.Where(m => m.RootPartitionKey == rootPartitionKey);
-                }
-                query = query.OrderBy(m => m.SortableUniqueId);
-                var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
-                while (feedIterator.HasMoreResults)
-                {
-                    var response = await feedIterator.ReadNextAsync();
-                    var events = ProcessEvents(response, sinceSortableUniqueId);
-                    resultAction(events.OrderBy(m => m.SortableUniqueId));
-                }
-            });
+        await GetEvents(
+                new EventRetrievalInfo(
+                    string.IsNullOrEmpty(rootPartitionKey)
+                        ? OptionalValue<string>.Empty
+                        : OptionalValue.FromValue(rootPartitionKey),
+                    new MultiProjectionTypeStream(multiProjectionType, targetAggregateNames),
+                    OptionalValue<Guid>.Empty,
+                    string.IsNullOrWhiteSpace(sinceSortableUniqueId)
+                        ? OptionalValue<SortableUniqueIdValue>.Empty
+                        : new SortableUniqueIdValue(sinceSortableUniqueId)),
+                resultAction)
+            .UnwrapBox();
     }
     public async Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(
         Type multiProjectionPayloadType,
         string payloadVersionIdentifier,
         string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionPayloadType);
+        var aggregateContainerGroup
+            = AggregateContainerGroupAttribute.FindAggregateContainerGroup(multiProjectionPayloadType);
         return await cosmosDbFactory.CosmosActionAsync(
             DocumentType.MultiProjectionSnapshot,
             aggregateContainerGroup,
             async container =>
             {
                 var options = new QueryRequestOptions { MaxItemCount = 1 };
-                var partitionKey = PartitionKeyGenerator.ForMultiProjectionSnapshot(multiProjectionPayloadType, rootPartitionKey);
-                var query = container.GetItemLinqQueryable<MultiProjectionSnapshotDocument>()
+                var partitionKey = PartitionKeyGenerator.ForMultiProjectionSnapshot(
+                    multiProjectionPayloadType,
+                    rootPartitionKey);
+                var query = container
+                    .GetItemLinqQueryable<MultiProjectionSnapshotDocument>()
                     .Where(
                         b => b.DocumentType == DocumentType.MultiProjectionSnapshot &&
                             b.PayloadVersionIdentifier == payloadVersionIdentifier &&
                             b.PartitionKey == partitionKey)
                     .OrderByDescending(m => m.LastSortableUniqueId);
-                var feedIterator = container.GetItemQueryIterator<MultiProjectionSnapshotDocument>(query.ToQueryDefinition(), null, options);
+                var feedIterator = container.GetItemQueryIterator<MultiProjectionSnapshotDocument>(
+                    query.ToQueryDefinition(),
+                    null,
+                    options);
                 while (feedIterator.HasMoreResults)
                 {
                     var next = await feedIterator.ReadNextAsync();
@@ -102,7 +92,8 @@ public class CosmosDocumentRepository(
         Type projectionPayloadType,
         string rootPartitionKey = IDocument.DefaultRootPartitionKey)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+        var aggregateContainerGroup
+            = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         return await cosmosDbFactory.CosmosActionAsync(
             DocumentType.AggregateSnapshot,
             aggregateContainerGroup,
@@ -117,10 +108,14 @@ public class CosmosDocumentRepository(
                         projectionPayloadType,
                         aggregateId)
                 };
-                var query = container.GetItemLinqQueryable<SnapshotDocument>()
+                var query = container
+                    .GetItemLinqQueryable<SnapshotDocument>()
                     .Where(b => b.DocumentType == DocumentType.AggregateSnapshot && b.AggregateId == aggregateId)
                     .OrderByDescending(m => m.LastSortableUniqueId);
-                var feedIterator = container.GetItemQueryIterator<SnapshotDocument>(query.ToQueryDefinition(), null, options);
+                var feedIterator = container.GetItemQueryIterator<SnapshotDocument>(
+                    query.ToQueryDefinition(),
+                    null,
+                    options);
                 while (feedIterator.HasMoreResults)
                 {
                     foreach (var obj in await feedIterator.ReadNextAsync())
@@ -137,6 +132,87 @@ public class CosmosDocumentRepository(
             });
     }
 
+    public async Task<ResultBox<UnitValue>> GetEvents(
+        EventRetrievalInfo eventRetrievalInfo,
+        Action<IEnumerable<IEvent>> resultAction)
+    {
+        await cosmosDbFactory.CosmosActionAsync(
+            DocumentType.Event,
+            eventRetrievalInfo.GetAggregateContainerGroup(),
+            async container =>
+            {
+                if (eventRetrievalInfo.GetIsPartition())
+                {
+                    var options = CreateDefaultOptions();
+                    options.PartitionKey = CosmosPartitionGenerator.ForEventGroup(
+                        eventRetrievalInfo.RootPartitionKey.GetValue(),
+                        eventRetrievalInfo.AggregateStream.GetValue().GetSingleStreamName().UnwrapBox(),
+                        eventRetrievalInfo.AggregateId.GetValue());
+                    var query = container.GetItemLinqQueryable<IEvent>();
+                    query = eventRetrievalInfo.SinceSortableUniqueId.HasValue
+                        ? query
+                            .Where(
+                                m => m.SortableUniqueId.CompareTo(
+                                        eventRetrievalInfo.SinceSortableUniqueId.GetValue().Value) >
+                                    0)
+                            .OrderByDescending(m => m.SortableUniqueId)
+                        : query.OrderBy(m => m.SortableUniqueId);
+
+
+                    var feedIterator = container.GetItemQueryIterator<dynamic>(
+                        query.ToQueryDefinition(),
+                        null,
+                        options);
+                    var events = new List<IEvent>();
+                    while (feedIterator.HasMoreResults)
+                    {
+                        var response = await feedIterator.ReadNextAsync();
+                        var toAdds = ProcessEvents(response, eventRetrievalInfo.SinceSortableUniqueId);
+                        events.AddRange(toAdds);
+                    }
+                    resultAction(events.OrderBy(m => m.SortableUniqueId));
+                } else
+                {
+                    var options = CreateDefaultOptions();
+
+                    var query = container.GetItemLinqQueryable<IEvent>().AsQueryable();
+                    if (eventRetrievalInfo.HasAggregateStream())
+                    {
+                        var aggregates = eventRetrievalInfo.AggregateStream.GetValue().GetStreamNames();
+                        query = query.Where(m => aggregates.Contains(m.AggregateType));
+                    }
+                    if (eventRetrievalInfo.HasRootPartitionKey())
+                    {
+                        query = query.Where(m => m.RootPartitionKey == eventRetrievalInfo.RootPartitionKey.GetValue());
+                    }
+                    if (eventRetrievalInfo.SinceSortableUniqueId.HasValue)
+                    {
+                        query = query
+                            .Where(
+                                m => m.SortableUniqueId.CompareTo(
+                                        eventRetrievalInfo.SinceSortableUniqueId.GetValue().Value) >
+                                    0)
+                            .OrderBy(m => m.SortableUniqueId);
+                    } else
+                    {
+                        query = query.OrderBy(m => m.SortableUniqueId);
+                    }
+                    var feedIterator = container.GetItemQueryIterator<dynamic>(
+                        query.ToQueryDefinition(),
+                        null,
+                        options);
+                    var events = new List<IEvent>();
+                    while (feedIterator.HasMoreResults)
+                    {
+                        var response = await feedIterator.ReadNextAsync();
+                        var toAdds = ProcessEvents(response, eventRetrievalInfo.SinceSortableUniqueId);
+                        events.AddRange(toAdds);
+                    }
+                    resultAction(events.OrderBy(m => m.SortableUniqueId));
+                }
+            });
+        return ResultBox.UnitValue;
+    }
     public async Task GetAllEventsForAggregateIdAsync(
         Guid aggregateId,
         Type aggregatePayloadType,
@@ -145,30 +221,17 @@ public class CosmosDocumentRepository(
         string rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-
-        await cosmosDbFactory.CosmosActionAsync(
-            DocumentType.Event,
-            aggregateContainerGroup,
-            async container =>
-            {
-                var options = CreateDefaultOptions();
-                options.PartitionKey = CosmosPartitionGenerator.ForEvent(rootPartitionKey, aggregatePayloadType, aggregateId);
-                var query = container.GetItemLinqQueryable<IEvent>();
-                query = sinceSortableUniqueId is not null
-                    ? query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0).OrderByDescending(m => m.SortableUniqueId)
-                    : query.OrderBy(m => m.SortableUniqueId);
-                var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
-                var events = new List<IEvent>();
-                while (feedIterator.HasMoreResults)
-                {
-                    var response = await feedIterator.ReadNextAsync();
-                    var toAdds = ProcessEvents(response, sinceSortableUniqueId);
-                    events.AddRange(toAdds);
-                }
-
-                resultAction(events.OrderBy(m => m.SortableUniqueId));
-            });
+        await GetEvents(
+            new EventRetrievalInfo(
+                string.IsNullOrEmpty(rootPartitionKey)
+                    ? OptionalValue<string>.Empty
+                    : OptionalValue.FromValue(rootPartitionKey),
+                new AggregateTypeStream(aggregatePayloadType),
+                OptionalValue.FromValue(aggregateId),
+                string.IsNullOrWhiteSpace(sinceSortableUniqueId)
+                    ? OptionalValue<SortableUniqueIdValue>.Empty
+                    : new SortableUniqueIdValue(sinceSortableUniqueId)),
+            resultAction);
     }
 
     public async Task GetAllCommandStringsForAggregateIdAsync(
@@ -178,7 +241,8 @@ public class CosmosDocumentRepository(
         string rootPartitionKey,
         Action<IEnumerable<string>> resultAction)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+        var aggregateContainerGroup
+            = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
 
         await cosmosDbFactory.CosmosActionAsync(
             DocumentType.Command,
@@ -186,12 +250,18 @@ public class CosmosDocumentRepository(
             async container =>
             {
                 var options = CreateDefaultOptions();
-                options.PartitionKey = CosmosPartitionGenerator.ForCommand(rootPartitionKey, aggregatePayloadType, aggregateId);
+                options.PartitionKey = CosmosPartitionGenerator.ForCommand(
+                    rootPartitionKey,
+                    aggregatePayloadType,
+                    aggregateId);
 
-                var query = container.GetItemLinqQueryable<IAggregateDocument>()
+                var query = container
+                    .GetItemLinqQueryable<IAggregateDocument>()
                     .Where(b => b.DocumentType == DocumentType.Command && b.AggregateId == aggregateId);
                 query = sinceSortableUniqueId is not null
-                    ? query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0).OrderByDescending(m => m.SortableUniqueId)
+                    ? query
+                        .Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0)
+                        .OrderByDescending(m => m.SortableUniqueId)
                     : query.OrderBy(m => m.SortableUniqueId);
                 var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
                 var commands = new List<string>();
@@ -200,7 +270,8 @@ public class CosmosDocumentRepository(
                     var response = await feedIterator.ReadNextAsync();
                     commands.AddRange(
                         (from item in response
-                         where sinceSortableUniqueId is null || !new SortableUniqueIdValue(item.SortableUniqueId).IsEarlierThan(sinceSortableUniqueId)
+                         where sinceSortableUniqueId is null ||
+                             !new SortableUniqueIdValue(item.SortableUniqueId).IsEarlierThan(sinceSortableUniqueId)
                          select SekibanJsonHelper.Serialize(item)).Cast<string>());
                 }
 
@@ -214,34 +285,18 @@ public class CosmosDocumentRepository(
         string rootPartitionKey,
         Action<IEnumerable<IEvent>> resultAction)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-
-        await cosmosDbFactory.CosmosActionAsync(
-            DocumentType.Event,
-            aggregateContainerGroup,
-            async container =>
-            {
-                var options = CreateDefaultOptions();
-                var query = container.GetItemLinqQueryable<IEvent>()
-                    .Where(b => b.DocumentType == DocumentType.Event && b.AggregateType == aggregatePayloadType.Name);
-                if (rootPartitionKey != IMultiProjectionService.ProjectionAllRootPartitions)
-                {
-                    query = query.Where(m => m.RootPartitionKey == rootPartitionKey);
-                }
-
-                query = sinceSortableUniqueId is not null
-                    ? query.Where(m => m.SortableUniqueId.CompareTo(sinceSortableUniqueId) > 0).OrderByDescending(m => m.SortableUniqueId)
-                    : query.OrderByDescending(m => m.SortableUniqueId);
-                var feedIterator = container.GetItemQueryIterator<dynamic>(query.ToQueryDefinition(), null, options);
-                var events = new List<IEvent>();
-                while (feedIterator.HasMoreResults)
-                {
-                    var response = await feedIterator.ReadNextAsync();
-                    var toAdds = ProcessEvents(response, sinceSortableUniqueId);
-                    events.AddRange(toAdds);
-                }
-                resultAction(events.OrderBy(m => m.SortableUniqueId));
-            });
+        await GetEvents(
+                new EventRetrievalInfo(
+                    string.IsNullOrEmpty(rootPartitionKey)
+                        ? OptionalValue<string>.Empty
+                        : OptionalValue.FromValue(rootPartitionKey),
+                    new AggregateTypeStream(aggregatePayloadType),
+                    OptionalValue<Guid>.Empty,
+                    string.IsNullOrWhiteSpace(sinceSortableUniqueId)
+                        ? OptionalValue<SortableUniqueIdValue>.Empty
+                        : new SortableUniqueIdValue(sinceSortableUniqueId)),
+                resultAction)
+            .UnwrapBox();
     }
 
     public async Task<bool> ExistsSnapshotForAggregateAsync(
@@ -252,7 +307,8 @@ public class CosmosDocumentRepository(
         string rootPartitionKey,
         string payloadVersionIdentifier)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+        var aggregateContainerGroup
+            = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         return await cosmosDbFactory.CosmosActionAsync(
             DocumentType.AggregateSnapshot,
             aggregateContainerGroup,
@@ -266,7 +322,8 @@ public class CosmosDocumentRepository(
                         projectionPayloadType,
                         aggregateId)
                 };
-                var query = container.GetItemLinqQueryable<SnapshotDocument>()
+                var query = container
+                    .GetItemLinqQueryable<SnapshotDocument>()
                     .Where(
                         b => b.DocumentType == DocumentType.AggregateSnapshot &&
                             b.AggregateId == aggregateId &&
@@ -274,7 +331,10 @@ public class CosmosDocumentRepository(
                             b.DocumentTypeName == projectionPayloadType.Name &&
                             b.PayloadVersionIdentifier == payloadVersionIdentifier)
                     .OrderByDescending(m => m.LastSortableUniqueId);
-                var feedIterator = container.GetItemQueryIterator<SnapshotDocument>(query.ToQueryDefinition(), null, options);
+                var feedIterator = container.GetItemQueryIterator<SnapshotDocument>(
+                    query.ToQueryDefinition(),
+                    null,
+                    options);
                 while (feedIterator.HasMoreResults)
                 {
                     var searched = await feedIterator.ReadNextAsync();
@@ -294,7 +354,8 @@ public class CosmosDocumentRepository(
         string rootPartitionKey,
         string payloadVersionIdentifier)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+        var aggregateContainerGroup
+            = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         return await cosmosDbFactory.CosmosActionAsync(
             DocumentType.AggregateSnapshot,
             aggregateContainerGroup,
@@ -309,14 +370,18 @@ public class CosmosDocumentRepository(
                         aggregateId),
                     MaxItemCount = 1
                 };
-                var query = container.GetItemLinqQueryable<SnapshotDocument>()
+                var query = container
+                    .GetItemLinqQueryable<SnapshotDocument>()
                     .Where(
                         b => b.DocumentType == DocumentType.AggregateSnapshot &&
                             b.AggregateId == aggregateId &&
                             b.AggregateType == aggregatePayloadType.Name &&
                             b.PayloadVersionIdentifier == payloadVersionIdentifier)
                     .OrderByDescending(m => m.LastSortableUniqueId);
-                var feedIterator = container.GetItemQueryIterator<SnapshotDocument>(query.ToQueryDefinition(), null, options);
+                var feedIterator = container.GetItemQueryIterator<SnapshotDocument>(
+                    query.ToQueryDefinition(),
+                    null,
+                    options);
                 while (feedIterator.HasMoreResults)
                 {
                     foreach (var obj in await feedIterator.ReadNextAsync())
@@ -357,7 +422,8 @@ public class CosmosDocumentRepository(
         string partitionKey,
         string rootPartitionKey)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+        var aggregateContainerGroup
+            = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
         return await cosmosDbFactory.CosmosActionAsync(
             DocumentType.AggregateSnapshot,
             aggregateContainerGroup,
@@ -365,12 +431,20 @@ public class CosmosDocumentRepository(
             {
                 var response = await container.ReadItemAsync<SnapshotDocument>(
                     id.ToString(),
-                    CosmosPartitionGenerator.ForSingleProjectionSnapshot(rootPartitionKey, aggregatePayloadType, projectionPayloadType, aggregateId));
-                return response.Resource is null ? null : await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(response.Resource);
+                    CosmosPartitionGenerator.ForSingleProjectionSnapshot(
+                        rootPartitionKey,
+                        aggregatePayloadType,
+                        projectionPayloadType,
+                        aggregateId));
+                return response.Resource is null
+                    ? null
+                    : await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(response.Resource);
             });
     }
 
-    private List<IEvent> ProcessEvents(IEnumerable<dynamic> response, string? sinceSortableUniqueId)
+    private List<IEvent> ProcessEvents(
+        IEnumerable<dynamic> response,
+        OptionalValue<SortableUniqueIdValue> sinceSortableUniqueId)
     {
         var events = new List<IEvent>();
         foreach (var item in response)
@@ -381,12 +455,15 @@ public class CosmosDocumentRepository(
                 continue;
             }
 
-            var toAdd = (registeredEventTypes.RegisteredTypes.Where(m => m.Name == typeName)
+            var toAdd = (registeredEventTypes
+                        .RegisteredTypes
+                        .Where(m => m.Name == typeName)
                         .Select(m => SekibanJsonHelper.ConvertTo(item, typeof(Event<>).MakeGenericType(m)) as IEvent)
                         .FirstOrDefault(m => m is not null) ??
                     EventHelper.GetUnregisteredEvent(item)) ??
                 throw new SekibanUnregisteredEventFoundException();
-            if (!string.IsNullOrWhiteSpace(sinceSortableUniqueId) && toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId))
+            if (sinceSortableUniqueId.HasValue &&
+                toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId.GetValue()))
             {
                 continue;
             }
@@ -397,5 +474,9 @@ public class CosmosDocumentRepository(
         return events;
     }
     private static QueryRequestOptions CreateDefaultOptions() =>
-        new() { MaxConcurrency = DefaultOptionsMax, MaxItemCount = DefaultOptionsMax, MaxBufferedItemCount = DefaultOptionsMax };
+        new()
+        {
+            MaxConcurrency = DefaultOptionsMax, MaxItemCount = DefaultOptionsMax,
+            MaxBufferedItemCount = DefaultOptionsMax
+        };
 }
