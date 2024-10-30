@@ -163,6 +163,7 @@ jobs:
     strategy:
       max-parallel: 4
     runs-on: ubuntu-latest
+    needs: [ regular80mixed ]
     steps:
     - uses: actions/checkout@v4
     - name: Setup .NET 8
@@ -212,6 +213,7 @@ jobs:
     strategy:
       max-parallel: 4
     runs-on: ubuntu-latest
+    needs: [ regular80multitenant ]
     steps:
     - uses: actions/checkout@v4
     - name: Setup .NET 8
@@ -357,7 +359,7 @@ jobs:
       max-parallel: 4
 
     runs-on: ubuntu-latest
-    needs: [ regular80 ]
+    needs: [ regular80aggregateTest, regular80postgres,regular80dynamo ,regular80cosmos ]
     steps:
     - uses: actions/checkout@v4
     - name: Setup .NET 8
