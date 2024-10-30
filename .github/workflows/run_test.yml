@@ -62,7 +62,7 @@ jobs:
   #   # - uses: mktcode/consecutive-workflow-action@v1
   #   #   with:
   #   #     token: ${{ secrets.GITHUB_TOKEN }}
-  regular80:
+  regular80aggregateTest:
     strategy:
       max-parallel: 4
     runs-on: ubuntu-latest
@@ -435,7 +435,7 @@ jobs:
   #     run: |
   #       dotnet test tests/Sekiban.Test.CosmosDb/Sekiban.Test.CosmosDb.csproj  --filter "Category=Performance" -v m -c Release -m:1 -f net7.0
 
-  performance80:
+  performance80cosmos:
     strategy:
       max-parallel: 4
 
