@@ -1,3 +1,4 @@
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Snapshot;
 namespace Sekiban.Core.Documents;
 
@@ -14,7 +15,7 @@ public interface IDocumentPersistentWriter : IDocumentWriter
     /// <param name="aggregateType"></param>
     /// <param name="useBlob"></param>
     /// <returns></returns>
-    Task SaveSingleSnapshotAsync(SnapshotDocument document, Type aggregateType, bool useBlob);
+    Task SaveSingleSnapshotAsync(SnapshotDocument document, IWriteDocumentStream writeDocumentStream, bool useBlob);
 
     /// <summary>
     ///     Document Store can not save document size, thus need to save payload to the blob

@@ -5,18 +5,8 @@ using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Snapshot;
 namespace Sekiban.Core.Documents;
 
-public interface IDocumentRepository
+public interface IDocumentRepository : IEventRepository
 {
-
-
-    Task GetAllEventStringsForAggregateIdAsync(
-        Guid aggregateId,
-        Type aggregatePayloadType,
-        string? partitionKey,
-        string? sinceSortableUniqueId,
-        string rootPartitionKey,
-        Action<IEnumerable<string>> resultAction);
-
     Task GetAllCommandStringsForAggregateIdAsync(
         Guid aggregateId,
         Type aggregatePayloadType,
@@ -51,9 +41,8 @@ public interface IDocumentRepository
         Type projectionPayloadType,
         string partitionKey,
         string rootPartitionKey);
-    #region Event Retrieval Methods (can be simplified in one method)
-    Task<ResultBox<UnitValue>> GetEvents(
-        EventRetrievalInfo eventRetrievalInfo,
-        Action<IEnumerable<IEvent>> resultAction);
-    #endregion
+}
+public interface IEventRepository
+{
+    Task<ResultBox<bool>> GetEvents(EventRetrievalInfo eventRetrievalInfo, Action<IEnumerable<IEvent>> resultAction);
 }

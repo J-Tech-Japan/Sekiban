@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Cache;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
 using Sekiban.Core.PubSub;
 using Sekiban.Core.Setting;
@@ -28,14 +29,18 @@ public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersist
         _serviceProvider = serviceProvider;
         _snapshotDocumentCache = snapshotDocumentCache;
     }
-    public Task SaveSingleSnapshotAsync(SnapshotDocument document, Type aggregateType, bool useBlob)
+    public Task SaveSingleSnapshotAsync(
+        SnapshotDocument document,
+        IWriteDocumentStream writeDocumentStream,
+        bool useBlob)
     {
         _snapshotDocumentCache.Set(document);
         return Task.CompletedTask;
     }
     public bool ShouldUseBlob(SnapshotDocument document) => false;
 
-    public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType) where TDocument : IDocument
+    public async Task SaveAsync<TDocument>(TDocument document, IWriteDocumentStream writeDocumentStream)
+        where TDocument : IDocument
     {
         var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
         var sekibanIdentifier = string.IsNullOrWhiteSpace(sekibanContext?.SettingGroupIdentifier)
@@ -49,7 +54,7 @@ public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersist
             case DocumentType.AggregateSnapshot:
                 if (document is SnapshotDocument sd)
                 {
-                    await SaveSingleSnapshotAsync(sd, aggregateType, ShouldUseBlob(sd));
+                    await SaveSingleSnapshotAsync(sd, writeDocumentStream, ShouldUseBlob(sd));
                 }
                 break;
         }
@@ -57,7 +62,8 @@ public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersist
         await Task.CompletedTask;
     }
 
-    public async Task SaveAndPublishEvents<TEvent>(IEnumerable<TEvent> events, Type aggregateType) where TEvent : IEvent
+    public async Task SaveAndPublishEvents<TEvent>(IEnumerable<TEvent> events, IWriteDocumentStream writeDocumentStream)
+        where TEvent : IEvent
     {
         var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
         var sekibanIdentifier = string.IsNullOrWhiteSpace(sekibanContext?.SettingGroupIdentifier)

@@ -1,6 +1,7 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.PubSub;
@@ -16,9 +17,10 @@ public class PostgresDocumentWriter(
     EventPublisher eventPublisher,
     IBlobAccessor blobAccessor) : IDocumentPersistentWriter
 {
-    public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType) where TDocument : IDocument
+    public async Task SaveAsync<TDocument>(TDocument document, IWriteDocumentStream writeDocumentStream)
+        where TDocument : IDocument
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
+        var aggregateContainerGroup = writeDocumentStream.GetAggregateContainerGroup();
         await dbFactory.DbActionAsync(
             async dbContext =>
             {
@@ -34,7 +36,7 @@ public class PostgresDocumentWriter(
                         dbContext.Commands.Add(DbCommandDocument.FromCommandDocument(cmd, aggregateContainerGroup));
                         break;
                     case (DocumentType.AggregateSnapshot, _, SnapshotDocument snapshot):
-                        await SaveSingleSnapshotAsync(snapshot, aggregateType, ShouldUseBlob(snapshot));
+                        await SaveSingleSnapshotAsync(snapshot, writeDocumentStream, ShouldUseBlob(snapshot));
                         break;
                     case (DocumentType.MultiProjectionSnapshot, _, MultiProjectionSnapshotDocument multiSnapshot):
                         dbContext.MultiProjectionSnapshots.Add(
@@ -46,15 +48,15 @@ public class PostgresDocumentWriter(
                 await dbContext.SaveChangesAsync();
             });
     }
-    public async Task SaveAndPublishEvents<TEvent>(IEnumerable<TEvent> events, Type aggregateType) where TEvent : IEvent
+    public async Task SaveAndPublishEvents<TEvent>(IEnumerable<TEvent> events, IWriteDocumentStream writeDocumentStream)
+        where TEvent : IEvent
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
         await dbFactory.DbActionAsync(
             async dbContext =>
             {
                 foreach (var ev in events)
                 {
-                    switch (aggregateContainerGroup)
+                    switch (writeDocumentStream.GetAggregateContainerGroup())
                     {
                         case AggregateContainerGroup.Default:
                             dbContext.Events.Add(DbEvent.FromEvent(ev));
@@ -72,9 +74,12 @@ public class PostgresDocumentWriter(
             await eventPublisher.PublishAsync(ev);
         }
     }
-    public async Task SaveSingleSnapshotAsync(SnapshotDocument document, Type aggregateType, bool useBlob)
+    public async Task SaveSingleSnapshotAsync(
+        SnapshotDocument document,
+        IWriteDocumentStream writeDocumentStream,
+        bool useBlob)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
+        var aggregateContainerGroup = writeDocumentStream.GetAggregateContainerGroup();
         if (useBlob)
         {
             var blobSnapshot = document with { Snapshot = null };

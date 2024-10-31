@@ -20,7 +20,7 @@ public class PostgresDocumentRepository(
     RegisteredEventTypes registeredEventTypes,
     ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor) : IDocumentPersistentRepository
 {
-    public async Task<ResultBox<UnitValue>> GetEvents(
+    public async Task<ResultBox<bool>> GetEvents(
         EventRetrievalInfo eventRetrievalInfo,
         Action<IEnumerable<IEvent>> resultAction)
     {
@@ -132,26 +132,7 @@ public class PostgresDocumentRepository(
                 }
 
             });
-        return ResultBox.UnitValue;
-    }
-    public async Task GetAllEventStringsForAggregateIdAsync(
-        Guid aggregateId,
-        Type aggregatePayloadType,
-        string? partitionKey,
-        string? sinceSortableUniqueId,
-        string rootPartitionKey,
-        Action<IEnumerable<string>> resultAction)
-    {
-        await GetEvents(
-            EventRetrievalInfo.FromNullableValues(
-                rootPartitionKey,
-                new AggregateTypeStream(aggregatePayloadType),
-                aggregateId,
-                sinceSortableUniqueId),
-            events =>
-            {
-                resultAction(events.Select(SekibanJsonHelper.Serialize).Where(m => !string.IsNullOrEmpty(m))!);
-            });
+        return true;
     }
     public async Task GetAllCommandStringsForAggregateIdAsync(
         Guid aggregateId,

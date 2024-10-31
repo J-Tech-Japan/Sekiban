@@ -20,6 +20,7 @@ using FeatureCheck.Domain.Shared;
 using FeatureCheck.Domain.Shared.Exceptions;
 using ResultBoxes;
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query;
@@ -42,7 +43,10 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
     public CustomerDbStoryBasic(
         SekibanTestFixture sekibanTestFixture,
         ITestOutputHelper testOutputHelper,
-        ISekibanServiceProviderGenerator providerGenerator) : base(sekibanTestFixture, testOutputHelper, providerGenerator)
+        ISekibanServiceProviderGenerator providerGenerator) : base(
+        sekibanTestFixture,
+        testOutputHelper,
+        providerGenerator)
     {
         singleProjectionSnapshotAccessor = GetService<ISingleProjectionSnapshotAccessor>();
         blobAccessor = GetService<IBlobAccessor>();
@@ -82,7 +86,8 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         var clientList = await multiProjectionService.GetAggregateList<Client>();
         Assert.Empty(clientList);
         var originalName = "Tanaka Taro";
-        var createClientResult = await commandExecutor.ExecCommandAsync(new CreateClient(branchId, originalName, "tanaka@example.com"));
+        var createClientResult
+            = await commandExecutor.ExecCommandAsync(new CreateClient(branchId, originalName, "tanaka@example.com"));
         var clientId = createClientResult.AggregateId!.Value;
         Assert.NotNull(createClientResult);
         Assert.NotNull(createClientResult.AggregateId);
@@ -96,7 +101,8 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         Assert.Single(tanakaProjection.Payload.ClientNames);
         Assert.Equal(originalName, tanakaProjection.Payload.ClientNames.First().Name);
 
-        var clientNameListFromMultiple = await multiProjectionService.GetSingleProjectionList<ClientNameHistoryProjection>();
+        var clientNameListFromMultiple
+            = await multiProjectionService.GetSingleProjectionList<ClientNameHistoryProjection>();
         Assert.Single(clientNameListFromMultiple);
         Assert.Equal(clientNameList.First().AggregateId, clientNameListFromMultiple.First().AggregateId);
 
@@ -133,7 +139,8 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         }
 
         // get change name state
-        var changeNameProjection = await aggregateLoader.AsSingleProjectionStateAsync<ClientNameHistoryProjection>(clientId);
+        var changeNameProjection
+            = await aggregateLoader.AsSingleProjectionStateAsync<ClientNameHistoryProjection>(clientId);
         Assert.NotNull(changeNameProjection);
 
         // loyalty point should be created with event subscribe
@@ -162,7 +169,12 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
             async () =>
             {
                 await commandExecutor.ExecCommandAsync(
-                    new UseLoyaltyPoint(clientId, datetimeFirst.AddSeconds(1), LoyaltyPointUsageTypeKeys.FlightUpgrade, 2000, "")
+                    new UseLoyaltyPoint(
+                        clientId,
+                        datetimeFirst.AddSeconds(1),
+                        LoyaltyPointUsageTypeKeys.FlightUpgrade,
+                        2000,
+                        "")
                     {
                         ReferenceVersion = addPointResult.Version
                     });
@@ -185,7 +197,8 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         Assert.Single(p.Payload.Records);
 
         // delete client
-        var deleteClientResult = await commandExecutor.ExecCommandAsync(new DeleteClient(clientId) { ReferenceVersion = versionCN });
+        var deleteClientResult
+            = await commandExecutor.ExecCommandAsync(new DeleteClient(clientId) { ReferenceVersion = versionCN });
         Assert.NotNull(deleteClientResult);
         Assert.NotNull(deleteClientResult.AggregateId);
         // client deleted
@@ -213,7 +226,8 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         foreach (var i in Enumerable.Range(0, count))
         {
             var recentActivityAddedResult = await commandExecutor.ExecCommandAsync(
-                new AddRecentActivity(createRecentActivityResult.AggregateId!.Value, $"Message - {i + 1}") { ReferenceVersion = version });
+                new AddRecentActivity(createRecentActivityResult.AggregateId!.Value, $"Message - {i + 1}")
+                    { ReferenceVersion = version });
             version = recentActivityAddedResult.Version;
         }
 
@@ -225,7 +239,8 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
 
         var recentActivityId = createRecentActivityResult.AggregateId!.Value;
 
-        await commandExecutor.ExecCommandAsync(new OnlyPublishingAddRecentActivity(recentActivityId, "only publish event"));
+        await commandExecutor.ExecCommandAsync(
+            new OnlyPublishingAddRecentActivity(recentActivityId, "only publish event"));
 
         // get single aggregate and applied event
         var recentActivityState = await aggregateLoader.AsDefaultStateAsync<RecentActivity>(recentActivityId);
@@ -235,7 +250,8 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         Assert.NotNull(p);
         Assert.Equal(3, p.Payload.Branches.Count);
         Assert.Empty(p.Payload.Records);
-        var snapshotManager = await aggregateLoader.AsDefaultStateFromInitialAsync<SnapshotManager>(SnapshotManager.SharedId);
+        var snapshotManager
+            = await aggregateLoader.AsDefaultStateFromInitialAsync<SnapshotManager>(SnapshotManager.SharedId);
         if (snapshotManager is null)
         {
             TestOutputHelper.WriteLine("snapshot manager is null");
@@ -270,7 +286,8 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         var branchId = branchResult.AggregateId!.Value;
         // create client
         var originalName = "Tanaka Taro";
-        var createClientResult = await commandExecutor.ExecCommandAsync(new CreateClient(branchId, originalName, "tanaka@example.com"));
+        var createClientResult
+            = await commandExecutor.ExecCommandAsync(new CreateClient(branchId, originalName, "tanaka@example.com"));
         var clientId = createClientResult.AggregateId!.Value;
 
         var loyaltyPoint = await aggregateLoader.AsDefaultStateAsync<LoyaltyPoint>(clientId);
@@ -295,7 +312,12 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
             async () =>
             {
                 await commandExecutor.ExecCommandAsync(
-                    new UseLoyaltyPoint(clientId, datetimeFirst.AddSeconds(1), LoyaltyPointUsageTypeKeys.FlightUpgrade, 2000, "")
+                    new UseLoyaltyPoint(
+                        clientId,
+                        datetimeFirst.AddSeconds(1),
+                        LoyaltyPointUsageTypeKeys.FlightUpgrade,
+                        2000,
+                        "")
                     {
                         ReferenceVersion = addPointResult.Version
                     });
@@ -318,7 +340,8 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         Assert.Single(p.Payload.Records);
 
         // delete client
-        var deleteClientResult = await commandExecutor.ExecCommandAsync(new DeleteClient(clientId) { ReferenceVersion = createClientResult.Version });
+        var deleteClientResult = await commandExecutor.ExecCommandAsync(
+            new DeleteClient(clientId) { ReferenceVersion = createClientResult.Version });
         Assert.NotNull(deleteClientResult);
         Assert.NotNull(deleteClientResult.AggregateId);
         // client deleted
@@ -345,12 +368,14 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         RemoveAllFromDefaultAndDissolvable();
         var branchResult = await commandExecutor.ExecCommandAsync(new CreateBranch("Tokyo"));
         var branchId = branchResult.AggregateId!.Value;
-        var clientResult = await commandExecutor.ExecCommandAsync(new CreateClient(branchId, "name", "email@example.com"));
+        var clientResult
+            = await commandExecutor.ExecCommandAsync(new CreateClient(branchId, "name", "email@example.com"));
         var currentVersion = clientResult.Version;
         foreach (var i in Enumerable.Range(0, 160))
         {
             clientResult = await commandExecutor.ExecCommandAsync(
-                new ChangeClientName(clientResult.AggregateId!.Value, $"name{i + 1}") { ReferenceVersion = currentVersion });
+                new ChangeClientName(clientResult.AggregateId!.Value, $"name{i + 1}")
+                    { ReferenceVersion = currentVersion });
             currentVersion = clientResult.Version;
         }
 
@@ -358,7 +383,9 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
 
         var client = await aggregateLoader.AsDefaultStateAsync<Client>(clientResult.AggregateId!.Value);
         Assert.NotNull(client);
-        var clientProjection = await aggregateLoader.AsSingleProjectionStateAsync<ClientNameHistoryProjection>(clientResult.AggregateId!.Value);
+        var clientProjection
+            = await aggregateLoader.AsSingleProjectionStateAsync<ClientNameHistoryProjection>(
+                clientResult.AggregateId!.Value);
         Assert.NotNull(clientProjection);
     }
     [Fact]
@@ -374,12 +401,14 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         RemoveAllFromDefaultAndDissolvable();
         var branchResult = await commandExecutor.ExecCommandAsync(new CreateBranch("Tokyo"));
         var branchId = branchResult.AggregateId!.Value;
-        var clientResult = await commandExecutor.ExecCommandAsync(new CreateClient(branchId, "name", "email@example.com"));
+        var clientResult
+            = await commandExecutor.ExecCommandAsync(new CreateClient(branchId, "name", "email@example.com"));
         var currentVersion = clientResult.Version;
         foreach (var i in Enumerable.Range(0, 160))
         {
             clientResult = await commandExecutor.ExecCommandAsync(
-                new ChangeClientName(clientResult.AggregateId!.Value, $"name{i + 1}") { ReferenceVersion = currentVersion });
+                new ChangeClientName(clientResult.AggregateId!.Value, $"name{i + 1}")
+                    { ReferenceVersion = currentVersion });
             currentVersion = clientResult.Version;
         }
 
@@ -387,12 +416,21 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
 
         var client1 = await aggregateLoader.AsDefaultStateFromInitialAsync<Client>(aggregateId, toVersion: 80);
         var clientSnapshot = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(client1!);
-        await documentPersistentWriter.SaveSingleSnapshotAsync(clientSnapshot!, typeof(Client), false);
+        await documentPersistentWriter.SaveSingleSnapshotAsync(
+            clientSnapshot!,
+            new AggregateWriteStream(typeof(Client)),
+            false);
         var client2 = await aggregateLoader.AsDefaultStateFromInitialAsync<Client>(aggregateId);
         var clientSnapshot2 = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(client2!);
-        await documentPersistentWriter.SaveSingleSnapshotAsync(clientSnapshot2!, typeof(Client), true);
+        await documentPersistentWriter.SaveSingleSnapshotAsync(
+            clientSnapshot2!,
+            new AggregateWriteStream(typeof(Client)),
+            true);
 
-        var snapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(aggregateId, typeof(Client), typeof(Client));
+        var snapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(
+            aggregateId,
+            typeof(Client),
+            typeof(Client));
 
         Assert.Contains(clientSnapshot!.Id, snapshots.Select(m => m.Id));
         var clientFromSnapshot = snapshots.First(m => m.Id == clientSnapshot.Id).GetState();
@@ -406,11 +444,19 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
             = await aggregateLoader.AsSingleProjectionStateFromInitialAsync<ClientNameHistoryProjection>(
                 clientResult.AggregateId!.Value,
                 toVersion: 80);
-        var projectionSnapshot = await singleProjectionSnapshotAccessor.SnapshotDocumentFromSingleProjectionStateAsync(projection1!, typeof(Client));
-        await documentPersistentWriter.SaveSingleSnapshotAsync(projectionSnapshot!, typeof(Client), false);
-        var projection2 = await aggregateLoader.AsSingleProjectionStateFromInitialAsync<ClientNameHistoryProjection>(clientResult.AggregateId!.Value);
-        var projectionSnapshot2 = await singleProjectionSnapshotAccessor.SnapshotDocumentFromSingleProjectionStateAsync(projection2!, typeof(Client));
-        await documentPersistentWriter.SaveSingleSnapshotAsync(projectionSnapshot2!, typeof(Client), true);
+        var projectionSnapshot
+            = await singleProjectionSnapshotAccessor.SnapshotDocumentFromSingleProjectionStateAsync(
+                projection1!,
+                typeof(Client));
+        await documentPersistentWriter.SaveSingleSnapshotAsync(projectionSnapshot!, new AggregateWriteStream(typeof(Client)), false);
+        var projection2
+            = await aggregateLoader.AsSingleProjectionStateFromInitialAsync<ClientNameHistoryProjection>(
+                clientResult.AggregateId!.Value);
+        var projectionSnapshot2
+            = await singleProjectionSnapshotAccessor.SnapshotDocumentFromSingleProjectionStateAsync(
+                projection2!,
+                typeof(Client));
+        await documentPersistentWriter.SaveSingleSnapshotAsync(projectionSnapshot2!, new AggregateWriteStream(typeof(Client)), true);
 
         var projectionSnapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(
             aggregateId,
@@ -432,12 +478,15 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
     public async Task ResultExecutionTest1()
     {
         RemoveAllFromDefaultAndDissolvable();
-        var clientId = await commandExecutor.ExecCommandWithResultAsync(new CreateBranchWithResult("Test1"))
+        var clientId = await commandExecutor
+            .ExecCommandWithResultAsync(new CreateBranchWithResult("Test1"))
             .Conveyor(
                 response => response.AggregateId is not null
                     ? ResultBox.FromValue(response.AggregateId.Value)
                     : new SekibanAggregateCreateFailedException(nameof(Branch)))
-            .Conveyor(branchId => commandExecutor.ExecCommandWithResultAsync(new CreateClientR(branchId, "John Doe", "john@example.com")))
+            .Conveyor(
+                branchId => commandExecutor.ExecCommandWithResultAsync(
+                    new CreateClientR(branchId, "John Doe", "john@example.com")))
             .Conveyor(
                 response => response.AggregateId is not null
                     ? ResultBox.FromValue(response.AggregateId.Value)
@@ -448,7 +497,8 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         var client = clientList.First();
         Assert.True(clientId.IsSuccess);
         Assert.Equal(clientId.GetValue(), client.AggregateId);
-        await commandExecutor.ExecCommandWithResultAsync(new ChangeClientNameWithoutLoadingWithResult(clientId.GetValue(), "John Doe 2"))
+        await commandExecutor
+            .ExecCommandWithResultAsync(new ChangeClientNameWithoutLoadingWithResult(clientId.GetValue(), "John Doe 2"))
             .Conveyor(
                 result => result.AggregateId is not null
                     ? result.AggregateId.Value
@@ -504,28 +554,32 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
                     async () =>
                     {
                         var recentActivityAddedResult = await commandExecutor.ExecCommandAsync(
-                            new AddRecentActivity(
-                                createRecentActivityResult.AggregateId!.Value,
-                                $"Message - {i + 1}") { ReferenceVersion = version });
+                            new AddRecentActivity(createRecentActivityResult.AggregateId!.Value, $"Message - {i + 1}")
+                                { ReferenceVersion = version });
                         version = recentActivityAddedResult.Version;
                     }));
         }
         await Task.WhenAll(tasks);
         recentActivityList = await multiProjectionService.GetAggregateList<RecentActivity>();
         Assert.Single(recentActivityList);
-        var projection = await aggregateLoader.AsSingleProjectionStateAsync<TenRecentProjection>(createRecentActivityResult.AggregateId!.Value);
+        var projection
+            = await aggregateLoader.AsSingleProjectionStateAsync<TenRecentProjection>(
+                createRecentActivityResult.AggregateId!.Value);
         Assert.NotNull(projection);
         // this works
         var aggregateRecentActivity
-            = await aggregateLoader.AsDefaultStateFromInitialAsync<RecentActivity>(createRecentActivityResult.AggregateId!.Value);
-        var aggregateRecentActivity2 = await aggregateLoader.AsDefaultStateAsync<RecentActivity>(createRecentActivityResult.AggregateId!.Value);
+            = await aggregateLoader.AsDefaultStateFromInitialAsync<RecentActivity>(
+                createRecentActivityResult.AggregateId!.Value);
+        var aggregateRecentActivity2
+            = await aggregateLoader.AsDefaultStateAsync<RecentActivity>(createRecentActivityResult.AggregateId!.Value);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + 1, aggregateRecentActivity.Version);
         Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
 
         await Task.Delay(1000);
-        var snapshotManager = await aggregateLoader.AsDefaultStateFromInitialAsync<SnapshotManager>(SnapshotManager.SharedId);
+        var snapshotManager
+            = await aggregateLoader.AsDefaultStateFromInitialAsync<SnapshotManager>(SnapshotManager.SharedId);
         if (snapshotManager is not null)
         {
             TestOutputHelper.WriteLine("-requests-");
@@ -591,7 +645,8 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         }
         await Task.WhenAll(tasks);
 
-        var events = (await aggregateLoader.AllEventsAsync<RecentActivity>(aggregateId) ?? Enumerable.Empty<IEvent>()).ToList();
+        var events = (await aggregateLoader.AllEventsAsync<RecentActivity>(aggregateId) ?? Enumerable.Empty<IEvent>())
+            .ToList();
         var versionShouldBe = 1;
         foreach (var ev in events)
         {
@@ -608,15 +663,22 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         TestOutputHelper.WriteLine($"snapshots {typeof(TAggregatePayload).Name} {snapshots.Count} ");
         foreach (var snapshot in snapshots)
         {
-            TestOutputHelper.WriteLine($"snapshot {snapshot.AggregateType}  {snapshot.Id}  {snapshot.SavedVersion} is checking");
+            TestOutputHelper.WriteLine(
+                $"snapshot {snapshot.AggregateType}  {snapshot.Id}  {snapshot.SavedVersion} is checking");
             var state = snapshot.GetState();
             if (state is null)
             {
-                TestOutputHelper.WriteLine($"Snapshot {snapshot.AggregateType} {snapshot.Id} {snapshot.SavedVersion}  is null");
-                throw new SekibanInvalidArgumentException($"Snapshot {snapshot.AggregateType} {snapshot.SavedVersion}  is null");
+                TestOutputHelper.WriteLine(
+                    $"Snapshot {snapshot.AggregateType} {snapshot.Id} {snapshot.SavedVersion}  is null");
+                throw new SekibanInvalidArgumentException(
+                    $"Snapshot {snapshot.AggregateType} {snapshot.SavedVersion}  is null");
             }
-            TestOutputHelper.WriteLine($"Snapshot {snapshot.AggregateType}  {snapshot.Id}  {snapshot.SavedVersion}  is not null");
-            var fromInitial = await aggregateLoader.AsDefaultStateFromInitialAsync<TAggregatePayload>(aggregateId, toVersion: state.Version) ??
+            TestOutputHelper.WriteLine(
+                $"Snapshot {snapshot.AggregateType}  {snapshot.Id}  {snapshot.SavedVersion}  is not null");
+            var fromInitial
+                = await aggregateLoader.AsDefaultStateFromInitialAsync<TAggregatePayload>(
+                    aggregateId,
+                    toVersion: state.Version) ??
                 throw new SekibanInvalidArgumentException();
             Assert.Equal(fromInitial.Version, state.Version);
             Assert.Equal(fromInitial.LastEventId, state.LastEventId);
@@ -637,12 +699,15 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
             {
                 TestOutputHelper.WriteLine(
                     $"Snapshot {snapshot.AggregateType} {snapshot.DocumentTypeName} {snapshot.Id} {snapshot.SavedVersion}  is null");
-                throw new SekibanInvalidArgumentException($"Snapshot {snapshot.AggregateType} {snapshot.SavedVersion}  is null");
+                throw new SekibanInvalidArgumentException(
+                    $"Snapshot {snapshot.AggregateType} {snapshot.SavedVersion}  is null");
             }
             TestOutputHelper.WriteLine(
                 $"Snapshot {snapshot.AggregateType} {snapshot.DocumentTypeName} {snapshot.Id}  {snapshot.SavedVersion}  is not null");
             var fromInitial
-                = await aggregateLoader.AsSingleProjectionStateFromInitialAsync<TAggregatePayload>(aggregateId, toVersion: state.Version) ??
+                = await aggregateLoader.AsSingleProjectionStateFromInitialAsync<TAggregatePayload>(
+                    aggregateId,
+                    toVersion: state.Version) ??
                 throw new SekibanInvalidArgumentException();
             Assert.Equal(fromInitial.Version, state.Version);
             Assert.Equal(fromInitial.LastEventId, state.LastEventId);
@@ -667,7 +732,9 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
                     async () =>
                     {
                         var recentActivityAddedResult = await commandExecutor.ExecCommandAsync(
-                            new AddRecentInMemoryActivity(createRecentActivityResult.AggregateId!.Value, $"Message - {i + 1}")
+                            new AddRecentInMemoryActivity(
+                                createRecentActivityResult.AggregateId!.Value,
+                                $"Message - {i + 1}")
                             {
                                 ReferenceVersion = version
                             });
@@ -680,9 +747,11 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         Assert.Single(recentActivityList);
 
         var aggregateRecentActivity
-            = await aggregateLoader.AsDefaultStateFromInitialAsync<RecentInMemoryActivity>(createRecentActivityResult.AggregateId!.Value);
+            = await aggregateLoader.AsDefaultStateFromInitialAsync<RecentInMemoryActivity>(
+                createRecentActivityResult.AggregateId!.Value);
         var aggregateRecentActivity2
-            = await aggregateLoader.AsDefaultStateAsync<RecentInMemoryActivity>(createRecentActivityResult.AggregateId!.Value);
+            = await aggregateLoader.AsDefaultStateAsync<RecentInMemoryActivity>(
+                createRecentActivityResult.AggregateId!.Value);
         Assert.Single(recentActivityList);
         Assert.NotNull(aggregateRecentActivity);
         Assert.Equal(count + 1, aggregateRecentActivity.Version);
@@ -731,7 +800,10 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
 
         TestOutputHelper.WriteLine("518");
 
-        var snapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(aggregateId, typeof(RecentActivity), typeof(RecentActivity));
+        var snapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(
+            aggregateId,
+            typeof(RecentActivity),
+            typeof(RecentActivity));
         await CheckSnapshots<RecentActivity>(snapshots, aggregateId);
         var projectionSnapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(
             aggregateId,
@@ -748,7 +820,8 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         Assert.Equal(count + aggregate.ToState().Version, aggregateRecentActivity.Version);
         Assert.Equal(aggregateRecentActivity.Version, aggregateRecentActivity2!.Version);
 
-        var snapshotManager = await aggregateLoader.AsDefaultStateFromInitialAsync<SnapshotManager>(SnapshotManager.SharedId);
+        var snapshotManager
+            = await aggregateLoader.AsDefaultStateFromInitialAsync<SnapshotManager>(SnapshotManager.SharedId);
         TestOutputHelper.WriteLine("-requests-");
         foreach (var key in snapshotManager!.Payload.Requests)
         {
@@ -780,21 +853,25 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         RemoveAllFromDefault();
         var result = await commandExecutor.ExecCommandWithEventsAsync(new CreateBranch("JAPAN"));
         var branchId = result.AggregateId!.Value;
-        result = await commandExecutor.ExecCommandWithEventsAsync(new CreateClient(branchId, "Test Name", "test@example.com"));
+        result = await commandExecutor.ExecCommandWithEventsAsync(
+            new CreateClient(branchId, "Test Name", "test@example.com"));
         var clientId = result.AggregateId!.Value;
         result = await commandExecutor.ExecCommandWithEventsAsync(new ClientNoEventsCommand { ClientId = clientId });
         Assert.NotNull(result.AggregateId);
         Assert.Equal(0, result.EventCount);
 
-        var result2 = await commandExecutor.ExecCommandWithEventsAsync(new ClientNoEventsCommand { ClientId = clientId });
+        var result2 = await commandExecutor.ExecCommandWithEventsAsync(
+            new ClientNoEventsCommand { ClientId = clientId });
         Assert.NotNull(result2.AggregateId);
         Assert.Equal(0, result2.EventCount);
 
-        var result3 = await commandExecutor.ExecCommandWithoutValidationAsync(new ClientNoEventsCommand { ClientId = clientId });
+        var result3 = await commandExecutor.ExecCommandWithoutValidationAsync(
+            new ClientNoEventsCommand { ClientId = clientId });
         Assert.NotNull(result3.AggregateId);
         Assert.Equal(0, result3.EventCount);
 
-        var result4 = await commandExecutor.ExecCommandWithoutValidationWithEventsAsync(new ClientNoEventsCommand { ClientId = clientId });
+        var result4 = await commandExecutor.ExecCommandWithoutValidationWithEventsAsync(
+            new ClientNoEventsCommand { ClientId = clientId });
         Assert.NotNull(result4.AggregateId);
         Assert.Equal(0, result4.EventCount);
     }
@@ -805,7 +882,8 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         RemoveAllFromDefault();
         var result = await commandExecutor.ExecCommandWithEventsAsync(new CreateBranch("JAPAN"));
         var branchId = result.AggregateId!.Value;
-        await commandExecutor.ExecCommandWithEventsAsync(new CreateClientWithBranchSubscriber(branchId, "Test Name", "test@example.com"));
+        await commandExecutor.ExecCommandWithEventsAsync(
+            new CreateClientWithBranchSubscriber(branchId, "Test Name", "test@example.com"));
         var branch = await aggregateLoader.AsDefaultStateAsync<Branch>(branchId);
         Assert.NotNull(branch);
         Assert.Equal(0, branch.Payload.NumberOfMembers);
@@ -819,7 +897,8 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
     {
         RemoveAllFromDefault();
         var targetAggregateId = Guid.NewGuid();
-        var result = await aggregateLoader.AsAggregateAsync<Branch>(targetAggregateId) ?? new Aggregate<Branch> { AggregateId = targetAggregateId };
+        var result = await aggregateLoader.AsAggregateAsync<Branch>(targetAggregateId) ??
+            new Aggregate<Branch> { AggregateId = targetAggregateId };
         Assert.Equal(0, result.Version);
         Assert.True(result.IsNew);
         Assert.True(result.ToState().IsNew);
@@ -838,7 +917,8 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         await Assert.ThrowsAsync<SekibanAggregateNotExistsException>(
             async () =>
             {
-                await commandExecutor.ExecCommandAsync(new AddNumberOfClients { BranchId = Guid.NewGuid(), ClientId = Guid.NewGuid() });
+                await commandExecutor.ExecCommandAsync(
+                    new AddNumberOfClients { BranchId = Guid.NewGuid(), ClientId = Guid.NewGuid() });
             });
     }
     [Fact]
@@ -848,13 +928,14 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         var branchCreatedResult = await commandExecutor.ExecCommandAsync(new CreateBranch("Japan Tokyo"));
         Assert.Equal(1, branchCreatedResult?.EventCount);
         Assert.NotNull(branchCreatedResult?.AggregateId);
-        var clientCreatedResult
-            = await commandExecutor.ExecCommandAsync(new CreateClient(branchCreatedResult.AggregateId.Value, "John", "john@example.com"));
+        var clientCreatedResult = await commandExecutor.ExecCommandAsync(
+            new CreateClient(branchCreatedResult.AggregateId.Value, "John", "john@example.com"));
         Assert.Equal(1, clientCreatedResult?.EventCount);
         Assert.NotNull(clientCreatedResult?.AggregateId);
 
         var branchUpdatedResult = await commandExecutor.ExecCommandAsync(
-            new AddNumberOfClients { BranchId = branchCreatedResult.AggregateId.Value, ClientId = clientCreatedResult.AggregateId.Value });
+            new AddNumberOfClients
+                { BranchId = branchCreatedResult.AggregateId.Value, ClientId = clientCreatedResult.AggregateId.Value });
         Assert.Equal(1, branchUpdatedResult?.EventCount);
         Assert.NotNull(branchUpdatedResult?.AggregateId);
 
@@ -868,7 +949,8 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         RemoveAllFromDefaultAndDissolvable();
         var branchResult = await commandExecutor.ExecCommandAsync(new CreateBranch("Japan Tokyo"));
         Assert.NotNull(branchResult.AggregateId);
-        var clientResult = await commandExecutor.ExecCommandAsync(new CreateClient(branchResult.AggregateId.Value, "John", "john@example.com"));
+        var clientResult = await commandExecutor.ExecCommandAsync(
+            new CreateClient(branchResult.AggregateId.Value, "John", "john@example.com"));
         Assert.NotNull(clientResult.AggregateId);
 
         // wait for 6 seconds. because the query does not make cache if it is too new.
@@ -883,7 +965,8 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         var clientResult2 = await commandExecutor.ExecCommandAsync(
             new ChangeClientName(clientResult.AggregateId.Value, "John2") { ReferenceVersion = clientResult.Version });
         Assert.NotNull(clientResult2.AggregateId);
-        var clientResult3 = await commandExecutor.ExecCommandAsync(new ChangeClientNameWithoutLoading(clientResult.AggregateId.Value, "John3"));
+        var clientResult3 = await commandExecutor.ExecCommandAsync(
+            new ChangeClientNameWithoutLoading(clientResult.AggregateId.Value, "John3"));
         Assert.NotNull(clientResult2.AggregateId);
 
 
@@ -911,7 +994,8 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         RemoveAllFromDefaultAndDissolvable();
         var branchResult = await commandExecutor.ExecCommandAsync(new CreateBranch("Japan Tokyo"));
         Assert.NotNull(branchResult.AggregateId);
-        var clientResult = await commandExecutor.ExecCommandAsync(new CreateClient(branchResult.AggregateId.Value, "John", "john@example.com"));
+        var clientResult = await commandExecutor.ExecCommandAsync(
+            new CreateClient(branchResult.AggregateId.Value, "John", "john@example.com"));
         Assert.NotNull(clientResult.AggregateId);
 
 
@@ -932,7 +1016,8 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
         var clientResult2 = await commandExecutor.ExecCommandAsync(
             new ChangeClientName(clientResult.AggregateId.Value, "John2") { ReferenceVersion = clientResult.Version });
         Assert.NotNull(clientResult2.AggregateId);
-        var clientResult3 = await commandExecutor.ExecCommandAsync(new ChangeClientNameWithoutLoading(clientResult.AggregateId.Value, "John3"));
+        var clientResult3 = await commandExecutor.ExecCommandAsync(
+            new ChangeClientNameWithoutLoading(clientResult.AggregateId.Value, "John3"));
         Assert.NotNull(clientResult2.AggregateId);
 
 

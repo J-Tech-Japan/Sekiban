@@ -3,6 +3,7 @@ using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.PubSub;
@@ -820,10 +821,12 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
             throw new SekibanTypeNotFoundException("Failed to get document writer");
         if (withPublish)
         {
-            documentWriter.SaveAndPublishEvents(new List<IEvent> { ev }, typeof(TAggregatePayload)).Wait();
+            documentWriter
+                .SaveAndPublishEvents(new List<IEvent> { ev }, new AggregateWriteStream(typeof(TAggregatePayload)))
+                .Wait();
         } else
         {
-            documentWriter.SaveAsync(ev, typeof(TAggregatePayload)).Wait();
+            documentWriter.SaveAsync(ev, new AggregateWriteStream(typeof(TAggregatePayload))).Wait();
         }
         return this;
     }

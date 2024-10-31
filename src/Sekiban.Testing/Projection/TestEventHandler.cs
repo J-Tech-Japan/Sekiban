@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.PubSub;
@@ -34,7 +35,8 @@ public class TestEventHandler(IServiceProvider serviceProvider)
     /// <summary>
     ///     Given events to test and publish events
     ///     Even non blocking subscriptions will be executed by same thread and block the execution
-    ///     (To test subscription values, use this method. But be careful, orders could be different from actual execution)
+    ///     (To test subscription values, use this method. But be careful, orders could be different from actual
+    ///     execution)
     /// </summary>
     /// <param name="events"></param>
     /// <exception cref="Exception"></exception>
@@ -54,14 +56,17 @@ public class TestEventHandler(IServiceProvider serviceProvider)
 
         foreach (var e in events)
         {
-            var aggregateType = sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == e.AggregateType) ??
+            var aggregateType
+                = sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == e.AggregateType) ??
                 throw new SekibanTypeNotFoundException($"Failed to find aggregate type {e.AggregateType}");
             if (withPublish)
             {
-                documentWriter.SaveAsync(e, aggregateType.Aggregate).Wait();
+                documentWriter.SaveAsync(e, new AggregateWriteStream(aggregateType.Aggregate)).Wait();
             } else
             {
-                documentWriter.SaveAndPublishEvents(new List<IEvent> { e }, aggregateType.Aggregate).Wait();
+                documentWriter
+                    .SaveAndPublishEvents(new List<IEvent> { e }, new AggregateWriteStream(aggregateType.Aggregate))
+                    .Wait();
             }
         }
     }
@@ -105,7 +110,8 @@ public class TestEventHandler(IServiceProvider serviceProvider)
     /// <exception cref="InvalidDataException"></exception>
     private void GivenEventsFromJson(string jsonEvents, bool withPublish)
     {
-        var list = JsonSerializer.Deserialize<List<JsonElement>>(jsonEvents) ?? throw new InvalidDataException("Failed to serialize in JSON.");
+        var list = JsonSerializer.Deserialize<List<JsonElement>>(jsonEvents) ??
+            throw new InvalidDataException("Failed to serialize in JSON.");
         AddEventsFromList(list, withPublish);
     }
     /// <summary>
@@ -129,7 +135,8 @@ public class TestEventHandler(IServiceProvider serviceProvider)
     private void GivenEventsFromFile(string filename, bool withPublish)
     {
         using var openStream = File.OpenRead(filename);
-        var list = JsonSerializer.Deserialize<List<JsonElement>>(openStream) ?? throw new InvalidDataException("Failed to serialize in JSON.");
+        var list = JsonSerializer.Deserialize<List<JsonElement>>(openStream) ??
+            throw new InvalidDataException("Failed to serialize in JSON.");
         AddEventsFromList(list, withPublish);
     }
     /// <summary>
@@ -144,12 +151,15 @@ public class TestEventHandler(IServiceProvider serviceProvider)
     ///     Given Events and publish events, by AggregateId, Type and Payload
     /// </summary>
     /// <param name="eventTuples"></param>
-    public void GivenEventsWithPublish(params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTuples)
+    public void GivenEventsWithPublish(
+        params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTuples)
     {
         GivenEvents(true, eventTuples);
     }
 
-    private void GivenEvents(bool withPublish, params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTuples)
+    private void GivenEvents(
+        bool withPublish,
+        params (Guid aggregateId, Type aggregateType, IEventPayloadCommon payload)[] eventTuples)
     {
         foreach (var (aggregateId, aggregateType, payload) in eventTuples)
         {
@@ -165,7 +175,8 @@ public class TestEventHandler(IServiceProvider serviceProvider)
     ///     Given Events, by AggregateId, Type and Payload
     /// </summary>
     /// <param name="eventTuples"></param>
-    public void GivenEvents(params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTuples)
+    public void GivenEvents(
+        params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTuples)
     {
         GivenEvents(false, eventTuples);
     }
@@ -173,12 +184,15 @@ public class TestEventHandler(IServiceProvider serviceProvider)
     ///     Given Events and publish events, by AggregateId, Type and Payload
     /// </summary>
     /// <param name="eventTuples"></param>
-    public void GivenEventsWithPublish(params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTuples)
+    public void GivenEventsWithPublish(
+        params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTuples)
     {
         GivenEvents(true, eventTuples);
     }
 
-    private void GivenEvents(bool withPublish, params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTuples)
+    private void GivenEvents(
+        bool withPublish,
+        params (Guid aggregateId, string rootPartitionKey, IEventPayloadCommon payload)[] eventTuples)
     {
         foreach (var (aggregateId, rootPartitionKey, payload) in eventTuples)
         {
@@ -186,7 +200,13 @@ public class TestEventHandler(IServiceProvider serviceProvider)
             var aggregateType = payload.GetAggregatePayloadInType();
             var eventType = typeof(Event<>);
             var genericType = eventType.MakeGenericType(type);
-            var ev = Activator.CreateInstance(genericType, aggregateId, aggregateType, payload, rootPartitionKey) as IEvent ??
+            var ev
+                = Activator.CreateInstance(
+                    genericType,
+                    aggregateId,
+                    aggregateType,
+                    payload,
+                    rootPartitionKey) as IEvent ??
                 throw new InvalidDataException("Failed to generate an event" + payload);
             GivenEvents(new[] { ev }, withPublish);
         }
@@ -203,13 +223,15 @@ public class TestEventHandler(IServiceProvider serviceProvider)
         foreach (var json in list)
         {
             var documentTypeName = json.GetProperty("DocumentTypeName").ToString();
-            var eventPayloadType = registeredEventTypes.RegisteredTypes.FirstOrDefault(e => e.Name == documentTypeName) ??
+            var eventPayloadType
+                = registeredEventTypes.RegisteredTypes.FirstOrDefault(e => e.Name == documentTypeName) ??
                 throw new InvalidDataException($"Event Type {documentTypeName} Is not registered.");
             var eventType = typeof(Event<>).MakeGenericType(eventPayloadType) ??
                 throw new InvalidDataException($"Event {documentTypeName} failed to generate.");
             var eventInstance = JsonSerializer.Deserialize(json.ToString(), eventType) ??
                 throw new InvalidDataException($"Event {documentTypeName} failed to deserialize.");
-            var ev = eventInstance as IEvent ?? throw new InvalidDataException($"Event {documentTypeName} failed to cast.");
+            var ev = eventInstance as IEvent ??
+                throw new InvalidDataException($"Event {documentTypeName} failed to cast.");
             GivenEvents(new List<IEvent> { ev }, withPublish);
         }
     }

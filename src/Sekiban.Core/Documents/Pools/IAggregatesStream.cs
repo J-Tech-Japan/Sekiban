@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Types;
 namespace Sekiban.Core.Documents.Pools;
 
 public interface IAggregatesStream
@@ -14,4 +15,20 @@ public interface IAggregatesStream
                     ? ExceptionOrNone.None
                     : new ApplicationException("Stream Names is not set"))
             .Conveyor(_ => GetStreamNames()[0].ToResultBox());
+}
+public interface IWriteDocumentStream
+{
+    public AggregateContainerGroup GetAggregateContainerGroup();
+}
+public record AggregateWriteStream(Type AggregatePayloadType) : IWriteDocumentStream
+{
+    public AggregateContainerGroup GetAggregateContainerGroup() =>
+        AggregateContainerGroupAttribute.FindAggregateContainerGroup(
+            AggregatePayloadType.GetBaseAggregatePayloadTypeFromAggregate());
+}
+//TBD
+public record PureAggregateProjectionWriteStream(Type PureAggregateProjectionType) : IWriteDocumentStream
+{
+    public AggregateContainerGroup GetAggregateContainerGroup() =>
+        AggregateContainerGroupAttribute.FindAggregateContainerGroup(PureAggregateProjectionType);
 }

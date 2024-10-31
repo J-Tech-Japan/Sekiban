@@ -1,5 +1,5 @@
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.PubSub;
@@ -17,13 +17,15 @@ namespace Sekiban.Infrastructure.Dynamo.Documents;
 /// <param name="dbFactory"></param>
 /// <param name="eventPublisher"></param>
 /// <param name="blobAccessor"></param>
-public class DynamoDocumentWriter(DynamoDbFactory dbFactory, EventPublisher eventPublisher, IBlobAccessor blobAccessor) : IDocumentPersistentWriter
+public class DynamoDocumentWriter(DynamoDbFactory dbFactory, EventPublisher eventPublisher, IBlobAccessor blobAccessor)
+    : IDocumentPersistentWriter
 {
 
 
-    public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType) where TDocument : IDocument
+    public async Task SaveAsync<TDocument>(TDocument document, IWriteDocumentStream writeDocumentStream)
+        where TDocument : IDocument
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
+        var aggregateContainerGroup = writeDocumentStream.GetAggregateContainerGroup();
         switch (document.DocumentType)
         {
             case DocumentType.Event:
@@ -32,7 +34,8 @@ public class DynamoDocumentWriter(DynamoDbFactory dbFactory, EventPublisher even
                     aggregateContainerGroup,
                     async container =>
                     {
-                        var json = SekibanJsonHelper.Serialize(document) ?? throw new SekibanInvalidDocumentTypeException();
+                        var json = SekibanJsonHelper.Serialize(document) ??
+                            throw new SekibanInvalidDocumentTypeException();
                         var newItem = Document.FromJson(json) ?? throw new SekibanInvalidDocumentTypeException();
                         await container.PutItemAsync(newItem);
                     });
@@ -44,7 +47,7 @@ public class DynamoDocumentWriter(DynamoDbFactory dbFactory, EventPublisher even
                 {
                     return;
                 }
-                await SaveSingleSnapshotAsync(snapshot, aggregateType, ShouldUseBlob(snapshot));
+                await SaveSingleSnapshotAsync(snapshot, writeDocumentStream, ShouldUseBlob(snapshot));
                 break;
             default:
                 await dbFactory.DynamoActionAsync(
@@ -52,29 +55,37 @@ public class DynamoDocumentWriter(DynamoDbFactory dbFactory, EventPublisher even
                     aggregateContainerGroup,
                     async container =>
                     {
-                        var json = SekibanJsonHelper.Serialize(document) ?? throw new SekibanInvalidDocumentTypeException();
+                        var json = SekibanJsonHelper.Serialize(document) ??
+                            throw new SekibanInvalidDocumentTypeException();
                         var newItem = Document.FromJson(json) ?? throw new SekibanInvalidDocumentTypeException();
                         await container.PutItemAsync(newItem);
                     });
                 break;
         }
     }
-    public async Task SaveSingleSnapshotAsync(SnapshotDocument document, Type aggregateType, bool useBlob)
+    public async Task SaveSingleSnapshotAsync(
+        SnapshotDocument document,
+        IWriteDocumentStream writeDocumentStream,
+        bool useBlob)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
+        var aggregateContainerGroup = writeDocumentStream.GetAggregateContainerGroup();
         if (useBlob)
         {
             var blobSnapshot = document with { Snapshot = null };
             var snapshotValue = document.Snapshot;
             var json = JsonSerializer.Serialize(snapshotValue, new JsonSerializerOptions());
             var memoryStream = new MemoryStream(Encoding.UTF8.GetBytes(json));
-            await blobAccessor.SetBlobWithGZipAsync(SekibanBlobContainer.SingleProjectionState, blobSnapshot.FilenameForSnapshot(), memoryStream);
+            await blobAccessor.SetBlobWithGZipAsync(
+                SekibanBlobContainer.SingleProjectionState,
+                blobSnapshot.FilenameForSnapshot(),
+                memoryStream);
             await dbFactory.DynamoActionAsync(
                 blobSnapshot.DocumentType,
                 aggregateContainerGroup,
                 async container =>
                 {
-                    var newJson = SekibanJsonHelper.Serialize(blobSnapshot) ?? throw new SekibanInvalidDocumentTypeException();
+                    var newJson = SekibanJsonHelper.Serialize(blobSnapshot) ??
+                        throw new SekibanInvalidDocumentTypeException();
                     var newItem = Document.FromJson(newJson) ?? throw new SekibanInvalidDocumentTypeException();
                     await container.PutItemAsync(newItem);
                 });
@@ -96,9 +107,10 @@ public class DynamoDocumentWriter(DynamoDbFactory dbFactory, EventPublisher even
         var stream = SekibanJsonHelper.Serialize(document);
         return stream is not null && stream.Length > 1024 * 300;
     }
-    public async Task SaveAndPublishEvents<TEvent>(IEnumerable<TEvent> events, Type aggregateType) where TEvent : IEvent
+    public async Task SaveAndPublishEvents<TEvent>(IEnumerable<TEvent> events, IWriteDocumentStream writeDocumentStream)
+        where TEvent : IEvent
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
+        var aggregateContainerGroup = writeDocumentStream.GetAggregateContainerGroup();
         var evs = events.ToList();
         await dbFactory.DynamoActionAsync(
             DocumentType.Event,
