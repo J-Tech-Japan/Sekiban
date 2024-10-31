@@ -23,8 +23,10 @@ public interface IWriteDocumentStream
 public record AggregateWriteStream(Type AggregatePayloadType) : IWriteDocumentStream
 {
     public AggregateContainerGroup GetAggregateContainerGroup() =>
-        AggregateContainerGroupAttribute.FindAggregateContainerGroup(
-            AggregatePayloadType.GetBaseAggregatePayloadTypeFromAggregate());
+        AggregateContainerGroupAttribute.FindAggregateContainerGroup(GetOriginal());
+    public Type GetOriginal() => AggregatePayloadType.IsAggregatePayloadType()
+        ? AggregatePayloadType.GetBaseAggregatePayloadTypeFromAggregate()
+        : AggregatePayloadType;
 }
 //TBD
 public record PureAggregateProjectionWriteStream(Type PureAggregateProjectionType) : IWriteDocumentStream
