@@ -12,7 +12,6 @@ public interface IPooledEventRepository : IEventRepository
 }
 public class DirectPoolRepository : IPooledEventRepository
 {
-
     public Task<ResultBox<bool>> GetEvents(
         EventRetrievalInfo eventRetrievalInfo,
         Action<IEnumerable<IEvent>> resultAction) => throw new NotImplementedException();

@@ -14,10 +14,9 @@ namespace Sekiban.Infrastructure.Postgres.Documents;
 
 public class PostgresDocumentWriter(
     PostgresDbFactory dbFactory,
-    EventPublisher eventPublisher,
-    IBlobAccessor blobAccessor) : IDocumentPersistentWriter
+    IBlobAccessor blobAccessor) : IDocumentPersistentWriter, IEventPersistentWriter
 {
-    public async Task SaveAsync<TDocument>(TDocument document, IWriteDocumentStream writeDocumentStream)
+    public async Task SaveItemAsync<TDocument>(TDocument document, IWriteDocumentStream writeDocumentStream)
         where TDocument : IDocument
     {
         var aggregateContainerGroup = writeDocumentStream.GetAggregateContainerGroup();
@@ -47,32 +46,6 @@ public class PostgresDocumentWriter(
                 }
                 await dbContext.SaveChangesAsync();
             });
-    }
-    public async Task SaveAndPublishEvents<TEvent>(IEnumerable<TEvent> events, IWriteDocumentStream writeDocumentStream)
-        where TEvent : IEvent
-    {
-        await dbFactory.DbActionAsync(
-            async dbContext =>
-            {
-                foreach (var ev in events)
-                {
-                    switch (writeDocumentStream.GetAggregateContainerGroup())
-                    {
-                        case AggregateContainerGroup.Default:
-                            dbContext.Events.Add(DbEvent.FromEvent(ev));
-                            break;
-                        case AggregateContainerGroup.Dissolvable:
-                            dbContext.DissolvableEvents.Add(DbDissolvableEvent.FromEvent(ev));
-                            break;
-                    }
-                }
-                await dbContext.SaveChangesAsync();
-
-            });
-        foreach (var ev in events)
-        {
-            await eventPublisher.PublishAsync(ev);
-        }
     }
     public async Task SaveSingleSnapshotAsync(
         SnapshotDocument document,
@@ -116,4 +89,23 @@ public class PostgresDocumentWriter(
         var serializer = SekibanJsonHelper.Serialize(document) ?? string.Empty;
         return serializer.Length > 1024 * 1024 * 2;
     }
+    public Task SaveEvents<TEvent>(IEnumerable<TEvent> events, IWriteDocumentStream writeDocumentStream)
+        where TEvent : IEvent => dbFactory.DbActionAsync(
+        async dbContext =>
+        {
+            foreach (var ev in events)
+            {
+                switch (writeDocumentStream.GetAggregateContainerGroup())
+                {
+                    case AggregateContainerGroup.Default:
+                        dbContext.Events.Add(DbEvent.FromEvent(ev));
+                        break;
+                    case AggregateContainerGroup.Dissolvable:
+                        dbContext.DissolvableEvents.Add(DbDissolvableEvent.FromEvent(ev));
+                        break;
+                }
+            }
+            await dbContext.SaveChangesAsync();
+
+        });
 }

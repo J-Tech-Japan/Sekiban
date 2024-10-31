@@ -12,7 +12,10 @@ namespace Sekiban.Core.Documents;
 ///     App developer does not need to use this class
 ///     see <see cref="IDocumentWriter" />
 /// </summary>
-public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersistentWriter
+public class InMemoryDocumentWriter : IDocumentTemporaryWriter,
+    IDocumentPersistentWriter,
+    IEventPersistentWriter,
+    IEventTemporaryWriter
 {
     private readonly EventPublisher _eventPublisher;
     private readonly InMemoryDocumentStore _inMemoryDocumentStore;
@@ -39,7 +42,7 @@ public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersist
     }
     public bool ShouldUseBlob(SnapshotDocument document) => false;
 
-    public async Task SaveAsync<TDocument>(TDocument document, IWriteDocumentStream writeDocumentStream)
+    public async Task SaveItemAsync<TDocument>(TDocument document, IWriteDocumentStream writeDocumentStream)
         where TDocument : IDocument
     {
         var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
@@ -61,19 +64,13 @@ public class InMemoryDocumentWriter : IDocumentTemporaryWriter, IDocumentPersist
 
         await Task.CompletedTask;
     }
-
-    public async Task SaveAndPublishEvents<TEvent>(IEnumerable<TEvent> events, IWriteDocumentStream writeDocumentStream)
+    public async Task SaveEvents<TEvent>(IEnumerable<TEvent> events, IWriteDocumentStream writeDocumentStream)
         where TEvent : IEvent
     {
         var sekibanContext = _serviceProvider.GetService<ISekibanContext>();
         var sekibanIdentifier = string.IsNullOrWhiteSpace(sekibanContext?.SettingGroupIdentifier)
             ? string.Empty
             : sekibanContext.SettingGroupIdentifier;
-
-        foreach (var ev in events)
-        {
-            _inMemoryDocumentStore.SaveEvent(ev, ev.PartitionKey, sekibanIdentifier);
-            await _eventPublisher.PublishAsync(ev);
-        }
+        await Task.CompletedTask;
     }
 }

@@ -26,13 +26,13 @@ public class DocumentWriterSplitter : IDocumentWriter
         _aggregateSettings = aggregateSettings;
     }
 
-    public async Task SaveAsync<TDocument>(TDocument document, IWriteDocumentStream writeDocumentStream)
+    public async Task SaveItemAsync<TDocument>(TDocument document, IWriteDocumentStream writeDocumentStream)
         where TDocument : IDocument
     {
         var aggregateContainerGroup = writeDocumentStream.GetAggregateContainerGroup();
         if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
-            await _documentTemporaryWriter.SaveAsync(document, writeDocumentStream);
+            await _documentTemporaryWriter.SaveItemAsync(document, writeDocumentStream);
             return;
         }
 
@@ -44,19 +44,6 @@ public class DocumentWriterSplitter : IDocumentWriter
         {
         }
 
-        await _documentPersistentWriter.SaveAsync(document, writeDocumentStream);
-    }
-
-    public async Task SaveAndPublishEvents<TEvent>(IEnumerable<TEvent> events, IWriteDocumentStream writeDocumentStream)
-        where TEvent : IEvent
-    {
-        var aggregateContainerGroup = writeDocumentStream.GetAggregateContainerGroup();
-        if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
-        {
-            await _documentTemporaryWriter.SaveAndPublishEvents(events, writeDocumentStream);
-            return;
-        }
-        var enumerable = events.ToList();
-        await _documentPersistentWriter.SaveAndPublishEvents(enumerable, writeDocumentStream);
+        await _documentPersistentWriter.SaveItemAsync(document, writeDocumentStream);
     }
 }

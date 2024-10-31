@@ -68,7 +68,11 @@ public static class SekibanCoreServiceExtensions
         services.AddTransient<IDocumentTemporaryWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentTemporaryRepository, InMemoryDocumentRepository>();
         services.AddTransient<IDocumentWriter, DocumentWriterSplitter>();
+        services.AddTransient<EventWriter>();
         services.AddTransient<IDocumentRepository, DocumentRepositorySplitter>();
+
+        services.AddTransient<IEventTemporaryWriter, InMemoryDocumentWriter>();
+
         services.AddScoped<ISekibanContext, SekibanContext>();
         services.AddTransient<IQueryExecutor, QueryExecutor>();
         services.AddTransient<ISekibanExecutor, SekibanExecutor>();
@@ -122,12 +126,15 @@ public static class SekibanCoreServiceExtensions
         services.AddSingleton(new InMemoryDocumentStore());
         services.AddTransient<IDocumentWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentRepository, InMemoryDocumentRepository>();
+        services.AddTransient<EventWriter>();
         services.AddScoped<ISekibanContext, SekibanContext>();
 
         services.AddTransient<IDocumentTemporaryRepository, InMemoryDocumentRepository>();
         services.AddTransient<IDocumentPersistentRepository, InMemoryDocumentRepository>();
         services.AddTransient<IDocumentTemporaryWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentPersistentWriter, InMemoryDocumentWriter>();
+        services.AddTransient<IEventPersistentWriter, InMemoryDocumentWriter>();
+        services.AddTransient<IEventTemporaryWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentRemover, InMemoryDocumentRemover>();
         services.AddTransient<IQueryExecutor, QueryExecutor>();
         services.AddTransient<ISekibanExecutor, SekibanExecutor>();
@@ -182,12 +189,15 @@ public static class SekibanCoreServiceExtensions
         services.AddSingleton(new InMemoryDocumentStore());
         services.AddTransient<IDocumentWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentRepository, InMemoryDocumentRepository>();
+        services.AddTransient<EventWriter>();
         services.AddScoped<ISekibanContext, SekibanContext>();
 
         services.AddTransient<IDocumentTemporaryRepository, InMemoryDocumentRepository>();
         services.AddTransient<IDocumentPersistentRepository, InMemoryDocumentRepository>();
         services.AddTransient<IDocumentTemporaryWriter, InMemoryDocumentWriter>();
         services.AddTransient<IDocumentPersistentWriter, InMemoryDocumentWriter>();
+        services.AddTransient<IEventPersistentWriter, InMemoryDocumentWriter>();
+        services.AddTransient<IEventTemporaryWriter, InMemoryDocumentWriter>();
         services.AddTransient<IQueryExecutor, QueryExecutor>();
         services.AddTransient<ISekibanExecutor, SekibanExecutor>();
         services.AddTransient<QueryHandler>();

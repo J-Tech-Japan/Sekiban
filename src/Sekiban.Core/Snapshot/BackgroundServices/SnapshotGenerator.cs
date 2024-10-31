@@ -114,7 +114,7 @@ public class SnapshotGenerator(
                         //     aggregateToSnapshot.LastSortableUniqueId,
                         //     aggregateToSnapshot.Version,
                         //     aggregateToSnapshot.GetPayloadVersionIdentifier());
-                        await documentWriter.SaveAsync(
+                        await documentWriter.SaveItemAsync(
                             snapshotDocument,
                             new AggregateWriteStream(aggregateType.Aggregate));
                     }
@@ -184,7 +184,7 @@ public class SnapshotGenerator(
                         = await singleProjectionSnapshotAccessor.SnapshotDocumentFromSingleProjectionStateAsync(
                             aggregateToSnapshot,
                             projection.OriginalAggregate);
-                    await documentWriter.SaveAsync(
+                    await documentWriter.SaveItemAsync(
                         snapshotDocument,
                         new AggregateWriteStream(projection.OriginalAggregate));
                 }
