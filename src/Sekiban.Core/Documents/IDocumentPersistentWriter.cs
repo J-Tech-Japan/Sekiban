@@ -24,5 +24,3 @@ public interface IDocumentPersistentWriter : IDocumentWriter
     /// <returns></returns>
     bool ShouldUseBlob(SnapshotDocument document);
 }
-public interface IEventPersistentWriter : IEventWriter;
-public interface IEventTemporaryWriter : IEventWriter;

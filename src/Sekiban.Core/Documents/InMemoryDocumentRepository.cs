@@ -16,7 +16,10 @@ namespace Sekiban.Core.Documents;
 public class InMemoryDocumentRepository(
     InMemoryDocumentStore inMemoryDocumentStore,
     IServiceProvider serviceProvider,
-    ISnapshotDocumentCache snapshotDocumentCache) : IDocumentTemporaryRepository, IDocumentPersistentRepository
+    ISnapshotDocumentCache snapshotDocumentCache) : IDocumentTemporaryRepository,
+    IDocumentPersistentRepository,
+    IEventPersistentRepository,
+    IEventTemporaryRepository
 {
 
     public async Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(
@@ -27,73 +30,6 @@ public class InMemoryDocumentRepository(
     {
         await Task.CompletedTask;
         return [];
-    }
-
-    public async Task<ResultBox<bool>> GetEvents(
-        EventRetrievalInfo eventRetrievalInfo,
-        Action<IEnumerable<IEvent>> resultAction)
-    {
-        var sekibanContext = serviceProvider.GetService<ISekibanContext>();
-        var sekibanIdentifier = string.IsNullOrWhiteSpace(sekibanContext?.SettingGroupIdentifier)
-            ? string.Empty
-            : sekibanContext.SettingGroupIdentifier;
-        await Task.CompletedTask;
-        if (eventRetrievalInfo.GetIsPartition())
-        {
-            var partitionKey = eventRetrievalInfo.GetPartitionKey();
-            if (partitionKey.IsSuccess)
-            {
-                var list = inMemoryDocumentStore
-                    .GetEventPartition(partitionKey.GetValue(), sekibanIdentifier)
-                    .OrderBy(m => m.SortableUniqueId)
-                    .ToList();
-                if (eventRetrievalInfo.SinceSortableUniqueId.HasValue)
-                {
-                    var index = list.FindIndex(
-                        m => m.SortableUniqueId == eventRetrievalInfo.SinceSortableUniqueId.GetValue());
-                    if (index == list.Count - 1)
-                    {
-                        resultAction(Enumerable.Empty<IEvent>());
-                    } else
-                    {
-                        resultAction(list.GetRange(index + 1, list.Count - index - 1).OrderBy(m => m.SortableUniqueId));
-                    }
-                } else
-                {
-                    resultAction(list.OrderBy(m => m.SortableUniqueId));
-                }
-            }
-        } else
-        {
-            var enumerable = inMemoryDocumentStore.GetAllEvents(sekibanIdentifier).AsEnumerable();
-            if (eventRetrievalInfo.HasAggregateStream())
-            {
-                var aggregateStream = eventRetrievalInfo.AggregateStream.GetValue().GetStreamNames();
-                enumerable = enumerable.Where(m => aggregateStream.Contains(m.AggregateType));
-            }
-            if (eventRetrievalInfo.HasRootPartitionKey())
-            {
-                enumerable = enumerable.Where(
-                    m => m.RootPartitionKey == eventRetrievalInfo.RootPartitionKey.GetValue());
-            }
-            var list = enumerable.ToList();
-            if (eventRetrievalInfo.SinceSortableUniqueId.HasValue)
-            {
-                var index = list.FindIndex(
-                    m => m.SortableUniqueId == eventRetrievalInfo.SinceSortableUniqueId.GetValue());
-                if (index == list.Count - 1)
-                {
-                    resultAction(Enumerable.Empty<IEvent>());
-                } else
-                {
-                    resultAction(list.GetRange(index + 1, list.Count - index - 1).OrderBy(m => m.SortableUniqueId));
-                }
-            } else
-            {
-                resultAction(list.OrderBy(m => m.SortableUniqueId));
-            }
-        }
-        return true;
     }
     public async Task GetAllCommandStringsForAggregateIdAsync(
         Guid aggregateId,
@@ -165,4 +101,71 @@ public class InMemoryDocumentRepository(
         string rootPartitionKey,
         string payloadVersionIdentifier) =>
         Task.FromResult(false);
+
+    public async Task<ResultBox<bool>> GetEvents(
+        EventRetrievalInfo eventRetrievalInfo,
+        Action<IEnumerable<IEvent>> resultAction)
+    {
+        var sekibanContext = serviceProvider.GetService<ISekibanContext>();
+        var sekibanIdentifier = string.IsNullOrWhiteSpace(sekibanContext?.SettingGroupIdentifier)
+            ? string.Empty
+            : sekibanContext.SettingGroupIdentifier;
+        await Task.CompletedTask;
+        if (eventRetrievalInfo.GetIsPartition())
+        {
+            var partitionKey = eventRetrievalInfo.GetPartitionKey();
+            if (partitionKey.IsSuccess)
+            {
+                var list = inMemoryDocumentStore
+                    .GetEventPartition(partitionKey.GetValue(), sekibanIdentifier)
+                    .OrderBy(m => m.SortableUniqueId)
+                    .ToList();
+                if (eventRetrievalInfo.SinceSortableUniqueId.HasValue)
+                {
+                    var index = list.FindIndex(
+                        m => m.SortableUniqueId == eventRetrievalInfo.SinceSortableUniqueId.GetValue());
+                    if (index == list.Count - 1)
+                    {
+                        resultAction(Enumerable.Empty<IEvent>());
+                    } else
+                    {
+                        resultAction(list.GetRange(index + 1, list.Count - index - 1).OrderBy(m => m.SortableUniqueId));
+                    }
+                } else
+                {
+                    resultAction(list.OrderBy(m => m.SortableUniqueId));
+                }
+            }
+        } else
+        {
+            var enumerable = inMemoryDocumentStore.GetAllEvents(sekibanIdentifier).AsEnumerable();
+            if (eventRetrievalInfo.HasAggregateStream())
+            {
+                var aggregateStream = eventRetrievalInfo.AggregateStream.GetValue().GetStreamNames();
+                enumerable = enumerable.Where(m => aggregateStream.Contains(m.AggregateType));
+            }
+            if (eventRetrievalInfo.HasRootPartitionKey())
+            {
+                enumerable = enumerable.Where(
+                    m => m.RootPartitionKey == eventRetrievalInfo.RootPartitionKey.GetValue());
+            }
+            var list = enumerable.ToList();
+            if (eventRetrievalInfo.SinceSortableUniqueId.HasValue)
+            {
+                var index = list.FindIndex(
+                    m => m.SortableUniqueId == eventRetrievalInfo.SinceSortableUniqueId.GetValue());
+                if (index == list.Count - 1)
+                {
+                    resultAction(Enumerable.Empty<IEvent>());
+                } else
+                {
+                    resultAction(list.GetRange(index + 1, list.Count - index - 1).OrderBy(m => m.SortableUniqueId));
+                }
+            } else
+            {
+                resultAction(list.OrderBy(m => m.SortableUniqueId));
+            }
+        }
+        return true;
+    }
 }

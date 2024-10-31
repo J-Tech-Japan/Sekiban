@@ -13,7 +13,7 @@ namespace Sekiban.Core.Query.MultiProjections.Projections;
 ///     Multi Projection using Memory Cache
 /// </summary>
 public class MemoryCacheMultiProjection(
-    IDocumentRepository documentRepository,
+    EventRepository documentRepository,
     IUpdateNotice updateNotice,
     IAggregateSettings aggregateSettings,
     IMultiProjectionCache multiProjectionCache,

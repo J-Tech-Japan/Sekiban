@@ -133,6 +133,7 @@ public static class PostgresDbServiceCollectionExtensions
         services.AddTransient<IDocumentPersistentRepository, PostgresDocumentRepository>();
         services.AddTransient<IDocumentRemover, PostgresDbDocumentRemover>();
         services.AddTransient<IEventPersistentWriter, PostgresDocumentWriter>();
+        services.AddTransient<IEventPersistentRepository, PostgresDocumentRepository>();
         return new SekibanPostgresDbOptionsServiceCollection(postgresDbOptions, services);
     }
     /// <summary>

@@ -8,15 +8,9 @@ namespace Sekiban.Core.Query.MultiProjections.Projections;
 /// <summary>
 ///     Simple Multi Projection
 /// </summary>
-public class SimpleMultiProjection : IMultiProjection
+public class SimpleMultiProjection(EventRepository documentRepository, RegisteredEventTypes registeredEventTypes)
+    : IMultiProjection
 {
-    private readonly IDocumentRepository _documentRepository;
-    private readonly RegisteredEventTypes _registeredEventTypes;
-    public SimpleMultiProjection(IDocumentRepository documentRepository, RegisteredEventTypes registeredEventTypes)
-    {
-        _documentRepository = documentRepository;
-        _registeredEventTypes = registeredEventTypes;
-    }
 
     public async Task<MultiProjectionState<TProjectionPayload>>
         GetMultiProjectionAsync<TProjection, TProjectionPayload>(
@@ -26,7 +20,7 @@ public class SimpleMultiProjection : IMultiProjection
         where TProjectionPayload : IMultiProjectionPayloadCommon
     {
         var projector = new TProjection();
-        await _documentRepository.GetEvents(
+        await documentRepository.GetEvents(
             EventRetrievalInfo.FromNullableValues(
                 rootPartitionKey,
                 new MultiProjectionTypeStream(typeof(TProjection), projector.TargetAggregateNames()),
@@ -53,7 +47,7 @@ public class SimpleMultiProjection : IMultiProjection
         var list = JsonSerializer.Deserialize<List<JsonElement>>(stream) ??
             throw new SekibanSerializerException("Could not deserialize file");
         var events = (IList<IEvent>)list
-            .Select(m => SekibanJsonHelper.DeserializeToEvent(m, _registeredEventTypes.RegisteredTypes))
+            .Select(m => SekibanJsonHelper.DeserializeToEvent(m, registeredEventTypes.RegisteredTypes))
             .Where(m => m is not null)
             .ToList();
         return events.Aggregate(
@@ -76,7 +70,7 @@ public class SimpleMultiProjection : IMultiProjection
             var list = JsonSerializer.Deserialize<List<JsonElement>>(eventStream) ??
                 throw new SekibanSerializerException("Could not deserialize file");
             var events = (IList<IEvent>)list
-                .Select(m => SekibanJsonHelper.DeserializeToEvent(m, _registeredEventTypes.RegisteredTypes))
+                .Select(m => SekibanJsonHelper.DeserializeToEvent(m, registeredEventTypes.RegisteredTypes))
                 .Where(m => m is not null)
                 .ToList();
             multiProjectionState = events.Aggregate(

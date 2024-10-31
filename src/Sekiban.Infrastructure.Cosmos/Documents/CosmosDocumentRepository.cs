@@ -24,7 +24,7 @@ namespace Sekiban.Infrastructure.Cosmos.Documents;
 public class CosmosDocumentRepository(
     ICosmosDbFactory cosmosDbFactory,
     RegisteredEventTypes registeredEventTypes,
-    ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor) : IDocumentPersistentRepository
+    ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor) : IDocumentPersistentRepository, IEventPersistentRepository
 {
     private const int DefaultOptionsMax = -1;
 
