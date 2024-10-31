@@ -19,7 +19,8 @@ public static class DynamoDbServiceCollectionExtensions
     public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDb(this WebApplicationBuilder builder) =>
         AddSekibanDynamoDb(builder.Services, builder.Configuration);
 
-    public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDbWithoutBlob(this WebApplicationBuilder builder) =>
+    public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDbWithoutBlob(
+        this WebApplicationBuilder builder) =>
         AddSekibanDynamoDbWithoutBlob(builder.Services, builder.Configuration);
 
     /// <summary>
@@ -40,7 +41,9 @@ public static class DynamoDbServiceCollectionExtensions
     /// <param name="services"></param>
     /// <param name="configuration"></param>
     /// <returns></returns>
-    public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDb(this IServiceCollection services, IConfiguration configuration)
+    public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDb(
+        this IServiceCollection services,
+        IConfiguration configuration)
     {
         var options = SekibanDynamoDbOptions.FromConfiguration(configuration);
         var s3Options = SekibanAwsS3Options.FromConfiguration(configuration);
@@ -94,7 +97,7 @@ public static class DynamoDbServiceCollectionExtensions
         services.AddTransient<IDocumentPersistentWriter, DynamoDocumentWriter>();
         services.AddTransient<IDocumentPersistentRepository, DynamoDocumentRepository>();
         services.AddTransient<IDocumentRemover, DynamoDbDocumentRemover>();
-
+        services.AddTransient<IEventPersistentWriter, DynamoDocumentWriter>();
         return new SekibanDynamoDbOptionsServiceCollection(dynamoDbOptions, services);
     }
 

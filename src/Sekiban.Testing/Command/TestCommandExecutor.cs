@@ -220,19 +220,13 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
             LatestEvents = commandResponse.Events;
         }
 
-        var documentWriter = serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter ??
+        var documentWriter = serviceProvider.GetService<EventWriter>() ??
             throw new SekibanTypeNotFoundException("Failed to get document writer");
         foreach (var e in LatestEvents)
         {
-            if (withPublish)
-            {
-                documentWriter
-                    .SaveAndPublishEvents(new List<IEvent> { e }, new AggregateWriteStream(typeof(TAggregatePayload)))
-                    .Wait();
-            } else
-            {
-                documentWriter.SaveAsync(e, new AggregateWriteStream(typeof(TAggregatePayload))).Wait();
-            }
+            documentWriter
+                .SaveEvents(new List<IEvent> { e }, new AggregateWriteStream(typeof(TAggregatePayload)), withPublish)
+                .Wait();
         }
         return aggregateId;
     }

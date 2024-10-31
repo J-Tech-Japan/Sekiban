@@ -28,7 +28,9 @@ public static class CosmosDbServiceCollectionExtensions
         Func<SekibanCosmosClientOptions, SekibanCosmosClientOptions>? optionsFunc = null)
     {
         var options = SekibanCosmosDbOptions.FromConfiguration(builder.Configuration);
-        var clientOptions = optionsFunc is null ? new SekibanCosmosClientOptions() : optionsFunc(new SekibanCosmosClientOptions());
+        var clientOptions = optionsFunc is null
+            ? new SekibanCosmosClientOptions()
+            : optionsFunc(new SekibanCosmosClientOptions());
         builder.Services.AddSekibanCosmosDbWithoutBlob(options, clientOptions);
         return new SekibanCosmosDbOptionsServiceCollection(options, clientOptions, builder);
     }
@@ -47,7 +49,9 @@ public static class CosmosDbServiceCollectionExtensions
         SekibanAzureBlobStorageOptions azureBlobStorageOptions,
         Func<SekibanCosmosClientOptions, SekibanCosmosClientOptions>? optionsFunc = null)
     {
-        var options = optionsFunc is null ? new SekibanCosmosClientOptions() : optionsFunc(new SekibanCosmosClientOptions());
+        var options = optionsFunc is null
+            ? new SekibanCosmosClientOptions()
+            : optionsFunc(new SekibanCosmosClientOptions());
         AddSekibanCosmosDb(builder.Services, cosmosDbOptions, azureBlobStorageOptions, options);
         return new SekibanCosmosDbOptionsServiceCollection(cosmosDbOptions, options, builder);
     }
@@ -66,7 +70,9 @@ public static class CosmosDbServiceCollectionExtensions
     {
         var dbOptions = SekibanCosmosDbOptions.FromConfiguration(configuration);
         var blobOptions = SekibanAzureBlobStorageOptions.FromConfiguration(configuration);
-        var options = optionsFunc is null ? new SekibanCosmosClientOptions() : optionsFunc(new SekibanCosmosClientOptions());
+        var options = optionsFunc is null
+            ? new SekibanCosmosClientOptions()
+            : optionsFunc(new SekibanCosmosClientOptions());
         return AddSekibanCosmosDb(services, dbOptions, blobOptions, options);
     }
     /// <summary>
@@ -83,7 +89,9 @@ public static class CosmosDbServiceCollectionExtensions
         Func<SekibanCosmosClientOptions, SekibanCosmosClientOptions>? optionsFunc = null)
     {
         var dbOptions = SekibanCosmosDbOptions.FromConfiguration(configuration);
-        var options = optionsFunc is null ? new SekibanCosmosClientOptions() : optionsFunc(new SekibanCosmosClientOptions());
+        var options = optionsFunc is null
+            ? new SekibanCosmosClientOptions()
+            : optionsFunc(new SekibanCosmosClientOptions());
         return AddSekibanCosmosDbWithoutBlob(services, dbOptions, options);
     }
     /// <summary>
@@ -102,7 +110,9 @@ public static class CosmosDbServiceCollectionExtensions
         SekibanAzureBlobStorageOptions azureBlobStorageOptions,
         Func<SekibanCosmosClientOptions, SekibanCosmosClientOptions>? optionsFunc = null)
     {
-        var options = optionsFunc is null ? new SekibanCosmosClientOptions() : optionsFunc(new SekibanCosmosClientOptions());
+        var options = optionsFunc is null
+            ? new SekibanCosmosClientOptions()
+            : optionsFunc(new SekibanCosmosClientOptions());
         return AddSekibanCosmosDb(services, cosmosDbOptions, azureBlobStorageOptions, options);
     }
     /// <summary>
@@ -147,6 +157,7 @@ public static class CosmosDbServiceCollectionExtensions
         services.AddTransient<IDocumentPersistentWriter, CosmosDocumentWriter>();
         services.AddTransient<IDocumentPersistentRepository, CosmosDocumentRepository>();
         services.AddTransient<IDocumentRemover, CosmosDbDocumentRemover>();
+        services.AddTransient<IEventPersistentWriter, CosmosDocumentWriter>();
         return services;
     }
     /// <summary>
@@ -166,10 +177,12 @@ public static class CosmosDbServiceCollectionExtensions
     {
         var options = SekibanCosmosDbOptions.FromConfigurationSection(
             section,
-            configurationRoot as IConfigurationRoot ?? throw new ConfigurationErrorsException("cosmos db failed to configure."));
+            configurationRoot as IConfigurationRoot ??
+            throw new ConfigurationErrorsException("cosmos db failed to configure."));
         var blobOptions = SekibanAzureBlobStorageOptions.FromConfigurationSection(
             section,
-            configurationRoot as IConfigurationRoot ?? throw new ConfigurationErrorsException("cosmos db failed to configure."));
+            configurationRoot as IConfigurationRoot ??
+            throw new ConfigurationErrorsException("cosmos db failed to configure."));
         return AddSekibanCosmosDb(services, options, blobOptions, optionsFunc);
     }
 }
