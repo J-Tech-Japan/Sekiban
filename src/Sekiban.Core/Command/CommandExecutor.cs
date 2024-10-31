@@ -4,6 +4,7 @@ using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command.UserInformation;
 using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.History;
@@ -473,7 +474,9 @@ public class CommandExecutor(
         finally
         {
             await commandExecuteAwaiter.EndTaskAsync<TAggregatePayload>(aggregateId);
-            await documentWriter.SaveAsync(commandDocument with { Payload = commandToSave }, typeof(TAggregatePayload));
+            await documentWriter.SaveAsync(
+                commandDocument with { Payload = commandToSave },
+                new AggregateWriteStream(typeof(TAggregatePayload)));
             if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
             {
                 SemaphoreInMemory.Release();
@@ -554,7 +557,7 @@ public class CommandExecutor(
             ev.CallHistories.AddRange(commandDocument.GetCallHistoriesIncludesItself());
         }
         toReturnEvents.AddRange(events);
-        await documentWriter.SaveAndPublishEvents(events, typeof(TAggregatePayload));
+        await documentWriter.SaveAndPublishEvents(events, new AggregateWriteStream(typeof(TAggregatePayload)));
         return toReturnEvents;
     }
 

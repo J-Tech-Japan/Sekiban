@@ -3,6 +3,7 @@ using FeatureCheck.Domain.Aggregates.SubTypes.InheritedSubtypes.Commands;
 using FeatureCheck.Domain.Shared;
 using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.SingleProjections.Projections;
 using Sekiban.Infrastructure.Cosmos;
@@ -42,7 +43,7 @@ public class InheritedSubtypeTests : TestBase<FeatureCheckDependency>
 
         var aggregateState = await aggregateLoader.AsDefaultStateFromInitialAsync<IInheritedAggregate>(aggregateId);
         var snapshotDocument = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(aggregateState!);
-        await documentPersistentWriter.SaveSingleSnapshotAsync(snapshotDocument!, typeof(IInheritedAggregate), false);
+        await documentPersistentWriter.SaveSingleSnapshotAsync(snapshotDocument!, new AggregateWriteStream(typeof(IInheritedAggregate)), false);
 
         ResetInMemoryDocumentStoreAndCache();
 
@@ -72,7 +73,7 @@ public class InheritedSubtypeTests : TestBase<FeatureCheckDependency>
 
         var aggregateState = await aggregateLoader.AsDefaultStateFromInitialAsync<IInheritedAggregate>(aggregateId);
         var snapshotDocument = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(aggregateState!);
-        await documentPersistentWriter.SaveSingleSnapshotAsync(snapshotDocument!, typeof(IInheritedAggregate), true);
+        await documentPersistentWriter.SaveSingleSnapshotAsync(snapshotDocument!, new AggregateWriteStream(typeof(IInheritedAggregate)), true);
 
         ResetInMemoryDocumentStoreAndCache();
 

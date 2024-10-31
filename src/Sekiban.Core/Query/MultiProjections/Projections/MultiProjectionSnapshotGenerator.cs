@@ -73,7 +73,7 @@ public class MultiProjectionSnapshotGenerator(
                 blobId,
                 projector,
                 rootPartitionKey);
-            await documentWriter.SaveAsync(snapshotDocument, typeof(TProjectionPayload));
+            await documentWriter.SaveAsync(snapshotDocument, new AggregateWriteStream(typeof(TProjectionPayload)));
             logger.LogInformation(
                 "Generate multi snapshot for {ProjectionName} and rootPartitionKey {RootPartitionKey} because state version is {StateVersion}, and number of events after the state is {UsedVersion}",
                 ProjectionName(typeof(TProjectionPayload)),

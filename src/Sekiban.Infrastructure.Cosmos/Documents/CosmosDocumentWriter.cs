@@ -1,5 +1,5 @@
-using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
 using Sekiban.Core.PubSub;
 using Sekiban.Core.Setting;
@@ -15,13 +15,16 @@ namespace Sekiban.Infrastructure.Cosmos.Documents;
 /// <param name="cosmosDbFactory"></param>
 /// <param name="eventPublisher"></param>
 /// <param name="blobAccessor"></param>
-public class CosmosDocumentWriter(ICosmosDbFactory cosmosDbFactory, EventPublisher eventPublisher, IBlobAccessor blobAccessor)
-    : IDocumentPersistentWriter
+public class CosmosDocumentWriter(
+    ICosmosDbFactory cosmosDbFactory,
+    EventPublisher eventPublisher,
+    IBlobAccessor blobAccessor) : IDocumentPersistentWriter
 {
 
-    public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType) where TDocument : IDocument
+    public async Task SaveAsync<TDocument>(TDocument document, IWriteDocumentStream writeDocumentStream)
+        where TDocument : IDocument
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
+        var aggregateContainerGroup = writeDocumentStream.GetAggregateContainerGroup();
         switch (document.DocumentType)
         {
             case DocumentType.Event:
@@ -40,7 +43,7 @@ public class CosmosDocumentWriter(ICosmosDbFactory cosmosDbFactory, EventPublish
                 {
                     return;
                 }
-                await SaveSingleSnapshotAsync(snapshot, aggregateType, ShouldUseBlob(snapshot));
+                await SaveSingleSnapshotAsync(snapshot, writeDocumentStream, ShouldUseBlob(snapshot));
                 break;
             default:
                 await cosmosDbFactory.CosmosActionAsync(
@@ -53,16 +56,22 @@ public class CosmosDocumentWriter(ICosmosDbFactory cosmosDbFactory, EventPublish
                 break;
         }
     }
-    public async Task SaveSingleSnapshotAsync(SnapshotDocument document, Type aggregateType, bool useBlob)
+    public async Task SaveSingleSnapshotAsync(
+        SnapshotDocument document,
+        IWriteDocumentStream writeDocumentStream,
+        bool useBlob)
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
+        var aggregateContainerGroup = writeDocumentStream.GetAggregateContainerGroup();
         if (useBlob)
         {
             var blobSnapshot = document with { Snapshot = null };
             var snapshotValue = document.Snapshot;
             var json = JsonSerializer.Serialize(snapshotValue, new JsonSerializerOptions());
             var memoryStream = new MemoryStream(Encoding.UTF8.GetBytes(json));
-            await blobAccessor.SetBlobWithGZipAsync(SekibanBlobContainer.SingleProjectionState, blobSnapshot.FilenameForSnapshot(), memoryStream);
+            await blobAccessor.SetBlobWithGZipAsync(
+                SekibanBlobContainer.SingleProjectionState,
+                blobSnapshot.FilenameForSnapshot(),
+                memoryStream);
             await cosmosDbFactory.CosmosActionAsync(
                 blobSnapshot.DocumentType,
                 aggregateContainerGroup,
@@ -89,15 +98,18 @@ public class CosmosDocumentWriter(ICosmosDbFactory cosmosDbFactory, EventPublish
         return stream.Length > 1024 * 1024 * 2;
     }
 
-    public async Task SaveAndPublishEvents<TEvent>(IEnumerable<TEvent> events, Type aggregateType) where TEvent : IEvent
+    public async Task SaveAndPublishEvents<TEvent>(IEnumerable<TEvent> events, IWriteDocumentStream writeDocumentStream)
+        where TEvent : IEvent
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
+        var aggregateContainerGroup = writeDocumentStream.GetAggregateContainerGroup();
         await cosmosDbFactory.CosmosActionAsync(
             DocumentType.Event,
             aggregateContainerGroup,
             async container =>
             {
-                var taskList = events.Select(ev => container.UpsertItemAsync<dynamic>(ev, CosmosPartitionGenerator.ForDocument(ev))).ToList();
+                var taskList = events
+                    .Select(ev => container.UpsertItemAsync<dynamic>(ev, CosmosPartitionGenerator.ForDocument(ev)))
+                    .ToList();
                 await Task.WhenAll(taskList);
             });
         foreach (var ev in events)

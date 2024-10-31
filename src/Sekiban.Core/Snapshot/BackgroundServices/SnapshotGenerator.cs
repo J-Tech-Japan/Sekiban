@@ -1,6 +1,7 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
 using Sekiban.Core.Query.SingleProjections;
 using Sekiban.Core.Query.SingleProjections.Projections;
@@ -113,7 +114,9 @@ public class SnapshotGenerator(
                         //     aggregateToSnapshot.LastSortableUniqueId,
                         //     aggregateToSnapshot.Version,
                         //     aggregateToSnapshot.GetPayloadVersionIdentifier());
-                        await documentWriter.SaveAsync(snapshotDocument, aggregateType.Aggregate);
+                        await documentWriter.SaveAsync(
+                            snapshotDocument,
+                            new AggregateWriteStream(aggregateType.Aggregate));
                     }
                 }
             }
@@ -181,7 +184,9 @@ public class SnapshotGenerator(
                         = await singleProjectionSnapshotAccessor.SnapshotDocumentFromSingleProjectionStateAsync(
                             aggregateToSnapshot,
                             projection.OriginalAggregate);
-                    await documentWriter.SaveAsync(snapshotDocument, projection.OriginalAggregate);
+                    await documentWriter.SaveAsync(
+                        snapshotDocument,
+                        new AggregateWriteStream(projection.OriginalAggregate));
                 }
             }
         }

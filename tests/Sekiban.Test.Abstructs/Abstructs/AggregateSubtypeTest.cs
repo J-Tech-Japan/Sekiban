@@ -6,6 +6,7 @@ using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.Shoppi
 using FeatureCheck.Domain.Aggregates.SubTypes.InterfaceBaseTypes.Subtypes.ShoppingCarts.Commands;
 using FeatureCheck.Domain.Shared;
 using Sekiban.Core.Command;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Query.SingleProjections.Projections;
 using Sekiban.Testing.Story;
 using Xunit.Abstractions;
@@ -20,7 +21,10 @@ public abstract class AggregateSubtypeTest : TestBase<FeatureCheckDependency>
     public AggregateSubtypeTest(
         SekibanTestFixture sekibanTestFixture,
         ITestOutputHelper testOutputHelper,
-        ISekibanServiceProviderGenerator providerGenerator) : base(sekibanTestFixture, testOutputHelper, providerGenerator) =>
+        ISekibanServiceProviderGenerator providerGenerator) : base(
+        sekibanTestFixture,
+        testOutputHelper,
+        providerGenerator) =>
         singleProjectionSnapshotAccessor = GetService<ISingleProjectionSnapshotAccessor>();
 
     [Fact]
@@ -70,7 +74,10 @@ public abstract class AggregateSubtypeTest : TestBase<FeatureCheckDependency>
         await CreateTheSubtypesAggregate();
         var purchasedTime = DateTime.Now;
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
-            new SubmitOrderI { CartId = cartId, OrderSubmittedLocalTime = purchasedTime, ReferenceVersion = commandResponse.Version });
+            new SubmitOrderI
+            {
+                CartId = cartId, OrderSubmittedLocalTime = purchasedTime, ReferenceVersion = commandResponse.Version
+            });
 
 
         // this time, the aggregate is created as ShoppingCartI
@@ -109,7 +116,10 @@ public abstract class AggregateSubtypeTest : TestBase<FeatureCheckDependency>
             new AddItemToShoppingCartI { CartId = cartId, Code = "TEST2", Name = "Name2", Quantity = 1 });
         var purchasedTime = DateTime.Now;
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
-            new SubmitOrderI { CartId = cartId, OrderSubmittedLocalTime = purchasedTime, ReferenceVersion = commandResponse.Version });
+            new SubmitOrderI
+            {
+                CartId = cartId, OrderSubmittedLocalTime = purchasedTime, ReferenceVersion = commandResponse.Version
+            });
 
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
             new ReceivePaymentToPurchasedCartI
@@ -135,7 +145,8 @@ public abstract class AggregateSubtypeTest : TestBase<FeatureCheckDependency>
         for (var i = 0; i < 140; i++)
         {
             commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
-                new AddItemToShoppingCartI { CartId = snapshotCartId, Code = $"TEST{i:000}", Name = $"Name{i:000}", Quantity = i + 1 });
+                new AddItemToShoppingCartI
+                    { CartId = snapshotCartId, Code = $"TEST{i:000}", Name = $"Name{i:000}", Quantity = i + 1 });
             var state = await aggregateLoader.AsDefaultStateAsync<ICartAggregate>(snapshotCartId);
             Assert.NotNull(state);
             Assert.Equal(nameof(ShoppingCartI), state.PayloadTypeName);
@@ -143,10 +154,16 @@ public abstract class AggregateSubtypeTest : TestBase<FeatureCheckDependency>
 
         var cart1 = await aggregateLoader.AsDefaultStateFromInitialAsync<ICartAggregate>(snapshotCartId, toVersion: 90);
         var cartSnapshot = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(cart1!);
-        await documentPersistentWriter.SaveSingleSnapshotAsync(cartSnapshot!, typeof(ICartAggregate), false);
+        await documentPersistentWriter.SaveSingleSnapshotAsync(
+            cartSnapshot!,
+            new AggregateWriteStream(typeof(ICartAggregate)),
+            false);
         var cart2 = await aggregateLoader.AsDefaultStateFromInitialAsync<ICartAggregate>(snapshotCartId);
         var cartSnapshot2 = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(cart2!);
-        await documentPersistentWriter.SaveSingleSnapshotAsync(cartSnapshot2!, typeof(ICartAggregate), true);
+        await documentPersistentWriter.SaveSingleSnapshotAsync(
+            cartSnapshot2!,
+            new AggregateWriteStream(typeof(ICartAggregate)),
+            true);
 
         var snapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(
             snapshotCartId,
@@ -165,7 +182,10 @@ public abstract class AggregateSubtypeTest : TestBase<FeatureCheckDependency>
 
         ResetInMemoryDocumentStoreAndCache();
 
-        snapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(snapshotCartId, typeof(ICartAggregate), typeof(ICartAggregate));
+        snapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(
+            snapshotCartId,
+            typeof(ICartAggregate),
+            typeof(ICartAggregate));
         Assert.NotEmpty(snapshots);
         foreach (var snapshot in snapshots)
         {
@@ -199,7 +219,8 @@ public abstract class AggregateSubtypeTest : TestBase<FeatureCheckDependency>
         await SecondCommandTest();
 
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
-            new ReceivePaymentToPurchasedCartI { CartId = cartId, Amount = 1000, Currency = "JPY", ReferenceVersion = commandResponse.Version });
+            new ReceivePaymentToPurchasedCartI
+                { CartId = cartId, Amount = 1000, Currency = "JPY", ReferenceVersion = commandResponse.Version });
     }
 
     [Fact]
@@ -217,13 +238,19 @@ public abstract class AggregateSubtypeTest : TestBase<FeatureCheckDependency>
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
             new AddItemToShoppingCartI { CartId = cartId1, Name = "Name2", Code = "Code2", Quantity = 2 });
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
-            new SubmitOrderI { CartId = cartId1, OrderSubmittedLocalTime = DateTime.Now, ReferenceVersion = commandResponse.Version });
+            new SubmitOrderI
+            {
+                CartId = cartId1, OrderSubmittedLocalTime = DateTime.Now, ReferenceVersion = commandResponse.Version
+            });
 
 
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
             new AddItemToShoppingCartI { CartId = cartId2, Name = "Name2", Code = "Code2", Quantity = 1 });
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
-            new SubmitOrderI { CartId = cartId2, OrderSubmittedLocalTime = DateTime.Now, ReferenceVersion = commandResponse.Version });
+            new SubmitOrderI
+            {
+                CartId = cartId2, OrderSubmittedLocalTime = DateTime.Now, ReferenceVersion = commandResponse.Version
+            });
 
         commandResponse = await commandExecutor.ExecCommandWithEventsAsync(
             new AddItemToShoppingCartI { CartId = cartId3, Name = "Name3", Code = "Code3", Quantity = 1 });

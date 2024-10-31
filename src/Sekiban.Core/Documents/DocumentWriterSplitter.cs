@@ -1,4 +1,5 @@
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
 using Sekiban.Core.Setting;
 namespace Sekiban.Core.Documents;
@@ -25,12 +26,13 @@ public class DocumentWriterSplitter : IDocumentWriter
         _aggregateSettings = aggregateSettings;
     }
 
-    public async Task SaveAsync<TDocument>(TDocument document, Type aggregateType) where TDocument : IDocument
+    public async Task SaveAsync<TDocument>(TDocument document, IWriteDocumentStream writeDocumentStream)
+        where TDocument : IDocument
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
+        var aggregateContainerGroup = writeDocumentStream.GetAggregateContainerGroup();
         if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
-            await _documentTemporaryWriter.SaveAsync(document, aggregateType);
+            await _documentTemporaryWriter.SaveAsync(document, writeDocumentStream);
             return;
         }
 
@@ -42,18 +44,19 @@ public class DocumentWriterSplitter : IDocumentWriter
         {
         }
 
-        await _documentPersistentWriter.SaveAsync(document, aggregateType);
+        await _documentPersistentWriter.SaveAsync(document, writeDocumentStream);
     }
 
-    public async Task SaveAndPublishEvents<TEvent>(IEnumerable<TEvent> events, Type aggregateType) where TEvent : IEvent
+    public async Task SaveAndPublishEvents<TEvent>(IEnumerable<TEvent> events, IWriteDocumentStream writeDocumentStream)
+        where TEvent : IEvent
     {
-        var aggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregateType);
+        var aggregateContainerGroup = writeDocumentStream.GetAggregateContainerGroup();
         if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
         {
-            await _documentTemporaryWriter.SaveAndPublishEvents(events, aggregateType);
+            await _documentTemporaryWriter.SaveAndPublishEvents(events, writeDocumentStream);
             return;
         }
         var enumerable = events.ToList();
-        await _documentPersistentWriter.SaveAndPublishEvents(enumerable, aggregateType);
+        await _documentPersistentWriter.SaveAndPublishEvents(enumerable, writeDocumentStream);
     }
 }

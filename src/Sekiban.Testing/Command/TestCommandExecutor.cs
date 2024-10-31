@@ -226,10 +226,12 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
         {
             if (withPublish)
             {
-                documentWriter.SaveAndPublishEvents(new List<IEvent> { e }, typeof(TAggregatePayload)).Wait();
+                documentWriter
+                    .SaveAndPublishEvents(new List<IEvent> { e }, new AggregateWriteStream(typeof(TAggregatePayload)))
+                    .Wait();
             } else
             {
-                documentWriter.SaveAsync(e, typeof(TAggregatePayload)).Wait();
+                documentWriter.SaveAsync(e, new AggregateWriteStream(typeof(TAggregatePayload))).Wait();
             }
         }
         return aggregateId;

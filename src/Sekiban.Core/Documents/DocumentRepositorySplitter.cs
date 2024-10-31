@@ -4,7 +4,6 @@ using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Setting;
-using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
 using Sekiban.Core.Types;
 namespace Sekiban.Core.Documents;
@@ -33,7 +32,7 @@ public class DocumentRepositorySplitter : IDocumentRepository
         _aggregateSettings = aggregateSettings;
     }
 
-    public async Task<ResultBox<UnitValue>> GetEvents(
+    public async Task<ResultBox<bool>> GetEvents(
         EventRetrievalInfo eventRetrievalInfo,
         Action<IEnumerable<IEvent>> resultAction)
     {
@@ -43,25 +42,6 @@ public class DocumentRepositorySplitter : IDocumentRepository
             return await _documentTemporaryRepository.GetEvents(eventRetrievalInfo, resultAction);
         }
         return await _documentPersistentRepository.GetEvents(eventRetrievalInfo, resultAction);
-    }
-    public async Task GetAllEventStringsForAggregateIdAsync(
-        Guid aggregateId,
-        Type aggregatePayloadType,
-        string? partitionKey,
-        string? sinceSortableUniqueId,
-        string rootPartitionKey,
-        Action<IEnumerable<string>> resultAction)
-    {
-        await GetEvents(
-            EventRetrievalInfo.FromNullableValues(
-                rootPartitionKey,
-                new AggregateTypeStream(aggregatePayloadType),
-                aggregateId,
-                sinceSortableUniqueId),
-            events =>
-            {
-                resultAction(events.Select(SekibanJsonHelper.Serialize).Where(m => !string.IsNullOrEmpty(m))!);
-            });
     }
     public async Task GetAllCommandStringsForAggregateIdAsync(
         Guid aggregateId,
@@ -192,18 +172,5 @@ public class DocumentRepositorySplitter : IDocumentRepository
                 version,
                 rootPartitionKey,
                 payloadVersionIdentifier);
-    }
-
-    private void SaveEvents(
-        List<IEvent> events,
-        Type originalType,
-        string partitionKey,
-        string sortableUniqueKey,
-        bool fromInitial)
-    {
-        foreach (var ev in events)
-        {
-            _documentTemporaryWriter.SaveAsync(ev, originalType).Wait();
-        }
     }
 }
