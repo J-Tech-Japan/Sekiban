@@ -9,21 +9,11 @@ namespace Sekiban.Core.Query.SingleProjections;
 ///     Aggregate Loader implementation.
 ///     Aggregate developer uses <see cref="IAggregateLoader" /> to load aggregate.
 /// </summary>
-public class AggregateLoader : IAggregateLoader
+public class AggregateLoader(
+    Projections.ISingleProjection singleProjection,
+    ISingleProjectionFromInitial singleProjectionFromInitial,
+    EventRepository eventRepository) : IAggregateLoader
 {
-    private readonly IDocumentRepository _documentRepository;
-    private readonly Projections.ISingleProjection _singleProjection;
-    private readonly ISingleProjectionFromInitial singleProjectionFromInitial;
-
-    public AggregateLoader(
-        Projections.ISingleProjection singleProjection,
-        ISingleProjectionFromInitial singleProjectionFromInitial,
-        IDocumentRepository documentRepository)
-    {
-        _singleProjection = singleProjection;
-        this.singleProjectionFromInitial = singleProjectionFromInitial;
-        _documentRepository = documentRepository;
-    }
 
     public async Task<SingleProjectionState<TSingleProjectionPayload>?>
         AsSingleProjectionStateAsync<TSingleProjectionPayload>(
@@ -33,7 +23,7 @@ public class AggregateLoader : IAggregateLoader
             SingleProjectionRetrievalOptions? retrievalOptions = null)
         where TSingleProjectionPayload : class, ISingleProjectionPayloadCommon
     {
-        var aggregate = await _singleProjection
+        var aggregate = await singleProjection
             .GetAggregateAsync<SingleProjection<TSingleProjectionPayload>,
                 SingleProjectionState<TSingleProjectionPayload>, SingleProjection<TSingleProjectionPayload>>(
                 aggregateId,
@@ -68,7 +58,7 @@ public class AggregateLoader : IAggregateLoader
         string rootPartitionKey = IDocument.DefaultRootPartitionKey,
         int? toVersion = null,
         SingleProjectionRetrievalOptions? retrievalOptions = null) where TAggregatePayload : IAggregatePayloadCommon =>
-        await _singleProjection
+        await singleProjection
             .GetAggregateAsync<Aggregate<TAggregatePayload>, AggregateState<TAggregatePayload>,
                 DefaultSingleProjector<TAggregatePayload>>(aggregateId, rootPartitionKey, toVersion, retrievalOptions);
 
@@ -92,7 +82,7 @@ public class AggregateLoader : IAggregateLoader
         int? toVersion = null) where TAggregatePayload : IAggregatePayloadCommon
     {
         var toReturn = new List<IEvent>();
-        await _documentRepository.GetEvents(
+        await eventRepository.GetEvents(
             EventRetrievalInfo.FromNullableValues(
                 rootPartitionKey,
                 new AggregateTypeStream(typeof(TAggregatePayload)),

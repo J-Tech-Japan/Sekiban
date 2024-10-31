@@ -14,6 +14,7 @@ namespace Sekiban.Core.Query.SingleProjections.Projections;
 ///     Single projection implementation with memory cache.
 /// </summary>
 public class MemoryCacheSingleProjection(
+    EventRepository eventRepository,
     IDocumentRepository documentRepository,
     IUpdateNotice updateNotice,
     IAggregateSettings aggregateSettings,
@@ -84,7 +85,7 @@ public class MemoryCacheSingleProjection(
 
         try
         {
-            await documentRepository.GetEvents(
+            await eventRepository.GetEvents(
                 EventRetrievalInfo.FromNullableValues(
                     rootPartitionKey,
                     new AggregateTypeStream(projector.GetOriginalAggregatePayloadType()),
@@ -195,7 +196,7 @@ public class MemoryCacheSingleProjection(
                 rootPartitionKey,
                 toVersion.Value);
         }
-        await documentRepository.GetEvents(
+        await eventRepository.GetEvents(
             EventRetrievalInfo.FromNullableValues(
                 rootPartitionKey,
                 new AggregateTypeStream(projector.GetOriginalAggregatePayloadType()),
@@ -281,7 +282,7 @@ public class MemoryCacheSingleProjection(
         var aggregate = projector.CreateInitialAggregate(aggregateId);
         var addFinished = false;
 
-        await documentRepository.GetEvents(
+        await eventRepository.GetEvents(
             EventRetrievalInfo.FromNullableValues(
                 rootPartitionKey,
                 new AggregateTypeStream(projector.GetOriginalAggregatePayloadType()),

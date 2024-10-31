@@ -158,6 +158,7 @@ public static class CosmosDbServiceCollectionExtensions
         services.AddTransient<IDocumentPersistentRepository, CosmosDocumentRepository>();
         services.AddTransient<IDocumentRemover, CosmosDbDocumentRemover>();
         services.AddTransient<IEventPersistentWriter, CosmosDocumentWriter>();
+        services.AddTransient<IEventPersistentRepository, CosmosDocumentRepository>();
         return services;
     }
     /// <summary>

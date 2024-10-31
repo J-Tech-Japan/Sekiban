@@ -98,6 +98,7 @@ public static class DynamoDbServiceCollectionExtensions
         services.AddTransient<IDocumentPersistentRepository, DynamoDocumentRepository>();
         services.AddTransient<IDocumentRemover, DynamoDbDocumentRemover>();
         services.AddTransient<IEventPersistentWriter, DynamoDocumentWriter>();
+        services.AddTransient<IEventPersistentRepository, DynamoDocumentRepository>();
         return new SekibanDynamoDbOptionsServiceCollection(dynamoDbOptions, services);
     }
 

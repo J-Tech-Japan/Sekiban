@@ -2,14 +2,6 @@ using ResultBoxes;
 using Sekiban.Core.Events;
 namespace Sekiban.Core.Documents.Pools;
 
-public interface IPooledDocumentWriter : IDocumentWriter
-{
-    public int GetPoolOrderIndex();
-}
-public interface IPooledEventRepository : IEventRepository
-{
-    public int GetPoolOrderIndex();
-}
 public class DirectPoolRepository : IPooledEventRepository
 {
     public Task<ResultBox<bool>> GetEvents(

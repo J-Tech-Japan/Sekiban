@@ -18,7 +18,7 @@ namespace Sekiban.Infrastructure.Postgres.Documents;
 public class PostgresDocumentRepository(
     PostgresDbFactory dbFactory,
     RegisteredEventTypes registeredEventTypes,
-    ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor) : IDocumentPersistentRepository
+    ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor) : IDocumentPersistentRepository,IEventPersistentRepository
 {
     public async Task<ResultBox<bool>> GetEvents(
         EventRetrievalInfo eventRetrievalInfo,

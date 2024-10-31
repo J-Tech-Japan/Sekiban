@@ -1,11 +1,8 @@
-using ResultBoxes;
-using Sekiban.Core.Documents.Pools;
-using Sekiban.Core.Events;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Snapshot;
 namespace Sekiban.Core.Documents;
 
-public interface IDocumentRepository : IEventRepository
+public interface IDocumentRepository
 {
     Task GetAllCommandStringsForAggregateIdAsync(
         Guid aggregateId,
@@ -41,8 +38,4 @@ public interface IDocumentRepository : IEventRepository
         Type projectionPayloadType,
         string partitionKey,
         string rootPartitionKey);
-}
-public interface IEventRepository
-{
-    Task<ResultBox<bool>> GetEvents(EventRetrievalInfo eventRetrievalInfo, Action<IEnumerable<IEvent>> resultAction);
 }

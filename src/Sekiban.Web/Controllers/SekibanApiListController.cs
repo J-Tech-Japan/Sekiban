@@ -21,6 +21,7 @@ namespace Sekiban.Web.Controllers;
 [ApiController]
 public class SekibanApiListController<T>(
     IWebDependencyDefinition webDependencyDefinition,
+    EventRepository eventRepository,
     IDocumentPersistentRepository documentRepository,
     IServiceProvider serviceProvider,
     IUpdateNotice updateNotice) : ControllerBase
@@ -134,7 +135,7 @@ public class SekibanApiListController<T>(
                 return Unauthorized();
             }
             var events = new List<dynamic>();
-            await documentRepository.GetEvents(
+            await eventRepository.GetEvents(
                 EventRetrievalInfo.FromNullableValues(
                     rootPartitionKey,
                     new AggregateTypeStream(aggregateType),

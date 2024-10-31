@@ -1,9 +1,5 @@
-using ResultBoxes;
 using Sekiban.Core.Aggregate;
-using Sekiban.Core.Documents.Pools;
-using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
-using Sekiban.Core.Setting;
 using Sekiban.Core.Snapshot;
 using Sekiban.Core.Types;
 namespace Sekiban.Core.Documents;
@@ -16,33 +12,16 @@ namespace Sekiban.Core.Documents;
 /// </summary>
 public class DocumentRepositorySplitter : IDocumentRepository
 {
-    private readonly IAggregateSettings _aggregateSettings;
     private readonly IDocumentPersistentRepository _documentPersistentRepository;
     private readonly IDocumentTemporaryRepository _documentTemporaryRepository;
-    private readonly IDocumentTemporaryWriter _documentTemporaryWriter;
     public DocumentRepositorySplitter(
         IDocumentPersistentRepository documentPersistentRepository,
-        IDocumentTemporaryRepository documentTemporaryRepository,
-        IDocumentTemporaryWriter documentTemporaryWriter,
-        IAggregateSettings aggregateSettings)
+        IDocumentTemporaryRepository documentTemporaryRepository)
     {
         _documentPersistentRepository = documentPersistentRepository;
         _documentTemporaryRepository = documentTemporaryRepository;
-        _documentTemporaryWriter = documentTemporaryWriter;
-        _aggregateSettings = aggregateSettings;
     }
 
-    public async Task<ResultBox<bool>> GetEvents(
-        EventRetrievalInfo eventRetrievalInfo,
-        Action<IEnumerable<IEvent>> resultAction)
-    {
-        var aggregateContainerGroup = eventRetrievalInfo.GetAggregateContainerGroup();
-        if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
-        {
-            return await _documentTemporaryRepository.GetEvents(eventRetrievalInfo, resultAction);
-        }
-        return await _documentPersistentRepository.GetEvents(eventRetrievalInfo, resultAction);
-    }
     public async Task GetAllCommandStringsForAggregateIdAsync(
         Guid aggregateId,
         Type aggregatePayloadType,

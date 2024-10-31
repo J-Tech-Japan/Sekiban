@@ -6,13 +6,8 @@ namespace Sekiban.Core.Query.SingleProjections.Projections;
 /// <summary>
 ///     Simple Single Projection From Initial Implementation.
 /// </summary>
-public class SimpleSingleProjectionFromInitial : ISingleProjectionFromInitial
+public class SimpleSingleProjectionFromInitial(EventRepository documentRepository) : ISingleProjectionFromInitial
 {
-    private readonly IDocumentRepository _documentRepository;
-
-    public SimpleSingleProjectionFromInitial(IDocumentRepository documentRepository) =>
-        _documentRepository = documentRepository;
-
     public async Task<TProjection?> GetAggregateFromInitialAsync<TProjection, TProjector>(
         Guid aggregateId,
         string rootPartitionKey,
@@ -23,7 +18,7 @@ public class SimpleSingleProjectionFromInitial : ISingleProjectionFromInitial
         var aggregate = projector.CreateInitialAggregate(aggregateId);
         var addFinished = false;
 
-        await _documentRepository.GetEvents(
+        await documentRepository.GetEvents(
             EventRetrievalInfo.FromNullableValues(
                 rootPartitionKey,
                 new AggregateTypeStream(projector.GetOriginalAggregatePayloadType()),

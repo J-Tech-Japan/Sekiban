@@ -244,10 +244,9 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
         string rootPartitionKey = IDocument.DefaultRootPartitionKey) where TAggregatePayload : IAggregatePayloadCommon
     {
         var toReturn = new List<IEvent>();
-        var documentRepository
-            = serviceProvider.GetRequiredService(typeof(IDocumentRepository)) as IDocumentRepository ??
+        var eventRepository = serviceProvider.GetService<EventRepository>() ??
             throw new SekibanTypeNotFoundException("Failed to get document repository");
-        documentRepository
+        eventRepository
             .GetEvents(
                 EventRetrievalInfo.FromNullableValues(
                     rootPartitionKey,

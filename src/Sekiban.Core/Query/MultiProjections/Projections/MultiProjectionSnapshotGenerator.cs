@@ -14,6 +14,7 @@ namespace Sekiban.Core.Query.MultiProjections.Projections;
 ///     Multi Projection Snapshot Generator
 /// </summary>
 public class MultiProjectionSnapshotGenerator(
+    EventRepository eventRepository,
     IDocumentRepository documentRepository,
     IBlobAccessor blobAccessor,
     IDocumentWriter documentWriter,
@@ -38,7 +39,7 @@ public class MultiProjectionSnapshotGenerator(
         }
 
         // get events from after snapshot or the initial and project them
-        await documentRepository.GetEvents(
+        await eventRepository.GetEvents(
             EventRetrievalInfo.FromNullableValues(
                 rootPartitionKey,
                 new MultiProjectionTypeStream(typeof(TProjection), projector.TargetAggregateNames()),

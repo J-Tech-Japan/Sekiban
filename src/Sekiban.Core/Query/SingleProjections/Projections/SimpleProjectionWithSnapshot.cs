@@ -7,18 +7,11 @@ namespace Sekiban.Core.Query.SingleProjections.Projections;
 /// <summary>
 ///     Single projection implementation. Simple one without snapshot.
 /// </summary>
-public class SimpleProjectionWithSnapshot : ISingleProjection
+public class SimpleProjectionWithSnapshot(
+    EventRepository eventRepository,
+    IDocumentRepository documentRepository,
+    ISingleProjectionFromInitial singleProjectionFromInitial) : ISingleProjection
 {
-    private readonly IDocumentRepository _documentRepository;
-    private readonly ISingleProjectionFromInitial singleProjectionFromInitial;
-
-    public SimpleProjectionWithSnapshot(
-        IDocumentRepository documentRepository,
-        ISingleProjectionFromInitial singleProjectionFromInitial)
-    {
-        _documentRepository = documentRepository;
-        this.singleProjectionFromInitial = singleProjectionFromInitial;
-    }
 
     /// <summary>
     ///     The normal version that uses snapshots and memory cache.
@@ -44,7 +37,7 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
         var projector = new TProjector();
         var aggregate = projector.CreateInitialAggregate(aggregateId);
         var payloadVersion = projector.GetPayloadVersionIdentifier();
-        var snapshotDocument = await _documentRepository.GetLatestSnapshotForAggregateAsync(
+        var snapshotDocument = await documentRepository.GetLatestSnapshotForAggregateAsync(
             aggregateId,
             projector.GetOriginalAggregatePayloadType(),
             projector.GetPayloadType(),
@@ -62,7 +55,7 @@ public class SimpleProjectionWithSnapshot : ISingleProjection
                 rootPartitionKey,
                 toVersion.Value);
         }
-        await _documentRepository.GetEvents(
+        await eventRepository.GetEvents(
             EventRetrievalInfo.FromNullableValues(
                 rootPartitionKey,
                 new AggregateTypeStream(projector.GetOriginalAggregatePayloadType()),

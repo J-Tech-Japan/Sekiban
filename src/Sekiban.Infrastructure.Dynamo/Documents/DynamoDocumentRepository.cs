@@ -23,7 +23,7 @@ namespace Sekiban.Infrastructure.Dynamo.Documents;
 public class DynamoDocumentRepository(
     DynamoDbFactory dbFactory,
     RegisteredEventTypes registeredEventTypes,
-    ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor) : IDocumentPersistentRepository
+    ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor) : IDocumentPersistentRepository,IEventPersistentRepository
 {
     public async Task<ResultBox<bool>> GetEvents(
         EventRetrievalInfo eventRetrievalInfo,
