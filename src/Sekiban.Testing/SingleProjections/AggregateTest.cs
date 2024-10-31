@@ -195,9 +195,9 @@ public class
         where T : IEventPayloadCommon =>
         _helper.ThenGetLatestSingleEvent(checkEventAction);
 
-    public IAggregateTestHelper<TAggregatePayload> ThenLastSingleEventIs<T>(Event<T> @event)
+    public IAggregateTestHelper<TAggregatePayload> ThenLastSingleEventIs<T>(Event<T> ev)
         where T : IEventPayloadCommon =>
-        _helper.ThenLastSingleEventIs(@event);
+        _helper.ThenLastSingleEventIs(ev);
 
     public IAggregateTestHelper<TAggregatePayload> ThenLastSingleEventPayloadIs<T>(T payload)
         where T : IEventPayloadCommon =>

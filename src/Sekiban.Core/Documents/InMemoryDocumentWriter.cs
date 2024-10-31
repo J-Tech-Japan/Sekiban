@@ -71,6 +71,10 @@ public class InMemoryDocumentWriter : IDocumentTemporaryWriter,
         var sekibanIdentifier = string.IsNullOrWhiteSpace(sekibanContext?.SettingGroupIdentifier)
             ? string.Empty
             : sekibanContext.SettingGroupIdentifier;
+        foreach (var ev in events)
+        {
+            _inMemoryDocumentStore.SaveEvent(ev, ev.PartitionKey, sekibanIdentifier);
+        }
         await Task.CompletedTask;
     }
 }
