@@ -18,12 +18,12 @@ public class ProcessToStringList
             };
 
             using var process = Process.Start(info);
-            using var reader = process.StandardOutput;
+            using var reader = process?.StandardOutput;
 
             var lines = new List<string>();
             do
             {
-                var output = reader.ReadLine();
+                var output = reader?.ReadLine();
                 if (output is not null)
                 {
                     lines.Add(output);

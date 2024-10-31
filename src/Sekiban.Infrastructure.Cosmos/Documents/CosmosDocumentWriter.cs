@@ -1,7 +1,6 @@
 using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
-using Sekiban.Core.PubSub;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Snapshot;
 using Sekiban.Infrastructure.Cosmos.Lib.Json;
@@ -15,13 +14,11 @@ namespace Sekiban.Infrastructure.Cosmos.Documents;
 /// <param name="cosmosDbFactory"></param>
 /// <param name="eventPublisher"></param>
 /// <param name="blobAccessor"></param>
-public class CosmosDocumentWriter(
-    ICosmosDbFactory cosmosDbFactory,
-    EventPublisher eventPublisher,
-    IBlobAccessor blobAccessor) : IDocumentPersistentWriter
+public class CosmosDocumentWriter(ICosmosDbFactory cosmosDbFactory, IBlobAccessor blobAccessor)
+    : IDocumentPersistentWriter, IEventPersistentWriter
 {
 
-    public async Task SaveAsync<TDocument>(TDocument document, IWriteDocumentStream writeDocumentStream)
+    public async Task SaveItemAsync<TDocument>(TDocument document, IWriteDocumentStream writeDocumentStream)
         where TDocument : IDocument
     {
         var aggregateContainerGroup = writeDocumentStream.GetAggregateContainerGroup();
@@ -98,23 +95,15 @@ public class CosmosDocumentWriter(
         return stream.Length > 1024 * 1024 * 2;
     }
 
-    public async Task SaveAndPublishEvents<TEvent>(IEnumerable<TEvent> events, IWriteDocumentStream writeDocumentStream)
-        where TEvent : IEvent
-    {
-        var aggregateContainerGroup = writeDocumentStream.GetAggregateContainerGroup();
-        await cosmosDbFactory.CosmosActionAsync(
-            DocumentType.Event,
-            aggregateContainerGroup,
-            async container =>
-            {
-                var taskList = events
-                    .Select(ev => container.UpsertItemAsync<dynamic>(ev, CosmosPartitionGenerator.ForDocument(ev)))
-                    .ToList();
-                await Task.WhenAll(taskList);
-            });
-        foreach (var ev in events)
+    public Task SaveEvents<TEvent>(IEnumerable<TEvent> events, IWriteDocumentStream writeDocumentStream)
+        where TEvent : IEvent => cosmosDbFactory.CosmosActionAsync(
+        DocumentType.Event,
+        writeDocumentStream.GetAggregateContainerGroup(),
+        async container =>
         {
-            await eventPublisher.PublishAsync(ev);
-        }
-    }
+            var taskList = events
+                .Select(ev => container.UpsertItemAsync<dynamic>(ev, CosmosPartitionGenerator.ForDocument(ev)))
+                .ToList();
+            await Task.WhenAll(taskList);
+        });
 }

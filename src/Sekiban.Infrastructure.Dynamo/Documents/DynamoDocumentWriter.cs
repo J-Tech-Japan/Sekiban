@@ -2,7 +2,6 @@ using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
-using Sekiban.Core.PubSub;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
@@ -17,12 +16,12 @@ namespace Sekiban.Infrastructure.Dynamo.Documents;
 /// <param name="dbFactory"></param>
 /// <param name="eventPublisher"></param>
 /// <param name="blobAccessor"></param>
-public class DynamoDocumentWriter(DynamoDbFactory dbFactory, EventPublisher eventPublisher, IBlobAccessor blobAccessor)
-    : IDocumentPersistentWriter
+public class DynamoDocumentWriter(DynamoDbFactory dbFactory, IBlobAccessor blobAccessor)
+    : IDocumentPersistentWriter, IEventPersistentWriter
 {
 
 
-    public async Task SaveAsync<TDocument>(TDocument document, IWriteDocumentStream writeDocumentStream)
+    public async Task SaveItemAsync<TDocument>(TDocument document, IWriteDocumentStream writeDocumentStream)
         where TDocument : IDocument
     {
         var aggregateContainerGroup = writeDocumentStream.GetAggregateContainerGroup();
@@ -107,28 +106,20 @@ public class DynamoDocumentWriter(DynamoDbFactory dbFactory, EventPublisher even
         var stream = SekibanJsonHelper.Serialize(document);
         return stream is not null && stream.Length > 1024 * 300;
     }
-    public async Task SaveAndPublishEvents<TEvent>(IEnumerable<TEvent> events, IWriteDocumentStream writeDocumentStream)
-        where TEvent : IEvent
-    {
-        var aggregateContainerGroup = writeDocumentStream.GetAggregateContainerGroup();
-        var evs = events.ToList();
-        await dbFactory.DynamoActionAsync(
-            DocumentType.Event,
-            aggregateContainerGroup,
-            async container =>
-            {
-                var batchWriter = container.CreateBatchWrite();
-                foreach (var ev in evs)
-                {
-                    var json = SekibanJsonHelper.Serialize(ev) ?? throw new SekibanInvalidDocumentTypeException();
-                    var newItem = Document.FromJson(json) ?? throw new SekibanInvalidDocumentTypeException();
-                    batchWriter.AddDocumentToPut(newItem);
-                }
-                await batchWriter.ExecuteAsync();
-            });
-        foreach (var ev in evs)
+    public Task SaveEvents<TEvent>(IEnumerable<TEvent> events, IWriteDocumentStream writeDocumentStream)
+        where TEvent : IEvent => dbFactory.DynamoActionAsync(
+        DocumentType.Event,
+        writeDocumentStream.GetAggregateContainerGroup(),
+        async container =>
         {
-            await eventPublisher.PublishAsync(ev);
-        }
-    }
+            var batchWriter = container.CreateBatchWrite();
+            foreach (var newItem in events
+                .ToList()
+                .Select(ev => SekibanJsonHelper.Serialize(ev) ?? throw new SekibanInvalidDocumentTypeException())
+                .Select(json => Document.FromJson(json) ?? throw new SekibanInvalidDocumentTypeException()))
+            {
+                batchWriter.AddDocumentToPut(newItem);
+            }
+            await batchWriter.ExecuteAsync();
+        });
 }

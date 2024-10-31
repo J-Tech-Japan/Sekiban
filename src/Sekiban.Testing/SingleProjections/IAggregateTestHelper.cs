@@ -461,10 +461,10 @@ public interface IAggregateTestHelper<TAggregatePayload> where TAggregatePayload
     ///     Get Latest event to validate.
     ///     Specify event type, if event was wrong type, it will throw exception.
     /// </summary>
-    /// <param name="event"></param>
+    /// <param name="ev"></param>
     /// <typeparam name="T"></typeparam>
     /// <returns></returns>
-    public IAggregateTestHelper<TAggregatePayload> ThenLastSingleEventIs<T>(Event<T> @event)
+    public IAggregateTestHelper<TAggregatePayload> ThenLastSingleEventIs<T>(Event<T> ev)
         where T : IEventPayloadCommon;
     /// <summary>
     ///     Check latest event payload.

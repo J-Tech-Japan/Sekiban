@@ -15,4 +15,11 @@ public class EventPublisher
     {
         await _mediator.Publish(ev, CancellationToken.None);
     }
+    public async Task PublishEventsAsync<TEvent>(IEnumerable<TEvent> events) where TEvent : IEvent
+    {
+        foreach (var ev in events)
+        {
+            await PublishAsync(ev);
+        }
+    }
 }

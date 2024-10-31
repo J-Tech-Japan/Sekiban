@@ -24,6 +24,7 @@ namespace Sekiban.Core.Command;
 /// </summary>
 public class CommandExecutor(
     IDocumentWriter documentWriter,
+    EventWriter eventWriter,
     IServiceProvider serviceProvider,
     IAggregateLoader aggregateLoader,
     IUserInformationFactory userInformationFactory,
@@ -474,7 +475,7 @@ public class CommandExecutor(
         finally
         {
             await commandExecuteAwaiter.EndTaskAsync<TAggregatePayload>(aggregateId);
-            await documentWriter.SaveAsync(
+            await documentWriter.SaveItemAsync(
                 commandDocument with { Payload = commandToSave },
                 new AggregateWriteStream(typeof(TAggregatePayload)));
             if (aggregateContainerGroup == AggregateContainerGroup.InMemory)
@@ -557,7 +558,7 @@ public class CommandExecutor(
             ev.CallHistories.AddRange(commandDocument.GetCallHistoriesIncludesItself());
         }
         toReturnEvents.AddRange(events);
-        await documentWriter.SaveAndPublishEvents(events, new AggregateWriteStream(typeof(TAggregatePayload)));
+        await eventWriter.SaveAndPublishEvents(events, new AggregateWriteStream(typeof(TAggregatePayload)));
         return toReturnEvents;
     }
 

@@ -262,7 +262,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         return this;
     }
 
-    public IAggregateTestHelper<TAggregatePayload> ThenLastSingleEventIs<T>(Event<T> @event)
+    public IAggregateTestHelper<TAggregatePayload> ThenLastSingleEventIs<T>(Event<T> ev)
         where T : IEventPayloadCommon
     {
         ThenNotThrowsAnException();
@@ -272,7 +272,7 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
         }
         Assert.IsType<T>(_latestEvents.First());
         var actual = _latestEvents.First();
-        var expected = @event;
+        var expected = ev;
         var actualJson = SekibanJsonHelper.Serialize(actual);
         var expectedJson = SekibanJsonHelper.Serialize(expected);
         Assert.Equal(expectedJson, actualJson);
@@ -817,17 +817,9 @@ public class AggregateTestHelper<TAggregatePayload> : IAggregateTestHelper<TAggr
 
     private IAggregateTestHelper<TAggregatePayload> SaveEvent(IEvent ev, bool withPublish)
     {
-        var documentWriter = _serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter ??
+        var documentWriter = _serviceProvider.GetRequiredService<EventWriter>() ??
             throw new SekibanTypeNotFoundException("Failed to get document writer");
-        if (withPublish)
-        {
-            documentWriter
-                .SaveAndPublishEvents(new List<IEvent> { ev }, new AggregateWriteStream(typeof(TAggregatePayload)))
-                .Wait();
-        } else
-        {
-            documentWriter.SaveAsync(ev, new AggregateWriteStream(typeof(TAggregatePayload))).Wait();
-        }
+        documentWriter.SaveEvents([ev], new AggregateWriteStream(typeof(TAggregatePayload)), withPublish).Wait();
         return this;
     }
 

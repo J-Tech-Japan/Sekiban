@@ -49,7 +49,7 @@ public class TestEventHandler(IServiceProvider serviceProvider)
 
     private void GivenEvents(IEnumerable<IEvent> events, bool withPublish)
     {
-        var documentWriter = serviceProvider.GetRequiredService(typeof(IDocumentWriter)) as IDocumentWriter ??
+        var eventwriter = serviceProvider.GetRequiredService<EventWriter>() ??
             throw new SekibanTypeNotFoundException("Failed to get document writer");
         var sekibanAggregateTypes = serviceProvider.GetService<SekibanAggregateTypes>() ??
             throw new SekibanTypeNotFoundException("Failed to get aggregate types");
@@ -59,15 +59,7 @@ public class TestEventHandler(IServiceProvider serviceProvider)
             var aggregateType
                 = sekibanAggregateTypes.AggregateTypes.FirstOrDefault(m => m.Aggregate.Name == e.AggregateType) ??
                 throw new SekibanTypeNotFoundException($"Failed to find aggregate type {e.AggregateType}");
-            if (withPublish)
-            {
-                documentWriter.SaveAsync(e, new AggregateWriteStream(aggregateType.Aggregate)).Wait();
-            } else
-            {
-                documentWriter
-                    .SaveAndPublishEvents(new List<IEvent> { e }, new AggregateWriteStream(aggregateType.Aggregate))
-                    .Wait();
-            }
+            eventwriter.SaveEvents([e], new AggregateWriteStream(aggregateType.Aggregate), withPublish).Wait();
         }
     }
     /// <summary>
