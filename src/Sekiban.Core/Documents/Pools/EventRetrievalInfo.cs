@@ -10,17 +10,26 @@ public record EventRetrievalInfo(
     OptionalValue<Guid> AggregateId,
     OptionalValue<SortableUniqueIdValue> SinceSortableUniqueId)
 {
+    public RetrieveEventOrder Order { get; init; } = RetrieveEventOrder.OldToNew;
+    public OptionalValue<int> MaxCount { get; init; } = OptionalValue<int>.Empty;
+
     public static EventRetrievalInfo FromNullableValues(
         string? rootPartitionKey,
         IAggregatesStream aggregatesStream,
         Guid? aggregateId,
-        string? sinceSortableUniqueId) => new(
+        string? sinceSortableUniqueId,
+        RetrieveEventOrder Order = RetrieveEventOrder.OldToNew,
+        int? MaxCount = null) => new(
         string.IsNullOrWhiteSpace(rootPartitionKey)
             ? OptionalValue<string>.Empty
             : OptionalValue.FromNullableValue(rootPartitionKey),
         OptionalValue<IAggregatesStream>.FromValue(aggregatesStream),
         OptionalValue.FromNullableValue(aggregateId),
-        OptionalValue.FromNullableValue(sinceSortableUniqueId).Remap(id => new SortableUniqueIdValue(id)));
+        OptionalValue.FromNullableValue(sinceSortableUniqueId).Remap(id => new SortableUniqueIdValue(id)))
+    {
+        Order = Order,
+        MaxCount = OptionalValue.FromNullableValue(MaxCount)
+    };
 
     public bool GetIsPartition() => AggregateId.HasValue;
     public bool HasAggregateStream() =>

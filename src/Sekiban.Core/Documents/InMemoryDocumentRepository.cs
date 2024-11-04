@@ -116,10 +116,10 @@ public class InMemoryDocumentRepository(
             var partitionKey = eventRetrievalInfo.GetPartitionKey();
             if (partitionKey.IsSuccess)
             {
-                var list = inMemoryDocumentStore
-                    .GetEventPartition(partitionKey.GetValue(), sekibanIdentifier)
-                    .OrderBy(m => m.SortableUniqueId)
-                    .ToList();
+                var array = inMemoryDocumentStore.GetEventPartition(partitionKey.GetValue(), sekibanIdentifier);
+                var list = eventRetrievalInfo.Order == RetrieveEventOrder.OldToNew
+                    ? array.OrderBy(m => m.SortableUniqueId).ToList()
+                    : array.OrderByDescending(m => m.SortableUniqueId).ToList();
                 if (eventRetrievalInfo.SinceSortableUniqueId.HasValue)
                 {
                     var index = list.FindIndex(
@@ -129,11 +129,18 @@ public class InMemoryDocumentRepository(
                         resultAction(Enumerable.Empty<IEvent>());
                     } else
                     {
-                        resultAction(list.GetRange(index + 1, list.Count - index - 1).OrderBy(m => m.SortableUniqueId));
+                        var range = list.GetRange(index + 1, list.Count - index - 1);
+                        range = eventRetrievalInfo.MaxCount.HasValue
+                            ? range.Take(eventRetrievalInfo.MaxCount.GetValue()).ToList()
+                            : range;
+                        resultAction(range);
                     }
                 } else
                 {
-                    resultAction(list.OrderBy(m => m.SortableUniqueId));
+                    list = eventRetrievalInfo.MaxCount.HasValue
+                        ? list.Take(eventRetrievalInfo.MaxCount.GetValue()).ToList()
+                        : list;
+                    resultAction(list);
                 }
             }
         } else
@@ -149,7 +156,9 @@ public class InMemoryDocumentRepository(
                 enumerable = enumerable.Where(
                     m => m.RootPartitionKey == eventRetrievalInfo.RootPartitionKey.GetValue());
             }
-            var list = enumerable.ToList();
+            var list = eventRetrievalInfo.Order == RetrieveEventOrder.OldToNew
+                ? enumerable.OrderBy(m => m.SortableUniqueId).ToList()
+                : enumerable.OrderByDescending(m => m.SortableUniqueId).ToList();
             if (eventRetrievalInfo.SinceSortableUniqueId.HasValue)
             {
                 var index = list.FindIndex(
@@ -159,11 +168,18 @@ public class InMemoryDocumentRepository(
                     resultAction(Enumerable.Empty<IEvent>());
                 } else
                 {
-                    resultAction(list.GetRange(index + 1, list.Count - index - 1).OrderBy(m => m.SortableUniqueId));
+                    var range = list.GetRange(index + 1, list.Count - index - 1);
+                    range = eventRetrievalInfo.MaxCount.HasValue
+                        ? range.Take(eventRetrievalInfo.MaxCount.GetValue()).ToList()
+                        : range;
+                    resultAction(range);
                 }
             } else
             {
-                resultAction(list.OrderBy(m => m.SortableUniqueId));
+                list = eventRetrievalInfo.MaxCount.HasValue
+                    ? list.Take(eventRetrievalInfo.MaxCount.GetValue()).ToList()
+                    : list;
+                resultAction(list);
             }
         }
         return true;

@@ -15,4 +15,3 @@ public interface IAggregatesStream
                     : new ApplicationException("Stream Names is not set"))
             .Conveyor(_ => GetStreamNames()[0].ToResultBox());
 }
-//TBD

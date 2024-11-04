@@ -448,7 +448,10 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
             = await singleProjectionSnapshotAccessor.SnapshotDocumentFromSingleProjectionStateAsync(
                 projection1!,
                 typeof(Client));
-        await documentPersistentWriter.SaveSingleSnapshotAsync(projectionSnapshot!, new AggregateWriteStream(typeof(Client)), false);
+        await documentPersistentWriter.SaveSingleSnapshotAsync(
+            projectionSnapshot!,
+            new AggregateWriteStream(typeof(Client)),
+            false);
         var projection2
             = await aggregateLoader.AsSingleProjectionStateFromInitialAsync<ClientNameHistoryProjection>(
                 clientResult.AggregateId!.Value);
@@ -456,7 +459,10 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
             = await singleProjectionSnapshotAccessor.SnapshotDocumentFromSingleProjectionStateAsync(
                 projection2!,
                 typeof(Client));
-        await documentPersistentWriter.SaveSingleSnapshotAsync(projectionSnapshot2!, new AggregateWriteStream(typeof(Client)), true);
+        await documentPersistentWriter.SaveSingleSnapshotAsync(
+            projectionSnapshot2!,
+            new AggregateWriteStream(typeof(Client)),
+            true);
 
         var projectionSnapshots = await documentPersistentRepository.GetSnapshotsForAggregateAsync(
             aggregateId,

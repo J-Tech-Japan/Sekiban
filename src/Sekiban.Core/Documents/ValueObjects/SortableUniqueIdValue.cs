@@ -97,6 +97,7 @@ public record SortableUniqueIdValue(string Value)
     /// <param name="toCompare"></param>
     /// <returns></returns>
     public bool IsLaterThanOrEqual(SortableUniqueIdValue toCompare) => Value.CompareTo(toCompare) >= 0;
+    public bool IsLaterThan(SortableUniqueIdValue toCompare) => Value.CompareTo(toCompare) > 0;
 
     /// <summary>
     ///     Get Tick String from Tick Long Value

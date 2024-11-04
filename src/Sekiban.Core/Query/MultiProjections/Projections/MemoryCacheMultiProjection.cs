@@ -37,7 +37,9 @@ public class MemoryCacheMultiProjection(
             .. list
                 .Select(m => SekibanJsonHelper.DeserializeToEvent(m, registeredEventTypes.RegisteredTypes))
                 .Where(m => m is not null)
+                .Cast<IEvent>()
                 .OrderBy(m => m is null ? string.Empty : m.SortableUniqueId)
+                .ToList()
         ];
         var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
         var safeEvents = events.Where(m => m.GetSortableUniqueId().IsEarlierThan(targetSafeId)).ToList();
