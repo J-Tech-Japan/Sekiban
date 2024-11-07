@@ -81,22 +81,9 @@ public class LoyaltyPointTest : AggregateTest<LoyaltyPoint, FeatureCheckDependen
                 IDocument.DefaultRootPartitionKey,
                 new AggregateTypeStream<LoyaltyPoint>(),
                 clientId,
-                null),
+                ISortableIdCondition.None),
             m => eventsOldToNew.AddRange(m));
-        var eventsNewToOld = new List<IEvent>();
-        await repository.GetEvents(
-            EventRetrievalInfo.FromNullableValues(
-                IDocument.DefaultRootPartitionKey,
-                new AggregateTypeStream<LoyaltyPoint>(),
-                clientId,
-                null,
-                RetrieveEventOrder.NewToOld),
-            m => eventsNewToOld.AddRange(m));
         Assert.Equal(101, eventsOldToNew.Count);
-        Assert.Equal(101, eventsNewToOld.Count);
-        Assert.NotEqual(eventsOldToNew[0], eventsNewToOld[0]);
-        Assert.Equal(eventsOldToNew.First().Id, eventsNewToOld.Last().Id);
-
 
 
         // check if all event order and max count is correct
@@ -106,58 +93,25 @@ public class LoyaltyPointTest : AggregateTest<LoyaltyPoint, FeatureCheckDependen
                 IDocument.DefaultRootPartitionKey,
                 new AggregateTypeStream<LoyaltyPoint>(),
                 clientId,
-                null,
-                RetrieveEventOrder.OldToNew,
+                ISortableIdCondition.None,
                 20),
             m => eventsOldToNew.AddRange(m));
-        eventsNewToOld = new List<IEvent>();
-        await repository.GetEvents(
-            EventRetrievalInfo.FromNullableValues(
-                IDocument.DefaultRootPartitionKey,
-                new AggregateTypeStream<LoyaltyPoint>(),
-                clientId,
-                null,
-                RetrieveEventOrder.NewToOld,
-                20),
-            m => eventsNewToOld.AddRange(m));
         Assert.Equal(20, eventsOldToNew.Count);
-        Assert.Equal(20, eventsNewToOld.Count);
-        Assert.NotEqual(eventsOldToNew[0], eventsNewToOld[0]);
-        Assert.NotEqual(eventsOldToNew.First().Id, eventsNewToOld.Last().Id);
-        Assert.True(eventsOldToNew.Last().Version < eventsNewToOld.First().Version);
-
-
-
 
 
         // check if all event order is correct
         eventsOldToNew = new List<IEvent>();
         await repository.GetEvents(
-            EventRetrievalInfo.FromNullableValues(null, new AllStream(), null, null),
+            EventRetrievalInfo.FromNullableValues(null, new AllStream(), null, ISortableIdCondition.None),
             m => eventsOldToNew.AddRange(m));
-        eventsNewToOld = new List<IEvent>();
-        await repository.GetEvents(
-            EventRetrievalInfo.FromNullableValues(null, new AllStream(), null, null, RetrieveEventOrder.NewToOld),
-            m => eventsNewToOld.AddRange(m));
         Assert.Equal(103, eventsOldToNew.Count);
-        Assert.Equal(103, eventsNewToOld.Count);
-        Assert.NotEqual(eventsOldToNew[0], eventsNewToOld[0]);
-        Assert.Equal(eventsOldToNew.First().Id, eventsNewToOld.Last().Id);
 
         // check if all event order and max count is correct
         eventsOldToNew = new List<IEvent>();
         await repository.GetEvents(
-            EventRetrievalInfo.FromNullableValues(null, new AllStream(), null, null, RetrieveEventOrder.OldToNew, 20),
+            EventRetrievalInfo.FromNullableValues(null, new AllStream(), null, ISortableIdCondition.None, 20),
             m => eventsOldToNew.AddRange(m));
-        eventsNewToOld = new List<IEvent>();
-        await repository.GetEvents(
-            EventRetrievalInfo.FromNullableValues(null, new AllStream(), null, null, RetrieveEventOrder.NewToOld, 20),
-            m => eventsNewToOld.AddRange(m));
         Assert.Equal(20, eventsOldToNew.Count);
-        Assert.Equal(20, eventsNewToOld.Count);
-        Assert.NotEqual(eventsOldToNew[0], eventsNewToOld[0]);
-        Assert.NotEqual(eventsOldToNew.First().Id, eventsNewToOld.Last().Id);
-        Assert.True(eventsOldToNew.Last().Version < eventsNewToOld.First().Version);
 
     }
 

@@ -23,7 +23,7 @@ public class SimpleSingleProjectionFromInitial(EventRepository documentRepositor
                 rootPartitionKey,
                 new AggregateTypeStream(projector.GetOriginalAggregatePayloadType()),
                 aggregateId,
-                null),
+                ISortableIdCondition.None),
             events =>
             {
                 var enumerable = events.ToList();

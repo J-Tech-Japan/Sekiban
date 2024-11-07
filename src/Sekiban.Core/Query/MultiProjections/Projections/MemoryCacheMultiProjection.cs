@@ -205,7 +205,7 @@ public class MemoryCacheMultiProjection(
                     rootPartitionKey,
                     new MultiProjectionTypeStream(typeof(TProjection), projector.TargetAggregateNames()),
                     null,
-                    savedContainer.SafeSortableUniqueId?.Value),
+                    ISortableIdCondition.FromMemoryCacheContainer(savedContainer)),
                 events =>
                 {
                     var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
@@ -300,7 +300,7 @@ public class MemoryCacheMultiProjection(
                 rootPartitionKey,
                 new MultiProjectionTypeStream(typeof(TProjection), projector.TargetAggregateNames()),
                 null,
-                null),
+                ISortableIdCondition.None),
             events =>
             {
                 var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();

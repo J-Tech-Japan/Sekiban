@@ -10,14 +10,18 @@ namespace Sekiban.Core.Query.SingleProjections.Projections;
 /// <typeparam name="TAggregate"></typeparam>
 /// <typeparam name="TState"></typeparam>
 // ReSharper disable once UnusedTypeParameter
-public record SingleMemoryCacheProjectionContainer<TAggregate, TState>
+public record SingleMemoryCacheProjectionContainer<TAggregate, TState> : IMemoryCacheContainer
     where TAggregate : IAggregateCommon, SingleProjections.ISingleProjection where TState : IAggregateStateCommon
 {
     public Guid AggregateId { get; init; } = Guid.Empty;
     public List<IEvent> UnsafeEvents { get; init; } = [];
     public TState? State { get; init; } = default;
     public TState? SafeState { get; init; } = default;
+    public DateTime CachedAt { get; init; } = SekibanDateProducer.GetRegistered().UtcNow;
     public SortableUniqueIdValue? LastSortableUniqueId { get; init; } = null;
     public SortableUniqueIdValue? SafeSortableUniqueId { get; init; } = null;
-    public DateTime CachedAt { get; init; } = SekibanDateProducer.GetRegistered().UtcNow;
+}
+public interface IMemoryCacheContainer
+{
+    public SortableUniqueIdValue? SafeSortableUniqueId { get; }
 }

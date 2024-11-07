@@ -284,12 +284,7 @@ public class DynamoDocumentRepository(
                     filter.AddSortableUniqueIdIfNull(eventRetrievalInfo);
                     var config = new QueryOperationConfig
                     {
-                        Filter = filter, BackwardSearch = eventRetrievalInfo.Order switch
-                        {
-                            RetrieveEventOrder.OldToNew => false,
-                            RetrieveEventOrder.NewToOld => true,
-                            _ => throw new ApplicationException("Invalid order")
-                        }
+                        Filter = filter, BackwardSearch = false
                     };
                     var search = table.Query(config);
 
@@ -314,8 +309,8 @@ public class DynamoDocumentRepository(
                             ScanOperator.Equal,
                             eventRetrievalInfo.RootPartitionKey.GetValue());
                     }
-                    filter.AddSortableUniqueIdIfNull(eventRetrievalInfo.SinceSortableUniqueId);
-                    var config = new ScanOperationConfig { Filter = filter};
+                    filter.AddSortableUniqueIdIfNull(eventRetrievalInfo.SortableIdCondition);
+                    var config = new ScanOperationConfig { Filter = filter };
                     var search = table.Scan(config);
 
                     var resultList = await FetchDocumentsAsync(search);
@@ -360,15 +355,8 @@ public class DynamoDocumentRepository(
                         .FirstOrDefault(m => m is not null) ??
                     EventHelper.GetUnregisteredEvent(jsonElement)) ??
                 throw new SekibanUnregisteredEventFoundException();
-            if (eventRetrievalInfo.SinceSortableUniqueId.HasValue &&
-                eventRetrievalInfo.Order == RetrieveEventOrder.OldToNew &&
-                toAdd.GetSortableUniqueId().IsEarlierThan(eventRetrievalInfo.SinceSortableUniqueId.GetValue()))
-            {
-                continue;
-            }
-            if (eventRetrievalInfo.SinceSortableUniqueId.HasValue &&
-                eventRetrievalInfo.Order == RetrieveEventOrder.NewToOld &&
-                toAdd.GetSortableUniqueId().IsLaterThan(eventRetrievalInfo.SinceSortableUniqueId.GetValue()))
+            if (eventRetrievalInfo.SortableIdCondition is SinceSortableIdCondition since &&
+                toAdd.GetSortableUniqueId().IsEarlierThan(since.SortableUniqueId))
             {
                 continue;
             }

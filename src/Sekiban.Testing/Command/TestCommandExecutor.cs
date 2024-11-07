@@ -252,7 +252,7 @@ public class TestCommandExecutor(IServiceProvider serviceProvider)
                     rootPartitionKey,
                     new AggregateTypeStream<TAggregatePayload>(),
                     aggregateId,
-                    null),
+                    ISortableIdCondition.None),
                 eventObjects => { toReturn.AddRange(eventObjects); })
             .Wait();
         return toReturn;

@@ -18,122 +18,9 @@ namespace Sekiban.Infrastructure.Postgres.Documents;
 public class PostgresDocumentRepository(
     PostgresDbFactory dbFactory,
     RegisteredEventTypes registeredEventTypes,
-    ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor) : IDocumentPersistentRepository,IEventPersistentRepository
+    ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor)
+    : IDocumentPersistentRepository, IEventPersistentRepository
 {
-    public async Task<ResultBox<bool>> GetEvents(
-        EventRetrievalInfo eventRetrievalInfo,
-        Action<IEnumerable<IEvent>> resultAction)
-    {
-        var aggregateContainerGroup = eventRetrievalInfo.GetAggregateContainerGroup();
-        await dbFactory.DbActionAsync(
-            async dbContext =>
-            {
-                if (eventRetrievalInfo.GetIsPartition())
-                {
-                    var partitionKey = eventRetrievalInfo.GetPartitionKey().UnwrapBox();
-                    switch (aggregateContainerGroup)
-                    {
-                        case AggregateContainerGroup.Default:
-
-                            var query = dbContext.Events.Where(m => m.PartitionKey == partitionKey) ??
-                                throw new SekibanInvalidArgumentException();
-                            query = eventRetrievalInfo.SinceSortableUniqueId.HasValue
-                                ? query
-                                    .Where(
-                                        m => string.Compare(
-                                                m.SortableUniqueId,
-                                                eventRetrievalInfo.SinceSortableUniqueId.GetValue().Value) >
-                                            0)
-                                    .OrderBy(m => m.SortableUniqueId)
-                                : query.OrderBy(m => m.SortableUniqueId);
-                            // take 1000 events each and run resultAction
-                            GetEventsInBatches(query).ForEach(resultAction);
-                            break;
-
-                        case AggregateContainerGroup.Dissolvable:
-                            var queryDissolvable
-                                = dbContext.DissolvableEvents.Where(m => m.PartitionKey == partitionKey) ??
-                                throw new SekibanInvalidArgumentException();
-                            queryDissolvable = eventRetrievalInfo.SinceSortableUniqueId.HasValue
-                                ? queryDissolvable
-                                    .Where(
-                                        m => string.Compare(
-                                                m.SortableUniqueId,
-                                                eventRetrievalInfo.SinceSortableUniqueId.GetValue().Value) >
-                                            0)
-                                    .OrderBy(m => m.SortableUniqueId)
-                                : queryDissolvable.OrderBy(m => m.SortableUniqueId);
-                            // take 1000 events each and run resultAction
-                            foreach (var ev in GetEventsInBatches(queryDissolvable))
-                            {
-                                resultAction(ev);
-                            }
-                            break;
-                    }
-                } else
-                {
-                    switch (aggregateContainerGroup)
-                    {
-                        case AggregateContainerGroup.Default:
-                            var query = dbContext.Events.AsQueryable();
-                            if (eventRetrievalInfo.HasAggregateStream())
-                            {
-                                var aggregateNames = eventRetrievalInfo.AggregateStream.GetValue().GetStreamNames();
-                                query = query.Where(m => aggregateNames.Contains(m.AggregateType));
-                            }
-                            if (eventRetrievalInfo.HasRootPartitionKey())
-                            {
-                                var rootPartitionKey = eventRetrievalInfo.RootPartitionKey.GetValue();
-                                query = query.Where(m => m.RootPartitionKey == rootPartitionKey);
-                            }
-                            query = eventRetrievalInfo.SinceSortableUniqueId.HasValue
-                                ? query
-                                    .Where(
-                                        m => string.Compare(
-                                                m.SortableUniqueId,
-                                                eventRetrievalInfo.SinceSortableUniqueId.GetValue().Value) >
-                                            0)
-                                    .OrderBy(m => m.SortableUniqueId)
-                                : query.OrderBy(m => m.SortableUniqueId);
-                            // take 1000 events each and run resultAction
-                            GetEventsInBatches(query).ForEach(resultAction);
-                            break;
-
-                        case AggregateContainerGroup.Dissolvable:
-
-
-                            var queryDissolvable = dbContext.DissolvableEvents.AsQueryable();
-                            if (eventRetrievalInfo.HasAggregateStream())
-                            {
-                                var aggregateNames = eventRetrievalInfo.AggregateStream.GetValue().GetStreamNames();
-                                queryDissolvable
-                                    = queryDissolvable.Where(m => aggregateNames.Contains(m.AggregateType));
-                            }
-                            if (eventRetrievalInfo.HasRootPartitionKey())
-                            {
-                                var rootPartitionKey = eventRetrievalInfo.RootPartitionKey.GetValue();
-                                queryDissolvable = queryDissolvable.Where(m => m.RootPartitionKey == rootPartitionKey);
-                            }
-                            queryDissolvable = eventRetrievalInfo.SinceSortableUniqueId.HasValue
-                                ? queryDissolvable
-                                    .Where(
-                                        m => string.Compare(
-                                                m.SortableUniqueId,
-                                                eventRetrievalInfo.SinceSortableUniqueId.GetValue().Value) >
-                                            0)
-                                    .OrderBy(m => m.SortableUniqueId)
-                                : queryDissolvable.OrderBy(m => m.SortableUniqueId);
-                            // take 1000 events each and run resultAction
-                            GetEventsInBatches(queryDissolvable).ForEach(resultAction);
-                            break;
-                    }
-                    await Task.CompletedTask;
-
-                }
-
-            });
-        return true;
-    }
     public async Task GetAllCommandStringsForAggregateIdAsync(
         Guid aggregateId,
         Type aggregatePayloadType,
@@ -324,6 +211,144 @@ public class PostgresDocumentRepository(
                 }
                 return list;
             });
+    }
+    public async Task<ResultBox<bool>> GetEvents(
+        EventRetrievalInfo eventRetrievalInfo,
+        Action<IEnumerable<IEvent>> resultAction)
+    {
+        var aggregateContainerGroup = eventRetrievalInfo.GetAggregateContainerGroup();
+        await dbFactory.DbActionAsync(
+            async dbContext =>
+            {
+                if (eventRetrievalInfo.GetIsPartition())
+                {
+                    var partitionKey = eventRetrievalInfo.GetPartitionKey().UnwrapBox();
+                    switch (aggregateContainerGroup)
+                    {
+                        case AggregateContainerGroup.Default:
+
+                            var query = dbContext.Events.Where(m => m.PartitionKey == partitionKey) ??
+                                throw new SekibanInvalidArgumentException();
+                            query = eventRetrievalInfo.SortableIdCondition switch
+                            {
+                                SinceSortableIdCondition sinceSortableIdCondition => query
+                                    .Where(
+                                        m => string.Compare(
+                                                m.SortableUniqueId,
+                                                sinceSortableIdCondition.SortableUniqueId.Value) >
+                                            0)
+                                    .OrderBy(m => m.SortableUniqueId),
+                                SortableIdConditionNone => query.OrderBy(m => m.SortableUniqueId),
+                                _ => throw new SekibanEventRetrievalException("Unknown SortableIdCondition")
+                            };
+                            query = eventRetrievalInfo.MaxCount.HasValue
+                                ? query.Take(eventRetrievalInfo.MaxCount.GetValue())
+                                : query;
+                            // take 1000 events each and run resultAction
+                            GetEventsInBatches(query).ForEach(resultAction);
+                            break;
+
+                        case AggregateContainerGroup.Dissolvable:
+                            var queryDissolvable
+                                = dbContext.DissolvableEvents.Where(m => m.PartitionKey == partitionKey) ??
+                                throw new SekibanInvalidArgumentException();
+                            queryDissolvable = eventRetrievalInfo.SortableIdCondition switch
+                            {
+                                SinceSortableIdCondition sinceSortableIdCondition => queryDissolvable
+                                    .Where(
+                                        m => string.Compare(
+                                                m.SortableUniqueId,
+                                                sinceSortableIdCondition.SortableUniqueId.Value) >
+                                            0)
+                                    .OrderBy(m => m.SortableUniqueId),
+                                SortableIdConditionNone => queryDissolvable.OrderBy(m => m.SortableUniqueId),
+                                _ => throw new SekibanEventRetrievalException("Unknown SortableIdCondition")
+                            };
+                            queryDissolvable = eventRetrievalInfo.MaxCount.HasValue
+                                ? queryDissolvable.Take(eventRetrievalInfo.MaxCount.GetValue())
+                                : queryDissolvable;
+                            // take 1000 events each and run resultAction
+                            foreach (var ev in GetEventsInBatches(queryDissolvable))
+                            {
+                                resultAction(ev);
+                            }
+                            break;
+                    }
+                } else
+                {
+                    switch (aggregateContainerGroup)
+                    {
+                        case AggregateContainerGroup.Default:
+                            var query = dbContext.Events.AsQueryable();
+                            if (eventRetrievalInfo.HasAggregateStream())
+                            {
+                                var aggregateNames = eventRetrievalInfo.AggregateStream.GetValue().GetStreamNames();
+                                query = query.Where(m => aggregateNames.Contains(m.AggregateType));
+                            }
+                            if (eventRetrievalInfo.HasRootPartitionKey())
+                            {
+                                var rootPartitionKey = eventRetrievalInfo.RootPartitionKey.GetValue();
+                                query = query.Where(m => m.RootPartitionKey == rootPartitionKey);
+                            }
+                            query = eventRetrievalInfo.SortableIdCondition switch
+                            {
+                                SinceSortableIdCondition sinceSortableIdCondition => query
+                                    .Where(
+                                        m => string.Compare(
+                                                m.SortableUniqueId,
+                                                sinceSortableIdCondition.SortableUniqueId.Value) >
+                                            0)
+                                    .OrderBy(m => m.SortableUniqueId),
+                                SortableIdConditionNone => query.OrderBy(m => m.SortableUniqueId),
+                                _ => throw new SekibanEventRetrievalException("Unknown SortableIdCondition")
+                            };
+                            query = eventRetrievalInfo.MaxCount.HasValue
+                                ? query.Take(eventRetrievalInfo.MaxCount.GetValue())
+                                : query;
+                            // take 1000 events each and run resultAction
+                            GetEventsInBatches(query).ForEach(resultAction);
+                            break;
+
+                        case AggregateContainerGroup.Dissolvable:
+
+
+                            var queryDissolvable = dbContext.DissolvableEvents.AsQueryable();
+                            if (eventRetrievalInfo.HasAggregateStream())
+                            {
+                                var aggregateNames = eventRetrievalInfo.AggregateStream.GetValue().GetStreamNames();
+                                queryDissolvable
+                                    = queryDissolvable.Where(m => aggregateNames.Contains(m.AggregateType));
+                            }
+                            if (eventRetrievalInfo.HasRootPartitionKey())
+                            {
+                                var rootPartitionKey = eventRetrievalInfo.RootPartitionKey.GetValue();
+                                queryDissolvable = queryDissolvable.Where(m => m.RootPartitionKey == rootPartitionKey);
+                            }
+                            queryDissolvable = eventRetrievalInfo.SortableIdCondition switch
+                            {
+                                SinceSortableIdCondition sinceSortableIdCondition => queryDissolvable
+                                    .Where(
+                                        m => string.Compare(
+                                                m.SortableUniqueId,
+                                                sinceSortableIdCondition.SortableUniqueId.Value) >
+                                            0)
+                                    .OrderBy(m => m.SortableUniqueId),
+                                SortableIdConditionNone => queryDissolvable.OrderBy(m => m.SortableUniqueId),
+                                _ => throw new SekibanEventRetrievalException("Unknown SortableIdCondition")
+                            };
+                            queryDissolvable = eventRetrievalInfo.MaxCount.HasValue
+                                ? queryDissolvable.Take(eventRetrievalInfo.MaxCount.GetValue())
+                                : queryDissolvable;
+                            // take 1000 events each and run resultAction
+                            GetEventsInBatches(queryDissolvable).ForEach(resultAction);
+                            break;
+                    }
+                    await Task.CompletedTask;
+
+                }
+
+            });
+        return true;
     }
 
 

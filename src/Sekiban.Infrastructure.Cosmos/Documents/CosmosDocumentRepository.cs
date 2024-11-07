@@ -298,22 +298,12 @@ public class CosmosDocumentRepository(
                         eventRetrievalInfo.AggregateStream.GetValue().GetSingleStreamName().UnwrapBox(),
                         eventRetrievalInfo.AggregateId.GetValue());
                     var query = container.GetItemLinqQueryable<IEvent>();
-                    query = (eventRetrievalInfo.SinceSortableUniqueId.HasValue, eventRetrievalInfo.Order) switch
+                    query = eventRetrievalInfo.SortableIdCondition switch
                     {
-                        (true, RetrieveEventOrder.OldToNew) => query
-                            .Where(
-                                m => m.SortableUniqueId.CompareTo(
-                                        eventRetrievalInfo.SinceSortableUniqueId.GetValue().Value) >
-                                    0)
+                        (SinceSortableIdCondition since) => query
+                            .Where(m => m.SortableUniqueId.CompareTo(since.SortableUniqueId.Value) > 0)
                             .OrderBy(m => m.SortableUniqueId),
-                        (true, RetrieveEventOrder.NewToOld) => query
-                            .Where(
-                                m => m.SortableUniqueId.CompareTo(
-                                        eventRetrievalInfo.SinceSortableUniqueId.GetValue().Value) <
-                                    0)
-                            .OrderByDescending(m => m.SortableUniqueId),
-                        (false, RetrieveEventOrder.OldToNew) => query.OrderBy(m => m.SortableUniqueId),
-                        (false, RetrieveEventOrder.NewToOld) => query.OrderByDescending(m => m.SortableUniqueId),
+                        SortableIdConditionNone => query.OrderBy(m => m.SortableUniqueId),
                         _ => throw new ArgumentOutOfRangeException()
                     };
                     var feedIterator = container.GetItemQueryIterator<dynamic>(
@@ -324,7 +314,7 @@ public class CosmosDocumentRepository(
                     while (feedIterator.HasMoreResults)
                     {
                         var response = await feedIterator.ReadNextAsync();
-                        var toAdds = ProcessEvents(response, eventRetrievalInfo.SinceSortableUniqueId);
+                        var toAdds = ProcessEvents(response, eventRetrievalInfo.SortableIdCondition);
                         events.AddRange(toAdds);
                         if (eventRetrievalInfo.MaxCount.HasValue &&
                             events.Count > eventRetrievalInfo.MaxCount.GetValue())
@@ -348,22 +338,12 @@ public class CosmosDocumentRepository(
                     {
                         query = query.Where(m => m.RootPartitionKey == eventRetrievalInfo.RootPartitionKey.GetValue());
                     }
-                    query = (eventRetrievalInfo.SinceSortableUniqueId.HasValue, eventRetrievalInfo.Order) switch
+                    query = eventRetrievalInfo.SortableIdCondition switch
                     {
-                        (true, RetrieveEventOrder.OldToNew) => query
-                            .Where(
-                                m => m.SortableUniqueId.CompareTo(
-                                        eventRetrievalInfo.SinceSortableUniqueId.GetValue().Value) >
-                                    0)
+                        (SinceSortableIdCondition since) => query
+                            .Where(m => m.SortableUniqueId.CompareTo(since.SortableUniqueId.Value) > 0)
                             .OrderBy(m => m.SortableUniqueId),
-                        (true, RetrieveEventOrder.NewToOld) => query
-                            .Where(
-                                m => m.SortableUniqueId.CompareTo(
-                                        eventRetrievalInfo.SinceSortableUniqueId.GetValue().Value) <
-                                    0)
-                            .OrderByDescending(m => m.SortableUniqueId),
-                        (false, RetrieveEventOrder.OldToNew) => query.OrderBy(m => m.SortableUniqueId),
-                        (false, RetrieveEventOrder.NewToOld) => query.OrderByDescending(m => m.SortableUniqueId),
+                        (SortableIdConditionNone _) => query.OrderBy(m => m.SortableUniqueId),
                         _ => throw new ArgumentOutOfRangeException()
                     };
                     var feedIterator = container.GetItemQueryIterator<dynamic>(
@@ -374,7 +354,7 @@ public class CosmosDocumentRepository(
                     while (feedIterator.HasMoreResults)
                     {
                         var response = await feedIterator.ReadNextAsync();
-                        var toAdds = ProcessEvents(response, eventRetrievalInfo.SinceSortableUniqueId);
+                        var toAdds = ProcessEvents(response, eventRetrievalInfo.SortableIdCondition);
                         events.AddRange(toAdds);
                         if (eventRetrievalInfo.MaxCount.HasValue &&
                             events.Count > eventRetrievalInfo.MaxCount.GetValue())
@@ -389,9 +369,7 @@ public class CosmosDocumentRepository(
         return true;
     }
 
-    private List<IEvent> ProcessEvents(
-        IEnumerable<dynamic> response,
-        OptionalValue<SortableUniqueIdValue> sinceSortableUniqueId)
+    private List<IEvent> ProcessEvents(IEnumerable<dynamic> response, ISortableIdCondition sortableIdCondition)
     {
         var events = new List<IEvent>();
         foreach (var item in response)
@@ -409,8 +387,7 @@ public class CosmosDocumentRepository(
                         .FirstOrDefault(m => m is not null) ??
                     EventHelper.GetUnregisteredEvent(item)) ??
                 throw new SekibanUnregisteredEventFoundException();
-            if (sinceSortableUniqueId.HasValue &&
-                toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId.GetValue()))
+            if (sortableIdCondition.OutsideOfRange(toAdd.GetSortableUniqueId()))
             {
                 continue;
             }

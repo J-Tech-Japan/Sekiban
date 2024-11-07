@@ -25,7 +25,7 @@ public class SimpleMultiProjection(EventRepository documentRepository, Registere
                 rootPartitionKey,
                 new MultiProjectionTypeStream(typeof(TProjection), projector.TargetAggregateNames()),
                 null,
-                null),
+                ISortableIdCondition.None),
             events =>
             {
                 foreach (var ev in events)

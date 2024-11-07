@@ -2,32 +2,52 @@ using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Partition;
+using Sekiban.Core.Query;
+using Sekiban.Core.Query.SingleProjections.Projections;
 namespace Sekiban.Core.Documents.Pools;
 
+public interface ISortableIdCondition
+{
+    public static ISortableIdCondition None => new SortableIdConditionNone();
+    public bool OutsideOfRange(SortableUniqueIdValue toCompare);
+    public static ISortableIdCondition Since(SortableUniqueIdValue sinceSortableId) =>
+        new SinceSortableIdCondition(sinceSortableId);
+    public static ISortableIdCondition FromState(IAggregateStateCommon? state) =>
+        state?.LastSortableUniqueId is { } lastSortableId ? Since(lastSortableId) : None;
+    public static ISortableIdCondition FromMultiProjectionState(IProjection state) =>
+        state.LastSortableUniqueId is { } lastSortableId && state.Version > 0 ? Since(lastSortableId) : None;
+    public static ISortableIdCondition FromMemoryCacheContainer(IMemoryCacheContainer container) =>
+        container.SafeSortableUniqueId is { } lastSortableId ? Since(lastSortableId) : None;
+}
+public record SortableIdConditionNone : ISortableIdCondition
+{
+    public bool OutsideOfRange(SortableUniqueIdValue toCompare) => false;
+}
+public record SinceSortableIdCondition(SortableUniqueIdValue SortableUniqueId) : ISortableIdCondition
+{
+    public bool OutsideOfRange(SortableUniqueIdValue toCompare) => SortableUniqueId.IsLaterThan(toCompare);
+}
 public record EventRetrievalInfo(
     OptionalValue<string> RootPartitionKey,
     OptionalValue<IAggregatesStream> AggregateStream,
     OptionalValue<Guid> AggregateId,
-    OptionalValue<SortableUniqueIdValue> SinceSortableUniqueId)
+    ISortableIdCondition SortableIdCondition)
 {
-    public RetrieveEventOrder Order { get; init; } = RetrieveEventOrder.OldToNew;
     public OptionalValue<int> MaxCount { get; init; } = OptionalValue<int>.Empty;
 
     public static EventRetrievalInfo FromNullableValues(
         string? rootPartitionKey,
         IAggregatesStream aggregatesStream,
         Guid? aggregateId,
-        string? sinceSortableUniqueId,
-        RetrieveEventOrder Order = RetrieveEventOrder.OldToNew,
+        ISortableIdCondition sortableIdCondition,
         int? MaxCount = null) => new(
         string.IsNullOrWhiteSpace(rootPartitionKey)
             ? OptionalValue<string>.Empty
             : OptionalValue.FromNullableValue(rootPartitionKey),
         OptionalValue<IAggregatesStream>.FromValue(aggregatesStream),
         OptionalValue.FromNullableValue(aggregateId),
-        OptionalValue.FromNullableValue(sinceSortableUniqueId).Remap(id => new SortableUniqueIdValue(id)))
+        sortableIdCondition)
     {
-        Order = Order,
         MaxCount = OptionalValue.FromNullableValue(MaxCount)
     };
 

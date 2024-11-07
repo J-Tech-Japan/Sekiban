@@ -60,7 +60,7 @@ public class SimpleProjectionWithSnapshot(
                 rootPartitionKey,
                 new AggregateTypeStream(projector.GetOriginalAggregatePayloadType()),
                 aggregateId,
-                state?.LastSortableUniqueId),
+                ISortableIdCondition.FromState(state)),
             events =>
             {
                 foreach (var e in events)
