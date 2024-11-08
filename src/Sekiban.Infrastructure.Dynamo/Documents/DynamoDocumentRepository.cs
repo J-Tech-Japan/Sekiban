@@ -315,7 +315,7 @@ public class DynamoDocumentRepository(
 
                     var resultList = await FetchDocumentsAsync(search);
                     var events = ProcessEventDocuments(resultList, eventRetrievalInfo);
-                    resultAction(events);
+                    resultAction(events.OrderBy(m => m.SortableUniqueId));
 
                 }
             });
@@ -355,8 +355,7 @@ public class DynamoDocumentRepository(
                         .FirstOrDefault(m => m is not null) ??
                     EventHelper.GetUnregisteredEvent(jsonElement)) ??
                 throw new SekibanUnregisteredEventFoundException();
-            if (eventRetrievalInfo.SortableIdCondition is SinceSortableIdCondition since &&
-                toAdd.GetSortableUniqueId().IsEarlierThan(since.SortableUniqueId))
+            if (eventRetrievalInfo.SortableIdCondition.OutsideOfRange(toAdd.GetSortableUniqueId()))
             {
                 continue;
             }

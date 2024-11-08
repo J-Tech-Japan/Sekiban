@@ -21,7 +21,3 @@ public record SingleMemoryCacheProjectionContainer<TAggregate, TState> : IMemory
     public SortableUniqueIdValue? LastSortableUniqueId { get; init; } = null;
     public SortableUniqueIdValue? SafeSortableUniqueId { get; init; } = null;
 }
-public interface IMemoryCacheContainer
-{
-    public SortableUniqueIdValue? SafeSortableUniqueId { get; }
-}

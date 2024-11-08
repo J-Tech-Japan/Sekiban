@@ -6,4 +6,3 @@ namespace Sekiban.Core.Exceptions;
 ///     <see cref="ICancelDeletedCommand" />
 /// </summary>
 public class SekibanAggregateAlreadyDeletedException : Exception, ISekibanException;
-public class SekibanEventRetrievalException(string message) : Exception(message), ISekibanException;
