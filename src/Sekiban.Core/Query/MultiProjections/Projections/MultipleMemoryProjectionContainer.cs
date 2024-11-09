@@ -1,5 +1,6 @@
 using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
+using Sekiban.Core.Query.SingleProjections.Projections;
 using Sekiban.Core.Shared;
 namespace Sekiban.Core.Query.MultiProjections.Projections;
 
@@ -9,7 +10,7 @@ namespace Sekiban.Core.Query.MultiProjections.Projections;
 /// <typeparam name="TProjection"></typeparam>
 /// <typeparam name="TProjectionPayload"></typeparam>
 // ReSharper disable once UnusedTypeParameter
-public record MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>
+public record MultipleMemoryProjectionContainer<TProjection, TProjectionPayload> : IMemoryCacheContainer
     where TProjection : IMultiProjector<TProjectionPayload>, new()
     where TProjectionPayload : IMultiProjectionPayloadCommon
 {
@@ -34,10 +35,10 @@ public record MultipleMemoryProjectionContainer<TProjection, TProjectionPayload>
     ///     Last sortable unique id. (include unsafe events)
     /// </summary>
     public SortableUniqueIdValue? LastSortableUniqueId { get; init; } = null;
+
+    public DateTime CachedAt { get; init; } = SekibanDateProducer.GetRegistered().UtcNow;
     /// <summary>
     ///     Last safe sortable unique id. (exclude unsafe events)
     /// </summary>
     public SortableUniqueIdValue? SafeSortableUniqueId { get; init; } = null;
-
-    public DateTime CachedAt { get; init; } = SekibanDateProducer.GetRegistered().UtcNow;
 }

@@ -1,6 +1,5 @@
 using ResultBoxes;
 using Sekiban.Core.Aggregate;
-using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Partition;
 namespace Sekiban.Core.Documents.Pools;
 
@@ -8,19 +7,25 @@ public record EventRetrievalInfo(
     OptionalValue<string> RootPartitionKey,
     OptionalValue<IAggregatesStream> AggregateStream,
     OptionalValue<Guid> AggregateId,
-    OptionalValue<SortableUniqueIdValue> SinceSortableUniqueId)
+    ISortableIdCondition SortableIdCondition)
 {
+    public OptionalValue<int> MaxCount { get; init; } = OptionalValue<int>.Empty;
+
     public static EventRetrievalInfo FromNullableValues(
         string? rootPartitionKey,
         IAggregatesStream aggregatesStream,
         Guid? aggregateId,
-        string? sinceSortableUniqueId) => new(
+        ISortableIdCondition sortableIdCondition,
+        int? MaxCount = null) => new(
         string.IsNullOrWhiteSpace(rootPartitionKey)
             ? OptionalValue<string>.Empty
             : OptionalValue.FromNullableValue(rootPartitionKey),
         OptionalValue<IAggregatesStream>.FromValue(aggregatesStream),
         OptionalValue.FromNullableValue(aggregateId),
-        OptionalValue.FromNullableValue(sinceSortableUniqueId).Remap(id => new SortableUniqueIdValue(id)));
+        sortableIdCondition)
+    {
+        MaxCount = OptionalValue.FromNullableValue(MaxCount)
+    };
 
     public bool GetIsPartition() => AggregateId.HasValue;
     public bool HasAggregateStream() =>

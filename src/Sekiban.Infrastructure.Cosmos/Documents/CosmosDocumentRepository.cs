@@ -24,7 +24,8 @@ namespace Sekiban.Infrastructure.Cosmos.Documents;
 public class CosmosDocumentRepository(
     ICosmosDbFactory cosmosDbFactory,
     RegisteredEventTypes registeredEventTypes,
-    ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor) : IDocumentPersistentRepository, IEventPersistentRepository
+    ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor)
+    : IDocumentPersistentRepository, IEventPersistentRepository
 {
     private const int DefaultOptionsMax = -1;
 
@@ -111,88 +112,6 @@ public class CosmosDocumentRepository(
                 }
                 return list;
             });
-    }
-
-    public async Task<ResultBox<bool>> GetEvents(
-        EventRetrievalInfo eventRetrievalInfo,
-        Action<IEnumerable<IEvent>> resultAction)
-    {
-        await cosmosDbFactory.CosmosActionAsync(
-            DocumentType.Event,
-            eventRetrievalInfo.GetAggregateContainerGroup(),
-            async container =>
-            {
-                if (eventRetrievalInfo.GetIsPartition())
-                {
-                    var options = CreateDefaultOptions();
-                    options.PartitionKey = CosmosPartitionGenerator.ForEventGroup(
-                        eventRetrievalInfo.RootPartitionKey.GetValue(),
-                        eventRetrievalInfo.AggregateStream.GetValue().GetSingleStreamName().UnwrapBox(),
-                        eventRetrievalInfo.AggregateId.GetValue());
-                    var query = container.GetItemLinqQueryable<IEvent>();
-                    query = eventRetrievalInfo.SinceSortableUniqueId.HasValue
-                        ? query
-                            .Where(
-                                m => m.SortableUniqueId.CompareTo(
-                                        eventRetrievalInfo.SinceSortableUniqueId.GetValue().Value) >
-                                    0)
-                            .OrderByDescending(m => m.SortableUniqueId)
-                        : query.OrderBy(m => m.SortableUniqueId);
-
-
-                    var feedIterator = container.GetItemQueryIterator<dynamic>(
-                        query.ToQueryDefinition(),
-                        null,
-                        options);
-                    var events = new List<IEvent>();
-                    while (feedIterator.HasMoreResults)
-                    {
-                        var response = await feedIterator.ReadNextAsync();
-                        var toAdds = ProcessEvents(response, eventRetrievalInfo.SinceSortableUniqueId);
-                        events.AddRange(toAdds);
-                    }
-                    resultAction(events.OrderBy(m => m.SortableUniqueId));
-                } else
-                {
-                    var options = CreateDefaultOptions();
-
-                    var query = container.GetItemLinqQueryable<IEvent>().AsQueryable();
-                    if (eventRetrievalInfo.HasAggregateStream())
-                    {
-                        var aggregates = eventRetrievalInfo.AggregateStream.GetValue().GetStreamNames();
-                        query = query.Where(m => aggregates.Contains(m.AggregateType));
-                    }
-                    if (eventRetrievalInfo.HasRootPartitionKey())
-                    {
-                        query = query.Where(m => m.RootPartitionKey == eventRetrievalInfo.RootPartitionKey.GetValue());
-                    }
-                    if (eventRetrievalInfo.SinceSortableUniqueId.HasValue)
-                    {
-                        query = query
-                            .Where(
-                                m => m.SortableUniqueId.CompareTo(
-                                        eventRetrievalInfo.SinceSortableUniqueId.GetValue().Value) >
-                                    0)
-                            .OrderBy(m => m.SortableUniqueId);
-                    } else
-                    {
-                        query = query.OrderBy(m => m.SortableUniqueId);
-                    }
-                    var feedIterator = container.GetItemQueryIterator<dynamic>(
-                        query.ToQueryDefinition(),
-                        null,
-                        options);
-                    var events = new List<IEvent>();
-                    while (feedIterator.HasMoreResults)
-                    {
-                        var response = await feedIterator.ReadNextAsync();
-                        var toAdds = ProcessEvents(response, eventRetrievalInfo.SinceSortableUniqueId);
-                        events.AddRange(toAdds);
-                    }
-                    resultAction(events.OrderBy(m => m.SortableUniqueId));
-                }
-            });
-        return true;
     }
     public async Task GetAllCommandStringsForAggregateIdAsync(
         Guid aggregateId,
@@ -362,9 +281,95 @@ public class CosmosDocumentRepository(
             });
     }
 
-    private List<IEvent> ProcessEvents(
-        IEnumerable<dynamic> response,
-        OptionalValue<SortableUniqueIdValue> sinceSortableUniqueId)
+    public async Task<ResultBox<bool>> GetEvents(
+        EventRetrievalInfo eventRetrievalInfo,
+        Action<IEnumerable<IEvent>> resultAction)
+    {
+        await cosmosDbFactory.CosmosActionAsync(
+            DocumentType.Event,
+            eventRetrievalInfo.GetAggregateContainerGroup(),
+            async container =>
+            {
+                if (eventRetrievalInfo.GetIsPartition())
+                {
+                    var options = CreateDefaultOptions();
+                    options.PartitionKey = CosmosPartitionGenerator.ForEventGroup(
+                        eventRetrievalInfo.RootPartitionKey.GetValue(),
+                        eventRetrievalInfo.AggregateStream.GetValue().GetSingleStreamName().UnwrapBox(),
+                        eventRetrievalInfo.AggregateId.GetValue());
+                    var query = container.GetItemLinqQueryable<IEvent>();
+                    query = eventRetrievalInfo.SortableIdCondition switch
+                    {
+                        (SinceSortableIdCondition since) => query
+                            .Where(m => m.SortableUniqueId.CompareTo(since.SortableUniqueId.Value) > 0)
+                            .OrderBy(m => m.SortableUniqueId),
+                        SortableIdConditionNone => query.OrderBy(m => m.SortableUniqueId),
+                        _ => throw new ArgumentOutOfRangeException()
+                    };
+                    var feedIterator = container.GetItemQueryIterator<dynamic>(
+                        query.ToQueryDefinition(),
+                        null,
+                        options);
+                    var events = new List<IEvent>();
+                    while (feedIterator.HasMoreResults)
+                    {
+                        var response = await feedIterator.ReadNextAsync();
+                        var toAdds = ProcessEvents(response, eventRetrievalInfo.SortableIdCondition);
+                        events.AddRange(toAdds);
+                        if (eventRetrievalInfo.MaxCount.HasValue &&
+                            events.Count > eventRetrievalInfo.MaxCount.GetValue())
+                        {
+                            events = events.Take(eventRetrievalInfo.MaxCount.GetValue()).ToList();
+                            break;
+                        }
+                    }
+                    resultAction(events);
+                } else
+                {
+                    var options = CreateDefaultOptions();
+
+                    var query = container.GetItemLinqQueryable<IEvent>().AsQueryable();
+                    if (eventRetrievalInfo.HasAggregateStream())
+                    {
+                        var aggregates = eventRetrievalInfo.AggregateStream.GetValue().GetStreamNames();
+                        query = query.Where(m => aggregates.Contains(m.AggregateType));
+                    }
+                    if (eventRetrievalInfo.HasRootPartitionKey())
+                    {
+                        query = query.Where(m => m.RootPartitionKey == eventRetrievalInfo.RootPartitionKey.GetValue());
+                    }
+                    query = eventRetrievalInfo.SortableIdCondition switch
+                    {
+                        (SinceSortableIdCondition since) => query
+                            .Where(m => m.SortableUniqueId.CompareTo(since.SortableUniqueId.Value) > 0)
+                            .OrderBy(m => m.SortableUniqueId),
+                        (SortableIdConditionNone _) => query.OrderBy(m => m.SortableUniqueId),
+                        _ => throw new ArgumentOutOfRangeException()
+                    };
+                    var feedIterator = container.GetItemQueryIterator<dynamic>(
+                        query.ToQueryDefinition(),
+                        null,
+                        options);
+                    var events = new List<IEvent>();
+                    while (feedIterator.HasMoreResults)
+                    {
+                        var response = await feedIterator.ReadNextAsync();
+                        var toAdds = ProcessEvents(response, eventRetrievalInfo.SortableIdCondition);
+                        events.AddRange(toAdds);
+                        if (eventRetrievalInfo.MaxCount.HasValue &&
+                            events.Count > eventRetrievalInfo.MaxCount.GetValue())
+                        {
+                            events = events.Take(eventRetrievalInfo.MaxCount.GetValue()).ToList();
+                            break;
+                        }
+                    }
+                    resultAction(events);
+                }
+            });
+        return true;
+    }
+
+    private List<IEvent> ProcessEvents(IEnumerable<dynamic> response, ISortableIdCondition sortableIdCondition)
     {
         var events = new List<IEvent>();
         foreach (var item in response)
@@ -382,8 +387,7 @@ public class CosmosDocumentRepository(
                         .FirstOrDefault(m => m is not null) ??
                     EventHelper.GetUnregisteredEvent(item)) ??
                 throw new SekibanUnregisteredEventFoundException();
-            if (sinceSortableUniqueId.HasValue &&
-                toAdd.GetSortableUniqueId().IsEarlierThan(sinceSortableUniqueId.GetValue()))
+            if (sortableIdCondition.OutsideOfRange(toAdd.GetSortableUniqueId()))
             {
                 continue;
             }

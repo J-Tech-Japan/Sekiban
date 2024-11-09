@@ -44,7 +44,7 @@ public class MultiProjectionSnapshotGenerator(
                 rootPartitionKey,
                 new MultiProjectionTypeStream(typeof(TProjection), projector.TargetAggregateNames()),
                 null,
-                state.Version > 0 ? state.LastSortableUniqueId : null),
+                ISortableIdCondition.FromMultiProjectionState(state)),
             events =>
             {
                 var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();

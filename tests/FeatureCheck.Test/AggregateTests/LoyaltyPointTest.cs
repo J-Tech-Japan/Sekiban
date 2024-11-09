@@ -7,10 +7,16 @@ using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Consts;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints.Events;
 using FeatureCheck.Domain.Aggregates.LoyaltyPoints.ValueObjects;
 using FeatureCheck.Domain.Shared;
+using Microsoft.Extensions.DependencyInjection;
+using Sekiban.Core.Documents;
+using Sekiban.Core.Documents.Pools;
+using Sekiban.Core.Events;
 using Sekiban.Core.Shared;
 using Sekiban.Testing.SingleProjections;
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Xunit;
 namespace FeatureCheck.Test.AggregateTests;
 
@@ -49,13 +55,80 @@ public class LoyaltyPointTest : AggregateTest<LoyaltyPoint, FeatureCheckDependen
             .ThenNotThrowsAnException();
     }
     [Fact]
+    public async Task EventOrderTest()
+    {
+        var branchId = RunEnvironmentCommand(new CreateBranch("Test"));
+        var clientId = RunEnvironmentCommand(new CreateClient(branchId, "Test Name", "test@example.com"));
+
+
+        WhenCommand(new CreateLoyaltyPoint(clientId, 10));
+        foreach (var i in Enumerable.Range(1, 100))
+        {
+            WhenCommand(
+                new AddLoyaltyPoint(
+                    clientId,
+                    DateTime.UtcNow,
+                    LoyaltyPointReceiveTypeKeys.CreditcardUsage,
+                    i * 100,
+                    $"test{i}"));
+
+        }
+        // check if aggregate order is correct
+        var repository = _serviceProvider.GetRequiredService<EventRepository>();
+        var eventsOldToNew = new List<IEvent>();
+        await repository.GetEvents(
+            EventRetrievalInfo.FromNullableValues(
+                IDocument.DefaultRootPartitionKey,
+                new AggregateTypeStream<LoyaltyPoint>(),
+                clientId,
+                ISortableIdCondition.None),
+            m => eventsOldToNew.AddRange(m));
+        Assert.Equal(101, eventsOldToNew.Count);
+
+
+        // check if all event order and max count is correct
+        eventsOldToNew = new List<IEvent>();
+        await repository.GetEvents(
+            EventRetrievalInfo.FromNullableValues(
+                IDocument.DefaultRootPartitionKey,
+                new AggregateTypeStream<LoyaltyPoint>(),
+                clientId,
+                ISortableIdCondition.None,
+                20),
+            m => eventsOldToNew.AddRange(m));
+        Assert.Equal(20, eventsOldToNew.Count);
+
+
+        // check if all event order is correct
+        eventsOldToNew = new List<IEvent>();
+        await repository.GetEvents(
+            EventRetrievalInfo.FromNullableValues(null, new AllStream(), null, ISortableIdCondition.None),
+            m => eventsOldToNew.AddRange(m));
+        Assert.Equal(103, eventsOldToNew.Count);
+
+        // check if all event order and max count is correct
+        eventsOldToNew = new List<IEvent>();
+        await repository.GetEvents(
+            EventRetrievalInfo.FromNullableValues(null, new AllStream(), null, ISortableIdCondition.None, 20),
+            m => eventsOldToNew.AddRange(m));
+        Assert.Equal(20, eventsOldToNew.Count);
+
+    }
+
+
+
+
+    [Fact]
     public void DeleteClientWillDeleteLoyaltyPointTest()
     {
         var branchId = GivenEnvironmentCommand(new CreateBranch("Test"));
         var clientId = GivenEnvironmentCommand(new CreateClient(branchId, "Test Name", "test@example.com"));
         WhenCommand(new CreateLoyaltyPoint(clientId, 10));
         RunEnvironmentCommandWithPublish(new DeleteClient(clientId));
-        var timeStamp = GetLatestEnvironmentEvents().Where(m => m.GetPayload() is LoyaltyPointDeleted).FirstOrDefault()?.TimeStamp;
+        var timeStamp = GetLatestEnvironmentEvents()
+            .Where(m => m.GetPayload() is LoyaltyPointDeleted)
+            .FirstOrDefault()
+            ?.TimeStamp;
         ThenPayloadIs(new LoyaltyPoint(10, timeStamp, true));
     }
     [Fact]
@@ -76,7 +149,8 @@ public class LoyaltyPointTest : AggregateTest<LoyaltyPoint, FeatureCheckDependen
                         HappenedDate = SekibanDateProducer.GetRegistered().UtcNow,
                         LoyaltyPointValue = new LoyaltyPointValue(100),
                         Note = "test",
-                        Reason = new LoyaltyPointReceiveType((LoyaltyPointReceiveTypeKeys)10000), // should cause exception
+                        Reason = new LoyaltyPointReceiveType(
+                            (LoyaltyPointReceiveTypeKeys)10000), // should cause exception
                         ReferenceVersion = GetCurrentVersion()
                     });
             });

@@ -90,7 +90,7 @@ public class MemoryCacheSingleProjection(
                     rootPartitionKey,
                     new AggregateTypeStream(projector.GetOriginalAggregatePayloadType()),
                     aggregateId,
-                    savedContainer.SafeSortableUniqueId?.Value),
+                    ISortableIdCondition.FromMemoryCacheContainer(savedContainer)),
                 events =>
                 {
                     var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
@@ -201,7 +201,7 @@ public class MemoryCacheSingleProjection(
                 rootPartitionKey,
                 new AggregateTypeStream(projector.GetOriginalAggregatePayloadType()),
                 aggregateId,
-                state?.LastSortableUniqueId),
+                ISortableIdCondition.FromState(state)),
             events =>
             {
                 var targetSafeId = SortableUniqueIdValue.GetSafeIdFromUtc();
@@ -287,7 +287,7 @@ public class MemoryCacheSingleProjection(
                 rootPartitionKey,
                 new AggregateTypeStream(projector.GetOriginalAggregatePayloadType()),
                 aggregateId,
-                null),
+                ISortableIdCondition.None),
             events =>
             {
                 events = events.ToList();

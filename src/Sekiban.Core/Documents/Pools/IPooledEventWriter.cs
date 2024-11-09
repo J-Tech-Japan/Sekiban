@@ -1,6 +1,6 @@
 namespace Sekiban.Core.Documents.Pools;
 
-public interface IPooledDocumentWriter : IDocumentWriter
+public interface IPooledEventWriter : IEventWriter
 {
     public int GetPoolOrderIndex();
 }

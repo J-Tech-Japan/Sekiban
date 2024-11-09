@@ -4,9 +4,9 @@ using Sekiban.Test.Abstructs.Abstructs;
 using Xunit.Abstractions;
 namespace Sekiban.Test.Postgres.Tests;
 
-public class CustomerDbStoryBasicPostgres(
+public class EventOrderSpecPostgres(
     TestBase<FeatureCheckDependency>.SekibanTestFixture sekibanTestFixture,
-    ITestOutputHelper testOutputHelper) : CustomerDbStoryBasic(
+    ITestOutputHelper testOutputHelper) : EventOrderSpec(
     sekibanTestFixture,
     testOutputHelper,
     new PostgresSekibanServiceProviderGenerator());

@@ -87,7 +87,7 @@ public class AggregateLoader(
                 rootPartitionKey,
                 new AggregateTypeStream(typeof(TAggregatePayload)),
                 aggregateId,
-                null),
+                ISortableIdCondition.None),
             eventObjects => { toReturn.AddRange(eventObjects); });
         return toVersion is null ? toReturn : toReturn.ToList().Take(toVersion.Value);
     }

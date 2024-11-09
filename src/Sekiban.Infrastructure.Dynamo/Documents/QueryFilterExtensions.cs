@@ -1,6 +1,8 @@
 using Amazon.DynamoDBv2.DocumentModel;
 using ResultBoxes;
+using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Documents.ValueObjects;
+using Sekiban.Core.Exceptions;
 using Document = Sekiban.Core.Documents.Document;
 namespace Sekiban.Infrastructure.Dynamo.Documents;
 
@@ -14,27 +16,39 @@ public static class QueryFilterExtensions
         }
         queryFilter.AddCondition(nameof(Document.SortableUniqueId), QueryOperator.GreaterThan, sinceSortableUniqueId);
     }
-    public static void AddSortableUniqueIdIfNull(
-        this QueryFilter queryFilter,
-        OptionalValue<SortableUniqueIdValue> sinceSortableUniqueId)
+    public static void AddSortableUniqueIdIfNull(this QueryFilter queryFilter, EventRetrievalInfo eventRetrievalInfo)
     {
-        if (!sinceSortableUniqueId.HasValue)
+        switch (eventRetrievalInfo.SortableIdCondition)
         {
-            return;
+            case SortableIdConditionNone _:
+                return;
+            case SinceSortableIdCondition sinceSortableIdCondition:
+                queryFilter.AddCondition(
+                    nameof(Document.SortableUniqueId),
+                    QueryOperator.GreaterThan,
+                    sinceSortableIdCondition.SortableUniqueId.Value);
+                return;
+            default:
+                throw new SekibanEventRetrievalException("Unknown SortableIdCondition");
         }
-        queryFilter.AddCondition(
-            nameof(Document.SortableUniqueId),
-            QueryOperator.GreaterThan,
-            sinceSortableUniqueId.GetValue().Value);
     }
-    public static void AddSortableUniqueIdIfNull(this ScanFilter scanFilter, string? sinceSortableUniqueId)
+    public static void AddSortableUniqueIdIfNull(this ScanFilter scanFilter, ISortableIdCondition sortableIdCondition)
     {
-        if (string.IsNullOrWhiteSpace(sinceSortableUniqueId))
+        switch (sortableIdCondition)
         {
-            return;
+            case SortableIdConditionNone _:
+                return;
+            case SinceSortableIdCondition sinceSortableIdCondition:
+                scanFilter.AddCondition(
+                    nameof(Document.SortableUniqueId),
+                    ScanOperator.GreaterThan,
+                    sinceSortableIdCondition.SortableUniqueId.Value);
+                return;
+            default:
+                throw new SekibanEventRetrievalException("Unknown SortableIdCondition");
         }
-        scanFilter.AddCondition(nameof(Document.SortableUniqueId), ScanOperator.GreaterThan, sinceSortableUniqueId);
     }
+
     public static void AddSortableUniqueIdIfNull(
         this ScanFilter scanFilter,
         OptionalValue<SortableUniqueIdValue> sinceSortableUniqueId)
