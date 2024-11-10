@@ -10,6 +10,7 @@ using FeatureCheck.Domain.Shared;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.Pools;
+using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 using Sekiban.Core.Shared;
 using Sekiban.Testing.SingleProjections;
@@ -57,10 +58,9 @@ public class LoyaltyPointTest : AggregateTest<LoyaltyPoint, FeatureCheckDependen
     [Fact]
     public async Task EventOrderTest()
     {
+        var beforeSortableUniqueId = SortableUniqueIdValue.GetCurrentIdFromUtc();
         var branchId = RunEnvironmentCommand(new CreateBranch("Test"));
         var clientId = RunEnvironmentCommand(new CreateClient(branchId, "Test Name", "test@example.com"));
-
-
         WhenCommand(new CreateLoyaltyPoint(clientId, 10));
         foreach (var i in Enumerable.Range(1, 100))
         {
@@ -112,6 +112,53 @@ public class LoyaltyPointTest : AggregateTest<LoyaltyPoint, FeatureCheckDependen
             EventRetrievalInfo.FromNullableValues(null, new AllStream(), null, ISortableIdCondition.None, 20),
             m => eventsOldToNew.AddRange(m));
         Assert.Equal(20, eventsOldToNew.Count);
+        
+        var secondSortableUniqueId = SortableUniqueIdValue.GetCurrentIdFromUtc();
+        
+        foreach (var i in Enumerable.Range(1, 50))
+        {
+            WhenCommand(
+                new AddLoyaltyPoint(
+                    clientId,
+                    DateTime.UtcNow,
+                    LoyaltyPointReceiveTypeKeys.CreditcardUsage,
+                    i * 100,
+                    $"test{i}"));
+
+        }
+        
+        eventsOldToNew = new List<IEvent>();
+        await repository.GetEvents(
+            EventRetrievalInfo.FromNullableValues(null, new AggregateTypeStream<LoyaltyPoint>(), clientId, ISortableIdCondition.Between(beforeSortableUniqueId, secondSortableUniqueId), null),
+            m => eventsOldToNew.AddRange(m));
+        Assert.Equal(101, eventsOldToNew.Count);
+
+        eventsOldToNew = new List<IEvent>();
+        await repository.GetEvents(
+            EventRetrievalInfo.FromNullableValues(null, new AggregateTypeStream<LoyaltyPoint>(), clientId, ISortableIdCondition.Between(beforeSortableUniqueId, secondSortableUniqueId), 30),
+            m => eventsOldToNew.AddRange(m));
+        Assert.Equal(30, eventsOldToNew.Count);
+
+        
+        eventsOldToNew = new List<IEvent>();
+        await repository.GetEvents(
+            EventRetrievalInfo.FromNullableValues(null, new AllStream(), null, ISortableIdCondition.Between(beforeSortableUniqueId, secondSortableUniqueId), null),
+            m => eventsOldToNew.AddRange(m));
+        Assert.Equal(103, eventsOldToNew.Count);
+
+        var thirdSortableUniqueId = SortableUniqueIdValue.GetCurrentIdFromUtc();
+
+        eventsOldToNew = new List<IEvent>();
+        await repository.GetEvents(
+            EventRetrievalInfo.FromNullableValues(null, new AllStream(), null, ISortableIdCondition.Between(secondSortableUniqueId, thirdSortableUniqueId), null),
+            m => eventsOldToNew.AddRange(m));
+        Assert.Equal(50, eventsOldToNew.Count);
+
+        eventsOldToNew = new List<IEvent>();
+        await repository.GetEvents(
+            EventRetrievalInfo.FromNullableValues(null, new AllStream(), null, ISortableIdCondition.Between(secondSortableUniqueId, thirdSortableUniqueId), 30),
+            m => eventsOldToNew.AddRange(m));
+        Assert.Equal(30, eventsOldToNew.Count);
 
     }
 

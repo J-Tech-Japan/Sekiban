@@ -10,6 +10,10 @@ public interface ISortableIdCondition
     public bool OutsideOfRange(SortableUniqueIdValue toCompare);
     public static ISortableIdCondition Since(SortableUniqueIdValue sinceSortableId) =>
         new SinceSortableIdCondition(sinceSortableId);
+    public static ISortableIdCondition Between(SortableUniqueIdValue start, SortableUniqueIdValue end) =>
+        start.IsEarlierThan(end)
+            ? new BetweenSortableIdCondition(start, end)
+            : new BetweenSortableIdCondition(end, start);
     public static ISortableIdCondition FromState(IAggregateStateCommon? state) =>
         state?.LastSortableUniqueId is { } lastSortableId ? Since(lastSortableId) : None;
     public static ISortableIdCondition FromMultiProjectionState(IProjection state) =>

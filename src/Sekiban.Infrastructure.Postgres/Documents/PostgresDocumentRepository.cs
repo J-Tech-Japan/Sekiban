@@ -238,6 +238,17 @@ public class PostgresDocumentRepository(
                                                 sinceSortableIdCondition.SortableUniqueId.Value) >
                                             0)
                                     .OrderBy(m => m.SortableUniqueId),
+                                BetweenSortableIdCondition betweenSortableIdCondition => query
+                                    .Where(
+                                        m => string.Compare(
+                                                m.SortableUniqueId,
+                                                betweenSortableIdCondition.Start.Value) >=
+                                            0 &&
+                                            string.Compare(
+                                                m.SortableUniqueId,
+                                                betweenSortableIdCondition.End.Value) <=
+                                            0)
+                                    .OrderBy(m => m.SortableUniqueId),
                                 SortableIdConditionNone => query.OrderBy(m => m.SortableUniqueId),
                                 _ => throw new SekibanEventRetrievalException("Unknown SortableIdCondition")
                             };
@@ -259,6 +270,17 @@ public class PostgresDocumentRepository(
                                         m => string.Compare(
                                                 m.SortableUniqueId,
                                                 sinceSortableIdCondition.SortableUniqueId.Value) >
+                                            0)
+                                    .OrderBy(m => m.SortableUniqueId),
+                                BetweenSortableIdCondition betweenSortableIdCondition => queryDissolvable
+                                    .Where(
+                                        m => string.Compare(
+                                                m.SortableUniqueId,
+                                                betweenSortableIdCondition.Start.Value) >=
+                                            0 &&
+                                            string.Compare(
+                                                m.SortableUniqueId,
+                                                betweenSortableIdCondition.End.Value) <=
                                             0)
                                     .OrderBy(m => m.SortableUniqueId),
                                 SortableIdConditionNone => queryDissolvable.OrderBy(m => m.SortableUniqueId),
@@ -299,6 +321,17 @@ public class PostgresDocumentRepository(
                                                 sinceSortableIdCondition.SortableUniqueId.Value) >
                                             0)
                                     .OrderBy(m => m.SortableUniqueId),
+                                BetweenSortableIdCondition betweenSortableIdCondition => query
+                                    .Where(
+                                        m => string.Compare(
+                                                m.SortableUniqueId,
+                                                betweenSortableIdCondition.Start.Value) >=
+                                            0 &&
+                                            string.Compare(
+                                                m.SortableUniqueId,
+                                                betweenSortableIdCondition.End.Value) <=
+                                            0)
+                                    .OrderBy(m => m.SortableUniqueId),
                                 SortableIdConditionNone => query.OrderBy(m => m.SortableUniqueId),
                                 _ => throw new SekibanEventRetrievalException("Unknown SortableIdCondition")
                             };
@@ -331,6 +364,17 @@ public class PostgresDocumentRepository(
                                         m => string.Compare(
                                                 m.SortableUniqueId,
                                                 sinceSortableIdCondition.SortableUniqueId.Value) >
+                                            0)
+                                    .OrderBy(m => m.SortableUniqueId),
+                                BetweenSortableIdCondition betweenSortableIdCondition => queryDissolvable
+                                    .Where(
+                                        m => string.Compare(
+                                                m.SortableUniqueId,
+                                                betweenSortableIdCondition.Start.Value) >=
+                                            0 &&
+                                            string.Compare(
+                                                m.SortableUniqueId,
+                                                betweenSortableIdCondition.End.Value) <=
                                             0)
                                     .OrderBy(m => m.SortableUniqueId),
                                 SortableIdConditionNone => queryDissolvable.OrderBy(m => m.SortableUniqueId),
