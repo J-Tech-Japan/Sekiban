@@ -28,6 +28,13 @@ public static class QueryFilterExtensions
                     QueryOperator.GreaterThan,
                     sinceSortableIdCondition.SortableUniqueId.Value);
                 return;
+            case BetweenSortableIdCondition between:
+                queryFilter.AddCondition(
+                    nameof(Document.SortableUniqueId),
+                    QueryOperator.Between,
+                    between.Start.Value,
+                    between.End.Value);
+                return;
             default:
                 throw new SekibanEventRetrievalException("Unknown SortableIdCondition");
         }
@@ -43,6 +50,13 @@ public static class QueryFilterExtensions
                     nameof(Document.SortableUniqueId),
                     ScanOperator.GreaterThan,
                     sinceSortableIdCondition.SortableUniqueId.Value);
+                return;
+            case BetweenSortableIdCondition between:
+                scanFilter.AddCondition(
+                    nameof(Document.SortableUniqueId),
+                    ScanOperator.Between,
+                    between.Start.Value,
+                    between.End.Value);
                 return;
             default:
                 throw new SekibanEventRetrievalException("Unknown SortableIdCondition");

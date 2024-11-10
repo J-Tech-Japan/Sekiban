@@ -303,6 +303,10 @@ public class CosmosDocumentRepository(
                         (SinceSortableIdCondition since) => query
                             .Where(m => m.SortableUniqueId.CompareTo(since.SortableUniqueId.Value) > 0)
                             .OrderBy(m => m.SortableUniqueId),
+                        (BetweenSortableIdCondition between) => query
+                            .Where(m => m.SortableUniqueId.CompareTo(between.Start.Value) > 0 &&
+                                m.SortableUniqueId.CompareTo(between.End.Value) < 0)
+                            .OrderBy(m => m.SortableUniqueId),
                         SortableIdConditionNone => query.OrderBy(m => m.SortableUniqueId),
                         _ => throw new ArgumentOutOfRangeException()
                     };
@@ -342,6 +346,10 @@ public class CosmosDocumentRepository(
                     {
                         (SinceSortableIdCondition since) => query
                             .Where(m => m.SortableUniqueId.CompareTo(since.SortableUniqueId.Value) > 0)
+                            .OrderBy(m => m.SortableUniqueId),
+                        BetweenSortableIdCondition between => query
+                            .Where(m => m.SortableUniqueId.CompareTo(between.Start.Value) > 0 &&
+                                m.SortableUniqueId.CompareTo(between.End.Value) < 0)
                             .OrderBy(m => m.SortableUniqueId),
                         (SortableIdConditionNone _) => query.OrderBy(m => m.SortableUniqueId),
                         _ => throw new ArgumentOutOfRangeException()

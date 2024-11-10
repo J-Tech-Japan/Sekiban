@@ -18,7 +18,7 @@ public record EventRetrievalInfo(
         ISortableIdCondition sortableIdCondition,
         int? MaxCount = null) => new(
         string.IsNullOrWhiteSpace(rootPartitionKey)
-            ? OptionalValue<string>.Empty
+            ? (aggregateId.HasValue ? OptionalValue.FromValue(IDocument.DefaultRootPartitionKey) : OptionalValue<string>.Empty) 
             : OptionalValue.FromNullableValue(rootPartitionKey),
         OptionalValue<IAggregatesStream>.FromValue(aggregatesStream),
         OptionalValue.FromNullableValue(aggregateId),

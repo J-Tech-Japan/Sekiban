@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ResultBoxes;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Documents.Pools;
+using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
 using Sekiban.Core.Query.MultiProjections;
@@ -135,6 +136,14 @@ public class InMemoryDocumentRepository(
                             resultAction(range);
                         }
                         break;
+                    case BetweenSortableIdCondition between:
+                        var rangeBetween = list.Where(m =>
+                            !between.OutsideOfRange(new SortableUniqueIdValue(m.SortableUniqueId))).OrderBy(m => m.SortableUniqueId).ToList();
+                        rangeBetween = eventRetrievalInfo.MaxCount.HasValue
+                            ? rangeBetween.Take(eventRetrievalInfo.MaxCount.GetValue()).ToList()
+                            : rangeBetween;
+                        resultAction(rangeBetween);
+                        break;
                     case SortableIdConditionNone _:
                         list = eventRetrievalInfo.MaxCount.HasValue
                             ? list.Take(eventRetrievalInfo.MaxCount.GetValue()).ToList()
@@ -175,6 +184,14 @@ public class InMemoryDocumentRepository(
                             : range;
                         resultAction(range);
                     }
+                    break;
+                case BetweenSortableIdCondition between:
+                    var rangeBetween = list.Where(m =>
+                        !between.OutsideOfRange(new SortableUniqueIdValue(m.SortableUniqueId))).OrderBy(m => m.SortableUniqueId).ToList();
+                    rangeBetween = eventRetrievalInfo.MaxCount.HasValue
+                        ? rangeBetween.Take(eventRetrievalInfo.MaxCount.GetValue()).ToList()
+                        : rangeBetween;
+                    resultAction(rangeBetween);
                     break;
                 case SortableIdConditionNone _:
                     list = eventRetrievalInfo.MaxCount.HasValue
