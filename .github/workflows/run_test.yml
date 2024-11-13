@@ -322,10 +322,13 @@ jobs:
       run: |
         dotnet build Sekiban.sln -c Release
       
-    - name: Test dotnet tests/Sekiban.Test.Dynamo
+    - name: Test dotnet tests/Sekiban.Test.Dynamo .NET8
       run: |
         dotnet test tests/Sekiban.Test.Dynamo/Sekiban.Test.Dynamo.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net8.0
-
+    - name: Test dotnet tests/Sekiban.Test.Dynamo .NET9
+      run: |
+        dotnet test tests/Sekiban.Test.Dynamo/Sekiban.Test.Dynamo.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net9.0
+  
   regular80postgres:
     strategy:
       max-parallel: 4
