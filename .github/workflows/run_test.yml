@@ -507,7 +507,7 @@ jobs:
       max-parallel: 4
 
     runs-on: ubuntu-latest
-    needs: [ regularAggregateTest, regularPostgres,regularDynamo ,regular90cosmos ]
+    needs: [ regularMultitenant, regularPostgres,regularDynamo ,regular90cosmos ]
     steps:
     - uses: actions/checkout@v4
     - name: Setup .NET 8
