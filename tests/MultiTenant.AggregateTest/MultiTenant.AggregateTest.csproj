@@ -1,7 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net8.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
 
@@ -9,6 +8,7 @@
         <IsTestProject>true</IsTestProject>
         <AssemblyName>MultiTenant.AggregateTests</AssemblyName>
         <RootNamespace>MultiTenant.AggregateTests</RootNamespace>
+        <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
     </PropertyGroup>
 
     <ItemGroup>
