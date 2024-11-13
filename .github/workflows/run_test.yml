@@ -120,11 +120,11 @@ jobs:
         dotnet test tests/Mixed.Test/Mixed.Test.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net8.0
   
 
-  regular80Multitenant:
+  regularMultitenant:
     strategy:
       max-parallel: 4
     runs-on: ubuntu-latest
-    needs: [ regular80Mixed ]
+    needs: [ regularAggregateTest ]
     steps:
     - uses: actions/checkout@v4
     - name: Setup .NET 8
@@ -168,16 +168,19 @@ jobs:
     - name: Test Build
       run: |
         dotnet build Sekiban.sln -c Release
-    - name: Test dotnet tests/MultiTenant.AggregateTest
+    - name: Test dotnet tests/MultiTenant.AggregateTest .NET8
       run: |
         dotnet test tests/MultiTenant.AggregateTest/MultiTenant.AggregateTest.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net8.0
-  
+    - name: Test dotnet tests/MultiTenant.AggregateTest .NET9
+      run: |
+        dotnet test tests/MultiTenant.AggregateTest/MultiTenant.AggregateTest.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net9.0
+        
 
   regular80cosmos:
     strategy:
       max-parallel: 4
     runs-on: ubuntu-latest
-    needs: [ regular80Multitenant ]
+    needs: [ regularMultitenant ]
     steps:
     - uses: actions/checkout@v4
     - name: Setup .NET 8
@@ -231,7 +234,7 @@ jobs:
     strategy:
       max-parallel: 4
     runs-on: ubuntu-latest
-    needs: [ regular90MultiTenant ]
+    needs: [ regular90Mixed ]
     steps:
     - uses: actions/checkout@v4
     - name: Setup .NET 8
@@ -333,61 +336,6 @@ jobs:
     - name: Test dotnet tests/Mixed.Test
       run: |
         dotnet test tests/Mixed.Test/Mixed.Test.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net9.0
-
-
-  regular90MultiTenant:
-    strategy:
-      max-parallel: 4
-    runs-on: ubuntu-latest
-    needs: [ regular90Mixed ]
-    steps:
-    - uses: actions/checkout@v4
-    - name: Setup .NET 8
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.x
-    - name: Setup .NET 9
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 9.0.x
-    - name: Secret Settings
-      run: |
-        pushd ./tests/Sekiban.Test.Abstructs
-        dotnet user-secrets set "ConnectionStrings:SekibanBlob" "${{secrets.SEKIBAN_BLOB_CONNECTION_STRING}}"
-        dotnet user-secrets set "ConnectionStrings:SekibanCosmos" "${{secrets.TEST_COSMOS_CONNECTION_STRING}}"
-        dotnet user-secrets set "ConnectionStrings:SekibanPostgresDefault" "${{secrets.SEKIBAN_POSTGRES_CONNECTION_DEFAULT}}"
-        dotnet user-secrets set "ConnectionStrings:SekibanPostgresSecondary" "${{secrets.SEKIBAN_POSTGRES_CONNECTION_SECONDARY}}"
-        dotnet user-secrets set "Sekiban:Default:Azure:CosmosDatabase" "GithubActions"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Azure:CosmosDatabase" "GithubActions"
-        dotnet user-secrets set "Sekiban:Default:Aws:AccessKeyId" "${{secrets.TEST_AWS_ACCESS_KEY_ID}}"
-        dotnet user-secrets set "Sekiban:Default:Aws:AccessKey" "${{secrets.TEST_AWS_ACCESS_KEY}}"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoRegion" "us-west-1"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoItemsTable" "jjga_items"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoEventsTable" "jjga_events"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoItemsTableDissolvable" "jjga_d_items"
-        dotnet user-secrets set "Sekiban:Default:Aws:DynamoEventsTableDissolvable" "jjga_d_events"
-        dotnet user-secrets set "Sekiban:Default:Aws:S3Region" "us-west-1"
-        dotnet user-secrets set "Sekiban:Default:Aws:S3BucketName" "jjga-s3"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:AccessKeyId" "${{secrets.TEST_AWS_ACCESS_KEY_ID}}"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:AccessKey" "${{secrets.TEST_AWS_ACCESS_KEY}}"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoRegion" "us-west-1"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoItemsTable" "jjga_items_2"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoEventsTable" "jjga_events_2"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoItemsTableDissolvable" "jjga_d_items_2"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:DynamoEventsTableDissolvable" "jjga_d_events_2"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:S3Region" "us-west-1"
-        dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:S3BucketName" "jjga-s3"        
-    - name: Restore dependencies
-      run: |
-        dotnet restore Sekiban.sln
-    - name: Test Build
-      run: |
-        dotnet build Sekiban.sln -c Release
-      
-    - name: Test dotnet tests/MultiTenant.AggregateTest
-      run: |
-        dotnet test tests/MultiTenant.AggregateTest/MultiTenant.AggregateTest.csproj  --filter "Category!=Flaky&Category!=Performance" -v m -c Release -m:1 -f net9.0
-       
 
   regularDynamo:
     strategy:
