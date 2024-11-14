@@ -4,12 +4,12 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Infrastructure.Dynamo</PackageId>
-        <Version>0.22.0-preview8</Version>
+        <Version>0.22.0-preview9</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework Dynamo Infrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.22.0-preview8</PackageVersion>
+        <PackageVersion>0.22.0-preview9</PackageVersion>
         <Description>Beta Support for F#</Description>
         <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
         <LangVersion>preview</LangVersion>
@@ -21,8 +21,8 @@
 
     <ItemGroup>
         <PackageReference Include="AWSSDK.DynamoDBv2" Version="3.7.403" />
-        <PackageReference Include="Sekiban.Core" Version="0.22.0-preview8"/>
-        <PackageReference Include="Sekiban.Infrastructure.Aws.S3" Version="0.22.0-preview8"/>
+        <PackageReference Include="Sekiban.Core" Version="0.22.0-preview9"/>
+        <PackageReference Include="Sekiban.Infrastructure.Aws.S3" Version="0.22.0-preview9"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
         <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.1"/>
     </ItemGroup>

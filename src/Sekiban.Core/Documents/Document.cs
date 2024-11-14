@@ -22,7 +22,11 @@ public abstract record Document : IAggregateDocument
         string aggregateType,
         string rootPartitionKey)
     {
+#if NET9_0_OR_GREATER
+        Id = Guid.CreateVersion7();
+#else
         Id = Guid.NewGuid();
+#endif
         AggregateId = aggregateId;
         PartitionKey = partitionKey;
         DocumentType = documentType;
