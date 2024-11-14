@@ -46,12 +46,12 @@ if (app.Environment.IsDevelopment())
 
 app
     .MapPost("/api/createbranchandclient", SekibanUsecase.CreateSimpleExecutorAsync<AddBranchAndClientUsecase, bool>())
-    .WithName("CreateBranchAndClient")
+    .WithName("CreateBranchAndClientU")
     .WithOpenApi();
 
 app
     .MapPost("/api/createbranch", CommandExecutor.CreateSimpleCommandExecutor<CreateBranch>())
-    .WithName("CreateBranch")
+    .WithName("CreateBranchU")
     .WithOpenApi();
 
 
