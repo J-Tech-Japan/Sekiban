@@ -4,19 +4,14 @@ using ResultBoxes;
 using Sekiban.Core.Command;
 namespace BookBorrowing.Domain.Aggregates.Borrowers.Commands;
 
-public record CreateBorrower(
-    BorrowerCardNo BorrowerCardNo,
-    Name Name,
-    PhoneNumber PhoneNumber,
-    Email Email) : ICommandWithHandler<Borrower, CreateBorrower>
+public record CreateBorrower(BorrowerCardNo BorrowerCardNo, Name Name, PhoneNumber PhoneNumber, Email Email)
+    : ICommandWithHandler<Borrower, CreateBorrower>
 {
-    public Guid GetAggregateId() => Guid.NewGuid();
-    public static ResultBox<UnitValue> HandleCommand(
+    public static Guid SpecifyAggregateId(CreateBorrower command) => Guid.NewGuid();
+
+    public static ResultBox<EventOrNone<Borrower>> HandleCommand(
         CreateBorrower command,
-        ICommandContext<Borrower> context) => context.AppendEvent(
-        new BorrowerCreated(
-            command.BorrowerCardNo,
-            command.Name,
-            command.PhoneNumber,
-            command.Email));
+        ICommandContext<Borrower> context) =>
+        EventOrNone.Event(
+            new BorrowerCreated(command.BorrowerCardNo, command.Name, command.PhoneNumber, command.Email));
 }
