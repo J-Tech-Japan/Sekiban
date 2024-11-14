@@ -73,7 +73,6 @@ public static class WebServiceExtension
     {
         definition.Define();
         services.AddSingleton(definition);
-
         services.AddControllers(
                 configure =>
                 {
@@ -83,7 +82,7 @@ public static class WebServiceExtension
                     {
                         configure.Filters.Add<SimpleExceptionFilter>();
                     }
-
+                    
                     configureMvc?.Invoke(configure);
                 })
             .ConfigureApplicationPartManager(

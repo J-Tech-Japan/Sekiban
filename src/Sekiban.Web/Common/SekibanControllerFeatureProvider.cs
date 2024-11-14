@@ -5,6 +5,15 @@ using Sekiban.Web.Dependency;
 using System.Reflection;
 namespace Sekiban.Web.Common;
 
+
+public static class RuntimeChecker
+{
+    public static bool IsDotNet9OrLater()
+    {
+        var version = Environment.Version;
+        return version.Major >= 9;
+    }
+}
 /// <summary>
 ///     Controller feature provider for sekiban commands and queries
 /// </summary>
@@ -51,6 +60,7 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
                     _webDependencyDefinition.Options.BaseSingleProjectionControllerType.MakeGenericType(projectionType).GetTypeInfo());
             }
         }
+        
         foreach (var projectionType in _webDependencyDefinition.GetAggregateListQueryTypes()
             .Concat(_webDependencyDefinition.GetSimpleAggregateListQueryTypes()))
         {
@@ -58,6 +68,14 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
             {
                 continue;
             }
+            
+            var aggregateType = projectionType.GetAggregateTypeFromAggregateListQueryType();
+            // aggregate type is interface and runtime is dotnet 9, it will continue it will throw exception when generate swagger
+            if (aggregateType.IsInterface && RuntimeChecker.IsDotNet9OrLater())
+            {
+                continue;
+            }
+            
             feature.Controllers.Add(
                 _webDependencyDefinition.Options.BaseAggregateListQueryControllerType.MakeGenericType(
                         projectionType.GetAggregateTypeFromAggregateListQueryType(),
@@ -66,7 +84,9 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
                         projectionType.GetResponseTypeFromAggregateListQueryType())
                     .GetTypeInfo());
         }
-
+        
+        
+        
         foreach (var projectionType in _webDependencyDefinition.GetAggregateQueryTypes())
         {
             if (!projectionType.IsAggregateQueryType())
@@ -81,7 +101,7 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
                         projectionType.GetResponseTypeFromAggregateQueryType())
                     .GetTypeInfo());
         }
-
+        
         foreach (var queryType in _webDependencyDefinition.GetSingleProjectionListQueryTypes())
         {
             if (!queryType.IsSingleProjectionListQueryType())
@@ -96,7 +116,7 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
                         queryType.GetResponseTypeFromSingleProjectionListQueryType())
                     .GetTypeInfo());
         }
-
+        
         foreach (var queryType in _webDependencyDefinition.GetSingleProjectionQueryTypes())
         {
             if (!queryType.IsSingleProjectionQueryType())
@@ -111,7 +131,7 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
                         queryType.GetResponseTypeFromSingleProjectionQueryType())
                     .GetTypeInfo());
         }
-
+        
         foreach (var queryType in _webDependencyDefinition.GetMultiProjectionListQueryTypes())
         {
             if (!queryType.IsMultiProjectionListQueryType())
@@ -126,7 +146,7 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
                         queryType.GetResponseTypeFromMultiProjectionListQueryType())
                     .GetTypeInfo());
         }
-
+        
         foreach (var queryType in _webDependencyDefinition.GetMultiProjectionQueryTypes())
         {
             if (!queryType.IsMultiProjectionQueryType())
@@ -141,7 +161,7 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
                         queryType.GetResponseTypeFromMultiProjectionQueryType())
                     .GetTypeInfo());
         }
-
+        
         foreach (var queryType in _webDependencyDefinition.GetGeneralListQueryTypes())
         {
             if (!queryType.IsGeneralListQueryType())
@@ -155,7 +175,7 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
                         queryType.GetResponseTypeFromGeneralListQueryType())
                     .GetTypeInfo());
         }
-
+        
         foreach (var queryType in _webDependencyDefinition.GetGeneralQueryTypes())
         {
             if (!queryType.IsGeneralQueryType())
@@ -169,7 +189,7 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
                         queryType.GetResponseTypeFromGeneralQueryType())
                     .GetTypeInfo());
         }
-
+        
         foreach (var queryType in _webDependencyDefinition.GetNextQueryTypes())
         {
             if (!queryType.IsQueryNextType())
@@ -180,7 +200,7 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
                 _webDependencyDefinition.Options.BaseNextQueryControllerType.MakeGenericType(queryType, queryType.GetResponseTypeFromQueryNextType())
                     .GetTypeInfo());
         }
-
+        
         foreach (var queryType in _webDependencyDefinition.GetNextListQueryTypes())
         {
             if (!queryType.IsListQueryNextType())
@@ -192,7 +212,7 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
                     .MakeGenericType(queryType, queryType.GetResponseTypeFromQueryNextType())
                     .GetTypeInfo());
         }
-
+        
         feature.Controllers.Add(_webDependencyDefinition.Options.BaseIndexControllerType.MakeGenericType(typeof(object)).GetTypeInfo());
     }
 }
