@@ -23,9 +23,9 @@
 
     <ItemGroup>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
-        <PackageReference Include="Azure.Storage.Blobs" Version="12.22.2"/>
+        <PackageReference Include="Azure.Storage.Blobs" Version="12.23.0" />
         <PackageReference Include="Sekiban.Core" Version="0.22.0-preview5"/>
-        <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.1"/>
+        <PackageReference Include="System.Configuration.ConfigurationManager" Version="9.0.0" />
     </ItemGroup>
 
 

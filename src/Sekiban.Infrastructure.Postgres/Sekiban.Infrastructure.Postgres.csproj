@@ -20,7 +20,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.1"/>
+        <PackageReference Include="System.Configuration.ConfigurationManager" Version="9.0.0" />
         <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
         <ProjectReference Include="..\Sekiban.Infrastructure.Aws.S3\Sekiban.Infrastructure.Aws.S3.csproj"/>
