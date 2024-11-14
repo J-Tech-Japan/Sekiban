@@ -10,10 +10,10 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.7" />
-        <PackageReference Include="Sekiban.Infrastructure.Dynamo" Version="0.22.0-preview6" />
-        <PackageReference Include="Sekiban.Web" Version="0.20.1"/>
-        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2"/>
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.0"/>
+        <PackageReference Include="Sekiban.Infrastructure.Dynamo" Version="0.22.0-preview7"/>
+        <PackageReference Include="Sekiban.Web" Version="0.22.0-preview7"/>
+        <PackageReference Include="Swashbuckle.AspNetCore" Version="7.0.0"/>
     </ItemGroup>
 
     <ItemGroup>
