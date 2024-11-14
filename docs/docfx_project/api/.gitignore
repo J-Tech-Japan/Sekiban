@@ -3,3 +3,5 @@
 ###############
 *.yml
 .manifest
+
+.DS_Store
