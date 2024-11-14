@@ -14,10 +14,8 @@ public record CreateUserPoint(
     int Point) : ICommandWithHandler<UserPoint, CreateUserPoint>
 {
     // Assign new Aggregate Id by NewGuid()
-    public Guid GetAggregateId() => Guid.NewGuid();
+    public static Guid SpecifyAggregateId(CreateUserPoint command) => Guid.NewGuid();
 
-    public static ResultBox<UnitValue> HandleCommand(
-        CreateUserPoint command,
-        ICommandContext<UserPoint> context) =>
-        context.AppendEvent(new UserPointCreated(command.Name, command.Email, command.Point));
+    public static ResultBox<EventOrNone<UserPoint>> HandleCommand(CreateUserPoint command, ICommandContext<UserPoint> context)
+    => context.AppendEvent(new UserPointCreated(command.Name, command.Email, command.Point));
 }
