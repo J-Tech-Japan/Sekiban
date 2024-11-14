@@ -140,7 +140,7 @@ public class SekibanApiListController<T>(
                     rootPartitionKey,
                     new AggregateTypeStream(aggregateType),
                     id,
-                    null),
+                    ISortableIdCondition.None),
                 eventObjects => { events.AddRange(eventObjects); });
             return Ok(events);
         }

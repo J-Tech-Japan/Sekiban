@@ -23,7 +23,7 @@
 
     <ItemGroup>
         <PackageReference Include="Jtechs.OpenApi.AspNetCore.Swashbuckle" Version="0.2.2"/>
-        <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0"/>
+        <PackageReference Include="Swashbuckle.AspNetCore" Version="7.0.0" />
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
     </ItemGroup>
 

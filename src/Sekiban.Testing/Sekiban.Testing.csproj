@@ -21,7 +21,7 @@
     </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="MartinCostello.Logging.XUnit" Version="0.4.0"/>
-        <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="8.0.1"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="9.0.0" />
         <PackageReference Include="xunit.assert" Version="2.9.2"/>
         <PackageReference Include="xunit.extensibility.core" Version="2.9.2"/>
         <PackageReference Include="Sekiban.Core" Version="0.22.0-preview5"/>
