@@ -4,12 +4,12 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PackageId>Sekiban.Infrastructure.Aws.S3</PackageId>
-        <Version>0.22.0-preview5</Version>
+        <Version>0.22.0-preview6</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework AWS S3 Infrastructure</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.22.0-preview5</PackageVersion>
+        <PackageVersion>0.22.0-preview6</PackageVersion>
         <Description>Beta Support for F#</Description>
         <LangVersion>preview</LangVersion>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -22,7 +22,7 @@
     <ItemGroup>
         <PackageReference Include="AWSSDK.S3" Version="3.7.405.14" />
         <PackageReference Include="SharpZipLib" Version="1.4.2"/>
-        <PackageReference Include="Sekiban.Core" Version="0.22.0-preview5"/>
+        <PackageReference Include="Sekiban.Core" Version="0.22.0-preview6"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
         <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.1"/>
     </ItemGroup>
