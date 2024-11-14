@@ -2,6 +2,7 @@ using ResultBoxes;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Events;
+using Sekiban.Core.Query.QueryModel;
 namespace Postgres.Sample.Domain.Aggregates.Teams;
 
 public record Team(string Name) : IAggregatePayload<Team>
@@ -16,8 +17,17 @@ public record TeamNameChanged(string Name) : IEventPayload<Team, TeamNameChanged
 }
 public record ChangeTeamName(Guid TeamId, string Name) : ICommandWithHandler<Team, ChangeTeamName>
 {
-    public Guid GetAggregateId() => TeamId;
-    public static ResultBox<UnitValue> HandleCommand(
-        ChangeTeamName command,
-        ICommandContext<Team> context) => context.AppendEvent(new TeamNameChanged(command.Name));
+    public static Guid SpecifyAggregateId(ChangeTeamName command) => command.TeamId;
+
+    public static ResultBox<EventOrNone<Team>> HandleCommand(ChangeTeamName command, ICommandContext<Team> context) =>
+        context.AppendEvent(new TeamNameChanged(command.Name));
+}
+public record ExistsTeam(Guid TeamId) : INextAggregateQuery<Team, ExistsTeam, bool>
+{
+
+    public static ResultBox<bool> HandleFilter(
+        IEnumerable<AggregateState<Team>> list,
+        ExistsTeam query,
+        IQueryContext context) =>
+        list.Any(x => x.AggregateId == query.TeamId);
 }
