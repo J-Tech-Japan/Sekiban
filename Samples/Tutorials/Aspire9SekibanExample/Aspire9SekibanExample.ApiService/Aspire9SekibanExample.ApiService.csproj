@@ -13,8 +13,8 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.0"/>
-        <PackageReference Include="Sekiban.Infrastructure.Postgres" Version="0.22.0-preview9"/>
-        <PackageReference Include="Sekiban.Web" Version="0.22.0-preview9"/>
+        <PackageReference Include="Sekiban.Infrastructure.Postgres" Version="0.22.0-preview10"/>
+        <PackageReference Include="Sekiban.Web" Version="0.22.0-preview10"/>
     </ItemGroup>
 
 </Project>
