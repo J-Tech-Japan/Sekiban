@@ -5,13 +5,13 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <OutputType>Library</OutputType>
         <PackageId>Sekiban.Web</PackageId>
-        <Version>0.22.0-preview10</Version>
+        <Version>0.22.1</Version>
         <Authors>J-Tech Group</Authors>
         <Company>J-Tech-Japan</Company>
         <PackageDescription>Sekiban - Event Sourcing Framework WebHelper</PackageDescription>
         <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
-        <PackageVersion>0.22.0-preview10</PackageVersion>
-        <Description>Beta Support for F#</Description>
+        <PackageVersion>0.22.1</PackageVersion>
+        <Description>Initial .NET 9 Release</Description>
         <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
         <LangVersion>preview</LangVersion>
         <OpenApiGenerateDocuments>false</OpenApiGenerateDocuments>
