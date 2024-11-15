@@ -23,7 +23,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Jtechs.OpenApi.AspNetCore.Swashbuckle" Version="0.2.3" />
+        <PackageReference Include="Jtechs.OpenApi.AspNetCore.Swashbuckle" Version="0.2.5" />
         <PackageReference Include="Microsoft.Sbom.Targets" Version="3.0.0">
           <PrivateAssets>all</PrivateAssets>
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
