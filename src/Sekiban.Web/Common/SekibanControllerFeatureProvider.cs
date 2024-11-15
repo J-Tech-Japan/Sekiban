@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.AspNetCore.Mvc.Controllers;
+using Sekiban.Core.Aggregate;
+using Sekiban.Core.Snapshot.Aggregate;
 using Sekiban.Core.Types;
 using Sekiban.Web.Dependency;
 using System.Reflection;
@@ -37,6 +39,12 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
             }
             if (implementationType != null && implementationType.IsCommandWithHandlerType())
             {
+                var aggregateType = implementationType.GetAggregatePayloadTypeFromCommandWithHandlerType();
+                if (aggregateType == typeof(SnapshotManager) || (aggregateType.IsGenericType && aggregateType.GetGenericTypeDefinition() == typeof(ITenantAggregatePayload<>)))
+                {
+                    continue;
+                }
+                
                 feature.Controllers.Add(
                     _webDependencyDefinition.Options.BaseControllerType.MakeGenericType(
                             implementationType.GetAggregatePayloadTypeFromCommandWithHandlerType(),
@@ -46,6 +54,11 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
         }
         foreach (var aggregateType in _webDependencyDefinition.GetAggregatePayloadTypes())
         {
+            if (aggregateType == typeof(SnapshotManager) || (aggregateType.IsGenericType && aggregateType.GetGenericTypeDefinition() == typeof(ITenantParentAggregatePayload<>)))
+            {
+                continue;
+            }
+            
             feature.Controllers.Add(_webDependencyDefinition.Options.BaseGetAggregateControllerType.MakeGenericType(aggregateType).GetTypeInfo());
         }
         foreach (var aggregateType in _webDependencyDefinition.GetAggregatePayloadSubtypes())
@@ -68,8 +81,12 @@ public class SekibanControllerFeatureProvider : IApplicationFeatureProvider<Cont
             {
                 continue;
             }
-            
             var aggregateType = projectionType.GetAggregateTypeFromAggregateListQueryType();
+            if (aggregateType == typeof(SnapshotManager) || (aggregateType.IsGenericType && aggregateType.GetGenericTypeDefinition() == typeof(ITenantAggregatePayload<>)))
+            {
+                continue;
+            }
+            
             // aggregate type is interface and runtime is dotnet 9, it will continue it will throw exception when generate swagger
             if (aggregateType.IsInterface && RuntimeChecker.IsDotNet9OrLater())
             {
