@@ -13,8 +13,10 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.0"/>
-        <PackageReference Include="Sekiban.Infrastructure.Postgres" Version="0.22.0-preview10"/>
-        <PackageReference Include="Sekiban.Web" Version="0.22.0-preview10"/>
+        <PackageReference Include="Scalar.AspNetCore" Version="1.2.37"/>
+        <PackageReference Include="Sekiban.Infrastructure.Postgres" Version="0.22.1"/>
+        <PackageReference Include="Sekiban.Web" Version="0.22.1"/>
+        <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="7.0.0"/>
     </ItemGroup>
 
 </Project>
