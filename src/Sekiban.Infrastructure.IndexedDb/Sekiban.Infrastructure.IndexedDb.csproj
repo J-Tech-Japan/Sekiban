@@ -6,4 +6,14 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.JSInterop" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj" />
+    <ProjectReference Include="..\Sekiban.Testing\Sekiban.Testing.csproj" />
+    <ProjectReference Include="..\Sekiban.Infrastructure.Azure.Storage.Blobs\Sekiban.Infrastructure.Azure.Storage.Blobs.csproj" />
+  </ItemGroup>
+
 </Project>
