@@ -18,4 +18,9 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Sekiban.Infrastructure.IndexedDb\Sekiban.Infrastructure.IndexedDb.csproj" />
+    <ProjectReference Include="..\Sekiban.Test.Abstructs\Sekiban.Test.Abstructs.csproj" />
+  </ItemGroup>
+
 </Project>
