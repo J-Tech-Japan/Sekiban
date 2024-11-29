@@ -2,5 +2,5 @@ namespace Sekiban.Infrastructure.IndexedDb;
 
 public interface ISekibanJsRuntime
 {
-    Task SaveDocumentAsync();
+    Task<ISekibanIndexedDbContext> CreateContextAsync(string context);
 }
