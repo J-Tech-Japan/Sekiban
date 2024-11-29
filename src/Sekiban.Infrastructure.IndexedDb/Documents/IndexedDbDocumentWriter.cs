@@ -1,11 +1,12 @@
 using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
+using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
 
 namespace Sekiban.Infrastructure.IndexedDb.Documents;
 
-public class IndexedDbDocumentWriter : IDocumentPersistentWriter, IEventPersistentWriter
+public class IndexedDbDocumentWriter(ISekibanJsRuntime sekibanJsRuntime) : IDocumentPersistentWriter, IEventPersistentWriter
 {
     public Task SaveEvents<TEvent>(IEnumerable<TEvent> events, IWriteDocumentStream writeDocumentStream) where TEvent : IEvent
     {
@@ -24,6 +25,8 @@ public class IndexedDbDocumentWriter : IDocumentPersistentWriter, IEventPersiste
 
     public bool ShouldUseBlob(SnapshotDocument document)
     {
-        throw new NotImplementedException();
+        var stream = SekibanJsonHelper.Serialize(document);
+        // TODO: adjust threshold
+        return stream is not null && stream.Length > 1024 * 1024 * 1;
     }
 }
