@@ -1,33 +1,42 @@
-console.log('Try npm run lint/fix!');
+import {DbEvent, DbEventQuery} from './models';
 
-const longString =
-  'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer ut aliquet diam.';
+export const init = async (contextName: string) => {
+  // TODO: use IndexedDB
+  const events = new Array<DbEvent>();
 
-const trailing = 'Semicolon';
+  const writeEventAsync = async (event: DbEvent): Promise<void> => {
+    events.push(structuredClone(event));
+  };
 
-const why = {am: 'I tabbed?'};
+  const getEventsAsync = async (query: DbEventQuery): Promise<DbEvent[]> =>
+    events
+      .filter(
+        x =>
+          query.RootPartitionKey === null ||
+          x.RootPartitionKey === query.RootPartitionKey,
+      )
+      .filter(
+        x =>
+          query.PartitionKey === null || x.PartitionKey === query.PartitionKey,
+      )
+      .filter(
+        x =>
+          query.AggregateTypes === null ||
+          query.AggregateTypes.includes(x.AggregateType),
+      )
+      .filter(
+        x =>
+          query.SortableIdStart === null ||
+          query.SortableIdStart <= x.SortableUniqueId,
+      )
+      .filter(
+        x =>
+          query.SortableIdEnd === null ||
+          x.SortableUniqueId <= query.SortableIdEnd,
+      );
 
-const iWish = "I didn't have a trailing space...";
-
-const sicilian = true;
-
-const vizzini = sicilian ? !sicilian : sicilian;
-
-const re = /foo {3}bar/;
-
-export function doSomeStuff(
-  withThis: string,
-  andThat: string,
-  andThose: string[],
-) {
-  //function on one line
-  if (!andThose.length) {
-    return false;
-  }
-  console.log(withThis);
-  console.log(andThat);
-  console.dir(andThose);
-  console.log(longString, trailing, why, iWish, vizzini, re);
-  return;
-}
-// TODO: more examples
+  return {
+    writeEventAsync,
+    getEventsAsync,
+  };
+};

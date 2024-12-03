@@ -1,25 +1,26 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.doSomeStuff = doSomeStuff;
-console.log("Try npm run lint/fix!");
-const longString = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer ut aliquet diam.';
-const trailing = 'Semicolon';
-const why = { am: 'I tabbed?' };
-const iWish = "I didn't have a trailing space...";
-const sicilian = true;
-;
-const vizzini = (!!sicilian) ? !!!sicilian : sicilian;
-const re = /foo   bar/;
-function doSomeStuff(withThis, andThat, andThose) {
-    //function on one line
-    if (!Boolean(andThose.length)) {
-        return false;
-    }
-    console.log(withThis);
-    console.log(andThat);
-    console.dir(andThose);
-    console.log(longString, trailing, why, iWish, vizzini, re);
-    return;
-}
-// TODO: more examples
+exports.init = void 0;
+const init = async (contextName) => {
+    // TODO: use IndexedDB
+    const events = new Array();
+    const writeEventAsync = async (event) => {
+        events.push(structuredClone(event));
+    };
+    const getEventsAsync = async (query) => events
+        .filter(x => query.RootPartitionKey === null ||
+        x.RootPartitionKey === query.RootPartitionKey)
+        .filter(x => query.PartitionKey === null || x.PartitionKey === query.PartitionKey)
+        .filter(x => query.AggregateTypes === null ||
+        query.AggregateTypes.includes(x.AggregateType))
+        .filter(x => query.SortableIdStart === null ||
+        query.SortableIdStart <= x.SortableUniqueId)
+        .filter(x => query.SortableIdEnd === null ||
+        x.SortableUniqueId <= query.SortableIdEnd);
+    return {
+        writeEventAsync,
+        getEventsAsync,
+    };
+};
+exports.init = init;
 //# sourceMappingURL=index.js.map
