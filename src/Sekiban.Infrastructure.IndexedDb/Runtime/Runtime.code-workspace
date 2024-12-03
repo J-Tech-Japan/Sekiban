@@ -1,0 +1,23 @@
+{
+  "folders": [
+    {
+      "path": ".",
+    },
+  ],
+  "settings": {
+    "[typescript]": {
+      "editor.codeActionsOnSave": {
+        "source.fixAll": "explicit",
+        "source.organizeImports": "explicit",
+      },
+      "editor.defaultFormatter": "esbenp.prettier-vscode",
+      "editor.formatOnSave": true,
+    },
+  },
+  "extensions": {
+    "recommendations": [
+			"dbaeumer.vscode-eslint",
+			"esbenp.prettier-vscode",
+		],
+  },
+}
