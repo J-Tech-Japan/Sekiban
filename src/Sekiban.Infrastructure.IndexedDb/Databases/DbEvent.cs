@@ -1,7 +1,7 @@
 using Sekiban.Core.Events;
 using Sekiban.Core.Shared;
 
-namespace Sekiban.Infrastructure.IndexedDb;
+namespace Sekiban.Infrastructure.IndexedDb.Databases;
 
 public record DbEvent
 {
@@ -11,9 +11,9 @@ public record DbEvent
     public string CallHistories { get; init; } = string.Empty;
     public string AggregateId { get; init; } = string.Empty;
     public string PartitionKey { get; init; } = string.Empty;
-    public int DocumentType { get; init; }
+    public string DocumentType { get; init; } = string.Empty;
     public string DocumentTypeName { get; init; } = string.Empty;
-    public long TimeStamp { get; init; } = 0;
+    public string TimeStamp { get; init; } = string.Empty;
     public string SortableUniqueId { get; init; } = string.Empty;
     public string AggregateType { get; init; } = string.Empty;
     public string RootPartitionKey { get; init; } = string.Empty;
@@ -27,11 +27,11 @@ public record DbEvent
             CallHistories = SekibanJsonHelper.Serialize(ev.CallHistories) ?? string.Empty,
             AggregateId = ev.AggregateId.ToString(),
             PartitionKey = ev.PartitionKey,
-            DocumentType = (int)ev.DocumentType,
+            DocumentType = ev.DocumentType.ToString(),
             DocumentTypeName = ev.DocumentTypeName,
-            TimeStamp = new DateTimeOffset(ev.TimeStamp).ToUnixTimeMilliseconds(),
+            TimeStamp = DateTimeConverter.ToString(ev.TimeStamp),
             SortableUniqueId = ev.SortableUniqueId,
             AggregateType = ev.AggregateType,
-            RootPartitionKey = ev.RootPartitionKey
+            RootPartitionKey = ev.RootPartitionKey,
         };
 }

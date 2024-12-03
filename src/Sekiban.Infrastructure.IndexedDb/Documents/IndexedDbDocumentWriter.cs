@@ -4,6 +4,7 @@ using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
+using Sekiban.Infrastructure.IndexedDb.Databases;
 
 namespace Sekiban.Infrastructure.IndexedDb.Documents;
 
