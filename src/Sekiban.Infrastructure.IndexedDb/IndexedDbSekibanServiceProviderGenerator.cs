@@ -18,7 +18,7 @@ public class IndexedDbSekibanServiceProviderGenerator : ISekibanServiceProviderG
     /// <param name="configureServices"></param>
     /// <param name="sekibanDateProducer"></param>
     /// <returns></returns>
-    public IServiceProvider Generate(
+    public virtual IServiceProvider Generate(
         ISekibanTestFixture fixture,
         IDependencyDefinition dependencyDefinition,
         Action<IServiceCollection>? configureServices = null,

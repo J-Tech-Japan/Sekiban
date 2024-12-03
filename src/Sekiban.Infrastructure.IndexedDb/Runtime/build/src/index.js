@@ -1,6 +1,12 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.init = void 0;
+const wrapio = (func) => async (input) => {
+    const args = JSON.parse(input);
+    const result = await func(args);
+    const output = JSON.stringify(result);
+    return output;
+};
 const init = async (contextName) => {
     // TODO: use IndexedDB
     const events = new Array();
@@ -18,8 +24,8 @@ const init = async (contextName) => {
         .filter(x => query.SortableIdEnd === null ||
         x.SortableUniqueId <= query.SortableIdEnd);
     return {
-        writeEventAsync,
-        getEventsAsync,
+        writeEventAsync: wrapio(writeEventAsync),
+        getEventsAsync: wrapio(getEventsAsync),
     };
 };
 exports.init = init;

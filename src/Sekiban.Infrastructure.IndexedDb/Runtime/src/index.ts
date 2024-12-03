@@ -1,5 +1,16 @@
 import {DbEvent, DbEventQuery} from './models';
 
+const wrapio =
+  <T, U>(func: (value: T) => Promise<U>) =>
+  async (input: string): Promise<string> => {
+    const args = JSON.parse(input);
+
+    const result = await func(args);
+
+    const output = JSON.stringify(result);
+    return output;
+  };
+
 export const init = async (contextName: string) => {
   // TODO: use IndexedDB
   const events = new Array<DbEvent>();
@@ -36,7 +47,7 @@ export const init = async (contextName: string) => {
       );
 
   return {
-    writeEventAsync,
-    getEventsAsync,
+    writeEventAsync: wrapio(writeEventAsync),
+    getEventsAsync: wrapio(getEventsAsync),
   };
 };

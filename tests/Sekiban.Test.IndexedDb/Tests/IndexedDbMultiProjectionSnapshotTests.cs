@@ -1,4 +1,3 @@
-using Sekiban.Infrastructure.IndexedDb;
 using Sekiban.Test.Abstructs.Abstructs;
 using Xunit.Abstractions;
 namespace Sekiban.Test.IndexedDb.Tests;
@@ -9,7 +8,7 @@ public class IndexedDbMultiProjectionSnapshotTests : MultiProjectionSnapshotTest
     public IndexedDbMultiProjectionSnapshotTests(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
         sekibanTestFixture,
         testOutputHelper,
-        new IndexedDbSekibanServiceProviderGenerator())
+        new TestServiceProviderGenerator())
     {
     }
 }
