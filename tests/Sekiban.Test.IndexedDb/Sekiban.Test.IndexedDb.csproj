@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.2" />
+    <PackageReference Include="Microsoft.JavaScript.NodeApi" Version="0.8.16" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
@@ -21,6 +22,12 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Sekiban.Infrastructure.IndexedDb\Sekiban.Infrastructure.IndexedDb.csproj" />
     <ProjectReference Include="..\Sekiban.Test.Abstructs\Sekiban.Test.Abstructs.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>
