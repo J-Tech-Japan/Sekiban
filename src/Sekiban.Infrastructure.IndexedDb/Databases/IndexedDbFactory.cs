@@ -3,7 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Setting;
 
-namespace Sekiban.Infrastructure.IndexedDb;
+namespace Sekiban.Infrastructure.IndexedDb.Databases;
 
 public class IndexedDbFactory(
     SekibanIndexedDbOptions dbOptions,
