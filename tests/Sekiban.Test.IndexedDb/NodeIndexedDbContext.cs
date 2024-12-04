@@ -16,29 +16,29 @@ public class NodeIndexedDbContext(NodejsEnvironment nodejs, JSReference runtime)
     public async Task RemoveAllEventsAsync() =>
         await DispatchAsync("removeAllEventsAsync");
 
-    public async Task RemoveAllDissolvableEventsAsync()
-    {
-        // TODO
-        await Task.CompletedTask;
-    }
+    public async Task<DbEvent[]> GetDissolvableEventsAsync(DbEventQuery query) =>
+        (await DispatchAsync<DbEventQuery, DbEvent[]>("getDissolvableEventsAsync", query))!;
 
-    public async Task RemoveAllCommandsAsync()
-    {
-        // TODO
-        await Task.CompletedTask;
-    }
+    public async Task WriteDissolvableEventAsync(DbEvent payload) =>
+        await DispatchAsync("writeDissolvableEventAsync", payload);
 
-    public async Task RemoveAllMultiProjectionSnapshotsAsync()
-    {
-        // TODO
-        await Task.CompletedTask;
-    }
+    public async Task RemoveAllDissolvableEventsAsync() =>
+        await DispatchAsync("removeAllDissolvableEventsAsync");
 
-    public async Task RemoveAllSingleProjectionSnapshotsAsync()
-    {
-        // TODO
-        await Task.CompletedTask;
-    }
+    public async Task<DbCommand[]> GetCommandsAsync(DbCommandQuery query) =>
+        (await DispatchAsync<DbCommandQuery, DbCommand[]>("getCommandsAsync", query))!;
+
+    public async Task WriteCommandAsync(DbCommand payload) =>
+        await DispatchAsync("writeCommandAsync", payload);
+
+    public async Task RemoveAllCommandsAsync() =>
+        await DispatchAsync("removeAllCommandsAsync");
+
+    public async Task RemoveAllSingleProjectionSnapshotsAsync() =>
+        await DispatchAsync("removeAllSingleProjectionSnapshotsAsync");
+
+    public async Task RemoveAllMultiProjectionSnapshotsAsync() =>
+        await DispatchAsync("removeAllMultiProjectionSnapshotsAsync");
 
     private async Task DispatchAsync(string operation) =>
         await DispatchAsync<object, object>(operation, null);

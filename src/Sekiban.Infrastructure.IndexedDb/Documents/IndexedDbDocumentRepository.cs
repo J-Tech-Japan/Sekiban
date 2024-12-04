@@ -1,4 +1,7 @@
+using System.Text.Json;
 using ResultBoxes;
+using Sekiban.Core.Aggregate;
+using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
@@ -19,18 +22,39 @@ public class IndexedDbDocumentRepository(
         throw new NotImplementedException();
     }
 
-    public Task GetAllCommandStringsForAggregateIdAsync(Guid aggregateId, Type aggregatePayloadType, string? sinceSortableUniqueId, string rootPartitionKey, Action<IEnumerable<string>> resultAction)
+    public async Task GetAllCommandStringsForAggregateIdAsync(Guid aggregateId, Type aggregatePayloadType, string? sinceSortableUniqueId, string rootPartitionKey, Action<IEnumerable<string>> resultAction)
     {
-        throw new NotImplementedException();
+        var aggregateContainerGroup
+            = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
+
+        await dbFactory.DbActionAsync(
+            async dbContext =>
+            {
+                var dbCommands = await dbContext.GetCommandsAsync(DbCommandQuery.ForAggregateId(aggregateId, aggregatePayloadType, sinceSortableUniqueId, rootPartitionKey));
+
+                var commands = dbCommands
+                    .Select(x => FromDbCommand(x))
+                    .Where(x => x is not null)
+                    .Select(x => JsonSerializer.Serialize(x));
+
+                resultAction(commands);
+            });
     }
 
     public async Task<ResultBox<bool>> GetEvents(EventRetrievalInfo eventRetrievalInfo, Action<IEnumerable<IEvent>> resultAction)
     {
         var dbEvents = await dbFactory.DbActionAsync((dbContext) =>
-            dbContext.GetEventsAsync(DbEventQuery.FromEventRetrievalInfo(eventRetrievalInfo)));
+            eventRetrievalInfo.GetAggregateContainerGroup() switch
+            {
+                AggregateContainerGroup.Default => dbContext.GetEventsAsync(DbEventQuery.FromEventRetrievalInfo(eventRetrievalInfo)),
+                AggregateContainerGroup.Dissolvable => dbContext.GetDissolvableEventsAsync(DbEventQuery.FromEventRetrievalInfo(eventRetrievalInfo)),
+                _ => throw new NotImplementedException(),
+            });
 
         var events = dbEvents
-            .Select(x => FromDbEvent(x));
+            .Select(x => FromDbEvent(x))
+            .Where(x => x is not null)
+            .Cast<IEvent>();
 
         resultAction(events);
 
@@ -92,5 +116,33 @@ public class IndexedDbDocumentRepository(
             dbEvent.RootPartitionKey,
             callHistories
         );
+    }
+
+    private CommandDocumentForJsonExport? FromDbCommand(DbCommand dbCommand)
+    {
+        var payload = SekibanJsonHelper.Deserialize<JsonElement?>(dbCommand.Payload);
+        if (payload is null)
+        {
+            return null;
+        }
+
+        var callHistories = SekibanJsonHelper.Deserialize<List<CallHistory>>(dbCommand.CallHistories) ?? [];
+
+        return new CommandDocumentForJsonExport
+        {
+            Id = new Guid(dbCommand.Id),
+            AggregateId = new Guid(dbCommand.AggregateId),
+            PartitionKey = dbCommand.PartitionKey,
+            DocumentType = Enum.Parse<DocumentType>(dbCommand.DocumentType),
+            DocumentTypeName = dbCommand.DocumentTypeName,
+            ExecutedUser = dbCommand.ExecutedUser,
+            Exception = dbCommand.Exception,
+            CallHistories = callHistories,
+            Payload = payload,
+            TimeStamp = DateTimeConverter.ToDateTime(dbCommand.TimeStamp),
+            SortableUniqueId = dbCommand.SortableUniqueId,
+            AggregateType = dbCommand.AggregateType,
+            RootPartitionKey = dbCommand.RootPartitionKey
+        };
     }
 }

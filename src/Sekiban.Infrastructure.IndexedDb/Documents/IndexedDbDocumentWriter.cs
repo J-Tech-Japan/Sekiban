@@ -1,4 +1,5 @@
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
@@ -22,7 +23,8 @@ public class IndexedDbDocumentWriter(IndexedDbFactory dbFactory) : IDocumentPers
                         break;
 
                     case AggregateContainerGroup.Dissolvable:
-                        throw new NotImplementedException();
+                        await dbContext.WriteDissolvableEventAsync(DbEvent.FromEvent(ev));
+                        break;
 
                     default:
                         throw new NotImplementedException();
@@ -31,9 +33,38 @@ public class IndexedDbDocumentWriter(IndexedDbFactory dbFactory) : IDocumentPers
 
         });
 
-    public Task SaveItemAsync<TDocument>(TDocument document, IWriteDocumentStream writeDocumentStream) where TDocument : IDocument
+    public async Task SaveItemAsync<TDocument>(TDocument document, IWriteDocumentStream writeDocumentStream) where TDocument : IDocument
     {
-        throw new NotImplementedException();
+        var aggregateContainerGroup = writeDocumentStream.GetAggregateContainerGroup();
+
+        await dbFactory.DbActionAsync(
+            async dbContext =>
+            {
+                switch (document.DocumentType, aggregateContainerGroup, document)
+                {
+                    case (DocumentType.Event, AggregateContainerGroup.Default, IEvent ev):
+                        await dbContext.WriteEventAsync(DbEvent.FromEvent(ev));
+                        break;
+
+                    case (DocumentType.Event, AggregateContainerGroup.Dissolvable, IEvent ev):
+                        await dbContext.WriteDissolvableEventAsync(DbEvent.FromEvent(ev));
+                        break;
+
+                    case (DocumentType.Command, _, ICommandDocumentCommon command):
+                        await dbContext.WriteCommandAsync(DbCommand.FromCommand(command, aggregateContainerGroup));
+                        break;
+
+                    case (DocumentType.AggregateSnapshot, _, SnapshotDocument snapshot):
+                        throw new NotImplementedException();
+
+                    case (DocumentType.MultiProjectionSnapshot, _, MultiProjectionSnapshotDocument snapshot):
+                        throw new NotImplementedException();
+
+                    default:
+                        throw new NotImplementedException();
+                }
+            }
+        );
     }
 
     public Task SaveSingleSnapshotAsync(SnapshotDocument document, IWriteDocumentStream writeDocumentStream, bool useBlob)
