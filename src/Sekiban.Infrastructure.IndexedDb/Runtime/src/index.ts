@@ -2,12 +2,14 @@ import {DbEvent, DbEventQuery} from './models';
 
 const wrapio =
   <T, U>(func: (value: T) => Promise<U>) =>
-  async (input: string): Promise<string> => {
-    const args = JSON.parse(input);
+  async (input: string | null): Promise<string | null> => {
+    const args =
+      input !== undefined && input !== null ? JSON.parse(input) : null;
 
     const result = await func(args);
 
-    const output = JSON.stringify(result);
+    const output =
+      result !== undefined && result !== null ? JSON.stringify(result) : null;
     return output;
   };
 
