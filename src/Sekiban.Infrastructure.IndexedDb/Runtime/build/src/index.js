@@ -2,9 +2,9 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.init = void 0;
 const wrapio = (func) => async (input) => {
-    const args = JSON.parse(input);
+    const args = input !== undefined && input !== null ? JSON.parse(input) : null;
     const result = await func(args);
-    const output = JSON.stringify(result);
+    const output = result !== undefined && result !== null ? JSON.stringify(result) : null;
     return output;
 };
 const init = async (contextName) => {

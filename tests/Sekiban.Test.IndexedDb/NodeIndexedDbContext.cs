@@ -41,22 +41,24 @@ public class NodeIndexedDbContext(NodejsEnvironment nodejs, JSReference runtime)
     }
 
     private async Task DispatchAsync(string operation) =>
-        await DispatchAsync<object, object>(operation, string.Empty);
+        await DispatchAsync<object, object>(operation, null);
 
-    private async Task DispatchAsync<TInput>(string operation, TInput input) =>
+    private async Task DispatchAsync<TInput>(string operation, TInput? input) =>
         await DispatchAsync<TInput, object>(operation, input);
 
     private async Task<TOutput?> DispatchAsync<TOutput>(string operation) =>
-        await DispatchAsync<object, TOutput>(operation, string.Empty);
+        await DispatchAsync<object, TOutput>(operation,  null);
 
-    private async Task<TOutput?> DispatchAsync<TInput, TOutput>(string operation, TInput input)
+    private async Task<TOutput?> DispatchAsync<TInput, TOutput>(string operation, TInput? input)
     {
-        await Task.CompletedTask;
-
-        var result = nodejs.Run(() =>
+        var result = await nodejs.RunAsync(async () =>
         {
-            var result = runtime.GetValue()[operation].Call(JsonSerializer.Serialize(input));
-            return JsonSerializer.Deserialize<TOutput>(result.GetValueStringUtf16());
+            var jsInput = input is null ? JSValue.Null : JsonSerializer.Serialize(input);
+
+            var jsOutput = await runtime.GetValue()[operation].Call(jsInput).CastTo<JSPromise>().AsTask();
+
+            var output = jsOutput.IsNull() ? default : JsonSerializer.Deserialize<TOutput>(jsOutput.GetValueStringUtf16());
+            return output;
         });
 
         return result;
