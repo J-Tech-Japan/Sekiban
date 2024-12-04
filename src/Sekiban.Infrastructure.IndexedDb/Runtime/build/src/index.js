@@ -23,9 +23,13 @@ const init = async (contextName) => {
         query.SortableIdStart <= x.SortableUniqueId)
         .filter(x => query.SortableIdEnd === null ||
         x.SortableUniqueId <= query.SortableIdEnd);
+    const removeAllEventsAsync = async () => {
+        events.splice(0);
+    };
     return {
         writeEventAsync: wrapio(writeEventAsync),
         getEventsAsync: wrapio(getEventsAsync),
+        removeAllEventsAsync: wrapio(removeAllEventsAsync),
     };
 };
 exports.init = init;

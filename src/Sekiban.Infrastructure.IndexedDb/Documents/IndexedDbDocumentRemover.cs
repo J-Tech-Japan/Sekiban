@@ -1,17 +1,20 @@
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
+using Sekiban.Infrastructure.IndexedDb.Databases;
 
 namespace Sekiban.Infrastructure.IndexedDb.Documents;
 
-public class IndexedDbDocumentRemover : IDocumentRemover
+public class IndexedDbDocumentRemover(IndexedDbFactory dbFactory) : IDocumentRemover
 {
-    public Task RemoveAllEventsAsync(AggregateContainerGroup aggregateContainerGroup)
+    public async Task RemoveAllEventsAsync(AggregateContainerGroup aggregateContainerGroup)
     {
-        throw new NotImplementedException();
+        await dbFactory.RemoveAllAsync(DocumentType.Event, aggregateContainerGroup);
     }
 
-    public Task RemoveAllItemsAsync(AggregateContainerGroup aggregateContainerGroup)
+    public async Task RemoveAllItemsAsync(AggregateContainerGroup aggregateContainerGroup)
     {
-        throw new NotImplementedException();
+        await dbFactory.RemoveAllAsync(DocumentType.Command, aggregateContainerGroup);
+        await dbFactory.RemoveAllAsync(DocumentType.AggregateSnapshot, aggregateContainerGroup);
+        await dbFactory.RemoveAllAsync(DocumentType.MultiProjectionSnapshot, aggregateContainerGroup);
     }
 }

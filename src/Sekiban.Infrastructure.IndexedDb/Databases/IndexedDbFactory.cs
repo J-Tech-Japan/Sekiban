@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
+using Sekiban.Core.Aggregate;
 using Sekiban.Core.Cache;
+using Sekiban.Core.Documents;
 using Sekiban.Core.Setting;
 
 namespace Sekiban.Infrastructure.IndexedDb.Databases;
@@ -23,6 +25,37 @@ public class IndexedDbFactory(
 
     public async Task DbActionAsync(Func<ISekibanIndexedDbContext, Task> action) =>
         await action(await GetDbContextAsync());
+
+    public async Task RemoveAllAsync(DocumentType documentType, AggregateContainerGroup aggregateContainerGroup)
+    {
+        await DbActionAsync(async (dbContext) => {
+            switch (documentType, aggregateContainerGroup)
+            {
+                case (DocumentType.Event, AggregateContainerGroup.Default):
+                    await dbContext.RemoveAllEventsAsync();
+                    break;
+
+                case (DocumentType.Event, AggregateContainerGroup.Dissolvable):
+                    await dbContext.RemoveAllDissolvableEventsAsync();
+                    break;
+
+                case (DocumentType.Command, _):
+                    await dbContext.RemoveAllCommandsAsync();
+                    break;
+
+                case (DocumentType.AggregateSnapshot, _):
+                    await dbContext.RemoveAllSingleProjectionSnapshotsAsync();
+                    break;
+
+                case (DocumentType.MultiProjectionSnapshot, _):
+                    await dbContext.RemoveAllMultiProjectionSnapshotsAsync();
+                    break;
+
+                default:
+                    throw new NotImplementedException();
+            }
+        });
+    }
 
     private async Task<ISekibanIndexedDbContext> GetDbContextAsync()
     {
