@@ -46,8 +46,13 @@ export const init = async (contextName: string) => {
           x.SortableUniqueId <= query.SortableIdEnd,
       );
 
+  const removeAllEventsAsync = async (): Promise<void> => {
+    events.splice(0);
+  };
+
   return {
     writeEventAsync: wrapio(writeEventAsync),
     getEventsAsync: wrapio(getEventsAsync),
+    removeAllEventsAsync: wrapio(removeAllEventsAsync),
   };
 };
