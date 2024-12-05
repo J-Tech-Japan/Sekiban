@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.0</TargetFramework>
+        <LangVersion>preview</LangVersion>
+        <Nullable>enable</Nullable>
+        <!-- LangVersionは明示的に書いておこう -->
+        <LangVersion>11</LangVersion>
+        <!-- Analyzer(Source Generator)ですという設定 -->
+        <IsRoslynComponent>true</IsRoslynComponent>
+        <AnalyzerLanguage>cs</AnalyzerLanguage>
+        <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0" />
+    </ItemGroup>
+    <ItemGroup>
+        <Analyzer Include="$(TargetPath)" />
+    </ItemGroup>
+</Project>

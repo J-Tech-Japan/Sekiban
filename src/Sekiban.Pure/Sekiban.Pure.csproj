@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <LangVersion>preview</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <PublishAot>true</PublishAot>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Sekiban.Pure.SourceGenerator\Sekiban.Pure.SourceGenerator.csproj" PrivateAssets="all"/>
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="ResultBoxes" Version="0.3.28" />
+    </ItemGroup>
+
+</Project>
