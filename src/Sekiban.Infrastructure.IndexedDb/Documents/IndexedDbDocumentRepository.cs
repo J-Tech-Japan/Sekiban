@@ -6,6 +6,7 @@ using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
 using Sekiban.Core.History;
+using Sekiban.Core.Query.SingleProjections.Projections;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
 using Sekiban.Infrastructure.IndexedDb.Databases;
@@ -14,19 +15,11 @@ namespace Sekiban.Infrastructure.IndexedDb.Documents;
 
 public class IndexedDbDocumentRepository(
     IndexedDbFactory dbFactory,
-    RegisteredEventTypes registeredEventTypes
+    RegisteredEventTypes registeredEventTypes,
+    ISingleProjectionSnapshotAccessor singleProjectionSnapshotAccessor
 ) : IDocumentPersistentRepository, IEventPersistentRepository
 {
-    public Task<bool> ExistsSnapshotForAggregateAsync(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType, int version, string rootPartitionKey, string payloadVersionIdentifier)
-    {
-        throw new NotImplementedException();
-    }
-
-    public async Task GetAllCommandStringsForAggregateIdAsync(Guid aggregateId, Type aggregatePayloadType, string? sinceSortableUniqueId, string rootPartitionKey, Action<IEnumerable<string>> resultAction)
-    {
-        var aggregateContainerGroup
-            = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType);
-
+    public async Task GetAllCommandStringsForAggregateIdAsync(Guid aggregateId, Type aggregatePayloadType, string? sinceSortableUniqueId, string rootPartitionKey, Action<IEnumerable<string>> resultAction) =>
         await dbFactory.DbActionAsync(
             async dbContext =>
             {
@@ -39,7 +32,6 @@ public class IndexedDbDocumentRepository(
 
                 resultAction(commands);
             });
-    }
 
     public async Task<ResultBox<bool>> GetEvents(EventRetrievalInfo eventRetrievalInfo, Action<IEnumerable<IEvent>> resultAction)
     {
@@ -52,7 +44,7 @@ public class IndexedDbDocumentRepository(
             });
 
         var events = dbEvents
-            .Select(x => FromDbEvent(x))
+            .Select(x => FromDbEvent(x, registeredEventTypes))
             .Where(x => x is not null)
             .Cast<IEvent>();
 
@@ -61,9 +53,34 @@ public class IndexedDbDocumentRepository(
         return true;
     }
 
-    public Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType, string rootPartitionKey, string payloadVersionIdentifier)
+    public async Task<bool> ExistsSnapshotForAggregateAsync(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType, int version, string rootPartitionKey, string payloadVersionIdentifier)
     {
-        throw new NotImplementedException();
+        var query = new DbSingleProjectionSnapshotQuery(aggregateId, aggregatePayloadType, projectionPayloadType, version, rootPartitionKey, payloadVersionIdentifier, true);
+
+        return (await dbFactory.DbActionAsync(
+            async dbContext =>
+                await dbContext.GetSingleProjectionSnapshotsAsync(query)
+        )).Length != 0;
+    }
+
+    public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType, string rootPartitionKey, string payloadVersionIdentifier)
+    {
+        var query = new DbSingleProjectionSnapshotQuery(aggregateId, aggregatePayloadType, projectionPayloadType, rootPartitionKey, payloadVersionIdentifier, true);
+
+        var dbSnapshot = (
+            await dbFactory.DbActionAsync(
+                async dbContext =>
+                    await dbContext.GetSingleProjectionSnapshotsAsync(query)
+            )
+        )
+            .FirstOrDefault();
+
+        if (dbSnapshot is null)
+        {
+            return null;
+        }
+
+        return await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(FromDbSingleProjectionSnapshot(dbSnapshot)!);
     }
 
     public Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(Type multiProjectionPayloadType, string payloadVersionIdentifier, string rootPartitionKey = "")
@@ -71,17 +88,58 @@ public class IndexedDbDocumentRepository(
         throw new NotImplementedException();
     }
 
-    public Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType, string partitionKey, string rootPartitionKey)
+    public async Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType, string partitionKey, string rootPartitionKey)
     {
-        throw new NotImplementedException();
+        var query = new DbSingleProjectionSnapshotQuery(id, aggregateId, aggregatePayloadType, partitionKey, rootPartitionKey, true);
+
+        var dbSnapshot = (
+            await dbFactory.DbActionAsync(
+                async dbContext =>
+                    await dbContext.GetSingleProjectionSnapshotsAsync(query)
+            )
+        )
+            .FirstOrDefault();
+
+        if (dbSnapshot is null)
+        {
+            return null;
+        }
+
+        return await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(FromDbSingleProjectionSnapshot(dbSnapshot)!);
     }
 
-    public Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType, string rootPartitionKey = "default")
+    public async Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType, string rootPartitionKey = IDocument.DefaultRootPartitionKey)
     {
-        throw new NotImplementedException();
+        var query = new DbSingleProjectionSnapshotQuery(aggregateId, aggregatePayloadType, projectionPayloadType, rootPartitionKey, false);
+
+        var dbSnapshots = await dbFactory.DbActionAsync(
+            async dbContext => await dbContext.GetSingleProjectionSnapshotsAsync(query));
+
+        var snapshots = new List<SnapshotDocument>();
+
+        foreach (var db in dbSnapshots)
+        {
+            var snapshot = FromDbSingleProjectionSnapshot(db);
+
+            if (snapshot is null)
+            {
+                continue;
+            }
+
+            var filled = await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(snapshot);
+
+            if (filled is null)
+            {
+                continue;
+            }
+
+            snapshots.Add(snapshot);
+        }
+
+        return snapshots;
     }
 
-    private IEvent? FromDbEvent(DbEvent dbEvent)
+    private static IEvent? FromDbEvent(DbEvent dbEvent, RegisteredEventTypes registeredEventTypes)
     {
         if (string.IsNullOrEmpty(dbEvent.DocumentTypeName))
         {
@@ -118,7 +176,7 @@ public class IndexedDbDocumentRepository(
         );
     }
 
-    private CommandDocumentForJsonExport? FromDbCommand(DbCommand dbCommand)
+    private static CommandDocumentForJsonExport? FromDbCommand(DbCommand dbCommand)
     {
         var payload = SekibanJsonHelper.Deserialize<JsonElement?>(dbCommand.Payload);
         if (payload is null)
@@ -143,6 +201,29 @@ public class IndexedDbDocumentRepository(
             SortableUniqueId = dbCommand.SortableUniqueId,
             AggregateType = dbCommand.AggregateType,
             RootPartitionKey = dbCommand.RootPartitionKey
+        };
+    }
+
+    private static SnapshotDocument? FromDbSingleProjectionSnapshot(DbSingleProjectionSnapshot dbSnapshot)
+    {
+        var payload = dbSnapshot.Snapshot is null ? null : SekibanJsonHelper.Deserialize<JsonElement?>(dbSnapshot.Snapshot);
+
+        return new()
+        {
+            Id = new Guid(dbSnapshot.Id),
+            AggregateId = new Guid(dbSnapshot.AggregateId),
+            PartitionKey = dbSnapshot.PartitionKey,
+            DocumentType = Enum.Parse<DocumentType>(dbSnapshot.DocumentType),
+            DocumentTypeName = dbSnapshot.DocumentTypeName,
+            TimeStamp = DateTimeConverter.ToDateTime(dbSnapshot.TimeStamp),
+            SortableUniqueId = dbSnapshot.SortableUniqueId,
+            AggregateType = dbSnapshot.AggregateType,
+            RootPartitionKey = dbSnapshot.RootPartitionKey,
+            Snapshot = payload,
+            LastEventId = new Guid(dbSnapshot.LastEventId),
+            LastSortableUniqueId = dbSnapshot.LastSortableUniqueId,
+            SavedVersion = dbSnapshot.SavedVersion,
+            PayloadVersionIdentifier = dbSnapshot.PayloadVersionIdentifier
         };
     }
 }

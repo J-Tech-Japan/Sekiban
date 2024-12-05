@@ -55,21 +55,32 @@ public class IndexedDbDocumentWriter(IndexedDbFactory dbFactory) : IDocumentPers
                         break;
 
                     case (DocumentType.AggregateSnapshot, _, SnapshotDocument snapshot):
-                        throw new NotImplementedException();
+                        await SaveSingleSnapshotAsync(snapshot, writeDocumentStream, ShouldUseBlob(snapshot));
+                        break;
 
                     case (DocumentType.MultiProjectionSnapshot, _, MultiProjectionSnapshotDocument snapshot):
                         throw new NotImplementedException();
 
                     default:
-                        throw new NotImplementedException();
+                        throw new NotImplementedException("unknown DocumentType");
                 }
             }
         );
     }
 
-    public Task SaveSingleSnapshotAsync(SnapshotDocument document, IWriteDocumentStream writeDocumentStream, bool useBlob)
+    public async Task SaveSingleSnapshotAsync(SnapshotDocument document, IWriteDocumentStream writeDocumentStream, bool useBlob)
     {
-        throw new NotImplementedException();
+        if (useBlob)
+        {
+            throw new NotImplementedException("SaveSingleSnapshotAsync(useBlob=true)");
+        }
+
+        await dbFactory.DbActionAsync(
+            async dbContext =>
+            {
+                await dbContext.WriteSingleProjectionSnapshotAsync(DbSingleProjectionSnapshot.FromSnapshot(document, writeDocumentStream.GetAggregateContainerGroup()));
+            }
+        );
     }
 
     public bool ShouldUseBlob(SnapshotDocument document)
