@@ -21,7 +21,7 @@ public record DbEventQuery
 
         switch (eventRetrievalInfo.SortableIdCondition)
         {
-            case null:
+            case SortableIdConditionNone:
                 break;
 
             case SinceSortableIdCondition since: {
