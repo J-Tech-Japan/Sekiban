@@ -8,6 +8,8 @@ export declare const init: (contextName: string) => Promise<{
     writeCommandAsync: (input: string | null) => Promise<string | null>;
     getCommandsAsync: (input: string | null) => Promise<string | null>;
     removeAllCommandsAsync: (input: string | null) => Promise<string | null>;
+    writeSingleProjectionSnapshotAsync: (input: string | null) => Promise<string | null>;
+    getSingleProjectionSnapshotsAsync: (input: string | null) => Promise<string | null>;
     removeAllSingleProjectionSnapshotsAsync: (input: string | null) => Promise<string | null>;
     removeAllMultiProjectionSnapshotsAsync: (input: string | null) => Promise<string | null>;
 }>;

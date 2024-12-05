@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.JavaScript.NodeApi;
 using Microsoft.JavaScript.NodeApi.Runtime;
+using Sekiban.Infrastructure.IndexedDb;
 using Sekiban.Infrastructure.IndexedDb.Databases;
 
 namespace Sekiban.Test.IndexedDb;
@@ -33,6 +34,12 @@ public class NodeIndexedDbContext(NodejsEnvironment nodejs, JSReference runtime)
 
     public async Task RemoveAllCommandsAsync() =>
         await DispatchAsync("removeAllCommandsAsync");
+
+    public async Task<DbSingleProjectionSnapshot[]> GetSingleProjectionSnapshotsAsync(DbSingleProjectionSnapshotQuery query) =>
+        (await DispatchAsync<DbSingleProjectionSnapshotQuery, DbSingleProjectionSnapshot[]>("getSingleProjectionSnapshotsAsync", query))!;
+
+    public async Task WriteSingleProjectionSnapshotAsync(DbSingleProjectionSnapshot payload) =>
+        await DispatchAsync("writeSingleProjectionSnapshotAsync", payload);
 
     public async Task RemoveAllSingleProjectionSnapshotsAsync() =>
         await DispatchAsync("removeAllSingleProjectionSnapshotsAsync");

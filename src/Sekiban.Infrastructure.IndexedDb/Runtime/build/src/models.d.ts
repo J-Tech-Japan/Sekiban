@@ -40,3 +40,31 @@ export type DbCommandQuery = {
     readonly PartitionKey: string | null;
     readonly AggregateContainerGroup: string | null;
 };
+export type DbSingleProjectionSnapshot = {
+    readonly Id: string;
+    readonly AggregateContainerGroup: string;
+    readonly Snapshot: string | null;
+    readonly LastEventId: string;
+    readonly LastSortableUniqueId: string;
+    readonly SavedVersion: number;
+    readonly PayloadVersionIdentifier: string;
+    readonly AggregateId: string;
+    readonly PartitionKey: string;
+    readonly DocumentType: string;
+    readonly DocumentTypeName: string;
+    readonly TimeStamp: string;
+    readonly SortableUniqueId: string;
+    readonly AggregateType: string;
+    readonly RootPartitionKey: string;
+};
+export type DbSingleProjectionSnapshotQuery = {
+    readonly Id: string | null;
+    readonly AggregateContainerGroup: string | null;
+    readonly PartitionKey: string | null;
+    readonly AggregateId: string | null;
+    readonly RootPartitionKey: string | null;
+    readonly AggregateType: string | null;
+    readonly PayloadVersionIdentifier: string | null;
+    readonly SavedVersion: number | null;
+    readonly IsLatestOnly: boolean;
+};

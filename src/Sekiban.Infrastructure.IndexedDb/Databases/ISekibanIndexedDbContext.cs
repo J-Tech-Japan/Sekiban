@@ -14,6 +14,8 @@ public interface ISekibanIndexedDbContext
     Task<DbCommand[]> GetCommandsAsync(DbCommandQuery query);
     Task RemoveAllCommandsAsync();
 
+    Task WriteSingleProjectionSnapshotAsync(DbSingleProjectionSnapshot payload);
+    Task<DbSingleProjectionSnapshot[]> GetSingleProjectionSnapshotsAsync(DbSingleProjectionSnapshotQuery query);
     Task RemoveAllSingleProjectionSnapshotsAsync();
 
     Task RemoveAllMultiProjectionSnapshotsAsync();

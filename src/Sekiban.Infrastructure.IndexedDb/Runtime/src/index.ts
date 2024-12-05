@@ -1,4 +1,11 @@
-import {DbCommand, DbCommandQuery, DbEvent, DbEventQuery} from './models';
+import {
+  DbCommand,
+  DbCommandQuery,
+  DbEvent,
+  DbEventQuery,
+  DbSingleProjectionSnapshot,
+  DbSingleProjectionSnapshotQuery,
+} from './models';
 
 const wrapio =
   <T, U>(func: (value: T) => Promise<U>) =>
@@ -45,6 +52,7 @@ export const init = async (contextName: string) => {
   const events: DbEvent[] = [];
   const dissolvableEvents: DbEvent[] = [];
   const commands: DbCommand[] = [];
+  const singleProjectionSnapshots: DbSingleProjectionSnapshot[] = [];
 
   const writeEventAsync = async (event: DbEvent): Promise<void> => {
     events.push(structuredClone(event));
@@ -95,6 +103,57 @@ export const init = async (contextName: string) => {
 
   const removeAllCommandsAsync = async (): Promise<void> => {};
 
+  const writeSingleProjectionSnapshotAsync = async (
+    snapshot: DbSingleProjectionSnapshot,
+  ): Promise<void> => {
+    singleProjectionSnapshots.push(structuredClone(snapshot));
+  };
+
+  const getSingleProjectionSnapshotsAsync = async (
+    query: DbSingleProjectionSnapshotQuery,
+  ): Promise<DbSingleProjectionSnapshot[]> => {
+    const items = singleProjectionSnapshots
+      .filter(x => query.Id === null || x.Id === query.Id)
+      .filter(
+        x =>
+          query.AggregateContainerGroup === null ||
+          x.AggregateContainerGroup === query.AggregateContainerGroup,
+      )
+      .filter(
+        x =>
+          query.PartitionKey === null || x.PartitionKey === query.PartitionKey,
+      )
+      .filter(
+        x => query.AggregateId === null || x.AggregateId === query.AggregateId,
+      )
+      .filter(
+        x =>
+          query.RootPartitionKey === null ||
+          x.RootPartitionKey === query.RootPartitionKey,
+      )
+      .filter(
+        x =>
+          query.AggregateType === null ||
+          x.AggregateType === query.AggregateType,
+      )
+      .filter(
+        x =>
+          query.PayloadVersionIdentifier === null ||
+          x.PayloadVersionIdentifier === query.PayloadVersionIdentifier,
+      )
+      .filter(
+        x =>
+          query.SavedVersion === null || x.SavedVersion === query.SavedVersion,
+      )
+      .map(x => structuredClone(x));
+
+    if (query.IsLatestOnly) {
+      return items.slice(0, 1);
+    } else {
+      return items;
+    }
+  };
+
   const removeAllSingleProjectionSnapshotsAsync = async (): Promise<void> => {};
   const removeAllMultiProjectionSnapshotsAsync = async (): Promise<void> => {};
 
@@ -111,6 +170,12 @@ export const init = async (contextName: string) => {
     getCommandsAsync: wrapio(getCommandsAsync),
     removeAllCommandsAsync: wrapio(removeAllCommandsAsync),
 
+    writeSingleProjectionSnapshotAsync: wrapio(
+      writeSingleProjectionSnapshotAsync,
+    ),
+    getSingleProjectionSnapshotsAsync: wrapio(
+      getSingleProjectionSnapshotsAsync,
+    ),
     removeAllSingleProjectionSnapshotsAsync: wrapio(
       removeAllSingleProjectionSnapshotsAsync,
     ),
