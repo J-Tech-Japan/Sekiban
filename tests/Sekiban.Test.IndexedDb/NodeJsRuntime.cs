@@ -17,7 +17,7 @@ public class NodeJsRuntime : ISekibanJsRuntime
         var runtime = await nodejsEnvironment.RunAsync(async () => {
             var runtime = await nodejsEnvironment
                 .Import("./Assets/runtime.js", "init")
-                .Call(context)
+                .Call(JSValue.Undefined, context)
                 .CastTo<JSPromise>()
                 .AsTask();
             return new JSReference(runtime);

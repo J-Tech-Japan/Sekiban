@@ -55,7 +55,7 @@ public class NodeIndexedDbContext(NodejsEnvironment nodejs, JSReference runtime)
         {
             var jsInput = input is null ? JSValue.Null : JsonSerializer.Serialize(input);
 
-            var jsOutput = await runtime.GetValue()[operation].Call(jsInput).CastTo<JSPromise>().AsTask();
+            var jsOutput = await runtime.GetValue()[operation].Call(JSValue.Undefined, jsInput).CastTo<JSPromise>().AsTask();
 
             var output = jsOutput.IsNull() ? default : JsonSerializer.Deserialize<TOutput>(jsOutput.GetValueStringUtf16());
             return output;
