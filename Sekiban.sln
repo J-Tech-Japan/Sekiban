@@ -83,6 +83,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MemStat.Net.Web", "internal
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FeatureCheck.WebApi.OpenApi9", "internalUsages\FeatureCheck.WebApi.OpenApi9\FeatureCheck.WebApi.OpenApi9.csproj", "{E2DB44E2-5D20-4EFB-A90A-E7E698B4302C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AotTechnicalTesting", "tests\AotTechnicalTesting\AotTechnicalTesting.csproj", "{4442D426-8417-4E49-83F5-4381E6D095C6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -233,6 +235,10 @@ Global
 		{E2DB44E2-5D20-4EFB-A90A-E7E698B4302C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E2DB44E2-5D20-4EFB-A90A-E7E698B4302C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E2DB44E2-5D20-4EFB-A90A-E7E698B4302C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4442D426-8417-4E49-83F5-4381E6D095C6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4442D426-8417-4E49-83F5-4381E6D095C6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4442D426-8417-4E49-83F5-4381E6D095C6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4442D426-8417-4E49-83F5-4381E6D095C6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -274,6 +280,7 @@ Global
 		{EEBE3FAB-4975-4BC8-85B9-6BA3E5A66195} = {B85F80AE-6A27-402C-93FA-352D938EDA8D}
 		{4901946C-6FE9-48CC-A0D1-3BC2F5D7B505} = {B85F80AE-6A27-402C-93FA-352D938EDA8D}
 		{E2DB44E2-5D20-4EFB-A90A-E7E698B4302C} = {B85F80AE-6A27-402C-93FA-352D938EDA8D}
+		{4442D426-8417-4E49-83F5-4381E6D095C6} = {4C34F748-F223-44DD-899D-029F9CEF7780}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {2DFBE53E-69A7-453A-8D20-72271AE32016}
