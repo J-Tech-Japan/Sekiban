@@ -57,7 +57,7 @@ public class IndexedDbDocumentRepository(
 
     public async Task<bool> ExistsSnapshotForAggregateAsync(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType, int version, string rootPartitionKey, string payloadVersionIdentifier)
     {
-        var query = new DbSingleProjectionSnapshotQuery(aggregateId, aggregatePayloadType, projectionPayloadType, version, rootPartitionKey, payloadVersionIdentifier, true);
+        var query = DbSingleProjectionSnapshotQuery.ForTestExistence(aggregateId, aggregatePayloadType, projectionPayloadType, version, rootPartitionKey, payloadVersionIdentifier);
 
         return (await dbFactory.DbActionAsync(
             async dbContext =>
@@ -67,7 +67,7 @@ public class IndexedDbDocumentRepository(
 
     public async Task<SnapshotDocument?> GetLatestSnapshotForAggregateAsync(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType, string rootPartitionKey, string payloadVersionIdentifier)
     {
-        var query = new DbSingleProjectionSnapshotQuery(aggregateId, aggregatePayloadType, projectionPayloadType, rootPartitionKey, payloadVersionIdentifier, true);
+        var query = DbSingleProjectionSnapshotQuery.ForGetLatest(aggregateId, aggregatePayloadType, projectionPayloadType, rootPartitionKey, payloadVersionIdentifier);
 
         var dbSnapshot = (
             await dbFactory.DbActionAsync(
@@ -107,7 +107,7 @@ public class IndexedDbDocumentRepository(
 
     public async Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType, string partitionKey, string rootPartitionKey)
     {
-        var query = new DbSingleProjectionSnapshotQuery(id, aggregateId, aggregatePayloadType, partitionKey, rootPartitionKey, true);
+        var query = DbSingleProjectionSnapshotQuery.ForGetById(id, aggregateId, aggregatePayloadType, partitionKey, rootPartitionKey);
 
         var dbSnapshot = (
             await dbFactory.DbActionAsync(
@@ -127,7 +127,7 @@ public class IndexedDbDocumentRepository(
 
     public async Task<List<SnapshotDocument>> GetSnapshotsForAggregateAsync(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType, string rootPartitionKey = IDocument.DefaultRootPartitionKey)
     {
-        var query = new DbSingleProjectionSnapshotQuery(aggregateId, aggregatePayloadType, projectionPayloadType, rootPartitionKey, false);
+        var query = DbSingleProjectionSnapshotQuery.ForGetAll(aggregateId, aggregatePayloadType, projectionPayloadType, rootPartitionKey);
 
         var dbSnapshots = await dbFactory.DbActionAsync(
             async dbContext => await dbContext.GetSingleProjectionSnapshotsAsync(query));
