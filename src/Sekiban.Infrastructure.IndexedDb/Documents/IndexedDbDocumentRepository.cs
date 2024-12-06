@@ -139,7 +139,7 @@ public class IndexedDbDocumentRepository(
                 continue;
             }
 
-            snapshots.Add(snapshot);
+            snapshots.Add(filled);
         }
 
         return snapshots;
