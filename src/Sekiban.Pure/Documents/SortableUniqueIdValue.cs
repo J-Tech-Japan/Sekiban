@@ -1,3 +1,4 @@
+using ResultBoxes;
 using Sekiban.Core.Shared;
 namespace Sekiban.Core.Documents.ValueObjects;
 
@@ -115,4 +116,9 @@ public record SortableUniqueIdValue(string Value)
 
     public static SortableUniqueIdValue? NullableValue(string? value) =>
         value != null ? new SortableUniqueIdValue(value) : null;
+
+    public static OptionalValue<SortableUniqueIdValue> OptionalValue(string? value) =>
+        !string.IsNullOrWhiteSpace(value)
+            ? new SortableUniqueIdValue(value)
+            : OptionalValue<SortableUniqueIdValue>.Empty;
 }
