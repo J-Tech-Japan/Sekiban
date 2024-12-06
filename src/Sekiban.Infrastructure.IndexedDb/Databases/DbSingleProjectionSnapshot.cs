@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Sekiban.Core.Aggregate;
+using Sekiban.Core.Documents;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
 
@@ -43,4 +45,27 @@ public record DbSingleProjectionSnapshot
             AggregateType = snapshot.AggregateType,
             RootPartitionKey = snapshot.RootPartitionKey,
         };
+
+    public SnapshotDocument ToSnapshot()
+    {
+        var payload = Snapshot is null ? null : SekibanJsonHelper.Deserialize<JsonElement?>(Snapshot);
+
+        return new()
+        {
+            Id = new Guid(Id),
+            AggregateId = new Guid(AggregateId),
+            PartitionKey = PartitionKey,
+            DocumentType = Enum.Parse<DocumentType>(DocumentType),
+            DocumentTypeName = DocumentTypeName,
+            TimeStamp = DateTimeConverter.ToDateTime(TimeStamp),
+            SortableUniqueId = SortableUniqueId,
+            AggregateType = AggregateType,
+            RootPartitionKey = RootPartitionKey,
+            Snapshot = payload,
+            LastEventId = new Guid(LastEventId),
+            LastSortableUniqueId = LastSortableUniqueId,
+            SavedVersion = SavedVersion,
+            PayloadVersionIdentifier = PayloadVersionIdentifier
+        };
+    }
 }
