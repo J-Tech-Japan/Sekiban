@@ -7,6 +7,8 @@ const wrapio = (func) => async (input) => {
     const output = result !== undefined && result !== null ? JSON.stringify(result) : null;
     return output;
 };
+const asc = (id) => (x, y) => id(x).localeCompare(id(y));
+const desc = (id) => (x, y) => id(y).localeCompare(id(x));
 const filterEvents = (events, query) => events
     .filter(x => query.RootPartitionKey === null ||
     x.RootPartitionKey === query.RootPartitionKey)
@@ -17,6 +19,7 @@ const filterEvents = (events, query) => events
     query.SortableIdStart <= x.SortableUniqueId)
     .filter(x => query.SortableIdEnd === null ||
     x.SortableUniqueId <= query.SortableIdEnd)
+    .toSorted(asc(x => x.SortableUniqueId))
     .map(x => structuredClone(x));
 const init = async (contextName) => {
     // TODO: use IndexedDB
@@ -48,6 +51,7 @@ const init = async (contextName) => {
         .filter(x => query.PartitionKey === null || x.PartitionKey === query.PartitionKey)
         .filter(x => query.AggregateContainerGroup === null ||
         x.AggregateContainerGroup === query.AggregateContainerGroup)
+        .toSorted(asc(x => x.SortableUniqueId))
         .map(x => structuredClone(x));
     const removeAllCommandsAsync = async () => {
         commands.splice(0);
@@ -69,6 +73,7 @@ const init = async (contextName) => {
             .filter(x => query.PayloadVersionIdentifier === null ||
             x.PayloadVersionIdentifier === query.PayloadVersionIdentifier)
             .filter(x => query.SavedVersion === null || x.SavedVersion === query.SavedVersion)
+            .toSorted(desc(x => x.LastSortableUniqueId))
             .map(x => structuredClone(x));
         if (query.IsLatestOnly) {
             return items.slice(0, 1);
@@ -90,6 +95,7 @@ const init = async (contextName) => {
             .filter(x => query.PartitionKey === null || x.PartitionKey === query.PartitionKey)
             .filter(x => query.PayloadVersionIdentifier === null ||
             x.PayloadVersionIdentifier === query.PayloadVersionIdentifier)
+            .toSorted(desc(x => x.LastSortableUniqueId))
             .map(x => structuredClone(x));
         if (query.IsLatestOnly) {
             return items.slice(0, 1);
