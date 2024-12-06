@@ -24,6 +24,7 @@ const init = async (contextName) => {
     const dissolvableEvents = [];
     const commands = [];
     const singleProjectionSnapshots = [];
+    const multiProjectionSnapshots = [];
     const writeEventAsync = async (event) => {
         events.push(structuredClone(event));
     };
@@ -48,7 +49,9 @@ const init = async (contextName) => {
         .filter(x => query.AggregateContainerGroup === null ||
         x.AggregateContainerGroup === query.AggregateContainerGroup)
         .map(x => structuredClone(x));
-    const removeAllCommandsAsync = async () => { };
+    const removeAllCommandsAsync = async () => {
+        commands.splice(0);
+    };
     const writeSingleProjectionSnapshotAsync = async (snapshot) => {
         singleProjectionSnapshots.push(structuredClone(snapshot));
     };
@@ -74,8 +77,30 @@ const init = async (contextName) => {
             return items;
         }
     };
-    const removeAllSingleProjectionSnapshotsAsync = async () => { };
-    const removeAllMultiProjectionSnapshotsAsync = async () => { };
+    const removeAllSingleProjectionSnapshotsAsync = async () => {
+        singleProjectionSnapshots.splice(0);
+    };
+    const writeMultiProjectionSnapshotAsync = async (payload) => {
+        multiProjectionSnapshots.push(structuredClone(payload));
+    };
+    const getMultiProjectionSnapshotsAsync = async (query) => {
+        const items = multiProjectionSnapshots
+            .filter(x => query.AggregateContainerGroup === null ||
+            x.AggregateContainerGroup === query.AggregateContainerGroup)
+            .filter(x => query.PartitionKey === null || x.PartitionKey === query.PartitionKey)
+            .filter(x => query.PayloadVersionIdentifier === null ||
+            x.PayloadVersionIdentifier === query.PayloadVersionIdentifier)
+            .map(x => structuredClone(x));
+        if (query.IsLatestOnly) {
+            return items.slice(0, 1);
+        }
+        else {
+            return items;
+        }
+    };
+    const removeAllMultiProjectionSnapshotsAsync = async () => {
+        multiProjectionSnapshots.splice(0);
+    };
     return {
         writeEventAsync: wrapio(writeEventAsync),
         getEventsAsync: wrapio(getEventsAsync),
@@ -89,6 +114,8 @@ const init = async (contextName) => {
         writeSingleProjectionSnapshotAsync: wrapio(writeSingleProjectionSnapshotAsync),
         getSingleProjectionSnapshotsAsync: wrapio(getSingleProjectionSnapshotsAsync),
         removeAllSingleProjectionSnapshotsAsync: wrapio(removeAllSingleProjectionSnapshotsAsync),
+        writeMultiProjectionSnapshotAsync: wrapio(writeMultiProjectionSnapshotAsync),
+        getMultiProjectionSnapshotsAsync: wrapio(getMultiProjectionSnapshotsAsync),
         removeAllMultiProjectionSnapshotsAsync: wrapio(removeAllMultiProjectionSnapshotsAsync),
     };
 };

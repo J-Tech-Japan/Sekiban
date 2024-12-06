@@ -11,5 +11,7 @@ export declare const init: (contextName: string) => Promise<{
     writeSingleProjectionSnapshotAsync: (input: string | null) => Promise<string | null>;
     getSingleProjectionSnapshotsAsync: (input: string | null) => Promise<string | null>;
     removeAllSingleProjectionSnapshotsAsync: (input: string | null) => Promise<string | null>;
+    writeMultiProjectionSnapshotAsync: (input: string | null) => Promise<string | null>;
+    getMultiProjectionSnapshotsAsync: (input: string | null) => Promise<string | null>;
     removeAllMultiProjectionSnapshotsAsync: (input: string | null) => Promise<string | null>;
 }>;

@@ -59,10 +59,11 @@ public class IndexedDbDocumentWriter(IndexedDbFactory dbFactory) : IDocumentPers
                         break;
 
                     case (DocumentType.MultiProjectionSnapshot, _, MultiProjectionSnapshotDocument snapshot):
-                        throw new NotImplementedException();
+                        await dbContext.WriteMultiProjectionSnapshotAsync(DbMultiProjectionSnapshot.FromSnapshot(snapshot, aggregateContainerGroup));
+                        break;
 
                     default:
-                        throw new NotImplementedException("unknown DocumentType");
+                        throw new NotImplementedException();
                 }
             }
         );
