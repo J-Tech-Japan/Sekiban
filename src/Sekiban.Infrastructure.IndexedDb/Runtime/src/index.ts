@@ -32,8 +32,8 @@ const desc =
   (x: T, y: T): number =>
     id(y).localeCompare(id(x));
 
-const filterEvents = (events: DbEvent[], query: DbEventQuery): DbEvent[] =>
-  events
+const filterEvents = (events: DbEvent[], query: DbEventQuery): DbEvent[] => {
+  const items = events
     .filter(
       x =>
         query.RootPartitionKey === null ||
@@ -59,6 +59,13 @@ const filterEvents = (events: DbEvent[], query: DbEventQuery): DbEvent[] =>
     )
     .toSorted(asc(x => x.SortableUniqueId))
     .map(x => structuredClone(x));
+
+  if (query.MaxCount !== null) {
+    return items.slice(0, query.MaxCount);
+  } else {
+    return items;
+  }
+};
 
 export const init = async (contextName: string) => {
   // TODO: use IndexedDB

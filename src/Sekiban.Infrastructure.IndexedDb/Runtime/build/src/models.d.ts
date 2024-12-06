@@ -18,6 +18,7 @@ export type DbEventQuery = {
     readonly AggregateTypes: readonly string[] | null;
     readonly SortableIdStart: string | null;
     readonly SortableIdEnd: string | null;
+    readonly MaxCount: number | null;
 };
 export type DbCommand = {
     readonly Id: string;
