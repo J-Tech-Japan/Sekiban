@@ -22,6 +22,16 @@ const wrapio =
     return output;
   };
 
+const asc =
+  <T>(id: (value: T) => string) =>
+  (x: T, y: T): number =>
+    id(x).localeCompare(id(y));
+
+const desc =
+  <T>(id: (value: T) => string) =>
+  (x: T, y: T): number =>
+    id(y).localeCompare(id(x));
+
 const filterEvents = (events: DbEvent[], query: DbEventQuery): DbEvent[] =>
   events
     .filter(
@@ -47,6 +57,7 @@ const filterEvents = (events: DbEvent[], query: DbEventQuery): DbEvent[] =>
         query.SortableIdEnd === null ||
         x.SortableUniqueId <= query.SortableIdEnd,
     )
+    .toSorted(asc(x => x.SortableUniqueId))
     .map(x => structuredClone(x));
 
 export const init = async (contextName: string) => {
@@ -102,6 +113,7 @@ export const init = async (contextName: string) => {
           query.AggregateContainerGroup === null ||
           x.AggregateContainerGroup === query.AggregateContainerGroup,
       )
+      .toSorted(asc(x => x.SortableUniqueId))
       .map(x => structuredClone(x));
 
   const removeAllCommandsAsync = async (): Promise<void> => {
@@ -150,6 +162,7 @@ export const init = async (contextName: string) => {
         x =>
           query.SavedVersion === null || x.SavedVersion === query.SavedVersion,
       )
+      .toSorted(desc(x => x.LastSortableUniqueId))
       .map(x => structuredClone(x));
 
     if (query.IsLatestOnly) {
@@ -187,6 +200,7 @@ export const init = async (contextName: string) => {
           query.PayloadVersionIdentifier === null ||
           x.PayloadVersionIdentifier === query.PayloadVersionIdentifier,
       )
+      .toSorted(desc(x => x.LastSortableUniqueId))
       .map(x => structuredClone(x));
 
     if (query.IsLatestOnly) {
