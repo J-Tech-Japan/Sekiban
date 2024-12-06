@@ -29,6 +29,7 @@ public class UnitTest1
     [Fact]
     public async Task SimpleEventSourcing()
     {
+        Repository.Events.Clear();
         var executor = new CommandExecutor { EventTypes = new DomainEventTypes() };
 
         Assert.Empty(Repository.Events);
@@ -46,6 +47,7 @@ public class UnitTest1
     [Fact]
     public async Task ChangeBranchNameSpec()
     {
+        Repository.Events.Clear();
         var executor = new CommandExecutor { EventTypes = new DomainEventTypes() };
 
         Assert.Empty(Repository.Events);

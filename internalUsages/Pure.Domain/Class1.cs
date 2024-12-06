@@ -3,9 +3,6 @@ using Sekiban.Pure;
 using Sekiban.Pure.Exception;
 namespace Pure.Domain;
 
-public class Class1
-{
-}
 public record UnconfirmedUser(string Name, string Email) : IAggregatePayload;
 public record ConfirmedUser(string Name, string Email) : IAggregatePayload;
 public record UserRegistered(string Name, string Email) : IEventPayload;
@@ -65,8 +62,6 @@ public record ChangeBranchName(Guid BranchId, string NameToChange)
     public PartitionKeys SpecifyPartitionKeys(ChangeBranchName command) =>
         PartitionKeys<BranchProjector>.Existing(BranchId);
 }
-
-
 public record RegisterCommand2(string Name, Guid BranchId, string TenantCode) : ICommand;
 public class RegisterCommand2Handler : ICommandHandler<RegisterCommand2>, ICommandPartitionSpecifier<RegisterCommand2>
 {
