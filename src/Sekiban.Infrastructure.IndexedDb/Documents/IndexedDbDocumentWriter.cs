@@ -1,15 +1,18 @@
+using System.Text;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
+using Sekiban.Core.Exceptions;
+using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
 using Sekiban.Infrastructure.IndexedDb.Databases;
 
 namespace Sekiban.Infrastructure.IndexedDb.Documents;
 
-public class IndexedDbDocumentWriter(IndexedDbFactory dbFactory) : IDocumentPersistentWriter, IEventPersistentWriter
+public class IndexedDbDocumentWriter(IndexedDbFactory dbFactory, IBlobAccessor blobAccessor) : IDocumentPersistentWriter, IEventPersistentWriter
 {
     public Task SaveEvents<TEvent>(IEnumerable<TEvent> events, IWriteDocumentStream writeDocumentStream) where TEvent : IEvent =>
         dbFactory.DbActionAsync(async (dbContext) =>
@@ -73,7 +76,16 @@ public class IndexedDbDocumentWriter(IndexedDbFactory dbFactory) : IDocumentPers
     {
         if (useBlob)
         {
-            throw new NotImplementedException("SaveSingleSnapshotAsync(useBlob=true)");
+            var json = SekibanJsonHelper.Serialize(document.Snapshot) ?? throw new SekibanInvalidDocumentTypeException();
+            using var memoryStream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+
+            await blobAccessor.SetBlobWithGZipAsync(
+                SekibanBlobContainer.SingleProjectionState,
+                document.FilenameForSnapshot(),
+                memoryStream
+            );
+
+            document = document with { Snapshot = null };
         }
 
         await dbFactory.DbActionAsync(
