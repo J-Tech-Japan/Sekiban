@@ -33,11 +33,6 @@ public class IndexedDbDocumentRepository(
 
     public async Task<ResultBox<bool>> GetEvents(EventRetrievalInfo eventRetrievalInfo, Action<IEnumerable<IEvent>> resultAction)
     {
-        if (eventRetrievalInfo.GetIsPartition())
-        {
-            throw new NotImplementedException();
-        }
-
         var dbEvents = await dbFactory.DbActionAsync(async (dbContext) =>
             eventRetrievalInfo.GetAggregateContainerGroup() switch
             {

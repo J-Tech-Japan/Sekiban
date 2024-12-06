@@ -9,18 +9,26 @@ const wrapio = (func) => async (input) => {
 };
 const asc = (id) => (x, y) => id(x).localeCompare(id(y));
 const desc = (id) => (x, y) => id(y).localeCompare(id(x));
-const filterEvents = (events, query) => events
-    .filter(x => query.RootPartitionKey === null ||
-    x.RootPartitionKey === query.RootPartitionKey)
-    .filter(x => query.PartitionKey === null || x.PartitionKey === query.PartitionKey)
-    .filter(x => query.AggregateTypes === null ||
-    query.AggregateTypes.includes(x.AggregateType))
-    .filter(x => query.SortableIdStart === null ||
-    query.SortableIdStart <= x.SortableUniqueId)
-    .filter(x => query.SortableIdEnd === null ||
-    x.SortableUniqueId <= query.SortableIdEnd)
-    .toSorted(asc(x => x.SortableUniqueId))
-    .map(x => structuredClone(x));
+const filterEvents = (events, query) => {
+    const items = events
+        .filter(x => query.RootPartitionKey === null ||
+        x.RootPartitionKey === query.RootPartitionKey)
+        .filter(x => query.PartitionKey === null || x.PartitionKey === query.PartitionKey)
+        .filter(x => query.AggregateTypes === null ||
+        query.AggregateTypes.includes(x.AggregateType))
+        .filter(x => query.SortableIdStart === null ||
+        query.SortableIdStart <= x.SortableUniqueId)
+        .filter(x => query.SortableIdEnd === null ||
+        x.SortableUniqueId <= query.SortableIdEnd)
+        .toSorted(asc(x => x.SortableUniqueId))
+        .map(x => structuredClone(x));
+    if (query.MaxCount !== null) {
+        return items.slice(0, query.MaxCount);
+    }
+    else {
+        return items;
+    }
+};
 const init = async (contextName) => {
     // TODO: use IndexedDB
     const events = [];
