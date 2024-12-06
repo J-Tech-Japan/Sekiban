@@ -1,26 +1,72 @@
 ﻿using ResultBoxes;
+using Sekiban.Core.Documents.ValueObjects;
+using Sekiban.Pure.Exception;
 using System.Collections.Immutable;
 namespace Sekiban.Pure;
 
 public interface IEvent
 {
+    public long Version { get; }
+    public string SortableUniqueId { get; }
+    public PartitionKeys PartitionKeys { get; }
+    public SortableUniqueIdValue GetSortableUniqueId() => new(SortableUniqueId);
     public IEventPayload GetPayload();
 }
-public record Event<TEventPayload>(TEventPayload Payload) : IEvent where TEventPayload : IEventPayload
+public record Event<TEventPayload>(
+    TEventPayload Payload,
+    PartitionKeys PartitionKeys,
+    string SortableUniqueId,
+    long Version) : IEvent where TEventPayload : IEventPayload
 {
     public IEventPayload GetPayload() => Payload;
 }
 public interface IAggregatePayload
 {
 }
-public record EmptyAggregatePayload : IAggregatePayload;
-public record Aggregate<TAggregatePayload>(TAggregatePayload Payload)
-    : IAggregate where TAggregatePayload : IAggregatePayload
+public record EmptyAggregatePayload : IAggregatePayload
+{
+    public static EmptyAggregatePayload Empty => new();
+}
+public record Aggregate(
+    IAggregatePayload Payload,
+    PartitionKeys PartitionKeys,
+    long Version,
+    string LastSortableUniqueId) : IAggregate
+{
+    public static Aggregate Empty => new(new EmptyAggregatePayload(), PartitionKeys.Generate(), 0, string.Empty);
+    public IAggregatePayload GetPayload() => Payload;
+    public static Aggregate EmptyFromPartitionKeys(PartitionKeys keys) =>
+        new(new EmptyAggregatePayload(), keys, 0, string.Empty);
+    public ResultBox<Aggregate<TAggregatePayload>> ToTypedPayload<TAggregatePayload>()
+        where TAggregatePayload : IAggregatePayload => Payload is TAggregatePayload typedPayload
+        ? ResultBox.FromValue(
+            new Aggregate<TAggregatePayload>(typedPayload, PartitionKeys, Version, LastSortableUniqueId))
+        : new SekibanAggregateTypeException("Payload is not typed to " + typeof(TAggregatePayload).Name);
+    public ResultBox<Aggregate> Project(IEvent ev, IAggregateProjector projector) => this with
+    {
+        Payload = projector.Project(Payload, ev),
+        LastSortableUniqueId = ev.SortableUniqueId,
+        Version = ev.Version
+    };
+    public ResultBox<Aggregate> Project(List<IEvent> events, IAggregateProjector projector) => ResultBox
+        .FromValue(events)
+        .ReduceEach(this, (ev, aggregate) => aggregate.Project(ev, projector));
+}
+public record Aggregate<TAggregatePayload>(
+    TAggregatePayload Payload,
+    PartitionKeys PartitionKeys,
+    long Version,
+    string LastSortableUniqueId) : IAggregate where TAggregatePayload : IAggregatePayload
 {
     public IAggregatePayload GetPayload() => Payload;
 }
 public interface IAggregate
 {
+    public long Version { get; }
+    public string LastSortableUniqueId { get; }
+    public PartitionKeys PartitionKeys { get; }
+    public OptionalValue<SortableUniqueIdValue> GetLastSortableUniqueIdValue() =>
+        SortableUniqueIdValue.OptionalValue(LastSortableUniqueId);
     public IAggregatePayload GetPayload();
 }
 public interface IEventPayload
@@ -134,6 +180,8 @@ public interface ICommandExecutor
 }
 public class CommandExecutor : ICommandExecutor
 {
+    public IEventTypes EventTypes { get; init; } = new EmptyEventTypes();
+
     // CommandWithHandler 版 １クラスに定義できるが、実態は、メソッドを関数版に渡している
     public Task<ResultBox<CommandResponse>> Execute<TCommand>(TCommand command)
         where TCommand : ICommandWithHandlerCommon<TCommand>, IEquatable<TCommand> => Execute(
@@ -142,13 +190,7 @@ public class CommandExecutor : ICommandExecutor
         command.SpecifyPartitionKeys,
         command.Handle);
 
-    public Task<ResultBox<CommandResponse>> Execute<TCommand, TAggregateProjector, TInject>(
-        TCommand command,
-        Func<TCommand, PartitionKeys> specifyPartitionKeys,
-        TInject inject,
-        Func<TCommand, ICommandContext, TInject, ResultBox<EventOrNone>> handler) where TCommand : ICommand
-        where TAggregateProjector : IAggregateProjector, new() =>
-        throw new NotImplementedException();
+
 
     // Command 版 これを使えば、CommandHandler クラスは不要
     public Task<ResultBox<CommandResponse>> Execute<TCommand>(
@@ -159,15 +201,13 @@ public class CommandExecutor : ICommandExecutor
         .Start
         .Conveyor(_ => specifyPartitionKeys(command).ToResultBox())
         .Combine(keys => Repository.Load(keys, projector))
-        .Combine((partitionKeys, aggregate) => ResultBox.FromValue(new CommandContext(aggregate, projector)))
         .Combine(
-            (partitionKeys, aggregate, context) =>
-                RunCommand(command, context, handler)) // todo : runcommand がTaskの場合、ResultBox で失敗するのでResultBox 側のチェック必要
+            (partitionKeys, aggregate) => ResultBox.FromValue(new CommandContext(aggregate, projector, EventTypes)))
+        .Combine((partitionKeys, aggregate, context) => RunCommand(command, partitionKeys, context, handler))
+        .Conveyor(values => Repository.Save(values.Value4.Events).Remap(_ => values))
         .Conveyor(
             (partitionKeys, aggregate, context, executed) =>
-                ResultBox.FromValue(new CommandResponse(partitionKeys, executed.Events, 0)))
-        .ToTask();
-
+                ResultBox.FromValue(new CommandResponse(partitionKeys, executed.Events, 0)));
 
     public Task<ResultBox<CommandResponse>> Execute<TCommand, TInject>(TCommand command, TInject inject)
         where TCommand : ICommandWithHandlerInjectionCommon<TCommand, TInject>, IEquatable<TCommand> => Execute(
@@ -186,95 +226,111 @@ public class CommandExecutor : ICommandExecutor
         .Start
         .Conveyor(_ => specifyPartitionKeys(command).ToResultBox())
         .Combine(keys => Repository.Load(keys, projector))
-        .Combine((partitionKeys, aggregate) => ResultBox.FromValue(new CommandContext(aggregate, projector)))
         .Combine(
-            (partitionKeys, aggregate, context) =>
-                RunCommand(
-                    command,
-                    inject,
-                    context,
-                    handler)) // todo : runcommand がTaskの場合、ResultBox で失敗するのでResultBox 側のチェック必要
+            (partitionKeys, aggregate) => ResultBox.FromValue(new CommandContext(aggregate, projector, EventTypes)))
+        .Combine((partitionKeys, aggregate, context) => RunCommand(command, partitionKeys, inject, context, handler))
+        .Conveyor(values => Repository.Save(values.Value4.Events).Remap(_ => values))
         .Conveyor(
             (partitionKeys, aggregate, context, executed) =>
-                ResultBox.FromValue(new CommandResponse(partitionKeys, executed.Events, 0)))
-        .ToTask();
+                ResultBox.FromValue(new CommandResponse(partitionKeys, executed.Events, 0)));
 
-
-    public ResultBox<CommandExecuted> RunCommand<TCommand>(
+    public Task<ResultBox<CommandExecuted>> RunCommand<TCommand>(
         TCommand command,
+        PartitionKeys keys,
         CommandContext context,
         Func<TCommand, ICommandContext, ResultBox<EventOrNone>> handler) where TCommand : ICommand =>
         handler(command, context)
             .Conveyor(
-                eventOrNone => ResultBox.FromValue(
-                    new CommandExecuted(
-                        context.Aggregate,
-                        eventOrNone.HasEvent
-                            ? context
-                                .Events
-                                .ToImmutableList()
-                                .Add(new Event<IEventPayload>(eventOrNone.GetValue()))
-                                .ToList()
-                            : context.Events)));
+                eventOrNone =>
+                    (eventOrNone.HasEvent
+                        ? EventTypes
+                            .GenerateTypedEvent(
+                                eventOrNone.GetValue(),
+                                keys,
+                                SortableUniqueIdValue.GetCurrentIdFromUtc(),
+                                context.Aggregate.Version + 1)
+                            .Remap(ev => context.Events.ToImmutableList().Add(ev).ToList())
+                        : ResultBox.FromValue(context.Events)).Remap(
+                        events => new CommandExecuted(context.Aggregate, events)))
+            .ToTask();
 
-    public ResultBox<CommandExecuted> RunCommand<TCommand, TInject>(
+    public Task<ResultBox<CommandExecuted>> RunCommand<TCommand, TInject>(
         TCommand command,
+        PartitionKeys keys,
         TInject inject,
         CommandContext context,
         Func<TCommand, TInject, ICommandContext, ResultBox<EventOrNone>> handler) where TCommand : ICommand =>
         handler(command, inject, context)
             .Conveyor(
-                eventOrNone => ResultBox.FromValue(
-                    new CommandExecuted(
-                        context.Aggregate,
-                        eventOrNone.HasEvent
-                            ? context
-                                .Events
-                                .ToImmutableList()
-                                .Add(new Event<IEventPayload>(eventOrNone.GetValue()))
-                                .ToList()
-                            : context.Events)));
+                eventOrNone =>
+                    (eventOrNone.HasEvent
+                        ? EventTypes
+                            .GenerateTypedEvent(
+                                eventOrNone.GetValue(),
+                                keys,
+                                SortableUniqueIdValue.GetCurrentIdFromUtc(),
+                                context.Aggregate.Version + 1)
+                            .Remap(ev => context.Events.ToImmutableList().Add(ev).ToList())
+                        : ResultBox.FromValue(context.Events)).Remap(
+                        events => new CommandExecuted(context.Aggregate, events)))
+            .ToTask();
 
     public record CommandExecuted(IAggregate Aggregate, List<IEvent> Events);
 }
-public class CommandContext(IAggregate aggregate, IAggregateProjector projector) : ICommandContext
+public class CommandContext(Aggregate aggregate, IAggregateProjector projector, IEventTypes eventTypes)
+    : ICommandContext
 {
-    public IAggregate Aggregate { get; set; } = aggregate;
+    public Aggregate Aggregate { get; set; } = aggregate;
     public IAggregateProjector Projector { get; } = projector;
+    public IEventTypes EventTypes { get; } = eventTypes;
     public List<IEvent> Events { get; } = new();
-    public IAggregate GetAggregate() => throw new NotImplementedException();
+    public IAggregate GetAggregate() => Aggregate;
     public EventOrNone AppendEvent(IEventPayload eventPayload)
     {
-        var toAdd = new Event<IEventPayload>(eventPayload);
-        var aggregatePayload = Projector.Project(Aggregate.GetPayload(), toAdd);
-        Aggregate = new Aggregate<IAggregatePayload>(aggregatePayload);
-        Events.Add(toAdd);
+        var toAdd = EventTypes.GenerateTypedEvent(
+            eventPayload,
+            Aggregate.PartitionKeys,
+            SortableUniqueIdValue.GetCurrentIdFromUtc(),
+            Aggregate.Version + 1);
+        if (!toAdd.IsSuccess) { return EventOrNone.Empty; }
+        var ev = toAdd.GetValue();
+        var aggregatePayload = Projector.Project(Aggregate.GetPayload(), toAdd.GetValue());
+        var projected = Aggregate.Project(ev, Projector);
+        if (projected.IsSuccess) { Aggregate = projected.GetValue(); } else { return EventOrNone.Empty; }
+        Events.Add(ev);
         return EventOrNone.Empty;
     }
 }
 public class Repository
 {
+    public static List<IEvent> Events { get; set; } = new();
+
+
     public Func<string, IEvent> Deserializer { get; set; } = s => throw new NotImplementedException();
     public Func<IEvent, string> Serializer { get; set; } = s => throw new NotImplementedException();
-    public static ResultBox<IAggregate> Load<TAggregateProjector>(PartitionKeys partitionKeys)
+    public static ResultBox<Aggregate> Load<TAggregateProjector>(PartitionKeys partitionKeys)
         where TAggregateProjector : IAggregateProjector, new() => Load(partitionKeys, new TAggregateProjector());
-    public static ResultBox<IAggregate> Load(PartitionKeys partitionKeys, IAggregateProjector projector) =>
-        new NotImplementedException();
-}
+    public static ResultBox<Aggregate> Load(PartitionKeys partitionKeys, IAggregateProjector projector) =>
+        ResultBox
+            .FromValue(
+                Events.Where(e => e.PartitionKeys.Equals(partitionKeys)).OrderBy(e => e.SortableUniqueId).ToList())
+            .Conveyor(events => Aggregate.EmptyFromPartitionKeys(partitionKeys).Project(events, projector));
 
-// public interface IdelegateCommand<TCommand> where TCommand : ICommand
-// {
-//     public void declare(IDistributedSekibanApplication app);
-// }
-// public class delegateCommand : IdelegateCommand<A>
-// {
-//
-//     public void declare(IDistributedSekibanApplication app) => app.MapCommand(
-//         (A command, Func<Branch> getAggregateState) =>
-//         {
-//
-//         });
-//
-//
-//
-// }
+    public static ResultBox<UnitValue> Save(List<IEvent> events) => ResultBox.Start.Do(() => Events.AddRange(events));
+}
+public interface IEventTypes
+{
+    public ResultBox<IEvent> GenerateTypedEvent(
+        IEventPayload payload,
+        PartitionKeys partitionKeys,
+        string sortableUniqueId,
+        long version);
+}
+public class EmptyEventTypes : IEventTypes
+{
+    public ResultBox<IEvent> GenerateTypedEvent(
+        IEventPayload payload,
+        PartitionKeys partitionKeys,
+        string sortableUniqueId,
+        long version) => ResultBox<IEvent>.FromException(new SekibanEventTypeNotFoundException(""));
+}

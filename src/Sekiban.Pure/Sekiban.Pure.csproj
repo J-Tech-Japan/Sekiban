@@ -9,11 +9,11 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\Sekiban.Pure.SourceGenerator\Sekiban.Pure.SourceGenerator.csproj" PrivateAssets="all"/>
+        <ProjectReference Include="..\Sekiban.Pure.SourceGenerator\Sekiban.Pure.SourceGenerator.csproj" PrivateAssets="all"/>
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Include="ResultBoxes" Version="0.3.28" />
+        <PackageReference Include="ResultBoxes" Version="0.3.29"/>
     </ItemGroup>
 
 </Project>
