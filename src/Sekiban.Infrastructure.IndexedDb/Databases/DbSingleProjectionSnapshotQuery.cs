@@ -16,92 +16,57 @@ public record DbSingleProjectionSnapshotQuery
 
     public bool IsLatestOnly { get; init; }
 
-    private DbSingleProjectionSnapshotQuery(Guid? id, Guid? aggregateId, Type? aggregatePayloadType, Type? projectionPayloadType, int? version, string? rootPartitionKey, string? payloadVersionIdentifier, bool isLatestOnly)
-    {
-        Id = id?.ToString();
-        AggregateContainerGroup = aggregatePayloadType != null ?
-            AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType).ToString() : null;
-        PartitionKey = (aggregateId != null && aggregatePayloadType != null && projectionPayloadType != null && rootPartitionKey != null) ?
-            PartitionKeyGenerator.ForAggregateSnapshot(aggregateId.Value, aggregatePayloadType, projectionPayloadType, rootPartitionKey) : null;
-        AggregateId = aggregateId?.ToString();
-        RootPartitionKey = rootPartitionKey;
-        AggregateType = aggregatePayloadType?.Name;
-        PayloadVersionIdentifier = payloadVersionIdentifier;
-        SavedVersion = version;
-        IsLatestOnly = isLatestOnly;
-    }
+    public static DbSingleProjectionSnapshotQuery ForGetLatest(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType, string rootPartitionKey, string payloadVersionIdentifier) =>
+        new()
+        {
+            AggregateContainerGroup = ToAggregateContainerGroup(aggregatePayloadType),
+            PartitionKey = ToPartitionKey(aggregateId, aggregatePayloadType, projectionPayloadType, rootPartitionKey),
+            AggregateId = aggregateId.ToString(),
+            RootPartitionKey = rootPartitionKey,
+            AggregateType = aggregatePayloadType.Name,
+            PayloadVersionIdentifier = payloadVersionIdentifier,
+            IsLatestOnly = true,
+        };
 
-    public DbSingleProjectionSnapshotQuery(
-        Guid aggregateId,
-        Type aggregatePayloadType,
-        Type projectionPayloadType,
-        string rootPartitionKey,
-        string payloadVersionIdentifier,
-        bool isLatestOnly
-    ) : this(
-        id: null,
-        aggregateId: aggregateId,
-        aggregatePayloadType: aggregatePayloadType,
-        projectionPayloadType: projectionPayloadType,
-        version: null,
-        rootPartitionKey: rootPartitionKey,
-        payloadVersionIdentifier: payloadVersionIdentifier,
-        isLatestOnly: isLatestOnly
-    )
-    { }
+    public static DbSingleProjectionSnapshotQuery ForTestExistence(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType, int version, string rootPartitionKey, string payloadVersionIdentifier) =>
+        new()
+        {
+            AggregateContainerGroup = ToAggregateContainerGroup(aggregatePayloadType),
+            PartitionKey = ToPartitionKey(aggregateId, aggregatePayloadType, projectionPayloadType, rootPartitionKey),
+            AggregateId = aggregateId.ToString(),
+            RootPartitionKey = rootPartitionKey,
+            AggregateType = aggregatePayloadType.Name,
+            PayloadVersionIdentifier = payloadVersionIdentifier,
+            SavedVersion = version,
+            IsLatestOnly = true,
+        };
 
-    public DbSingleProjectionSnapshotQuery(
-        Guid aggregateId,
-        Type aggregatePayloadType,
-        Type projectionPayloadType,
-        int version,
-        string rootPartitionKey,
-        string payloadVersionIdentifier,
-        bool isLatestOnly
-    ) : this(
-        id: null,
-        aggregateId: aggregateId,
-        aggregatePayloadType: aggregatePayloadType,
-        projectionPayloadType: projectionPayloadType,
-        version: version,
-        rootPartitionKey: rootPartitionKey,
-        payloadVersionIdentifier: payloadVersionIdentifier,
-        isLatestOnly: isLatestOnly
-    )
-    { }
+    public static DbSingleProjectionSnapshotQuery ForGetById(Guid id, Guid aggregateId, Type aggregatePayloadType, string partitionKey, string rootPartitionKey) =>
+        new()
+        {
+            Id = id.ToString(),
+            AggregateContainerGroup = ToAggregateContainerGroup(aggregatePayloadType),
+            PartitionKey = partitionKey,
+            AggregateId = aggregateId.ToString(),
+            RootPartitionKey = rootPartitionKey,
+            AggregateType = aggregatePayloadType.Name,
+            IsLatestOnly = true,
+        };
 
-    public DbSingleProjectionSnapshotQuery(
-        Guid id,
-        Guid aggregateId,
-        Type aggregatePayloadType,
-        string partitionKey,
-        string rootPartitionKey,
-        bool isLatestOnly
-    )
-    {
-        Id = id.ToString();
-        AggregateId = aggregateId.ToString();
-        AggregateContainerGroup = AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType).ToString();
-        PartitionKey = partitionKey;
-        RootPartitionKey = rootPartitionKey;
-        IsLatestOnly = isLatestOnly;
-    }
+    public static DbSingleProjectionSnapshotQuery ForGetAll(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType, string rootPartitionKey) =>
+        new()
+        {
+            AggregateContainerGroup = ToAggregateContainerGroup(aggregatePayloadType),
+            PartitionKey = ToPartitionKey(aggregateId, aggregatePayloadType, projectionPayloadType, rootPartitionKey),
+            AggregateId = aggregateId.ToString(),
+            RootPartitionKey = rootPartitionKey,
+            AggregateType = aggregatePayloadType.Name,
+            IsLatestOnly = false,
+        };
 
-    public DbSingleProjectionSnapshotQuery(
-        Guid aggregateId,
-        Type aggregatePayloadType,
-        Type projectionPayloadType,
-        string rootPartitionKey,
-        bool isLatestOnly
-    ) : this(
-        id: null,
-        aggregateId: aggregateId,
-        aggregatePayloadType: aggregatePayloadType,
-        projectionPayloadType: projectionPayloadType,
-        version: null,
-        rootPartitionKey: rootPartitionKey,
-        payloadVersionIdentifier: null,
-        isLatestOnly: isLatestOnly
-    )
-    { }
+    private static string ToAggregateContainerGroup(Type aggregatePayloadType) =>
+        AggregateContainerGroupAttribute.FindAggregateContainerGroup(aggregatePayloadType).ToString();
+
+    private static string ToPartitionKey(Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType, string rootPartitionKey) =>
+        PartitionKeyGenerator.ForAggregateSnapshot(aggregateId, aggregatePayloadType, projectionPayloadType, rootPartitionKey);
 }
