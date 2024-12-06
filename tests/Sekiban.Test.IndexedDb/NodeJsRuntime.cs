@@ -14,16 +14,16 @@ public class NodeJsRuntime : ISekibanJsRuntime
 
     public async Task<ISekibanIndexedDbContext> CreateContextAsync(string context)
     {
-        var runtime = await nodejsEnvironment.RunAsync(async () => {
-            var runtime = await nodejsEnvironment
-                .Import("./Assets/runtime.js", "init")
+        var store = await nodejsEnvironment.RunAsync(async () =>
+        {
+            var store = await nodejsEnvironment.Import("./Assets/runtime.js", "init")
                 .Call(JSValue.Undefined, context)
                 .CastTo<JSPromise>()
                 .AsTask();
-            return new JSReference(runtime);
+
+            return new JSReference(store);
         });
 
-        await Task.CompletedTask;
-        return new NodeIndexedDbContext(nodejsEnvironment, runtime);
+        return new NodeIndexedDbContext(nodejsEnvironment, store);
     }
 }

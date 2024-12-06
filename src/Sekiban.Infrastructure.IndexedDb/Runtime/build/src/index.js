@@ -29,31 +29,25 @@ const filterEvents = (events, query) => {
         return items;
     }
 };
-const init = async (contextName) => {
-    // TODO: use IndexedDB
-    const events = [];
-    const dissolvableEvents = [];
-    const commands = [];
-    const singleProjectionSnapshots = [];
-    const multiProjectionSnapshots = [];
+const operations = (store) => {
     const writeEventAsync = async (event) => {
-        events.push(structuredClone(event));
+        store.events.push(structuredClone(event));
     };
-    const getEventsAsync = async (query) => filterEvents(events, query);
+    const getEventsAsync = async (query) => filterEvents(store.events, query);
     const removeAllEventsAsync = async () => {
-        events.splice(0);
+        store.events.splice(0);
     };
     const writeDissolvableEventAsync = async (event) => {
-        dissolvableEvents.push(structuredClone(event));
+        store.dissolvableEvents.push(structuredClone(event));
     };
-    const getDissolvableEventsAsync = async (query) => filterEvents(dissolvableEvents, query);
+    const getDissolvableEventsAsync = async (query) => filterEvents(store.dissolvableEvents, query);
     const removeAllDissolvableEventsAsync = async () => {
-        dissolvableEvents.splice(0);
+        store.dissolvableEvents.splice(0);
     };
     const writeCommandAsync = async (command) => {
-        commands.push(structuredClone(command));
+        store.commands.push(structuredClone(command));
     };
-    const getCommandsAsync = async (query) => commands
+    const getCommandsAsync = async (query) => store.commands
         .filter(x => query.SortableIdStart === null ||
         query.SortableIdStart <= x.SortableUniqueId)
         .filter(x => query.PartitionKey === null || x.PartitionKey === query.PartitionKey)
@@ -62,13 +56,13 @@ const init = async (contextName) => {
         .toSorted(asc(x => x.SortableUniqueId))
         .map(x => structuredClone(x));
     const removeAllCommandsAsync = async () => {
-        commands.splice(0);
+        store.commands.splice(0);
     };
     const writeSingleProjectionSnapshotAsync = async (snapshot) => {
-        singleProjectionSnapshots.push(structuredClone(snapshot));
+        store.singleProjectionSnapshots.push(structuredClone(snapshot));
     };
     const getSingleProjectionSnapshotsAsync = async (query) => {
-        const items = singleProjectionSnapshots
+        const items = store.singleProjectionSnapshots
             .filter(x => query.Id === null || x.Id === query.Id)
             .filter(x => query.AggregateContainerGroup === null ||
             x.AggregateContainerGroup === query.AggregateContainerGroup)
@@ -91,13 +85,13 @@ const init = async (contextName) => {
         }
     };
     const removeAllSingleProjectionSnapshotsAsync = async () => {
-        singleProjectionSnapshots.splice(0);
+        store.singleProjectionSnapshots.splice(0);
     };
     const writeMultiProjectionSnapshotAsync = async (payload) => {
-        multiProjectionSnapshots.push(structuredClone(payload));
+        store.multiProjectionSnapshots.push(structuredClone(payload));
     };
     const getMultiProjectionSnapshotsAsync = async (query) => {
-        const items = multiProjectionSnapshots
+        const items = store.multiProjectionSnapshots
             .filter(x => query.AggregateContainerGroup === null ||
             x.AggregateContainerGroup === query.AggregateContainerGroup)
             .filter(x => query.PartitionKey === null || x.PartitionKey === query.PartitionKey)
@@ -113,7 +107,7 @@ const init = async (contextName) => {
         }
     };
     const removeAllMultiProjectionSnapshotsAsync = async () => {
-        multiProjectionSnapshots.splice(0);
+        store.multiProjectionSnapshots.splice(0);
     };
     return {
         writeEventAsync: wrapio(writeEventAsync),
@@ -132,6 +126,23 @@ const init = async (contextName) => {
         getMultiProjectionSnapshotsAsync: wrapio(getMultiProjectionSnapshotsAsync),
         removeAllMultiProjectionSnapshotsAsync: wrapio(removeAllMultiProjectionSnapshotsAsync),
     };
+};
+const stores = new Map();
+const newStore = () => ({
+    events: [],
+    dissolvableEvents: [],
+    commands: [],
+    singleProjectionSnapshots: [],
+    multiProjectionSnapshots: [],
+});
+const init = async (contextName) => {
+    // TODO: use IndexedDB
+    let store = stores.get(contextName);
+    if (store === undefined) {
+        store = newStore();
+    }
+    stores.set(contextName, store);
+    return operations(store);
 };
 exports.init = init;
 //# sourceMappingURL=index.js.map
