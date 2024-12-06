@@ -6,7 +6,7 @@ using Sekiban.Infrastructure.IndexedDb.Databases;
 
 namespace Sekiban.Test.IndexedDb;
 
-public class NodeIndexedDbContext(NodejsEnvironment nodejs, JSReference runtime) : ISekibanIndexedDbContext
+public class NodeIndexedDbContext(NodejsEnvironment nodejs, JSReference store) : ISekibanIndexedDbContext
 {
     public async Task<DbEvent[]> GetEventsAsync(DbEventQuery query) =>
         (await DispatchAsync<DbEventQuery, DbEvent[]>("getEventsAsync", query))!;
@@ -69,7 +69,7 @@ public class NodeIndexedDbContext(NodejsEnvironment nodejs, JSReference runtime)
         {
             var jsInput = input is null ? JSValue.Null : JsonSerializer.Serialize(input);
 
-            var jsOutput = await runtime.GetValue()[operation].Call(JSValue.Undefined, jsInput).CastTo<JSPromise>().AsTask();
+            var jsOutput = await store.GetValue()[operation].Call(JSValue.Undefined, jsInput).CastTo<JSPromise>().AsTask();
 
             var output = jsOutput.IsNull() ? default : JsonSerializer.Deserialize<TOutput>(jsOutput.GetValueStringUtf16());
             return output;

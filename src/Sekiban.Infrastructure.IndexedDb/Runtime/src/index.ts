@@ -67,45 +67,46 @@ const filterEvents = (events: DbEvent[], query: DbEventQuery): DbEvent[] => {
   }
 };
 
-export const init = async (contextName: string) => {
-  // TODO: use IndexedDB
-  const events: DbEvent[] = [];
-  const dissolvableEvents: DbEvent[] = [];
-  const commands: DbCommand[] = [];
-  const singleProjectionSnapshots: DbSingleProjectionSnapshot[] = [];
-  const multiProjectionSnapshots: DbMultiProjectionSnapshot[] = [];
+type Store = {
+  readonly events: DbEvent[];
+  readonly dissolvableEvents: DbEvent[];
+  readonly commands: DbCommand[];
+  readonly singleProjectionSnapshots: DbSingleProjectionSnapshot[];
+  readonly multiProjectionSnapshots: DbMultiProjectionSnapshot[];
+};
 
+const operations = (store: Store) => {
   const writeEventAsync = async (event: DbEvent): Promise<void> => {
-    events.push(structuredClone(event));
+    store.events.push(structuredClone(event));
   };
 
   const getEventsAsync = async (query: DbEventQuery): Promise<DbEvent[]> =>
-    filterEvents(events, query);
+    filterEvents(store.events, query);
 
   const removeAllEventsAsync = async (): Promise<void> => {
-    events.splice(0);
+    store.events.splice(0);
   };
 
   const writeDissolvableEventAsync = async (event: DbEvent): Promise<void> => {
-    dissolvableEvents.push(structuredClone(event));
+    store.dissolvableEvents.push(structuredClone(event));
   };
 
   const getDissolvableEventsAsync = async (
     query: DbEventQuery,
-  ): Promise<DbEvent[]> => filterEvents(dissolvableEvents, query);
+  ): Promise<DbEvent[]> => filterEvents(store.dissolvableEvents, query);
 
   const removeAllDissolvableEventsAsync = async (): Promise<void> => {
-    dissolvableEvents.splice(0);
+    store.dissolvableEvents.splice(0);
   };
 
   const writeCommandAsync = async (command: DbCommand): Promise<void> => {
-    commands.push(structuredClone(command));
+    store.commands.push(structuredClone(command));
   };
 
   const getCommandsAsync = async (
     query: DbCommandQuery,
   ): Promise<DbCommand[]> =>
-    commands
+    store.commands
       .filter(
         x =>
           query.SortableIdStart === null ||
@@ -124,19 +125,19 @@ export const init = async (contextName: string) => {
       .map(x => structuredClone(x));
 
   const removeAllCommandsAsync = async (): Promise<void> => {
-    commands.splice(0);
+    store.commands.splice(0);
   };
 
   const writeSingleProjectionSnapshotAsync = async (
     snapshot: DbSingleProjectionSnapshot,
   ): Promise<void> => {
-    singleProjectionSnapshots.push(structuredClone(snapshot));
+    store.singleProjectionSnapshots.push(structuredClone(snapshot));
   };
 
   const getSingleProjectionSnapshotsAsync = async (
     query: DbSingleProjectionSnapshotQuery,
   ): Promise<DbSingleProjectionSnapshot[]> => {
-    const items = singleProjectionSnapshots
+    const items = store.singleProjectionSnapshots
       .filter(x => query.Id === null || x.Id === query.Id)
       .filter(
         x =>
@@ -180,19 +181,19 @@ export const init = async (contextName: string) => {
   };
 
   const removeAllSingleProjectionSnapshotsAsync = async (): Promise<void> => {
-    singleProjectionSnapshots.splice(0);
+    store.singleProjectionSnapshots.splice(0);
   };
 
   const writeMultiProjectionSnapshotAsync = async (
     payload: DbMultiProjectionSnapshot,
   ): Promise<void> => {
-    multiProjectionSnapshots.push(structuredClone(payload));
+    store.multiProjectionSnapshots.push(structuredClone(payload));
   };
 
   const getMultiProjectionSnapshotsAsync = async (
     query: DbMultiProjectionSnapshotQuery,
   ): Promise<DbMultiProjectionSnapshot[]> => {
-    const items = multiProjectionSnapshots
+    const items = store.multiProjectionSnapshots
       .filter(
         x =>
           query.AggregateContainerGroup === null ||
@@ -218,7 +219,7 @@ export const init = async (contextName: string) => {
   };
 
   const removeAllMultiProjectionSnapshotsAsync = async (): Promise<void> => {
-    multiProjectionSnapshots.splice(0);
+    store.multiProjectionSnapshots.splice(0);
   };
 
   return {
@@ -252,4 +253,26 @@ export const init = async (contextName: string) => {
       removeAllMultiProjectionSnapshotsAsync,
     ),
   };
+};
+
+const stores = new Map<string, Store>();
+
+const newStore = (): Store => ({
+  events: [],
+  dissolvableEvents: [],
+  commands: [],
+  singleProjectionSnapshots: [],
+  multiProjectionSnapshots: [],
+});
+
+export const init = async (contextName: string) => {
+  // TODO: use IndexedDB
+  let store: Store | undefined = stores.get(contextName);
+
+  if (store === undefined) {
+    store = newStore();
+  }
+
+  stores.set(contextName, store);
+  return operations(store);
 };
