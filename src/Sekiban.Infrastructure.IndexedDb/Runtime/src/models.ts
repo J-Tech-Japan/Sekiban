@@ -74,3 +74,27 @@ export type DbSingleProjectionSnapshotQuery = {
 
   readonly IsLatestOnly: boolean;
 };
+
+export type DbMultiProjectionSnapshot = {
+  readonly Id: string;
+  readonly AggregateContainerGroup: string;
+  readonly PartitionKey: string;
+  readonly DocumentType: string;
+  readonly DocumentTypeName: string;
+  readonly TimeStamp: string;
+  readonly SortableUniqueId: string;
+  readonly AggregateType: string;
+  readonly RootPartitionKey: string;
+  readonly LastEventId: string;
+  readonly LastSortableUniqueId: string;
+  readonly SavedVersion: number;
+  readonly PayloadVersionIdentifier: string;
+};
+
+export type DbMultiProjectionSnapshotQuery = {
+  readonly AggregateContainerGroup: string | null;
+  readonly PartitionKey: string | null;
+  readonly PayloadVersionIdentifier: string | null;
+
+  readonly IsLatestOnly: boolean;
+};

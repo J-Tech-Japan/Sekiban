@@ -4,6 +4,7 @@ using Sekiban.Core.Aggregate;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
+using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.SingleProjections.Projections;
 using Sekiban.Core.Snapshot;
 using Sekiban.Infrastructure.IndexedDb.Databases;
@@ -32,11 +33,16 @@ public class IndexedDbDocumentRepository(
 
     public async Task<ResultBox<bool>> GetEvents(EventRetrievalInfo eventRetrievalInfo, Action<IEnumerable<IEvent>> resultAction)
     {
-        var dbEvents = await dbFactory.DbActionAsync((dbContext) =>
+        if (eventRetrievalInfo.GetIsPartition())
+        {
+            throw new NotImplementedException();
+        }
+
+        var dbEvents = await dbFactory.DbActionAsync(async (dbContext) =>
             eventRetrievalInfo.GetAggregateContainerGroup() switch
             {
-                AggregateContainerGroup.Default => dbContext.GetEventsAsync(DbEventQuery.FromEventRetrievalInfo(eventRetrievalInfo)),
-                AggregateContainerGroup.Dissolvable => dbContext.GetDissolvableEventsAsync(DbEventQuery.FromEventRetrievalInfo(eventRetrievalInfo)),
+                AggregateContainerGroup.Default => await dbContext.GetEventsAsync(DbEventQuery.FromEventRetrievalInfo(eventRetrievalInfo)),
+                AggregateContainerGroup.Dissolvable => await dbContext.GetDissolvableEventsAsync(DbEventQuery.FromEventRetrievalInfo(eventRetrievalInfo)),
                 _ => throw new NotImplementedException(),
             });
 
@@ -79,9 +85,24 @@ public class IndexedDbDocumentRepository(
         return await singleProjectionSnapshotAccessor.FillSnapshotDocumentAsync(dbSnapshot.ToSnapshot());
     }
 
-    public Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(Type multiProjectionPayloadType, string payloadVersionIdentifier, string rootPartitionKey = "")
+    public async Task<MultiProjectionSnapshotDocument?> GetLatestSnapshotForMultiProjectionAsync(Type multiProjectionPayloadType, string payloadVersionIdentifier, string rootPartitionKey = IMultiProjectionService.ProjectionAllRootPartitions)
     {
-        throw new NotImplementedException();
+        var query = DbMultiProjectionSnapshotQuery.ForGetLatest(multiProjectionPayloadType, payloadVersionIdentifier, rootPartitionKey);
+
+        var dbSnapshot = (
+            await dbFactory.DbActionAsync(
+                async dbContext =>
+                    await dbContext.GetMultiProjectionSnapshotsAsync(query)
+            )
+        )
+            .FirstOrDefault();
+
+        if (dbSnapshot is null)
+        {
+            return null;
+        }
+
+        return dbSnapshot.ToSnapshot();
     }
 
     public async Task<SnapshotDocument?> GetSnapshotByIdAsync(Guid id, Guid aggregateId, Type aggregatePayloadType, Type projectionPayloadType, string partitionKey, string rootPartitionKey)

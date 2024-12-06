@@ -44,8 +44,15 @@ public class NodeIndexedDbContext(NodejsEnvironment nodejs, JSReference runtime)
     public async Task RemoveAllSingleProjectionSnapshotsAsync() =>
         await DispatchAsync("removeAllSingleProjectionSnapshotsAsync");
 
+    public async Task WriteMultiProjectionSnapshotAsync(DbMultiProjectionSnapshot payload) =>
+        await DispatchAsync("writeMultiProjectionSnapshotAsync", payload);
+
+    public async Task<DbMultiProjectionSnapshot[]> GetMultiProjectionSnapshotsAsync(DbMultiProjectionSnapshotQuery query) =>
+        (await DispatchAsync<DbMultiProjectionSnapshotQuery, DbMultiProjectionSnapshot[]>("getMultiProjectionSnapshotsAsync", query))!;
+
     public async Task RemoveAllMultiProjectionSnapshotsAsync() =>
         await DispatchAsync("removeAllMultiProjectionSnapshotsAsync");
+
 
     private async Task DispatchAsync(string operation) =>
         await DispatchAsync<object, object>(operation, null);
@@ -54,7 +61,7 @@ public class NodeIndexedDbContext(NodejsEnvironment nodejs, JSReference runtime)
         await DispatchAsync<TInput, object>(operation, input);
 
     private async Task<TOutput?> DispatchAsync<TOutput>(string operation) =>
-        await DispatchAsync<object, TOutput>(operation,  null);
+        await DispatchAsync<object, TOutput>(operation, null);
 
     private async Task<TOutput?> DispatchAsync<TInput, TOutput>(string operation, TInput? input)
     {
