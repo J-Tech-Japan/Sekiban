@@ -71,6 +71,14 @@ public class UnitTest1
         Assert.Equal("branch name2", payload.Name);
 
     }
+    [Fact]
+    public void CanUseDelegateSpec()
+    {
+        var confirmUser = new ConfirmUser(Guid.CreateVersion7());
+        Delegate d = confirmUser.Handle;
+        Assert.IsType<Func<ConfirmUser, ICommandContext<UnconfirmedUser>, ResultBox<EventOrNone>>>(d);
+
+    }
 
     [Fact]
     public async Task MultipleBranchesSpec()

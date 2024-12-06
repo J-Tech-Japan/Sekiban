@@ -89,6 +89,12 @@ public record RegisterUser(string Name, string Email)
             .Conveyor(_ => EventOrNone.Event(new UserRegistered(command.Name, command.Email)));
     public record Injection(Func<string, bool> EmailExists);
 }
+public record ConfirmUser(Guid UserId) : ICommandWithHandler<ConfirmUser, UserProjector, UnconfirmedUser>
+{
+    public ResultBox<EventOrNone> Handle(ConfirmUser command, ICommandContext<UnconfirmedUser> context) =>
+        EventOrNone.Event(new UserConfirmed());
+    public PartitionKeys SpecifyPartitionKeys(ConfirmUser command) => PartitionKeys<UserProjector>.Existing(UserId);
+}
 public class Test
 {
     public void Test1()
@@ -109,6 +115,7 @@ public class Test
         commandExecutor.Execute(
             new RegisterUser("tomo", "tomo@example.com"),
             new RegisterUser.Injection(email => false));
+        //commandExecutor.Execute(new ConfirmUser(Guid.CreateVersion7()));
     }
 }
 public class DomainEventTypes : IEventTypes
@@ -117,7 +124,7 @@ public class DomainEventTypes : IEventTypes
         IEventPayload payload,
         PartitionKeys partitionKeys,
         string sortableUniqueId,
-        long version) => payload switch
+        int version) => payload switch
     {
         UserRegistered userRegistered => new Event<UserRegistered>(
             userRegistered,
