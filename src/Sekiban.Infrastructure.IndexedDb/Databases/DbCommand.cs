@@ -1,5 +1,8 @@
+using System.Text.Json;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Command;
+using Sekiban.Core.Documents;
+using Sekiban.Core.History;
 using Sekiban.Core.Shared;
 
 namespace Sekiban.Infrastructure.IndexedDb.Databases;
@@ -39,4 +42,32 @@ public record DbCommand
             AggregateType = command.AggregateType,
             RootPartitionKey = command.RootPartitionKey,
         };
+
+    public CommandDocumentForJsonExport? ToCommand()
+    {
+        var payload = SekibanJsonHelper.Deserialize<JsonElement?>(Payload);
+        if (payload is null)
+        {
+            return null;
+        }
+
+        var callHistories = SekibanJsonHelper.Deserialize<List<CallHistory>>(CallHistories) ?? [];
+
+        return new CommandDocumentForJsonExport
+        {
+            Id = new Guid(Id),
+            AggregateId = new Guid(AggregateId),
+            PartitionKey = PartitionKey,
+            DocumentType = Enum.Parse<DocumentType>(DocumentType),
+            DocumentTypeName = DocumentTypeName,
+            ExecutedUser = ExecutedUser,
+            Exception = Exception,
+            CallHistories = callHistories,
+            Payload = payload,
+            TimeStamp = DateTimeConverter.ToDateTime(TimeStamp),
+            SortableUniqueId = SortableUniqueId,
+            AggregateType = AggregateType,
+            RootPartitionKey = RootPartitionKey
+        };
+    }
 }

@@ -1,4 +1,6 @@
+using Sekiban.Core.Documents;
 using Sekiban.Core.Events;
+using Sekiban.Core.History;
 using Sekiban.Core.Shared;
 
 namespace Sekiban.Infrastructure.IndexedDb.Databases;
@@ -34,4 +36,41 @@ public record DbEvent
             AggregateType = ev.AggregateType,
             RootPartitionKey = ev.RootPartitionKey,
         };
+
+    public IEvent? ToEvent(RegisteredEventTypes registeredEventTypes)
+    {
+        if (string.IsNullOrEmpty(DocumentTypeName))
+        {
+            return null;
+        }
+
+        var type = registeredEventTypes.RegisteredTypes.FirstOrDefault(x => x.Name == DocumentTypeName);
+        if (type is null)
+        {
+            return null;
+        }
+
+        if (SekibanJsonHelper.Deserialize(Payload, type) is not IEventPayloadCommon payload)
+        {
+            return null;
+        }
+
+        var callHistories = SekibanJsonHelper.Deserialize<List<CallHistory>>(CallHistories) ?? [];
+
+        return Event.GenerateIEvent(
+            new Guid(Id),
+            new Guid(AggregateId),
+            PartitionKey,
+            Enum.Parse<DocumentType>(DocumentType),
+            DocumentTypeName,
+            type,
+            DateTimeConverter.ToDateTime(TimeStamp),
+            SortableUniqueId,
+            payload,
+            AggregateType,
+            Version,
+            RootPartitionKey,
+            callHistories
+        );
+    }
 }
