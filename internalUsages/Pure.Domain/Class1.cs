@@ -63,17 +63,9 @@ public record ChangeBranchName(Guid BranchId, string NameToChange)
     public PartitionKeys SpecifyPartitionKeys(ChangeBranchName command) =>
         PartitionKeys<BranchProjector>.Existing(BranchId);
 }
-public record RegisterCommand2(string Name, Guid BranchId, string TenantCode) : ICommand;
-public class RegisterCommand2Handler : ICommandHandler<RegisterCommand2>, ICommandPartitionSpecifier<RegisterCommand2>
+public record RegisterBranch2(string Name) : ICommand;
+public record RegisterBranch3(string Name) : ICommandWithAggregateRestriction<EmptyAggregatePayload>
 {
-    public ResultBox<EventOrNone> Handle(RegisterCommand2 command, ICommandContext<IAggregatePayload> context) =>
-        throw new NotImplementedException();
-    public PartitionKeys SpecifyPartitionKeys(RegisterCommand2 command) => throw new NotImplementedException();
-}
-public record RegisterCommand3(string Name) : ICommand, ICommandHandler<RegisterCommand3>
-{
-    public ResultBox<EventOrNone> Handle(RegisterCommand3 command, ICommandContext<IAggregatePayload> context) =>
-        EventOrNone.Event(new BranchCreated(command.Name));
 }
 public record RegisterUser(string Name, string Email)
     : ICommandWithHandlerInjection<RegisterUser, UserProjector, RegisterUser.Injection>
@@ -122,19 +114,6 @@ public class Test
     public void Test1()
     {
         var commandExecutor = new CommandExecutor();
-        commandExecutor.ExecuteFunctionWithoutAggregateRestriction(
-            new RegisterCommand2("name", Guid.CreateVersion7(), "tenantCode"),
-            new BranchProjector(),
-            c => PartitionKeys.Existing(c.BranchId),
-            (c, context) => EventOrNone.Event(new BranchCreated(c.Name)));
-
-        commandExecutor.ExecuteFunctionWithoutAggregateRestriction(
-            new RegisterCommand2("name", Guid.CreateVersion7(), "tenantCode"),
-            new BranchProjector(),
-            c => PartitionKeys.Existing<BranchProjector>(c.BranchId),
-            (_, _) => EventOrNone.Event(new BranchCreated("name")));
-
-
         commandExecutor.Execute(new RegisterBranch("name"));
         commandExecutor.Execute(
             new RegisterUser("tomo", "tomo@example.com"),
