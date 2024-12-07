@@ -6,3 +6,4 @@ public class SekibanAggregateTypeRestrictionException(string message)
     : ApplicationException(message), ISekibanException;
 public class SekibanEventTypeNotFoundException(string message) : ApplicationException(message), ISekibanException;
 public class SekibanCommandHandlerNotMatchException(string message) : ApplicationException(message), ISekibanException;
+public class SekibanCommandExecutionException(string message) : ApplicationException(message), ISekibanException;
