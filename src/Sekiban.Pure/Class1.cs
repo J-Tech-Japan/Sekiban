@@ -199,53 +199,10 @@ public record TenantPartitionKeys(string TenantCode)
         PartitionKeys.Existing(aggregateId, group, TenantCode);
 }
 public record CommandResponse(PartitionKeys PartitionKeys, List<IEvent> Events, int Version);
-public interface ICommandExecutor
-{
-}
+public interface ICommandExecutor;
 public class CommandExecutor : ICommandExecutor
 {
     public IEventTypes EventTypes { get; init; } = new EmptyEventTypes();
-
-    // public Task<ResultBox<CommandResponse>> Execute<TCommand>(TCommand command)
-    //     where TCommand : ICommandWithHandlerCommon, ICommandGetProjector, ICommandPartitionSpecifier<TCommand>,
-    //     IEquatable<TCommand> =>
-    //     InvokeGeneral(command, typeof(IAggregatePayload), OptionalValue<NoInjection>.Empty);
-    //
-    // private Task<ResultBox<CommandResponse>> InvokeGeneral<TCommand, TInject>(
-    //     TCommand command,
-    //     Type aggregateType,
-    //     OptionalValue<TInject> inject)
-    //     where TCommand : ICommandWithHandlerCommon, ICommandGetProjector, ICommandPartitionSpecifier<TCommand>,
-    //     IEquatable<TCommand>
-    // {
-    //     var method = GetType().GetMethod(nameof(ExecuteGeneral));
-    //     if (method is null) { throw new SekibanCommandExecutionException(""); }
-    //     var genericMethod = method.MakeGenericMethod(typeof(TCommand), typeof(TInject), aggregateType);
-    //     if (genericMethod is null) { throw new SekibanCommandExecutionException(""); }
-    //     var task = genericMethod.Invoke(
-    //             this,
-    //             new object[]
-    //                 { command, command.GetProjector(), command.SpecifyPartitionKeys, inject, command.GetHandler() }) as
-    //         Task<ResultBox<CommandResponse>>;
-    //     if (task is null) { throw new SekibanCommandExecutionException(""); }
-    //     return task;
-    // }
-
-    // public Task<ResultBox<CommandResponse>> Execute<TCommand, TInject>(TCommand command, TInject inject)
-    //     where TCommand : ICommandWithHandlerCommon => throw new NotImplementedException();
-
-
-    // CommandWithHandler, No Injection, Typed AggregatePayload
-    // public Task<ResultBox<CommandResponse>> Execute<TCommand, TInject, TAggregatePayload>(TCommand command)
-    //     where TCommand : ICommandWithHandlerCommon<TCommand, TInject, TAggregatePayload>, IEquatable<TCommand>
-    //     where TAggregatePayload : IAggregatePayload =>
-    //     ExecuteGeneral<TCommand, NoInjection, TAggregatePayload>(
-    //         command,
-    //         command.GetProjector(),
-    //         command.SpecifyPartitionKeys,
-    //         OptionalValue<NoInjection>.Empty,
-    //         command.GetHandler());
-    // Function, No Injection, Not Typed AggregatePayload
     public Task<ResultBox<CommandResponse>> ExecuteWithFunction<TCommand>(
         TCommand command,
         IAggregateProjector projector,

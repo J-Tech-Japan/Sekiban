@@ -1,5 +1,7 @@
-﻿using ResultBoxes;
+﻿using Pure.Domain.Generated;
+using ResultBoxes;
 using Sekiban.Pure;
+using Sekiban.Pure.Exception;
 namespace Pure.Domain.Test;
 
 public class UnitTest1
@@ -43,6 +45,17 @@ public class UnitTest1
         var payload = aggregate.GetPayload();
         Assert.IsType<Branch>(payload);
 
+        var userExecuted = await executor
+            .Execute(new RegisterUser("tomo", "tomo@example.com"), new RegisterUser.Injection(_ => false))
+            .UnwrapBox();
+        Assert.NotNull(userExecuted);
+        var confirmResult = await executor.Execute(new ConfirmUser(userExecuted.PartitionKeys.AggregateId));
+        Assert.NotNull(confirmResult);
+        Assert.True(confirmResult.IsSuccess);
+        var confirmResult2 = await executor.Execute(new ConfirmUser(userExecuted.PartitionKeys.AggregateId));
+        Assert.NotNull(confirmResult2);
+        Assert.False(confirmResult2.IsSuccess); // already confirmed, it should fail
+        Assert.IsType<SekibanAggregateTypeRestrictionException>(confirmResult2.GetException());
     }
     [Fact]
     public async Task ChangeBranchNameSpec()
