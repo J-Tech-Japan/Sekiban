@@ -85,11 +85,11 @@ public interface ICommandContext<TAggregatePayload> where TAggregatePayload : IA
         producedEvents);
     public ResultBox<Aggregate<TAggregatePayload>> GetAggregate();
 }
-public interface ICommand
-{
-}
+public interface ICommand;
+public interface ICommandWithAggregateRestriction<TAggregatePayload> : ICommand
+    where TAggregatePayload : IAggregatePayload;
 public record NoInjection;
-public interface ICommandHandler<TCommand> where TCommand : ICommand, IEquatable<TCommand>
+public interface ICommandHandler<in TCommand> where TCommand : ICommand, IEquatable<TCommand>
 {
     public ResultBox<EventOrNone> Handle(TCommand command, ICommandContext<IAggregatePayload> context);
 }
@@ -99,10 +99,8 @@ public interface
 {
     public ResultBox<EventOrNone> Handle(TCommand command, ICommandContext<TAggregatePayload> context);
 }
-public interface ICommandHandlerCommon
-{
-}
-public interface ICommandHandlerCommon<TCommand, TInjection, TAggregatePayload>
+public interface
+    ICommandHandlerCommon<TCommand, TInjection, TAggregatePayload> : ICommandWithAggregateRestriction<TAggregatePayload>
     where TCommand : ICommand, IEquatable<TCommand> where TAggregatePayload : IAggregatePayload
 {
 }
@@ -147,11 +145,7 @@ public interface ICommandGetProjector
 {
     public IAggregateProjector GetProjector();
 }
-public interface ICommandWithHandlerCommon : ICommand
-{
-}
-public interface ICommandWithHandlerCommon<TCommand, TInjection, TAggregatePayload> : ICommandWithHandlerCommon,
-    ICommand,
+public interface ICommandWithHandlerCommon<TCommand, TInjection, TAggregatePayload> : ICommand,
     ICommandHandlerCommon<TCommand, TInjection, TAggregatePayload>,
     ICommandGetProjector,
     ICommandPartitionSpecifier<TCommand> where TCommand : ICommand, IEquatable<TCommand>
@@ -208,7 +202,7 @@ public interface ICommandExecutor;
 public class CommandExecutor : ICommandExecutor
 {
     public IEventTypes EventTypes { get; init; } = new EmptyEventTypes();
-    public Task<ResultBox<CommandResponse>> Execute<TCommand>(
+    public Task<ResultBox<CommandResponse>> ExecuteFunctionWithoutAggregateRestriction<TCommand>(
         TCommand command,
         IAggregateProjector projector,
         Func<TCommand, PartitionKeys> specifyPartitionKeys,
@@ -219,12 +213,26 @@ public class CommandExecutor : ICommandExecutor
             specifyPartitionKeys,
             OptionalValue<NoInjection>.Empty,
             handler);
-    public Task<ResultBox<CommandResponse>> ExecuteWithInjection<TCommand, TInjection>(
+    public Task<ResultBox<CommandResponse>> ExecuteFunctionWithAggregateRestriction<TCommand, TAggregatePayload>(
         TCommand command,
         IAggregateProjector projector,
         Func<TCommand, PartitionKeys> specifyPartitionKeys,
-        TInjection inject,
-        Func<TCommand, TInjection, ICommandContext<IAggregatePayload>, ResultBox<EventOrNone>> handler)
+        Func<TCommand, ICommandContext<TAggregatePayload>, ResultBox<EventOrNone>> handler)
+        where TCommand : ICommandWithAggregateRestriction<TAggregatePayload>
+        where TAggregatePayload : IAggregatePayload =>
+        ExecuteGeneral<TCommand, NoInjection, TAggregatePayload>(
+            command,
+            projector,
+            specifyPartitionKeys,
+            OptionalValue<NoInjection>.Empty,
+            handler);
+    public Task<ResultBox<CommandResponse>>
+        ExecuteFunctionWithInjectionWithoutAggregateRestriction<TCommand, TInjection>(
+            TCommand command,
+            IAggregateProjector projector,
+            Func<TCommand, PartitionKeys> specifyPartitionKeys,
+            TInjection inject,
+            Func<TCommand, TInjection, ICommandContext<IAggregatePayload>, ResultBox<EventOrNone>> handler)
         where TCommand : ICommand =>
         ExecuteGeneral<TCommand, TInjection, IAggregatePayload>(
             command,
@@ -232,30 +240,20 @@ public class CommandExecutor : ICommandExecutor
             specifyPartitionKeys,
             OptionalValue<TInjection>.FromValue(inject),
             handler);
-    public Task<ResultBox<CommandResponse>> ExecuteWithInjection<TCommand, TInjection, TAggregatePayload>(
-        TCommand command,
-        IAggregateProjector projector,
-        Func<TCommand, PartitionKeys> specifyPartitionKeys,
-        TInjection inject,
-        Func<TCommand, TInjection, ICommandContext<TAggregatePayload>, ResultBox<EventOrNone>> handler)
-        where TCommand : ICommand where TAggregatePayload : IAggregatePayload =>
+    public Task<ResultBox<CommandResponse>>
+        ExecuteFunctionWithInjectionWithAggregateRestriction<TCommand, TInjection, TAggregatePayload>(
+            TCommand command,
+            IAggregateProjector projector,
+            Func<TCommand, PartitionKeys> specifyPartitionKeys,
+            TInjection inject,
+            Func<TCommand, TInjection, ICommandContext<TAggregatePayload>, ResultBox<EventOrNone>> handler)
+        where TCommand : ICommandWithAggregateRestriction<TAggregatePayload>
+        where TAggregatePayload : IAggregatePayload =>
         ExecuteGeneral<TCommand, TInjection, TAggregatePayload>(
             command,
             projector,
             specifyPartitionKeys,
             OptionalValue<TInjection>.FromValue(inject),
-            handler);
-    public Task<ResultBox<CommandResponse>> Execute<TCommand, TAggregatePayload>(
-        TCommand command,
-        IAggregateProjector projector,
-        Func<TCommand, PartitionKeys> specifyPartitionKeys,
-        Func<TCommand, ICommandContext<TAggregatePayload>, ResultBox<EventOrNone>> handler) where TCommand : ICommand
-        where TAggregatePayload : IAggregatePayload =>
-        ExecuteGeneral<TCommand, NoInjection, TAggregatePayload>(
-            command,
-            projector,
-            specifyPartitionKeys,
-            OptionalValue<NoInjection>.Empty,
             handler);
 
     #region Private Methods

@@ -87,7 +87,7 @@ public class UnitTest1
 
         Assert.Empty(Repository.Events);
         var registerBranch = new RegisterBranch("branch1");
-        await executor.Execute(
+        await executor.ExecuteFunction(
             registerBranch,
             new BranchProjector(),
             registerBranch.SpecifyPartitionKeys,
@@ -103,7 +103,7 @@ public class UnitTest1
 
         var registerUser = new RegisterUser("tomo", "tomo@example.com");
         var userExecuted = await executor
-            .ExecuteWithInjection(
+            .ExecuteFunctionWithInjection(
                 registerUser,
                 new UserProjector(),
                 registerUser.SpecifyPartitionKeys,
@@ -114,14 +114,14 @@ public class UnitTest1
 
         var confirmUser = new ConfirmUser(userExecuted.PartitionKeys.AggregateId);
 
-        var confirmResult = await executor.Execute<ConfirmUser, UnconfirmedUser>(
+        var confirmResult = await executor.ExecuteFunction(
             confirmUser,
             new UserProjector(),
             confirmUser.SpecifyPartitionKeys,
             confirmUser.Handle);
         Assert.NotNull(confirmResult);
         Assert.True(confirmResult.IsSuccess);
-        var confirmResult2 = await executor.Execute<ConfirmUser, UnconfirmedUser>(
+        var confirmResult2 = await executor.ExecuteFunction(
             confirmUser,
             new UserProjector(),
             confirmUser.SpecifyPartitionKeys,
@@ -134,7 +134,7 @@ public class UnitTest1
 
 
         var revokeCommand = new RevokeUser(userExecuted.PartitionKeys.AggregateId);
-        var revokeResultFail = await executor.ExecuteWithInjection<RevokeUser, RevokeUser.Injection, ConfirmedUser>(
+        var revokeResultFail = await executor.ExecuteFunctionWithInjection(
             revokeCommand,
             new UserProjector(),
             revokeCommand.SpecifyPartitionKeys,
@@ -144,7 +144,7 @@ public class UnitTest1
         Assert.False(revokeResultFail.IsSuccess); // when use not exists, it should fail
         Assert.IsType<ApplicationException>(revokeResultFail.GetException());
 
-        var revokeResult = await executor.ExecuteWithInjection<RevokeUser, RevokeUser.Injection, ConfirmedUser>(
+        var revokeResult = await executor.ExecuteFunctionWithInjection(
             revokeCommand,
             new UserProjector(),
             revokeCommand.SpecifyPartitionKeys,
@@ -153,7 +153,7 @@ public class UnitTest1
         Assert.NotNull(revokeResult);
         Assert.True(revokeResult.IsSuccess);
 
-        var revokeResult2 = await executor.ExecuteWithInjection<RevokeUser, RevokeUser.Injection, ConfirmedUser>(
+        var revokeResult2 = await executor.ExecuteFunctionWithInjection(
             revokeCommand,
             new UserProjector(),
             revokeCommand.SpecifyPartitionKeys,
