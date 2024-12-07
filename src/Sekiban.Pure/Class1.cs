@@ -125,7 +125,6 @@ public interface
     where TProjector : IAggregateProjector, new()
 {
     IAggregateProjector ICommandGetProjector.GetProjector() => new TProjector();
-    Delegate ICommandWithHandlerCommon.GetHandler() => Handle;
 }
 public interface
     ICommandWithHandlerInjection<TCommand, TProjector, TInject> :
@@ -134,7 +133,15 @@ public interface
     where TProjector : IAggregateProjector, new()
 {
     IAggregateProjector ICommandGetProjector.GetProjector() => new TProjector();
-    Delegate ICommandWithHandlerCommon.GetHandler() => Handle;
+}
+public interface
+    ICommandWithHandlerInjection<TCommand, TProjector, TInject, TAggregatePayload> :
+    ICommandWithHandlerCommon<TCommand, TInject, TAggregatePayload>,
+    ICommandHandlerInjection<TCommand, TInject, TAggregatePayload> where TCommand : ICommand, IEquatable<TCommand>
+    where TProjector : IAggregateProjector, new()
+    where TAggregatePayload : IAggregatePayload
+{
+    IAggregateProjector ICommandGetProjector.GetProjector() => new TProjector();
 }
 public interface ICommandGetProjector
 {
@@ -142,7 +149,6 @@ public interface ICommandGetProjector
 }
 public interface ICommandWithHandlerCommon : ICommand
 {
-    public Delegate GetHandler();
 }
 public interface ICommandWithHandlerCommon<TCommand, TInjection, TAggregatePayload> : ICommandWithHandlerCommon,
     ICommand,
@@ -160,7 +166,6 @@ public interface
     where TAggregatePayload : IAggregatePayload
 {
     IAggregateProjector ICommandGetProjector.GetProjector() => new TProjector();
-    Delegate ICommandWithHandlerCommon.GetHandler() => Handle;
 }
 public static class PartitionKeys<TAggregateProjector> where TAggregateProjector : IAggregateProjector, new()
 {
@@ -203,7 +208,7 @@ public interface ICommandExecutor;
 public class CommandExecutor : ICommandExecutor
 {
     public IEventTypes EventTypes { get; init; } = new EmptyEventTypes();
-    public Task<ResultBox<CommandResponse>> ExecuteWithFunction<TCommand>(
+    public Task<ResultBox<CommandResponse>> Execute<TCommand>(
         TCommand command,
         IAggregateProjector projector,
         Func<TCommand, PartitionKeys> specifyPartitionKeys,
@@ -214,19 +219,20 @@ public class CommandExecutor : ICommandExecutor
             specifyPartitionKeys,
             OptionalValue<NoInjection>.Empty,
             handler);
-    public Task<ResultBox<CommandResponse>> ExecuteWithFunction<TCommand, TInjection>(
+    public Task<ResultBox<CommandResponse>> ExecuteWithInjection<TCommand, TInjection>(
         TCommand command,
         IAggregateProjector projector,
         Func<TCommand, PartitionKeys> specifyPartitionKeys,
         TInjection inject,
-        Func<TCommand, ICommandContext<IAggregatePayload>, ResultBox<EventOrNone>> handler) where TCommand : ICommand =>
+        Func<TCommand, TInjection, ICommandContext<IAggregatePayload>, ResultBox<EventOrNone>> handler)
+        where TCommand : ICommand =>
         ExecuteGeneral<TCommand, TInjection, IAggregatePayload>(
             command,
             projector,
             specifyPartitionKeys,
             OptionalValue<TInjection>.FromValue(inject),
             handler);
-    public Task<ResultBox<CommandResponse>> ExecuteWithFunction<TCommand, TInjection, TAggregatePayload>(
+    public Task<ResultBox<CommandResponse>> ExecuteWithInjection<TCommand, TInjection, TAggregatePayload>(
         TCommand command,
         IAggregateProjector projector,
         Func<TCommand, PartitionKeys> specifyPartitionKeys,
@@ -239,7 +245,7 @@ public class CommandExecutor : ICommandExecutor
             specifyPartitionKeys,
             OptionalValue<TInjection>.FromValue(inject),
             handler);
-    public Task<ResultBox<CommandResponse>> ExecuteWithFunction<TCommand, TAggregatePayload>(
+    public Task<ResultBox<CommandResponse>> Execute<TCommand, TAggregatePayload>(
         TCommand command,
         IAggregateProjector projector,
         Func<TCommand, PartitionKeys> specifyPartitionKeys,

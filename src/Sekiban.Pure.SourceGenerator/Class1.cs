@@ -90,20 +90,21 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
             var model = compilation.GetSemanticModel(typeSyntax.SyntaxTree);
             var typeSymbol = model.GetDeclaredSymbol(typeSyntax) as INamedTypeSymbol;
             var allInterfaces = typeSymbol.AllInterfaces.ToList();
-            if (typeSymbol != null && typeSymbol.AllInterfaces.Any(m => m.OriginalDefinition == iEventSymbol))
+            if (typeSymbol != null && typeSymbol.AllInterfaces.Any(m => m.OriginalDefinition.Name == iEventSymbol.Name))
             {
-                var interfaceImplementation = typeSymbol.AllInterfaces.First(m => m.OriginalDefinition == iEventSymbol);
-                var arg1 = interfaceImplementation.TypeArguments[0].ToDisplayString();
-                var arg2 = interfaceImplementation.TypeArguments[1].ToDisplayString();
-                var arg3 = interfaceImplementation.TypeArguments[2].ToDisplayString();
+                var interfaceImplementation = typeSymbol.AllInterfaces.First(
+                    m => m.OriginalDefinition is not null && m.OriginalDefinition.Name == iEventSymbol.Name);
                 var toadd = new CommandWithHandlerValues
                 {
                     InterfaceName = interfaceImplementation.Name,
                     RecordName = typeSymbol.ToDisplayString(),
                     TypeCount = interfaceImplementation.TypeArguments.Length,
-                    Type1Name = arg1,
-                    Type2Name = arg2,
-                    Type3Name = arg3
+                    Type1Name = interfaceImplementation.TypeArguments[0].ToDisplayString(),
+                    Type2Name = interfaceImplementation.TypeArguments[1].ToDisplayString(),
+                    Type3Name = interfaceImplementation.TypeArguments[2].ToDisplayString(),
+                    Type4Name = interfaceImplementation.TypeArguments.Length > 3
+                        ? interfaceImplementation.TypeArguments[3].ToDisplayString()
+                        : string.Empty
                 };
                 eventTypes.Add(toadd);
             }
@@ -133,7 +134,7 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
                 case ("ICommandWithHandler", 2):
                     sb.AppendLine(
                         $"        public static Task<ResultBox<CommandResponse>> Execute(this CommandExecutor executor, {type.RecordName} command) =>");
-                    sb.AppendLine("            executor.ExecuteWithFunction(");
+                    sb.AppendLine("            executor.Execute(");
                     sb.AppendLine("                command,");
                     sb.AppendLine("                (command as ICommandGetProjector).GetProjector(),");
                     sb.AppendLine("                command.SpecifyPartitionKeys,");
@@ -143,8 +144,7 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
                 case ("ICommandWithHandler", 3):
                     sb.AppendLine(
                         $"        public static Task<ResultBox<CommandResponse>> Execute(this CommandExecutor executor, {type.RecordName} command) =>");
-                    sb.AppendLine(
-                        "            executor.ExecuteWithFunction<" + $"{type.RecordName}, {type.Type3Name}>(");
+                    sb.AppendLine("            executor.Execute<" + $"{type.RecordName}, {type.Type3Name}>(");
                     sb.AppendLine("                command,");
                     sb.AppendLine("                (command as ICommandGetProjector).GetProjector(),");
                     sb.AppendLine("                command.SpecifyPartitionKeys,");
@@ -155,8 +155,21 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
                     sb.AppendLine(
                         $"        public static Task<ResultBox<CommandResponse>> Execute(this CommandExecutor executor, {type.RecordName} command, {type.RecordName}.Injection injection) =>");
                     sb.AppendLine(
-                        "            executor.ExecuteWithFunction<" +
+                        "            executor.ExecuteWithInjection<" +
                         $"{type.RecordName}, {type.Type3Name}, IAggregatePayload>(");
+                    sb.AppendLine("                command,");
+                    sb.AppendLine("                (command as ICommandGetProjector).GetProjector(),");
+                    sb.AppendLine("                command.SpecifyPartitionKeys,");
+                    sb.AppendLine("                injection,");
+                    sb.AppendLine("                command.Handle);");
+                    sb.AppendLine();
+                    break;
+                case ("ICommandWithHandlerInjection", 4):
+                    sb.AppendLine(
+                        $"        public static Task<ResultBox<CommandResponse>> Execute(this CommandExecutor executor, {type.RecordName} command, {type.RecordName}.Injection injection) =>");
+                    sb.AppendLine(
+                        "            executor.ExecuteWithInjection<" +
+                        $"{type.RecordName}, {type.Type3Name}, {type.Type4Name}>(");
                     sb.AppendLine("                command,");
                     sb.AppendLine("                (command as ICommandGetProjector).GetProjector(),");
                     sb.AppendLine("                command.SpecifyPartitionKeys,");
@@ -180,5 +193,6 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
         public string Type1Name { get; set; }
         public string Type2Name { get; set; }
         public string Type3Name { get; set; }
+        public string Type4Name { get; set; }
     }
 }

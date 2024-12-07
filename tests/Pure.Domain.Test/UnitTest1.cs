@@ -56,7 +56,114 @@ public class UnitTest1
         Assert.NotNull(confirmResult2);
         Assert.False(confirmResult2.IsSuccess); // already confirmed, it should fail
         Assert.IsType<SekibanAggregateTypeRestrictionException>(confirmResult2.GetException());
+
+        var revokeResultFail = await executor.Execute(
+            new RevokeUser(userExecuted.PartitionKeys.AggregateId),
+            new RevokeUser.Injection(_ => false));
+        Assert.NotNull(revokeResultFail);
+        Assert.False(revokeResultFail.IsSuccess); // when use not exists, it should fail
+        Assert.IsType<ApplicationException>(revokeResultFail.GetException());
+
+
+        var revokeResult = await executor.Execute(
+            new RevokeUser(userExecuted.PartitionKeys.AggregateId),
+            new RevokeUser.Injection(_ => true));
+        Assert.NotNull(revokeResult);
+        Assert.True(revokeResult.IsSuccess);
+
+        var revokeResult2 = await executor.Execute(
+            new RevokeUser(userExecuted.PartitionKeys.AggregateId),
+            new RevokeUser.Injection(_ => true));
+        Assert.NotNull(revokeResult2);
+        Assert.False(revokeResult2.IsSuccess); // already revoked, it should fail
+        Assert.IsType<SekibanAggregateTypeRestrictionException>(revokeResult2.GetException());
+
     }
+    [Fact]
+    public async Task SimpleEventSourcingFunction()
+    {
+        Repository.Events.Clear();
+        var executor = new CommandExecutor { EventTypes = new DomainEventTypes() };
+
+        Assert.Empty(Repository.Events);
+        var registerBranch = new RegisterBranch("branch1");
+        await executor.Execute(
+            registerBranch,
+            new BranchProjector(),
+            registerBranch.SpecifyPartitionKeys,
+            registerBranch.Handle);
+
+        Assert.Single(Repository.Events);
+        var last = Repository.Events.Last();
+        Assert.IsType<Event<BranchCreated>>(last);
+
+        var aggregate = Repository.Load(last.PartitionKeys, new BranchProjector()).UnwrapBox();
+        var payload = aggregate.GetPayload();
+        Assert.IsType<Branch>(payload);
+
+        var registerUser = new RegisterUser("tomo", "tomo@example.com");
+        var userExecuted = await executor
+            .ExecuteWithInjection(
+                registerUser,
+                new UserProjector(),
+                registerUser.SpecifyPartitionKeys,
+                new RegisterUser.Injection(_ => false),
+                registerUser.Handle)
+            .UnwrapBox();
+        Assert.NotNull(userExecuted);
+
+        var confirmUser = new ConfirmUser(userExecuted.PartitionKeys.AggregateId);
+
+        var confirmResult = await executor.Execute<ConfirmUser, UnconfirmedUser>(
+            confirmUser,
+            new UserProjector(),
+            confirmUser.SpecifyPartitionKeys,
+            confirmUser.Handle);
+        Assert.NotNull(confirmResult);
+        Assert.True(confirmResult.IsSuccess);
+        var confirmResult2 = await executor.Execute<ConfirmUser, UnconfirmedUser>(
+            confirmUser,
+            new UserProjector(),
+            confirmUser.SpecifyPartitionKeys,
+            confirmUser.Handle);
+        Assert.NotNull(confirmResult2);
+        Assert.False(confirmResult2.IsSuccess); // already confirmed, it should fail
+        Assert.IsType<SekibanAggregateTypeRestrictionException>(confirmResult2.GetException());
+
+
+
+
+        var revokeCommand = new RevokeUser(userExecuted.PartitionKeys.AggregateId);
+        var revokeResultFail = await executor.ExecuteWithInjection<RevokeUser, RevokeUser.Injection, ConfirmedUser>(
+            revokeCommand,
+            new UserProjector(),
+            revokeCommand.SpecifyPartitionKeys,
+            new RevokeUser.Injection(_ => false),
+            revokeCommand.Handle);
+        Assert.NotNull(revokeResultFail);
+        Assert.False(revokeResultFail.IsSuccess); // when use not exists, it should fail
+        Assert.IsType<ApplicationException>(revokeResultFail.GetException());
+
+        var revokeResult = await executor.ExecuteWithInjection<RevokeUser, RevokeUser.Injection, ConfirmedUser>(
+            revokeCommand,
+            new UserProjector(),
+            revokeCommand.SpecifyPartitionKeys,
+            new RevokeUser.Injection(_ => true),
+            revokeCommand.Handle);
+        Assert.NotNull(revokeResult);
+        Assert.True(revokeResult.IsSuccess);
+
+        var revokeResult2 = await executor.ExecuteWithInjection<RevokeUser, RevokeUser.Injection, ConfirmedUser>(
+            revokeCommand,
+            new UserProjector(),
+            revokeCommand.SpecifyPartitionKeys,
+            new RevokeUser.Injection(_ => true),
+            revokeCommand.Handle);
+        Assert.NotNull(revokeResult2);
+        Assert.False(revokeResult2.IsSuccess); // already revoked, it should fail
+        Assert.IsType<SekibanAggregateTypeRestrictionException>(revokeResult2.GetException());
+    }
+
     [Fact]
     public async Task ChangeBranchNameSpec()
     {

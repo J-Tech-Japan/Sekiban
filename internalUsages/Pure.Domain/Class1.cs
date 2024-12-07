@@ -98,18 +98,36 @@ public record ConfirmUser(Guid UserId) : ICommandWithHandler<ConfirmUser, UserPr
         EventOrNone.Event(new UserConfirmed());
     public PartitionKeys SpecifyPartitionKeys(ConfirmUser command) => PartitionKeys<UserProjector>.Existing(UserId);
 }
+public record RevokeUser(Guid UserId)
+    : ICommandWithHandlerInjection<RevokeUser, UserProjector, RevokeUser.Injection, ConfirmedUser>
+{
+    public PartitionKeys SpecifyPartitionKeys(RevokeUser command) => PartitionKeys<UserProjector>.Existing(UserId);
+    public ResultBox<EventOrNone> Handle(
+        RevokeUser command,
+        Injection injection,
+        ICommandContext<ConfirmedUser> context) =>
+        context
+            .GetAggregate()
+            .Conveyor(aggregate => injection.UserExists(aggregate.PartitionKeys.AggregateId).ToResultBox())
+            .Verify(
+                exists => exists
+                    ? ExceptionOrNone.None
+                    : ExceptionOrNone.FromException(new ApplicationException("user already exists")))
+            .Conveyor(_ => EventOrNone.Event(new UserUnconfirmed()));
+    public record Injection(Func<Guid, bool> UserExists);
+}
 public class Test
 {
     public void Test1()
     {
         var commandExecutor = new CommandExecutor();
-        commandExecutor.ExecuteWithFunction(
+        commandExecutor.Execute(
             new RegisterCommand2("name", Guid.CreateVersion7(), "tenantCode"),
             new BranchProjector(),
             c => PartitionKeys.Existing(c.BranchId),
             (c, context) => EventOrNone.Event(new BranchCreated(c.Name)));
 
-        commandExecutor.ExecuteWithFunction(
+        commandExecutor.Execute(
             new RegisterCommand2("name", Guid.CreateVersion7(), "tenantCode"),
             new BranchProjector(),
             c => PartitionKeys.Existing<BranchProjector>(c.BranchId),
