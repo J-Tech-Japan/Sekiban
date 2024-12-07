@@ -103,7 +103,7 @@ public class UnitTest1
 
         var registerUser = new RegisterUser("tomo", "tomo@example.com");
         var userExecuted = await executor
-            .ExecuteFunctionWithInjection(
+            .ExecuteFunction(
                 registerUser,
                 new UserProjector(),
                 registerUser.SpecifyPartitionKeys,
@@ -134,7 +134,7 @@ public class UnitTest1
 
 
         var revokeCommand = new RevokeUser(userExecuted.PartitionKeys.AggregateId);
-        var revokeResultFail = await executor.ExecuteFunctionWithInjection(
+        var revokeResultFail = await executor.ExecuteFunction(
             revokeCommand,
             new UserProjector(),
             revokeCommand.SpecifyPartitionKeys,
@@ -144,7 +144,7 @@ public class UnitTest1
         Assert.False(revokeResultFail.IsSuccess); // when use not exists, it should fail
         Assert.IsType<ApplicationException>(revokeResultFail.GetException());
 
-        var revokeResult = await executor.ExecuteFunctionWithInjection(
+        var revokeResult = await executor.ExecuteFunction(
             revokeCommand,
             new UserProjector(),
             revokeCommand.SpecifyPartitionKeys,
@@ -153,7 +153,7 @@ public class UnitTest1
         Assert.NotNull(revokeResult);
         Assert.True(revokeResult.IsSuccess);
 
-        var revokeResult2 = await executor.ExecuteFunctionWithInjection(
+        var revokeResult2 = await executor.ExecuteFunction(
             revokeCommand,
             new UserProjector(),
             revokeCommand.SpecifyPartitionKeys,
@@ -203,6 +203,7 @@ public class UnitTest1
     [Fact]
     public async Task MultipleBranchesSpec()
     {
+        Repository.Events.Clear();
         var executor = new CommandExecutor { EventTypes = new DomainEventTypes() };
 
         Assert.Empty(Repository.Events);
@@ -227,6 +228,40 @@ public class UnitTest1
         Assert.NotNull(payload);
         Assert.Equal("branch name2", payload.Name);
         Assert.Equal(2, aggregate.Version);
+
+    }
+    [Fact]
+    public async Task ICommandAndICommandWithAggregateRestrictionShouldWorkWithFunctionTest()
+    {
+        Repository.Events.Clear();
+        var executor = new CommandExecutor { EventTypes = new DomainEventTypes() };
+
+        var command1 = new RegisterBranch2("aaa");
+        var result = await executor.ExecuteFunction(
+            command1,
+            new BranchProjector(),
+            branch2 => PartitionKeys.Generate(),
+            (branch2, context) => EventOrNone.Event(new BranchCreated(branch2.Name)));
+        Assert.True(result.IsSuccess);
+        var aggregate = Repository.Load<BranchProjector>(result.GetValue().PartitionKeys);
+        Assert.NotNull(aggregate);
+        Assert.IsType<Branch>(aggregate.GetValue().GetPayload());
+        var branch = aggregate.GetValue().GetPayload() as Branch ?? throw new ApplicationException();
+        Assert.Equal("aaa", branch.Name);
+
+
+        var command2 = new RegisterBranch3("bbb");
+        var result2 = await executor.ExecuteFunction(
+            command2,
+            new BranchProjector(),
+            branch2 => PartitionKeys.Generate(),
+            (branch3, context) => EventOrNone.Event(new BranchCreated(branch3.Name)));
+        Assert.True(result2.IsSuccess);
+        var aggregate2 = Repository.Load<BranchProjector>(result2.GetValue().PartitionKeys);
+        Assert.NotNull(aggregate2);
+        Assert.IsType<Branch>(aggregate2.GetValue().GetPayload());
+        var branch2 = aggregate2.GetValue().GetPayload() as Branch ?? throw new ApplicationException();
+        Assert.Equal("bbb", branch2.Name);
 
     }
 }
