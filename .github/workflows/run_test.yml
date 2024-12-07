@@ -492,14 +492,14 @@ jobs:
         dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:S3BucketName" "jjga-s3"        
     - name: Restore dependencies
       run: |
-        dotnet restore Sekiban.sln
+        dotnet restore SekibanFor8.sln
     - name: Test dotnet
       uses: nick-fields/retry@v2
       with:
         timeout_seconds: 1000
         max_attempts: 3
         retry_on: error
-        command: dotnet test Sekiban.sln  --filter "Category=Flaky" -v m -c Release -m:1 -f net8.0
+        command: dotnet test SekibanFor8.sln  --filter "Category=Flaky" -v m -c Release -m:1 -f net8.0
 
 
   flaky90:
