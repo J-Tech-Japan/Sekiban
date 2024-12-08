@@ -32,7 +32,7 @@ public class UnitTest1
     public async Task SimpleEventSourcing()
     {
         Repository.Events.Clear();
-        var executor = new CommandExecutor { EventTypes = new DomainEventTypes() };
+        var executor = new CommandExecutor { EventTypes = new PureDomainEventTypes() };
 
         Assert.Empty(Repository.Events);
         await executor.Execute(new RegisterBranch("branch1"));
@@ -83,7 +83,7 @@ public class UnitTest1
     public async Task SimpleEventSourcingFunction()
     {
         Repository.Events.Clear();
-        var executor = new CommandExecutor { EventTypes = new DomainEventTypes() };
+        var executor = new CommandExecutor { EventTypes = new PureDomainEventTypes() };
 
         Assert.Empty(Repository.Events);
         var registerBranch = new RegisterBranch("branch1");
@@ -168,7 +168,7 @@ public class UnitTest1
     public async Task ChangeBranchNameSpec()
     {
         Repository.Events.Clear();
-        var executor = new CommandExecutor { EventTypes = new DomainEventTypes() };
+        var executor = new CommandExecutor { EventTypes = new PureDomainEventTypes() };
 
         Assert.Empty(Repository.Events);
         var executed = await executor.Execute(new RegisterBranch("branch1"));
@@ -204,7 +204,7 @@ public class UnitTest1
     public async Task MultipleBranchesSpec()
     {
         Repository.Events.Clear();
-        var executor = new CommandExecutor { EventTypes = new DomainEventTypes() };
+        var executor = new CommandExecutor { EventTypes = new PureDomainEventTypes() };
 
         Assert.Empty(Repository.Events);
         var executed = await executor.Execute(new RegisterBranch("branch 0"));
@@ -234,7 +234,7 @@ public class UnitTest1
     public async Task ICommandAndICommandWithAggregateRestrictionShouldWorkWithFunctionTest()
     {
         Repository.Events.Clear();
-        var executor = new CommandExecutor { EventTypes = new DomainEventTypes() };
+        var executor = new CommandExecutor { EventTypes = new PureDomainEventTypes() };
 
         var command1 = new RegisterBranch2("aaa");
         var result = await executor.ExecuteFunction(
