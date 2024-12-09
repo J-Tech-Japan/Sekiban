@@ -16,4 +16,11 @@
     <ProjectReference Include="..\Sekiban.Infrastructure.Azure.Storage.Blobs\Sekiban.Infrastructure.Azure.Storage.Blobs.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="Runtime/dist/runtime.js">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <TargetPath>Assets/sekiban-runtime.js</TargetPath>
+    </Content>
+  </ItemGroup>
+
 </Project>
