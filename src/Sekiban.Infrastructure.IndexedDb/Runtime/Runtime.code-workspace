@@ -10,14 +10,19 @@
         "source.fixAll": "explicit",
         "source.organizeImports": "explicit",
       },
-      "editor.defaultFormatter": "esbenp.prettier-vscode",
+      "editor.defaultFormatter": "biomejs.biome",
       "editor.formatOnSave": true,
+    },
+    "[json]": {
+      "editor.defaultFormatter": "vscode.json-language-features",
+    },
+    "[jsonc]": {
+      "editor.defaultFormatter": "vscode.json-language-features",
     },
   },
   "extensions": {
     "recommendations": [
-			"dbaeumer.vscode-eslint",
-			"esbenp.prettier-vscode",
-		],
+      "biomejs.biome",
+    ],
   },
 }
