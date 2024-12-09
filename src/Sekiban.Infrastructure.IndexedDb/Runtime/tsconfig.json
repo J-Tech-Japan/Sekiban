@@ -1,11 +1,16 @@
 {
-  "extends": "./node_modules/gts/tsconfig-google.json",
+  "extends": "@tsconfig/recommended",
   "compilerOptions": {
-    "rootDir": ".",
-    "outDir": "build"
+    "lib": [
+      "esnext",
+      "dom",
+    ],
+    "module": "esnext",
+    "target": "esnext",
+    "isolatedModules": true,
+    "outDir": "dist/",
   },
   "include": [
     "src/**/*.ts",
-    "test/**/*.ts"
-  ]
+  ],
 }
