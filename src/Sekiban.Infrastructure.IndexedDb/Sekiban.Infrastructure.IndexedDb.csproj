@@ -23,4 +23,9 @@
     </Content>
   </ItemGroup>
 
+  <Target Name="Build runtime" BeforeTargets="BeforeBuild">
+    <Exec Command="npm install" WorkingDirectory="Runtime" />
+    <Exec Command="npm run build" WorkingDirectory="Runtime" />
+  </Target>
+
 </Project>
