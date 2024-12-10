@@ -9,8 +9,10 @@ namespace Pure.Benchmark.Test;
 
 // [SimpleJob(RuntimeMoniker.Net90, 1, 5, 10, 10000, baseline: true)]
 // [SimpleJob(RuntimeMoniker.NativeAot90, 1, 5, 10, 10000)]
-[SimpleJob(RuntimeMoniker.Net90, 1, 5, 10, 3000, baseline: true)]
-[SimpleJob(RuntimeMoniker.NativeAot90, 1, 5, 10, 3000)]
+[SimpleJob(RuntimeMoniker.Net90, 1, 5, 10, 5000, baseline: true)]
+[SimpleJob(RuntimeMoniker.NativeAot90, 1, 5, 10, 5000)]
+[SimpleJob(RuntimeMoniker.Net80, 1, 5, 10, 5000)]
+[SimpleJob(RuntimeMoniker.NativeAot80, 1, 5, 10, 5000)]
 // [SimpleJob(RuntimeMoniker.Net90, 1, 5, 10, 100, baseline: true)]
 // [SimpleJob(RuntimeMoniker.NativeAot90, 1, 5, 10, 100)]
 public class DomainTest
@@ -19,11 +21,8 @@ public class DomainTest
     [Benchmark]
     public Task<ResultBox<CommandResponse>> WithReflection()
     {
-        Console.WriteLine("WithReflection start");
         var executor = new CommandExecutor { EventTypes = new CpPureDomainEventTypes() };
-        Console.WriteLine("executor created");
         var createCommand = new RegisterBranch("a");
-        Console.WriteLine("createCommand created");
         return executor.ExecuteGeneralNonGeneric(
             createCommand,
             new BranchProjector(),
@@ -31,24 +30,18 @@ public class DomainTest
             null,
             createCommand.Handle,
             OptionalValue<Type>.Empty);
-        // result.Log("with");
     }
 
     [Benchmark]
-    public Task<ResultBox<CommandResponse>> WithoutReflection()
+    public Task<ResultBox<CommandResponse>> WithReflection2()
     {
-        Console.WriteLine("WithoutReflection start");
         var executor = new CommandExecutor { EventTypes = new CpPureDomainEventTypes() };
-        Console.WriteLine("executor created");
         var createCommand = new RegisterBranch("a");
-        Console.WriteLine("createCommand created");
         var method = executor
                 .GetType()
                 .GetMethod(nameof(CommandExecutor.ExecuteGeneral), BindingFlags.Public | BindingFlags.Instance) ??
             throw new ApplicationException("Method not found");
-        Console.WriteLine("method created");
         var generic = method.MakeGenericMethod(typeof(RegisterBranch), typeof(NoInjection), typeof(IAggregatePayload));
-        Console.WriteLine("generic created");
         return (Task<ResultBox<CommandResponse>>)generic.Invoke(
             executor,
             new object[]
@@ -77,16 +70,35 @@ public class DomainTest
     }
 
     [Benchmark]
-    public Task<ResultBox<CommandResponse>> WithoutReflection2()
+    public Task<ResultBox<CommandResponse>> WithoutReflection1()
     {
         var executor = new CommandExecutor { EventTypes = new CpPureDomainEventTypes() };
         var createCommand = new RegisterBranch("a");
-        // return executor.Execute(createCommand);
         return executor.ExecuteGeneral<RegisterBranch, NoInjection, IAggregatePayload>(
             createCommand,
             new BranchProjector(),
             createCommand.SpecifyPartitionKeys,
             OptionalValue<NoInjection>.Empty,
+            createCommand.Handle);
+    }
+
+    [Benchmark]
+    public Task<ResultBox<CommandResponse>> WithoutReflection2()
+    {
+        var executor = new CommandExecutor { EventTypes = new CpPureDomainEventTypes() };
+        var createCommand = new RegisterBranch("a");
+        return executor.Execute(createCommand);
+    }
+    [Benchmark]
+    public Task<ResultBox<CommandResponse>> WithoutReflection3()
+    {
+        var executor = new CommandExecutor { EventTypes = new CpPureDomainEventTypes() };
+        var createCommand = new RegisterBranch("a");
+
+        return executor.ExecuteFunction(
+            createCommand,
+            new BranchProjector(),
+            createCommand.SpecifyPartitionKeys,
             createCommand.Handle);
     }
 }
@@ -104,13 +116,16 @@ public class Program
             var summary = BenchmarkRunner.Run<DomainTest>();
         } else
         {
+
             var test = new DomainTest();
             Console.WriteLine("test start");
             await test.WithReflection().Log();
             Console.WriteLine("test WithReflection end");
-            await test.WithoutReflection2().Log();
+            await test.WithoutReflection1().Log();
             Console.WriteLine("test WithoutReflection2 end");
-            await test.WithoutReflection().Log();
+            await test.WithReflection2().Log();
+            Console.WriteLine("test WithoutReflection end");
+            await test.WithoutReflection2().Log();
             Console.WriteLine("test WithoutReflection end");
             // Console.WriteLine("test");
             // var r = ResultBox.FromValue(1);

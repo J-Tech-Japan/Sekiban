@@ -133,6 +133,7 @@ public interface
     ICommandHandler<TCommand, IAggregatePayload> where TCommand : ICommand, IEquatable<TCommand>
     where TProjector : IAggregateProjector, new()
 {
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ICommandWithHandler<,>))]
     IAggregateProjector ICommandGetProjector.GetProjector() => new TProjector();
 }
 public interface
@@ -141,6 +142,7 @@ public interface
     ICommandHandlerAsync<TCommand, IAggregatePayload> where TCommand : ICommand, IEquatable<TCommand>
     where TProjector : IAggregateProjector, new()
 {
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ICommandWithHandlerAsync<,>))]
     IAggregateProjector ICommandGetProjector.GetProjector() => new TProjector();
 }
 public interface
@@ -149,6 +151,7 @@ public interface
     ICommandHandlerInjection<TCommand, TInject, IAggregatePayload> where TCommand : ICommand, IEquatable<TCommand>
     where TProjector : IAggregateProjector, new()
 {
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ICommandWithHandlerInjection<,,>))]
     IAggregateProjector ICommandGetProjector.GetProjector() => new TProjector();
 }
 public interface
@@ -157,6 +160,7 @@ public interface
     ICommandHandlerInjectionAsync<TCommand, TInject, IAggregatePayload> where TCommand : ICommand, IEquatable<TCommand>
     where TProjector : IAggregateProjector, new()
 {
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ICommandWithHandlerInjectionAsync<,,>))]
     IAggregateProjector ICommandGetProjector.GetProjector() => new TProjector();
 }
 public interface
@@ -166,15 +170,17 @@ public interface
     where TProjector : IAggregateProjector, new()
     where TAggregatePayload : IAggregatePayload
 {
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ICommandWithHandlerInjection<,,,>))]
     IAggregateProjector ICommandGetProjector.GetProjector() => new TProjector();
 }
 public interface
-    ICommandWithHandlerInjectionAdync<TCommand, TProjector, TInject, TAggregatePayload> :
+    ICommandWithHandlerInjectionAsync<TCommand, TProjector, TInject, TAggregatePayload> :
     ICommandWithHandlerCommon<TCommand, TInject, TAggregatePayload>,
     ICommandHandlerInjectionAsync<TCommand, TInject, TAggregatePayload> where TCommand : ICommand, IEquatable<TCommand>
     where TProjector : IAggregateProjector, new()
     where TAggregatePayload : IAggregatePayload
 {
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ICommandWithHandlerInjectionAsync<,,,>))]
     IAggregateProjector ICommandGetProjector.GetProjector() => new TProjector();
 }
 public interface ICommandGetProjector
@@ -193,6 +199,7 @@ public interface
     where TProjector : IAggregateProjector, new()
     where TAggregatePayload : IAggregatePayload
 {
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ICommandWithHandler<,,>))]
     IAggregateProjector ICommandGetProjector.GetProjector() => new TProjector();
 }
 public interface
@@ -202,6 +209,7 @@ public interface
     where TProjector : IAggregateProjector, new()
     where TAggregatePayload : IAggregatePayload
 {
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ICommandWithHandlerAsync<,,>))]
     IAggregateProjector ICommandGetProjector.GetProjector() => new TProjector();
 }
 public static class PartitionKeys<TAggregateProjector> where TAggregateProjector : IAggregateProjector, new()
@@ -368,6 +376,7 @@ public class CommandExecutor : ICommandExecutor
             handler);
     #region Private Methods
     [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods, typeof(CommandExecutor))]
+    [UnconditionalSuppressMessage("AOT", "IL3050:Calling members annotated with 'RequiresDynamicCodeAttribute' may break functionality when AOT compiling.", Justification = "<Pending>")]
     public async Task<ResultBox<CommandResponse>> ExecuteGeneralNonGeneric(
         ICommand command,
         IAggregateProjector projector,
@@ -391,7 +400,6 @@ public class CommandExecutor : ICommandExecutor
         var method = GetType().GetMethod(nameof(ExecuteGeneral), BindingFlags.Public | BindingFlags.Instance);
         if (method is null) { return new SekibanCommandHandlerNotMatchException("Method not found"); }
         var genericMethod = method.MakeGenericMethod(commandType, injectType, aggregatePayloadTypeValue);
-        if (genericMethod is null) { return new SekibanCommandHandlerNotMatchException("Generic method not found"); }
         var result = genericMethod.Invoke(
             this,
             new[] { command, projector, specifyPartitionKeys, injectValue, handler });

@@ -1,6 +1,4 @@
-﻿// using Pure.Domain.Generated;
-using Pure.Domain.Generated;
-using ResultBoxes;
+﻿using ResultBoxes;
 using Sekiban.Pure;
 using Sekiban.Pure.Exception;
 namespace Pure.Domain.Test;
@@ -33,7 +31,7 @@ public class UnitTest1
     public async Task SimpleEventSourcing()
     {
         Repository.Events.Clear();
-        var executor = new CommandExecutor { EventTypes = new PureDomainEventTypes() };
+        var executor = new CommandExecutor { EventTypes = new CpPureDomainEventTypes() };
 
         Assert.Empty(Repository.Events);
         await executor.Execute(new RegisterBranch("branch1"));
@@ -84,7 +82,7 @@ public class UnitTest1
     public async Task SimpleEventSourcingFunction()
     {
         Repository.Events.Clear();
-        var executor = new CommandExecutor { EventTypes = new PureDomainEventTypes() };
+        var executor = new CommandExecutor { EventTypes = new CpPureDomainEventTypes() };
 
         Assert.Empty(Repository.Events);
         var registerBranch = new RegisterBranch("branch1");
@@ -169,7 +167,7 @@ public class UnitTest1
     public async Task ChangeBranchNameSpec()
     {
         Repository.Events.Clear();
-        var executor = new CommandExecutor { EventTypes = new PureDomainEventTypes() };
+        var executor = new CommandExecutor { EventTypes = new CpPureDomainEventTypes() };
 
         Assert.Empty(Repository.Events);
         var executed = await executor.Execute(new RegisterBranch("branch1"));
@@ -205,7 +203,7 @@ public class UnitTest1
     public async Task MultipleBranchesSpec()
     {
         Repository.Events.Clear();
-        var executor = new CommandExecutor { EventTypes = new PureDomainEventTypes() };
+        var executor = new CommandExecutor { EventTypes = new CpPureDomainEventTypes() };
 
         Assert.Empty(Repository.Events);
         var executed = await executor.Execute(new RegisterBranch("branch 0"));
@@ -235,7 +233,7 @@ public class UnitTest1
     public async Task ICommandAndICommandWithAggregateRestrictionShouldWorkWithFunctionTest()
     {
         Repository.Events.Clear();
-        var executor = new CommandExecutor { EventTypes = new PureDomainEventTypes() };
+        var executor = new CommandExecutor { EventTypes = new CpPureDomainEventTypes() };
 
         var command1 = new RegisterBranch2("aaa");
         var result = await executor.ExecuteFunction(
@@ -269,7 +267,7 @@ public class UnitTest1
     [Fact]
     public async Task ShoppingCartSpec()
     {
-        var executor = new CommandExecutor { EventTypes = new PureDomainEventTypes() };
+        var executor = new CommandExecutor { EventTypes = new CpPureDomainEventTypes() };
         var userId = Guid.NewGuid();
         var createCommand = new CreateShoppingCart(userId);
         var result = await executor.Execute(createCommand);
@@ -287,7 +285,7 @@ public class UnitTest1
     [Fact]
     public async Task ShoppingCartSpecFunction()
     {
-        var executor = new CommandExecutor { EventTypes = new PureDomainEventTypes() };
+        var executor = new CommandExecutor { EventTypes = new CpPureDomainEventTypes() };
         var userId = Guid.NewGuid();
         var createCommand = new CreateShoppingCart(userId);
         var result = await executor.ExecuteFunctionAsync(
@@ -308,7 +306,7 @@ public class UnitTest1
     [Fact]
     public async Task ExecuteWithGeneric()
     {
-        var executor = new CommandExecutor { EventTypes = new PureDomainEventTypes() };
+        var executor = new CommandExecutor { EventTypes = new CpPureDomainEventTypes() };
         var createCommand = new RegisterBranch("a");
         var result = await executor.ExecuteGeneralNonGeneric(
             createCommand,
@@ -322,7 +320,7 @@ public class UnitTest1
     [Fact]
     public async Task ExecuteWithoutGeneric()
     {
-        var executor = new CommandExecutor { EventTypes = new PureDomainEventTypes() };
+        var executor = new CommandExecutor { EventTypes = new CpPureDomainEventTypes() };
         var createCommand = new RegisterBranch("a");
         var result = await executor.Execute(createCommand);
         Assert.True(result.IsSuccess);
