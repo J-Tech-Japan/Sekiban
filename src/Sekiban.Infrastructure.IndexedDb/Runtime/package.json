@@ -2,10 +2,11 @@
   "name": "runtime",
   "version": "1.0.0",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "lint": "biome check src/",
     "lint:fix": "biome check src/ --write",
-    "build": "tsc --noEmit && esbuild --bundle --minify --outfile=dist/runtime.js src/index.ts"
+    "build": "tsc --noEmit && esbuild --bundle --minify --platform=neutral --external:'node:*' --outfile=dist/runtime.js src/index.ts"
   },
   "keywords": [],
   "author": "",
