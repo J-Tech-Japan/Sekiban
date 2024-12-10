@@ -9,10 +9,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\..\ResultBoxes\src\ResultBoxes\ResultBoxes\ResultBoxes.csproj"/>
-    </ItemGroup>
-
-    <ItemGroup>
         <PackageReference Include="ResultBoxes" Version="0.3.29"/>
     </ItemGroup>
 
