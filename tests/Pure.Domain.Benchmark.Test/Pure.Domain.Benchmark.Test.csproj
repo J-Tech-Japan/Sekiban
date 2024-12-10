@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <RootNamespace>Pure.Benchmark.Test</RootNamespace>
+        <PublishAot>true</PublishAot>
+        <TrimMode>link</TrimMode>
+        <TargetFrameworks>net9.0;net8.0</TargetFrameworks>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="BenchmarkDotNet" Version="0.14.1-nightly.20241209.198"/>
+
+        <!--        <ProjectReference Include="..\..\..\ResultBoxes\src\ResultBoxes\ResultBoxes\ResultBoxes.csproj"/>-->
+
+        <!--        <ProjectReference Include="..\..\src\Sekiban.Pure\Sekiban.Pure.csproj"/>-->
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\internalUsages\Pure.Domain\Pure.Domain.csproj"/>
+        <!--        <ProjectReference Include="..\..\src\Sekiban.Pure.SourceGenerator\Sekiban.Pure.SourceGenerator.csproj" Publish="false"/>-->
+    </ItemGroup>
+
+</Project>

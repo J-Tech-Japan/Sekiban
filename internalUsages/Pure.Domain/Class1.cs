@@ -1,6 +1,6 @@
-﻿using Pure.Domain.Generated;
-using ResultBoxes;
+﻿using ResultBoxes;
 using Sekiban.Pure;
+using Sekiban.Pure.Exception;
 namespace Pure.Domain;
 
 public record UnconfirmedUser(string Name, string Email) : IAggregatePayload;
@@ -108,18 +108,57 @@ public record RevokeUser(Guid UserId)
             .Conveyor(_ => EventOrNone.Event(new UserUnconfirmed()));
     public record Injection(Func<Guid, bool> UserExists);
 }
-public class Test
+// public class Test
+// {
+//     public void Test1()
+//     {
+//         var commandExecutor = new CommandExecutor();
+//         commandExecutor.Execute(new RegisterBranch("name"));
+//         commandExecutor.Execute(
+//             new RegisterUser("tomo", "tomo@example.com"),
+//             new RegisterUser.Injection(email => false));
+//         commandExecutor.Execute(new ConfirmUser(GuidExtensions.CreateVersion7()));
+//     }
+// }
+public class ShoppingCartProjector : IAggregateProjector
 {
-    public void Test1()
-    {
-        var commandExecutor = new CommandExecutor();
-        commandExecutor.Execute(new RegisterBranch("name"));
-        commandExecutor.Execute(
-            new RegisterUser("tomo", "tomo@example.com"),
-            new RegisterUser.Injection(email => false));
-        commandExecutor.Execute(new ConfirmUser(Guid.CreateVersion7()));
-    }
+    public IAggregatePayload Project(IAggregatePayload payload, IEvent ev) =>
+        (payload, ev.GetPayload()) switch
+        {
+            (EmptyAggregatePayload, ShoppingCartCreated created) => new BuyingShoppingCart(
+                created.UserId,
+                new List<ShoppingCartItems>()),
+            (BuyingShoppingCart buyingShoppingCart, ShoppingCartItemAdded added) => new BuyingShoppingCart(
+                buyingShoppingCart.UserId,
+                buyingShoppingCart
+                    .Items
+                    .Append(new ShoppingCartItems(added.Name, added.Quantity, Guid.NewGuid(), 100))
+                    .ToList()),
+            (BuyingShoppingCart buyingShoppingCart, PaymentProcessedShoppingCart processed) =>
+                new EmptyAggregatePayload(),
+            _ => payload
+        };
 }
+public record ShoppingCartItems(string Name, int Quantity, Guid ItemId, int Price);
+public record BuyingShoppingCart(Guid UserId, List<ShoppingCartItems> Items) : IAggregatePayload;
+public record ShoppingCartCreated(Guid UserId) : IEventPayload;
+public record ShoppingCartItemAdded(string Name, int Quantity) : IEventPayload;
+public record PaymentProcessingShoppingCart(
+    Guid UserId,
+    List<ShoppingCartItems> Items,
+    int TotalPrice,
+    string PaymentMethod) : IAggregatePayload;
+public record PaymentProcessedShoppingCart(string PaymentMethod) : IEventPayload;
+public record CreateShoppingCart(Guid UserId) : ICommandWithHandlerAsync<CreateShoppingCart, ShoppingCartProjector>
+{
+    public PartitionKeys SpecifyPartitionKeys(CreateShoppingCart command) =>
+        PartitionKeys<ShoppingCartProjector>.Generate();
+    public Task<ResultBox<EventOrNone>> HandleAsync(
+        CreateShoppingCart command,
+        ICommandContext<IAggregatePayload> context) =>
+        EventOrNone.Event(new ShoppingCartCreated(command.UserId)).ToTask();
+}
+
 // public static class Extensions
 // {
 //     public static Task<ResultBox<CommandResponse>> ExecuteFunction(
@@ -172,3 +211,55 @@ public class Test
 //             new SekibanEventTypeNotFoundException($"Event Type {payload.GetType().Name} Not Found"))
 //     };
 // }
+public class CpPureDomainEventTypes : IEventTypes
+{
+    public ResultBox<IEvent> GenerateTypedEvent(
+        IEventPayload payload,
+        PartitionKeys partitionKeys,
+        string sortableUniqueId,
+        int version) => payload switch
+    {
+        UserRegistered userregistered => new Event<UserRegistered>(
+            userregistered,
+            partitionKeys,
+            sortableUniqueId,
+            version),
+        UserConfirmed userconfirmed => new Event<UserConfirmed>(
+            userconfirmed,
+            partitionKeys,
+            sortableUniqueId,
+            version),
+        UserUnconfirmed userunconfirmed => new Event<UserUnconfirmed>(
+            userunconfirmed,
+            partitionKeys,
+            sortableUniqueId,
+            version),
+        BranchCreated branchcreated => new Event<BranchCreated>(
+            branchcreated,
+            partitionKeys,
+            sortableUniqueId,
+            version),
+        BranchNameChanged branchnamechanged => new Event<BranchNameChanged>(
+            branchnamechanged,
+            partitionKeys,
+            sortableUniqueId,
+            version),
+        ShoppingCartCreated shoppingcartcreated => new Event<ShoppingCartCreated>(
+            shoppingcartcreated,
+            partitionKeys,
+            sortableUniqueId,
+            version),
+        ShoppingCartItemAdded shoppingcartitemadded => new Event<ShoppingCartItemAdded>(
+            shoppingcartitemadded,
+            partitionKeys,
+            sortableUniqueId,
+            version),
+        PaymentProcessedShoppingCart paymentprocessedshoppingcart => new Event<PaymentProcessedShoppingCart>(
+            paymentprocessedshoppingcart,
+            partitionKeys,
+            sortableUniqueId,
+            version),
+        _ => ResultBox<IEvent>.FromException(
+            new SekibanEventTypeNotFoundException($"Event Type {payload.GetType().Name} Not Found"))
+    };
+}

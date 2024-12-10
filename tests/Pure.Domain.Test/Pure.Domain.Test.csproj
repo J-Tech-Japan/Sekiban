@@ -5,6 +5,7 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <IsPackable>false</IsPackable>
+        <PublishAot>true</PublishAot>
     </PropertyGroup>
 
     <ItemGroup>
@@ -19,7 +20,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\internalUsages\Pure.Domain\Pure.Domain.csproj" />
+        <ProjectReference Include="..\..\internalUsages\Pure.Domain\Pure.Domain.csproj"/>
     </ItemGroup>
 
 </Project>
