@@ -16,7 +16,9 @@ public class NodeJsRuntime : ISekibanJsRuntime
     {
         var store = await nodejsEnvironment.RunAsync(async () =>
         {
-            var store = await nodejsEnvironment.Import(ISekibanJsRuntime.RuntimePath, "init")
+            var module = await nodejsEnvironment.ImportAsync(ISekibanJsRuntime.RuntimePath, property: "init", esModule: true);
+
+            var store = await module
                 .Call(JSValue.Undefined, context)
                 .CastTo<JSPromise>()
                 .AsTask();
