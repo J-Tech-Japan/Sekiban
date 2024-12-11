@@ -9,18 +9,59 @@ import type {
 	DbSingleProjectionSnapshotQuery,
 } from "./models";
 
-const wrapio =
-	<T, U>(func: (value: T) => Promise<U>) =>
-	async (input: string | null): Promise<string | null> => {
-		const args =
-			input !== undefined && input !== null ? JSON.parse(input) : null;
+const log = (() => {
+	if (globalThis?.process?.versions?.node === undefined) {
+		return async () => {};
+	}
 
-		const result = await func(args);
+	let seq = 0;
 
-		const output =
-			result !== undefined && result !== null ? JSON.stringify(result) : null;
-		return output;
+	return async (name: string, value: unknown): Promise<void> => {
+		const line = JSON.stringify({
+			seq: seq++,
+			event: name,
+			payload: value ?? null,
+		});
+
+		const fs = await import("node:fs/promises");
+		await fs.mkdir("/tmp/sekiban/").catch(() => {});
+		await fs.writeFile("/tmp/sekiban/runtime.log", `${line}\n`, {
+			flag: "a",
+		});
 	};
+})();
+
+// biome-ignore lint/suspicious/noExplicitAny: ignore param/return types for deserialize/serialize
+const wrapio = <T extends Record<string, (args: any) => Promise<any>>>(
+	operations: T,
+	trace?: boolean,
+) =>
+	Object.fromEntries(
+		Object.entries(operations).map(([name, func]) => [
+			name,
+			async (input: string | null): Promise<string | null> => {
+				const args =
+					input !== undefined && input !== null ? JSON.parse(input) : null;
+
+				if (trace === true) {
+					await log(`${name}:args`, args);
+				}
+
+				const result = await func(args);
+
+				if (trace === true) {
+					await log(`${name}:result`, result);
+				}
+
+				const output =
+					result !== undefined && result !== null
+						? JSON.stringify(result)
+						: null;
+
+				return output;
+			},
+		]),
+	) as Record<keyof T, (input: string | null) => Promise<string | null>>;
 
 const asc =
 	<T>(id: (value: T) => string) =>
@@ -213,35 +254,25 @@ const operations = (store: Store) => {
 	};
 
 	return {
-		writeEventAsync: wrapio(writeEventAsync),
-		getEventsAsync: wrapio(getEventsAsync),
-		removeAllEventsAsync: wrapio(removeAllEventsAsync),
+		writeEventAsync,
+		getEventsAsync,
+		removeAllEventsAsync,
 
-		writeDissolvableEventAsync: wrapio(writeDissolvableEventAsync),
-		getDissolvableEventsAsync: wrapio(getDissolvableEventsAsync),
-		removeAllDissolvableEventsAsync: wrapio(removeAllDissolvableEventsAsync),
+		writeDissolvableEventAsync,
+		getDissolvableEventsAsync,
+		removeAllDissolvableEventsAsync,
 
-		writeCommandAsync: wrapio(writeCommandAsync),
-		getCommandsAsync: wrapio(getCommandsAsync),
-		removeAllCommandsAsync: wrapio(removeAllCommandsAsync),
+		writeCommandAsync,
+		getCommandsAsync,
+		removeAllCommandsAsync,
 
-		writeSingleProjectionSnapshotAsync: wrapio(
-			writeSingleProjectionSnapshotAsync,
-		),
-		getSingleProjectionSnapshotsAsync: wrapio(
-			getSingleProjectionSnapshotsAsync,
-		),
-		removeAllSingleProjectionSnapshotsAsync: wrapio(
-			removeAllSingleProjectionSnapshotsAsync,
-		),
+		writeSingleProjectionSnapshotAsync,
+		getSingleProjectionSnapshotsAsync,
+		removeAllSingleProjectionSnapshotsAsync,
 
-		writeMultiProjectionSnapshotAsync: wrapio(
-			writeMultiProjectionSnapshotAsync,
-		),
-		getMultiProjectionSnapshotsAsync: wrapio(getMultiProjectionSnapshotsAsync),
-		removeAllMultiProjectionSnapshotsAsync: wrapio(
-			removeAllMultiProjectionSnapshotsAsync,
-		),
+		writeMultiProjectionSnapshotAsync,
+		getMultiProjectionSnapshotsAsync,
+		removeAllMultiProjectionSnapshotsAsync,
 	};
 };
 
@@ -263,5 +294,5 @@ export const init = async (contextName: string) => {
 	}
 
 	stores.set(contextName, store);
-	return operations(store);
+	return wrapio(operations(store), true);
 };
