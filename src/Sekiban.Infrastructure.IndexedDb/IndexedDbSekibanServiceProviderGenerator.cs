@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Dependency;
-using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using Sekiban.Infrastructure.Azure.Storage.Blobs;
 using Sekiban.Testing.Story;
@@ -18,7 +17,7 @@ public class IndexedDbSekibanServiceProviderGenerator : ISekibanServiceProviderG
     /// <param name="configureServices"></param>
     /// <param name="sekibanDateProducer"></param>
     /// <returns></returns>
-    public virtual IServiceProvider Generate(
+    public IServiceProvider Generate(
         ISekibanTestFixture fixture,
         IDependencyDefinition dependencyDefinition,
         Action<IServiceCollection>? configureServices = null,
@@ -28,7 +27,10 @@ public class IndexedDbSekibanServiceProviderGenerator : ISekibanServiceProviderG
 
         services.AddSingleton<IConfiguration>(fixture.Configuration);
         services.AddSekibanWithDependency(dependencyDefinition, fixture.Configuration);
-        // services.AddSekibanIndexedDbOnly
+        services.AddSekibanIndexedDb(fixture.Configuration);
+        services.AddSekibanAzureBlobStorage(fixture.Configuration);
+
+        AddSekibanJsRuntime(services);
 
         if (fixture.TestOutputHelper is not null)
         {
@@ -40,10 +42,11 @@ public class IndexedDbSekibanServiceProviderGenerator : ISekibanServiceProviderG
             configureServices(services);
         }
 
-        services.AddSingleton(SekibanAzureBlobStorageOptions.FromConfiguration(fixture.Configuration));
-        services.AddTransient<IBlobAccessor, AzureBlobAccessor>();
-        services.AddTransient<IBlobContainerAccessor, AzureBlobContainerAccessor>();
-
         return services.BuildServiceProvider();
+    }
+
+    protected virtual void AddSekibanJsRuntime(IServiceCollection services)
+    {
+        // TODO: configure Blazor runtime
     }
 }
