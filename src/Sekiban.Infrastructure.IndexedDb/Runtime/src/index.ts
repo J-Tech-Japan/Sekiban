@@ -1,3 +1,4 @@
+import { type IDBPDatabase, openDB } from "idb";
 import type {
 	DbCommand,
 	DbCommandQuery,
@@ -8,6 +9,7 @@ import type {
 	DbSingleProjectionSnapshot,
 	DbSingleProjectionSnapshotQuery,
 } from "./models";
+import type { SekibanDb } from "./schema";
 
 const log = (() => {
 	if (globalThis?.process?.versions?.node === undefined) {
@@ -73,8 +75,17 @@ const desc =
 	(x: T, y: T): number =>
 		id(y).localeCompare(id(x));
 
-const filterEvents = (events: DbEvent[], query: DbEventQuery): DbEvent[] => {
-	const items = events
+const filterEvents = async (
+	idb: IDBPDatabase<SekibanDb>,
+	store: "events" | "dissolvable-events",
+	query: DbEventQuery,
+): Promise<DbEvent[]> => {
+	const shard =
+		query.PartitionKey !== null
+			? await idb.getAllFromIndex(store, "PartitionKey", query.PartitionKey)
+			: await idb.getAll(store);
+
+	const items = shard
 		.filter(
 			(x) =>
 				query.RootPartitionKey === null ||
@@ -99,8 +110,7 @@ const filterEvents = (events: DbEvent[], query: DbEventQuery): DbEvent[] => {
 				query.SortableIdEnd === null ||
 				x.SortableUniqueId <= query.SortableIdEnd,
 		)
-		.toSorted(asc((x) => x.SortableUniqueId))
-		.map((x) => structuredClone(x));
+		.toSorted(asc((x) => x.SortableUniqueId));
 
 	return query.MaxCount !== null ? items.slice(0, query.MaxCount) : items;
 };
@@ -113,78 +123,97 @@ type Store = {
 	readonly multiProjectionSnapshots: DbMultiProjectionSnapshot[];
 };
 
-const operations = (store: Store) => {
+const operations = (store: Store, idb: IDBPDatabase<SekibanDb>) => {
 	const writeEventAsync = async (event: DbEvent): Promise<void> => {
-		store.events.push(structuredClone(event));
+		await idb.add("events", event);
 	};
 
 	const getEventsAsync = async (query: DbEventQuery): Promise<DbEvent[]> =>
-		filterEvents(store.events, query);
+		await filterEvents(idb, "events", query);
 
 	const removeAllEventsAsync = async (): Promise<void> => {
-		store.events.splice(0);
+		await idb.clear("events");
 	};
 
 	const writeDissolvableEventAsync = async (event: DbEvent): Promise<void> => {
-		store.dissolvableEvents.push(structuredClone(event));
+		await idb.add("dissolvable-events", event);
 	};
 
 	const getDissolvableEventsAsync = async (
 		query: DbEventQuery,
-	): Promise<DbEvent[]> => filterEvents(store.dissolvableEvents, query);
+	): Promise<DbEvent[]> => await filterEvents(idb, "dissolvable-events", query);
 
 	const removeAllDissolvableEventsAsync = async (): Promise<void> => {
-		store.dissolvableEvents.splice(0);
+		await idb.clear("dissolvable-events");
 	};
 
 	const writeCommandAsync = async (command: DbCommand): Promise<void> => {
-		store.commands.push(structuredClone(command));
+		await idb.add("commands", command);
 	};
 
 	const getCommandsAsync = async (
 		query: DbCommandQuery,
-	): Promise<DbCommand[]> =>
-		store.commands
-			.filter(
-				(x) =>
-					query.SortableIdStart === null ||
-					query.SortableIdStart <= x.SortableUniqueId,
-			)
-			.filter(
-				(x) =>
-					query.PartitionKey === null || x.PartitionKey === query.PartitionKey,
-			)
+	): Promise<DbCommand[]> => {
+		const shard =
+			query.PartitionKey !== null
+				? await idb.getAllFromIndex(
+						"commands",
+						"PartitionKey",
+						query.PartitionKey,
+					)
+				: await idb.getAll("commands");
+
+		const items = shard
 			.filter(
 				(x) =>
 					query.AggregateContainerGroup === null ||
 					x.AggregateContainerGroup === query.AggregateContainerGroup,
 			)
-			.toSorted(asc((x) => x.SortableUniqueId))
-			.map((x) => structuredClone(x));
+			.filter(
+				(x) =>
+					query.SortableIdStart === null ||
+					query.SortableIdStart <= x.SortableUniqueId,
+			);
+
+		return items;
+	};
 
 	const removeAllCommandsAsync = async (): Promise<void> => {
-		store.commands.splice(0);
+		await idb.clear("commands");
 	};
 
 	const writeSingleProjectionSnapshotAsync = async (
 		snapshot: DbSingleProjectionSnapshot,
 	): Promise<void> => {
-		store.singleProjectionSnapshots.push(structuredClone(snapshot));
+		await idb.add("single-projection-snapshots", snapshot);
 	};
 
 	const getSingleProjectionSnapshotsAsync = async (
 		query: DbSingleProjectionSnapshotQuery,
 	): Promise<DbSingleProjectionSnapshot[]> => {
-		const items = store.singleProjectionSnapshots
-			.filter((x) => query.Id === null || x.Id === query.Id)
+		if (query.Id !== null) {
+			const item = await idb.getFromIndex(
+				"single-projection-snapshots",
+				"Id",
+				query.Id,
+			);
+			return item !== undefined ? [item] : [];
+		}
+
+		const shard =
+			query.PartitionKey !== null
+				? await idb.getAllFromIndex(
+						"single-projection-snapshots",
+						"PartitionKey",
+						query.PartitionKey,
+					)
+				: await idb.getAll("single-projection-snapshots");
+
+		const items = shard
 			.filter(
 				(x) =>
 					query.AggregateContainerGroup === null ||
 					x.AggregateContainerGroup === query.AggregateContainerGroup,
-			)
-			.filter(
-				(x) =>
-					query.PartitionKey === null || x.PartitionKey === query.PartitionKey,
 			)
 			.filter(
 				(x) =>
@@ -209,26 +238,34 @@ const operations = (store: Store) => {
 				(x) =>
 					query.SavedVersion === null || x.SavedVersion === query.SavedVersion,
 			)
-			.toSorted(desc((x) => x.LastSortableUniqueId))
-			.map((x) => structuredClone(x));
+			.toSorted(desc((x) => x.LastSortableUniqueId));
 
 		return query.IsLatestOnly ? items.slice(0, 1) : items;
 	};
 
 	const removeAllSingleProjectionSnapshotsAsync = async (): Promise<void> => {
-		store.singleProjectionSnapshots.splice(0);
+		await idb.clear("single-projection-snapshots");
 	};
 
 	const writeMultiProjectionSnapshotAsync = async (
-		payload: DbMultiProjectionSnapshot,
+		snapshot: DbMultiProjectionSnapshot,
 	): Promise<void> => {
-		store.multiProjectionSnapshots.push(structuredClone(payload));
+		await idb.add("multi-projection-snapshots", snapshot);
 	};
 
 	const getMultiProjectionSnapshotsAsync = async (
 		query: DbMultiProjectionSnapshotQuery,
 	): Promise<DbMultiProjectionSnapshot[]> => {
-		const items = store.multiProjectionSnapshots
+		const shard =
+			query.PartitionKey !== null
+				? await idb.getAllFromIndex(
+						"multi-projection-snapshots",
+						"PartitionKey",
+						query.PartitionKey,
+					)
+				: await idb.getAll("multi-projection-snapshots");
+
+		const items = shard
 			.filter(
 				(x) =>
 					query.AggregateContainerGroup === null ||
@@ -236,21 +273,16 @@ const operations = (store: Store) => {
 			)
 			.filter(
 				(x) =>
-					query.PartitionKey === null || x.PartitionKey === query.PartitionKey,
-			)
-			.filter(
-				(x) =>
 					query.PayloadVersionIdentifier === null ||
 					x.PayloadVersionIdentifier === query.PayloadVersionIdentifier,
 			)
-			.toSorted(desc((x) => x.LastSortableUniqueId))
-			.map((x) => structuredClone(x));
+			.toSorted(desc((x) => x.LastSortableUniqueId));
 
 		return query.IsLatestOnly ? items.slice(0, 1) : items;
 	};
 
 	const removeAllMultiProjectionSnapshotsAsync = async (): Promise<void> => {
-		store.multiProjectionSnapshots.splice(0);
+		await idb.clear("multi-projection-snapshots");
 	};
 
 	return {
@@ -276,7 +308,7 @@ const operations = (store: Store) => {
 	};
 };
 
-const newStore = (): Store => ({
+const memStore = (): Store => ({
 	events: [],
 	dissolvableEvents: [],
 	commands: [],
@@ -284,15 +316,98 @@ const newStore = (): Store => ({
 	multiProjectionSnapshots: [],
 });
 
-const stores = new Map<string, Store>();
+const stores = new Map<
+	string,
+	{
+		mem: Store;
+		idb: IDBPDatabase<SekibanDb>;
+	}
+>();
+
+const idbStore = async (
+	contextName: string,
+): Promise<IDBPDatabase<SekibanDb>> =>
+	openDB<SekibanDb>(contextName, 1, {
+		blocked: (current, blocked) => {
+			throw new Error(`upgrade blocked (${current} -> ${blocked})`);
+		},
+		upgrade: (db) => {
+			const events = db.createObjectStore("events", {
+				keyPath: "Id",
+			});
+			events.createIndex("RootPartitionKey", "RootPartitionKey");
+			events.createIndex("PartitionKey", "PartitionKey");
+			events.createIndex("AggregateType", "AggregateType");
+			events.createIndex("SortableUniqueId", "SortableUniqueId");
+
+			const dissolvableEvents = db.createObjectStore("dissolvable-events", {
+				keyPath: "Id",
+			});
+			dissolvableEvents.createIndex("RootPartitionKey", "RootPartitionKey");
+			dissolvableEvents.createIndex("PartitionKey", "PartitionKey");
+			dissolvableEvents.createIndex("AggregateType", "AggregateType");
+			dissolvableEvents.createIndex("SortableUniqueId", "SortableUniqueId");
+
+			const commands = db.createObjectStore("commands", {
+				keyPath: "Id",
+			});
+			commands.createIndex("SortableUniqueId", "SortableUniqueId");
+			commands.createIndex("PartitionKey", "PartitionKey");
+			commands.createIndex(
+				"AggregateContainerGroup",
+				"AggregateContainerGroup",
+			);
+
+			const singleProjectionSnapshots = db.createObjectStore(
+				"single-projection-snapshots",
+				{
+					keyPath: "Id",
+				},
+			);
+			singleProjectionSnapshots.createIndex("Id", "Id");
+			singleProjectionSnapshots.createIndex(
+				"AggregateContainerGroup",
+				"AggregateContainerGroup",
+			);
+			singleProjectionSnapshots.createIndex("PartitionKey", "PartitionKey");
+			singleProjectionSnapshots.createIndex("AggregateId", "AggregateId");
+			singleProjectionSnapshots.createIndex(
+				"RootPartitionKey",
+				"RootPartitionKey",
+			);
+			singleProjectionSnapshots.createIndex("AggregateType", "AggregateType");
+			singleProjectionSnapshots.createIndex(
+				"PayloadVersionIdentifier",
+				"PayloadVersionIdentifier",
+			);
+			singleProjectionSnapshots.createIndex("SavedVersion", "SavedVersion");
+
+			const multiProjectionSnapshots = db.createObjectStore(
+				"multi-projection-snapshots",
+				{ keyPath: "Id" },
+			);
+			multiProjectionSnapshots.createIndex(
+				"AggregateContainerGroup",
+				"AggregateContainerGroup",
+			);
+			multiProjectionSnapshots.createIndex("PartitionKey", "PartitionKey");
+			multiProjectionSnapshots.createIndex(
+				"PayloadVersionIdentifier",
+				"PayloadVersionIdentifier",
+			);
+		},
+	});
 
 export const init = async (contextName: string) => {
 	let store = stores.get(contextName);
 
 	if (store === undefined) {
-		store = newStore();
+		store = {
+			mem: memStore(),
+			idb: await idbStore(contextName),
+		};
 	}
 
 	stores.set(contextName, store);
-	return wrapio(operations(store), true);
+	return wrapio(operations(store.mem, store.idb), true);
 };
