@@ -34,6 +34,15 @@
     <None Update="Assets\libnode.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <Content Include="Runtime\dist\indexed-db.mjs">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <TargetPath>Assets\indexed-db.mjs</TargetPath>
+    </Content>
   </ItemGroup>
+
+  <Target Name="Build runtime" BeforeTargets="BeforeBuild">
+    <Exec Command="npm install" WorkingDirectory="Runtime" />
+    <Exec Command="npm run build" WorkingDirectory="Runtime" />
+  </Target>
 
 </Project>

@@ -14,6 +14,8 @@ public class NodeJsRuntime : ISekibanJsRuntime
 
     public async Task<ISekibanIndexedDbContext> CreateContextAsync(string context)
     {
+        await nodejsEnvironment.RunAsync(async () => await nodejsEnvironment.ImportAsync("./Assets/indexed-db.mjs", esModule: true));
+
         var store = await nodejsEnvironment.RunAsync(async () =>
         {
             var module = await nodejsEnvironment.ImportAsync(ISekibanJsRuntime.RuntimePath, property: "init", esModule: true);
