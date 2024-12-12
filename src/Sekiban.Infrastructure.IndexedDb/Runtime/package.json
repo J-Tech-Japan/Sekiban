@@ -18,6 +18,7 @@
     "@tsconfig/recommended": "^1.0.8",
     "@types/node": "^22.10.1",
     "esbuild": "^0.24.0",
+    "idb": "^8.0.0",
     "typescript": "^5.7.2"
   }
 }

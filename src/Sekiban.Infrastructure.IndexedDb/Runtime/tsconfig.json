@@ -7,6 +7,7 @@
     ],
     "module": "esnext",
     "target": "esnext",
+    "moduleResolution": "bundler",
     "isolatedModules": true,
     "outDir": "dist/",
   },
