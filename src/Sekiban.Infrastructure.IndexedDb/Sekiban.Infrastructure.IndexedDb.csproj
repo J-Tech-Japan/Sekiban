@@ -19,7 +19,7 @@
   <ItemGroup>
     <Content Include="Runtime/dist/runtime.js">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      <TargetPath>Assets/sekiban-runtime.mjs</TargetPath>
+      <TargetPath>wwwroot/sekiban-runtime.mjs</TargetPath>
     </Content>
   </ItemGroup>
 
