@@ -2,7 +2,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Shared;
-using Sekiban.Infrastructure.Azure.Storage.Blobs;
 using Sekiban.Infrastructure.IndexedDb.Databases;
 using Sekiban.Testing.Story;
 
@@ -29,7 +28,6 @@ public class IndexedDbSekibanServiceProviderGenerator : ISekibanServiceProviderG
         services.AddSingleton<IConfiguration>(fixture.Configuration);
         services.AddSekibanWithDependency(dependencyDefinition, fixture.Configuration);
         services.AddSekibanIndexedDb(fixture.Configuration);
-        services.AddSekibanAzureBlobStorage(fixture.Configuration);
 
         AddSekibanJsRuntime(services);
 

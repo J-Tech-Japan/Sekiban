@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Documents;
+using Sekiban.Core.Setting;
 using Sekiban.Infrastructure.IndexedDb.Databases;
 using Sekiban.Infrastructure.IndexedDb.Documents;
 
@@ -14,10 +15,10 @@ public static class IndexedDbServiceCollectionExtensions
     public static SekibanIndexedDbOptionsServiceCollection AddSekibanIndexedDb(this IServiceCollection services, IConfiguration configuration)
     {
         var options = SekibanIndexedDbOptions.FromConfiguration(configuration);
-        return AddSekibanIndexedDbWithoutBlob(services, options);
+        return AddSekibanIndexedDbWithBlob(services, options);
     }
 
-    public static SekibanIndexedDbOptionsServiceCollection AddSekibanIndexedDbWithoutBlob(
+    public static SekibanIndexedDbOptionsServiceCollection AddSekibanIndexedDbWithBlob(
         this IServiceCollection services,
         SekibanIndexedDbOptions indexedDbOptions
     )
@@ -33,6 +34,8 @@ public static class IndexedDbServiceCollectionExtensions
         services.AddTransient<IEventPersistentRepository, IndexedDbDocumentRepository>();
 
         services.AddTransient<IDocumentRemover, IndexedDbDocumentRemover>();
+
+        services.AddTransient<IBlobAccessor, IndexedDbBlobAccessor>();
 
         return new SekibanIndexedDbOptionsServiceCollection(indexedDbOptions, services);
     }

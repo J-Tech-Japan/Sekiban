@@ -50,6 +50,25 @@ public class BlazorIndexedDbContext(IJSObjectReference store) : ISekibanIndexedD
     public async Task RemoveAllMultiProjectionSnapshotsAsync() =>
         await DispatchAsync("removeAllMultiProjectionSnapshotsAsync");
 
+    public async Task WriteMultiProjectionStateBlobAsync(DbBlob payload) =>
+        await DispatchAsync("writeMultiProjectionStateBlobAsync", payload);
+
+    public async Task<DbBlob> GetMultiProjectionStateBlobAsync(string blobName) =>
+        (await DispatchAsync<string, DbBlob>("getMultiProjectionStateBlobAsync", blobName))!;
+
+    public async Task WriteSingleProjectionStateBlobAsync(DbBlob payload) =>
+        await DispatchAsync("writeSingleProjectionStateBlobAsync", payload);
+
+    public async Task<DbBlob> GetSingleProjectionStateBlobAsync(string blobName) =>
+        (await DispatchAsync<string, DbBlob>("getSingleProjectionStateBlobAsync", blobName))!;
+
+    public async Task WriteMultiProjectionEventsBlobAsync(DbBlob payload) =>
+        await DispatchAsync("writeMultiProjectionEventsBlobAsync", payload);
+
+    public async Task<DbBlob> GetMultiProjectionEventsBlobAsync(string blobName) =>
+        (await DispatchAsync<string, DbBlob>("getMultiProjectionEventsBlobAsync", blobName))!;
+
+
     private async Task DispatchAsync(string operation) =>
         await DispatchAsync<object, object>(operation, null);
 

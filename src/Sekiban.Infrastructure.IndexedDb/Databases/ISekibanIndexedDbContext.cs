@@ -21,4 +21,13 @@ public interface ISekibanIndexedDbContext
     Task WriteMultiProjectionSnapshotAsync(DbMultiProjectionSnapshot payload);
     Task<DbMultiProjectionSnapshot[]> GetMultiProjectionSnapshotsAsync(DbMultiProjectionSnapshotQuery query);
     Task RemoveAllMultiProjectionSnapshotsAsync();
+
+    Task WriteMultiProjectionStateBlobAsync(DbBlob payload);
+    Task<DbBlob> GetMultiProjectionStateBlobAsync(string blobName);
+
+    Task WriteSingleProjectionStateBlobAsync(DbBlob payload);
+    Task<DbBlob> GetSingleProjectionStateBlobAsync(string blobName);
+
+    Task WriteMultiProjectionEventsBlobAsync(DbBlob payload);
+    Task<DbBlob> GetMultiProjectionEventsBlobAsync(string blobName);
 }
