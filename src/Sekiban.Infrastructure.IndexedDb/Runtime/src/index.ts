@@ -1,4 +1,5 @@
 import type {
+	DbBlob,
 	DbCommand,
 	DbCommandQuery,
 	DbEvent,
@@ -276,6 +277,72 @@ const operations = (idb: SekibanDb) => {
 		await idb.clear("multi-projection-snapshots");
 	};
 
+	const writeSingleProjectionStateBlobAsync = async (
+		blob: DbBlob,
+	): Promise<void> => {
+		await idb.add("single-projection-state-blobs", blob);
+	};
+
+	const getSingleProjectionStateBlobAsync = async (
+		blobName: string,
+	): Promise<DbBlob> => {
+		const item = await idb.getFromIndex(
+			"single-projection-state-blobs",
+			"Name",
+			blobName,
+		);
+
+		if (item === undefined) {
+			throw new Error();
+		}
+
+		return item;
+	};
+
+	const writeMultiProjectionStateBlobAsync = async (
+		blob: DbBlob,
+	): Promise<void> => {
+		await idb.add("multi-projection-state-blobs", blob);
+	};
+
+	const getMultiProjectionStateBlobAsync = async (
+		blobName: string,
+	): Promise<DbBlob> => {
+		const item = await idb.getFromIndex(
+			"multi-projection-state-blobs",
+			"Name",
+			blobName,
+		);
+
+		if (item === undefined) {
+			throw new Error();
+		}
+
+		return item;
+	};
+
+	const writeMultiProjectionEventsBlobAsync = async (
+		blob: DbBlob,
+	): Promise<void> => {
+		await idb.add("multi-projection-events-blobs", blob);
+	};
+
+	const getMultiProjectionEventsBlobAsync = async (
+		blobName: string,
+	): Promise<DbBlob> => {
+		const item = await idb.getFromIndex(
+			"multi-projection-events-blobs",
+			"Name",
+			blobName,
+		);
+
+		if (item === undefined) {
+			throw new Error();
+		}
+
+		return item;
+	};
+
 	return {
 		writeEventAsync,
 		getEventsAsync,
@@ -296,6 +363,15 @@ const operations = (idb: SekibanDb) => {
 		writeMultiProjectionSnapshotAsync,
 		getMultiProjectionSnapshotsAsync,
 		removeAllMultiProjectionSnapshotsAsync,
+
+		writeSingleProjectionStateBlobAsync,
+		getSingleProjectionStateBlobAsync,
+
+		writeMultiProjectionStateBlobAsync,
+		getMultiProjectionStateBlobAsync,
+
+		writeMultiProjectionEventsBlobAsync,
+		getMultiProjectionEventsBlobAsync,
 	};
 };
 

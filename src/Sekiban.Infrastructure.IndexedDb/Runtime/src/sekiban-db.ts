@@ -1,5 +1,6 @@
 import { type DBSchema, type IDBPDatabase, openDB } from "idb";
 import type {
+	DbBlob,
 	DbCommand,
 	DbEvent,
 	DbMultiProjectionSnapshot,
@@ -61,6 +62,30 @@ interface SekibanDbSchema extends DBSchema {
 			AggregateContainerGroup: DbMultiProjectionSnapshot["AggregateContainerGroup"];
 			PartitionKey: DbMultiProjectionSnapshot["PartitionKey"];
 			PayloadVersionIdentifier: DbMultiProjectionSnapshot["PayloadVersionIdentifier"];
+		};
+	};
+
+	"single-projection-state-blobs": {
+		key: string;
+		value: DbBlob;
+		indexes: {
+			Name: DbBlob["Name"];
+		};
+	};
+
+	"multi-projection-state-blobs": {
+		key: string;
+		value: DbBlob;
+		indexes: {
+			Name: DbBlob["Name"];
+		};
+	};
+
+	"multi-projection-events-blobs": {
+		key: string;
+		value: DbBlob;
+		indexes: {
+			Name: DbBlob["Name"];
 		};
 	};
 }
@@ -136,5 +161,29 @@ export const connect = async (contextName: string): Promise<SekibanDb> =>
 				"PayloadVersionIdentifier",
 				"PayloadVersionIdentifier",
 			);
+
+			const singleProjectionStateBlobs = db.createObjectStore(
+				"single-projection-state-blobs",
+				{
+					keyPath: "Id",
+				},
+			);
+			singleProjectionStateBlobs.createIndex("Name", "Name");
+
+			const multiProjectionStateBlobs = db.createObjectStore(
+				"multi-projection-state-blobs",
+				{
+					keyPath: "Id",
+				},
+			);
+			multiProjectionStateBlobs.createIndex("Name", "Name");
+
+			const multiProjectionEventsBlobs = db.createObjectStore(
+				"multi-projection-events-blobs",
+				{
+					keyPath: "Id",
+				},
+			);
+			multiProjectionEventsBlobs.createIndex("Name", "Name");
 		},
 	});

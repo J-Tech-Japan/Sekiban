@@ -100,3 +100,10 @@ export type DbMultiProjectionSnapshotQuery = {
 
 	readonly IsLatestOnly: boolean;
 };
+
+export type DbBlob = {
+	readonly Id: string;
+	readonly Name: string;
+	readonly Payload: string;
+	readonly IsGzipped: boolean;
+};
