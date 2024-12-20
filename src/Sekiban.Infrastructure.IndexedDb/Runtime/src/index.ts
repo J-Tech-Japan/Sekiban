@@ -385,5 +385,5 @@ export const init = async (contextName: string) => {
 	}
 
 	contexts.set(contextName, context);
-	return wrapio(operations(context), true);
+	return wrapio(operations(context), false);
 };

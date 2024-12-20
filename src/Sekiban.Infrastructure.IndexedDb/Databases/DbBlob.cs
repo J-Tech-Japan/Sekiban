@@ -1,3 +1,5 @@
+using System.IO.Compression;
+
 namespace Sekiban.Infrastructure.IndexedDb.Databases;
 
 public record DbBlob
@@ -9,18 +11,10 @@ public record DbBlob
 
     public static DbBlob FromStream(Stream stream, string blobName, bool useGzip)
     {
-        using var ms = new MemoryStream();
+        using var ms = useGzip ?
+            Gzip(stream) :
+            Noop(stream);
 
-        if (useGzip)
-        {
-            Gzip(stream, ms);
-        }
-        else
-        {
-            stream.CopyTo(ms);
-        }
-
-        ms.Seek(0, SeekOrigin.Begin);
         var payload = Convert.ToBase64String(ms.ToArray());
 
         return new()
@@ -35,42 +29,45 @@ public record DbBlob
     public Stream ToStream()
     {
         using var payload = new MemoryStream(Convert.FromBase64String(Payload));
-        var result = new MemoryStream();
 
-        if (IsGzipped)
-        {
-            Gunzip(payload, result);
-        }
-        else
-        {
-            payload.CopyTo(result);
-        }
+        var result = IsGzipped ?
+            Gunzip(payload) :
+            Noop(payload);
 
-        result.Seek(0, SeekOrigin.Begin);
         return result;
     }
 
-    private static void Gzip(Stream plain, Stream compressed)
+    private static MemoryStream Gzip(Stream plain)
     {
         using var workStream = new MemoryStream();
-        using var gzip = new System.IO.Compression.GZipStream(workStream, System.IO.Compression.CompressionMode.Compress);
+        using var gzipStream = new GZipStream(workStream, CompressionMode.Compress);
 
-        plain.CopyTo(gzip);
-        gzip.Close();
+        plain.CopyTo(gzipStream);
+        gzipStream.Close();
 
-        workStream.Seek(0, SeekOrigin.Begin);
-        workStream.CopyTo(compressed);
+        var resultStream = new MemoryStream(workStream.ToArray());
+        return resultStream;
     }
 
-    private static void Gunzip(Stream plain, Stream decompressed)
+    private static MemoryStream Gunzip(Stream gzipped)
     {
         using var workStream = new MemoryStream();
-        using var gzip = new System.IO.Compression.GZipStream(workStream, System.IO.Compression.CompressionMode.Compress);
+        using var gzipStream = new GZipStream(gzipped, CompressionMode.Decompress);
 
-        plain.CopyTo(gzip);
-        gzip.Close();
+        gzipStream.CopyTo(workStream);
+        gzipStream.Close();
 
-        workStream.Seek(0, SeekOrigin.Begin);
-        workStream.CopyTo(decompressed);
+        var resultStream = new MemoryStream(workStream.ToArray());
+        return resultStream;
+    }
+
+    private static MemoryStream Noop(Stream stream)
+    {
+        var resultStream = new MemoryStream();
+
+        stream.CopyTo(resultStream);
+        resultStream.Seek(0, SeekOrigin.Begin);
+
+        return resultStream;
     }
 }
