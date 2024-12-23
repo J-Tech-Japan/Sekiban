@@ -13,7 +13,7 @@
         <PackageVersion>0.22.1</PackageVersion>
         <Description>Initial .NET 9 Release</Description>
         <AssemblyName>Sekiban.Core.AspNetCore</AssemblyName>
-        <RootNamespace>Sekiban.Core.AspNetCore</RootNamespace>
+        <RootNamespace>Sekiban.Core</RootNamespace>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <IncludeSymbols>true</IncludeSymbols>

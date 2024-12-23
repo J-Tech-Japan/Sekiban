@@ -1,11 +1,10 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using ResultBoxes;
-using Sekiban.Core.Usecase;
 
-namespace Sekiban.Core.AspNetCore.Usecase;
+namespace Sekiban.Core.Usecase;
 
-public static class SekibanUsecase
+public static class SekibanAspNetCoreUsecase
 {
     public static IResult ToResults<TResult>(this ResultBox<TResult> resultBox) where TResult : notnull =>
         Results.Ok(resultBox.UnwrapBox());

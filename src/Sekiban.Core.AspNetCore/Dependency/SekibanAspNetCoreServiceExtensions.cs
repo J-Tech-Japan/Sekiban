@@ -1,14 +1,13 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
-using Sekiban.Core.AspNetCore.Command.UserInformation;
 using Sekiban.Core.Command.UserInformation;
 
-namespace Sekiban.Core.AspNetCore.Dependency;
+namespace Sekiban.Core.Dependency;
 
 /// <summary>
 ///     Extension methods for <see cref="IServiceCollection" />
 /// </summary>
-public static class SekibanCoreServiceExtensions
+public static class SekibanAspNetCoreServiceExtensions
 {
     public enum HttpContextType
     {

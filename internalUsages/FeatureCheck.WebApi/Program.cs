@@ -2,9 +2,9 @@ using FeatureCheck.Domain.Aggregates.Branches.Commands;
 using FeatureCheck.Domain.Shared;
 using FeatureCheck.Domain.Usecases;
 using Microsoft.Azure.Cosmos;
-using Sekiban.Core.AspNetCore.Command;
-using Sekiban.Core.AspNetCore.Usecase;
+using Sekiban.Core.Command;
 using Sekiban.Core.Dependency;
+using Sekiban.Core.Usecase;
 using Sekiban.Infrastructure.Cosmos;
 using Sekiban.Infrastructure.Cosmos.Lib.Json;
 using Sekiban.Web.Dependency;
@@ -45,12 +45,12 @@ if (app.Environment.IsDevelopment())
 }
 
 app
-    .MapPost("/api/createbranchandclient", SekibanUsecase.CreateSimpleExecutorAsync<AddBranchAndClientUsecase, bool>())
+    .MapPost("/api/createbranchandclient", SekibanAspNetCoreUsecase.CreateSimpleExecutorAsync<AddBranchAndClientUsecase, bool>())
     .WithName("CreateBranchAndClientU")
     .WithOpenApi();
 
 app
-    .MapPost("/api/createbranch", CommandExecutor.CreateSimpleCommandExecutor<CreateBranch>())
+    .MapPost("/api/createbranch", AspNetCoreCommandExecutor.CreateSimpleCommandExecutor<CreateBranch>())
     .WithName("CreateBranchU")
     .WithOpenApi();
 

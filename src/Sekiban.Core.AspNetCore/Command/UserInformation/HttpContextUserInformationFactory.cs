@@ -1,8 +1,7 @@
 using Microsoft.AspNetCore.Http;
-using Sekiban.Core.Command.UserInformation;
 using System.Security.Claims;
 
-namespace Sekiban.Core.AspNetCore.Command.UserInformation;
+namespace Sekiban.Core.Command.UserInformation;
 
 /// <summary>
 ///     Getting user information through HttpContext.

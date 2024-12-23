@@ -1,11 +1,10 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Sekiban.Core.AspNetCore.Usecase;
-using Sekiban.Core.Command;
+using Sekiban.Core.Usecase;
 
-namespace Sekiban.Core.AspNetCore.Command;
+namespace Sekiban.Core.Command;
 
-public class CommandExecutor
+public class AspNetCoreCommandExecutor
 {
     public static Func<TCommon, ISekibanExecutor, Task<IResult>> CreateSimpleCommandExecutor<TCommon>()
         where TCommon : class, ICommandCommon =>
