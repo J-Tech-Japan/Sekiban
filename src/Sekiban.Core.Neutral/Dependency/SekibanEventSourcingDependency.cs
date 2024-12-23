@@ -1,6 +1,6 @@
-using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Sekiban.Core.Command;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
@@ -22,8 +22,8 @@ public static class SekibanEventSourcingDependency
     /// <param name="builder"></param>
     /// <param name="dependencyDefinition"></param>
     /// <returns></returns>
-    public static WebApplicationBuilder AddSekibanWithDependency(
-        this WebApplicationBuilder builder,
+    public static IHostApplicationBuilder AddSekibanWithDependency(
+        this IHostApplicationBuilder builder,
         IDependencyDefinition dependencyDefinition)
     {
         builder.Services.AddSekibanWithDependency(dependencyDefinition, builder.Configuration);
@@ -35,7 +35,7 @@ public static class SekibanEventSourcingDependency
     /// <param name="builder"></param>
     /// <typeparam name="TDependency"></typeparam>
     /// <returns></returns>
-    public static WebApplicationBuilder AddSekibanWithDependency<TDependency>(this WebApplicationBuilder builder)
+    public static IHostApplicationBuilder AddSekibanWithDependency<TDependency>(this IHostApplicationBuilder builder)
         where TDependency : IDependencyDefinition, new()
     {
         builder.Services.AddSekibanWithDependency(new TDependency(), builder.Configuration);
@@ -49,8 +49,8 @@ public static class SekibanEventSourcingDependency
     /// <param name="dependencyDefinition"></param>
     /// <param name="settings"></param>
     /// <returns></returns>
-    public static WebApplicationBuilder AddSekibanWithDependency(
-        this WebApplicationBuilder builder,
+    public static IHostApplicationBuilder AddSekibanWithDependency(
+        this IHostApplicationBuilder builder,
         IDependencyDefinition dependencyDefinition,
         SekibanSettings settings)
     {
@@ -162,7 +162,7 @@ public static class SekibanEventSourcingDependency
                 GetAssembly()));
         // Sekiban Event Sourcing
         services.AddSekibanCore(settings, sekibanDateProducer ?? new SekibanDateProducer(), multiProjectionType);
-        services.AddSekibanHTTPUser();
+        services.AddSekibanConstantUser();
         services.AddSingleton(settings);
         services.AddTransient<IAggregateSettings, ContextAggregateSettings>();
         // run Define() before using.
@@ -217,7 +217,7 @@ public static class SekibanEventSourcingDependency
         // Sekiban Event Sourcing
         services.AddSekibanCoreInMemory(sekibanDateProducer);
 
-        services.AddSekibanHTTPUser();
+        services.AddSekibanConstantUser();
         services.AddSingleton(SekibanSettings.Default);
         services.AddTransient<IAggregateSettings, ContextAggregateSettings>();
         // run Define() before using.
@@ -273,7 +273,7 @@ public static class SekibanEventSourcingDependency
         // Sekiban Event Sourcing
         services.AddSekibanCoreAggregateTest(sekibanDateProducer);
 
-        services.AddSekibanHTTPUser();
+        services.AddSekibanConstantUser();
         services.AddSingleton(SekibanSettings.Default);
         services.AddSekibanAppSettingsFromObject(new AggregateSettings());
         // run Define() before using.

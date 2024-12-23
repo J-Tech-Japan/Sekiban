@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Http;
+using Sekiban.Core.Command.UserInformation;
 using System.Security.Claims;
-namespace Sekiban.Core.Command.UserInformation;
+
+namespace Sekiban.Core.AspNetCore.Command.UserInformation;
 
 /// <summary>
 ///     Get user information from AzureAd
