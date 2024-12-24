@@ -50,20 +50,20 @@ public abstract class AbstractSekibanIndexedDbContext : ISekibanIndexedDbContext
     public async Task WriteMultiProjectionStateBlobAsync(DbBlob payload) =>
         await DispatchAsync("writeMultiProjectionStateBlobAsync", payload);
 
-    public async Task<DbBlob> GetMultiProjectionStateBlobAsync(string blobName) =>
-        (await DispatchAsync<string, DbBlob>("getMultiProjectionStateBlobAsync", blobName))!;
+    public async Task<DbBlob[]> GetMultiProjectionStateBlobsAsync(DbBlobQuery query) =>
+        (await DispatchAsync<DbBlobQuery, DbBlob[]>("getMultiProjectionStateBlobsAsync", query))!;
 
     public async Task WriteSingleProjectionStateBlobAsync(DbBlob payload) =>
         await DispatchAsync("writeSingleProjectionStateBlobAsync", payload);
 
-    public async Task<DbBlob> GetSingleProjectionStateBlobAsync(string blobName) =>
-        (await DispatchAsync<string, DbBlob>("getSingleProjectionStateBlobAsync", blobName))!;
+    public async Task<DbBlob[]> GetSingleProjectionStateBlobsAsync(DbBlobQuery query) =>
+        (await DispatchAsync<DbBlobQuery, DbBlob[]>("getSingleProjectionStateBlobsAsync", query))!;
 
     public async Task WriteMultiProjectionEventsBlobAsync(DbBlob payload) =>
         await DispatchAsync("writeMultiProjectionEventsBlobAsync", payload);
 
-    public async Task<DbBlob> GetMultiProjectionEventsBlobAsync(string blobName) =>
-        (await DispatchAsync<string, DbBlob>("getMultiProjectionEventsBlobAsync", blobName))!;
+    public async Task<DbBlob[]> GetMultiProjectionEventsBlobsAsync(DbBlobQuery query) =>
+        (await DispatchAsync<DbBlobQuery, DbBlob[]>("getMultiProjectionEventsBlobsAsync", query))!;
 
 
     protected abstract Task DispatchAsync(string operation);

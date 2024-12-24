@@ -7,14 +7,23 @@ public class IndexedDbBlobAccessor(IndexedDbFactory dbFactory) : IBlobAccessor
 {
     public async Task<Stream?> GetBlobAsync(SekibanBlobContainer container, string blobName)
     {
-        var dbBlob = await dbFactory.DbActionAsync(
-            async (dbContext) => container switch
-            {
-                SekibanBlobContainer.SingleProjectionState => await dbContext.GetSingleProjectionStateBlobAsync(blobName),
-                SekibanBlobContainer.MultiProjectionState => await dbContext.GetMultiProjectionStateBlobAsync(blobName),
-                SekibanBlobContainer.MultiProjectionEvents => await dbContext.GetMultiProjectionEventsBlobAsync(blobName),
-                _ => throw new NotImplementedException(),
-            });
+        var dbBlob = (
+            await dbFactory.DbActionAsync(
+                async (dbContext) => container switch
+                {
+                    SekibanBlobContainer.SingleProjectionState => await dbContext.GetSingleProjectionStateBlobsAsync(DbBlobQuery.ForName(blobName)),
+                    SekibanBlobContainer.MultiProjectionState => await dbContext.GetMultiProjectionStateBlobsAsync(DbBlobQuery.ForName(blobName)),
+                    SekibanBlobContainer.MultiProjectionEvents => await dbContext.GetMultiProjectionEventsBlobsAsync(DbBlobQuery.ForName(blobName)),
+                    _ => throw new NotImplementedException(),
+                }
+            )
+        )
+            .FirstOrDefault();
+
+        if (dbBlob is null)
+        {
+            return null;
+        }
 
         return dbBlob.ToStream();
     }
