@@ -107,3 +107,9 @@ export type DbBlob = {
 	readonly Payload: string;
 	readonly IsGzipped: boolean;
 };
+
+export type DbBlobQuery = {
+	readonly Name: string | null;
+
+	readonly MaxCount: number | null;
+};
