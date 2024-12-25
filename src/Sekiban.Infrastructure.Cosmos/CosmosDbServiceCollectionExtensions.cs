@@ -1,6 +1,6 @@
-using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Sekiban.Core.Documents;
 using Sekiban.Infrastructure.Azure.Storage.Blobs;
 using Sekiban.Infrastructure.Cosmos.Documents;
@@ -16,7 +16,7 @@ public static class CosmosDbServiceCollectionExtensions
     /// <param name="optionsFunc"></param>
     /// <returns></returns>
     public static SekibanCosmosDbOptionsServiceCollection AddSekibanCosmosDb(
-        this WebApplicationBuilder builder,
+        this IHostApplicationBuilder builder,
         Func<SekibanCosmosClientOptions, SekibanCosmosClientOptions>? optionsFunc = null)
     {
         var options = SekibanCosmosDbOptions.FromConfiguration(builder.Configuration);
@@ -24,7 +24,7 @@ public static class CosmosDbServiceCollectionExtensions
         return AddSekibanCosmosDb(builder, options, blobOptions, optionsFunc);
     }
     public static SekibanCosmosDbOptionsServiceCollection AddSekibanCosmosDbWithoutBlob(
-        this WebApplicationBuilder builder,
+        this HostApplicationBuilder builder,
         Func<SekibanCosmosClientOptions, SekibanCosmosClientOptions>? optionsFunc = null)
     {
         var options = SekibanCosmosDbOptions.FromConfiguration(builder.Configuration);
@@ -44,7 +44,7 @@ public static class CosmosDbServiceCollectionExtensions
     /// <param name="optionsFunc"></param>
     /// <returns></returns>
     public static SekibanCosmosDbOptionsServiceCollection AddSekibanCosmosDb(
-        this WebApplicationBuilder builder,
+        this IHostApplicationBuilder builder,
         SekibanCosmosDbOptions cosmosDbOptions,
         SekibanAzureBlobStorageOptions azureBlobStorageOptions,
         Func<SekibanCosmosClientOptions, SekibanCosmosClientOptions>? optionsFunc = null)

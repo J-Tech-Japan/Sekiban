@@ -26,14 +26,14 @@
           <PrivateAssets>all</PrivateAssets>
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="Sekiban.Core" Version="0.22.1"/>
+        <PackageReference Include="Sekiban.Core.Neutral" Version="0.22.1"/>
         <PackageReference Include="Sekiban.Infrastructure.Aws.S3" Version="0.22.1"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
         <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.1"/>
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj"/>
+        <ProjectReference Include="..\Sekiban.Core.Neutral\Sekiban.Core.Neutral.csproj"/>
         <ProjectReference Include="..\Sekiban.Infrastructure.Aws.S3\Sekiban.Infrastructure.Aws.S3.csproj"/>
         <ProjectReference Include="..\Sekiban.Testing\Sekiban.Testing.csproj"/>
     </ItemGroup>

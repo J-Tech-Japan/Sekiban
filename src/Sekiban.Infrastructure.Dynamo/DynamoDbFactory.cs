@@ -1,7 +1,7 @@
+using System.Configuration;
 using Amazon;
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.DocumentModel;
-using Microsoft.AspNetCore.Connections;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
@@ -59,7 +59,7 @@ public class DynamoDbFactory(SekibanDynamoDbOptions dbOptions, IMemoryCacheAcces
         var dbOption = GetSekibanDynamoDbOption();
         var region = dbOption.DynamoDbRegion ?? string.Empty;
         return RegionEndpoint.EnumerableAllRegions.FirstOrDefault(m => m.SystemName == region) ??
-            throw new ConnectionAbortedException("DynamoDbEndPointUrl not found");
+            throw new ConfigurationErrorsException("DynamoDbEndPointUrl not found");
     }
 
     private async Task<Table> GetTableAsync(DocumentType documentType, AggregateContainerGroup containerGroup)

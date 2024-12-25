@@ -12,7 +12,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Sekiban.Core\Sekiban.Core.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Core.Neutral\Sekiban.Core.Neutral.csproj"/>
         <ProjectReference Include="..\Shipping.Port\Shipping.Port.csproj"/>
     </ItemGroup>
 

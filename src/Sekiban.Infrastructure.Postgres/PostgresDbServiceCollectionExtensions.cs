@@ -1,6 +1,6 @@
-using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Sekiban.Core.Documents;
 using Sekiban.Infrastructure.Aws.S3;
 using Sekiban.Infrastructure.Azure.Storage.Blobs;
@@ -20,7 +20,7 @@ public static class PostgresDbServiceCollectionExtensions
     /// <param name="builder"></param>
     /// <returns></returns>
     public static SekibanPostgresDbOptionsServiceCollection
-        AddSekibanPostgresDbOnly(this WebApplicationBuilder builder) =>
+        AddSekibanPostgresDbOnly(this IHostApplicationBuilder builder) =>
         AddSekibanPostgresDbOnly(builder.Services, builder.Configuration);
 
 
@@ -30,14 +30,14 @@ public static class PostgresDbServiceCollectionExtensions
     /// <param name="builder"></param>
     /// <returns></returns>
     public static SekibanPostgresDbOptionsServiceCollection AddSekibanPostgresDbWithAzureBlobStorage(
-        this WebApplicationBuilder builder)
+        this IHostApplicationBuilder builder)
     {
         builder.AddSekibanAzureBlobStorage();
         return AddSekibanPostgresDbOnly(builder.Services, builder.Configuration);
     }
 
     public static SekibanPostgresDbOptionsServiceCollection AddSekibanPostgresDbWithAwsS3(
-        this WebApplicationBuilder builder)
+        this IHostApplicationBuilder builder)
     {
         builder.AddSekibanAwsS3();
         return AddSekibanPostgresDbOnly(builder.Services, builder.Configuration);
@@ -50,7 +50,7 @@ public static class PostgresDbServiceCollectionExtensions
     /// <param name="postgresDbOptions"></param>
     /// <returns></returns>
     public static SekibanPostgresDbOptionsServiceCollection AddSekibanPostgresDbOnly(
-        this WebApplicationBuilder builder,
+        this IHostApplicationBuilder builder,
         SekibanPostgresOptions postgresDbOptions) =>
         AddSekibanPostgresDbOnly(builder.Services, postgresDbOptions);
 
@@ -61,10 +61,11 @@ public static class PostgresDbServiceCollectionExtensions
     /// <param name="connectionStringName"></param>
     /// <returns></returns>
     public static SekibanPostgresDbOptionsServiceCollection AddSekibanPostgresDbOnlyFromConnectionStringName(
-        this WebApplicationBuilder builder,
+        this IHostApplicationBuilder builder,
         string connectionStringName)
     {
-        var options = SekibanPostgresOptions.FromConnectionStringName(connectionStringName, builder.Configuration);
+        var configuration = builder.Configuration.Build();
+        var options = SekibanPostgresOptions.FromConnectionStringName(connectionStringName, configuration);
         return AddSekibanPostgresDbOnly(builder.Services, options);
     }
     public static SekibanPostgresDbOptionsServiceCollection AddSekibanPostgresDbOnlyFromConnectionStringName(

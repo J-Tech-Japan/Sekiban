@@ -1,13 +1,12 @@
-using Microsoft.AspNetCore.Builder;
-using Sekiban.Infrastructure.Azure.Storage.Blobs;
+using Microsoft.Extensions.Hosting;
 namespace Sekiban.Infrastructure.Cosmos;
 
 public class SekibanCosmosDbOptionsServiceCollection(
     SekibanCosmosDbOptions sekibanCosmosDbOptions,
     SekibanCosmosClientOptions cosmosClientOptions,
-    WebApplicationBuilder applicationBuilder)
+    IHostApplicationBuilder applicationBuilder)
 {
     public SekibanCosmosDbOptions SekibanCosmosDbOptions { get; init; } = sekibanCosmosDbOptions;
     public SekibanCosmosClientOptions CosmosClientOptions { get; init; } = cosmosClientOptions;
-    public WebApplicationBuilder ApplicationBuilder { get; init; } = applicationBuilder;
+    public IHostApplicationBuilder ApplicationBuilder { get; init; } = applicationBuilder;
 }

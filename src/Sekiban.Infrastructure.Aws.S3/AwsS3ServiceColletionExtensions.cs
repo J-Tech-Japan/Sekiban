@@ -1,6 +1,6 @@
-using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Sekiban.Core.Setting;
 using Sekiban.Infrastructure.Aws.S3.Blobs;
 namespace Sekiban.Infrastructure.Aws.S3;
@@ -12,7 +12,7 @@ public static class AwsS3ServiceColletionExtensions
     /// </summary>
     /// <param name="builder"></param>
     /// <returns></returns>
-    public static SekibanAwsS3OptionsServiceCollection AddSekibanAwsS3(this WebApplicationBuilder builder) =>
+    public static SekibanAwsS3OptionsServiceCollection AddSekibanAwsS3(this IHostApplicationBuilder builder) =>
         AddSekibanAwsS3(builder.Services, builder.Configuration);
     /// <summary>
     ///     Add AWS S3 services for Sekiban
