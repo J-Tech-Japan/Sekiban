@@ -20,20 +20,20 @@ public class UserProjector : IAggregateProjector
         _ => payload
     };
     public string GetVersion() => "1.0.1";
-    public static Func<IAggregatePayload, IEvent, IAggregatePayload> Projector() =>
-        (payload, ev) => (payload, ev.GetPayload()) switch
-        {
-            (EmptyAggregatePayload, UserRegistered registered) => new UnconfirmedUser(
-                registered.Name,
-                registered.Email),
-            (UnconfirmedUser unconfirmedUser, UserConfirmed) => new ConfirmedUser(
-                unconfirmedUser.Name,
-                unconfirmedUser.Email),
-            (ConfirmedUser confirmedUser, UserUnconfirmed) => new UnconfirmedUser(
-                confirmedUser.Name,
-                confirmedUser.Email),
-            _ => payload
-        };
+    // public static Func<IAggregatePayload, IEvent, IAggregatePayload> Projector() =>
+    //     (payload, ev) => (payload, ev.GetPayload()) switch
+    //     {
+    //         (EmptyAggregatePayload, UserRegistered registered) => new UnconfirmedUser(
+    //             registered.Name,
+    //             registered.Email),
+    //         (UnconfirmedUser unconfirmedUser, UserConfirmed) => new ConfirmedUser(
+    //             unconfirmedUser.Name,
+    //             unconfirmedUser.Email),
+    //         (ConfirmedUser confirmedUser, UserUnconfirmed) => new UnconfirmedUser(
+    //             confirmedUser.Name,
+    //             confirmedUser.Email),
+    //         _ => payload
+    //     };
 }
 public record Branch(string Name) : IAggregatePayload;
 public record BranchCreated(string Name) : IEventPayload;

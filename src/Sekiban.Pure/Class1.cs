@@ -1,5 +1,6 @@
 ﻿using ResultBoxes;
 using Sekiban.Core.Documents.ValueObjects;
+using Sekiban.Core.Shared;
 using Sekiban.Pure.Exception;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
@@ -376,7 +377,10 @@ public class CommandExecutor : ICommandExecutor
             handler);
     #region Private Methods
     [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods, typeof(CommandExecutor))]
-    [UnconditionalSuppressMessage("AOT", "IL3050:Calling members annotated with 'RequiresDynamicCodeAttribute' may break functionality when AOT compiling.", Justification = "<Pending>")]
+    [UnconditionalSuppressMessage(
+        "AOT",
+        "IL3050:Calling members annotated with 'RequiresDynamicCodeAttribute' may break functionality when AOT compiling.",
+        Justification = "<Pending>")]
     public async Task<ResultBox<CommandResponse>> ExecuteGeneralNonGeneric(
         ICommand command,
         IAggregateProjector projector,
@@ -476,7 +480,7 @@ public class CommandExecutor : ICommandExecutor
                 .GenerateTypedEvent(
                     eventOrNone.GetValue(),
                     commandContext.GetAggregateCommon().PartitionKeys,
-                    SortableUniqueIdValue.GetCurrentIdFromUtc(),
+                    SortableUniqueIdValue.Generate(SekibanDateProducer.GetRegistered().UtcNow, Guid.NewGuid()),
                     commandContext.GetAggregateCommon().Version + 1)
                 .Remap(ev => commandContext.Events.Append(ev).ToList())
             : ResultBox.FromValue(commandContext.Events)).Remap(commandContext.GetCommandExecuted);
@@ -498,7 +502,7 @@ public class CommandContext<TAggregatePayload>(
         var toAdd = EventTypes.GenerateTypedEvent(
             eventPayload,
             Aggregate.PartitionKeys,
-            SortableUniqueIdValue.GetCurrentIdFromUtc(),
+            SortableUniqueIdValue.Generate(SekibanDateProducer.GetRegistered().UtcNow, Guid.NewGuid()),
             Aggregate.Version + 1);
         if (!toAdd.IsSuccess) { return EventOrNone.Empty; }
         var ev = toAdd.GetValue();
