@@ -22,7 +22,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\..\internalUsages\FeatureCheck.Domain\FeatureCheck.Domain.csproj"/>
-        <ProjectReference Include="..\..\src\Sekiban.Core.Neutral\Sekiban.Core.Neutral.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Core.DotNet\Sekiban.Core.DotNet.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Testing\Sekiban.Testing.csproj"/>
     </ItemGroup>
 

@@ -14,7 +14,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Sekiban.Core.Neutral\Sekiban.Core.Neutral.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Core.DotNet\Sekiban.Core.DotNet.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Infrastructure.Cosmos\Sekiban.Infrastructure.Cosmos.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Web\Sekiban.Web.csproj"/>
     </ItemGroup>

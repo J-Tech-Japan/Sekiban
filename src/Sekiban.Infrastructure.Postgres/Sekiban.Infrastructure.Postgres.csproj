@@ -26,7 +26,7 @@
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <PackageReference Include="System.Configuration.ConfigurationManager" Version="9.0.0" />
-        <ProjectReference Include="..\Sekiban.Core.Neutral\Sekiban.Core.Neutral.csproj"/>
+        <ProjectReference Include="..\Sekiban.Core.DotNet\Sekiban.Core.DotNet.csproj"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
         <ProjectReference Include="..\Sekiban.Infrastructure.Aws.S3\Sekiban.Infrastructure.Aws.S3.csproj"/>
         <ProjectReference Include="..\Sekiban.Infrastructure.Azure.Storage.Blobs\Sekiban.Infrastructure.Azure.Storage.Blobs.csproj"/>

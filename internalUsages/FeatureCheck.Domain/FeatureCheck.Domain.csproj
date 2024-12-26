@@ -9,7 +9,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\SampleProject.Common\SampleProject.Common.csproj"/>
-        <ProjectReference Include="..\..\src\Sekiban.Core.Neutral\Sekiban.Core.Neutral.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Core.DotNet\Sekiban.Core.DotNet.csproj"/>
     </ItemGroup>
 
 
