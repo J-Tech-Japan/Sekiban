@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Shared;
 using Sekiban.Testing.Story;
+
 namespace Sekiban.Testing.Shared;
 
 /// <summary>
