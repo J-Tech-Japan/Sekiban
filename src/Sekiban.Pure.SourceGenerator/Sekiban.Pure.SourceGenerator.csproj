@@ -15,7 +15,7 @@
     <ItemGroup>
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0"/>
     </ItemGroup>
-    <ItemGroup>
-        <Analyzer Include="$(TargetPath)"/>
-    </ItemGroup>
+<!--    <ItemGroup>-->
+<!--        <Analyzer Include="$(TargetPath)"/>-->
+<!--    </ItemGroup>-->
 </Project>
