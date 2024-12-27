@@ -89,7 +89,10 @@ public interface ICommandContext<TAggregatePayload> where TAggregatePayload : IA
 public interface ICommand;
 public interface ICommandWithAggregateRestriction<TAggregatePayload> : ICommand
     where TAggregatePayload : IAggregatePayload;
-public record NoInjection;
+public record NoInjection
+{
+    public static NoInjection Empty => new();
+}
 public interface
     ICommandHandler<TCommand, TAggregatePayload> : ICommandHandlerCommon<TCommand, NoInjection, TAggregatePayload>
     where TCommand : ICommand, IEquatable<TCommand> where TAggregatePayload : IAggregatePayload
@@ -266,115 +269,18 @@ public interface ICommandExecutor;
 public class CommandExecutor : ICommandExecutor
 {
     public IEventTypes EventTypes { get; init; } = new EmptyEventTypes();
-    public Task<ResultBox<CommandResponse>> ExecuteFunctionWithoutAggregateRestriction<TCommand>(
-        TCommand command,
-        IAggregateProjector projector,
-        Func<TCommand, PartitionKeys> specifyPartitionKeys,
-        Func<TCommand, ICommandContext<IAggregatePayload>, ResultBox<EventOrNone>> handler) where TCommand : ICommand =>
-        ExecuteGeneral<TCommand, NoInjection, IAggregatePayload>(
-            command,
-            projector,
-            specifyPartitionKeys,
-            OptionalValue<NoInjection>.Empty,
-            handler);
-    public Task<ResultBox<CommandResponse>> ExecuteFunctionWithoutAggregateRestrictionAsync<TCommand>(
-        TCommand command,
-        IAggregateProjector projector,
-        Func<TCommand, PartitionKeys> specifyPartitionKeys,
-        Func<TCommand, ICommandContext<IAggregatePayload>, Task<ResultBox<EventOrNone>>> handler)
-        where TCommand : ICommand =>
-        ExecuteGeneral<TCommand, NoInjection, IAggregatePayload>(
-            command,
-            projector,
-            specifyPartitionKeys,
-            OptionalValue<NoInjection>.Empty,
-            handler);
-    public Task<ResultBox<CommandResponse>> ExecuteFunctionWithAggregateRestriction<TCommand, TAggregatePayload>(
-        TCommand command,
-        IAggregateProjector projector,
-        Func<TCommand, PartitionKeys> specifyPartitionKeys,
-        Func<TCommand, ICommandContext<TAggregatePayload>, ResultBox<EventOrNone>> handler)
-        where TCommand : ICommandWithAggregateRestriction<TAggregatePayload>
-        where TAggregatePayload : IAggregatePayload =>
-        ExecuteGeneral<TCommand, NoInjection, TAggregatePayload>(
-            command,
-            projector,
-            specifyPartitionKeys,
-            OptionalValue<NoInjection>.Empty,
-            handler);
-    public Task<ResultBox<CommandResponse>> ExecuteFunctionWithAggregateRestrictionAsync<TCommand, TAggregatePayload>(
-        TCommand command,
-        IAggregateProjector projector,
-        Func<TCommand, PartitionKeys> specifyPartitionKeys,
-        Func<TCommand, ICommandContext<TAggregatePayload>, Task<ResultBox<EventOrNone>>> handler)
-        where TCommand : ICommandWithAggregateRestriction<TAggregatePayload>
-        where TAggregatePayload : IAggregatePayload =>
-        ExecuteGeneral<TCommand, NoInjection, TAggregatePayload>(
-            command,
-            projector,
-            specifyPartitionKeys,
-            OptionalValue<NoInjection>.Empty,
-            handler);
 
-    public Task<ResultBox<CommandResponse>>
-        ExecuteFunctionWithInjectionWithoutAggregateRestriction<TCommand, TInjection>(
-            TCommand command,
-            IAggregateProjector projector,
-            Func<TCommand, PartitionKeys> specifyPartitionKeys,
-            TInjection inject,
-            Func<TCommand, TInjection, ICommandContext<IAggregatePayload>, ResultBox<EventOrNone>> handler)
-        where TCommand : ICommand =>
-        ExecuteGeneral<TCommand, TInjection, IAggregatePayload>(
+    public Task<ResultBox<CommandResponse>> ExecuteWithResource<TCommand>(
+        TCommand command,
+        ICommandResource<TCommand> resource) where TCommand : ICommand, IEquatable<TCommand> =>
+        ExecuteGeneralNonGeneric(
             command,
-            projector,
-            specifyPartitionKeys,
-            OptionalValue<TInjection>.FromValue(inject),
-            handler);
-    public Task<ResultBox<CommandResponse>>
-        ExecuteFunctionWithInjectionWithoutAggregateRestrictionAsync<TCommand, TInjection>(
-            TCommand command,
-            IAggregateProjector projector,
-            Func<TCommand, PartitionKeys> specifyPartitionKeys,
-            TInjection inject,
-            Func<TCommand, TInjection, ICommandContext<IAggregatePayload>, Task<ResultBox<EventOrNone>>> handler)
-        where TCommand : ICommand =>
-        ExecuteGeneral<TCommand, TInjection, IAggregatePayload>(
-            command,
-            projector,
-            specifyPartitionKeys,
-            OptionalValue<TInjection>.FromValue(inject),
-            handler);
+            resource.GetProjector(),
+            resource.GetSpecifyPartitionKeysFunc(),
+            resource.GetInjection(),
+            resource.GetHandler(),
+            resource.GetAggregatePayloadType());
 
-    public Task<ResultBox<CommandResponse>>
-        ExecuteFunctionWithInjectionWithAggregateRestriction<TCommand, TInjection, TAggregatePayload>(
-            TCommand command,
-            IAggregateProjector projector,
-            Func<TCommand, PartitionKeys> specifyPartitionKeys,
-            TInjection inject,
-            Func<TCommand, TInjection, ICommandContext<TAggregatePayload>, ResultBox<EventOrNone>> handler)
-        where TCommand : ICommandWithAggregateRestriction<TAggregatePayload>
-        where TAggregatePayload : IAggregatePayload =>
-        ExecuteGeneral<TCommand, TInjection, TAggregatePayload>(
-            command,
-            projector,
-            specifyPartitionKeys,
-            OptionalValue<TInjection>.FromValue(inject),
-            handler);
-    public Task<ResultBox<CommandResponse>>
-        ExecuteFunctionWithInjectionWithAggregateRestrictionAsync<TCommand, TInjection, TAggregatePayload>(
-            TCommand command,
-            IAggregateProjector projector,
-            Func<TCommand, PartitionKeys> specifyPartitionKeys,
-            TInjection inject,
-            Func<TCommand, TInjection, ICommandContext<TAggregatePayload>, Task<ResultBox<EventOrNone>>> handler)
-        where TCommand : ICommandWithAggregateRestriction<TAggregatePayload>
-        where TAggregatePayload : IAggregatePayload =>
-        ExecuteGeneral<TCommand, TInjection, TAggregatePayload>(
-            command,
-            projector,
-            specifyPartitionKeys,
-            OptionalValue<TInjection>.FromValue(inject),
-            handler);
     #region Private Methods
     [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods, typeof(CommandExecutor))]
     [UnconditionalSuppressMessage(
@@ -544,4 +450,125 @@ public class EmptyEventTypes : IEventTypes
         PartitionKeys partitionKeys,
         string sortableUniqueId,
         int version) => ResultBox<IEvent>.FromException(new SekibanEventTypeNotFoundException(""));
+}
+public interface ICommandResource<TCommand> where TCommand : ICommand, IEquatable<TCommand>
+{
+    public Func<TCommand, PartitionKeys> GetSpecifyPartitionKeysFunc();
+    public OptionalValue<Type> GetAggregatePayloadType();
+    public Type GetCommandType();
+    public IAggregateProjector GetProjector();
+    public object? GetInjection();
+    public Delegate GetHandler();
+}
+public record CommandResource<TCommand, TProjector, TAggregatePayload>(
+    Func<TCommand, PartitionKeys> SpecifyPartitionKeys,
+    Func<TCommand, ICommandContext<TAggregatePayload>, ResultBox<EventOrNone>> Handler)
+    : ICommandResource<TCommand> where TCommand : ICommand, IEquatable<TCommand>
+    where TAggregatePayload : IAggregatePayload
+    where TProjector : IAggregateProjector, new()
+{
+    public Func<TCommand, PartitionKeys> GetSpecifyPartitionKeysFunc() => SpecifyPartitionKeys;
+    public Type GetCommandType() => typeof(TCommand);
+    public IAggregateProjector GetProjector() => new TProjector();
+    public object? GetInjection() => NoInjection.Empty;
+    public Delegate GetHandler() => Handler;
+    public OptionalValue<Type> GetAggregatePayloadType() => typeof(TAggregatePayload);
+}
+public record CommandResourceTask<TCommand, TProjector, TAggregatePayload>(
+    Func<TCommand, PartitionKeys> SpecifyPartitionKeys,
+    Func<TCommand, ICommandContext<TAggregatePayload>, Task<ResultBox<EventOrNone>>> Handler)
+    : ICommandResource<TCommand> where TCommand : ICommand, IEquatable<TCommand>
+    where TAggregatePayload : IAggregatePayload
+    where TProjector : IAggregateProjector, new()
+{
+    public Func<TCommand, PartitionKeys> GetSpecifyPartitionKeysFunc() => SpecifyPartitionKeys;
+    public Type GetCommandType() => typeof(TCommand);
+    public IAggregateProjector GetProjector() => new TProjector();
+    public object? GetInjection() => NoInjection.Empty;
+    public Delegate GetHandler() => Handler;
+    public OptionalValue<Type> GetAggregatePayloadType() => typeof(TAggregatePayload);
+}
+public record CommandResource<TCommand, TProjector>(
+    Func<TCommand, PartitionKeys> SpecifyPartitionKeys,
+    Func<TCommand, ICommandContext<IAggregatePayload>, ResultBox<EventOrNone>> Handler)
+    : ICommandResource<TCommand> where TCommand : ICommand, IEquatable<TCommand>
+    where TProjector : IAggregateProjector, new()
+{
+    public Func<TCommand, PartitionKeys> GetSpecifyPartitionKeysFunc() => SpecifyPartitionKeys;
+    public Type GetCommandType() => typeof(TCommand);
+    public IAggregateProjector GetProjector() => new TProjector();
+    public object GetInjection() => NoInjection.Empty;
+    public Delegate GetHandler() => Handler;
+    public OptionalValue<Type> GetAggregatePayloadType() => OptionalValue<Type>.Empty;
+}
+public record CommandResourceTask<TCommand, TProjector>(
+    Func<TCommand, PartitionKeys> SpecifyPartitionKeys,
+    Func<TCommand, ICommandContext<IAggregatePayload>, Task<ResultBox<EventOrNone>>> Handler)
+    : ICommandResource<TCommand> where TCommand : ICommand, IEquatable<TCommand>
+    where TProjector : IAggregateProjector, new()
+{
+    public Func<TCommand, PartitionKeys> GetSpecifyPartitionKeysFunc() => SpecifyPartitionKeys;
+    public Type GetCommandType() => typeof(TCommand);
+    public IAggregateProjector GetProjector() => new TProjector();
+    public object GetInjection() => NoInjection.Empty;
+    public Delegate GetHandler() => Handler;
+    public OptionalValue<Type> GetAggregatePayloadType() => OptionalValue<Type>.Empty;
+}
+public record CommandResourceWithInject<TCommand, TProjector, TInject>(
+    Func<TCommand, PartitionKeys> SpecifyPartitionKeys,
+    TInject? Injection,
+    Func<TCommand, TInject, ICommandContext<IAggregatePayload>, ResultBox<EventOrNone>> Handler)
+    : ICommandResource<TCommand> where TCommand : ICommand, IEquatable<TCommand>
+    where TProjector : IAggregateProjector, new()
+{
+    public Func<TCommand, PartitionKeys> GetSpecifyPartitionKeysFunc() => SpecifyPartitionKeys;
+    public Type GetCommandType() => typeof(TCommand);
+    public IAggregateProjector GetProjector() => new TProjector();
+    public object GetInjection() => NoInjection.Empty;
+    public Delegate GetHandler() => Handler;
+    public OptionalValue<Type> GetAggregatePayloadType() => OptionalValue<Type>.Empty;
+}
+public record CommandResourceWithInjectTask<TCommand, TProjector, TInject>(
+    Func<TCommand, PartitionKeys> SpecifyPartitionKeys,
+    TInject? Injection,
+    Func<TCommand, TInject, ICommandContext<IAggregatePayload>, Task<ResultBox<EventOrNone>>> Handler)
+    : ICommandResource<TCommand> where TCommand : ICommand, IEquatable<TCommand>
+    where TProjector : IAggregateProjector, new()
+{
+    public Func<TCommand, PartitionKeys> GetSpecifyPartitionKeysFunc() => SpecifyPartitionKeys;
+    public Type GetCommandType() => typeof(TCommand);
+    public IAggregateProjector GetProjector() => new TProjector();
+    public object GetInjection() => NoInjection.Empty;
+    public Delegate GetHandler() => Handler;
+    public OptionalValue<Type> GetAggregatePayloadType() => OptionalValue<Type>.Empty;
+}
+public record CommandResourceWithInject<TCommand, TProjector, TAggregatePayload, TInject>(
+    Func<TCommand, PartitionKeys> SpecifyPartitionKeys,
+    TInject? Injection,
+    Func<TCommand, TInject, ICommandContext<TAggregatePayload>, Task<ResultBox<EventOrNone>>> Handler)
+    : ICommandResource<TCommand> where TCommand : ICommand, IEquatable<TCommand>
+    where TAggregatePayload : IAggregatePayload
+    where TProjector : IAggregateProjector, new()
+{
+    public Func<TCommand, PartitionKeys> GetSpecifyPartitionKeysFunc() => SpecifyPartitionKeys;
+    public Type GetCommandType() => typeof(TCommand);
+    public IAggregateProjector GetProjector() => new TProjector();
+    public object? GetInjection() => Injection;
+    public Delegate GetHandler() => Handler;
+    public OptionalValue<Type> GetAggregatePayloadType() => typeof(TAggregatePayload);
+}
+public record CommandResourceWithInjectTask<TCommand, TProjector, TAggregatePayload, TInject>(
+    Func<TCommand, PartitionKeys> SpecifyPartitionKeys,
+    TInject? Injection,
+    Func<TCommand, TInject, ICommandContext<TAggregatePayload>, Task<ResultBox<EventOrNone>>> Handler)
+    : ICommandResource<TCommand> where TCommand : ICommand, IEquatable<TCommand>
+    where TAggregatePayload : IAggregatePayload
+    where TProjector : IAggregateProjector, new()
+{
+    public Func<TCommand, PartitionKeys> GetSpecifyPartitionKeysFunc() => SpecifyPartitionKeys;
+    public Type GetCommandType() => typeof(TCommand);
+    public IAggregateProjector GetProjector() => new TProjector();
+    public object? GetInjection() => Injection;
+    public Delegate GetHandler() => Handler;
+    public OptionalValue<Type> GetAggregatePayloadType() => typeof(TAggregatePayload);
 }
