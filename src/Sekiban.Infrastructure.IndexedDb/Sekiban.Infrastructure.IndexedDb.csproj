@@ -21,7 +21,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.JSInterop" Version="8.0.11" />
+    <PackageReference Condition="'$(TargetFramework)' == 'net8.0'" Include="Microsoft.JSInterop" Version="8.0.11" />
+    <PackageReference Condition="'$(TargetFramework)' == 'net9.0'" Include="Microsoft.JSInterop" Version="9.0.0" />
     <PackageReference Include="Microsoft.Sbom.Targets" Version="3.0.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
