@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using System;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -32,11 +33,13 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
                 var commandTypes = ImmutableArray.CreateBuilder<CommandWithHandlerValues>();
 
                 commandTypes.AddRange(GetCommandWithHandlerValues(compilation, types));
+                commandTypes.AddRange(GetCommandWithHandlerAsyncValues(compilation, types));
                 commandTypes.AddRange(GetICommandWithHandlerInjectionValues(compilation, types));
+                commandTypes.AddRange(GetICommandWithHandlerInjectionAsyncValues(compilation, types));
                 commandTypes.AddRange(GetCommandValues(compilation, types, commandTypes.ToImmutable()));
 
                 // Generate source code
-                var rootNamespace = compilation.AssemblyName;
+                var rootNamespace = compilation.AssemblyName ?? throw new Exception();
                 var sourceCode = GenerateSourceCode(commandTypes.ToImmutable(), rootNamespace);
                 ctx.AddSource("CommandExecutorExtension.g.cs", SourceText.From(sourceCode, Encoding.UTF8));
             });
@@ -53,10 +56,9 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
         foreach (var typeSyntax in types)
         {
             var model = compilation.GetSemanticModel(typeSyntax.SyntaxTree);
-            var typeSymbol = model.GetDeclaredSymbol(typeSyntax) as INamedTypeSymbol;
+            var typeSymbol = model.GetDeclaredSymbol(typeSyntax) as INamedTypeSymbol ?? throw new Exception();
             var allInterfaces = typeSymbol.AllInterfaces.ToList();
-            if (typeSymbol != null &&
-                typeSymbol.AllInterfaces.Any(m => m.OriginalDefinition.Name == iCommmandWithHandlerSymbol.Name))
+            if (typeSymbol.AllInterfaces.Any(m => m.OriginalDefinition.Name == iCommmandWithHandlerSymbol.Name))
             {
                 var interfaceImplementation = typeSymbol.AllInterfaces.First(
                     m => m.OriginalDefinition is not null &&
@@ -78,7 +80,113 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
         return eventTypes.ToImmutable();
     }
 
+    public ImmutableArray<CommandWithHandlerValues> GetCommandWithHandlerAsyncValues(
+        Compilation compilation,
+        ImmutableArray<SyntaxNode> types)
+    {
+        var iCommmandWithHandlerSymbol = compilation.GetTypeByMetadataName("Sekiban.Pure.ICommandWithHandlerAsync`2");
+        if (iCommmandWithHandlerSymbol == null)
+            return new ImmutableArray<CommandWithHandlerValues>();
+        var eventTypes = ImmutableArray.CreateBuilder<CommandWithHandlerValues>();
+        foreach (var typeSyntax in types)
+        {
+            var model = compilation.GetSemanticModel(typeSyntax.SyntaxTree);
+            var typeSymbol = model.GetDeclaredSymbol(typeSyntax) as INamedTypeSymbol ?? throw new Exception();
+            var allInterfaces = typeSymbol.AllInterfaces.ToList();
+            if (typeSymbol.AllInterfaces.Any(m => m.OriginalDefinition.Name == iCommmandWithHandlerSymbol.Name))
+            {
+                var interfaceImplementation = typeSymbol.AllInterfaces.First(
+                    m => m.OriginalDefinition is not null &&
+                        m.OriginalDefinition.Name == iCommmandWithHandlerSymbol.Name);
+                eventTypes.Add(
+                    new CommandWithHandlerValues
+                    {
+                        InterfaceName = interfaceImplementation.Name,
+                        RecordName = typeSymbol.ToDisplayString(),
+                        TypeCount = interfaceImplementation.TypeArguments.Length,
+                        Type1Name = interfaceImplementation.TypeArguments[0].ToDisplayString(),
+                        Type2Name = interfaceImplementation.TypeArguments[1].ToDisplayString(),
+                        AggregatePayloadTypeName = interfaceImplementation.TypeArguments.Length > 2
+                            ? interfaceImplementation.TypeArguments[2].ToDisplayString()
+                            : string.Empty
+                    });
+            }
+        }
+        return eventTypes.ToImmutable();
+    }
 
+    public ImmutableArray<CommandWithHandlerValues> GetICommandWithHandlerInjectionValues(
+        Compilation compilation,
+        ImmutableArray<SyntaxNode> types)
+    {
+        var iCommandWithHandlerSymbol
+            = compilation.GetTypeByMetadataName("Sekiban.Pure.ICommandWithHandlerInjection`3");
+        if (iCommandWithHandlerSymbol == null)
+            return new ImmutableArray<CommandWithHandlerValues>();
+        var eventTypes = ImmutableArray.CreateBuilder<CommandWithHandlerValues>();
+        foreach (var typeSyntax in types)
+        {
+            var model = compilation.GetSemanticModel(typeSyntax.SyntaxTree);
+            var typeSymbol = model.GetDeclaredSymbol(typeSyntax) as INamedTypeSymbol ?? throw new Exception();
+            var allInterfaces = typeSymbol.AllInterfaces.ToList();
+            if (typeSymbol.AllInterfaces.Any(m => m.OriginalDefinition.Name == iCommandWithHandlerSymbol.Name))
+            {
+                var interfaceImplementation = typeSymbol.AllInterfaces.First(
+                    m => m.OriginalDefinition is not null &&
+                        m.OriginalDefinition.Name == iCommandWithHandlerSymbol.Name);
+                var toadd = new CommandWithHandlerValues
+                {
+                    InterfaceName = interfaceImplementation.Name,
+                    RecordName = typeSymbol.ToDisplayString(),
+                    TypeCount = interfaceImplementation.TypeArguments.Length,
+                    Type1Name = interfaceImplementation.TypeArguments[0].ToDisplayString(),
+                    Type2Name = interfaceImplementation.TypeArguments[1].ToDisplayString(),
+                    InjectTypeName = interfaceImplementation.TypeArguments[2].ToDisplayString(),
+                    AggregatePayloadTypeName = interfaceImplementation.TypeArguments.Length > 3
+                        ? interfaceImplementation.TypeArguments[3].ToDisplayString()
+                        : string.Empty
+                };
+                eventTypes.Add(toadd);
+            }
+        }
+        return eventTypes.ToImmutable();
+    }
+    public ImmutableArray<CommandWithHandlerValues> GetICommandWithHandlerInjectionAsyncValues(
+        Compilation compilation,
+        ImmutableArray<SyntaxNode> types)
+    {
+        var iCommandWithHandlerSymbol
+            = compilation.GetTypeByMetadataName("Sekiban.Pure.ICommandWithHandlerInjectionAsync`3");
+        if (iCommandWithHandlerSymbol == null)
+            return new ImmutableArray<CommandWithHandlerValues>();
+        var eventTypes = ImmutableArray.CreateBuilder<CommandWithHandlerValues>();
+        foreach (var typeSyntax in types)
+        {
+            var model = compilation.GetSemanticModel(typeSyntax.SyntaxTree);
+            var typeSymbol = model.GetDeclaredSymbol(typeSyntax) as INamedTypeSymbol ?? throw new Exception();
+            var allInterfaces = typeSymbol.AllInterfaces.ToList();
+            if (typeSymbol.AllInterfaces.Any(m => m.OriginalDefinition.Name == iCommandWithHandlerSymbol.Name))
+            {
+                var interfaceImplementation = typeSymbol.AllInterfaces.First(
+                    m => m.OriginalDefinition is not null &&
+                        m.OriginalDefinition.Name == iCommandWithHandlerSymbol.Name);
+                var toadd = new CommandWithHandlerValues
+                {
+                    InterfaceName = interfaceImplementation.Name,
+                    RecordName = typeSymbol.ToDisplayString(),
+                    TypeCount = interfaceImplementation.TypeArguments.Length,
+                    Type1Name = interfaceImplementation.TypeArguments[0].ToDisplayString(),
+                    Type2Name = interfaceImplementation.TypeArguments[1].ToDisplayString(),
+                    InjectTypeName = interfaceImplementation.TypeArguments[2].ToDisplayString(),
+                    AggregatePayloadTypeName = interfaceImplementation.TypeArguments.Length > 3
+                        ? interfaceImplementation.TypeArguments[3].ToDisplayString()
+                        : string.Empty
+                };
+                eventTypes.Add(toadd);
+            }
+        }
+        return eventTypes.ToImmutable();
+    }
 
     public ImmutableArray<CommandWithHandlerValues> GetCommandValues(
         Compilation compilation,
@@ -128,43 +236,6 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
 
 
 
-    public ImmutableArray<CommandWithHandlerValues> GetICommandWithHandlerInjectionValues(
-        Compilation compilation,
-        ImmutableArray<SyntaxNode> types)
-    {
-        var iCommandWithHandlerSymbol
-            = compilation.GetTypeByMetadataName("Sekiban.Pure.ICommandWithHandlerInjection`3");
-        if (iCommandWithHandlerSymbol == null)
-            return new ImmutableArray<CommandWithHandlerValues>();
-        var eventTypes = ImmutableArray.CreateBuilder<CommandWithHandlerValues>();
-        foreach (var typeSyntax in types)
-        {
-            var model = compilation.GetSemanticModel(typeSyntax.SyntaxTree);
-            var typeSymbol = model.GetDeclaredSymbol(typeSyntax) as INamedTypeSymbol;
-            var allInterfaces = typeSymbol.AllInterfaces.ToList();
-            if (typeSymbol != null &&
-                typeSymbol.AllInterfaces.Any(m => m.OriginalDefinition.Name == iCommandWithHandlerSymbol.Name))
-            {
-                var interfaceImplementation = typeSymbol.AllInterfaces.First(
-                    m => m.OriginalDefinition is not null &&
-                        m.OriginalDefinition.Name == iCommandWithHandlerSymbol.Name);
-                var toadd = new CommandWithHandlerValues
-                {
-                    InterfaceName = interfaceImplementation.Name,
-                    RecordName = typeSymbol.ToDisplayString(),
-                    TypeCount = interfaceImplementation.TypeArguments.Length,
-                    Type1Name = interfaceImplementation.TypeArguments[0].ToDisplayString(),
-                    Type2Name = interfaceImplementation.TypeArguments[1].ToDisplayString(),
-                    InjectTypeName = interfaceImplementation.TypeArguments[2].ToDisplayString(),
-                    AggregatePayloadTypeName = interfaceImplementation.TypeArguments.Length > 3
-                        ? interfaceImplementation.TypeArguments[3].ToDisplayString()
-                        : string.Empty
-                };
-                eventTypes.Add(toadd);
-            }
-        }
-        return eventTypes.ToImmutable();
-    }
 
     private string GenerateSourceCode(ImmutableArray<CommandWithHandlerValues> eventTypes, string rootNamespace)
     {
@@ -239,6 +310,78 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
 
 
                     break;
+
+
+
+
+
+
+                case ("ICommandWithHandlerAsync", 2):
+                    sb.AppendLine(
+                        $"        public static Task<ResultBox<CommandResponse>> Execute(this CommandExecutor executor, {type.RecordName} command) =>");
+                    sb.AppendLine("            executor.ExecuteFunctionWithoutAggregateRestrictionAsync(");
+                    sb.AppendLine("                command,");
+                    sb.AppendLine("                (command as ICommandGetProjector).GetProjector(),");
+                    sb.AppendLine("                command.SpecifyPartitionKeys,");
+                    sb.AppendLine("                command.HandleAsync);");
+                    sb.AppendLine();
+                    // add this too
+                    sb.AppendLine(
+                        $"        public static Task<ResultBox<CommandResponse>> ExecuteFunctionAsync(this CommandExecutor executor, {type.RecordName} command,");
+                    sb.AppendLine("                IAggregateProjector projector,");
+                    sb.AppendLine($"                Func<{type.RecordName}, PartitionKeys> specifyPartitionKeys,");
+                    sb.AppendLine(
+                        $"                Func<{type.RecordName}, ICommandContext<IAggregatePayload>, Task<ResultBox<EventOrNone>>> handler) =>");
+                    sb.AppendLine("            executor.ExecuteFunctionWithoutAggregateRestrictionAsync(");
+                    sb.AppendLine("                command,");
+                    sb.AppendLine("                projector,");
+                    sb.AppendLine("                specifyPartitionKeys,");
+                    sb.AppendLine("                handler);");
+                    sb.AppendLine();
+                    break;
+                case ("ICommandWithHandlerAsync", 3):
+                    sb.AppendLine(
+                        $"        public static Task<ResultBox<CommandResponse>> Execute(this CommandExecutor executor, {type.RecordName} command) =>");
+                    sb.AppendLine(
+                        "            executor.ExecuteFunctionWithAggregateRestrictionAsync<" +
+                        $"{type.RecordName}, {type.AggregatePayloadTypeName}>(");
+                    sb.AppendLine("                command,");
+                    sb.AppendLine("                (command as ICommandGetProjector).GetProjector(),");
+                    sb.AppendLine("                command.SpecifyPartitionKeys,");
+                    sb.AppendLine("                command.HandleAsync);");
+                    sb.AppendLine();
+
+                    // add this too
+                    sb.AppendLine(
+                        $"        public static Task<ResultBox<CommandResponse>> ExecuteFunctionAsync(this CommandExecutor executor, {type.RecordName} command,");
+                    sb.AppendLine("                IAggregateProjector projector,");
+                    sb.AppendLine($"                Func<{type.RecordName}, PartitionKeys> specifyPartitionKeys,");
+                    sb.AppendLine(
+                        $"                Func<{type.RecordName}, ICommandContext<{type.AggregatePayloadTypeName}>, Task<ResultBox<EventOrNone>>> handler) =>");
+                    sb.AppendLine(
+                        "            executor.ExecuteFunctionWithAggregateRestrictionAsync<" +
+                        $"{type.RecordName}, {type.AggregatePayloadTypeName}>(");
+                    sb.AppendLine("                command,");
+                    sb.AppendLine("                projector,");
+                    sb.AppendLine("                specifyPartitionKeys,");
+                    sb.AppendLine("                handler);");
+                    sb.AppendLine();
+
+
+
+                    break;
+
+
+
+
+
+
+
+
+
+
+
+
                 case ("ICommandWithHandlerInjection", 3):
                     sb.AppendLine(
                         $"        public static Task<ResultBox<CommandResponse>> Execute(this CommandExecutor executor, {type.RecordName} command, {type.InjectTypeName} injection) =>");
@@ -341,12 +484,12 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
     }
     public class CommandWithHandlerValues
     {
-        public string InterfaceName { get; set; }
-        public string RecordName { get; set; }
+        public string InterfaceName { get; set; } = string.Empty;
+        public string RecordName { get; set; } = string.Empty;
         public int TypeCount { get; set; }
-        public string Type1Name { get; set; }
-        public string Type2Name { get; set; }
-        public string InjectTypeName { get; set; }
-        public string AggregatePayloadTypeName { get; set; }
+        public string Type1Name { get; set; } = string.Empty;
+        public string Type2Name { get; set; } = string.Empty;
+        public string InjectTypeName { get; set; } = string.Empty;
+        public string AggregatePayloadTypeName { get; set; } = string.Empty;
     }
 }

@@ -20,6 +20,7 @@ jobs:
     - name: Restore dependencies
       run: |
         pushd ./
+        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
         dotnet restore Sekiban.sln
     - name: Build with dotnet
       run: |
