@@ -8,8 +8,19 @@ namespace Sekiban.Test.IndexedDb;
 
 public class NodeJsRuntime : ISekibanJsRuntime
 {
+    private static string LibNodeName => Environment.OSVersion.Platform switch
+    {
+        // Windows
+        PlatformID.Win32NT => "libnode.dll",
+
+        // MacOS and Linux
+        PlatformID.Unix => "libnode.so.115",
+
+        _ => throw new PlatformNotSupportedException(),
+    };
+
     private static readonly string basedir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!;
-    private static readonly NodejsPlatform nodejsPlatform = new NodejsPlatform(Path.Combine(basedir, "Assets", "libnode.so.115"));
+    private static readonly NodejsPlatform nodejsPlatform = new(Path.Combine(basedir, "Assets", LibNodeName));
     private static readonly NodejsEnvironment nodejsEnvironment = nodejsPlatform.CreateEnvironment(basedir);
 
     public async Task<ISekibanIndexedDbContext> CreateContextAsync(string context)
