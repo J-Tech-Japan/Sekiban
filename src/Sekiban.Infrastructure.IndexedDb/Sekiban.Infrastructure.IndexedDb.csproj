@@ -4,10 +4,28 @@
     <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PackageId>Sekiban.Infrastructure.IndexedDb</PackageId>
+    <Version>0.22.1</Version>
+    <Authors>J-Tech Group</Authors>
+    <Company>J-Tech-Japan</Company>
+    <PackageDescription>Sekiban - Event Sourcing Framework IndexedDB Infrastructure</PackageDescription>
+    <RepositoryUrl>https://github.com/J-Tech-Japan/Sekiban</RepositoryUrl>
+    <PackageVersion>0.22.1</PackageVersion>
+    <Description>Initial .NET 9 Release</Description>
+    <LangVersion>preview</LangVersion>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <GenerateSBOM>true</GenerateSBOM>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.JSInterop" Version="8.0.11" />
+    <PackageReference Include="Microsoft.Sbom.Targets" Version="3.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
     <PackageReference Include="System.Configuration.ConfigurationManager" Version="9.0.0" />
   </ItemGroup>
 
@@ -20,6 +38,7 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <TargetPath>wwwroot/sekiban-runtime.mjs</TargetPath>
     </Content>
+    <None Include="..\README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
 
   <Target Name="Build runtime" BeforeTargets="DispatchToInnerBuilds">
