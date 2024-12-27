@@ -15,7 +15,7 @@ var builder = new ConfigurationBuilder().SetBasePath(AppContext.BaseDirectory)
 var configuration = builder.Build();
 var serviceCollection = new ServiceCollection();
 serviceCollection.AddSingleton<IConfiguration>(configuration);
-SekibanEventSourcingDependency.Register(serviceCollection, new EmptyDependencyDefinition(), SekibanSettings.FromConfiguration(configuration));
+SekibanAspNetCoreEventSourcingDependency.Register(serviceCollection, new EmptyDependencyDefinition(), SekibanSettings.FromConfiguration(configuration));
 serviceCollection.AddSekibanCosmosDb(configuration);
 serviceCollection.AddLogging();
 serviceCollection.AddTransient<EventsConverter>();

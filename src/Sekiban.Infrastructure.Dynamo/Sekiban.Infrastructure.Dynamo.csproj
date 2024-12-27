@@ -35,7 +35,6 @@
     <ItemGroup>
         <ProjectReference Include="..\Sekiban.Core.DotNet\Sekiban.Core.DotNet.csproj"/>
         <ProjectReference Include="..\Sekiban.Infrastructure.Aws.S3\Sekiban.Infrastructure.Aws.S3.csproj"/>
-        <ProjectReference Include="..\Sekiban.Testing\Sekiban.Testing.csproj"/>
     </ItemGroup>
 
 </Project>

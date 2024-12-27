@@ -31,7 +31,7 @@
     <ItemGroup>
         <ProjectReference Include="..\..\internalUsages\FeatureCheck.Domain\FeatureCheck.Domain.csproj"/>
         <ProjectReference Include="..\..\internalUsages\MultiTenant.Domain\MultiTenant.Domain.csproj"/>
-        <ProjectReference Include="..\..\src\Sekiban.Core.DotNet\Sekiban.Core.DotNet.csproj"/>
+        <ProjectReference Include="..\..\src\Sekiban.Core\Sekiban.Core.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Testing\Sekiban.Testing.csproj"/>
     </ItemGroup>
 

@@ -3,8 +3,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Shared;
 using Sekiban.Infrastructure.Aws.S3;
+using Sekiban.Infrastructure.Dynamo;
 using Sekiban.Testing.Story;
-namespace Sekiban.Infrastructure.Dynamo;
+
+namespace Sekiban.Test.Dynamo;
 
 /// <summary>
 ///     DynamoDB service provider generator
