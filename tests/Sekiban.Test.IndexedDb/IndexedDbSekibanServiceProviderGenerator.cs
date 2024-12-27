@@ -2,10 +2,11 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Dependency;
 using Sekiban.Core.Shared;
+using Sekiban.Infrastructure.IndexedDb;
 using Sekiban.Infrastructure.IndexedDb.Databases;
 using Sekiban.Testing.Story;
 
-namespace Sekiban.Infrastructure.IndexedDb;
+namespace Sekiban.Test.IndexedDb;
 
 public class IndexedDbSekibanServiceProviderGenerator : ISekibanServiceProviderGenerator
 {
