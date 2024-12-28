@@ -259,10 +259,12 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
                 case ("ICommandWithHandler", 2):
                     sb.AppendLine(
                         $"        public static Task<ResultBox<CommandResponse>> Execute(this CommandExecutor executor, {type.RecordName} command) =>");
-                    sb.AppendLine("            executor.ExecuteFunctionWithoutAggregateRestriction(");
+                    sb.AppendLine(
+                        $"            executor.ExecuteGeneral<{type.RecordName},NoInjection,IAggregatePayload>(");
                     sb.AppendLine("                command,");
                     sb.AppendLine("                (command as ICommandGetProjector).GetProjector(),");
                     sb.AppendLine("                command.SpecifyPartitionKeys,");
+                    sb.AppendLine("                NoInjection.Empty,");
                     sb.AppendLine("                command.Handle);");
                     sb.AppendLine();
                     // add this too
@@ -272,10 +274,12 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
                     sb.AppendLine($"                Func<{type.RecordName}, PartitionKeys> specifyPartitionKeys,");
                     sb.AppendLine(
                         $"                Func<{type.RecordName}, ICommandContext<IAggregatePayload>, ResultBox<EventOrNone>> handler) =>");
-                    sb.AppendLine("            executor.ExecuteFunctionWithoutAggregateRestriction(");
+                    sb.AppendLine(
+                        $"            executor.ExecuteGeneral<{type.RecordName},NoInjection,IAggregatePayload>(");
                     sb.AppendLine("                command,");
                     sb.AppendLine("                projector,");
                     sb.AppendLine("                specifyPartitionKeys,");
+                    sb.AppendLine("                NoInjection.Empty,");
                     sb.AppendLine("                handler);");
                     sb.AppendLine();
                     break;
@@ -283,11 +287,11 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
                     sb.AppendLine(
                         $"        public static Task<ResultBox<CommandResponse>> Execute(this CommandExecutor executor, {type.RecordName} command) =>");
                     sb.AppendLine(
-                        "            executor.ExecuteFunctionWithAggregateRestriction<" +
-                        $"{type.RecordName}, {type.AggregatePayloadTypeName}>(");
+                        $"            executor.ExecuteGeneral<{type.RecordName},NoInjection,{type.AggregatePayloadTypeName}>(");
                     sb.AppendLine("                command,");
                     sb.AppendLine("                (command as ICommandGetProjector).GetProjector(),");
                     sb.AppendLine("                command.SpecifyPartitionKeys,");
+                    sb.AppendLine("                NoInjection.Empty,");
                     sb.AppendLine("                command.Handle);");
                     sb.AppendLine();
 
@@ -299,30 +303,24 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
                     sb.AppendLine(
                         $"                Func<{type.RecordName}, ICommandContext<{type.AggregatePayloadTypeName}>, ResultBox<EventOrNone>> handler) =>");
                     sb.AppendLine(
-                        "            executor.ExecuteFunctionWithAggregateRestriction<" +
-                        $"{type.RecordName}, {type.AggregatePayloadTypeName}>(");
+                        $"            executor.ExecuteGeneral<{type.RecordName},NoInjection,{type.AggregatePayloadTypeName}>(");
                     sb.AppendLine("                command,");
                     sb.AppendLine("                projector,");
                     sb.AppendLine("                specifyPartitionKeys,");
+                    sb.AppendLine("                NoInjection.Empty,");
                     sb.AppendLine("                handler);");
                     sb.AppendLine();
-
-
-
                     break;
-
-
-
-
-
 
                 case ("ICommandWithHandlerAsync", 2):
                     sb.AppendLine(
                         $"        public static Task<ResultBox<CommandResponse>> Execute(this CommandExecutor executor, {type.RecordName} command) =>");
-                    sb.AppendLine("            executor.ExecuteFunctionWithoutAggregateRestrictionAsync(");
+                    sb.AppendLine(
+                        $"            executor.ExecuteGeneral<{type.RecordName},NoInjection,IAggregatePayload>(");
                     sb.AppendLine("                command,");
                     sb.AppendLine("                (command as ICommandGetProjector).GetProjector(),");
                     sb.AppendLine("                command.SpecifyPartitionKeys,");
+                    sb.AppendLine("                NoInjection.Empty,");
                     sb.AppendLine("                command.HandleAsync);");
                     sb.AppendLine();
                     // add this too
@@ -332,10 +330,12 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
                     sb.AppendLine($"                Func<{type.RecordName}, PartitionKeys> specifyPartitionKeys,");
                     sb.AppendLine(
                         $"                Func<{type.RecordName}, ICommandContext<IAggregatePayload>, Task<ResultBox<EventOrNone>>> handler) =>");
-                    sb.AppendLine("            executor.ExecuteFunctionWithoutAggregateRestrictionAsync(");
+                    sb.AppendLine(
+                        $"            executor.ExecuteGeneral<{type.RecordName},NoInjection,IAggregatePayload>(");
                     sb.AppendLine("                command,");
                     sb.AppendLine("                projector,");
                     sb.AppendLine("                specifyPartitionKeys,");
+                    sb.AppendLine("                NoInjection.Empty,");
                     sb.AppendLine("                handler);");
                     sb.AppendLine();
                     break;
@@ -343,11 +343,11 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
                     sb.AppendLine(
                         $"        public static Task<ResultBox<CommandResponse>> Execute(this CommandExecutor executor, {type.RecordName} command) =>");
                     sb.AppendLine(
-                        "            executor.ExecuteFunctionWithAggregateRestrictionAsync<" +
-                        $"{type.RecordName}, {type.AggregatePayloadTypeName}>(");
+                        $"            executor.ExecuteGeneral<{type.RecordName},NoInjection,{type.AggregatePayloadTypeName}>(");
                     sb.AppendLine("                command,");
                     sb.AppendLine("                (command as ICommandGetProjector).GetProjector(),");
                     sb.AppendLine("                command.SpecifyPartitionKeys,");
+                    sb.AppendLine("                NoInjection.Empty,");
                     sb.AppendLine("                command.HandleAsync);");
                     sb.AppendLine();
 
@@ -359,35 +359,20 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
                     sb.AppendLine(
                         $"                Func<{type.RecordName}, ICommandContext<{type.AggregatePayloadTypeName}>, Task<ResultBox<EventOrNone>>> handler) =>");
                     sb.AppendLine(
-                        "            executor.ExecuteFunctionWithAggregateRestrictionAsync<" +
-                        $"{type.RecordName}, {type.AggregatePayloadTypeName}>(");
+                        $"            executor.ExecuteGeneral<{type.RecordName},NoInjection,{type.AggregatePayloadTypeName}>(");
                     sb.AppendLine("                command,");
                     sb.AppendLine("                projector,");
                     sb.AppendLine("                specifyPartitionKeys,");
+                    sb.AppendLine("                NoInjection.Empty,");
                     sb.AppendLine("                handler);");
                     sb.AppendLine();
-
-
-
                     break;
-
-
-
-
-
-
-
-
-
-
-
 
                 case ("ICommandWithHandlerInjection", 3):
                     sb.AppendLine(
                         $"        public static Task<ResultBox<CommandResponse>> Execute(this CommandExecutor executor, {type.RecordName} command, {type.InjectTypeName} injection) =>");
                     sb.AppendLine(
-                        "            executor.ExecuteFunctionWithInjectionWithoutAggregateRestriction<" +
-                        $"{type.RecordName}, {type.InjectTypeName}>(");
+                        $"            executor.ExecuteGeneral<{type.RecordName},{type.InjectTypeName},IAggregatePayload>(");
                     sb.AppendLine("                command,");
                     sb.AppendLine("                (command as ICommandGetProjector).GetProjector(),");
                     sb.AppendLine("                command.SpecifyPartitionKeys,");
@@ -404,8 +389,7 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
                     sb.AppendLine(
                         $"                Func<{type.RecordName}, {type.InjectTypeName}, ICommandContext<IAggregatePayload>, ResultBox<EventOrNone>> handler) =>");
                     sb.AppendLine(
-                        "            executor.ExecuteFunctionWithInjectionWithoutAggregateRestriction<" +
-                        $"{type.RecordName}, {type.InjectTypeName}>(");
+                        $"            executor.ExecuteGeneral<{type.RecordName},{type.InjectTypeName},IAggregatePayload>(");
                     sb.AppendLine("                command,");
                     sb.AppendLine("                projector,");
                     sb.AppendLine("                specifyPartitionKeys,");
@@ -417,8 +401,7 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
                     sb.AppendLine(
                         $"        public static Task<ResultBox<CommandResponse>> Execute(this CommandExecutor executor, {type.RecordName} command, {type.InjectTypeName} injection) =>");
                     sb.AppendLine(
-                        "            executor.ExecuteFunctionWithInjectionWithAggregateRestriction<" +
-                        $"{type.RecordName}, {type.InjectTypeName}, {type.AggregatePayloadTypeName}>(");
+                        $"            executor.ExecuteGeneral<{type.RecordName},{type.InjectTypeName},{type.AggregatePayloadTypeName}>(");
                     sb.AppendLine("                command,");
                     sb.AppendLine("                (command as ICommandGetProjector).GetProjector(),");
                     sb.AppendLine("                command.SpecifyPartitionKeys,");
@@ -435,7 +418,7 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
                     sb.AppendLine(
                         $"                Func<{type.RecordName}, {type.InjectTypeName}, ICommandContext<{type.AggregatePayloadTypeName}>, ResultBox<EventOrNone>> handler) =>");
                     sb.AppendLine(
-                        $"            executor.ExecuteFunctionWithInjectionWithAggregateRestriction<{type.RecordName}, {type.InjectTypeName}, {type.AggregatePayloadTypeName}>(");
+                        $"            executor.ExecuteGeneral<{type.RecordName},{type.InjectTypeName},{type.AggregatePayloadTypeName}>(");
                     sb.AppendLine("                command,");
                     sb.AppendLine("                projector,");
                     sb.AppendLine("                specifyPartitionKeys,");
@@ -451,10 +434,11 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
                     sb.AppendLine(
                         $"                Func<{type.RecordName},  ICommandContext<IAggregatePayload>, ResultBox<EventOrNone>> handler) =>");
                     sb.AppendLine(
-                        "            executor.ExecuteFunctionWithoutAggregateRestriction<" + $"{type.RecordName}>(");
+                        $"            executor.ExecuteGeneral<{type.RecordName},NoInjection,IAggregatePayload>(");
                     sb.AppendLine("                command,");
                     sb.AppendLine("                projector,");
                     sb.AppendLine("                specifyPartitionKeys,");
+                    sb.AppendLine("                NoInjection.Empty,");
                     sb.AppendLine("                handler);");
                     sb.AppendLine();
 
@@ -467,10 +451,11 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
                     sb.AppendLine(
                         $"                Func<{type.RecordName},  ICommandContext<{type.AggregatePayloadTypeName}>, ResultBox<EventOrNone>> handler) =>");
                     sb.AppendLine(
-                        $"            executor.ExecuteFunctionWithAggregateRestriction<{type.RecordName}, {type.AggregatePayloadTypeName}>(");
+                        $"            executor.ExecuteGeneral<{type.RecordName},NoInjection,{type.AggregatePayloadTypeName}>(");
                     sb.AppendLine("                command,");
                     sb.AppendLine("                projector,");
                     sb.AppendLine("                specifyPartitionKeys,");
+                    sb.AppendLine("                NoInjection.Empty,");
                     sb.AppendLine("                handler);");
                     sb.AppendLine();
                     break;
