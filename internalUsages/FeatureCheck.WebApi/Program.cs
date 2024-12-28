@@ -45,12 +45,12 @@ if (app.Environment.IsDevelopment())
 }
 
 app
-    .MapPost("/api/createbranchandclient", SekibanUsecase.CreateSimpleExecutorAsync<AddBranchAndClientUsecase, bool>())
+    .MapPost("/api/createbranchandclient", SekibanAspNetCoreUsecase.CreateSimpleExecutorAsync<AddBranchAndClientUsecase, bool>())
     .WithName("CreateBranchAndClientU")
     .WithOpenApi();
 
 app
-    .MapPost("/api/createbranch", CommandExecutor.CreateSimpleCommandExecutor<CreateBranch>())
+    .MapPost("/api/createbranch", AspNetCoreCommandExecutor.CreateSimpleCommandExecutor<CreateBranch>())
     .WithName("CreateBranchU")
     .WithOpenApi();
 

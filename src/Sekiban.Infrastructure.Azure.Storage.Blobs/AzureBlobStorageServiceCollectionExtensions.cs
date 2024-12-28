@@ -1,6 +1,6 @@
-using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Sekiban.Core.Setting;
 using System.Configuration;
 namespace Sekiban.Infrastructure.Azure.Storage.Blobs;
@@ -12,7 +12,7 @@ public static class AzureBlobStorageServiceCollectionExtensions
     /// </summary>
     /// <param name="builder"></param>
     /// <returns></returns>
-    public static AzureBlobStorageOptionsServiceCollection AddSekibanAzureBlobStorage(this WebApplicationBuilder builder)
+    public static AzureBlobStorageOptionsServiceCollection AddSekibanAzureBlobStorage(this IHostApplicationBuilder builder)
     {
         var options = SekibanAzureBlobStorageOptions.FromConfiguration(builder.Configuration);
         return AddSekibanAzureBlobStorage(builder, options);
@@ -24,7 +24,7 @@ public static class AzureBlobStorageServiceCollectionExtensions
     /// <param name="azureBlobStorageOptions"></param>
     /// <returns></returns>
     public static AzureBlobStorageOptionsServiceCollection AddSekibanAzureBlobStorage(
-        this WebApplicationBuilder builder,
+        this IHostApplicationBuilder builder,
         SekibanAzureBlobStorageOptions azureBlobStorageOptions)
     {
         AddSekibanAzureBlobStorage(builder.Services, azureBlobStorageOptions);

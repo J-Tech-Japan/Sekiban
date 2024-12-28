@@ -4,8 +4,10 @@ using Sekiban.Core.Dependency;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using Sekiban.Infrastructure.Azure.Storage.Blobs;
+using Sekiban.Infrastructure.Postgres;
 using Sekiban.Testing.Story;
-namespace Sekiban.Infrastructure.Postgres;
+
+namespace Sekiban.Test.Postgres;
 
 /// <summary>
 ///     Postgres DB service provider generator

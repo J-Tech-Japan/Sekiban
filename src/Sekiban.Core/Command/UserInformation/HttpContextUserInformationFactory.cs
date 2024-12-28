@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
+
 namespace Sekiban.Core.Command.UserInformation;
 
 /// <summary>

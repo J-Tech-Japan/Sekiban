@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.1.32328.378
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Sekiban.Core", "src\Sekiban.Core\Sekiban.Core.csproj", "{55BD846C-C1F0-4187-A0D7-2013EEEFDBCE}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Sekiban.Core.DotNet", "src\Sekiban.Core.DotNet\Sekiban.Core.DotNet.csproj", "{55BD846C-C1F0-4187-A0D7-2013EEEFDBCE}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Lib", "Lib", "{76D7B2DA-2E6B-4078-AC01-B29BCA83411A}"
 EndProject
@@ -92,6 +92,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pure.Domain", "internalUsages\Pure.Domain\Pure.Domain.csproj", "{59FE4616-6610-48AE-A44A-2AC2E1D27A05}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pure.Domain.Test", "tests\Pure.Domain.Test\Pure.Domain.Test.csproj", "{51DF08A1-D72A-476E-80EC-77257CAD3132}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sekiban.Core", "src\Sekiban.Core\Sekiban.Core.csproj", "{8DA8CCA4-3A14-4626-8883-207E80906911}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -263,6 +265,10 @@ Global
 		{51DF08A1-D72A-476E-80EC-77257CAD3132}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{51DF08A1-D72A-476E-80EC-77257CAD3132}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{51DF08A1-D72A-476E-80EC-77257CAD3132}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8DA8CCA4-3A14-4626-8883-207E80906911}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8DA8CCA4-3A14-4626-8883-207E80906911}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8DA8CCA4-3A14-4626-8883-207E80906911}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8DA8CCA4-3A14-4626-8883-207E80906911}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -309,6 +315,7 @@ Global
 		{5D33366F-B87C-4B97-B5D5-03DE86FD1A8D} = {76D7B2DA-2E6B-4078-AC01-B29BCA83411A}
 		{59FE4616-6610-48AE-A44A-2AC2E1D27A05} = {B85F80AE-6A27-402C-93FA-352D938EDA8D}
 		{51DF08A1-D72A-476E-80EC-77257CAD3132} = {4C34F748-F223-44DD-899D-029F9CEF7780}
+		{8DA8CCA4-3A14-4626-8883-207E80906911} = {76D7B2DA-2E6B-4078-AC01-B29BCA83411A}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {2DFBE53E-69A7-453A-8D20-72271AE32016}

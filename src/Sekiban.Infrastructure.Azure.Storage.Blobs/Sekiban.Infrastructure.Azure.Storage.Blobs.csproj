@@ -29,12 +29,12 @@
           <PrivateAssets>all</PrivateAssets>
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="Sekiban.Core" Version="0.22.1"/>
+        <PackageReference Include="Sekiban.Core.DotNet" Version="0.22.1"/>
         <PackageReference Include="System.Configuration.ConfigurationManager" Version="9.0.0" />
     </ItemGroup>
 
 
     <ItemGroup>
-        <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj"/>
+        <ProjectReference Include="..\Sekiban.Core.DotNet\Sekiban.Core.DotNet.csproj"/>
     </ItemGroup>
 </Project>

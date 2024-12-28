@@ -1,10 +1,10 @@
-﻿using Microsoft.AspNetCore.Builder;
+﻿using Microsoft.Extensions.Hosting;
 namespace Sekiban.Infrastructure.Azure.Storage.Blobs;
 
 public class AzureBlobStorageOptionsServiceCollection(
     SekibanAzureBlobStorageOptions sekibanAzureBlobStorageOptions,
-    WebApplicationBuilder applicationBuilder)
+    IHostApplicationBuilder applicationBuilder)
 {
     public SekibanAzureBlobStorageOptions SekibanAzureBlobStorageOptions { get; init; } = sekibanAzureBlobStorageOptions;
-    public WebApplicationBuilder ApplicationBuilder { get; init; } = applicationBuilder;
+    public IHostApplicationBuilder ApplicationBuilder { get; init; } = applicationBuilder;
 }

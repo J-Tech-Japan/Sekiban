@@ -1,6 +1,6 @@
-using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Sekiban.Core.Documents;
 using Sekiban.Infrastructure.Aws.S3;
 using Sekiban.Infrastructure.Dynamo.Documents;
@@ -16,11 +16,11 @@ public static class DynamoDbServiceCollectionExtensions
     /// </summary>
     /// <param name="builder"></param>
     /// <returns></returns>
-    public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDb(this WebApplicationBuilder builder) =>
+    public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDb(this IHostApplicationBuilder builder) =>
         AddSekibanDynamoDb(builder.Services, builder.Configuration);
 
     public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDbWithoutBlob(
-        this WebApplicationBuilder builder) =>
+        this IHostApplicationBuilder builder) =>
         AddSekibanDynamoDbWithoutBlob(builder.Services, builder.Configuration);
 
     /// <summary>
@@ -31,7 +31,7 @@ public static class DynamoDbServiceCollectionExtensions
     /// <param name="s3Options"></param>
     /// <returns></returns>
     public static SekibanDynamoDbOptionsServiceCollection AddSekibanDynamoDb(
-        this WebApplicationBuilder builder,
+        this IHostApplicationBuilder builder,
         SekibanDynamoDbOptions dynamoDbOptions,
         SekibanAwsS3Options s3Options) =>
         AddSekibanDynamoDb(builder.Services, dynamoDbOptions, s3Options);

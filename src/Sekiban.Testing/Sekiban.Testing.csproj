@@ -29,7 +29,7 @@
         </PackageReference>
         <PackageReference Include="xunit.assert" Version="2.9.2"/>
         <PackageReference Include="xunit.extensibility.core" Version="2.9.2"/>
-        <PackageReference Include="Sekiban.Core" Version="0.22.1"/>
+        <PackageReference Include="Sekiban.Core.DotNet" Version="0.22.1"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
         <PackageReference Include="xunit.extensibility.execution" Version="2.9.2"/>
     </ItemGroup>
@@ -43,6 +43,6 @@
         </None>
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj"/>
+        <ProjectReference Include="..\Sekiban.Core.DotNet\Sekiban.Core.DotNet.csproj"/>
     </ItemGroup>
 </Project>

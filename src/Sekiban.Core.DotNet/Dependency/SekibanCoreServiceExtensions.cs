@@ -1,5 +1,4 @@
 using MemStat.Net;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Command;
@@ -24,11 +23,6 @@ namespace Sekiban.Core.Dependency;
 /// </summary>
 public static class SekibanCoreServiceExtensions
 {
-    public enum HttpContextType
-    {
-        Local = 1, Azure = 2
-    }
-
     public enum MultiProjectionType
     {
         Simple = 1, MemoryCache = 2
@@ -240,22 +234,12 @@ public static class SekibanCoreServiceExtensions
         return services;
     }
 
-    public static IServiceCollection AddSekibanHTTPUser(
+    public static IServiceCollection AddSekibanConstantUser(
         this IServiceCollection services,
-        HttpContextType contextType = HttpContextType.Local)
+        string userInfo = "Const User Information")
     {
-        // Users Information
-        services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
-        switch (contextType)
-        {
-            case HttpContextType.Local:
-                services.AddTransient<IUserInformationFactory, HttpContextUserInformationFactory>();
-                break;
-            case HttpContextType.Azure:
-                services.AddTransient<IUserInformationFactory, AzureAdUserInformationFactory>();
-                break;
-        }
-
+        var factory = new ConstUserInformationFactory(userInfo);
+        services.AddSingleton<IUserInformationFactory>(factory);
         return services;
     }
 

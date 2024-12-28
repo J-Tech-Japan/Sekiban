@@ -29,15 +29,14 @@
           <PrivateAssets>all</PrivateAssets>
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="Sekiban.Core" Version="0.22.1"/>
+        <PackageReference Include="Sekiban.Core.DotNet" Version="0.22.1"/>
         <PackageReference Include="Sekiban.Infrastructure.Azure.Storage.Blobs" Version="0.22.1"/>
         <None Include="..\README.md" Pack="true" PackagePath="\"/>
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Sekiban.Core\Sekiban.Core.csproj"/>
+        <ProjectReference Include="..\Sekiban.Core.DotNet\Sekiban.Core.DotNet.csproj"/>
         <ProjectReference Include="..\Sekiban.Infrastructure.Azure.Storage.Blobs\Sekiban.Infrastructure.Azure.Storage.Blobs.csproj"/>
-        <ProjectReference Include="..\Sekiban.Testing\Sekiban.Testing.csproj"/>
     </ItemGroup>
 
 
