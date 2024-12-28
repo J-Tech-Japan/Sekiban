@@ -1,20 +1,20 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net9.0</TargetFramework>
-        <LangVersion>preview</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PublishAot>true</PublishAot>
+        <TrimMode>link</TrimMode>
+        <TargetFrameworks>net9.0;net8.0</TargetFrameworks>
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\src\Sekiban.Pure\Sekiban.Pure.csproj" />
+        <ProjectReference Include="..\..\src\Sekiban.Pure\Sekiban.Pure.csproj"/>
         <ProjectReference Include="..\..\src\Sekiban.Pure.SourceGenerator\Sekiban.Pure.SourceGenerator.csproj">
-                  <OutputItemType>Analyzer</OutputItemType>
-                  <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-              </ProjectReference>
-
+            <OutputItemType>Analyzer</OutputItemType>
+            <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+            <PrivateAssets>all</PrivateAssets>
+        </ProjectReference>
     </ItemGroup>
 
 </Project>

@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using System;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -34,7 +35,7 @@ public class EventTypesGenerator : IIncrementalGenerator
                 commandTypes.AddRange(GetEventValues(compilation, types));
 
                 // Generate source code
-                var rootNamespace = compilation.AssemblyName;
+                var rootNamespace = compilation.AssemblyName ?? throw new ApplicationException("AssemblyName is null");
                 var sourceCode = GenerateSourceCode(commandTypes.ToImmutable(), rootNamespace);
                 ctx.AddSource("EventTypes.g.cs", SourceText.From(sourceCode, Encoding.UTF8));
             });
@@ -51,11 +52,13 @@ public class EventTypesGenerator : IIncrementalGenerator
         foreach (var typeSyntax in types)
         {
             var model = compilation.GetSemanticModel(typeSyntax.SyntaxTree);
-            var typeSymbol = model.GetDeclaredSymbol(typeSyntax) as INamedTypeSymbol;
+            var typeSymbol = model.GetDeclaredSymbol(typeSyntax) as INamedTypeSymbol ??
+                throw new ApplicationException("TypeSymbol is null");
             var allInterfaces = typeSymbol.AllInterfaces.ToList();
-            if (typeSymbol != null && typeSymbol.AllInterfaces.Any(m => m == iEventPayloadSymbol))
+            if (typeSymbol.AllInterfaces.Any(m => m.Equals(iEventPayloadSymbol, SymbolEqualityComparer.Default)))
             {
-                var interfaceImplementation = typeSymbol.AllInterfaces.First(m => m == iEventPayloadSymbol);
+                var interfaceImplementation = typeSymbol.AllInterfaces.First(
+                    m => m.Equals(iEventPayloadSymbol, SymbolEqualityComparer.Default));
                 eventTypes.Add(
                     new CommandWithHandlerValues
                     {
@@ -114,8 +117,8 @@ public class EventTypesGenerator : IIncrementalGenerator
     }
     public class CommandWithHandlerValues
     {
-        public string InterfaceName { get; set; }
-        public string RecordName { get; set; }
+        public string InterfaceName { get; set; } = string.Empty;
+        public string RecordName { get; set; } = string.Empty;
         public int TypeCount { get; set; }
     }
 }

@@ -1,6 +1,6 @@
-﻿using Pure.Domain.Generated;
-using ResultBoxes;
+﻿using ResultBoxes;
 using Sekiban.Pure;
+using Sekiban.Pure.Exception;
 namespace Pure.Domain;
 
 public record UnconfirmedUser(string Name, string Email) : IAggregatePayload;
@@ -20,20 +20,20 @@ public class UserProjector : IAggregateProjector
         _ => payload
     };
     public string GetVersion() => "1.0.1";
-    public static Func<IAggregatePayload, IEvent, IAggregatePayload> Projector() =>
-        (payload, ev) => (payload, ev.GetPayload()) switch
-        {
-            (EmptyAggregatePayload, UserRegistered registered) => new UnconfirmedUser(
-                registered.Name,
-                registered.Email),
-            (UnconfirmedUser unconfirmedUser, UserConfirmed) => new ConfirmedUser(
-                unconfirmedUser.Name,
-                unconfirmedUser.Email),
-            (ConfirmedUser confirmedUser, UserUnconfirmed) => new UnconfirmedUser(
-                confirmedUser.Name,
-                confirmedUser.Email),
-            _ => payload
-        };
+    // public static Func<IAggregatePayload, IEvent, IAggregatePayload> Projector() =>
+    //     (payload, ev) => (payload, ev.GetPayload()) switch
+    //     {
+    //         (EmptyAggregatePayload, UserRegistered registered) => new UnconfirmedUser(
+    //             registered.Name,
+    //             registered.Email),
+    //         (UnconfirmedUser unconfirmedUser, UserConfirmed) => new ConfirmedUser(
+    //             unconfirmedUser.Name,
+    //             unconfirmedUser.Email),
+    //         (ConfirmedUser confirmedUser, UserUnconfirmed) => new UnconfirmedUser(
+    //             confirmedUser.Name,
+    //             confirmedUser.Email),
+    //         _ => payload
+    //     };
 }
 public record Branch(string Name) : IAggregatePayload;
 public record BranchCreated(string Name) : IEventPayload;
@@ -108,18 +108,57 @@ public record RevokeUser(Guid UserId)
             .Conveyor(_ => EventOrNone.Event(new UserUnconfirmed()));
     public record Injection(Func<Guid, bool> UserExists);
 }
-public class Test
+// public class Test
+// {
+//     public void Test1()
+//     {
+//         var commandExecutor = new CommandExecutor();
+//         commandExecutor.Execute(new RegisterBranch("name"));
+//         commandExecutor.Execute(
+//             new RegisterUser("tomo", "tomo@example.com"),
+//             new RegisterUser.Injection(email => false));
+//         commandExecutor.Execute(new ConfirmUser(GuidExtensions.CreateVersion7()));
+//     }
+// }
+public class ShoppingCartProjector : IAggregateProjector
 {
-    public void Test1()
-    {
-        var commandExecutor = new CommandExecutor();
-        commandExecutor.Execute(new RegisterBranch("name"));
-        commandExecutor.Execute(
-            new RegisterUser("tomo", "tomo@example.com"),
-            new RegisterUser.Injection(email => false));
-        commandExecutor.Execute(new ConfirmUser(Guid.CreateVersion7()));
-    }
+    public IAggregatePayload Project(IAggregatePayload payload, IEvent ev) =>
+        (payload, ev.GetPayload()) switch
+        {
+            (EmptyAggregatePayload, ShoppingCartCreated created) => new BuyingShoppingCart(
+                created.UserId,
+                new List<ShoppingCartItems>()),
+            (BuyingShoppingCart buyingShoppingCart, ShoppingCartItemAdded added) => new BuyingShoppingCart(
+                buyingShoppingCart.UserId,
+                buyingShoppingCart
+                    .Items
+                    .Append(new ShoppingCartItems(added.Name, added.Quantity, Guid.NewGuid(), 100))
+                    .ToList()),
+            (BuyingShoppingCart buyingShoppingCart, PaymentProcessedShoppingCart processed) =>
+                new EmptyAggregatePayload(),
+            _ => payload
+        };
 }
+public record ShoppingCartItems(string Name, int Quantity, Guid ItemId, int Price);
+public record BuyingShoppingCart(Guid UserId, List<ShoppingCartItems> Items) : IAggregatePayload;
+public record ShoppingCartCreated(Guid UserId) : IEventPayload;
+public record ShoppingCartItemAdded(string Name, int Quantity) : IEventPayload;
+public record PaymentProcessingShoppingCart(
+    Guid UserId,
+    List<ShoppingCartItems> Items,
+    int TotalPrice,
+    string PaymentMethod) : IAggregatePayload;
+public record PaymentProcessedShoppingCart(string PaymentMethod) : IEventPayload;
+public record CreateShoppingCart(Guid UserId) : ICommandWithHandlerAsync<CreateShoppingCart, ShoppingCartProjector>
+{
+    public PartitionKeys SpecifyPartitionKeys(CreateShoppingCart command) =>
+        PartitionKeys<ShoppingCartProjector>.Generate();
+    public Task<ResultBox<EventOrNone>> HandleAsync(
+        CreateShoppingCart command,
+        ICommandContext<IAggregatePayload> context) =>
+        EventOrNone.Event(new ShoppingCartCreated(command.UserId)).ToTask();
+}
+
 // public static class Extensions
 // {
 //     public static Task<ResultBox<CommandResponse>> ExecuteFunction(
@@ -172,3 +211,196 @@ public class Test
 //             new SekibanEventTypeNotFoundException($"Event Type {payload.GetType().Name} Not Found"))
 //     };
 // }
+public class CpPureDomainEventTypes : IEventTypes
+{
+    public ResultBox<IEvent> GenerateTypedEvent(
+        IEventPayload payload,
+        PartitionKeys partitionKeys,
+        string sortableUniqueId,
+        int version) => payload switch
+    {
+        UserRegistered userregistered => new Event<UserRegistered>(
+            userregistered,
+            partitionKeys,
+            sortableUniqueId,
+            version),
+        UserConfirmed userconfirmed => new Event<UserConfirmed>(
+            userconfirmed,
+            partitionKeys,
+            sortableUniqueId,
+            version),
+        UserUnconfirmed userunconfirmed => new Event<UserUnconfirmed>(
+            userunconfirmed,
+            partitionKeys,
+            sortableUniqueId,
+            version),
+        BranchCreated branchcreated => new Event<BranchCreated>(
+            branchcreated,
+            partitionKeys,
+            sortableUniqueId,
+            version),
+        BranchNameChanged branchnamechanged => new Event<BranchNameChanged>(
+            branchnamechanged,
+            partitionKeys,
+            sortableUniqueId,
+            version),
+        ShoppingCartCreated shoppingcartcreated => new Event<ShoppingCartCreated>(
+            shoppingcartcreated,
+            partitionKeys,
+            sortableUniqueId,
+            version),
+        ShoppingCartItemAdded shoppingcartitemadded => new Event<ShoppingCartItemAdded>(
+            shoppingcartitemadded,
+            partitionKeys,
+            sortableUniqueId,
+            version),
+        PaymentProcessedShoppingCart paymentprocessedshoppingcart => new Event<PaymentProcessedShoppingCart>(
+            paymentprocessedshoppingcart,
+            partitionKeys,
+            sortableUniqueId,
+            version),
+        _ => ResultBox<IEvent>.FromException(
+            new SekibanEventTypeNotFoundException($"Event Type {payload.GetType().Name} Not Found"))
+    };
+}
+public static class CpDomainExecutorExtensions
+{
+    public static Task<ResultBox<CommandResponse>> Execute(this CommandExecutor executor, RegisterBranch command) =>
+        executor.ExecuteFunctionWithoutAggregateRestriction(
+            command,
+            (command as ICommandGetProjector).GetProjector(),
+            command.SpecifyPartitionKeys,
+            command.Handle);
+
+    public static Task<ResultBox<CommandResponse>> ExecuteFunction(
+        this CommandExecutor executor,
+        RegisterBranch command,
+        IAggregateProjector projector,
+        Func<RegisterBranch, PartitionKeys> specifyPartitionKeys,
+        Func<RegisterBranch, ICommandContext<IAggregatePayload>, ResultBox<EventOrNone>> handler) =>
+        executor.ExecuteFunctionWithoutAggregateRestriction(command, projector, specifyPartitionKeys, handler);
+
+    public static Task<ResultBox<CommandResponse>> Execute(this CommandExecutor executor, ChangeBranchName command) =>
+        executor.ExecuteFunctionWithoutAggregateRestriction(
+            command,
+            (command as ICommandGetProjector).GetProjector(),
+            command.SpecifyPartitionKeys,
+            command.Handle);
+
+    public static Task<ResultBox<CommandResponse>> ExecuteFunction(
+        this CommandExecutor executor,
+        ChangeBranchName command,
+        IAggregateProjector projector,
+        Func<ChangeBranchName, PartitionKeys> specifyPartitionKeys,
+        Func<ChangeBranchName, ICommandContext<IAggregatePayload>, ResultBox<EventOrNone>> handler) =>
+        executor.ExecuteFunctionWithoutAggregateRestriction(command, projector, specifyPartitionKeys, handler);
+
+    public static Task<ResultBox<CommandResponse>> Execute(this CommandExecutor executor, ConfirmUser command) =>
+        executor.ExecuteFunctionWithAggregateRestriction<ConfirmUser, UnconfirmedUser>(
+            command,
+            (command as ICommandGetProjector).GetProjector(),
+            command.SpecifyPartitionKeys,
+            command.Handle);
+
+    public static Task<ResultBox<CommandResponse>> ExecuteFunction(
+        this CommandExecutor executor,
+        ConfirmUser command,
+        IAggregateProjector projector,
+        Func<ConfirmUser, PartitionKeys> specifyPartitionKeys,
+        Func<ConfirmUser, ICommandContext<UnconfirmedUser>, ResultBox<EventOrNone>> handler) =>
+        executor.ExecuteFunctionWithAggregateRestriction<ConfirmUser, UnconfirmedUser>(
+            command,
+            projector,
+            specifyPartitionKeys,
+            handler);
+
+    public static Task<ResultBox<CommandResponse>> Execute(this CommandExecutor executor, CreateShoppingCart command) =>
+        executor.ExecuteFunctionWithoutAggregateRestrictionAsync(
+            command,
+            (command as ICommandGetProjector).GetProjector(),
+            command.SpecifyPartitionKeys,
+            command.HandleAsync);
+
+    public static Task<ResultBox<CommandResponse>> ExecuteFunctionAsync(
+        this CommandExecutor executor,
+        CreateShoppingCart command,
+        IAggregateProjector projector,
+        Func<CreateShoppingCart, PartitionKeys> specifyPartitionKeys,
+        Func<CreateShoppingCart, ICommandContext<IAggregatePayload>, Task<ResultBox<EventOrNone>>> handler) =>
+        executor.ExecuteFunctionWithoutAggregateRestrictionAsync(command, projector, specifyPartitionKeys, handler);
+
+    public static Task<ResultBox<CommandResponse>> Execute(
+        this CommandExecutor executor,
+        RegisterUser command,
+        RegisterUser.Injection injection) =>
+        executor.ExecuteFunctionWithInjectionWithoutAggregateRestriction<RegisterUser, RegisterUser.Injection>(
+            command,
+            (command as ICommandGetProjector).GetProjector(),
+            command.SpecifyPartitionKeys,
+            injection,
+            command.Handle);
+
+    public static Task<ResultBox<CommandResponse>> ExecuteFunction(
+        this CommandExecutor executor,
+        RegisterUser command,
+        IAggregateProjector projector,
+        Func<RegisterUser, PartitionKeys> specifyPartitionKeys,
+        RegisterUser.Injection injection,
+        Func<RegisterUser, RegisterUser.Injection, ICommandContext<IAggregatePayload>, ResultBox<EventOrNone>>
+            handler) =>
+        executor.ExecuteFunctionWithInjectionWithoutAggregateRestriction<RegisterUser, RegisterUser.Injection>(
+            command,
+            projector,
+            specifyPartitionKeys,
+            injection,
+            handler);
+
+    public static Task<ResultBox<CommandResponse>> Execute(
+        this CommandExecutor executor,
+        RevokeUser command,
+        RevokeUser.Injection injection) =>
+        executor.ExecuteFunctionWithInjectionWithAggregateRestriction<RevokeUser, RevokeUser.Injection, ConfirmedUser>(
+            command,
+            (command as ICommandGetProjector).GetProjector(),
+            command.SpecifyPartitionKeys,
+            injection,
+            command.Handle);
+
+    public static Task<ResultBox<CommandResponse>> ExecuteFunction(
+        this CommandExecutor executor,
+        RevokeUser command,
+        IAggregateProjector projector,
+        Func<RevokeUser, PartitionKeys> specifyPartitionKeys,
+        RevokeUser.Injection injection,
+        Func<RevokeUser, RevokeUser.Injection, ICommandContext<ConfirmedUser>, ResultBox<EventOrNone>> handler) =>
+        executor.ExecuteFunctionWithInjectionWithAggregateRestriction<RevokeUser, RevokeUser.Injection, ConfirmedUser>(
+            command,
+            projector,
+            specifyPartitionKeys,
+            injection,
+            handler);
+
+    public static Task<ResultBox<CommandResponse>> ExecuteFunction(
+        this CommandExecutor executor,
+        RegisterBranch2 command,
+        IAggregateProjector projector,
+        Func<RegisterBranch2, PartitionKeys> specifyPartitionKeys,
+        Func<RegisterBranch2, ICommandContext<IAggregatePayload>, ResultBox<EventOrNone>> handler) =>
+        executor.ExecuteFunctionWithoutAggregateRestriction<RegisterBranch2>(
+            command,
+            projector,
+            specifyPartitionKeys,
+            handler);
+
+    public static Task<ResultBox<CommandResponse>> ExecuteFunction(
+        this CommandExecutor executor,
+        RegisterBranch3 command,
+        IAggregateProjector projector,
+        Func<RegisterBranch3, PartitionKeys> specifyPartitionKeys,
+        Func<RegisterBranch3, ICommandContext<EmptyAggregatePayload>, ResultBox<EventOrNone>> handler) =>
+        executor.ExecuteFunctionWithAggregateRestriction<RegisterBranch3, EmptyAggregatePayload>(
+            command,
+            projector,
+            specifyPartitionKeys,
+            handler);
+}

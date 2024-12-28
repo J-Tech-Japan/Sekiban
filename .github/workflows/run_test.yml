@@ -55,6 +55,7 @@ jobs:
         dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:S3BucketName" "jjga-s3"        
     - name: Restore dependencies
       run: |
+        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
         dotnet restore Sekiban.sln
     - name: Test Build
       run: |
@@ -110,6 +111,7 @@ jobs:
         dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:S3BucketName" "jjga-s3"        
     - name: Restore dependencies
       run: |
+        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
         dotnet restore Sekiban.sln
     - name: Test Build
       run: |
@@ -164,6 +166,7 @@ jobs:
         dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:S3BucketName" "jjga-s3"        
     - name: Restore dependencies
       run: |
+        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
         dotnet restore Sekiban.sln
     - name: Test Build
       run: |
@@ -220,6 +223,7 @@ jobs:
         dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:S3BucketName" "jjga-s3"        
     - name: Restore dependencies
       run: |
+        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
         dotnet restore Sekiban.sln
     - name: Test Build
       run: |
@@ -274,6 +278,7 @@ jobs:
         dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:S3BucketName" "jjga-s3"        
     - name: Restore dependencies
       run: |
+        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
         dotnet restore Sekiban.sln
     - name: Test Build
       run: |
@@ -329,6 +334,7 @@ jobs:
         dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:S3BucketName" "jjga-s3"        
     - name: Restore dependencies
       run: |
+        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
         dotnet restore Sekiban.sln
     - name: Test Build
       run: |
@@ -380,6 +386,7 @@ jobs:
         dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:S3BucketName" "jjga-s3"        
     - name: Restore dependencies
       run: |
+        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
         dotnet restore Sekiban.sln
     - name: Test Build
       run: |
@@ -435,6 +442,7 @@ jobs:
         dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:S3BucketName" "jjga-s3"        
     - name: Restore dependencies
       run: |
+        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
         dotnet restore Sekiban.sln
     - name: Test Build
       run: |
@@ -492,6 +500,7 @@ jobs:
         dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:S3BucketName" "jjga-s3"        
     - name: Restore dependencies
       run: |
+        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
         dotnet restore SekibanFor8.sln
     - name: Test dotnet
       uses: nick-fields/retry@v2
@@ -547,6 +556,7 @@ jobs:
         dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:S3BucketName" "jjga-s3"        
     - name: Restore dependencies
       run: |
+        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
         dotnet restore Sekiban.sln
     - name: Test dotnet
       uses: nick-fields/retry@v2
@@ -582,6 +592,7 @@ jobs:
         dotnet user-secrets set "Sekiban:Contexts:Secondary:Azure:CosmosDatabase" "GithubActions8"
     - name: Restore dependencies
       run: |
+        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
         dotnet restore Sekiban.sln
     - name: Test dotnet
       run: |
@@ -612,6 +623,7 @@ jobs:
         dotnet user-secrets set "Sekiban:Contexts:Secondary:Azure:CosmosDatabase" "GithubActions"
     - name: Restore dependencies
       run: |
+        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
         dotnet restore Sekiban.sln
     - name: Test dotnet
       run: |
@@ -656,6 +668,7 @@ jobs:
         dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:S3BucketName" "jjga-s3"        
     - name: Restore dependencies
       run: |
+        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
         dotnet restore Sekiban.sln
     - name: Test dotnet
       run: |
@@ -707,6 +720,7 @@ jobs:
         dotnet user-secrets set "Sekiban:Contexts:Secondary:Aws:S3BucketName" "jjga-s3"        
     - name: Restore dependencies
       run: |
+        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
         dotnet restore Sekiban.sln
     - name: Test dotnet
       run: |
@@ -736,6 +750,7 @@ jobs:
         dotnet user-secrets set "ConnectionStrings:SekibanPostgresSecondary" "${{secrets.SEKIBAN_POSTGRES_CONNECTION_SECONDARY8}}"
     - name: Restore dependencies
       run: |
+        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
         dotnet restore Sekiban.sln
     - name: Test dotnet
       run: |
@@ -767,6 +782,7 @@ jobs:
         dotnet user-secrets set "ConnectionStrings:SekibanPostgresSecondary" "${{secrets.SEKIBAN_POSTGRES_CONNECTION_SECONDARY}}"
     - name: Restore dependencies
       run: |
+        dotnet nuget add source -n benchmarknightly https://www.myget.org/F/benchmarkdotnet/api/v3/index.json
         dotnet restore Sekiban.sln
     - name: Test dotnet
       run: |
