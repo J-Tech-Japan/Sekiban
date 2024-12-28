@@ -497,7 +497,7 @@ public record CommandResource<TCommand, TProjector>(
     public Func<TCommand, PartitionKeys> GetSpecifyPartitionKeysFunc() => SpecifyPartitionKeys;
     public Type GetCommandType() => typeof(TCommand);
     public IAggregateProjector GetProjector() => new TProjector();
-    public object GetInjection() => NoInjection.Empty;
+    public object? GetInjection() => NoInjection.Empty;
     public Delegate GetHandler() => Handler;
     public OptionalValue<Type> GetAggregatePayloadType() => OptionalValue<Type>.Empty;
 }
@@ -524,7 +524,7 @@ public record CommandResourceWithInject<TCommand, TProjector, TInject>(
     public Func<TCommand, PartitionKeys> GetSpecifyPartitionKeysFunc() => SpecifyPartitionKeys;
     public Type GetCommandType() => typeof(TCommand);
     public IAggregateProjector GetProjector() => new TProjector();
-    public object GetInjection() => NoInjection.Empty;
+    public object? GetInjection() => Injection;
     public Delegate GetHandler() => Handler;
     public OptionalValue<Type> GetAggregatePayloadType() => OptionalValue<Type>.Empty;
 }
@@ -538,14 +538,14 @@ public record CommandResourceWithInjectTask<TCommand, TProjector, TInject>(
     public Func<TCommand, PartitionKeys> GetSpecifyPartitionKeysFunc() => SpecifyPartitionKeys;
     public Type GetCommandType() => typeof(TCommand);
     public IAggregateProjector GetProjector() => new TProjector();
-    public object GetInjection() => NoInjection.Empty;
+    public object? GetInjection() => Injection;
     public Delegate GetHandler() => Handler;
     public OptionalValue<Type> GetAggregatePayloadType() => OptionalValue<Type>.Empty;
 }
 public record CommandResourceWithInject<TCommand, TProjector, TAggregatePayload, TInject>(
     Func<TCommand, PartitionKeys> SpecifyPartitionKeys,
     TInject? Injection,
-    Func<TCommand, TInject, ICommandContext<TAggregatePayload>, Task<ResultBox<EventOrNone>>> Handler)
+    Func<TCommand, TInject, ICommandContext<TAggregatePayload>, ResultBox<EventOrNone>> Handler)
     : ICommandResource<TCommand> where TCommand : ICommand, IEquatable<TCommand>
     where TAggregatePayload : IAggregatePayload
     where TProjector : IAggregateProjector, new()
