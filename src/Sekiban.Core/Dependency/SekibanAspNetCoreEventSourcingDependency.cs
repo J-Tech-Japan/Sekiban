@@ -2,12 +2,12 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Sekiban.Core.Command;
+using Sekiban.Core.PubSub;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot.Aggregate;
 using Sekiban.Core.Snapshot.Aggregate.Commands;
 using System.Reflection;
-
 namespace Sekiban.Core.Dependency;
 
 /// <summary>
@@ -160,7 +160,8 @@ public static class SekibanAspNetCoreEventSourcingDependency
         services.AddMediatR(
             new MediatRServiceConfiguration().RegisterServicesFromAssemblies(
                 Assembly.GetExecutingAssembly(),
-                GetAssembly()));
+                GetAssembly(),
+                typeof(UpdateNoticeEventSubscriber<>).Assembly)); // Sekiban.Core.DotNet needs to be added
         // Sekiban Event Sourcing
         services.AddSekibanCore(settings, sekibanDateProducer ?? new SekibanDateProducer(), multiProjectionType);
         services.AddSekibanHTTPUser();
