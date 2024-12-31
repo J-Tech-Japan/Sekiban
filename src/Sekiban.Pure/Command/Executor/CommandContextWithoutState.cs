@@ -3,7 +3,7 @@ using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Shared;
 using Sekiban.Pure.Command.Handlers;
 using Sekiban.Pure.Events;
-namespace Sekiban.Pure;
+namespace Sekiban.Pure.Command.Executor;
 
 public record CommandContextWithoutState(PartitionKeys PartitionKeys, IEventTypes EventTypes)
     : ICommandContextWithoutState

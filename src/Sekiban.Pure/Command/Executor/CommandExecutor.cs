@@ -7,7 +7,7 @@ using Sekiban.Pure.Exception;
 using Sekiban.Pure.Projectors;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
-namespace Sekiban.Pure;
+namespace Sekiban.Pure.Command.Executor;
 
 public class CommandExecutor : ICommandExecutor
 {

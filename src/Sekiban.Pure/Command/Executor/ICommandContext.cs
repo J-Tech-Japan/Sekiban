@@ -1,7 +1,7 @@
 using ResultBoxes;
 using Sekiban.Pure.Command.Handlers;
 using Sekiban.Pure.Events;
-namespace Sekiban.Pure;
+namespace Sekiban.Pure.Command.Executor;
 
 public interface ICommandContext<TAggregatePayload> : ICommandContextWithoutState
     where TAggregatePayload : IAggregatePayload

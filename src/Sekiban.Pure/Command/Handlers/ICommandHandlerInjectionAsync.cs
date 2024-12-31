@@ -1,4 +1,5 @@
 using ResultBoxes;
+using Sekiban.Pure.Command.Executor;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Projectors;
 using System.Diagnostics.CodeAnalysis;

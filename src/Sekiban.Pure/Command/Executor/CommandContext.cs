@@ -3,7 +3,7 @@ using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Shared;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Projectors;
-namespace Sekiban.Pure;
+namespace Sekiban.Pure.Command.Executor;
 
 public class CommandContext<TAggregatePayload>(
     Aggregate aggregate,

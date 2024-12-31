@@ -252,6 +252,7 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
         sb.AppendLine("using Sekiban.Pure.Events;");
         sb.AppendLine("using Sekiban.Pure.Command.Handlers;");
         sb.AppendLine("using Sekiban.Pure.Command.Resources;");
+        sb.AppendLine("using Sekiban.Pure.Command.Executor;");
         sb.AppendLine();
         sb.AppendLine($"namespace {rootNamespace}.Generated");
         sb.AppendLine("{");
