@@ -49,7 +49,8 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
         Compilation compilation,
         ImmutableArray<SyntaxNode> types)
     {
-        var iCommmandWithHandlerSymbol = compilation.GetTypeByMetadataName("Sekiban.Pure.ICommandWithHandler`2");
+        var iCommmandWithHandlerSymbol
+            = compilation.GetTypeByMetadataName("Sekiban.Pure.Command.Handlers.ICommandWithHandler`2");
         if (iCommmandWithHandlerSymbol == null)
             return new ImmutableArray<CommandWithHandlerValues>();
         var eventTypes = ImmutableArray.CreateBuilder<CommandWithHandlerValues>();
@@ -84,7 +85,8 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
         Compilation compilation,
         ImmutableArray<SyntaxNode> types)
     {
-        var iCommmandWithHandlerSymbol = compilation.GetTypeByMetadataName("Sekiban.Pure.ICommandWithHandlerAsync`2");
+        var iCommmandWithHandlerSymbol
+            = compilation.GetTypeByMetadataName("Sekiban.Pure.Command.Handlers.ICommandWithHandlerAsync`2");
         if (iCommmandWithHandlerSymbol == null)
             return new ImmutableArray<CommandWithHandlerValues>();
         var eventTypes = ImmutableArray.CreateBuilder<CommandWithHandlerValues>();
@@ -120,7 +122,7 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
         ImmutableArray<SyntaxNode> types)
     {
         var iCommandWithHandlerSymbol
-            = compilation.GetTypeByMetadataName("Sekiban.Pure.ICommandWithHandlerInjection`3");
+            = compilation.GetTypeByMetadataName("Sekiban.Pure.Command.Handlers.ICommandWithHandlerInjection`3");
         if (iCommandWithHandlerSymbol == null)
             return new ImmutableArray<CommandWithHandlerValues>();
         var eventTypes = ImmutableArray.CreateBuilder<CommandWithHandlerValues>();
@@ -156,7 +158,7 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
         ImmutableArray<SyntaxNode> types)
     {
         var iCommandWithHandlerSymbol
-            = compilation.GetTypeByMetadataName("Sekiban.Pure.ICommandWithHandlerInjectionAsync`3");
+            = compilation.GetTypeByMetadataName("Sekiban.Pure.Command.Handlers.ICommandWithHandlerInjectionAsync`3");
         if (iCommandWithHandlerSymbol == null)
             return new ImmutableArray<CommandWithHandlerValues>();
         var eventTypes = ImmutableArray.CreateBuilder<CommandWithHandlerValues>();
@@ -193,9 +195,9 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
         ImmutableArray<SyntaxNode> types,
         ImmutableArray<CommandWithHandlerValues> alreadyFoundCommands)
     {
-        var iCommandSymbol = compilation.GetTypeByMetadataName("Sekiban.Pure.ICommand");
+        var iCommandSymbol = compilation.GetTypeByMetadataName("Sekiban.Pure.Command.Handlers.ICommand");
         var iCommandWithAggregateRestrictionSymbol
-            = compilation.GetTypeByMetadataName("Sekiban.Pure.ICommandWithAggregateRestriction`1");
+            = compilation.GetTypeByMetadataName("Sekiban.Pure.Command.Handlers.ICommandWithAggregateRestriction`1");
         if (iCommandSymbol == null || iCommandWithAggregateRestrictionSymbol == null)
             return new ImmutableArray<CommandWithHandlerValues>();
         var eventTypes = ImmutableArray.CreateBuilder<CommandWithHandlerValues>();
@@ -244,8 +246,12 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
         sb.AppendLine("using System.Threading.Tasks;");
         sb.AppendLine("using ResultBoxes;");
         sb.AppendLine("using Sekiban.Pure;");
+        sb.AppendLine("using Sekiban.Pure.Projectors;");
         sb.AppendLine("using Sekiban.Pure.Exception;");
-
+        sb.AppendLine("using Sekiban.Pure.Events;");
+        sb.AppendLine("using Sekiban.Pure.Events;");
+        sb.AppendLine("using Sekiban.Pure.Command.Handlers;");
+        sb.AppendLine("using Sekiban.Pure.Command.Resources;");
         sb.AppendLine();
         sb.AppendLine($"namespace {rootNamespace}.Generated");
         sb.AppendLine("{");

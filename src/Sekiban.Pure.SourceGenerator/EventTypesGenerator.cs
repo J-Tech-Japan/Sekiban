@@ -45,7 +45,7 @@ public class EventTypesGenerator : IIncrementalGenerator
         Compilation compilation,
         ImmutableArray<SyntaxNode> types)
     {
-        var iEventPayloadSymbol = compilation.GetTypeByMetadataName("Sekiban.Pure.IEventPayload");
+        var iEventPayloadSymbol = compilation.GetTypeByMetadataName("Sekiban.Pure.Events.IEventPayload");
         if (iEventPayloadSymbol == null)
             return new ImmutableArray<CommandWithHandlerValues>();
         var eventTypes = ImmutableArray.CreateBuilder<CommandWithHandlerValues>();
@@ -78,6 +78,7 @@ public class EventTypesGenerator : IIncrementalGenerator
         sb.AppendLine("using ResultBoxes;");
         sb.AppendLine("using Sekiban.Pure;");
         sb.AppendLine("using Sekiban.Pure.Exception;");
+        sb.AppendLine("using Sekiban.Pure.Events;");
 
         sb.AppendLine();
         sb.AppendLine($"namespace {rootNamespace}.Generated");

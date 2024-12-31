@@ -1,0 +1,20 @@
+using ResultBoxes;
+using Sekiban.Pure.Events;
+using Sekiban.Pure.Projectors;
+namespace Sekiban.Pure;
+
+public class Repository
+{
+    public static List<IEvent> Events { get; set; } = new();
+    public Func<string, IEvent> Deserializer { get; set; } = s => throw new NotImplementedException();
+    public Func<IEvent, string> Serializer { get; set; } = s => throw new NotImplementedException();
+    public static ResultBox<Aggregate> Load<TAggregateProjector>(PartitionKeys partitionKeys)
+        where TAggregateProjector : IAggregateProjector, new() => Load(partitionKeys, new TAggregateProjector());
+    public static ResultBox<Aggregate> Load(PartitionKeys partitionKeys, IAggregateProjector projector) =>
+        ResultBox
+            .FromValue(
+                Events.Where(e => e.PartitionKeys.Equals(partitionKeys)).OrderBy(e => e.SortableUniqueId).ToList())
+            .Conveyor(events => Aggregate.EmptyFromPartitionKeys(partitionKeys).Project(events, projector));
+
+    public static ResultBox<UnitValue> Save(List<IEvent> events) => ResultBox.Start.Do(() => Events.AddRange(events));
+}
