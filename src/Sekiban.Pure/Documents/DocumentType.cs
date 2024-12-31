@@ -1,4 +1,4 @@
-namespace Sekiban.Core.Documents;
+namespace Sekiban.Pure.Documents;
 
 /// <summary>
 ///     Document Type : used in Documents, what type of document

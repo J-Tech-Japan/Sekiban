@@ -1,6 +1,6 @@
 using ResultBoxes;
 using Sekiban.Core.Shared;
-namespace Sekiban.Core.Documents.ValueObjects;
+namespace Sekiban.Pure.Documents;
 
 /// <summary>
 ///     Calculate helper value document for Sortable Unique Id

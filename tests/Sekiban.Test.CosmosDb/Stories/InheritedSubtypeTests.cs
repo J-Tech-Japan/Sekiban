@@ -6,7 +6,6 @@ using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Query.MultiProjections;
 using Sekiban.Core.Query.SingleProjections.Projections;
-using Sekiban.Infrastructure.Cosmos;
 using Sekiban.Test.Abstructs.Abstructs;
 using System.Threading.Tasks;
 using Xunit;
@@ -33,7 +32,8 @@ public class InheritedSubtypeTests : TestBase<FeatureCheckDependency>
     {
         RemoveAllFromDefaultAndDissolvable();
 
-        commandResponse = await commandExecutor.ExecCommandWithEventsAsync(new OpenInheritedAggregate { YearMonth = 202001 });
+        commandResponse
+            = await commandExecutor.ExecCommandWithEventsAsync(new OpenInheritedAggregate { YearMonth = 202001 });
         Assert.NotNull(commandResponse.AggregateId);
         var aggregateId = commandResponse.AggregateId!.Value;
 
@@ -42,8 +42,12 @@ public class InheritedSubtypeTests : TestBase<FeatureCheckDependency>
 
 
         var aggregateState = await aggregateLoader.AsDefaultStateFromInitialAsync<IInheritedAggregate>(aggregateId);
-        var snapshotDocument = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(aggregateState!);
-        await documentPersistentWriter.SaveSingleSnapshotAsync(snapshotDocument!, new AggregateWriteStream(typeof(IInheritedAggregate)), false);
+        var snapshotDocument
+            = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(aggregateState!);
+        await documentPersistentWriter.SaveSingleSnapshotAsync(
+            snapshotDocument!,
+            new AggregateWriteStream(typeof(IInheritedAggregate)),
+            false);
 
         ResetInMemoryDocumentStoreAndCache();
 
@@ -63,7 +67,8 @@ public class InheritedSubtypeTests : TestBase<FeatureCheckDependency>
     {
         RemoveAllFromDefaultAndDissolvable();
 
-        commandResponse = await commandExecutor.ExecCommandWithEventsAsync(new OpenInheritedAggregate { YearMonth = 202001 });
+        commandResponse
+            = await commandExecutor.ExecCommandWithEventsAsync(new OpenInheritedAggregate { YearMonth = 202001 });
         Assert.NotNull(commandResponse.AggregateId);
         var aggregateId = commandResponse.AggregateId!.Value;
 
@@ -72,8 +77,12 @@ public class InheritedSubtypeTests : TestBase<FeatureCheckDependency>
 
 
         var aggregateState = await aggregateLoader.AsDefaultStateFromInitialAsync<IInheritedAggregate>(aggregateId);
-        var snapshotDocument = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(aggregateState!);
-        await documentPersistentWriter.SaveSingleSnapshotAsync(snapshotDocument!, new AggregateWriteStream(typeof(IInheritedAggregate)), true);
+        var snapshotDocument
+            = await singleProjectionSnapshotAccessor.SnapshotDocumentFromAggregateStateAsync(aggregateState!);
+        await documentPersistentWriter.SaveSingleSnapshotAsync(
+            snapshotDocument!,
+            new AggregateWriteStream(typeof(IInheritedAggregate)),
+            true);
 
         ResetInMemoryDocumentStoreAndCache();
 

@@ -1,5 +1,4 @@
-using Sekiban.Core.Documents.ValueObjects;
-namespace Sekiban.Core.Documents;
+namespace Sekiban.Pure.Documents;
 
 /// <summary>
 ///     Basic Document Structure to Persist Events, Commands and Snapshots

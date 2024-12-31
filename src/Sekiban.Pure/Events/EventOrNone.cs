@@ -1,5 +1,5 @@
 using ResultBoxes;
-namespace Sekiban.Pure;
+namespace Sekiban.Pure.Events;
 
 public record EventOrNone(IEventPayload? EventPayload, bool HasEvent)
 {

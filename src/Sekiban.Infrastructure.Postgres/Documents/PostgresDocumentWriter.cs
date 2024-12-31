@@ -4,7 +4,6 @@ using Sekiban.Core.Documents;
 using Sekiban.Core.Documents.Pools;
 using Sekiban.Core.Events;
 using Sekiban.Core.Exceptions;
-using Sekiban.Core.PubSub;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;
 using Sekiban.Core.Snapshot;
@@ -12,9 +11,8 @@ using Sekiban.Infrastructure.Postgres.Databases;
 using System.Text;
 namespace Sekiban.Infrastructure.Postgres.Documents;
 
-public class PostgresDocumentWriter(
-    PostgresDbFactory dbFactory,
-    IBlobAccessor blobAccessor) : IDocumentPersistentWriter, IEventPersistentWriter
+public class PostgresDocumentWriter(PostgresDbFactory dbFactory, IBlobAccessor blobAccessor)
+    : IDocumentPersistentWriter, IEventPersistentWriter
 {
     public async Task SaveItemAsync<TDocument>(TDocument document, IWriteDocumentStream writeDocumentStream)
         where TDocument : IDocument
