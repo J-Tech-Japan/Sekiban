@@ -1,4 +1,5 @@
 using ResultBoxes;
+using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Command.Handlers;
 using Sekiban.Pure.Events;
 namespace Sekiban.Pure.Command.Executor;

@@ -1,4 +1,4 @@
-namespace Sekiban.Pure;
+namespace Sekiban.Pure.Aggregates;
 
 public record EmptyAggregatePayload : IAggregatePayload
 {

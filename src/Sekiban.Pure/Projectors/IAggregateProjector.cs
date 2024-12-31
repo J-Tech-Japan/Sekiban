@@ -1,3 +1,4 @@
+using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Events;
 namespace Sekiban.Pure.Projectors;
 

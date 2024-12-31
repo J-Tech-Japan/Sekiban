@@ -1,7 +1,9 @@
 using ResultBoxes;
+using Sekiban.Pure.Aggregates;
+using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Projectors;
-namespace Sekiban.Pure;
+namespace Sekiban.Pure.Repositories;
 
 public class Repository
 {

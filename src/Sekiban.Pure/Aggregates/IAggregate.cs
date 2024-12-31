@@ -1,6 +1,6 @@
 using ResultBoxes;
-using Sekiban.Core.Documents.ValueObjects;
-namespace Sekiban.Pure;
+using Sekiban.Pure.Documents;
+namespace Sekiban.Pure.Aggregates;
 
 public interface IAggregate
 {

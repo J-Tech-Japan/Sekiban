@@ -1,4 +1,5 @@
 using ResultBoxes;
+using Sekiban.Pure.Documents;
 using Sekiban.Pure.Exception;
 namespace Sekiban.Pure.Events;
 

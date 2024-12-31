@@ -1,3 +1,3 @@
-namespace Sekiban.Pure;
+namespace Sekiban.Pure.Aggregates;
 
 public interface IAggregatePayload;

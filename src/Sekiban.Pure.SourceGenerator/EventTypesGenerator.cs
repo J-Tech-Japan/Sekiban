@@ -79,6 +79,7 @@ public class EventTypesGenerator : IIncrementalGenerator
         sb.AppendLine("using Sekiban.Pure;");
         sb.AppendLine("using Sekiban.Pure.Exception;");
         sb.AppendLine("using Sekiban.Pure.Events;");
+        sb.AppendLine("using Sekiban.Pure.Documents;");
 
         sb.AppendLine();
         sb.AppendLine($"namespace {rootNamespace}.Generated");

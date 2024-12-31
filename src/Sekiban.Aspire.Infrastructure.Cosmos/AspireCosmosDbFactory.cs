@@ -3,7 +3,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Aggregate;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Documents;
-using Sekiban.Infrastructure.Azure.Storage.Blobs;
 using Sekiban.Infrastructure.Cosmos;
 namespace Sekiban.Aspire.Infrastructure.Cosmos;
 
@@ -36,7 +35,10 @@ public class AspireCosmosDbFactory(
         return await cosmosDbFactory.CosmosActionAsync(documentType, containerGroup, cosmosAction);
     }
 
-    public async Task CosmosActionAsync(DocumentType documentType, AggregateContainerGroup containerGroup, Func<Container, Task> cosmosAction)
+    public async Task CosmosActionAsync(
+        DocumentType documentType,
+        AggregateContainerGroup containerGroup,
+        Func<Container, Task> cosmosAction)
     {
         cosmosDbFactory.SearchCosmosClientAsync = GetCosmosClientFromAspire;
         await cosmosDbFactory.CosmosActionAsync(documentType, containerGroup, cosmosAction);

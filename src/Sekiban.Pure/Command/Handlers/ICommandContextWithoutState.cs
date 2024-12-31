@@ -1,5 +1,6 @@
 using ResultBoxes;
 using Sekiban.Pure.Command.Executor;
+using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 namespace Sekiban.Pure.Command.Handlers;
 

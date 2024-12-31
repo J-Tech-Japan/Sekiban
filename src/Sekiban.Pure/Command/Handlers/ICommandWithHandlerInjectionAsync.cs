@@ -1,3 +1,4 @@
+using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Projectors;
 using System.Diagnostics.CodeAnalysis;
 namespace Sekiban.Pure.Command.Handlers;

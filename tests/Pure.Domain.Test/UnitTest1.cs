@@ -4,9 +4,11 @@ using Sekiban.Pure;
 using Sekiban.Pure.Command.Executor;
 using Sekiban.Pure.Command.Handlers;
 using Sekiban.Pure.Command.Resources;
+using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Exception;
 using Sekiban.Pure.Projectors;
+using Sekiban.Pure.Repositories;
 namespace Pure.Domain.Test;
 
 public class UnitTest1

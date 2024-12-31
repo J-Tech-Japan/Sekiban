@@ -1,5 +1,4 @@
 using FeatureCheck.Domain.Shared;
-using Sekiban.Infrastructure.Postgres;
 using Sekiban.Test.Abstructs.Abstructs;
 using Xunit.Abstractions;
 namespace Sekiban.Test.Postgres.Tests;

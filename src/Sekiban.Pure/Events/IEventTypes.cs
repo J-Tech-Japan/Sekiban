@@ -1,4 +1,5 @@
 using ResultBoxes;
+using Sekiban.Pure.Documents;
 namespace Sekiban.Pure.Events;
 
 public interface IEventTypes

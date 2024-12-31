@@ -1,4 +1,4 @@
-﻿using Sekiban.Pure;
+﻿using Sekiban.Pure.Aggregates;
 namespace Pure.Domain;
 
 public record UnconfirmedUser(string Name, string Email) : IAggregatePayload;

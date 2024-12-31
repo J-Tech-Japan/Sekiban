@@ -1,4 +1,5 @@
 using ResultBoxes;
+using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Projectors;
 namespace Sekiban.Pure.Command.Handlers;

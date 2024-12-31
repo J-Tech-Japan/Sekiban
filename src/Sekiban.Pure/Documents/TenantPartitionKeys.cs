@@ -1,4 +1,4 @@
-namespace Sekiban.Pure;
+namespace Sekiban.Pure.Documents;
 
 public record TenantPartitionKeys(string TenantCode)
 {

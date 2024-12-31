@@ -1,6 +1,7 @@
 using ResultBoxes;
-using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Shared;
+using Sekiban.Pure.Aggregates;
+using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Projectors;
 namespace Sekiban.Pure.Command.Executor;
@@ -14,7 +15,6 @@ public class CommandContext<TAggregatePayload>(
     public IAggregateProjector Projector { get; } = projector;
     public IEventTypes EventTypes { get; } = eventTypes;
     public List<IEvent> Events { get; } = new();
-    public PartitionKeys GetPartitionKeys() => Aggregate.PartitionKeys;
     public int GetNextVersion() => Aggregate.Version + 1;
     public int GetCurrentVersion() => Aggregate.Version;
     public IAggregate GetAggregateCommon() => Aggregate;
@@ -34,4 +34,5 @@ public class CommandContext<TAggregatePayload>(
         Events.Add(ev);
         return EventOrNone.Empty;
     }
+    public PartitionKeys GetPartitionKeys() => Aggregate.PartitionKeys;
 }

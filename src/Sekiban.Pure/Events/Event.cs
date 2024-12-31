@@ -1,3 +1,4 @@
+using Sekiban.Pure.Documents;
 namespace Sekiban.Pure.Events;
 
 public record Event<TEventPayload>(

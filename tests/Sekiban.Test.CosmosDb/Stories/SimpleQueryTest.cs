@@ -6,7 +6,6 @@ using FeatureCheck.Domain.Projections.ClientLoyaltyPointMultiples;
 using FeatureCheck.Domain.Shared;
 using Sekiban.Core.Command;
 using Sekiban.Core.Query.QueryModel;
-using Sekiban.Infrastructure.Cosmos;
 using Sekiban.Test.Abstructs.Abstructs;
 using System.Threading.Tasks;
 using Xunit;
@@ -29,15 +28,7 @@ public class SimpleQueryTest : TestBase<FeatureCheckDependency>
     public async Task QueryExecuteAggregateListAsync()
     {
 
-        await _queryExecutor.ExecuteAsync(
-            new BasicClientQueryParameter(
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null));
+        await _queryExecutor.ExecuteAsync(new BasicClientQueryParameter(null, null, null, null, null, null, null));
     }
 
     [Fact]
@@ -63,20 +54,14 @@ public class SimpleQueryTest : TestBase<FeatureCheckDependency>
     public async Task QueryExecuteMultipleProjectionListAsync()
     {
         await _queryExecutor.ExecuteAsync(
-            new ClientLoyaltyPointQuery.Parameter(
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null));
+            new ClientLoyaltyPointQuery.Parameter(null, null, null, null, null, null, null, null));
     }
     [Fact]
     public async Task QueryExecuteMultipleProjectionAsync()
     {
         await _queryExecutor.ExecuteAsync(
-            new ClientLoyaltyPointMultiProjectionQuery.Parameter(null, ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.Points));
+            new ClientLoyaltyPointMultiProjectionQuery.Parameter(
+                null,
+                ClientLoyaltyPointMultiProjectionQuery.QuerySortKeys.Points));
     }
 }

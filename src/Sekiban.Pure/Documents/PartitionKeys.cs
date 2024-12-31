@@ -1,6 +1,6 @@
 using Sekiban.Pure.Extensions;
 using Sekiban.Pure.Projectors;
-namespace Sekiban.Pure;
+namespace Sekiban.Pure.Documents;
 
 public record PartitionKeys(Guid AggregateId, string Group, string RootPartitionKey)
 {

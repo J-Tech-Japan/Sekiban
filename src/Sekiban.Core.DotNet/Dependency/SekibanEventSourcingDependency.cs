@@ -1,6 +1,4 @@
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Sekiban.Core.Command;
 using Sekiban.Core.Setting;
 using Sekiban.Core.Shared;

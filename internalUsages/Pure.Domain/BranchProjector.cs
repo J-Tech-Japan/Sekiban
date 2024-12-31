@@ -1,4 +1,4 @@
-using Sekiban.Pure;
+using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Projectors;
 namespace Pure.Domain;

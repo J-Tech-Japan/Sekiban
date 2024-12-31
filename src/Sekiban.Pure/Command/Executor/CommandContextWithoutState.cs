@@ -1,7 +1,7 @@
 using ResultBoxes;
-using Sekiban.Core.Documents.ValueObjects;
 using Sekiban.Core.Shared;
 using Sekiban.Pure.Command.Handlers;
+using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 namespace Sekiban.Pure.Command.Executor;
 

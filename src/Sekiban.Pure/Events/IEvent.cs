@@ -1,4 +1,4 @@
-using Sekiban.Core.Documents.ValueObjects;
+using Sekiban.Pure.Documents;
 namespace Sekiban.Pure.Events;
 
 public interface IEvent

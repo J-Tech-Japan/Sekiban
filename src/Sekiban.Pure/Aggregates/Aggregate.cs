@@ -1,8 +1,9 @@
 using ResultBoxes;
+using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Exception;
 using Sekiban.Pure.Projectors;
-namespace Sekiban.Pure;
+namespace Sekiban.Pure.Aggregates;
 
 public record Aggregate(
     IAggregatePayload Payload,
