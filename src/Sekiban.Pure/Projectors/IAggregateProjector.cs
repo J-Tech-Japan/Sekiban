@@ -7,3 +7,9 @@ public interface IAggregateProjector
     public IAggregatePayload Project(IAggregatePayload payload, IEvent ev);
     public virtual string GetVersion() => "initial";
 }
+public interface IMultiProjector<TMultiAggregatePayload>
+{
+    public virtual string GetVersion() => "initial";
+    public TMultiAggregatePayload Project(TMultiAggregatePayload payload, IEvent ev);
+    public TMultiAggregatePayload GenerateInitialPayload();
+}
