@@ -15,7 +15,7 @@ public class ShoppingCartProjector : IAggregateProjector
                 buyingShoppingCart.UserId,
                 buyingShoppingCart
                     .Items
-                    .Append(new ShoppingCartItems(added.Name, added.Quantity, Guid.NewGuid(), 100))
+                    .Append(new ShoppingCartItems(added.Name, added.Quantity, added.ItemId, added.Price))
                     .ToList()),
             (BuyingShoppingCart buyingShoppingCart, PaymentProcessedShoppingCart processed) =>
                 new EmptyAggregatePayload(),
