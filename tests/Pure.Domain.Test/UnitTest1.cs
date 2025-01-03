@@ -1,6 +1,5 @@
 ﻿using Pure.Domain.Generated;
 using ResultBoxes;
-using Sekiban.Pure;
 using Sekiban.Pure.Command.Executor;
 using Sekiban.Pure.Command.Handlers;
 using Sekiban.Pure.Command.Resources;
@@ -11,6 +10,32 @@ using Sekiban.Pure.Projectors;
 using Sekiban.Pure.Repositories;
 namespace Pure.Domain.Test;
 
+public class MultiProjectionSpec
+{
+    [Fact]
+    public async Task TestSimple()
+    {
+        var executor = new CommandExecutor { EventTypes = new PureDomainEventTypes() };
+        var result = await executor
+            .Execute(new RegisterUser("Tomohisa", "tomo@example.com"), new RegisterUser.Injection(email => false))
+            .Conveyor(response => executor.Execute(new ConfirmUser(response.PartitionKeys.AggregateId)))
+            .Conveyor(
+                _ => executor.Execute(
+                    new RegisterUser("John", "john@example.com"),
+                    new RegisterUser.Injection(_ => false)))
+            .Conveyor(response => executor.Execute(new ConfirmUser(response.PartitionKeys.AggregateId)))
+            .Conveyor(
+                response => executor.Execute(
+                    new RevokeUser(response.PartitionKeys.AggregateId),
+                    new RevokeUser.Injection(_ => true)));
+        Assert.True(result.IsSuccess);
+        var projectionResult = Repository.LoadMultiProjection<MultiProjectorPayload>(MultiProjectionEventSelector.All);
+        Assert.True(projectionResult.IsSuccess);
+        var projection = projectionResult.GetValue();
+        Assert.Equal(2, projection.Users.Count);
+        Assert.Equal(1, projection.Users.Values.Count(m => m.IsConfirmed));
+    }
+}
 public class UnitTest1
 {
     [Fact]
