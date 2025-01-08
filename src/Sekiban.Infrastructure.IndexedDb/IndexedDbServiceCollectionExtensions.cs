@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Sekiban.Core.Documents;
 using Sekiban.Core.Setting;
 using Sekiban.Infrastructure.IndexedDb.Databases;
@@ -12,16 +13,29 @@ namespace Sekiban.Infrastructure.IndexedDb;
 /// </summary>
 public static class IndexedDbServiceCollectionExtensions
 {
-    public static SekibanIndexedDbOptionsServiceCollection AddSekibanIndexedDb(this IServiceCollection services, IConfiguration configuration)
+    public static IHostApplicationBuilder AddSekibanIndexedDb(this IHostApplicationBuilder builder) =>
+        AddSekibanIndexedDb<BlazorJsRuntime>(builder);
+    public static IHostApplicationBuilder AddSekibanIndexedDb<T>(this IHostApplicationBuilder builder)
+        where T : class, ISekibanJsRuntime
     {
-        var options = SekibanIndexedDbOptions.FromConfiguration(configuration);
-        return AddSekibanIndexedDbWithBlob(services, options);
+        AddSekibanIndexedDb<T>(builder.Services, builder.Configuration);
+        return builder;
     }
 
-    public static SekibanIndexedDbOptionsServiceCollection AddSekibanIndexedDbWithBlob(
-        this IServiceCollection services,
+    public static SekibanIndexedDbOptionsServiceCollection AddSekibanIndexedDb(this IServiceCollection services, IConfiguration configuration) =>
+        AddSekibanIndexedDb<BlazorJsRuntime>(services, configuration);
+    public static SekibanIndexedDbOptionsServiceCollection AddSekibanIndexedDb<T>(this IServiceCollection services, IConfiguration configuration)
+        where T : class, ISekibanJsRuntime
+    {
+        var options = SekibanIndexedDbOptions.FromConfiguration(configuration);
+        return AddIndexedDbDependencies<T>(services, options);
+    }
+
+    public static SekibanIndexedDbOptionsServiceCollection AddIndexedDbDependencies<T>(
+        IServiceCollection services,
         SekibanIndexedDbOptions indexedDbOptions
     )
+        where T : class, ISekibanJsRuntime
     {
         services.AddSingleton(indexedDbOptions);
 
@@ -36,6 +50,8 @@ public static class IndexedDbServiceCollectionExtensions
         services.AddTransient<IDocumentRemover, IndexedDbDocumentRemover>();
 
         services.AddTransient<IBlobAccessor, IndexedDbBlobAccessor>();
+
+        services.AddSingleton<ISekibanJsRuntime, T>();
 
         return new SekibanIndexedDbOptionsServiceCollection(indexedDbOptions, services);
     }

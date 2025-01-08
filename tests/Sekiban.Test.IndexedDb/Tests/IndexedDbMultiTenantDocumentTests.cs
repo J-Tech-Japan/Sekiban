@@ -8,7 +8,7 @@ public class IndexedDbMultiTenantDocumentTests : MultiTenantDocumentTests
     public IndexedDbMultiTenantDocumentTests(SekibanTestFixture sekibanTestFixture, ITestOutputHelper output) : base(
         sekibanTestFixture,
         output,
-        new TestServiceProviderGenerator())
+        new IndexedDbSekibanServiceProviderGenerator())
     {
     }
 }

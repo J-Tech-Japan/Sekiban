@@ -8,4 +8,4 @@ public class IndexedDbEventOrderSpec(
     ITestOutputHelper testOutputHelper) : EventOrderSpec(
     sekibanTestFixture,
     testOutputHelper,
-    new TestServiceProviderGenerator());
+    new IndexedDbSekibanServiceProviderGenerator());

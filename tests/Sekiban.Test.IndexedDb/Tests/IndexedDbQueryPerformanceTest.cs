@@ -7,7 +7,7 @@ public class IndexedDbQueryPerformanceTest : QueryPerformanceTestBase
     public IndexedDbQueryPerformanceTest(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
         sekibanTestFixture,
         testOutputHelper,
-        new TestServiceProviderGenerator())
+        new IndexedDbSekibanServiceProviderGenerator())
     {
     }
 }

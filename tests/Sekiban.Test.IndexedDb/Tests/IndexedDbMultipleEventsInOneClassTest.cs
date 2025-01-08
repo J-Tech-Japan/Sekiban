@@ -7,7 +7,7 @@ public class IndexedDbMultipleEventsInOneClassTest : MultipleEventsInOneClassTes
     public IndexedDbMultipleEventsInOneClassTest(SekibanTestFixture sekibanTestFixture, ITestOutputHelper output) : base(
         sekibanTestFixture,
         output,
-        new TestServiceProviderGenerator())
+        new IndexedDbSekibanServiceProviderGenerator())
     {
     }
 }

@@ -8,7 +8,7 @@ public class IndexedDbAggregateSubtypeTest : AggregateSubtypeTest
     public IndexedDbAggregateSubtypeTest(SekibanTestFixture sekibanTestFixture, ITestOutputHelper testOutputHelper) : base(
         sekibanTestFixture,
         testOutputHelper,
-        new TestServiceProviderGenerator())
+        new IndexedDbSekibanServiceProviderGenerator())
     {
     }
 }

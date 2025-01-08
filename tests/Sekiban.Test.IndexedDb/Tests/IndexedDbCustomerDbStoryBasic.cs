@@ -8,4 +8,4 @@ public class IndexedDbCustomerDbStoryBasic(
     ITestOutputHelper testOutputHelper) : CustomerDbStoryBasic(
     sekibanTestFixture,
     testOutputHelper,
-    new TestServiceProviderGenerator());
+    new IndexedDbSekibanServiceProviderGenerator());
