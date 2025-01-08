@@ -11,11 +11,11 @@ public interface ISekibanJsRuntime
     {
         // Windows, MacOS and Linux
         PlatformID.Win32NT or PlatformID.Unix => Path.Combine(
-            Path.GetDirectoryName(Assembly.GetAssembly(typeof(ISekibanJsRuntime))!.Location)!,
+            Path.GetDirectoryName(typeof(ISekibanJsRuntime).Assembly.Location)!,
             "wwwroot", "sekiban-runtime.mjs"),
 
         // Blazor (WASM)
-        PlatformID.Other => "./sekiban-runtime.mjs",
+        PlatformID.Other => "./_content/Sekiban.Infrastructure.IndexedDb/sekiban-runtime.mjs",
 
         _ => throw new PlatformNotSupportedException(),
     };
