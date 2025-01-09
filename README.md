@@ -129,11 +129,12 @@ seminars, please contact us at [sekibanadmin@jtechs.com](mailto:sekibanadmin@jte
   </a>
 </p>
 
-### Contributors
+## Contributors
 
 <a href="https://github.com/J-Tech-Japan/Sekiban/graphs/contributors">
   <img alt="contributors" src="https://contrib.rocks/image?repo=J-Tech-Japan/Sekiban"/>
 </a>
+
 # License
 
 Apache 2.0
