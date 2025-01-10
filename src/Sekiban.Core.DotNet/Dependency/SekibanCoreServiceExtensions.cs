@@ -1,4 +1,3 @@
-using MemStat.Net;
 using Microsoft.Extensions.DependencyInjection;
 using Sekiban.Core.Cache;
 using Sekiban.Core.Command;
@@ -95,7 +94,6 @@ public static class SekibanCoreServiceExtensions
 
         services.AddTransient<ISekibanUsecaseExecutor, SekibanUsecaseExecutor>();
         services.AddTransient<ISekibanUsecaseContext, SekibanUsecaseContext>();
-        services.AddMemoryUsageFinder();
         return services;
     }
 
@@ -163,7 +161,6 @@ public static class SekibanCoreServiceExtensions
         services.AddScoped<EventNonBlockingStatus>();
         services.AddTransient<ISekibanUsecaseExecutor, SekibanUsecaseExecutor>();
         services.AddTransient<ISekibanUsecaseContext, SekibanUsecaseContext>();
-        services.AddMemoryUsageFinder();
         return services;
     }
 
@@ -230,7 +227,6 @@ public static class SekibanCoreServiceExtensions
         services.AddScoped<EventNonBlockingStatus>();
         services.AddTransient<ISekibanUsecaseExecutor, SekibanUsecaseExecutor>();
         services.AddTransient<ISekibanUsecaseContext, SekibanUsecaseContext>();
-        services.AddMemoryUsageFinder();
         return services;
     }
 
