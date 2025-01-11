@@ -25,5 +25,13 @@ public class Repository
         ResultBox
             .FromValue(Events.Where(eventSelector.GetEventSelector).OrderBy(e => e.SortableUniqueId).ToList())
             .Combine(events => TMultiProjection.GenerateInitialPayload().ToResultBox())
-            .Remap((events, initialPayload) => events.Aggregate(initialPayload, initialPayload.Project));
+            .Conveyor(
+                (events, initialPayload) => ResultBox
+                    .FromValue(events)
+                    .ReduceEach(
+                        initialPayload,
+                        (ev, payload) =>
+                            payload
+                                .Project(payload, ev)
+                                .Match(success => success.ToResultBox(), ResultBox<TMultiProjection>.Error)));
 }
