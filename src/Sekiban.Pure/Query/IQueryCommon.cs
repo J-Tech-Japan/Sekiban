@@ -1,5 +1,4 @@
 using ResultBoxes;
-using Sekiban.Pure.Events;
 using Sekiban.Pure.Projectors;
 namespace Sekiban.Pure.Query;
 
@@ -25,33 +24,3 @@ public interface
         IQueryContext context);
 }
 public interface IQueryContext;
-public record MultiProjectionState<TMultiProjector>(
-    TMultiProjector Payload,
-    Guid LastEventId,
-    string LastSortableUniqueId,
-    int AppliedSnapshotVersion,
-    int Version,
-    string RootPartitionKey) where TMultiProjector : IMultiProjector<TMultiProjector>
-{
-    public MultiProjectionState() : this(
-        TMultiProjector.GenerateInitialPayload(),
-        Guid.Empty,
-        string.Empty,
-        0,
-        0,
-        string.Empty)
-    {
-    }
-    public string GetPayloadVersionIdentifier() => Payload.GetVersion();
-    public ResultBox<MultiProjectionState<TMultiProjector>> ApplyEvent(IEvent ev) =>
-        Payload
-            .Project(Payload, ev)
-            .Remap(
-                p => this with
-                {
-                    Payload = p,
-                    LastEventId = ev.Id,
-                    LastSortableUniqueId = ev.SortableUniqueId,
-                    Version = Version + 1
-                });
-}
