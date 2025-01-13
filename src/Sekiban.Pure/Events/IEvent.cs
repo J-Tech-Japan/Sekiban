@@ -3,6 +3,7 @@ namespace Sekiban.Pure.Events;
 
 public interface IEvent
 {
+    public Guid Id { get; }
     public int Version { get; }
     public string SortableUniqueId { get; }
     public PartitionKeys PartitionKeys { get; }

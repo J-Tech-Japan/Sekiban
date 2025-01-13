@@ -32,8 +32,25 @@ public class MultiProjectionSpec
         var projectionResult = Repository.LoadMultiProjection<MultiProjectorPayload>(MultiProjectionEventSelector.All);
         Assert.True(projectionResult.IsSuccess);
         var projection = projectionResult.GetValue();
+<<<<<<< Updated upstream
         Assert.Equal(2, projection.Users.Count);
         Assert.Equal(1, projection.Users.Values.Count(m => m.IsConfirmed));
+=======
+        Assert.Equal(2, projection.Payload.Users.Count);
+        Assert.Equal(1, projection.Payload.Users.Values.Count(m => m.IsConfirmed));
+
+        var projectionFromAggregateList
+            = Repository.LoadMultiProjection<AggregateListProjector<UserProjector>>(
+                MultiProjectionEventSelector.FromProjectorGroup<UserProjector>());
+        // var projectionFromAggregateList
+        //     = Repository.LoadMultiProjection<AggregateListProjector<UserProjector>>(MultiProjectionEventSelector.All);
+        Assert.True(projectionFromAggregateList.IsSuccess);
+        var projectionFromAggregateListValue = projectionFromAggregateList.GetValue();
+        Assert.Equal(2, projectionFromAggregateListValue.Payload.Aggregates.Count);
+        Assert.Equal(
+            1,
+            projectionFromAggregateListValue.Payload.Aggregates.Count(m => m.Value.GetPayload() is ConfirmedUser));
+>>>>>>> Stashed changes
     }
 }
 public class UnitTest1

@@ -80,6 +80,7 @@ public class EventTypesGenerator : IIncrementalGenerator
         sb.AppendLine("using Sekiban.Pure.Exception;");
         sb.AppendLine("using Sekiban.Pure.Events;");
         sb.AppendLine("using Sekiban.Pure.Documents;");
+        sb.AppendLine("using Sekiban.Pure.Extensions;");
 
         sb.AppendLine();
         sb.AppendLine($"namespace {rootNamespace}.Generated");
@@ -100,6 +101,7 @@ public class EventTypesGenerator : IIncrementalGenerator
                 case ("IEventPayload", 0):
                     sb.AppendLine(
                         $"            {type.RecordName} {type.RecordName.Split('.').Last().ToLower()} => new Event<{type.RecordName}>(");
+                    sb.AppendLine("                GuidExtensions.CreateVersion7(),");
                     sb.AppendLine($"                {type.RecordName.Split('.').Last().ToLower()},");
                     sb.AppendLine("                partitionKeys,");
                     sb.AppendLine("                sortableUniqueId,");
