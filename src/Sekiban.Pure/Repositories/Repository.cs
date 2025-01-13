@@ -25,6 +25,8 @@ public class Repository
         IMultiProjectionEventSelector eventSelector) where TMultiProjection : IMultiProjector<TMultiProjection> =>
         ResultBox
             .FromValue(Events.Where(eventSelector.GetEventSelector).OrderBy(e => e.SortableUniqueId).ToList())
-            .Combine(events => TMultiProjection.GenerateInitialPayload().ToResultBox())
-            .Remap((events, initialPayload) => events.Aggregate(initialPayload, initialPayload.Project));
+            .Conveyor(
+                events => events
+                    .ToResultBox()
+                    .ReduceEach(new MultiProjectionState<TMultiProjection>(), (ev, state) => state.ApplyEvent(ev)));
 }
