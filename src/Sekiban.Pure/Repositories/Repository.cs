@@ -26,12 +26,5 @@ public class Repository
         ResultBox
             .FromValue(Events.Where(eventSelector.GetEventSelector).OrderBy(e => e.SortableUniqueId).ToList())
             .Combine(events => TMultiProjection.GenerateInitialPayload().ToResultBox())
-<<<<<<< Updated upstream
             .Remap((events, initialPayload) => events.Aggregate(initialPayload, initialPayload.Project));
-=======
-            .Conveyor(
-                (events, initialPayload) => ResultBox
-                    .FromValue(events)
-                    .ReduceEach(new MultiProjectionState<TMultiProjection>(), (ev, state) => state.ApplyEvent(ev)));
->>>>>>> Stashed changes
 }

@@ -27,15 +27,12 @@ public class MultiProjectionSpec
             .Conveyor(
                 response => executor.Execute(
                     new RevokeUser(response.PartitionKeys.AggregateId),
-                    new RevokeUser.Injection(_ => true)));
+                    new RevokeUser.Injection(_ => true)))
+            .Conveyor(_ => executor.Execute(new RegisterBranch("japan")));
         Assert.True(result.IsSuccess);
         var projectionResult = Repository.LoadMultiProjection<MultiProjectorPayload>(MultiProjectionEventSelector.All);
         Assert.True(projectionResult.IsSuccess);
         var projection = projectionResult.GetValue();
-<<<<<<< Updated upstream
-        Assert.Equal(2, projection.Users.Count);
-        Assert.Equal(1, projection.Users.Values.Count(m => m.IsConfirmed));
-=======
         Assert.Equal(2, projection.Payload.Users.Count);
         Assert.Equal(1, projection.Payload.Users.Values.Count(m => m.IsConfirmed));
 
@@ -50,7 +47,6 @@ public class MultiProjectionSpec
         Assert.Equal(
             1,
             projectionFromAggregateListValue.Payload.Aggregates.Count(m => m.Value.GetPayload() is ConfirmedUser));
->>>>>>> Stashed changes
     }
 }
 public class UnitTest1

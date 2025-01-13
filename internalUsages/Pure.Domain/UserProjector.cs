@@ -1,3 +1,4 @@
+using ResultBoxes;
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Projectors;
@@ -21,7 +22,7 @@ public record MultiProjectorPayload(
     ImmutableDictionary<Guid, MultiProjectorPayload.User> Users,
     ImmutableDictionary<Guid, MultiProjectorPayload.Cart> Carts) : IMultiProjector<MultiProjectorPayload>
 {
-    public MultiProjectorPayload Project(MultiProjectorPayload payload, IEvent ev) => ev.GetPayload() switch
+    public ResultBox<MultiProjectorPayload> Project(MultiProjectorPayload payload, IEvent ev) => ev.GetPayload() switch
     {
         UserRegistered userRegistered => payload with
         {
