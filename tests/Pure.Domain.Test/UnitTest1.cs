@@ -7,6 +7,7 @@ using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Exception;
 using Sekiban.Pure.Projectors;
+using Sekiban.Pure.Query;
 using Sekiban.Pure.Repositories;
 namespace Pure.Domain.Test;
 
@@ -47,6 +48,11 @@ public class MultiProjectionSpec
         Assert.Equal(
             1,
             projectionFromAggregateListValue.Payload.Aggregates.Count(m => m.Value.GetPayload() is ConfirmedUser));
+        var queryResult = await QueryExecutor.Execute(new UserQueryFromMultiProjection());
+        Assert.True(queryResult.IsSuccess);
+        var queryResultValue = queryResult.GetValue().Items.ToList();
+        Assert.Equal(2, queryResultValue.Count);
+
     }
 }
 public class UnitTest1
