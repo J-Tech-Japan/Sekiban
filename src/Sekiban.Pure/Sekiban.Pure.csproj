@@ -12,8 +12,4 @@
         <PackageReference Include="ResultBoxes" Version="0.3.29"/>
     </ItemGroup>
 
-    <ItemGroup>
-        <Folder Include="Query\"/>
-    </ItemGroup>
-
 </Project>

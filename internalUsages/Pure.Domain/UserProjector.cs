@@ -2,6 +2,7 @@ using ResultBoxes;
 using Sekiban.Pure.Aggregates;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Projectors;
+using Sekiban.Pure.Query;
 using System.Collections.Immutable;
 namespace Pure.Domain;
 
@@ -86,4 +87,19 @@ public record MultiProjectorPayload(
     public record User(Guid UserId, string Name, string Email, bool IsConfirmed);
     public record Cart(Guid CartId, Guid UserId, ImmutableList<Item> Items, string PaymentMethod);
     public record Item(Guid ItemId, string Name, int Quantity, decimal Price);
+}
+public record
+    UserQueryFromMultiProjection : IMultiProjectionListQuery<MultiProjectorPayload, UserQueryFromMultiProjection,
+    string>
+{
+    public static ResultBox<IEnumerable<string>> HandleFilter(
+        MultiProjectionState<MultiProjectorPayload> projection,
+        UserQueryFromMultiProjection query,
+        IQueryContext context) =>
+        projection.Payload.Users.Values.Select(user => user.Name).ToList();
+    public static ResultBox<IEnumerable<string>> HandleSort(
+        IEnumerable<string> filteredList,
+        UserQueryFromMultiProjection query,
+        IQueryContext context) =>
+        filteredList.OrderBy(name => name).ToList();
 }
