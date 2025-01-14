@@ -48,7 +48,16 @@ public class MultiProjectionSpec
         Assert.Equal(
             1,
             projectionFromAggregateListValue.Payload.Aggregates.Count(m => m.Value.GetPayload() is ConfirmedUser));
-        var queryResult = await QueryExecutor.Execute(new UserQueryFromMultiProjection());
+        var queryExecutor = new QueryExecutor();
+        var queryResult = await queryExecutor.Execute(new UserQueryFromMultiProjection());
+        // var queryResult
+        //     = await queryExecutor
+        //         .ExecuteListWithMultiProjectionFunction<MultiProjectorPayload, UserQueryFromMultiProjection, string>(
+        //             new UserQueryFromMultiProjection(),
+        //             UserQueryFromMultiProjection.HandleFilter,
+        //             UserQueryFromMultiProjection.HandleSort);
+
+
         Assert.True(queryResult.IsSuccess);
         var queryResultValue = queryResult.GetValue().Items.ToList();
         Assert.Equal(2, queryResultValue.Count);
