@@ -18,6 +18,19 @@ public class QueryExecutor
         .Combine(_ => new QueryContext().ToResultBox())
         .Combine((projection, context) => filter(projection, query, context))
         .Conveyor((_, context, filtered) => SortAndReturnQuery(query, sort, filtered, context));
+
+    public Task<ResultBox<TOutput>> ExecuteWithMultiProjectionFunction<TMultiProjector, TQuery, TOutput>(
+        TQuery query,
+        Func<MultiProjectionState<TMultiProjector>, TQuery, IQueryContext, ResultBox<TOutput>> handler)
+        where TQuery : IListQueryCommon<TQuery, TOutput>, IEquatable<TQuery>
+        where TOutput : notnull
+        where TMultiProjector : IMultiProjector<TMultiProjector> =>
+        Repository
+            .LoadMultiProjection<TMultiProjector>(MultiProjectionEventSelector.All)
+            .Combine(_ => new QueryContext().ToResultBox())
+            .Conveyor((projection, context) => handler(projection, query, context))
+            .ToTask();
+
     private static ListQueryResult<TOutput> CreateListQueryResult<TOutput>(
         IListQueryCommon<TOutput> query,
         List<TOutput> sorted) where TOutput : notnull =>
