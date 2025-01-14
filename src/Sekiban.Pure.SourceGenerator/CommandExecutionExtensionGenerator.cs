@@ -257,7 +257,7 @@ public class CommandExecutionExtensionGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine($"namespace {rootNamespace}.Generated");
         sb.AppendLine("{");
-        sb.AppendLine("    public static class DomainExecutorExtensions");
+        sb.AppendLine("    public static class CommandExecutorExtensions");
         sb.AppendLine("    {");
 
         foreach (var type in eventTypes)
