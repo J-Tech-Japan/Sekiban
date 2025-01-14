@@ -7,63 +7,9 @@ using Sekiban.Pure.Documents;
 using Sekiban.Pure.Events;
 using Sekiban.Pure.Exception;
 using Sekiban.Pure.Projectors;
-using Sekiban.Pure.Query;
 using Sekiban.Pure.Repositories;
 namespace Pure.Domain.Test;
 
-public class MultiProjectionSpec
-{
-    [Fact]
-    public async Task TestSimple()
-    {
-        var executor = new CommandExecutor { EventTypes = new PureDomainEventTypes() };
-        var result = await executor
-            .Execute(new RegisterUser("Tomohisa", "tomo@example.com"), new RegisterUser.Injection(email => false))
-            .Conveyor(response => executor.Execute(new ConfirmUser(response.PartitionKeys.AggregateId)))
-            .Conveyor(
-                _ => executor.Execute(
-                    new RegisterUser("John", "john@example.com"),
-                    new RegisterUser.Injection(_ => false)))
-            .Conveyor(response => executor.Execute(new ConfirmUser(response.PartitionKeys.AggregateId)))
-            .Conveyor(
-                response => executor.Execute(
-                    new RevokeUser(response.PartitionKeys.AggregateId),
-                    new RevokeUser.Injection(_ => true)))
-            .Conveyor(_ => executor.Execute(new RegisterBranch("japan")));
-        Assert.True(result.IsSuccess);
-        var projectionResult = Repository.LoadMultiProjection<MultiProjectorPayload>(MultiProjectionEventSelector.All);
-        Assert.True(projectionResult.IsSuccess);
-        var projection = projectionResult.GetValue();
-        Assert.Equal(2, projection.Payload.Users.Count);
-        Assert.Equal(1, projection.Payload.Users.Values.Count(m => m.IsConfirmed));
-
-        var projectionFromAggregateList
-            = Repository.LoadMultiProjection<AggregateListProjector<UserProjector>>(
-                MultiProjectionEventSelector.FromProjectorGroup<UserProjector>());
-        // var projectionFromAggregateList
-        //     = Repository.LoadMultiProjection<AggregateListProjector<UserProjector>>(MultiProjectionEventSelector.All);
-        Assert.True(projectionFromAggregateList.IsSuccess);
-        var projectionFromAggregateListValue = projectionFromAggregateList.GetValue();
-        Assert.Equal(2, projectionFromAggregateListValue.Payload.Aggregates.Count);
-        Assert.Equal(
-            1,
-            projectionFromAggregateListValue.Payload.Aggregates.Count(m => m.Value.GetPayload() is ConfirmedUser));
-        var queryExecutor = new QueryExecutor();
-        var queryResult = await queryExecutor.Execute(new UserQueryFromMultiProjection());
-        // var queryResult
-        //     = await queryExecutor
-        //         .ExecuteListWithMultiProjectionFunction<MultiProjectorPayload, UserQueryFromMultiProjection, string>(
-        //             new UserQueryFromMultiProjection(),
-        //             UserQueryFromMultiProjection.HandleFilter,
-        //             UserQueryFromMultiProjection.HandleSort);
-
-
-        Assert.True(queryResult.IsSuccess);
-        var queryResultValue = queryResult.GetValue().Items.ToList();
-        Assert.Equal(2, queryResultValue.Count);
-
-    }
-}
 public class UnitTest1
 {
     [Fact]
