@@ -101,4 +101,36 @@ public class MultiProjectionSpec
         var noMatchUsers = noMatchQuery.GetValue().Items.ToList();
         Assert.Empty(noMatchUsers);
     }
+
+    [Fact]
+    public async Task TestUserExistsQuery()
+    {
+        // Setup test data
+        Repository.Events.Clear();
+        var executor = new CommandExecutor { EventTypes = new PureDomainEventTypes() };
+        var result = await executor
+            // Register first user
+            .Execute(new RegisterUser("Alice", "alice@example.com"), new RegisterUser.Injection(email => false))
+            // Register second user
+            .Conveyor(_ => executor.Execute(new RegisterUser("Bob", "bob@example.com"), new RegisterUser.Injection(_ => false)));
+        
+        Assert.True(result.IsSuccess);
+
+        var queryExecutor = new QueryExecutor();
+
+        // Test 1: Query with existing email
+        var existingEmailQuery = await queryExecutor.Execute(new UserExistsQueryFromMultiProjection("alice@example.com"));
+        Assert.True(existingEmailQuery.IsSuccess);
+        Assert.True(existingEmailQuery.GetValue());
+
+        // Test 2: Query with another existing email
+        var anotherExistingEmailQuery = await queryExecutor.Execute(new UserExistsQueryFromMultiProjection("bob@example.com"));
+        Assert.True(anotherExistingEmailQuery.IsSuccess);
+        Assert.True(anotherExistingEmailQuery.GetValue());
+
+        // Test 3: Query with non-existing email
+        var nonExistingEmailQuery = await queryExecutor.Execute(new UserExistsQueryFromMultiProjection("nonexistent@example.com"));
+        Assert.True(nonExistingEmailQuery.IsSuccess);
+        Assert.False(nonExistingEmailQuery.GetValue());
+    }
 }
