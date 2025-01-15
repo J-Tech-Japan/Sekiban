@@ -22,7 +22,7 @@ public class QueryExecutor
     public Task<ResultBox<TOutput>> ExecuteWithMultiProjectionFunction<TMultiProjector, TQuery, TOutput>(
         TQuery query,
         Func<MultiProjectionState<TMultiProjector>, TQuery, IQueryContext, ResultBox<TOutput>> handler)
-        where TQuery : IListQueryCommon<TQuery, TOutput>, IEquatable<TQuery>
+        where TQuery : IQueryCommon<TQuery, TOutput>, IEquatable<TQuery>
         where TOutput : notnull
         where TMultiProjector : IMultiProjector<TMultiProjector> =>
         Repository
