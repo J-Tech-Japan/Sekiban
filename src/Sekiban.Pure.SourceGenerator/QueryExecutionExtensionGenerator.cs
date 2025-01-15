@@ -45,9 +45,11 @@ public class QueryExecutionExtensionGenerator : IIncrementalGenerator
         Compilation compilation,
         ImmutableArray<SyntaxNode> types)
     {
-        var iQueryWithHandlerSymbol
+        var iListQueryWithHandlerSymbol
             = compilation.GetTypeByMetadataName("Sekiban.Pure.Query.IMultiProjectionListQuery`3");
-        if (iQueryWithHandlerSymbol == null)
+        var iQueryWithHandlerSymbol
+            = compilation.GetTypeByMetadataName("Sekiban.Pure.Query.IMultiProjectionQuery`3");
+        if (iListQueryWithHandlerSymbol == null && iQueryWithHandlerSymbol == null)
             return new ImmutableArray<QueryWithHandlerValues>();
         var eventTypes = ImmutableArray.CreateBuilder<QueryWithHandlerValues>();
         foreach (var typeSyntax in types)
@@ -55,20 +57,23 @@ public class QueryExecutionExtensionGenerator : IIncrementalGenerator
             var model = compilation.GetSemanticModel(typeSyntax.SyntaxTree);
             var typeSymbol = model.GetDeclaredSymbol(typeSyntax) as INamedTypeSymbol ?? throw new Exception();
             var allInterfaces = typeSymbol.AllInterfaces.ToList();
-            if (typeSymbol.AllInterfaces.Any(m => m.OriginalDefinition.Name == iQueryWithHandlerSymbol.Name))
+            var matchingInterface = typeSymbol.AllInterfaces.FirstOrDefault(
+                m => m.OriginalDefinition is not null && 
+                     (m.OriginalDefinition.Name == iListQueryWithHandlerSymbol?.Name || 
+                      m.OriginalDefinition.Name == iQueryWithHandlerSymbol?.Name));
+            
+            if (matchingInterface != null)
             {
-                var interfaceImplementation = typeSymbol.AllInterfaces.First(
-                    m => m.OriginalDefinition is not null && m.OriginalDefinition.Name == iQueryWithHandlerSymbol.Name);
                 eventTypes.Add(
                     new QueryWithHandlerValues
                     {
-                        InterfaceName = interfaceImplementation.Name,
+                        InterfaceName = matchingInterface.Name,
                         RecordName = typeSymbol.ToDisplayString(),
-                        TypeCount = interfaceImplementation.TypeArguments.Length,
-                        Generic1Name = interfaceImplementation.TypeArguments[0].ToDisplayString(),
-                        Generic2Name = interfaceImplementation.TypeArguments[1].ToDisplayString(),
-                        Generic3Name = interfaceImplementation.TypeArguments.Length > 2
-                            ? interfaceImplementation.TypeArguments[2].ToDisplayString()
+                        TypeCount = matchingInterface.TypeArguments.Length,
+                        Generic1Name = matchingInterface.TypeArguments[0].ToDisplayString(),
+                        Generic2Name = matchingInterface.TypeArguments[1].ToDisplayString(),
+                        Generic3Name = matchingInterface.TypeArguments.Length > 2
+                            ? matchingInterface.TypeArguments[2].ToDisplayString()
                             : string.Empty
                     });
             }
@@ -111,6 +116,15 @@ public class QueryExecutionExtensionGenerator : IIncrementalGenerator
                     sb.AppendLine("                query,");
                     sb.AppendLine($"                {type.Generic2Name}.HandleFilter,");
                     sb.AppendLine($"                {type.Generic2Name}.HandleSort);");
+                    sb.AppendLine();
+                    break;
+                case ("IMultiProjectionQuery", 3):
+                    sb.AppendLine(
+                        $"        public static Task<ResultBox<{type.Generic3Name}>> Execute(this QueryExecutor queryExecutor, {type.RecordName} query) =>");
+                    sb.AppendLine(
+                        $"      queryExecutor.ExecuteWithMultiProjectionFunction<{type.Generic1Name},{type.Generic2Name},{type.Generic3Name}>(");
+                    sb.AppendLine("                query,");
+                    sb.AppendLine($"                {type.Generic2Name}.HandleQuery);");
                     sb.AppendLine();
                     break;
             }
