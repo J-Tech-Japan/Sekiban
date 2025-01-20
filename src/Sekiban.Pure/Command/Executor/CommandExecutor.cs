@@ -61,6 +61,39 @@ public class CommandExecutor : ICommandExecutor
         if (result is Task<ResultBox<CommandResponse>> task) { return await task; }
         return new SekibanCommandHandlerNotMatchException("Result is not Task<ResultBox<CommandResponse>>");
     }
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods, typeof(CommandExecutor))]
+    [UnconditionalSuppressMessage(
+        "AOT",
+        "IL3050:Calling members annotated with 'RequiresDynamicCodeAttribute' may break functionality when AOT compiling.",
+        Justification = "<Pending>")]
+    public async Task<ResultBox<CommandResponse>> ExecuteGeneralNonGeneric(
+        ICommand command,
+        IAggregateProjector projector,
+        PartitionKeys partitionKeys,
+        object? inject,
+        Delegate handler,
+        OptionalValue<Type> aggregatePayloadType)
+    {
+        var commandType = command.GetType();
+        var injectType = inject is not null ? inject.GetType() : typeof(NoInjection);
+        var optionalType = typeof(OptionalValue<>).MakeGenericType(injectType);
+        var optionalMethod = optionalType?.GetMethod(
+            nameof(OptionalValue.FromValue),
+            BindingFlags.Static | BindingFlags.Public);
+        var injectValue = inject is not null
+            ? optionalMethod?.Invoke(null, new[] { inject })
+            : OptionalValue<NoInjection>.Empty;
+        var aggregatePayloadTypeValue = aggregatePayloadType.HasValue
+            ? aggregatePayloadType.GetValue()
+            : typeof(IAggregatePayload);
+        var method = GetType()
+            .GetMethod(nameof(ExecuteGeneralWithPartitionKeys), BindingFlags.Public | BindingFlags.Instance);
+        if (method is null) { return new SekibanCommandHandlerNotMatchException("Method not found"); }
+        var genericMethod = method.MakeGenericMethod(commandType, injectType, aggregatePayloadTypeValue);
+        var result = genericMethod.Invoke(this, new[] { command, projector, partitionKeys, injectValue, handler });
+        if (result is Task<ResultBox<CommandResponse>> task) { return await task; }
+        return new SekibanCommandHandlerNotMatchException("Result is not Task<ResultBox<CommandResponse>>");
+    }
 
 
     [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods, typeof(CommandExecutor))]
@@ -72,25 +105,43 @@ public class CommandExecutor : ICommandExecutor
         Delegate handler) where TCommand : ICommand where TAggregatePayload : IAggregatePayload =>
         specifyPartitionKeys(command)
             .ToResultBox()
-            .Combine(
+            .Conveyor(
+                partitionKeys => ExecuteGeneralWithPartitionKeys<TCommand, TInject, TAggregatePayload>(
+                    command,
+                    projector,
+                    partitionKeys,
+                    inject,
+                    handler));
+
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods, typeof(CommandExecutor))]
+    public Task<ResultBox<CommandResponse>> ExecuteGeneralWithPartitionKeys<TCommand, TInject, TAggregatePayload>(
+        TCommand command,
+        IAggregateProjector projector,
+        PartitionKeys partitionKeys,
+        OptionalValue<TInject> inject,
+        Delegate handler) where TCommand : ICommand where TAggregatePayload : IAggregatePayload =>
+        ResultBox
+            .Start
+            .Conveyor(
                 keys => CreateCommandContextWithoutState<TCommand, TAggregatePayload, TInject>(
                     command,
-                    keys,
+                    partitionKeys,
                     projector,
                     handler))
             .Combine(
-                (partitionKeys, context) =>
-                    RunHandler<TCommand, TInject, TAggregatePayload>(command, context, inject, handler)
-                        .Conveyor(eventOrNone => EventToCommandExecuted(context, eventOrNone)))
-            .Conveyor(values => Repository.Save(values.Value3.ProducedEvents).Remap(_ => values))
+                context => RunHandler<TCommand, TInject, TAggregatePayload>(command, context, inject, handler)
+                    .Conveyor(eventOrNone => EventToCommandExecuted(context, eventOrNone)))
+            .Conveyor(values => Repository.Save(values.Value2.ProducedEvents).Remap(_ => values))
             .Conveyor(
-                (partitionKeys, context, executed) => ResultBox.FromValue(
+                (context, executed) => ResultBox.FromValue(
                     new CommandResponse(
                         partitionKeys,
                         executed.ProducedEvents,
                         executed.ProducedEvents.Count > 0
                             ? executed.ProducedEvents.Last().Version
                             : context.GetCurrentVersion())));
+
+
     private ResultBox<ICommandContextWithoutState>
         CreateCommandContextWithoutState<TCommand, TAggregatePayload, TInject>(
             TCommand command,

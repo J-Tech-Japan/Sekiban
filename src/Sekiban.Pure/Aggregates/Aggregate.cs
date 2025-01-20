@@ -37,4 +37,8 @@ public record Aggregate<TAggregatePayload>(
     string LastSortableUniqueId) : IAggregate where TAggregatePayload : IAggregatePayload
 {
     public IAggregatePayload GetPayload() => Payload;
+    public ResultBox<Aggregate<TAggregatePayload1>> ToTypedPayload<TAggregatePayload1>() where TAggregatePayload1 : IAggregatePayload => Payload is TAggregatePayload1 typedPayload
+        ? ResultBox.FromValue(
+            new Aggregate<TAggregatePayload1>(typedPayload, PartitionKeys, Version, LastSortableUniqueId))
+        : new SekibanAggregateTypeException("Payload is not typed to " + typeof(TAggregatePayload).Name);
 }
