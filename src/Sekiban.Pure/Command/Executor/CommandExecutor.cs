@@ -52,7 +52,7 @@ public class CommandExecutor : ICommandExecutor
         var aggregatePayloadTypeValue = aggregatePayloadType.HasValue
             ? aggregatePayloadType.GetValue()
             : typeof(IAggregatePayload);
-        var method = GetType().GetMethod(nameof(ExecuteGeneralWithPartitionKeys), BindingFlags.Public | BindingFlags.Instance);
+        var method = GetType().GetMethod(nameof(ExecuteGeneral), BindingFlags.Public | BindingFlags.Instance);
         if (method is null) { return new SekibanCommandHandlerNotMatchException("Method not found"); }
         var genericMethod = method.MakeGenericMethod(commandType, injectType, aggregatePayloadTypeValue);
         var result = genericMethod.Invoke(
@@ -86,12 +86,11 @@ public class CommandExecutor : ICommandExecutor
         var aggregatePayloadTypeValue = aggregatePayloadType.HasValue
             ? aggregatePayloadType.GetValue()
             : typeof(IAggregatePayload);
-        var method = GetType().GetMethod(nameof(ExecuteGeneralWithPartitionKeys), BindingFlags.Public | BindingFlags.Instance);
+        var method = GetType()
+            .GetMethod(nameof(ExecuteGeneralWithPartitionKeys), BindingFlags.Public | BindingFlags.Instance);
         if (method is null) { return new SekibanCommandHandlerNotMatchException("Method not found"); }
         var genericMethod = method.MakeGenericMethod(commandType, injectType, aggregatePayloadTypeValue);
-        var result = genericMethod.Invoke(
-            this,
-            new[] { command, projector, partitionKeys, injectValue, handler });
+        var result = genericMethod.Invoke(this, new[] { command, projector, partitionKeys, injectValue, handler });
         if (result is Task<ResultBox<CommandResponse>> task) { return await task; }
         return new SekibanCommandHandlerNotMatchException("Result is not Task<ResultBox<CommandResponse>>");
     }
@@ -105,10 +104,15 @@ public class CommandExecutor : ICommandExecutor
         OptionalValue<TInject> inject,
         Delegate handler) where TCommand : ICommand where TAggregatePayload : IAggregatePayload =>
         specifyPartitionKeys(command)
-            .ToResultBox().Conveyor(partitionKeys =>
-                ExecuteGeneralWithPartitionKeys<TCommand, TInject, TAggregatePayload>(command, projector, partitionKeys, inject,
+            .ToResultBox()
+            .Conveyor(
+                partitionKeys => ExecuteGeneralWithPartitionKeys<TCommand, TInject, TAggregatePayload>(
+                    command,
+                    projector,
+                    partitionKeys,
+                    inject,
                     handler));
-    
+
     [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods, typeof(CommandExecutor))]
     public Task<ResultBox<CommandResponse>> ExecuteGeneralWithPartitionKeys<TCommand, TInject, TAggregatePayload>(
         TCommand command,
@@ -116,7 +120,8 @@ public class CommandExecutor : ICommandExecutor
         PartitionKeys partitionKeys,
         OptionalValue<TInject> inject,
         Delegate handler) where TCommand : ICommand where TAggregatePayload : IAggregatePayload =>
-            ResultBox.Start
+        ResultBox
+            .Start
             .Conveyor(
                 keys => CreateCommandContextWithoutState<TCommand, TAggregatePayload, TInject>(
                     command,
@@ -124,9 +129,8 @@ public class CommandExecutor : ICommandExecutor
                     projector,
                     handler))
             .Combine(
-                (context) =>
-                    RunHandler<TCommand, TInject, TAggregatePayload>(command, context, inject, handler)
-                        .Conveyor(eventOrNone => EventToCommandExecuted(context, eventOrNone)))
+                context => RunHandler<TCommand, TInject, TAggregatePayload>(command, context, inject, handler)
+                    .Conveyor(eventOrNone => EventToCommandExecuted(context, eventOrNone)))
             .Conveyor(values => Repository.Save(values.Value2.ProducedEvents).Remap(_ => values))
             .Conveyor(
                 (context, executed) => ResultBox.FromValue(
@@ -137,7 +141,7 @@ public class CommandExecutor : ICommandExecutor
                             ? executed.ProducedEvents.Last().Version
                             : context.GetCurrentVersion())));
 
-    
+
     private ResultBox<ICommandContextWithoutState>
         CreateCommandContextWithoutState<TCommand, TAggregatePayload, TInject>(
             TCommand command,
