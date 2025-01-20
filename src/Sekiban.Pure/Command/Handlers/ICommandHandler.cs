@@ -12,13 +12,3 @@ public interface
 {
     public ResultBox<EventOrNone> Handle(TCommand command, ICommandContext<TAggregatePayload> context);
 }
-public interface
-    ICommandWithHandler<TCommand, TProjector, TAggregatePayload> :
-    ICommandWithHandlerCommon<TCommand, NoInjection, TAggregatePayload>,
-    ICommandHandler<TCommand, TAggregatePayload> where TCommand : ICommand, IEquatable<TCommand>
-    where TProjector : IAggregateProjector, new()
-    where TAggregatePayload : IAggregatePayload
-{
-    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(ICommandWithHandler<,,>))]
-    IAggregateProjector ICommandGetProjector.GetProjector() => new TProjector();
-}
