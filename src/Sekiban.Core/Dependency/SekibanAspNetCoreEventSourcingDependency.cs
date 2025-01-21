@@ -156,30 +156,9 @@ public static class SekibanAspNetCoreEventSourcingDependency
         SekibanCoreServiceExtensions.MultiProjectionType multiProjectionType
             = SekibanCoreServiceExtensions.MultiProjectionType.MemoryCache)
     {
-        // MediatR
-        services.AddMediatR(
-            new MediatRServiceConfiguration().RegisterServicesFromAssemblies(
-                Assembly.GetExecutingAssembly(),
-                GetAssembly(),
-                typeof(UpdateNoticeEventSubscriber<>).Assembly)); // Sekiban.Core.DotNet needs to be added
-        // Sekiban Event Sourcing
-        services.AddSekibanCore(settings, sekibanDateProducer ?? new SekibanDateProducer(), multiProjectionType);
         services.AddSekibanHTTPUser();
-        services.AddSingleton(settings);
-        services.AddTransient<IAggregateSettings, ContextAggregateSettings>();
-        // run Define() before using.
-        dependencyDefinition.Define();
-        // Each Domain contexts
-        services.AddSingleton(dependencyDefinition.GetSekibanDependencyOptions().RegisteredEventTypes);
-        services.AddSingleton(dependencyDefinition.GetSekibanDependencyOptions().SekibanAggregateTypes);
-        services.AddTransient(dependencyDefinition.GetSekibanDependencyOptions().TransientDependencies);
-        services.AddTransient(GetDependencies());
 
-        services.AddQueriesFromDependencyDefinition(dependencyDefinition);
-
-        foreach (var action in dependencyDefinition.GetServiceActions())
-        {
-            action(services);
-        }
+        SekibanEventSourcingDependency.RegisterWithoutUser(
+            services, dependencyDefinition, settings, sekibanDateProducer, multiProjectionType);
     }
 }

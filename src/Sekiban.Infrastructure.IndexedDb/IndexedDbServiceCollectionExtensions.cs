@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -16,6 +17,15 @@ public static class IndexedDbServiceCollectionExtensions
     public static IHostApplicationBuilder AddSekibanIndexedDb(this IHostApplicationBuilder builder) =>
         AddSekibanIndexedDb<BlazorJsRuntime>(builder);
     public static IHostApplicationBuilder AddSekibanIndexedDb<T>(this IHostApplicationBuilder builder)
+        where T : class, ISekibanJsRuntime
+    {
+        AddSekibanIndexedDb<T>(builder.Services, builder.Configuration);
+        return builder;
+    }
+
+    public static WebAssemblyHostBuilder AddSekibanIndexedDb(this WebAssemblyHostBuilder builder) =>
+        AddSekibanIndexedDb<BlazorJsRuntime>(builder);
+    public static WebAssemblyHostBuilder AddSekibanIndexedDb<T>(this WebAssemblyHostBuilder builder)
         where T : class, ISekibanJsRuntime
     {
         AddSekibanIndexedDb<T>(builder.Services, builder.Configuration);
