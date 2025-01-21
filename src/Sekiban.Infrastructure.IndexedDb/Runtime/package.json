@@ -1,0 +1,24 @@
+{
+  "name": "runtime",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "lint": "biome check src/",
+    "lint:fix": "biome check src/ --write",
+    "build": "tsc --noEmit && esbuild --bundle --minify --platform=neutral --external:node:* --outfile=../wwwroot/sekiban-runtime.mjs src/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "private": true,
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@tsconfig/recommended": "^1.0.8",
+    "@types/node": "^22.10.1",
+    "esbuild": "^0.24.0",
+    "idb": "^8.0.0",
+    "typescript": "^5.7.2"
+  }
+}

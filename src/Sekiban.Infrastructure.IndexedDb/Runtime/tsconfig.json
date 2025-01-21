@@ -1,0 +1,17 @@
+{
+  "extends": "@tsconfig/recommended",
+  "compilerOptions": {
+    "lib": [
+      "esnext",
+      "dom",
+    ],
+    "module": "esnext",
+    "target": "esnext",
+    "moduleResolution": "bundler",
+    "isolatedModules": true,
+    "outDir": "dist/",
+  },
+  "include": [
+    "src/**/*.ts",
+  ],
+}

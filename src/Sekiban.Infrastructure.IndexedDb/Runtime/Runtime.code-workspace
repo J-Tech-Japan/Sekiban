@@ -1,0 +1,28 @@
+{
+  "folders": [
+    {
+      "path": ".",
+    },
+  ],
+  "settings": {
+    "[typescript]": {
+      "editor.codeActionsOnSave": {
+        "source.fixAll": "explicit",
+        "source.organizeImports": "explicit",
+      },
+      "editor.defaultFormatter": "biomejs.biome",
+      "editor.formatOnSave": true,
+    },
+    "[json]": {
+      "editor.defaultFormatter": "vscode.json-language-features",
+    },
+    "[jsonc]": {
+      "editor.defaultFormatter": "vscode.json-language-features",
+    },
+  },
+  "extensions": {
+    "recommendations": [
+      "biomejs.biome",
+    ],
+  },
+}
