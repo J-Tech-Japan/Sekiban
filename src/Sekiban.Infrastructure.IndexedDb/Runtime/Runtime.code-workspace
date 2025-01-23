@@ -13,6 +13,14 @@
       "editor.defaultFormatter": "biomejs.biome",
       "editor.formatOnSave": true,
     },
+    "[javascript]": {
+      "editor.codeActionsOnSave": {
+        "source.fixAll": "explicit",
+        "source.organizeImports": "explicit",
+      },
+      "editor.defaultFormatter": "biomejs.biome",
+      "editor.formatOnSave": true,
+    },
     "[json]": {
       "editor.defaultFormatter": "vscode.json-language-features",
     },

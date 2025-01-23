@@ -40,9 +40,8 @@
     </Content>
   </ItemGroup>
 
-  <Target Name="Build runtime" BeforeTargets="DispatchToInnerBuilds">
-    <Exec Command="npm install" WorkingDirectory="Runtime" />
-    <Exec Command="npm run build" WorkingDirectory="Runtime" />
+  <Target Name="Build runtime" BeforeTargets="BeforeBuild">
+    <Exec Command="node build.js" WorkingDirectory="Runtime" />
   </Target>
 
 </Project>
