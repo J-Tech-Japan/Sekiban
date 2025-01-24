@@ -1035,7 +1035,7 @@ public abstract class CustomerDbStoryBasic : TestBase<FeatureCheckDependency>
 
         aggregateResult = await aggregateLoader.AsDefaultStateAsync<Client>(
             clientResult2.AggregateId.Value,
-            retrievalOptions: SingleProjectionRetrievalOptions.WithPostponeFetchSeconds(2));
+            retrievalOptions: SingleProjectionRetrievalOptions.WithPostponeFetchSeconds(0));
         Assert.NotNull(aggregateResult);
         Assert.Equal(3, aggregateResult.Version);
 
