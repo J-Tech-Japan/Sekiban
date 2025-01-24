@@ -5,31 +5,39 @@ namespace Sekiban.Infrastructure.IndexedDb.Databases;
 
 public record DbEventQuery
 {
-    public string? RootPartitionKey { get; init; }
-    public string? PartitionKey { get; init; }
-    public string[]? AggregateTypes { get; init; }
-    public string? SortableIdStart { get; init; }
-    public string? SortableIdEnd { get; init; }
+    public string? RootPartitionKey { get; private set; }
+    public string? PartitionKey { get; private set; }
+    public string[]? AggregateTypes { get; private set; }
+    public string? SortableIdStart { get; private set; }
+    public string? SortableIdEnd { get; private set; }
 
-    public int? MaxCount { get; init; }
+    public int? MaxCount { get; private set; }
 
     public static DbEventQuery FromEventRetrievalInfo(EventRetrievalInfo eventRetrievalInfo)
     {
-        var query = eventRetrievalInfo.GetIsPartition() ?
-            new DbEventQuery
-            {
-                PartitionKey = eventRetrievalInfo.GetPartitionKey().UnwrapBox(),
-            } :
-            new DbEventQuery
-            {
-                RootPartitionKey = eventRetrievalInfo.HasRootPartitionKey() ? eventRetrievalInfo.RootPartitionKey.GetValue() : null,
-                AggregateTypes = eventRetrievalInfo.HasAggregateStream() ? eventRetrievalInfo.AggregateStream.GetValue().GetStreamNames().ToArray() : null,
-            };
+        var query = new DbEventQuery();
 
-        query = query with
+        if (eventRetrievalInfo.GetIsPartition())
         {
-            MaxCount = eventRetrievalInfo.MaxCount.HasValue ? eventRetrievalInfo.MaxCount.GetValue() : null,
-        };
+            query.PartitionKey = eventRetrievalInfo.GetPartitionKey().UnwrapBox();
+        }
+        else
+        {
+            if (eventRetrievalInfo.HasRootPartitionKey())
+            {
+                query.RootPartitionKey = eventRetrievalInfo.RootPartitionKey.GetValue();
+            }
+
+            if (eventRetrievalInfo.HasAggregateStream())
+            {
+                query.AggregateTypes = eventRetrievalInfo.AggregateStream.GetValue().GetStreamNames().ToArray();
+            }
+        }
+
+        if (eventRetrievalInfo.MaxCount.HasValue)
+        {
+            query.MaxCount = eventRetrievalInfo.MaxCount.GetValue();
+        }
 
         switch (eventRetrievalInfo.SortableIdCondition)
         {
@@ -37,20 +45,13 @@ public record DbEventQuery
                 break;
 
             case SinceSortableIdCondition since:
-                query = query with
-                {
-                    SortableIdStart = since.SortableUniqueId,
-                };
+                query.SortableIdStart = since.SortableUniqueId;
                 break;
 
             case BetweenSortableIdCondition between:
-                query = query with
-                {
-                    SortableIdStart = between.Start,
-                    SortableIdEnd = between.End,
-                };
+                query.SortableIdStart = between.Start;
+                query.SortableIdEnd = between.End;
                 break;
-
 
             default:
                 throw new NotImplementedException("unknown ISortableIdCondition");
