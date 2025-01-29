@@ -45,6 +45,9 @@ jobs:
     - name: Pack Testing
       run: |
         dotnet nuget push "src/Sekiban.Testing/bin/Release/Sekiban.Testing.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
+    - name: Pack IndexedDb
+      run: |
+        dotnet nuget push "src/Sekiban.Infrastructure.IndexedDb/bin/Release/Sekiban.Infrastructure.IndexedDb.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
     - name: Pack Web
       run: |
         dotnet nuget push "src/Sekiban.Web/bin/Release/Sekiban.Web.${{ github.event.release.tag_name }}.nupkg" --api-key ${{secrets.NUGET_APIKEY}}  --source https://api.nuget.org/v3/index.json
