@@ -1,14 +1,15 @@
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Text;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
+
 namespace Sekiban.Pure.SourceGenerator;
 
 [Generator]
-public class EventTypesGenerator : IIncrementalGenerator
+public class AggregateProjectorTypesGenerator : IIncrementalGenerator
 {
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -37,7 +38,7 @@ public class EventTypesGenerator : IIncrementalGenerator
                 // Generate source code
                 var rootNamespace = compilation.AssemblyName ?? throw new ApplicationException("AssemblyName is null");
                 var sourceCode = GenerateSourceCode(commandTypes.ToImmutable(), rootNamespace);
-                ctx.AddSource("EventTypes.g.cs", SourceText.From(sourceCode, Encoding.UTF8));
+                ctx.AddSource("AggregateProjectorTypes.g.cs", SourceText.From(sourceCode, Encoding.UTF8));
             });
 
     }
@@ -45,7 +46,7 @@ public class EventTypesGenerator : IIncrementalGenerator
         Compilation compilation,
         ImmutableArray<SyntaxNode> types)
     {
-        var iEventPayloadSymbol = compilation.GetTypeByMetadataName("Sekiban.Pure.Events.IEventPayload");
+        var iEventPayloadSymbol = compilation.GetTypeByMetadataName("Sekiban.Pure.Projectors.IAggregateProjector");
         if (iEventPayloadSymbol == null)
             return new ImmutableArray<CommandWithHandlerValues>();
         var eventTypes = ImmutableArray.CreateBuilder<CommandWithHandlerValues>();
@@ -53,7 +54,7 @@ public class EventTypesGenerator : IIncrementalGenerator
         {
             var model = compilation.GetSemanticModel(typeSyntax.SyntaxTree);
             var typeSymbol = model.GetDeclaredSymbol(typeSyntax) as INamedTypeSymbol ??
-                throw new ApplicationException("TypeSymbol is null");
+                             throw new ApplicationException("TypeSymbol is null");
             var allInterfaces = typeSymbol.AllInterfaces.ToList();
             if (typeSymbol.AllInterfaces.Any(m => m.Equals(iEventPayloadSymbol, SymbolEqualityComparer.Default)))
             {
@@ -77,43 +78,39 @@ public class EventTypesGenerator : IIncrementalGenerator
         sb.AppendLine("using System.Threading.Tasks;");
         sb.AppendLine("using ResultBoxes;");
         sb.AppendLine("using Sekiban.Pure;");
+        sb.AppendLine("using Sekiban.Pure.Aggregates;");
         sb.AppendLine("using Sekiban.Pure.Exception;");
         sb.AppendLine("using Sekiban.Pure.Events;");
         sb.AppendLine("using Sekiban.Pure.Documents;");
-        sb.AppendLine("using Sekiban.Pure.Extensions;");
+        sb.AppendLine("using Sekiban.Pure.Projectors;");
 
         sb.AppendLine();
         sb.AppendLine($"namespace {rootNamespace}.Generated");
         sb.AppendLine("{");
-        sb.AppendLine($"    public class {rootNamespace.Replace(".", "")}EventTypes : IEventTypes");
+        sb.AppendLine($"    public class {rootNamespace.Replace(".", "")}AggregateProjectorSpecifier : IAggregateProjectorSpecifier");
         sb.AppendLine("    {");
-        sb.AppendLine("        public ResultBox<IEvent> GenerateTypedEvent(");
-        sb.AppendLine("            IEventPayload payload,");
-        sb.AppendLine("            PartitionKeys partitionKeys,");
-        sb.AppendLine("            string sortableUniqueId,");
-        sb.AppendLine("            int version) => payload switch");
-        sb.AppendLine("        {");
+        sb.AppendLine("        public ResultBox<IAggregateProjector> GetProjector(string projectorName)");
+        sb.AppendLine("            => projectorName switch");
+        sb.AppendLine("            {");
 
+        
+        
+            
+            
+        
         foreach (var type in eventTypes)
         {
             switch (type.InterfaceName, type.TypeCount)
             {
-                case ("IEventPayload", 0):
-                    sb.AppendLine(
-                        $"            {type.RecordName} {type.RecordName.Split('.').Last().ToLower()} => new Event<{type.RecordName}>(");
-                    sb.AppendLine("                GuidExtensions.CreateVersion7(),");
-                    sb.AppendLine($"                {type.RecordName.Split('.').Last().ToLower()},");
-                    sb.AppendLine("                partitionKeys,");
-                    sb.AppendLine("                sortableUniqueId,");
-                    sb.AppendLine("                version,");
-                    sb.AppendLine($"                \"{type.RecordName.Split('.').Last()}\"),");
+                case ("IAggregateProjector", 0):
+                    sb.AppendLine($"                nameof({type.RecordName}) => new {type.RecordName}(),");
                     break;
             }
         }
 
-        sb.AppendLine("            _ => ResultBox<IEvent>.FromException(");
+        sb.AppendLine("            _ => ResultBox<IAggregateProjector>.FromException(");
         sb.AppendLine(
-            "                new SekibanEventTypeNotFoundException($\"Event Type {payload.GetType().Name} Not Found\"))");
+            "       new ResultsInvalidOperationException($\"Projector Type {projectorName} Not Found\"))");
         sb.AppendLine("        };");
         sb.AppendLine("    };");
         sb.AppendLine("}");

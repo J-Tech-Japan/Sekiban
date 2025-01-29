@@ -7,6 +7,9 @@ public interface IAggregate
     public int Version { get; }
     public string LastSortableUniqueId { get; }
     public PartitionKeys PartitionKeys { get; }
+    public string ProjectorVersion { get; }
+    public string ProjectorTypeName { get; }
+    public string PayloadTypeName { get; }
     public OptionalValue<SortableUniqueIdValue> GetLastSortableUniqueIdValue() =>
         SortableUniqueIdValue.OptionalValue(LastSortableUniqueId);
     public IAggregatePayload GetPayload();

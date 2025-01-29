@@ -9,6 +9,7 @@
 
     <ItemGroup>
       <PackageReference Include="Microsoft.Orleans.Server" Version="9.0.1" />
+      <PackageReference Include="Microsoft.Orleans.Streaming" Version="9.0.1" />
     </ItemGroup>
 
     <ItemGroup>
